@@ -1,6 +1,6 @@
 # T-343: DEF-417 (part 2) — user-visible refusals name things in human terms, never raw ids or keys
 
-**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. **S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27** (each: tester red, builder, Opus audit, full gates; committed locally, push pending Ian). Refusal banners screen-tested on 9008 for S5.1b/S5.1c. **S6a/S6b/S6c specced and APPROVED 2026-09-27 (§S6), serial S6a → S6b → S6c.** Open: S6a–S6c, S5.4 (after S6c), S5.5+, S7 (DEF-452), S8, S9.
+**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. **S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27** (each: tester red, builder, Opus audit, full gates; committed locally, push pending Ian). Refusal banners screen-tested on 9008 for S5.1b/S5.1c. **S6a/S6b/S6c specced and APPROVED 2026-09-27 (§S6), serial S6a → S6b → S6c.** **S5.5m (DEF-454) and S7 (DEF-452 + trade line numbers) specced and APPROVED 2026-09-27 (§S5.5m, §S7); S7 strictly after S6c and S5.5m.** Open: S6a–S6c, S5.4 (after S6c), S5.5m, S5.5+, S7, S8, S9.
 **Orchestrator defaults (Ian may override any time):** fallback wording as proposed in S1.3; the 96 capability labels
 are Sonnet-drafted from CAPABILITY-MATRIX.md notes and fixed later if Ian wants; staging S1 = fail closed on
 IDENTIFIERS, strict flip at S9; S3 names the record's KIND, not its number; cross-org refusals never name the other
@@ -209,8 +209,11 @@ with `U` in subject and reason → rendered text has no UUID (red: contains `U`)
   holds the capability via a position at OTHER stores must not blame the role. Name the store and where the job is, e.g.
   "…can't submit a sales day at SmokeStore Two — their Cashier job is at SmokeStore." Needs a refusal-only lookup,
   savepointed like S2's. Evidence: `t341-smk2-refusal.png`.
-- **S7** collapse ≈40 app regexes into `err instanceof AuthorizationError && err.capability === …`, or delete.
-- **S8** the four choke-point bypasses.
+- **S7** collapse ≈40 app regexes into `err instanceof AuthorizationError && err.capability === …`, or delete. **Now
+  specced at §S7 (APPROVED 2026-09-27): 31 remain at HEAD, all in DEF-452's 13 files; every one is deleted, none re-keyed.**
+- **S8** the four choke-point bypasses. **Scope shift (2026-09-27, §S5.5m/§S7):** S8 keeps only NON-presentable raw
+  returns and re-wraps. S7 puts `isPresentable` first in the R1.3 wrappers (`production`, `staff`, `access-defaults`),
+  and S5.5m owns `remittance/actions.ts` `handedOverOn`'s presentable re-wrap.
 - **S9** strict flip — codeless fall-through returns the fallback for any non-presentable Error; precondition: ratchet at zero.
 
 ## Invariants
@@ -393,6 +396,8 @@ argument with the same classifier.
 | S5.3 | deliveries + catalogue + opening | 13, 14a, 16 | 10 + 16 + 9 | low traffic; `run_cutover` is once per org |
 | S6a / S6b / S6c | labels; DEF-431 — specced at **§S6** (APPROVED) | 10, 11 | — | strictly serial S6a → S6b → S6c (one tester, one builder); S6a is S5.4's precondition |
 | S5.4 | commissary `Outcome` reasons | 10, 11 | ≈16 reasons | needs S6 labels and an app edit that overlaps S8 |
+| S5.5m | money-amount labels (DEF-454) — specced at **§S5.5m** (APPROVED) | — | 40 `parseMoneyInput` callers (36 domain, 4 app) | before S7 (shares `trade/index.ts`); shares no file with S6a–S6c or S5.4, so may run beside S6 |
+| S7 | app wrappers stop pre-empting refusals (DEF-452) + trade line numbers — specced at **§S7** (APPROVED) | — | 31 branches in 13 `actions.ts`; `roles.ts`, `sessions.ts`, `NewOrderForm.tsx`, `trade/index.ts` | **strictly after S6c and S5.5m commit** (`admin/users/actions.ts` is S6b's; `trade/index.ts` is S5.5m's) |
 | S5.5+ | the ≈180 unowned sites (stock, production, …) | — | — | specced later; ledger, fixed-assets, stores and scheduler after T-346 |
 
 **Ratchet rule (every group) (R1.2):** at S5.0, `tests/unit/t343-throw-ratchet.test.ts` replaces the single `CEILING`
@@ -1224,8 +1229,10 @@ Evidence: `~/.claude/skills/orchestrator/tools/t341-admin-users-page.png`.
   (`.test.ts` + `createElement`, per the `t337-access-defaults-grid-render.test.ts` header). Mock `requirePageAccess`
   (actor ≠ person, unless the leg says self), `userDetail`, and `../actions` (as t337 mocks its actions). **Two target
   fixtures:** a **`staff`** target for U1–U4 (active grants `record_sale` with source `'grant'` and `submit_sales_day`
-  with source `'position'` via "Cashier at SmokeStore"; one revoked `void_sales_day`; the picker offers the rest of
-  `grantableCapabilitiesFor('staff')`), and a separate **`super_admin`** target for U5. Keep the real `lib.ts` helpers
+  with source `'position'` via "Cashier at SmokeStore"; one revoked `void_sales_day`; the picker offers
+  `grantableCapabilitiesFor('staff')` minus ACTIVE grants only, so a revoked capability stays re-grantable and
+  `void_sales_day` appears in both the revoked list and the picker; U1 counts the muted key per section — orchestrator
+  ruling 2026-09-27 on a builder QUESTION), and a separate **`super_admin`** target for U5. Keep the real `lib.ts` helpers
   where importable, and mock only what reaches `@shareat/db` at module scope. The action legs use the t337-actions
   harness (`RedirectSignal`, mocked `next/navigation`, session, `withOrgPrincipal`), with **exactly this partial mock**:
   `vi.mock('@shareat/auth', async (orig) => ({ ...(await orig()), grantCapabilityAsActor: vi.fn() }))`. **Expected
@@ -1327,3 +1334,467 @@ option texts, which carry account hints (`Loss — Dr 5300`). Rewording `CAPABIL
 1. **The key on admin capability screens:** shown as small muted grey text under the label, not hover-only (design
    rule 5; S6b U1, S6c G1).
 2. **Label wording:** the S6a table is approved as drafted.
+
+---
+
+## S5.5m: every malformed money amount refuses in human words (DEF-454)
+**Status:** APPROVED 2026-09-27 (orchestrator, after independent Opus spec audit; Ian's answers folded). **Model:**
+Sonnet, tester then builder. **Migration:** none (one function signature and 40 string arguments; no schema).
+**Order:** before S7. S7 edits `packages/domain/src/trade/index.ts` after this slice (the trade line numbers below).
+
+**Goal.** A mistyped money amount on any screen reads `The payment amount — "abc" is not a valid amount. Use at most
+two decimal places.` It never reads `recordPayment: the amount — …` or names an expense or charge by id. The compiler
+proves that every caller passes a human label, so a new caller cannot forget one.
+
+### S5.5m evidence (planner, HEAD `5fe72a6`, every call site re-read)
+- `packages/domain/src/shared/money-input.ts:34` `parseMoneyInput(raw, rawLabel, humanLabel?)`. With `humanLabel`, the
+  throw carries `userMessage` = `${humanLabel} — "${raw}" is not a valid amount. Use at most two decimal places.`
+  (`:41`) and `.message` is unchanged (`:38`). Without it the throw is a plain, non-presentable `Error` (`:40`). Its
+  only import is `@shareat/core/money` (`:11`). It is exported at the subpath `@shareat/domain/money-input`
+  (`packages/domain/package.json:10`, `vitest.config.mts:21`) because app and client-capable code reach it without the
+  `@shareat/db` barrel (T-266; the file's own `:26-32` warning).
+- **One caller passes a human label:** `cutover/opening.ts:72` (`'This amount'`, S5.3b ruling). **Forty do not:** 36
+  sites in 18 domain files and 4 sites in 3 app files, listed in the wording table below. Census:
+  `grep -rn "parseMoneyInput(" packages apps --include=*.ts --include=*.tsx`, minus comments, tests and the definition.
+- **Two raw labels carry an id:** `ap/index.ts:776-779` (`the allocation for expense ${a.expenseId}`) and
+  `ar/index.ts:272-275` (`… for charge ${a.chargeId}`). The same holds at `apps/erp/src/app/ap/actions.ts:269` and
+  `customers/actions.ts:148`. The raw stays (Invariant 1). The human label names no id (Invariant 4).
+- **One app site re-wraps and drops `userMessage`.** In `apps/erp/src/app/remittance/actions.ts`, `handedOverOn`
+  (`:96-104`) catches the throw from `isHandedOver` (`:87-91`, whose `parseMoneyInput` is at `:89`). It throws a fresh
+  `Error` whose text is the quoted account name, a colon, and the caught message. So a human label at `:89` alone would
+  never reach the screen. **This slice owns that re-wrap for presentable errors.** S8 keeps only non-presentable
+  re-wraps (the S8 pointer under "Later slices" says so).
+  `apps/erp/tests/remittance-overage-wiring.test.ts:359-400` runs both arrow bodies as source text through
+  `new Function('isHandedOver', 'accountName', 'line', body)`. So the bodies must stay plain JavaScript once types are
+  erased, and they may use no identifier other than those parameters and globals.
+- **Trade line numbers are not visible row numbers today.** `apps/erp/src/app/trade/orders/actions.ts:52-54` drops empty
+  rows before `createTradeOrder` numbers lines `i + 1` (`trade/index.ts:274,287`). S5.3b ruled that "Line n" must name
+  the visible form row. So rows 31–32 land here as "A line's rate/total". **S7 (Ian, 2026-09-27) adds visible row
+  numbers and changes those two labels to `Line ${n}'s rate` / `Line ${n}'s total`** (§S7 change 5).
+- **Tests that call it with two arguments.** Once the parameter is required, these break at typecheck and nowhere else:
+  `packages/domain/src/shared/money-input.test.ts:13,17,21,26,38,42,43,44,48` and `apps/erp/tests/money-input-resolves.test.ts:26,47`.
+  `apps/erp/tests/t343-s1-action-guard.test.ts:46` and `packages/domain/tests/t343-s5-2-verify-invoice-rewrap.test.ts:38`
+  mock the function and are unaffected. The root `tsconfig.json:78-82` includes `apps/**`, `packages/**` and `tests/**`.
+- **Raw `.message` pins that must stay green unedited:** `packages/domain/tests/integration/cutover.test.ts:550`,
+  `service-charge-distribution.test.ts:570`, `apps/erp/tests/integration/t328-trade-inputs-refused-by-parser.test.ts:132`
+  (a suffix, so it does not care about the label), and `apps/erp/tests/remittance-overage-wiring.test.ts` (the account prefix).
+- T-346 and T-345 have landed (`22475b1`, `7c26f6d`), so Invariant 14 does not hold back `fixed-assets/capitalize.ts`.
+- The line numbers in this section are at `5fe72a6`. The builder finds each call by its raw label, not by its line.
+
+### S5.5m design (decided here)
+1. **`humanLabel` becomes required.** The signature is `parseMoneyInput(raw: string, rawLabel: string, humanLabel: string)`.
+   The `humanLabel === undefined` branch (`:40`) is deleted, so every throw is presentable. **This is the sweep's
+   guard:** a missed caller, or any future one, fails `npm run typecheck`. No source scan is needed and none is written
+   (S5.3b ruling on X1: raw-text source scans pin spelling, not behaviour). The type system is not a text scan. It
+   follows every import, alias and re-export, and it ignores comments.
+2. **The wording table below fixes the wording.** Each label is a capitalised noun phrase that completes
+   `<label> — "<typed>" is not a valid amount.` The typed value is already quoted in the sentence, so a deictic label
+   ("An amount applied to an invoice") finds the row without naming an id. No label names an id, a key or a function.
+   The only interpolated value is `cfg.name` at the sales-day tender site. That is the money-account name the cashier
+   picked on the same form, an account of the actor's own store that is already on screen (DEF-453).
+3. **The raw label never changes** (Invariant 1). Every `.message` stays byte-identical, so refusal recording
+   (Invariant 2) and the raw pins above stay green.
+4. **`handedOverOn` carries the human sentence through its re-wrap.** Its catch keeps today's raw text byte-identical.
+   When the caught error has a string `userMessage`, it throws `Object.assign(new Error(raw), { userMessage })`. That
+   `userMessage` is the quoted account name, `": "`, and the caught `userMessage` with its first character lower-cased.
+   The screen then reads `"GCash": the amount handed over — "abc" is not a valid amount. Use at most two decimal places.`
+   - The narrowing is `err instanceof Error && 'userMessage' in err && typeof err.userMessage === 'string'`, which is
+     valid TypeScript and valid JavaScript.
+   - **No template literal is nested inside another in either arrow body.** Compute the lower-cased sentence into a
+     `const` first (`human.charAt(0).toLowerCase() + human.slice(1)`). Then build the message with one template literal
+     whose `${…}` holds only identifiers and calls, or with `+`. The wiring test's extractor reads the body as text.
+   - No cast, annotation, import or helper call goes inside either arrow body.
+5. **Not a Workflow.** The slice is 22 files: 40 one-argument edits of a single shape, plus one small re-wrap. One
+   builder does it in a single pass against the table. One agent per file would pay for 22 cold contexts, each re-reading
+   this spec and its file, for edits that take seconds. And because the parameter is required, typecheck stays red
+   until the last file is done, so parallel agents could not check their own work either. The per-file instruction
+   below is written so the orchestrator *could* fan it out if it overrules this. The builder follows the same text,
+   file by file.
+
+### S5.5m wording table (approved by Ian 2026-09-27, as drafted)
+Line numbers are at HEAD `5fe72a6`. **Human label** is the literal third argument. It is a template literal only where
+it interpolates. The screen shows `<human label> — "<typed>" is not a valid amount. Use at most two decimal places.`
+
+| # | File:line (domain rows are under `packages/domain/src/`) | Raw label today (unchanged) | Human label |
+|---|---|---|---|
+| 1 | `ap/index.ts:761` | `recordPayment: the amount` | `The payment amount` |
+| 2 | `ap/index.ts:776-779` | `recordPayment: the allocation for expense ${a.expenseId}` | `An amount applied to an invoice` |
+| 3 | `ap/index.ts:1114` | `suggestPaymentAllocation: the amount` | `The payment amount` |
+| 4 | `ar/index.ts:64` | `recordCharge: the charge amount` | `The charge amount` |
+| 5 | `ar/index.ts:225` | `recordCollection: the amount` | `The amount collected` |
+| 6 | `ar/index.ts:226` | `recordCollection: the platform fee` | `The platform fee` |
+| 7 | `ar/index.ts:245-247` | `recordCollection: creditApplied` | `The store credit applied` |
+| 8 | `ar/index.ts:272-275` | `recordCollection: the allocation for charge ${a.chargeId}` | `An amount applied to a charge` |
+| 9 | `ar/index.ts:633` | `suggestCollectionAllocation: the amount` | `The amount collected` |
+| 10 | `cash-requests/index.ts:53` | `createCashRequest: the amount` | `The amount requested` |
+| 11 | `cash-requests/index.ts:109` | `decideCashRequest: the approved amount` | `The approved amount` |
+| 12 | `cash-requests/index.ts:187` | `releaseCashRequest: the amount` | `The amount released` |
+| 13 | `expenses/reimbursement.ts:46` | `payReimbursement: the amount` | `The reimbursement amount` |
+| 14 | `fixed-assets/capitalize.ts:85` | `createAsset: the cost` | `The asset's cost` |
+| 15 | `fixed-assets/capitalize.ts:103` | `createAsset: the salvage value` | `The salvage value` |
+| 16 | `loans/index.ts:92` | `disburseLoan: the amount` | `The loan amount` |
+| 17 | `loans/index.ts:167` | `recordLoanPayment: the amount` | `The payment amount` |
+| 18 | `money-transfers/index.ts:154` | `createMoneyTransfer: amountOut` | `The amount sent` |
+| 19 | `money-transfers/index.ts:155` | `createMoneyTransfer: amountIn` | `The amount received` |
+| 20 | `owners/index.ts:78` | `createOwner: the drawing limit` | `The drawing limit` |
+| 21 | `owners/index.ts:123` | `recordContribution: the amount` | `The contribution amount` |
+| 22 | `payroll/index.ts:72` | `setPayRate: the amount` | `The pay rate` |
+| 23 | `payroll/separation.ts:131-134` | `postSeparation: the separation pay` | `The separation pay` |
+| 24 | `prepaid/index.ts:420` | `writeOffPrepaidItem: the refund amount` | `The refund amount` |
+| 25 | `recurring-expenses/index.ts:91` | `createRecurringTemplate: the default amount` | `The default amount` |
+| 26 | `recurring-expenses/index.ts:171` | `updateRecurringTemplate: the default amount` | `The default amount` |
+| 27 | `remittance/index.ts:206` | `createRemittance: the declared overage` | `A declared overage` |
+| 28 | `sales-days/create.ts:342` | `sales day tenders: "${cfg.name}"'s amount` | `The amount for "${cfg.name}"` (template literal) |
+| 29 | `service-charge/index.ts:50` | `distributeServiceCharge: the amount` | `The amount to distribute` |
+| 30 | `stock/supplier-returns.ts:369` | `refundSupplierCredit: the amount` | `The refund amount` |
+| 31 | `trade/index.ts:274` | `createTradeOrder: line ${i + 1}'s rate` | `A line's rate` (S7 changes it to `Line ${n}'s rate`) |
+| 32 | `trade/index.ts:287-290` | `createTradeOrder: line ${i + 1}'s total` | `A line's total` (S7 changes it to `Line ${n}'s total`) |
+| 33 | `trade/index.ts:304` | `createTradeOrder: the delivery fee` | `The delivery fee` |
+| 34 | `trade/index.ts:305` | `createTradeOrder: other fees` | `The other fees` |
+| 35 | `trade/index.ts:314` | `createTradeOrder: the total` | `The stated total` |
+| 36 | `wastage/orders.ts:292` | `recordOrderWastage: the amount` | `The wastage amount` |
+| 37 | `apps/erp/src/app/ap/actions.ts:269` | `suggestPaymentAllocation: the amount typed for expense ${t.expenseId}` | `An amount you typed against an invoice` |
+| 38 | `apps/erp/src/app/customers/actions.ts:148` | `suggestCollectionAllocation: the amount typed for charge ${t.chargeId}` | `An amount you typed against a charge` |
+| 39 | `apps/erp/src/app/remittance/actions.ts:89` | `createRemittanceAction: the amount handed over` | `The amount handed over` (on screen: `"<account>": the amount handed over — …`, design rule 4) |
+| 40 | `apps/erp/src/app/remittance/actions.ts:146` | `createRemittance: the declared overage` | `A declared overage` |
+
+Unchanged: `cutover/opening.ts:72` (`This amount`, S5.3b).
+
+### S5.5m build
+**Per-file instruction.** The text is exact, and it is the same whether one builder does the work or it is fanned out:
+> In `<file>`, at each `parseMoneyInput(` call that the S5.5m wording table lists for this file, add that row's human
+> label as the third argument. Use a string literal, or a template literal only where the table interpolates. Change
+> nothing else: not the raw label, not the other arguments, not the surrounding code, comments or imports. If a listed
+> call (found by its raw label) is not in the file, or the file holds a `parseMoneyInput(` call that the table does not
+> list, STOP and report QUESTION. Report the lines you changed.
+
+Two files take one extra change each:
+- `packages/domain/src/shared/money-input.ts`: make `humanLabel: string` required. Delete the line
+  `if (humanLabel === undefined) throw err;` (`:40`). Update the doc comment: the parameter is required (S5.5m,
+  DEF-454), and the "~20 callers … keep compiling" paragraph goes. The only import stays `@shareat/core/money`.
+- `apps/erp/src/app/remittance/actions.ts` `handedOverOn` (`:96-104`): apply design rule 4. Nothing else in the body changes.
+
+**The builder's gate is `npm run typecheck` clean**, plus the named legs green. A caller the builder missed shows up
+there, not in vitest.
+
+- **BUILDER paths (22):** `packages/domain/src/shared/money-input.ts`; `packages/domain/src/{ap/index.ts, ar/index.ts,
+  cash-requests/index.ts, expenses/reimbursement.ts, fixed-assets/capitalize.ts, loans/index.ts, money-transfers/index.ts,
+  owners/index.ts, payroll/index.ts, payroll/separation.ts, prepaid/index.ts, recurring-expenses/index.ts,
+  remittance/index.ts, sales-days/create.ts, service-charge/index.ts, stock/supplier-returns.ts, trade/index.ts,
+  wastage/orders.ts}` (18); `apps/erp/src/app/{ap/actions.ts, customers/actions.ts, remittance/actions.ts}` (3). Source only.
+- **TESTER paths (disjoint):**
+  - New: `packages/domain/tests/t343-s5-5m-money-label-required.test.ts`,
+    `apps/erp/tests/integration/t343-s5-5m-money-labels.test.ts` and `apps/erp/tests/t343-s5-5m-remittance-rewrap.test.ts`.
+  - Amended: `packages/domain/src/shared/money-input.test.ts` and `apps/erp/tests/money-input-resolves.test.ts`.
+    **This amendment is ruled here, and it is not a weakening.** Each two-argument call gains a third argument
+    `'The amount'`. No assertion, expected string or test title changes. Both files assert `.message` and the return
+    value, and neither of those changes. **The tester makes the amendment in the RED phase**, with the new legs. The
+    parameter is still optional then, so the amended files typecheck before and after the builder.
+
+| Id | Leg | Asserts | Red for the right reason |
+|---|---|---|---|
+| T1 | + type | in `t343-s5-5m-money-label-required.test.ts`: `// @ts-expect-error S5.5m — humanLabel is required` directly above `parseMoneyInput('1', 'x')`; the runtime result is `'1.00'` | **`npm run typecheck`** reports `TS2578: Unused '@ts-expect-error' directive` at that line. Vitest is green, so this leg's red comes from the typecheck. Record the raw tsc line |
+| T1n | ⛔ | same file: `parseMoneyInput('1', 'x', 'The amount')` with no directive typechecks and returns `'1.00'` | green now |
+| T2 | ⛔ | same file: `parseMoneyInput('abc', 'fn: the amount', 'The amount')` throws an `Error` whose `.message` is exactly `fn: the amount — "abc" is not a valid amount. Use at most two decimal places.`, and whose `userMessage` is the same sentence with `The amount` in place of the raw label; `parseMoneyInput('1.234', 'x', 'The amount')` also carries `userMessage` | green now (S5.3b); pins the three-argument contract |
+| H1 | + | integration, the `createSalesDay` tender path (`sales-days/create.ts:118` → `writeTenders`, `:228` → the parse at `:342`; use the nearest existing sales-days fixture): a tender typed `abc` on the money account `GCash` → `errorMessage(err)` from the shared `apps/erp/src/lib/constraint-messages.ts` is exactly `The amount for "GCash" — "abc" is not a valid amount. Use at most two decimal places.` | the rendered text still carries `sales day tenders` / `'s amount` (no `userMessage`) |
+| H2 | + | integration, `recordPayment` (the AP fixture): amount `1.234` → `The payment amount — "1.234" …`; an allocation typed `abc` → `An amount applied to an invoice — "abc" …`, and the rendered text has no UUID and no `[hidden]` | today's text: the raw label, with the allocation's id redacted to `[hidden]` |
+| H3 | + | integration, `createTradeOrder` (the `t328-trade-inputs-refused-by-parser` harness): `deliveryFee: 'abc'` → `The delivery fee — "abc" …` | text derived from the raw label, not the human one |
+| H4 | + | integration, `createCashRequest`: `abc` → `The amount requested — "abc" …` | text derived from the raw label |
+| H5 | + | `createRemittanceAction`. Action harness: `RedirectSignal`, mocked session and `withOrgPrincipal`, the real `@shareat/domain/money-input`, the real shared `errorMessage`. One line typed `abc` from the account `GCash` → the `error` param is exactly `"GCash": the amount handed over — "abc" is not a valid amount. Use at most two decimal places.` | `"GCash": createRemittanceAction: the amount handed over — …` |
+| H6 | ⛔ | every H leg also asserts that `.message` is byte-identical to today's raw sentence (Invariant 1) | green now |
+
+**If a site cannot be reached with about 40 lines of fixture, STOP and report QUESTION. Do not substitute a source scan
+(S5.3b ruling on X1).** H1–H5 sample the wiring: the highest-traffic screens and the one re-wrap. T1 is the exhaustive
+proof, because a caller without a label does not compile.
+
+**Negative halves (unedited, must stay green):**
+- `packages/domain/tests/integration/`: `cutover.test.ts` (`:550`), `service-charge-distribution.test.ts`, `order-wastage.test.ts`.
+- `apps/erp/tests/integration/`: `t328-trade-inputs-refused-by-parser.test.ts`,
+  `t328-trade-rate-message-names-the-rate.test.ts`, `t327-operator-sentence-two-paths.test.ts`.
+- `apps/erp/tests/remittance-overage-wiring.test.ts`. It executes the `isHandedOver` and `handedOverOn` bodies, and
+  design rule 4 keeps them plain JavaScript.
+- `packages/domain/src/shared/money-positivity-guard.test.ts`, `t343-s1-action-guard.test.ts`, `t343-s5-2-verify-invoice-rewrap.test.ts`.
+- `tests/unit/t343-throw-ratchet.test.ts`. The ratchet counts `throw new Error(`. This slice changes arguments,
+  deletes one `throw err;` (`money-input.ts:40`, which the ratchet does not count), and adds throws only in
+  `apps/erp/src/app/remittance/actions.ts`, which is not ratcheted. So no `CEILINGS` entry moves.
+
+**Caller baseline:** no exported function is added or removed, so the orchestrator's regeneration must show no diff. If
+it does, STOP.
+
+**Smoketest (9008, screenshots).**
+- (a) `/sales-days/new`: type `abc` in a tender → the banner reads `The amount for "<wallet>" — "abc" …`.
+- (b) `/remittance`: type `abc` as an amount handed over → `"<account>": the amount handed over — …`.
+- (c) An AP supplier page: type `1.234` in the amount applied to an invoice, and submit **Pay** without using
+  auto-allocate → `An amount applied to an invoice — "1.234" …`.
+
+**Done when:** as "Done when (per slice)", plus:
+- T1 goes red at typecheck, then green.
+- H1–H5 go red, then green. Record the raw reds.
+- Typecheck is clean.
+- DEF-454 is stamped FIXED.
+
+### S5.5m invariants (in addition to 1–19)
+20. `money-input.ts`'s only import is `@shareat/core/money`. It never imports `refuse`, `RefusalError`, or anything
+    that reaches `@shareat/db` (T-266: `@shareat/domain/money-input` is reachable without the db barrel). **No test
+    guards this.** `client-bundle-boundary.test.ts` checks client files' specifiers, not this leaf's imports. The guard
+    is the reviewer reading the diff of `money-input.ts`.
+21. `humanLabel` is required. Every caller passes a capitalised noun phrase that names no id, key or function
+    (Invariant 4). The one interpolation is the tender's money-account name (DEF-453).
+22. Every raw label and every `.message` is byte-identical (Invariant 1). Only `userMessage` is added.
+
+### S5.5m out of scope
+- Visible trade line numbers. S7 adds them (change 5).
+- Every other refusal in the 18 files: only the money parse changes.
+- `parseFourDecimalCost` and `parseQuantityInput`, which have their own label splits (S5.3 and later).
+- The issue messages in `money-lines.ts`, which are already human.
+- Non-presentable re-wraps (S8).
+- POS, CUSTOMER and Website.
+
+**Order:** S5.5m, then S7. S5.5m shares no file with S6a–S6c or S5.4, so it may run beside S6 in another lane at the
+orchestrator's choice. It shares `packages/domain/src/trade/index.ts` with S7, so S7 starts from S5.5m's commit.
+
+---
+
+## S7: app wrappers stop pre-empting refusals, and trade lines are numbered (DEF-452; the "≈40 app regexes")
+**Status:** APPROVED 2026-09-27 (orchestrator, after independent Opus spec audit; Ian's answers folded). **Model:**
+Sonnet, tester then builder. **Migration:** none.
+
+**Runs strictly after both S6c and S5.5m are committed.**
+- `admin/users/actions.ts` belongs to both S6b (the success banner) and S7 (the local `errorMessage`), and one tester
+  and one builder run S6a → S6b → S6c.
+- `packages/domain/src/trade/index.ts` is S5.5m's file (rows 31–32), and S7 edits it again.
+
+S7 starts only when both commits are on `main`. The builder re-reads every BUILDER file at that HEAD before editing.
+
+**Goal.**
+- On the 13 screens DEF-452 names, a refused action shows the S2/S2b sentence, which names the store and where the job
+  is. It does not show a screen-local "Only a manager or admin…".
+- Any presentable error beats a screen-local regex. Local sentences for constraint names and plain domain throws stay.
+- On the new trade order form, every line shows its number, and every refusal about a line names that visible number.
+
+### S7 evidence (planner, HEAD `5fe72a6`, all files re-read)
+- **The rule from S5.1d still holds.** All seven `authorize()` throw sites pass a `userMessage` (S2/S2b), and the
+  shared `errorMessage` (`apps/erp/src/lib/constraint-messages.ts:296`) is its only reader. So a local branch keyed on
+  authorize's raw text is a pure bypass.
+- **The census is exactly DEF-452.**
+  - `grep -rn "may not '" apps/erp/src` finds 30 branches, all in the 13 files.
+  - A wider grep for other authorize-shaped keys (`no store scope`, `/authorize:/`, `has no active role`,
+    `instanceof AuthorizationError`, `.capability ===`) finds one more branch (`admin/access-defaults/actions.ts:43`)
+    and nothing else. S5.1c and S5.1d removed the rest.
+  - **So the "≈40" in the Later-slices S7 line is 31 today, and all 31 are in this slice. Nothing is left to list for later.**
+- **In all 13 files, find each branch by its regex and each function by its name, never by line.** The line numbers
+  below are at `5fe72a6`, and S6b has already moved lines in `admin/users/actions.ts`.
+
+  | File (under `apps/erp/src/app/`) | Local fn (at `5fe72a6`) | Bypass branches, by regex (deleted) | Kept branches, by regex |
+  |---|---|---|---|
+  | `inventory/pos-map/actions.ts` | `:21` | `manage_pos_map`, `request_pos_map`, `decide_pos_map_request` | none |
+  | `inventory/pos-usage/actions.ts` | `:22` | `record_stock_movement`, `finalize_pos_usage_pull`, `request_pos_map` | none |
+  | `inventory/production/actions.ts` | `:31` | `record_stock_movement`, `post_production`, `edit_posted_production`, `void_production` | `/live slicer payment/` → raw (S8's, non-presentable only) |
+  | `inventory/usage/actions.ts` | `:41` | `record_stock_movement`, `record_wastage`, `post_usage`, `void_usage_record` | `/is a parking spot/`, `/storage room; only an operating room/`, `/is inactive and cannot be a usage source/`, `/a posted usage record is immutable/`, `/a voided usage record is terminal/` |
+  | `inventory/counts/actions.ts` | `:45` | `open_count_session`, `commit_count`, `record_stock_movement` | `/already in active count session/`, `/is frozen by an active count session/`, `/count_lines_counted_non_negative/`, `/count session .* is already committed/` |
+  | `items/actions.ts` | `:53` | `approve_item`, `manage_items` | `/items_org_name_key/`, `/items_org_code_key/` |
+  | `staff/actions.ts` | `:40` | `enrol_staff`, `manage_store_settings` | the `return raw` branches (S8's, non-presentable only); `/person_credentials_lookup_hash_unique/` |
+  | `staff/[employmentId]/credentials/actions.ts` | `:23` | `manage_attendance` | none |
+  | `trade/orders/actions.ts` | `:30` | `approve_buyer` | none |
+  | `commissary/catalogue/actions.ts` | `:25` | `manage_commissary_offerings`, `manage_commissary_map` | none |
+  | `attendance/terminals/actions.ts` | `:34` | `provision_clock_terminal`, `manage_attendance` | none |
+  | `admin/users/actions.ts` | `:39` | `manage_users`, `grant_capability`. Also **dead once presentable wins**, because each thrower already carries a `userMessage`: `/may not change their own role/` (`roles.ts:347`), `/may not grant themselves a capability/` (`roles.ts:579`), `/outranks you/` (`roles.ts:452`), `/requires super_admin/` (`roles.ts:397`), `/only active admin/` (`roles.ts:500`), `/does not exist in org/` (`roles.ts:369,599`, `credentials-admin.ts:45`), `/^revokeCredential:/` and `/does not exist or is already revoked/` (`recordGone` at `sessions.ts:196`, `access.ts:265,681`) | `/person_credentials_external_id_unique/` |
+  | `admin/access-defaults/actions.ts` | `:38` | `grant_capability`, `/has no active role/` (`authorize.ts:141`, S2 `noActiveRole`) | `/does not belong to this organisation/`, `/does not exist in this organisation/`; the `return raw` branch (S8's, non-presentable only) |
+- **Why not collapse to `err instanceof AuthorizationError && err.capability === …`** (the Later-slices option).
+  Every `AuthorizationError` from `authorize()` and `roles.ts` already carries its own sentence. A capability-keyed
+  local sentence would still pre-empt it, and would lose what S2b added: the store, and where the job is. So every
+  branch is **deleted**, and none is re-keyed (Invariant 24).
+- **Three local admin sentences are better than the domain's.** Once presentable wins, the S5a `userMessage` would
+  replace each of them on screen. Ian chose option A (2026-09-27): the better sentences move into `roles.ts` (the S5.3b
+  proof-photo precedent).
+
+  | `roles.ts` (at `5fe72a6`) | S5a `userMessage` today | Local sentence (`admin/users/actions.ts`) |
+  |---|---|---|
+  | `:347-351` self role | `An actor may not change their own role — ask another admin, so a mistake here cannot lock the org out.` | `You cannot change your own role. Ask another admin — this is what stops one mis-click locking the org out.` |
+  | `:579-583` self grant | `An actor may not grant themselves a capability — ask another admin, so nobody can widen their own authority.` | `You cannot give yourself a capability. Ask another admin — otherwise anyone holding this screen could widen their own authority, and nobody would have approved it.` |
+  | `:500-508` last admin | `Refusing to demote this org's only active admin who can sign in — appoint another admin or super admin who holds a credential first, …` | `This is the org's only active admin who can sign in. Appoint another admin or super-admin and give them a PIN or an email account first — otherwise nobody is left who can manage users.` |
+
+  "An actor" is internal vocabulary. For the other dead branches:
+  - S5a's `outranks` and `requires super_admin` sentences name the roles.
+  - `goneSentence` covers the rest.
+  - The one gap is `/^revokeCredential:/`, where `goneSentence('credential')` reads worse than the local "sign-in
+    account". So `sessions.ts:196`'s kind becomes `'sign-in account'` (change 4).
+- **Six files end with no local branch:** pos-map, pos-usage, credentials, trade/orders, catalogue and terminals. Each
+  local function would shrink to `return sharedErrorMessage(err)`, so it is deleted and the shared function is imported
+  unaliased. Every function in the 13 files is private (not exported), and no test mocks one by name (grep
+  `apps/erp/tests`). `local-errormessage-convergence.test.ts` checks only the files that still declare a local copy.
+- **No existing test asserts a deleted sentence.** Every deleted sentence was grepped over `apps/erp/tests`,
+  `packages` and `tests`, and so was `credential could not be found`. The only hits are two comments
+  (`credentials-admin.ts:40`, `credentials-admin.test.ts:375`) and one test *title* (`production.test.ts:651`).
+  `roles.test.ts:393,1046,1063` match the raw `.message`, which does not change.
+- **S8 scope shift.** Once each wrapper returns presentable errors first, S8's raw returns in production, staff and
+  access-defaults only ever see non-presentable errors. S8 keeps those, and nothing more, in these files. The S8
+  pointer under "Later slices" records this.
+- **Trade line numbers (Ian, 2026-09-27: add them now, in S7).**
+  - `createTradeOrder` has one caller: `apps/erp/src/app/trade/orders/actions.ts:60` (`createOrderAction`).
+    `NewOrderForm.tsx` (a `'use client'` component rendered by `trade/orders/page.tsx:138`) is the only form that posts
+    trade lines.
+  - The form shows no row number today (`NewOrderForm.tsx:161-215`: Item, Quantity and Rate per row).
+  - The action drops rows with an empty `itemId` before the domain (`actions.ts:52-54`).
+  - The domain numbers every line refusal `i + 1` over the surviving rows: `trade/index.ts:222`, `:224`, `:238`,
+    `:260`, `:263`, `:274` (rate parse), `:275`, `:276`, `:278`, `:289` (total parse) and `:292`.
+  - So "line 3" can name a row the person cannot see. The deliveries precedent (S5.3b R3: `documents.ts:69,143`,
+    `inventory/deliveries/actions.ts:129,148`) numbers rows before the filter, and has the domain use
+    `line.lineNo ?? i + 1`.
+
+### S7 change (BUILDER)
+1. **Seven files keep some local branches:** production, usage, counts, items, staff, admin/users and access-defaults.
+   In each:
+   - (a) The first statement of the local `errorMessage` is `if (isPresentable(err)) return sharedErrorMessage(err);`.
+     Import `isPresentable` from `@/lib/error-shape`, as S5.1d did.
+   - (b) Delete the bypass and dead branches in the table, found by regex.
+   - (c) Every kept branch keeps its text and its order, S8's raw returns included.
+   - (d) Fix any doc comment that names authorize denials or the deleted cases.
+2. **Six files keep nothing.** Delete the local `errorMessage`, and change the import to
+   `import { errorMessage } from '@/lib/constraint-messages';`. Call sites are unchanged.
+3. **`packages/auth/src/roles.ts`.** Replace the third argument (`userMessage`) of the three throws found by their raw
+   text (`may not change their own role`, `may not grant themselves a capability`, `only active admin who can sign in`)
+   with these, exactly:
+   - self role: `You cannot change your own role. Ask another admin — this is what stops one mis-click locking the org out.`
+   - self grant: `You cannot give yourself a capability. Ask another admin, so nobody can widen their own authority without someone else approving it.`
+   - last admin: `This is the org's only active admin who can sign in. Appoint another admin or super admin and give them a PIN or an email account first — otherwise nobody is left who can manage users.`
+
+   The first argument (the raw text) and the capability stay byte-identical. No other `roles.ts` line changes.
+4. **`packages/db/src/repo/sessions.ts`** (`revokeCredential`, `:196` at `5fe72a6`): the `recordGone` kind changes from
+   `'credential'` to `'sign-in account'`. The raw first argument stays byte-identical. The screen then reads
+   `That sign-in account could not be found. Someone may have changed it — reload the page and try again.`
+5. **Trade line numbers.**
+   - `apps/erp/src/app/trade/orders/NewOrderForm.tsx`: `lines.map((l, idx) => …)` renders, first in each row, a visible
+     `Line {idx + 1}` label (a `<span>` spanning the row's grid, `text-xs font-medium` in the form's existing label
+     colours). No control is added or removed, and no import is added (Invariant 17).
+   - `apps/erp/src/app/trade/orders/actions.ts` `createOrderAction`: each posted row gets `lineNo: i + 1` in the `.map`
+     BEFORE the `.filter`, which is the deliveries shape. The rows are in document order, so `i + 1` is the visible
+     `Line n`.
+   - `packages/domain/src/trade/index.ts`: `TradeLineDraft` gains `readonly lineNo?: number`, documented as the
+     visible form row, as in `deliveries/documents.ts:69`. At the top of the `createTradeOrder` loop,
+     `const n = draft.lineNo ?? i + 1;`. Every `line ${i + 1}` in that loop's messages becomes `line ${n}` (the 11
+     sites above). Rows 31–32's human labels (from S5.5m) become `` `Line ${n}'s rate` `` and `` `Line ${n}'s total` ``.
+     `lineNo` is not persisted: the `lines.push` shape and `tradeRepo.insertLines` are unchanged.
+   - With no `lineNo`, every message is byte-identical to today, so existing tests and any non-form caller are
+     unaffected. With `lineNo`, the number in the raw is the visible row (the S5.3b R3 precedent; Invariant 25).
+6. **The ratchet does not move.** S7 changes arguments, deletes app branches and renumbers existing messages. It adds or
+   removes no `throw new Error(` in a ratcheted directory.
+
+- **BUILDER paths (17):** the 13 `actions.ts` files in the table (`trade/orders/actions.ts` also takes change 5),
+  `packages/auth/src/roles.ts`, `packages/db/src/repo/sessions.ts`, `apps/erp/src/app/trade/orders/NewOrderForm.tsx`
+  and `packages/domain/src/trade/index.ts`. Source only.
+- **TESTER paths (disjoint), all new:**
+  - `apps/erp/tests/t343-s7-wrapper-refusals.test.ts`: the 11 non-admin files.
+  - `apps/erp/tests/t343-s7-admin-refusals.test.ts`: admin/users and access-defaults.
+  - `apps/erp/tests/t343-s7-trade-line-numbers.test.ts`: the action and form legs of change 5.
+  - `apps/erp/tests/integration/t343-s7-trade-line-numbers.test.ts`: the domain legs, using the
+    `t328-trade-inputs-refused-by-parser` harness.
+  - `packages/auth/tests/integration/t343-s7-roles-sentences.test.ts`: uses the fixture approach of `roles.test.ts`.
+  - `packages/db/tests/integration/t343-s7-credential-gone.test.ts`, or a new `describe` in the nearest existing
+    sessions-repo integration file. The tester picks one and names it in the READY report.
+
+  **App harness:** the same as `t343-s5-1d-wrapper-refusals.test.ts`.
+  - `RedirectSignal`. Mock `next/navigation`, `next/cache`, the session and each file's `withOrgPrincipal`. Domain
+    functions are mocked to throw.
+  - Use the REAL `@/lib/constraint-messages` and `@/lib/error-shape`, the real `AuthorizationError` (third argument S),
+    and the real `refuse` / `recordGone` from `packages/db/src/refusal` and `packages/db/src/repo/record-gone`.
+  - For admin/users, mock `@shareat/auth` partially:
+    `vi.mock('@shareat/auth', async (orig) => ({ ...(await orig()), grantCapabilityAsActor: vi.fn(), assignRoleAsActor: vi.fn() }))`,
+    plus anything else the action calls.
+  - `provisionTerminalAction` returns `{ ok: false, error }` instead of redirecting, so read `error`.
+  - Form legs render with `renderToStaticMarkup(createElement(NewOrderForm, props))` (`.test.ts` plus `createElement`,
+    as in the `t337-access-defaults-grid-render.test.ts` header). Visible text is defined as in S6b.
+  - Take action and export names from the files at HEAD.
+
+  **If one file's action cannot be driven with about 40 lines of mocks, STOP and report QUESTION. Do not substitute a
+  source scan (S5.3b ruling on X1).**
+
+| Id | Leg | Asserts | Red for the right reason |
+|---|---|---|---|
+| P1 | + (`it.each`, one row per deleted `may not '<cap>'` branch: **30 rows**, by file and capability as in the table above) | an action in that file, whose domain mock throws `new AuthorizationError("authorize: role 'staff' may not '<cap>'", cap, S)` → the rendered error `=== S` | that file's local sentence for `<cap>` |
+| P2 | + | access-defaults: raw `authorize: person <uuid> has no active role in org <uuid>` with `userMessage` S → `=== S` | `Your account has no active role, so nothing here can be granted or changed.` |
+| P3 | + (one row per file that keeps branches: 7) | `refuse('<raw that matches a kept branch>', S)` → `=== S`. Rows: production `… live slicer payment …`; usage `… is a parking spot …`; counts `… already in active count session …`; items, a raw containing `items_org_name_key` (no `code`); staff `… already has an open employment …`; admin/users `refuse('… person_credentials_external_id_unique …', S)` (no `code`); access-defaults `… does not exist in this organisation …` | the kept branch's local sentence, or the raw for the raw-return rows |
+| P4 | + (2 rows) | admin/users: (a) raw `revokeGrantById: grant <uuid> does not exist or is already revoked`, built with the real `recordGone(raw, 'grant')` → `goneSentence('grant')`; (b) raw `revokeCredential: credential <uuid> does not exist or is already revoked`, built with `recordGone(raw, 'sign-in account')` → `goneSentence('sign-in account')` | (a) `That grant was already revoked — reload the page to see the current state.`; (b) `That sign-in account was already unlinked — reload the page to see the current state.` |
+| P5 | + | repo integration: `sessionsRepo.revokeCredential` on an already-revoked credential throws a `RecordGoneError` whose `userMessage` is `goneSentence('sign-in account')`, and whose `.message` is byte-identical to today's | `userMessage` is `goneSentence('credential')` |
+| K1 | ⛔ (one row per file that keeps branches: 7) | a **non-presentable** error that hits a kept branch renders exactly today's text. Build constraint-shaped errors the way `local-errormessage-convergence.test.ts` does. Rows: production, the raw return; usage, the parking-spot sentence; counts, the frozen-room sentence; items, the `{ code: '23505', constraint: 'items_org_name_key' }` sentence; staff, the `must be exactly 6 digits` raw; admin/users, the `{ code: '23505', constraint: 'person_credentials_external_id_unique' }` sentence; access-defaults, the `belongs to a different store` raw | green now |
+| K2 | ⛔ (one row per emptied file: 6) | plain `Error('fn: <uuid> text')` → equals the shared `errorMessage(err)`, with no UUID | green now |
+| R1 | + | integration: `assignRoleAsActor` on self → `userMessage === <self-role sentence>`; `grantCapabilityAsActor` on self → `<self-grant sentence>`; demoting the org's only credentialed admin → `<last-admin sentence>`. The texts come from change 3 and are typed into the test, because they ARE the contract | the S5a sentences (`An actor may not …` / `Refusing to demote …`) |
+| R1n | ⛔ | the same three throws: `.message` is byte-identical to today's, and `capability` is unchanged | green now |
+| N1 | + | `createOrderAction` with posted rows `itemId = ['a', '', 'b']` → the mocked `createTradeOrder` receives two lines, with `lineNo` 1 and 3 | `lineNo` is absent |
+| N2 | + | integration: `createTradeOrder` with two valid lines, the second carrying `lineNo: 3` and `rate: 'abc'` → `userMessage` is exactly `Line 3's rate — "abc" is not a valid amount. Use at most two decimal places.` and `.message` is `createTradeOrder: line 3's rate — "abc" …` | `userMessage` is `A line's rate — …` and `.message` says `line 2` |
+| N2n | ⛔ | the same order with no `lineNo` → `.message` byte-identical to today's (`line 2's rate`), and `userMessage` is `Line 2's rate — …` | the red is only in `userMessage` (`A line's rate`); `.message` is green now |
+| N3 | + | `NewOrderForm` with one item: visible text contains `Line 1`, and the form's controls (`itemId`, `quantity`, `rate` fields and the two buttons) are unchanged | `Line 1` is absent |
+
+**Negative halves (unedited, must stay green):**
+- `apps/erp/tests/`: `local-errormessage-convergence.test.ts`, `t343-s5-1d-wrapper-refusals.test.ts`,
+  `t343-s5-1c-commissary-refusals.test.ts`, `t343-s1-presentable.test.ts`, `t343-s5-action-guard.test.ts`,
+  `t337-access-defaults-actions.test.ts`, `t343-s6b-admin-users-labels.test.ts`, `t343-s6c-screen-labels.test.ts`,
+  `remittance-overage-wiring.test.ts`, and `action-link-sweep.test.ts` (touch-target baseline: the new `Line n` span
+  is not a control).
+- S5.5m's `t343-s5-5m-*` files, except row 31's assertions if any name `A line's rate`. S5.5m's H3 uses the delivery
+  fee, not a line rate, so none should.
+- `apps/erp/tests/integration/`: `t328-trade-inputs-refused-by-parser.test.ts` and
+  `t328-trade-rate-message-names-the-rate.test.ts` (no `lineNo`, so the raw is byte-identical), plus
+  `packages/domain/tests/integration/trade.test.ts`.
+- `packages/auth/tests/integration/roles.test.ts` (`:393`, `:1046` and `:1063` match the raw; `:1144` expects
+  `Super admin`), `credentials-admin.test.ts`, and `packages/auth/tests/t343-s5a-census.test.ts`.
+- `packages/domain/tests/integration/production.test.ts`, `tests/unit/t343-throw-ratchet.test.ts` and
+  `tests/unit/client-bundle-boundary.test.ts` (`NewOrderForm` gains no import).
+
+**Caller baseline:** no exported function is added or removed, so no diff is expected. If there is one, STOP.
+
+**Smoketest (9008, screenshots, desktop and phone width).**
+- (a) As staff on `/inventory/production`, post a run → the S2 sentence for `post_production`, not "Only a manager or admin can post…".
+- (b) As a manager whose job is at store A, on `/inventory/counts?store=<B>`, open a count → the S2b sentence "…the
+  Manager job that lets you is at A".
+- (c) As an admin on your own `/admin/users/<self>` page, change your role → `You cannot change your own role. …`.
+- (d) As staff on `/admin/access-defaults`, tick a cell → the S2 sentence for `grant_capability`.
+- (e) `/trade/orders`: the new-order form shows `Line 1`, `Line 2`, `Line 3`. Type `abc` as line 3's rate → the banner
+  reads `Line 3's rate — "abc" …`.
+
+**Done when:** as "Done when (per slice)", plus:
+- P1–P5, R1, N1, N2 and N3 go red, then green. Record the raw reds.
+- DEF-452 is stamped FIXED.
+- The Later-slices S7 line is closed: all 31 authorize-shaped app branches are gone, and none remains to list.
+
+### S7 invariants (in addition to 1–22)
+23. In every app `errorMessage`, a presentable error returns `sharedErrorMessage(err)` before any local branch. No app
+    branch keys on `authorize()`'s raw text (`may not '…'`, `no store scope`, `authorize:`, `has no active role`).
+    Behavioural legs prove this, not a source scan.
+24. A refusal's sentence comes from its `userMessage`, written in `packages`. No app maps `err.capability` to a sentence
+    of its own. A better sentence moves into the domain (the S5.3b precedent). It is never kept as an app override.
+25. The raw `.message` is byte-identical at every `roles.ts` and `sessions.ts` site S7 touches (Invariant 1; K4). One
+    exception: a trade line refusal with a `lineNo` numbers the line by its visible row. That is the S5.3b R3 ruling.
+    Without `lineNo` the raw is byte-identical.
+
+### S7 out of scope
+- S8's raw returns in these same files (production `/live slicer payment/`, the staff `return raw` branches, the
+  access-defaults `return raw` branch). After S7 these see only non-presentable errors, and they stay below the
+  presentable guard. The four choke-point bypasses are also S8's.
+- Wrappers keyed only on constraints, with no authorize branch: `expenses`, `remittance`, `till`,
+  `statutory-discounts`, and the `SalesDayBlockedError` formatting in `sales-days`.
+- Rewording any S2/S2b sentence.
+- Trade dispatch, receive and void line refusals: only `createTradeOrder`'s loop is renumbered.
+- POS, CUSTOMER and Website.
+
+### Ian's answers (2026-09-27), folded above
+1. **S5.5m wording table:** approved as drafted.
+2. **S7:** option A. The three better admin sentences move into `roles.ts` (change 3), and legs R1/R1n are added.
+3. **Trade row numbers:** added now, inside S7 (change 5). Order: S5.5m first, with rows 31–32 as "A line's rate/total".
+   Then S7 changes them to `Line ${n}'s rate` / `Line ${n}'s total`.
+
+Folded from the orchestrator's audit, in the bodies above:
+- S5.5m:
+  - It owns the presentable `handedOverOn` re-wrap; S8 keeps non-presentable re-wraps.
+  - The tester amends the two-argument test files in the RED phase.
+  - The builder's gate is a clean typecheck.
+  - Invariant 20's guard is the reviewer.
+  - No nested template literal in the re-wrap.
+  - H1 follows the `createSalesDay` tender path.
+  - Smoketest (c) uses Pay, not auto-allocate.
+  - The ratchet wording is corrected.
+- S7:
+  - P3's admin/users row uses `person_credentials_external_id_unique`.
+  - `sessions.ts:196`'s kind becomes `'sign-in account'` (change 4, P4b, P5).
+  - The S8 scope shift is recorded.
+  - Branches are found by regex in all 13 files.
