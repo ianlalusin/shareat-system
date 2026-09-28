@@ -310,34 +310,93 @@ describe('E6 (⛔ guard, green today and after) — same-rank calls never write'
   });
 });
 
-describe('E7 — concurrent double submit over one seeded elevation row', () => {
+describe('E7 (S2d, D2 — made deterministic) — the ON CONFLICT arm is actually reached, not just serialisation luck', () => {
   it(
-    'both fulfil (no raw 23505), exactly one active row, exactly one revoked row, exactly one wrote:true — was red today: 0 revoked rows, both report wrote:true',
+    "a real concurrent winner is inserted while the SUT's own UPDATE is blocked on a row lock; the SUT then loses on the unique index for real and returns the WINNER's id — was red before S2c: a raw 23505 either way",
     async () => {
       const f = await fixture('e7');
-      await seedRow(f.targetId, CAP, 'elevation', f.thirdId, PAST);
+      const seededId = await seedRow(f.targetId, CAP, 'elevation', f.thirdId, PAST);
 
-      const results = await Promise.allSettled([
-        asOrg(f.orgId, (tx) => grantCapabilityAsActor(tx, f.admin, { personId: f.targetId, capability: CAP })),
-        asOrg(f.orgId, (tx) => grantCapabilityAsActor(tx, f.admin, { personId: f.targetId, capability: CAP })),
-      ]);
+      // ⚠️ A plain `Promise.allSettled` of two SUT calls cannot tell a real interleaving from pure
+      // serialisation (S2d, D2): if the first call fully commits before the second's own SELECT
+      // even runs, the second sees the ALREADY-superseded 'grant' row and takes the same-rank
+      // no-op branch at the top — never reaching the INSERT/ON CONFLICT code at all. Holding a
+      // real row lock on a second, manually-driven connection forces the SUT to reach its own
+      // UPDATE while the row is still 'elevation', then — while it is blocked — a real competing
+      // writer inserts the winning row, so the SUT's later INSERT is GUARANTEED to hit the unique
+      // index for real, not by chance.
+      const conn = await sql.reserve();
+      try {
+        await conn`begin`;
+        await conn`select id from person_grants where id = ${seededId} for update`;
 
-      const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
-      expect(rejected.map((r) => (r.reason as { code?: string })?.code), 'no raw 23505').not.toContain('23505');
+        // `accessRepo.grantCapability` directly (like E8) — its return carries `id`, which
+        // `grantCapabilityAsActor` does not; D2 needs the loser's OWN returned id to prove the
+        // re-select ran, not just the final DB state.
+        const sutPromise = asOrg(f.orgId, (tx) =>
+          accessRepo.grantCapability(tx, { personId: f.targetId, grantName: CAP, grantedBy: f.adminId, grantSource: 'grant' }),
+        );
+        await new Promise((r) => setTimeout(r, 300));
 
-      const active = await activeRows(f.targetId, CAP);
-      expect(active.length, 'exactly one active row').toBe(1);
-      expect(active[0]!.grant_source).toBe('grant');
+        await conn`update person_grants set revoked_at = now(), revoke_reason = ${accessRepo.SUPERSEDED_BY_HAND_GRANT_REASON} where id = ${seededId} and revoked_at is null`;
+        const [winner] = await conn<{ id: string }[]>`
+          insert into person_grants (person_id, grant_name, grant_source, source_ref, granted_by)
+          values (${f.targetId}, ${CAP}, 'grant', null, ${f.adminId}) returning id`;
+        await conn`commit`;
 
-      const allRows = await sql<RowShape[]>`
-        select id, grant_source, store_id, granted_by, granted_at, revoked_at, revoke_reason
-        from person_grants where person_id = ${f.targetId} and grant_name = ${CAP}`;
-      const revoked = allRows.filter((r) => r.revoked_at !== null);
-      expect(revoked.length, 'wanted: exactly one revoked row (the seeded one) — was red: 0').toBe(1);
+        const result = await sutPromise;
+        expect(result.wrote, "the SUT lost the race for real — it must not claim it wrote").toBe(false);
+        expect(result.heldEverywhere).toBe(true);
+        expect(result.id, "wanted: the WINNER's id — proves the ON CONFLICT re-select ran, not a guess").toBe(winner!.id);
 
-      const fulfilled = results.filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof grantCapabilityAsActor>>> => r.status === 'fulfilled');
-      const wroteTrueCount = fulfilled.filter((r) => r.value.wrote).length;
-      expect(wroteTrueCount, 'wanted: exactly one call reports wrote:true — was red: both did').toBe(1);
+        const active = await activeRows(f.targetId, CAP);
+        expect(active.length, "exactly one active row (the winner's)").toBe(1);
+        expect(active[0]!.id).toBe(winner!.id);
+      } finally {
+        conn.release();
+      }
+    },
+    30000,
+  );
+});
+
+describe('E9 (S2d, D1) — a concurrent revoke lands between the SELECT and the UPDATE: the call still inserts', () => {
+  it(
+    'exactly one active "grant" row, wrote:true — pins §4c item 1.2\'s "0 rows must NOT return early" rule, which no prior leg forced (a mutant adding `if (revoked.length === 0) return {..., wrote:false}` kept all 472 tests green)',
+    async () => {
+      const f = await fixture('e9');
+      const seededId = await seedRow(f.targetId, CAP, 'elevation', f.thirdId, PAST);
+
+      const conn = await sql.reserve();
+      try {
+        await conn`begin`;
+        await conn`select id from person_grants where id = ${seededId} for update`;
+
+        const sutPromise = asOrg(f.orgId, (tx) => grantCapabilityAsActor(tx, f.admin, { personId: f.targetId, capability: CAP }));
+        // Give the SUT's own (non-locking) SELECT time to complete and its own UPDATE time to
+        // reach and block on the row lock this connection holds.
+        await new Promise((r) => setTimeout(r, 300));
+
+        // The barrier: a REAL concurrent revoke, landing exactly between the SUT's SELECT and its
+        // own UPDATE — by the time this connection releases the lock, the SUT's UPDATE (`WHERE
+        // revoked_at IS NULL`) will affect 0 rows.
+        await conn`update person_grants set revoked_at = now(), revoke_reason = 'concurrent revoke (E9 barrier)' where id = ${seededId} and revoked_at is null`;
+        await conn`commit`;
+
+        const result = await sutPromise;
+        expect(result.wrote, 'wanted: true — the SUT must not bail out just because its own UPDATE affected 0 rows').toBe(true);
+        expect(result.heldEverywhere).toBe(true);
+
+        const active = await activeRows(f.targetId, CAP);
+        expect(active.length, 'exactly one active row').toBe(1);
+        expect(active[0]!.grant_source).toBe('grant');
+
+        const seeded = await rowById(seededId);
+        expect(seeded.revoked_at, 'revoked by the barrier — the SUT\'s own UPDATE hit 0 rows').not.toBeNull();
+        expect(seeded.revoke_reason).toBe('concurrent revoke (E9 barrier)');
+      } finally {
+        conn.release();
+      }
     },
     30000,
   );

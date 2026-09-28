@@ -588,7 +588,7 @@ describe('A4 (⛔ green now — a guard) — the ordinary picker grant (no inten
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(pickerFormData()));
     const params = new URL(to, 'http://localhost').searchParams;
-    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${CAP_TITLE}, at every store.`);
+    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${CAP_TITLE}, at every store they work at.`);
     expect(grantCapabilityAsActor).toHaveBeenCalledTimes(1);
     const callArg = grantCapabilityAsActor.mock.calls[0]?.[2] as Record<string, unknown>;
     expect('positionGrantId' in callArg, 'the ordinary grant path must not carry this field at all').toBe(false);

@@ -712,3 +712,24 @@ their reasons, citing this amendment.
 which stopped being true at S2b (`8d14e7a`). As specced, 0166 would also narrow deliberate org-wide picker grants and
 S2c replacements. S3 is not built until an amendment bounds the definition and a test proves a deliberate grant
 survives.
+
+### 4d. S2d: follow-ups from the executed post-commit review of `7415676` (APPROVED 2026-09-28, orchestrator — DONE 2026-09-28)
+The auditor RAN invariants (a)–(e) on its own DB (`shareat_test_auditor`, restricted role) — all PASS, plus five
+mutants (four killed). **Model** Sonnet, tester then builder. **Migration** none.
+- **D1 (MED, tester).** The ⛔ "0 rows must NOT return early" (§4c item 1.2) is pinned by nothing: a mutant adding
+  `if (revoked.length === 0) return …wrote:false` kept all 472 tests green. New leg **E9**: another connection revokes
+  the elevation row (FOR UPDATE barrier) between the call's SELECT and its UPDATE → the call still inserts the hand
+  grant; exactly one active row, `grant_source='grant'`, `wrote: true`. Must be red under that mutant.
+- **D2 (LOW, tester).** E7 cannot tell a real interleaving from serialisation. Make it deterministic with the same
+  FOR UPDATE barrier so the ON CONFLICT arm is actually reached, and assert that it was (loser returns the winner's id).
+- **D3 (LOW, builder + tester red).** `admin/users/actions.ts:206` "…, at every store" overclaims: a store-scoped
+  capability also needs a `person_store_scope` row at each store. Wording becomes
+  `` `${capabilityTitle(c)}, at every store they work at` `` (store-scoped only; org/platform unchanged). Red **G4**.
+- **D4 (LOW, builder + tester red).** `admin/users/lib.ts:234-236` second lookup accepts `'grant'` only; the old fold
+  also accepted `'owner'`. Accept `'grant' | 'owner'` in the SAME-STORE lookup only — the org-wide lookup already accepts both (§4c item 2.1), unchanged (parity; `person_grants_store_shape_check`
+  forbids owner+store today, so this is defensive) and say so in the JSDoc. Red **P9** (pure fold with an owner
+  same-store fixture).
+- **BUILDER paths:** `apps/erp/src/app/admin/users/actions.ts`, `apps/erp/src/app/admin/users/lib.ts`.
+- **TESTER paths:** `packages/auth/tests/integration/t349-s2c-supersede-elevation.test.ts` (E7, E9),
+  `apps/erp/tests/t349-s2c-fold-and-banner.test.ts` (G4, P9), plus the banner pins in
+  `apps/erp/tests/t343-s6b-admin-users-labels.test.ts` / `t349-hold-own-right-page.test.ts` that the new wording moves.

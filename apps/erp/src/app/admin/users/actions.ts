@@ -203,8 +203,11 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
         // T-349 S2c item 4 — the picker grant is always person-level (org-wide). For a
         // store-scoped capability that reaches every store, so the banner says so; an
         // org/platform-scoped capability has no store axis to name.
+        // T-349 S2d (D3) — "at every store" overclaimed: a store-scoped capability ALSO needs a
+        // `person_store_scope` row at each store (authorize()'s axis 2), which this grant does not
+        // create. "at every store they work at" is honest about that second axis.
         const phrase = (c: Capability) =>
-          CAPABILITY_SCOPE[c] === 'store' ? `${capabilityTitle(c)}, at every store` : capabilityTitle(c);
+          CAPABILITY_SCOPE[c] === 'store' ? `${capabilityTitle(c)}, at every store they work at` : capabilityTitle(c);
         ok =
           capabilities.length === 1
             ? `Granted: ${phrase(capabilities[0]!)}.`

@@ -159,13 +159,29 @@ describe('P8 — foldActiveGrants: NULL-store cover wins over same-store cover, 
     ]);
     expect(storeALine?.alsoVia).toEqual([]);
   });
+
+  // T-349 S2d (D4) — the same-store lookup (`lib.ts:236-238`) accepts `grantSource === 'grant'`
+  // only; the pre-S2c fold also accepted `'owner'`. `person_grants_store_shape_check` forbids an
+  // `owner`+`store_id` row today (defensive parity, not a reachable production shape), so this is a
+  // pure-function fixture, not an integration leg.
+  it(
+    'P9 — a same-store OWNER row covers the position too, not just a same-store grant — was red today: the owner row is not matched at all, the position stays its own uncovered line',
+    () => {
+      const ownerSameStore = baseRow({ id: 'grant-owner-store-a', grantSource: 'owner' as const, storeId: STORE_A });
+      const folded = lib.foldActiveGrants([ownerSameStore, position]);
+      const ownerLine = folded.find((f) => f.grant.id === 'grant-owner-store-a');
+      const uncoveredPosition = folded.find((f) => f.grant.id === 'grant-position');
+      expect(ownerLine?.alsoVia, 'wanted: the same-store owner row folds the position in').toEqual([positionSource]);
+      expect(uncoveredPosition, 'wanted: no separate uncovered position line').toBeUndefined();
+    },
+  );
 });
 
 // =================================================================================================
 // G1-G3 — setCapabilityGrantAction's banner names the store axis for a store-scoped capability.
 // =================================================================================================
 
-describe('G1-G3 — the picker-grant banner names "at every store" for a store-scoped capability only', () => {
+describe('G1-G3 — the picker-grant banner names "at every store they work at" for a store-scoped capability only', () => {
   let grantCapabilityAsActor: ReturnType<typeof vi.fn>;
 
   beforeAll(() => {
@@ -176,11 +192,11 @@ describe('G1-G3 — the picker-grant banner names "at every store" for a store-s
     grantCapabilityAsActor.mockReset();
   });
 
-  it('G1: one store-scoped capability (confirm_receipt) → "Granted: <Title>, at every store."', async () => {
+  it('G1: one store-scoped capability (confirm_receipt) → "Granted: <Title>, at every store they work at."', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(grantFormData({ capabilities: ['confirm_receipt'] })));
     const params = new URL(to, 'http://localhost').searchParams;
-    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${capabilityTitle('confirm_receipt')}, at every store.`);
+    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${capabilityTitle('confirm_receipt')}, at every store they work at.`);
   });
 
   it('G2 (⛔ green today, a guard): one org-scoped capability (manage_fixed_assets) → "Granted: <Title>." with no store phrase', async () => {
@@ -199,7 +215,7 @@ describe('G1-G3 — the picker-grant banner names "at every store" for a store-s
     );
     const params = new URL(to, 'http://localhost').searchParams;
     expect(params.get('ok'), `redirect URL was: ${to}`).toBe(
-      `Granted 2 capabilities: ${capabilityTitle('confirm_receipt')}, at every store; ${capabilityTitle('manage_fixed_assets')}.`,
+      `Granted 2 capabilities: ${capabilityTitle('confirm_receipt')}, at every store they work at; ${capabilityTitle('manage_fixed_assets')}.`,
     );
   });
 });

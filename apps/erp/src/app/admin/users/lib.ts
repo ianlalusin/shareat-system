@@ -228,13 +228,21 @@ export function foldActiveGrants(grants: readonly GrantWithSource[]): FoldedGran
   const coveredPositionIds = new Set<string>();
   for (const position of positions) {
     // First, an org-wide cover (NULL store) — it wins even when a same-store cover also exists.
-    // Only when there is none, a same-store 'grant' row covers it.
+    // Only when there is none, a same-store cover applies.
+    // T-349 S2d (D4) — the same-store lookup accepts `'grant' | 'owner'`, parity with the org-wide
+    // lookup above. `person_grants_store_shape_check` forbids an `'owner'` row from carrying a
+    // store today, so this arm is defensive rather than reachable — but the fold should not assume
+    // a DB constraint it does not enforce itself, and the two lookups agreeing is what makes this
+    // one function's rule, not two.
     const cover =
       others.find(
         (g) => g.grantName === position.grantName && (g.grantSource === 'grant' || g.grantSource === 'owner') && g.storeId === null,
       ) ??
       others.find(
-        (g) => g.grantName === position.grantName && g.grantSource === 'grant' && g.storeId === position.storeId,
+        (g) =>
+          g.grantName === position.grantName &&
+          (g.grantSource === 'grant' || g.grantSource === 'owner') &&
+          g.storeId === position.storeId,
       );
     if (cover) {
       coveredPositionIds.add(position.id);
