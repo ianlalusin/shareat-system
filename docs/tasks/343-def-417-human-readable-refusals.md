@@ -2310,6 +2310,27 @@ S5.5v already owns the neighbouring files; all disjoint from S5.5t/S5.5u.
    New leg P1: preview with a comma-typed penalty AND an unconfigured channel returns BOTH refusals (red: only the
    figures refusal, thrown).
 
+
+**S5.5w Amendment A1 — from the S5.5t post-commit /code-review (`7896e2a`, run by Ian in the worktree), 2026-09-28,
+binding.** Folded here because S5.5w already owns `items/index.ts` and `cutover/index.ts`.
+1. **Cost overflow (CONFIRMED).** `parseFourDecimalCost` (`packages/domain/src/commissary/catalogue.ts:40-56`) caps
+   decimals but not the integer part; every caller writes `numeric(14,4)` (cutover, deliveries, stock layers, supplier
+   returns), so `12345678901.5` reaches Postgres and returns the generic DB-refused text. **Builder, +1 path**
+   `catalogue.ts`: after the pattern check, a trimmed value whose integer part (leading zeros stripped) has more than 10
+   digits → `refuse(<raw>, `${humanLabel} — "${raw}" is too large. Use a number below 10000000000.`)`. Tester leg C1:
+   cutover `unitCost='12345678901.5'` → that sentence, count unchanged (red: DB-refused fallback); `'9999999999.9999'`
+   saves.
+2. **Same-unit message lost (CONFIRMED).** `items/index.ts:193` — the same-unit "must be 1" check (`:210`) runs after
+   the new format/magnitude checks, so a same-unit line with a malformed factor gets the format sentence. Move the
+   same-unit check BEFORE the format/magnitude checks. Tester leg SU1: `purchaseUnit` = base unit,
+   `conversionFactor='1.2345678'` → the same-unit sentence (red: the six-decimal sentence).
+3. **Trim on persist (PLAUSIBLE, cheap).** `items/index.ts:192` validates the trimmed factor but stores the raw; store
+   the trimmed string. Leg T1: `' 2 '` saves `2.000000`.
+4. **Dismissed (orchestrator):** fraction-before-magnitude order (ruled in S5.5t A2 — format first); the fourth inline
+   bounded-decimal validator (consolidation is DEF-383's own task); `wholeMinutes()` in the app layer (S5.5q precedent,
+   `recordAdjustment` takes typed numbers); per-call `fn` labels, message parity pin, regex hoisting — style, no
+   failure scenario.
+
 **S5.5w — build (after S5.5t and S5.5u commit; 8 elements, 28 fields, 12 files).**
 1. **Boxes.** `ap/invoices/[id]/page.tsx:167,190` (`decimal`), `cutover/count/page.tsx:140` (`decimal`),
    `prepaid/page.tsx:205` (`decimal`), `:223` and `prepaid/[id]/page.tsx:121` (`numeric`),
@@ -2345,7 +2366,8 @@ S5.5v already owns the neighbouring files; all disjoint from S5.5t/S5.5u.
   `apps/erp/src/app/prepaid/page.tsx`, `apps/erp/src/app/prepaid/[id]/page.tsx`, `apps/erp/src/app/prepaid/actions.ts`,
   `apps/erp/src/app/settings/attendance/page.tsx`, `apps/erp/src/app/settings/attendance/actions.ts`,
   `packages/domain/src/shared/quantity-input.ts` (new), `packages/domain/src/trade/index.ts`,
-  `packages/domain/src/items/index.ts`, `packages/domain/src/cutover/index.ts`, `packages/domain/src/prepaid/index.ts`.
+  `packages/domain/src/items/index.ts`, `packages/domain/src/cutover/index.ts`, `packages/domain/src/prepaid/index.ts`,
+  **+ `packages/domain/src/commissary/catalogue.ts` (Amendment A1)**.
 
 - **TESTER paths:** `apps/erp/tests/t343-s5-5w-number-boxes.test.ts`, `apps/erp/tests/integration/t343-s5-5w-followups.test.ts`
   (new); ⚠️ ruled edits: `apps/erp/tests/t343-s5-5t-number-boxes.test.ts:81-95` pins cutover `quantity` and AP
