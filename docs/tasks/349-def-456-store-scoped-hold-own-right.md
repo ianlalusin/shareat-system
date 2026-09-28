@@ -1,6 +1,6 @@
 # T-349: "Hold in their own right" keeps the grant at that store (DEF-456)
 
-**Status:** S1 DONE 2026-09-27 (`3d601ab`, migration 0165), S2 DONE (`ea0ccb4`), S2b DONE 2026-09-27 (post-commit follow-ups, §4b). **S3 (repair of already-widened rows, migration 0166 reserved) APPROVED — Ian answered Q1 YES 2026-09-27 — ON HOLD pending an amendment (§9 S3 HOLD).** S2c APPROVED 2026-09-28 (§4c).
+**Status:** S1 DONE 2026-09-27 (`3d601ab`, migration 0165), S2 DONE (`ea0ccb4`), S2b DONE 2026-09-27 (post-commit follow-ups, §4b). **S3 (repair of already-widened rows, migration 0166 reserved) APPROVED — Ian answered Q1 YES 2026-09-27 — amended by S3 Amendment A1 (date bound + store-scoped only; §9).** S2c APPROVED 2026-09-28 (§4c).
 **Closes:** DEF-456 (`docs/DEFECTS-REGISTER.md:663`). **Ian's ruling, 2026-09-27:** *"keep it at that store."*
 **Migrations:** S1 `0165_t349_person_grants_store_grant.sql`, journal `when` = `1800329507084` (0164's `1800243107084` +
 86 400 000; it must exceed the previous entry, ADR-012 §5.5). S2 none. **S3 `0166_t349_def456_repair.sql` is reserved
@@ -587,7 +587,128 @@ administrator revokes them by hand. S1 and S2 ship either way.
 capability.") and a new hand-grant row names the clicking actor and the time. Supersedes bible §13 row 188's in-place
 re-label (bible row owed — planner).
 
-⚠️ **S3 HOLD (2026-09-28, S2c spec audit):** §3.5's "widened row" definition assumes the picker hides held capabilities,
+### S3 Amendment A1 — APPROVED 2026-09-28 (orchestrator, drafted by the independent Opus S2c auditor) (2026-09-28, independent Opus spec audit)
+
+This amends §3.5, the S3 repair in migration `0166_t349_def456_repair.sql`, and leg M6. It is binding on the S3
+TESTER and BUILDER. Line numbers are HEAD `586d8eb`.
+
+**The defect in §3.5 as written.**
+
+- §3.5 defines a widened row R: an active `'grant'` row with `store_id IS NULL` and `source_ref IS NULL`, beside a
+  `'position'` row P for the same capability that was active at R's `granted_at`.
+- It then justifies that definition with "since 0159 no other path produces one: the picker hides held capabilities".
+  That premise is now false.
+- Since S2b item 3 (`8d14e7a`), the picker hides only capabilities held org-wide. An admin can therefore deliberately
+  grant org-wide a capability the person also holds through a job. That write has exactly R's shape.
+- S2c's close-and-replace (§4c) also produces R's shape when a position row is active.
+- **Result:** 0166 as specced would narrow deliberate org-wide grants down to the job's store.
+
+**Is there a structural marker? No, and the reason is recorded here so it is not searched for again.**
+
+- Before S2 (`ea0ccb4^:apps/erp/src/app/admin/users/actions.ts`), the hold button and the picker ran the same loop:
+  `grantCapabilityAsActor(tx, actor, { personId, capability })`, person-level.
+- `intent === 'hold_own_right'` changed only the banner (`:190-191`).
+- Both paths wrote an identical row: `grant_source = 'grant'`, `store_id` NULL, `source_ref` NULL,
+  `granted_by` = the actor, `granted_at` = now().
+  - 0140 added `grant_source` with the value `'grant'` for both.
+  - 0165 added the store-scoped `'grant'` shape, which the old path never wrote.
+- The rows carry no reason, no ref and no source value that could tell the two paths apart.
+- What *did* tell them apart was the page. Until S2b, the picker offered only capabilities with **no active row of
+  any kind** (`ea0ccb4^:[personId]/page.tsx:64-65`, the `heldNames` set built from every active row). So before
+  S2b, an active P at R's time proves R came from the hold button. After S2b it proves nothing. **The discriminator is
+  therefore time, and only a date bound works.**
+
+**The ruled definition.** It replaces §3.5's first paragraph. Its three conditions are all required:
+
+1. **Shape.** R is an ACTIVE row with `grant_source = 'grant'`, `store_id IS NULL` and `source_ref IS NULL`.
+   A `'position'` row P exists for the same `(person_id, grant_name)` with `P.granted_at < R.granted_at` and
+   `(P.revoked_at IS NULL OR P.revoked_at > R.granted_at)`. This part is unchanged.
+2. **Date bound, new.** `R.granted_at < '2026-09-27T10:59:23Z'`, the committer time of `ea0ccb4`
+   (`2026-09-27T18:59:23+08:00`), with a strict `<`. Why this date:
+   - From that commit on, the hold path writes a store-scoped row for a store-scoped capability, so no later
+     NULL-store R can have come from the old button.
+   - The picker change (S2b, `8d14e7a`, 22:51 +08:00) came strictly later. So no deliberate R the picker could have
+     made while a job row was active falls before the bound, on any machine. The same holds for S2c's replacements,
+     which come later still.
+   - ⚠️ **Residual, and it errs in the safe direction.** CI deploys on push, and pushes happen at wrap-up, so
+     production ran the old hold path until the S2 deploy, which may be later than the commit. A hold clicked in
+     production between the commit and that deploy is *missed*: it stays org-wide, which is today's state, visible
+     and revocable by hand. It is never wrongly narrowed.
+   - The app is deployed but not launched: production holds essentially one person. The orchestrator runs the §3.5
+     SELECT read-only on erp2 before 0166 ships. The SELECT uses the shape condition and reports two counts: rows
+     matched below the bound, and rows between the bound and the S2 deploy time. If the second count is not zero,
+     that is a question for Ian (below).
+3. **Store-scoped capabilities only, new.** `R.grant_name IN (<the literal list of every capability with
+   CAPABILITY_SCOPE = 'store' at build time>)`. The reason:
+   - DEF-456 is a *store* widening. For an org-scoped capability, `authorize` applies no store filter, so a NULL-store
+     row is the correct shape. §3.2 item 9 made that ruling: S2 itself writes NULL-store for an org-scoped hold.
+   - Re-scoping such a row would create a shape S2 never writes, a store-carrying `'grant'` row for an org-scoped
+     capability. The page would then read "hand-granted at X" for authority that is org-wide.
+   - The BUILDER generates the list from `packages/auth/src/capabilities.ts`'s `CAPABILITY_SCOPE` and pastes it into
+     the SQL with a header comment naming the source and the HEAD it came from. The report records the count. A
+     migration is immutable, so the list is a snapshot, and later edits to `CAPABILITY_SCOPE` do not touch it.
+
+The repair steps 1-2 of §3.5 (insert at each P store with R's `granted_by`/`granted_at`, then revoke R with the
+DEF-456 reason) are **unchanged**. Delete the sentence "Since 0159 no other path produces one: the picker hides held
+capabilities, and 0159 step 5 twins copy `granted_at` and are never `'grant'`." Replace it with a pointer to this
+amendment. Q1's answer stands: this narrows *what* 0166 matches and does not change what it does to a match.
+
+**M6: TESTER's ruled edit to `packages/db/tests/integration/t349-s3-def456-repair-migration.test.ts`.**
+
+*Existing seeds (`:163-201`).* R1, R2 and the control stay as they are. They already satisfy the new bound and
+capability conditions: they use `record_sale` (store-scoped) and dates in 2026-01 to 2026-04. Record in the TESTER
+report that the existing seeds were checked against A1 and needed no change.
+
+*New seeds, in `beforeAll`.* Each has a P at A active from `'2026-01-01T00:00:00Z'` and still active.
+
+- **S1, a post-S2b picker grant.** A NULL-store `'grant'` row, `source_ref` NULL, `record_sale`,
+  `granted_at = '2026-09-28T00:00:00Z'`.
+- **S2, an S2c replacement.** A revoked `'elevation'` NULL-store `record_sale` row: `granted_at '2026-01-05'`,
+  `revoked_at = '2026-09-28T01:00:00Z'`, reason `'Replaced by a hand grant of the same capability.'`. Plus an active
+  NULL-store `'grant'` row with `granted_at = '2026-09-28T01:00:00Z'`.
+- **S3, an org-scoped hold before the bound.** It needs a second `position_capability_defaults` row at A for an
+  org-scoped capability (e.g. `manage_fixed_assets`; the TESTER confirms its `CAPABILITY_SCOPE` is `'org'`), and P
+  for that capability. R is a NULL-store `'grant'` row with `granted_at '2026-03-10T00:00:00Z'`.
+- **S4, the bound edge.** A shape-matching `record_sale` R with `granted_at = '2026-09-27T10:59:23Z'`, exactly the
+  bound.
+
+*Legs.* Each "untouched" check reads the R row back by id and also counts active `'grant'` rows at A for that person.
+
+| Id | Case | Target | Expected red today |
+|---|---|---|---|
+| M6-S1 | post-S2b deliberate picker grant | ⛔ after 0166 the row is still active and unrevoked; ⛔ no `'grant'` row at A for S1's person | locating 0166 fails (as M6). Against the pre-A1 SQL it would be revoked and re-scoped |
+| M6-S2 | S2c replacement | ⛔ as S1; ⛔ the revoked elevation row is unchanged | as M6-S1 |
+| M6-S3 | org-scoped hold before the bound | ⛔ as S1: an org-scoped capability is never re-scoped | as M6-S1 |
+| M6-S4 | R exactly at the bound | ⛔ as S1 (strict `<`) | as M6-S1 |
+
+- Extend the pre-state block (`:213-225`) so S1-S4 are asserted active exactly as seeded.
+- Update the `grantsAtA` count so it still reads 0.
+
+⚠️ **A gap in M6 today, which the TESTER closes in the same edit.** The file's only post-repair check is "locating
+0166" (`:227-229`). It never applies 0166 and never asserts the repaired state, even though the `it` title promises
+it. So as soon as 0166 exists, M6 goes green without proving anything. Add a second `it` that applies 0166 to the
+scratch DB and then asserts:
+
+- R1/R2's targets as §4 M6 states them, and the control untouched;
+- M6-S1 to M6-S4;
+- no row at B.
+
+This is a ruled edit: it adds proof and does not weaken anything.
+
+**BUILDER paths (S3, unchanged):** `packages/db/migrations/0166_t349_def456_repair.sql` (new) and
+`packages/db/migrations/meta/_journal.json`. Put the bound and the capability list in the migration header with
+their reasons, citing this amendment.
+
+**For Ian, only if needed.**
+
+- If the erp2 count finds a row between the bound and the S2 deploy time, Ian decides: re-scope it by hand, or leave
+  it org-wide.
+- Otherwise nothing here needs Ian. The bound only ever errs toward leaving a row as it is today, and the org-scoped
+  exclusion follows his §3.2 item 9 ruling.
+
+---
+
+✅ **S3 HOLD LIFTED by S3 Amendment A1 above.** Was: §3.5's "widened row" definition assumes the picker hides held capabilities,
 which stopped being true at S2b (`8d14e7a`). As specced, 0166 would also narrow deliberate org-wide picker grants and
 S2c replacements. S3 is not built until an amendment bounds the definition and a test proves a deliberate grant
 survives.
