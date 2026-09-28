@@ -2341,6 +2341,13 @@ S5.5v already owns the neighbouring files; all disjoint from S5.5t/S5.5u.
 6. **Gate batching (orchestrator).** The ratchet and money-positivity-guard files carry S5.5w's cutover edits, so
    S5.5v, S5.5u and S5.5w are gated and committed together.
 
+
+**S5.5v Amendment A3 — from the batch Chrome smoketest, 2026-09-28, binding.** "Check the numbers" sends
+`gross || '0'` / `net || '0'` (`channel-settlements/SettlementForm.tsx:189-190`), so a blank gross previews as
+"reconciles exactly" and enables Post — contradicting "the same arithmetic the posting runs" and hiding the domain's blank
+refusal (Ian's Q1). Send gross and net RAW (deductions keep `|| '0'`: blank deduction = 0 by design). Leg PV4 (source/
+render): the preview call passes `grossAmount: gross` and `netDeposited: net` with no `|| '0'`.
+
 **S5.5w Amendment A1 — from the S5.5t post-commit /code-review (`7896e2a`, run by Ian in the worktree), 2026-09-28,
 binding.** Folded here because S5.5w already owns `items/index.ts` and `cutover/index.ts`.
 1. **Cost overflow (CONFIRMED).** `parseFourDecimalCost` (`packages/domain/src/commissary/catalogue.ts:40-56`) caps
