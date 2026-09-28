@@ -1,6 +1,6 @@
 # T-349: "Hold in their own right" keeps the grant at that store (DEF-456)
 
-**Status:** S1 DONE 2026-09-27 (`3d601ab`, migration 0165), S2 DONE (`ea0ccb4`), S2b DONE 2026-09-27 (post-commit follow-ups, §4b). **S3 (repair of already-widened rows, migration 0166 reserved) APPROVED — Ian answered Q1 YES 2026-09-27** (§9).
+**Status:** S1 DONE 2026-09-27 (`3d601ab`, migration 0165), S2 DONE (`ea0ccb4`), S2b DONE 2026-09-27 (post-commit follow-ups, §4b). **S3 (repair of already-widened rows, migration 0166 reserved) APPROVED — Ian answered Q1 YES 2026-09-27 — ON HOLD pending an amendment (§9 S3 HOLD).** S2c APPROVED 2026-09-28 (§4c).
 **Closes:** DEF-456 (`docs/DEFECTS-REGISTER.md:663`). **Ian's ruling, 2026-09-27:** *"keep it at that store."*
 **Migrations:** S1 `0165_t349_person_grants_store_grant.sql`, journal `when` = `1800329507084` (0164's `1800243107084` +
 86 400 000; it must exceed the previous entry, ADR-012 §5.5). S2 none. **S3 `0166_t349_def456_repair.sql` is reserved
@@ -355,6 +355,221 @@ reads "hand-granted at SmokeStore", and the store-less row appears in the revoke
 4. `8d14e7a`'s message claims the S5.5s full-suite run covered it; that run predates the commit. The next full gates
    (at the S5.5t commit) are the first real run over it.
 
+### 4c. S2c: follow-ups from the S2b post-commit review of `8d14e7a` (APPROVED 2026-09-28 (orchestrator, after independent Opus spec audit; Ian's Q2 folded))
+
+Model **Sonnet, tester then builder**; **no migration**. All four items are buildable now: **Ian answered Q2 on
+2026-09-28: "Close and replace"** (§9). Line numbers are HEAD `645693d`. Paths are disjoint from T-349 S3
+(`0166_*.sql`, `_journal.json`, `packages/db/tests/integration/t349-s3-def456-repair-migration.test.ts`) and from
+T-343 S5.5u/S5.5v/S5.5w (none of their files are under `admin/users/`, `repo/access.ts` or `packages/auth/`).
+⛔ `tests/unit/t343-throw-ratchet.test.ts` is dirty in the S5.5v lane: **do not edit it**. Its check is `<=` the
+ceiling, so this slice needs no edit there (item 1 adds only `throw refuse(...)`, never a raw `throw new Error`).
+
+**Rulings.**
+
+- **Finding 1: the upgrade keeps someone else's name on a "hand-granted" row. Ian's ruling (Q2): close and replace.**
+  - *Where it comes from.* T-248 (`fddef02`, bible §13 row 188: "closed as a monotone upgrade") re-tags the row in
+    place. This happens on every person-level call whose source outranks an `'elevation'` or NULL-source row, including
+    the picker. S2b only made it report `wrote: true`. `assignRole` writes elevation rows with
+    `grantedBy: input.grantedBy` (`roles.ts:112`), which may be NULL. So an upgraded row can read "hand-granted" while
+    its `granted_by` is NULL or is whoever appointed the manager, and its `granted_at` is the appointment date. That
+    breaks the rule at `roles.ts:656` and `:671` (`granted_by` is the ACTOR, never null).
+  - *Coexisting at person level is impossible.* `person_grants_active_person_level_unique` (`schema/access.ts:226-228`)
+    has no source term. **Rejected**: it would need a migration and would put two active rows on one line.
+  - *Ruled mechanism (Ian, Q2 = replace).* In the same transaction, revoke the lower-ranked row with a fixed reason,
+    then insert a fresh row with the incoming source, the actor as `granted_by` and `now()`. No migration. This keeps
+    both moments on record, matching this table's own rule ("re-granting inserts a new one rather than reviving the
+    old", `access.ts:573-576`). The result is still monotone: the active row only ever becomes less sweepable. What
+    changes from row 188 is the mechanism, a new row instead of a re-tag. **Bible §13 row 188's closing sentence is
+    superseded by this ruling.** Recording that in the bible is the orchestrator's job at commit, not the builder's.
+  - *Invariants this must keep (the audit checked each).*
+    - (a) **Atomic.** The revoke and the insert run on the same `tx`. The UPDATE must come first, because the insert
+      needs the slot free. If the insert fails, the revoke rolls back.
+    - (b) **No window.** Other sessions see either the old active row or the new one. Under READ COMMITTED (the
+      default: `client.ts:84` passes no isolation level) there is never a moment with neither.
+    - (c) **Idempotent on double-click.** A concurrent second call blocks on the row lock. It then sees the row
+      revoked, so its UPDATE touches 0 rows. Its INSERT hits the committed winner and does nothing. It returns
+      `wrote: false`. Never a raw 23505.
+    - (d) **`authorize()` is unchanged for the person.** `authorize.ts` never reads `grant_source`. The old row and
+      the new one have the same `(person, grant_name, store_id NULL)`, so every check answers the same before and
+      after.
+    - (e) **Tenancy.** Both statements run on the caller's `withOrgPrincipal` tx. `person_grants` stays `derived`
+      RLS, with a `WITH CHECK` through `persons`. `registry.ts` and `classification.ts` need no edit.
+- **Finding 2.** Fix both halves.
+  - The fold's choice of cover must not depend on input order. **An org-wide (NULL-store) cover wins over a
+    same-store cover**, the same preference as the repo's covering select (`access.ts:674`, `nulls first`). The page
+    and the "already held everywhere" banner then agree.
+  - Separately, `grantsForPerson` gains `ORDER BY granted_at, id`, so the page list stops moving after an UPDATE. The
+    other callers (`authorize.ts:269`, `domain/people/position-defaults.ts:275`) do not depend on order (verified).
+- **Finding 3.** The picker grant is always person-level.
+  - For a **store-scoped** capability (`CAPABILITY_SCOPE[c] === 'store'`) that means every store, and the banner
+    says so.
+  - For `'org'`/`'platform'` capabilities the banner is unchanged. "At every store" would claim a store axis they
+    do not have.
+- **Finding 4. No work.** The S5.5t commit (`7896e2a`) ran the full gates over a tree that contained `8d14e7a`.
+  Integration: 3464 passed, 22 failed, and every failure was in the uncommitted S5.5v red files. Closed.
+
+**BUILDER items.**
+
+1. **Supersede, not re-tag.** In `packages/db/src/repo/access.ts:726-748`, the person-level "existing" arm of
+   `grantCapability`:
+   1. Keep the rank test (`grantSourceRank(input.grantSource) > grantSourceRank(existingSource)`). When the incoming
+      call does not outrank, nothing changes: `{ id: existing.id, wrote: false, heldEverywhere: true }`, no write.
+   2. When it outranks, **do not UPDATE `grant_source`**. Instead, on the same `tx`:
+      - `UPDATE person_grants SET revoked_at = now(), revoke_reason = SUPERSEDED_BY_HAND_GRANT_REASON
+        WHERE id = existing.id AND revoked_at IS NULL`.
+        - Export `SUPERSEDED_BY_HAND_GRANT_REASON = 'Replaced by a hand grant of the same capability.'` from
+          `repo/access.ts`.
+        - The wording is plain, with no ids (T-343). It is also true for a NULL-source row, not only for an
+          elevation row.
+        - **Ignore the affected-row count.** It is 0 when a concurrent supersede, the admin-arrival sweep or a manual
+          revoke got there first. In every one of those cases the next step is still correct.
+      - `INSERT { personId, grantName, grantedBy: input.grantedBy, grantSource: input.grantSource, sourceRef: null }`.
+        `granted_at` takes its default, `now()`, which equals the revoke's `revoked_at` because both use the
+        transaction's timestamp.
+        - Use `.onConflictDoNothing({ target: [personId, grantName], where: sql\`revoked_at is null and store_id is null\` })`
+          with `.returning({ id })`.
+        - The `where` must match `person_grants_active_person_level_unique`'s predicate exactly.
+      - If a row was inserted, return `{ id: <new id>, wrote: true, heldEverywhere: true }`.
+      - If not (a concurrent writer holds the slot), re-select the active `storeId IS NULL` row and return
+        `{ id: winner.id, wrote: false, heldEverywhere: true }`. If none is visible, `throw refuse(...)` with the same
+        two sentences as `:718-721`. Never a raw 23505, never a raw `throw new Error`.
+      - ⛔ Why "0 rows" must NOT return early: when the sweep revoked the elevation row concurrently, returning early
+        would leave the person holding neither row, and the admin's deliberate grant would be lost. Falling through
+        to the insert keeps it.
+   3. Comments to rewrite, each to say *supersede* (a revoke plus a new row, with who and when both kept):
+      - the JSDoc at `:573-604`, i.e. the "rank-based rewrite", "`grantSource` is re-written ONLY when" and T-248
+        paragraphs;
+      - the `GRANT_SOURCE_RANK` JSDoc at `:537-561`, where ":541 idempotent branch … may only ever move a stored
+        `grantSource`" becomes "may only ever REPLACE the active row with a less sweepable one";
+      - the S2b comment at `:740-742`.
+
+      In each, cite Ian's Q2 ruling (2026-09-28). ⚠️ The `'position'` branch and its `reconcilePositionGrants`
+      "elevation → position" note (`:553-556`) are a separate arm and do NOT change. Leave that sentence alone.
+2. **Deterministic cover in the fold.** In `apps/erp/src/app/admin/users/lib.ts:216-243` (`foldActiveGrants`), replace
+   `others.find` (`:222-227`) with two lookups:
+   1. First, an active `'grant'`/`'owner'` row for the capability with `storeId === null`.
+   2. Only if there is none, a `'grant'` row with `storeId === position.storeId`.
+
+   Rewrite the JSDoc at `:199-206` to state the preference and why: it agrees with `access.ts:674`.
+3. **Stable order.** In `packages/db/src/repo/access.ts:929-945` (`grantsForPerson`), add
+   `.orderBy(asc(personGrants.grantedAt), asc(personGrants.id))`. `asc` is already imported. Update the JSDoc: the
+   order is stable, so the admin page list does not move after an UPDATE.
+4. **Banner names the scope.** In `apps/erp/src/app/admin/users/actions.ts`:
+   - Add `CAPABILITY_SCOPE` to the `@shareat/auth` import (`:19-28`). It is exported at
+     `packages/auth/src/index.ts:8`.
+   - Define a local phrase at `:202-205`: when `CAPABILITY_SCOPE[c] === 'store'` it is
+     `` `${capabilityTitle(c)}, at every store` ``, otherwise `capabilityTitle(c)`.
+   - One capability → `` `Granted: ${phrase}.` ``
+   - Several → `` `Granted ${n} capabilities: ${phrases.join('; ')}.` ``
+
+   The hold banners (`:173-180`) and the revoke banner stay as they are.
+
+**BUILDER paths:** `packages/db/src/repo/access.ts`, `apps/erp/src/app/admin/users/lib.ts`,
+`apps/erp/src/app/admin/users/actions.ts`. ⛔ Not `roles.ts`: its callers already pass `grantedBy: actor.personId`
+and ignore `id`. The returned `id` changing on a supersede has no production consumer (verified: `roles.ts:647,657,673`
+read only `wrote`/`heldEverywhere`; `organizations/index.ts:287` and `roles.ts:109,705` discard the result).
+
+**TESTER paths.**
+
+- **New files.**
+  - `apps/erp/tests/t349-s2c-fold-and-banner.test.ts` (P8, G1-G3). It uses the S6b harness with a partial
+    `@shareat/auth` mock that spreads the real module, so `CAPABILITY_SCOPE` is the real one.
+  - `packages/db/tests/integration/t349-s2c-grants-order.test.ts` (R1).
+  - `packages/auth/tests/integration/t349-s2c-supersede-elevation.test.ts` (E1-E8).
+- **Existing files to edit.** Each edit is **a ruled behaviour change, not a weakening**, and is recorded in the
+  TESTER report.
+  - `apps/erp/tests/t343-s6b-admin-users-labels.test.ts`:
+    - **A1** (`:595-600`, `record_sale`) and **A3** (`:638-649`, `record_sale` + `submit_sales_day`). Both
+      capabilities are store-scoped, so each expected title gains `, at every store`.
+    - Retitle both so the title states the suffix.
+    - ⛔ Do not touch A2/A4 (`:603-636`, the hold path).
+  - `apps/erp/tests/t349-hold-own-right-page.test.ts`: **A4** (describe `:574`, `it` `:585-592`). `confirm_receipt` is
+    store-scoped, so the expectation gains `, at every store`. Retitle "unchanged" to "names every store". The
+    `positionGrantId`-absent assertion stays.
+  - `packages/auth/tests/integration/authorize.test.ts`, **case 12** (`:720-758`):
+    - Its `after` and `survived` selects have no `revoked_at` filter, so after a supersede they would read one of two
+      rows at random. Add `and revoked_at is null` to both, and assert that exactly one active row exists.
+    - Reword the comment at `:751-752` from "move this row OUT of the sweepable set" to "replace it with a
+      non-sweepable row".
+    - The assertions themselves do not change: source `'grant'`, and the row survives the admin-arrival sweep.
+  - `packages/auth/tests/integration/t349-hold-own-right.test.ts`, **H10** (`:461-500`):
+    - Retitle "upgrades in place to 'grant'" to "is superseded by a new 'grant' row".
+    - Drop the comment at `:481-486`, which describes pre-S2b code.
+    - Reword the message at `:495` from "upgraded in place, not duplicated" to "one active row: the elevation row is
+      replaced, not duplicated".
+    - The active-row-count and `'grant'` checks stay green unchanged.
+
+**Legs.** Every leg asserts the TARGET. Record the raw red for each one.
+
+*Fixture for E1-E8 (the TESTER names it):*
+
+- an org with an active admin (the actor);
+- a target person with a raw-inserted `manager` role;
+- a third person (the seeded grantor);
+- an org-scoped capability that `CAPABILITY_MATRIX.manager` does NOT grant, so `authorize` for the target depends on
+  the grant row alone (e.g. `manage_fixed_assets`; the TESTER confirms the matrix cell and names the capability).
+
+The seeded row is a raw INSERT with an explicit past `granted_at`.
+
+| Id | Item | Case | Target (+ / ⛔) | Expected red today |
+|---|---|---|---|---|
+| E1 | 1 | Seed an active NULL-store `'elevation'` row, `granted_by` = third person, `granted_at` = fixed past time. The admin picker-grants it (`grantCapabilityAsActor`, no `positionGrantId`) | + exactly one active NULL-store row: `'grant'`, `granted_by` = actor, `source_ref` NULL, `granted_at` > seeded; + the seeded row is revoked, `revoke_reason` = the literal `'Replaced by a hand grant of the same capability.'`, its `granted_by`/`granted_at`/`grant_source` unchanged; + seeded `revoked_at` = new row's `granted_at` (no gap on record); + `wrote: true`, `heldEverywhere: true` | active row `granted_by` = third person; no revoked row |
+| E2 | 1 | E1 with the seeded `granted_by` NULL | + as E1 | active row `granted_by` NULL |
+| E3 | 1 | E1 via the org-scoped hold path (H10's fixture, `positionGrantId` given) | + as E1; + `storeName` null | as E1 |
+| E4 | 1 | Seeded `grant_source` NULL (a pre-0140 row), then picker grant | + as E1 (same reason literal) | no revoked row |
+| E5 | 1 | After E1: `authorize(target, cap)` BEFORE the grant and AFTER it; then an admin arrival (`assignRole` admin) runs `revokeElevationGrantsForOrg` | + authorize resolves both before and after (identical result); + after the sweep the new `'grant'` row is still active and authorize still resolves; ⛔ the sweep revokes nothing of the target's | green (guard) |
+| E6 | 1 | Same-rank call over an active `'grant'` row, and over an active `'owner'` row; also a second picker grant right after E1 (a sequential double-click) | ⛔ no new row, no newly revoked row, `wrote: false`, returned id = the active row's id | green (guard) |
+| E7 | 1 | Concurrent double submit: two `grantCapabilityAsActor` calls over one seeded elevation row, `Promise.allSettled` (H4's pattern, separate transactions) | + both fulfilled (no 23505); + exactly one active NULL-store row (`'grant'`); + exactly one revoked row (the seeded one); + exactly one result has `wrote: true` | 0 revoked rows (and both report `wrote: true`). If the race does not interleave, record it; E7 stands as a guard |
+| E8 | 1 | Atomicity: `accessRepo.grantCapability` directly, `grantSource: 'grant'`, `grantedBy` = a random uuid (FK 23503 on the INSERT), over a seeded elevation row, in one `asOrg` tx | + the call rejects; + afterwards the seeded elevation row is still ACTIVE and unrevoked (the revoke rolled back with the failed insert) | the call resolves (today's UPDATE never touches `granted_by`) |
+| R1 | 3 | 3 rows for one person with explicit `granted_at` t1<t2<t3 (distinct capabilities); `UPDATE` the t1 row (e.g. `grant_source` elevation→grant); then `grantsForPerson` | + ids in order t1, t2, t3 | t1 last (heap order after UPDATE). If the unordered read happens to return this order, record it: R1 stands as a guard and P8 is the load-bearing red |
+| P8 | 2 | `foldActiveGrants` over [store-A `'grant'`, NULL-store `'grant'`, position at A], then over the same rows in reverse order | + in **both** orders the NULL-store line has `alsoVia` = [Cashier at A] and the store-A line's `alsoVia` is empty | the first order puts it on the store-A line |
+| G1 | 4 | Picker grant, one store-scoped capability (`confirm_receipt`) | `ok === 'Granted: <Title>, at every store.'` | `Granted: <Title>.` |
+| G2 | 4 | Picker grant, one org-scoped capability (`manage_fixed_assets`) | `ok === 'Granted: <Title>.'`; ⛔ `ok` does not contain "every store" | green (guard) |
+| G3 | 4 | Picker grant, two capabilities: `confirm_receipt` then `manage_fixed_assets` | `ok === 'Granted 2 capabilities: <A>, at every store; <B>.'` | no suffix |
+
+**Out of scope.**
+
+- A picker grant that writes nothing (stale tab) still says "Granted: …". It could read `wrote`. Candidate follow-up.
+- A double-click on the picker for a capability the person does NOT yet hold. The person-level fresh INSERT
+  (`access.ts:750-761`) has no `ON CONFLICT`, so the second submit can raise a raw 23505. This predates S2c. It breaks
+  T-349 invariant 3's spirit on the picker path. Candidate follow-up, and the orchestrator should log a DEF.
+- Showing `granted_by` on the page.
+- The revoked list renders a superseded row as "auto-elevated — clears when this org gains an active administrator ·
+  Replaced by a hand grant of the same capability." The label is the existing `grantSourceLabel` and the reason
+  explains it. A past-tense label is a wording follow-up, not this slice.
+- A production count, or a repair, of rows already re-tagged since `fddef02`. Q2 fixes future writes only. A repair
+  would be its own migration slice, and only if Ian asks for one.
+- Everything S3 owns.
+
+**Orchestrator, at commit (not the builder).**
+
+- Add a bible §13 row recording Ian's Q2 ruling: a hand grant over an automatic grant closes the automatic row and
+  inserts a new one. This supersedes row 188's closing "monotone upgrade" mechanism, and the direction is unchanged.
+- Update the GLOSSARY if it describes the re-tag.
+- In this task file, add Q2 and its answer to §9 and mark §8b as specced.
+- ⚠️ **Flag for S3 (not an S2c path).** §3.5 says a widened row is R, an active NULL-store `'grant'` row with
+  `source_ref` NULL, beside a `'position'` row that was active at R's time. It argues "since 0159 no other path
+  produces one: the picker hides held capabilities". **That premise has been false since S2b item 3 (`8d14e7a`).**
+  The picker no longer hides a position-held capability, so a deliberate org-wide picker grant, or an S2c supersede
+  over an elevation row, produces exactly R's shape. 0166 as specced would narrow those deliberate grants to the job's
+  store. The S3 lane needs a bound. For example, R must predate S2 going live: no hold since `ea0ccb4` writes a
+  NULL-store row for a store-scoped capability. It also needs a ⛔ leg in `t349-s3-def456-repair-migration.test.ts`
+  proving a post-S2b picker grant survives.
+
+**Done when.**
+
+- Every leg seen red for its stated reason (guards green), then passing.
+- Typecheck and unit clean. **FULL** integration green on a lane DB. The files most at risk are
+  `authorize.test.ts`, `roles.test.ts`, `t349-hold-own-right*.test.ts`, `position-defaults.test.ts` and
+  `admin-users-lib.test.ts`.
+- Build green with 9008 stopped.
+- **Smoketest on 9008** (390px and 1280px, both themes):
+  - Picker-grant a store-scoped capability. The banner reads "Granted: <Title>, at every store."
+  - Picker-grant an org-scoped capability. The banner reads "Granted: <Title>." with no store phrase.
+  - One covered position shows "also via …" on the org-wide line after a reload, and again after a second reload.
+  - Give an elevated manager a capability by hand. The page shows one active "hand-granted" line and, in the revoked
+    list, one line whose reason reads "Replaced by a hand grant of the same capability."
+
 ## 9. Open for Ian
 
 **Q1. Re-scope the rows DEF-456 already widened?** (dev: 1 row; production: count at cutover.) Slice S3 (§3.5) revokes
@@ -366,3 +581,13 @@ stay at that store, and nobody chose the wider reach. If no, S3 is never built, 
 administrator revokes them by hand. S1 and S2 ship either way.
 
 **Answer (Ian, 2026-09-27): YES — re-scope.** S3 is built as §3.5 specifies.
+
+**Q2 (S2c). When someone hand-grants a capability a person already holds automatically, how does the record change?**
+**Answer (Ian, 2026-09-28): close and replace** — the automatic row is revoked ("Replaced by a hand grant of the same
+capability.") and a new hand-grant row names the clicking actor and the time. Supersedes bible §13 row 188's in-place
+re-label (bible row owed — planner).
+
+⚠️ **S3 HOLD (2026-09-28, S2c spec audit):** §3.5's "widened row" definition assumes the picker hides held capabilities,
+which stopped being true at S2b (`8d14e7a`). As specced, 0166 would also narrow deliberate org-wide picker grants and
+S2c replacements. S3 is not built until an amendment bounds the definition and a test proves a deliberate grant
+survives.
