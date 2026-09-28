@@ -307,42 +307,76 @@ describe('S2-R4 (F6) — a wired channel with NO active accounts at its store', 
 // G2's own real-audit-log legs live in `apps/erp/tests/integration/t350-s4-banner.test.ts` (needs
 // real Postgres); these stay in the mocked file because they turn on URL-param wiring alone or on
 // the `auditLogRepo.latestForEntity` mock above.
+//
+// T-350 S5 (APPROVED 2026-09-29) supersedes G5 below: the reviewed commit's `same=1` sentence
+// ("No change — ...", sourced from the channel's CURRENT data, not audit_log) is exactly the bug
+// S5 exists to remove (finding A in the executed review of abe22f2). G5's OWN test is rewritten
+// here, not deleted, to assert the new negative: same=1 must render NOTHING. G3 is widened to pin
+// `entry.before.moneyAccountId` as the thing that selects "set" vs "changed" wording, not merely
+// that an audit row exists at all.
 // =================================================================================================
 
-describe('G3 — positive control on S2-R3: a real changedChannel renders the real account name', () => {
+describe('S5 — `before.moneyAccountId === null` renders the "set" sentence, not "changed"', () => {
   it(
-    'wanted: `changedChannel=<real id>` names the real account in the banner, reading a FRESH ' +
-      'audit_log entry by this same viewer — was red today: the page reads `sp.channel`, never ' +
-      '`sp.changedChannel`, so nothing names it and the banner falls back to the generic ' +
-      '"the new account" text',
+    'wanted: "Payout account set. <after name> is where this channel\'s settlements bank." — was ' +
+      'red today: the page has no "set" sentence at all; whenever a fresh, viewer-authored row ' +
+      'exists it always renders the "changed" wording, regardless of `before`',
     async () => {
-      // A fresh row by THIS viewer (ACTOR.personId), so the page takes the real audit_log path —
-      // not the "no backing row" or "someone else's row" branch.
       latestAuditEntryMock.mockResolvedValueOnce({
         actorPersonId: ACTOR.personId,
         occurredAt: new Date(),
+        before: { moneyAccountId: null, moneyAccountName: null },
         after: { moneyAccountId: 'acct-a', moneyAccountName: 'Bank A' },
       });
       const html = await renderPage([wiredChannel({ destinationAccountName: 'Bank A' })], ['set_channel_payout'], {
-        searchParams: { ok: 'destination', changed: '1', changedChannel: 'chan-1' },
+        searchParams: { ok: 'destination', changedChannel: 'chan-1' },
       });
-      expect(html, 'wanted the real account name reported via changedChannel').toMatch(
-        /New settlements bank into Bank A/,
+      const normalised = html.replace(/&#x27;/gi, "'");
+      expect(normalised, 'wanted the exact "set" sentence').toMatch(
+        /Payout account set\. Bank A is where this channel's settlements bank\./,
       );
+      expect(normalised, 'must not read as "changed"').not.toMatch(/Payout account changed/);
     },
   );
 });
 
-describe('G2 (mock) — a failed audit_log read shows NO change banner (fallback removed)', () => {
+describe('G3/S5 — `before.moneyAccountId` non-null renders "changed", naming the audit row\'s own after-account', () => {
   it(
-    'wanted: the read throwing renders no "changed" banner at all — was red before the builder ' +
-      'removed the catch-fallback: a failed read used to fall back to the channel\'s live account ' +
-      'name and show the banner anyway',
+    'wanted: `changedChannel=<real id>` names the real account in the "changed" sentence, reading a ' +
+      'FRESH audit_log entry by this same viewer whose `before` names a prior account — was red ' +
+      'today: the page reads `sp.channel`, never `sp.changedChannel`, so nothing names it',
+    async () => {
+      // A fresh row by THIS viewer (ACTOR.personId), so the page takes the real audit_log path —
+      // not the "no backing row" or "someone else's row" branch. `before` is non-null: this is a
+      // CHANGE, not a first set.
+      latestAuditEntryMock.mockResolvedValueOnce({
+        actorPersonId: ACTOR.personId,
+        occurredAt: new Date(),
+        before: { moneyAccountId: 'acct-old', moneyAccountName: 'Old Bank' },
+        after: { moneyAccountId: 'acct-a', moneyAccountName: 'Bank A' },
+      });
+      const html = await renderPage([wiredChannel({ destinationAccountName: 'Bank A' })], ['set_channel_payout'], {
+        searchParams: { ok: 'destination', changedChannel: 'chan-1' },
+      });
+      expect(html, 'wanted the real account name reported via changedChannel').toMatch(
+        /New settlements bank into Bank A/,
+      );
+      expect(html, 'must not read as a "set" claim').not.toMatch(/Payout account set\./);
+    },
+  );
+});
+
+describe('G2 (mock) — a failed audit_log read shows NO banner at all (fallback removed)', () => {
+  it(
+    'wanted: the read throwing renders no banner at all — was red before the builder removed the ' +
+      'catch-fallback: a failed read used to fall back to the channel\'s live account name and show ' +
+      'the banner anyway',
     async () => {
       latestAuditEntryMock.mockRejectedValueOnce(new Error('audit_log read failed'));
       const html = await renderPage([wiredChannel({ destinationAccountName: 'Bank A' })], ['set_channel_payout'], {
-        searchParams: { ok: 'destination', changed: '1', changedChannel: 'chan-1' },
+        searchParams: { ok: 'destination', changedChannel: 'chan-1' },
       });
+      expect(html, 'wanted no "set" banner when the audit_log read throws').not.toMatch(/Payout account set/);
       expect(
         html,
         'wanted no "changed" banner when the audit_log read throws — no live-data fallback',
@@ -356,32 +390,69 @@ describe('G4 — `channel` alone no longer drives the banner (reserved for the s
     'wanted: `channel=<id>` with no `changedChannel` names no account in the banner — was red today: ' +
       'the page still reads `sp.channel` directly for the banner, so the two params collide',
     async () => {
+      latestAuditEntryMock.mockResolvedValueOnce({
+        actorPersonId: ACTOR.personId,
+        occurredAt: new Date(),
+        before: { moneyAccountId: null, moneyAccountName: null },
+        after: { moneyAccountId: 'acct-a', moneyAccountName: 'Bank A' },
+      });
       const html = await renderPage([wiredChannel({ destinationAccountName: 'Bank A' })], ['set_channel_payout'], {
-        searchParams: { ok: 'destination', changed: '1', channel: 'chan-1' },
+        searchParams: { ok: 'destination', channel: 'chan-1' },
       });
       expect(
         html,
         'wanted no account name leaked into the banner via the legacy `channel` param alone',
       ).not.toMatch(/New settlements bank into Bank A/);
+      expect(html, 'wanted no "set" sentence either — no changedChannel at all').not.toMatch(
+        /Payout account set/,
+      );
     },
   );
 });
 
-describe('G5 — a same-account save shows the no-op sentence, not the first-set one', () => {
+describe('S5 — an unlisted `changedChannel` (not among the rendered channels) shows no banner', () => {
   it(
-    'wanted: `?ok=destination&same=1` renders "No change — <account> is already this channel\'s ' +
-      'payout account." — was red today: `same` is never read, so `ok=destination` alone falls back ' +
-      'to the generic first-set sentence',
+    'wanted: a `changedChannel` id that names no channel on this page renders nothing, even with a ' +
+      'fresh, viewer-authored, well-formed audit row for that exact id — was red today (pre-S5): the ' +
+      'page never cross-checks `changedChannel` against the channels it actually listed',
     async () => {
+      latestAuditEntryMock.mockResolvedValueOnce({
+        actorPersonId: ACTOR.personId,
+        occurredAt: new Date(),
+        before: { moneyAccountId: null, moneyAccountName: null },
+        after: { moneyAccountId: 'acct-a', moneyAccountName: 'Bank Unlisted' },
+      });
+      const html = await renderPage([wiredChannel({ destinationAccountName: 'Bank A' })], ['set_channel_payout'], {
+        // 'chan-999' is not among the rendered channels — only 'chan-1' is.
+        searchParams: { ok: 'destination', changedChannel: 'chan-999' },
+      });
+      expect(html, 'wanted no "set" sentence for an unlisted channel id').not.toMatch(/Payout account set/);
+      expect(html, 'wanted no "changed" sentence for an unlisted channel id').not.toMatch(
+        /Payout account changed/,
+      );
+      expect(html, 'the unlisted row\'s account name must not leak in either').not.toMatch(/Bank Unlisted/);
+    },
+  );
+});
+
+describe('G5/S5 — a same-account save (`?same=1`) shows NO banner, never the old no-op sentence', () => {
+  it(
+    'wanted: `?ok=destination&same=1&changedChannel=<id>` with no backing audit_log row (S5 §domain: ' +
+      'a same-account save writes nothing) renders no banner at all — was red today: `same=1` still ' +
+      'triggers a dedicated "No change — <account> is already this channel\'s payout account." ' +
+      'sentence sourced from the channel\'s CURRENT data, entirely bypassing audit_log',
+    async () => {
+      // No latestAuditEntryMock resolution queued here — default (see beforeEach) is `undefined`,
+      // matching the real shape of a same-account no-op (nothing written to audit_log).
       const html = await renderPage([wiredChannel({ destinationAccountName: 'Bank A' })], ['set_channel_payout'], {
         searchParams: { ok: 'destination', same: '1', changedChannel: 'chan-1' },
       });
-      // React escapes every apostrophe in a text node to `&#x27;` — normalise before matching, the
-      // same idiom `t343-s6b-admin-users-labels.test.ts` and siblings already use.
       const normalised = html.replace(/&#x27;/gi, "'");
-      expect(normalised, 'wanted the named no-op sentence, naming the account').toMatch(
-        /No change — Bank A is already this channel's payout account\./,
+      expect(normalised, 'wanted no "No change" sentence at all — same=1 must be inert').not.toMatch(
+        /No change/,
       );
+      expect(normalised, 'wanted no "set" sentence either').not.toMatch(/Payout account set/);
+      expect(normalised, 'wanted no "changed" sentence either').not.toMatch(/Payout account changed/);
     },
   );
 });

@@ -31,17 +31,19 @@ interface SearchParams {
    *  read for the banner (T-350 S4 / G4: the two collided when both used `channel`). */
   channel?: string;
   day?: string;
-  changed?: string;
-  /** T-350 S4 (G5) — a same-account save. */
-  same?: string;
-  /** T-350 S4 (G4) — which channel `changed`/`same` is about, separate from `channel` above. */
+  /** T-350 S4 (G4) / S5 — which channel a payout-destination save was about. The ONLY thing the
+   *  redirect says; everything else (was it a first set, a change, a no-op?) is derived from the
+   *  audit row, never carried in the URL (T-350 S5). */
   changedChannel?: string;
 }
 
 const OK_MESSAGE: Record<string, string> = {
   posted: 'Settlement posted. The receivable it cleared is gone from the list above.',
   voided: 'Settlement reversed — every leg, including the receivable, is back where it was.',
-  destination: 'Payout account set. This channel can be settled now.',
+  // T-350 S5 — no `destination` entry, on purpose. `?ok=destination` alone (or with a
+  // `changedChannel` that fails verification) shows NO banner; there is no generic fallback text
+  // to fall back to any more (S4's `same=1`/`changed=1` re-created the same "URL says so" hole
+  // one branch over — S5's fix is that the URL says NOTHING about what happened).
 };
 
 export default async function ChannelSettlementsPage({
@@ -84,21 +86,16 @@ export default async function ChannelSettlementsPage({
   });
   const canSetChannelPayoutAt = (storeId: string) => canSetChannelPayoutByStore.has(storeId);
 
-  // T-350 S4 (G5) — a same-account save names the account from the CHANNEL's own current data
-  // (no write happened, so there is no audit row to read).
-  const sameChannel =
-    sp.ok === 'destination' && sp.same === '1' && sp.changedChannel
-      ? channels.find((c) => c.id === sp.changedChannel)
-      : undefined;
-
-  // T-350 S4 (G2) — the "changed" banner must be backed by a REAL audit_log fact, never a query
-  // param alone: it shows only when the channel's latest `set_channel_payout` row exists, was
-  // written by THIS viewer, and is under 10 minutes old — and then names THAT row's captured
-  // `after.moneyAccountName`, not the channel's current live name (which may have moved again
-  // since). A forged `?changed=1` with no backing row, someone else's change, or a stale one all
-  // render no banner at all.
-  let changedBannerAccountName: string | undefined;
-  if (sp.ok === 'destination' && sp.changed === '1' && sp.changedChannel) {
+  // T-350 S5 — the payout banner is derived ONLY from the audit row, never from anything the URL
+  // claims. The redirect after a save carries just `changedChannel=<id>`; whether that was a first
+  // set, a change, or a same-account no-op (which writes no row at all) is read back here from the
+  // channel's latest `set_channel_payout` row — viewer is the actor, under 10 minutes old, this
+  // org, AND `changedChannel` must name a channel this page actually listed (a review finding: an
+  // id for a channel nobody listed used to fall through to the first-set sentence). No qualifying
+  // row (nothing written, an unlisted/forged/stale id, someone else's change, or a failed read)
+  // shows NO banner; there is no generic fallback sentence to fall back to.
+  let payoutBannerMessage: string | undefined;
+  if (sp.ok === 'destination' && sp.changedChannel && channels.some((c) => c.id === sp.changedChannel)) {
     const changedChannelId = sp.changedChannel;
     try {
       const entry = await withOrgPrincipal(actor.orgId, (tx) =>
@@ -115,26 +112,23 @@ export default async function ChannelSettlementsPage({
         Date.now() - entry.occurredAt.getTime() < TEN_MINUTES_MS;
       if (fresh) {
         const after = entry.after as { moneyAccountName?: string } | null;
-        changedBannerAccountName = after?.moneyAccountName ?? 'the new account';
+        const before = entry.before as { moneyAccountId?: string | null } | null;
+        const afterName = after?.moneyAccountName ?? 'the new account';
+        payoutBannerMessage =
+          before?.moneyAccountId == null
+            ? `Payout account set. ${afterName} is where this channel's settlements bank.`
+            : `Payout account changed. New settlements bank into ${afterName}.`;
       }
     } catch (err) {
-      // A failed READ must not fall back to the channel's live data — that would re-create the
-      // exact unverified "changed" claim G2 exists to remove, just moved from a query param to a
-      // caught exception. No banner, logged once, and the page still renders (bible §7's "loud,
-      // never silent" is for the log, not for taking the whole page down over a banner).
-      logger.warn({ err }, 'channel-settlements: could not verify the "changed" banner against audit_log');
+      // A failed READ must not fall back to anything else — that would re-create the exact
+      // unverified claim S5 exists to remove, just moved from a query param to a caught exception.
+      // No banner, logged once, and the page still renders (bible §7's "loud, never silent" is for
+      // the log, not for taking the whole page down over a banner).
+      logger.warn({ err }, 'channel-settlements: could not verify the payout-change banner against audit_log');
     }
   }
 
-  const okMessage = sameChannel
-    ? `No change — ${sameChannel.destinationAccountName ?? 'that account'} is already this channel's payout account.`
-    : changedBannerAccountName
-      ? `Payout account changed. New settlements bank into ${changedBannerAccountName}.`
-      : sp.ok === 'destination' && sp.changed === '1'
-        ? undefined
-        : sp.ok
-          ? OK_MESSAGE[sp.ok]
-          : undefined;
+  const okMessage = payoutBannerMessage ?? (sp.ok ? OK_MESSAGE[sp.ok] : undefined);
 
   const today = new Date().toISOString().slice(0, 10);
   const unwired = channels.filter((c) => !c.destinationMoneyAccountId && c.isActive);

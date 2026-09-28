@@ -329,12 +329,20 @@ describe('C8 (S2, F4/F8) — held at store A only, channel at store B → refuse
   );
 });
 
-describe('G1 (S4) — the ACTION redirect for a same-account save carries no changed=1', () => {
+// T-350 S5 (APPROVED 2026-09-29) supersedes this leg's own premise: the redirect no longer carries
+// `changed=1` for ANY outcome (set, changed, or same-account) — only `ok=destination&changedChannel=
+// <id>`, full stop. Kept and widened here rather than deleted: it is still the one leg that exercises
+// the REAL action against a same-account no-op with a real signed-in admin, and now also catches a
+// stray `same=1` (S4's own flag, retired by S5) leaking back onto the redirect. The exact-shape
+// assertion (only `ok`+`changedChannel`, nothing else) is pinned again, end to end, in
+// `t350-s5-banner-roundtrip.test.ts`.
+describe('G1 (S4/S5) — the ACTION redirect for a same-account save carries no changed=1, no same=1', () => {
   it(
-    'a same-account Save redirects with no changed=1 — this catches a builder reverting ' +
-      '`changed = result.wrote && result.hadAccountBefore` back to `changed = result.wrote` alone: ' +
-      'C7 above only pins the DOMAIN result (result.wrote === false), never that the ACTION actually ' +
-      'reads it — a regression there would leave C7 green while this goes red',
+    'a same-account Save redirects with no changed=1 and (S5) no same=1 either — this catches a ' +
+      'builder reverting `changed = result.wrote && result.hadAccountBefore` back to `changed = ' +
+      'result.wrote` alone, or leaving S4\'s retired `same=1` flag on the redirect: C7 above only ' +
+      'pins the DOMAIN result (result.wrote === false), never that the ACTION actually reads it — a ' +
+      'regression there would leave C7 green while this goes red',
     async () => {
       const f = await fixture('g1');
       g1Jar = new FakeJar();
@@ -364,6 +372,9 @@ describe('G1 (S4) — the ACTION redirect for a same-account save carries no cha
       expect(caught, 'expected the action to redirect (success or error)').toBeInstanceOf(RedirectSignal);
       const to = (caught as RedirectSignal).to;
       expect(to, `wanted no changed=1 on a same-account no-op — got ${to}`).not.toMatch(/changed=1/);
+      expect(to, `T-350 S5: wanted no same=1 either — the redirect names ONLY ok+changedChannel — got ${to}`).not.toMatch(
+        /same=1/,
+      );
     },
   );
 });

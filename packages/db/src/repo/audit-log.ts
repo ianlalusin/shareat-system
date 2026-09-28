@@ -57,16 +57,19 @@ export async function append(tx: Tx, orgId: string, input: AppendAuditLogInput):
 export interface LatestAuditLogEntry {
   readonly actorPersonId: string | null;
   readonly occurredAt: Date;
+  readonly before: unknown;
   readonly after: unknown;
 }
 
 /**
- * T-350 S4 (G2) — the most recent audit row for one entity/action, so a caller can verify a claim
- * ("this just changed") against a real fact instead of trusting a query param. Tenancy is the
- * caller's `tx` (RLS confines the read to its own org already); `orgId` is still an explicit
- * filter, the same defence-in-depth every other read in this directory applies. Returns `undefined`
- * when nothing matches — a clean, ordinary answer, never an exception; a caller cannot mistake a
- * genuinely non-existent row for a broken read.
+ * T-350 S4/S5 (G2) — the most recent audit row for one entity/action, so a caller can verify a
+ * claim ("this just changed") against a real fact instead of trusting a query param. `before` is
+ * read alongside `after` (S5) so a caller can tell a FIRST set (`before.moneyAccountId` null) from
+ * a later change without a second read or a second guess. Tenancy is the caller's `tx` (RLS
+ * confines the read to its own org already); `orgId` is still an explicit filter, the same
+ * defence-in-depth every other read in this directory applies. Returns `undefined` when nothing
+ * matches — a clean, ordinary answer, never an exception; a caller cannot mistake a genuinely
+ * non-existent row for a broken read.
  */
 export async function latestForEntity(
   tx: Tx,
@@ -77,6 +80,7 @@ export async function latestForEntity(
     .select({
       actorPersonId: auditLog.actorPersonId,
       occurredAt: auditLog.occurredAt,
+      before: auditLog.before,
       after: auditLog.after,
     })
     .from(auditLog)

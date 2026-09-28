@@ -252,3 +252,23 @@ then builder. **Migration** none.
 - **BUILDER paths:** `apps/erp/src/app/channel-settlements/{page.tsx,actions.ts}`, `packages/db/src/repo/audit-log.ts`
   (a read), `packages/domain/src/owners/index.ts`. **TESTER paths:** the T-350 test files + a new
   `apps/erp/tests/integration/t350-s4-banner.test.ts`, and an owners test for G6.
+
+## S5: the payout banner is derived ONLY from the audit row (APPROVED 2026-09-29, orchestrator — DONE 2026-09-29)
+From the executed review of `abe22f2`: S4's `same=1` re-introduced the URL-only claim one branch over (A), the flag is
+unpinned end-to-end (B), the reader ignores `before` so a first set reads as "changed" (C), an unlisted channel falls
+through to the first-set sentence (D), and the suppression arm is unpinned (E). Adopting the auditor's acceptance
+criterion instead of another per-symptom fix:
+- **Rule.** After a payout save the action redirects to `?ok=destination&changedChannel=<id>` and NOTHING else about
+  what happened. The page reads that channel's latest `audit_log` payout row (viewer is the actor, < 10 min, this
+  org) and derives the sentence from its `before`/`after`:
+  - `before.moneyAccountId` null → "Payout account set. <after name> is where this channel's settlements bank.";
+  - otherwise → "Payout account changed. New settlements bank into <after name>.";
+  - no qualifying row (a same-account save writes none; a forged or stale link has none; a failed read) → **no
+    banner**. A same-account save simply returns to the page.
+  - `ok=destination` never falls back to `OK_MESSAGE.destination`; that entry is removed.
+- **Every sentence arm has a leg that goes red when that arm is deleted** (set, changed, no-row, stale, other actor,
+  failed read, unknown/unlisted channel), plus one action→redirect→render round-trip leg for each of set / changed /
+  same-account. The spec's G1 prose is corrected: the pinned revert is `changed = result.hadAccountBefore`.
+- F (the repo-level `orgId` filter is test-unpinned) → add one leg; RLS already proven.
+- **BUILDER paths:** `apps/erp/src/app/channel-settlements/{page.tsx,actions.ts}`. **TESTER paths:** the T-350 test
+  files (render + integration) and `t350-s4-banner.test.ts`.
