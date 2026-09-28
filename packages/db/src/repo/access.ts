@@ -538,9 +538,10 @@ export type GrantCapabilityInput =
 /**
  * ⭐ **T-248 follow-up — lane D's read-only review, finding #1, confirmed real by the
  * orchestrator.** Ranks how eligible a `grantSource` is for the admin-arrival sweep: lower
- * is MORE eligible. `grantCapability`'s idempotent branch below may only ever move a stored
- * `grantSource` DOWN this list (more evidence, less sweepable), **never up** — that one
- * invariant is the whole safety argument for not turning the branch into a plain overwrite.
+ * is MORE eligible. `grantCapability`'s person-level branch below may only ever REPLACE the
+ * active row with a less sweepable one (T-349 S2c, Ian's ruling Q2: close the old row and
+ * insert a new one, never a plain overwrite) — moving DOWN this list (more evidence, less
+ * sweepable), **never up** — that one invariant is the whole safety argument for the branch.
  *
  * `null` (a row written before migration 0140, provenance unknown) ranks alongside
  * `'elevation'`: the sweep's `WHERE grant_source = 'elevation'` already excludes it either
@@ -570,6 +571,13 @@ export function grantSourceRank(source: GrantSource | null): number {
   return source === null ? 0 : GRANT_SOURCE_RANK[source];
 }
 
+/**
+ * T-349 S2c, Ian's ruling (Q2, 2026-09-28): the revoke reason on the row a person-level supersede
+ * closes out. Plain wording, no ids (T-343), and true for a NULL-source row as well as an
+ * `'elevation'` row — the message says what happened, not what the row used to be.
+ */
+export const SUPERSEDED_BY_HAND_GRANT_REASON = 'Replaced by a hand grant of the same capability.';
+
 /** Grants one capability. Idempotent against an ALREADY-ACTIVE identical grant (the
  * partial unique index would otherwise reject a second "elevate this manager" call); a
  * previously revoked grant is a distinct row, and re-granting inserts a new one rather
@@ -578,7 +586,7 @@ export function grantSourceRank(source: GrantSource | null): number {
  * ⭐ **T-341 / DEF-414 — two branches, and they never touch each other's rows.** A `'position'`
  * call never rewrites a person-level row, and a person-level call never rewrites a `'position'`
  * row; the two COEXIST for the same `(personId, grantName)` (`schema/access.ts`'s two partial
- * unique indexes, migration 0159). The rank-based rewrite T-248/T-289 built (below) survives
+ * unique indexes, migration 0159). The rank-based supersede T-248/T-289/S2c built (below) applies
  * ONLY on the person-level branch, where it always applied to same-shape rows.
  *
  * **Position branch.** Idempotent on `(personId, grantName, 'position', storeId)`, where
@@ -589,12 +597,17 @@ export function grantSourceRank(source: GrantSource | null): number {
  *
  * **Person-level branch (`storeId IS NULL`).** Unchanged from T-248/T-289 except restricted to
  * `storeId IS NULL` rows — a `'position'` row is invisible to this branch and vice versa.
- * `grantSource` is re-written ONLY when the incoming source outranks the stored one on
- * `GRANT_SOURCE_RANK` (strictly less sweepable) — e.g. stored `'elevation'`, incoming `'grant'`:
- * a deliberate hand-grant of a capability the target already held via the auto-elevation
- * fallback is real new evidence and must not be left tagged as still-sweepable. The reverse, and
- * every same-rank call, is UNCHANGED: the existing row's provenance stands, because a second call
- * is not evidence the first was wrong.
+ * The active row is **superseded — revoked and replaced by a fresh insert, never re-tagged in
+ * place (T-349 S2c, Ian's ruling Q2, 2026-09-28)** — ONLY when the incoming source outranks the
+ * stored one on `GRANT_SOURCE_RANK` (strictly less sweepable) — e.g. stored `'elevation'`,
+ * incoming `'grant'`: a deliberate hand-grant of a capability the target already held via the
+ * auto-elevation fallback is real new evidence and must not be left tagged as still-sweepable.
+ * The new row carries the incoming call's own `grantedBy` and a fresh `granted_at` — a re-tag in
+ * place would have kept the superseded row's `granted_by`/`granted_at`, so a "hand-granted" line
+ * could name whoever wrote the elevation row, never the admin who actually granted it
+ * (`roles.ts:656,671`: `granted_by` is always the ACTOR). The reverse, and every same-rank call,
+ * is UNCHANGED: the existing row's provenance stands, because a second call is not evidence the
+ * first was wrong.
  *
  * ⛔ **Why this had to change, concretely (T-248).** `grant_capability` is itself
  * `{ admin: true, manager: false }`, so an auto-elevated manager holds it — meaning one
@@ -737,14 +750,63 @@ export async function grantCapability(
     .limit(1);
   if (existing) {
     const existingSource = existing.grantSource as GrantSource | null;
-    // T-349 §4b item 1 (S2b) — the rank-upgrade (e.g. 'elevation' → 'grant') IS the intended effect
-    // of "hold in their own right": it must outlive `revokeElevationGrantsForOrg`. That is a write,
-    // and the banner (`wrote` ? "now held" : "already held") must say so.
+    // T-349 §4b item 1 (S2b), mechanism updated by §4c item 1 (S2c, Ian's Q2 ruling) — the
+    // rank-upgrade (e.g. 'elevation' → 'grant') IS the intended effect of "hold in their own
+    // right": it must outlive `revokeElevationGrantsForOrg`. That is a write, and the banner
+    // (`wrote` ? "now held" : "already held") must say so. Since S2c the upgrade is a supersede
+    // (revoke + fresh insert), never a re-tag of the stored row.
     const upgraded = grantSourceRank(input.grantSource) > grantSourceRank(existingSource);
-    if (upgraded) {
-      await tx.update(personGrants).set({ grantSource: input.grantSource }).where(eq(personGrants.id, existing.id));
+    if (!upgraded) return { id: existing.id, wrote: false, heldEverywhere: true };
+
+    // T-349 S2c, Ian's ruling (Q2, 2026-09-28): "close and replace", not a re-tag in place. A
+    // re-tagged row would keep the SUPERSEDED row's `granted_by`/`granted_at` — a "hand-granted"
+    // line naming whoever wrote the elevation row, never the admin who actually granted it
+    // (`roles.ts:656,671`: `granted_by` is always the ACTOR). Same transaction, revoke first (the
+    // insert needs the slot free), ignore the affected-row count — a concurrent supersede, the
+    // admin-arrival sweep or a manual revoke may have already gotten there, and in every one of
+    // those cases falling through to the insert is still correct (§4c item 1, "why 0 rows must not
+    // return early").
+    await tx
+      .update(personGrants)
+      .set({ revokedAt: sql`now()`, revokeReason: SUPERSEDED_BY_HAND_GRANT_REASON })
+      .where(and(eq(personGrants.id, existing.id), isNull(personGrants.revokedAt)));
+
+    const inserted = await tx
+      .insert(personGrants)
+      .values({
+        personId: input.personId,
+        grantName: input.grantName,
+        grantedBy: input.grantedBy,
+        grantSource: input.grantSource,
+        sourceRef: null,
+      })
+      .onConflictDoNothing({
+        target: [personGrants.personId, personGrants.grantName],
+        where: sql`${personGrants.revokedAt} is null and ${personGrants.storeId} is null`,
+      })
+      .returning({ id: personGrants.id });
+    if (inserted[0]) return { id: inserted[0].id, wrote: true, heldEverywhere: true };
+
+    // Lost the race — never a raw 23505. Re-select the winner the conflict just proved exists.
+    const [winner] = await tx
+      .select({ id: personGrants.id })
+      .from(personGrants)
+      .where(
+        and(
+          eq(personGrants.personId, input.personId),
+          eq(personGrants.grantName, input.grantName),
+          isNull(personGrants.storeId),
+          isNull(personGrants.revokedAt),
+        ),
+      )
+      .limit(1);
+    if (!winner) {
+      throw refuse(
+        'grantCapability: lost the race but the winning row is not visible',
+        'That could not be completed — please try again.',
+      );
     }
-    return { id: existing.id, wrote: upgraded, heldEverywhere: true };
+    return { id: winner.id, wrote: false, heldEverywhere: true };
   }
 
   const [row] = await tx
@@ -925,7 +987,13 @@ export async function positionGrantsElsewhere(
 }
 
 /** All grant rows for a person — active and revoked — because invariant 11 requires a
- * revoked grant to "remain queryable with its revocation date". */
+ * revoked grant to "remain queryable with its revocation date".
+ *
+ * T-349 S2c item 3 — ordered by `(grantedAt, id)`, so the result is stable rather than whatever a
+ * heap scan happens to return that day. Without it, a person-level supersede (revoke + fresh
+ * insert, §4c item 1) could put the new row anywhere in the scan, and the admin page's list would
+ * visibly reorder after a click that changed no capability the person holds. The other callers
+ * (`authorize.ts`, `domain/people/position-defaults.ts`) don't depend on order — verified. */
 export async function grantsForPerson(tx: Tx, personId: string): Promise<GrantRow[]> {
   const rows = await tx
     .select({
@@ -941,6 +1009,7 @@ export async function grantsForPerson(tx: Tx, personId: string): Promise<GrantRo
       revokeReason: personGrants.revokeReason,
     })
     .from(personGrants)
-    .where(eq(personGrants.personId, personId));
+    .where(eq(personGrants.personId, personId))
+    .orderBy(asc(personGrants.grantedAt), asc(personGrants.id));
   return rows as GrantRow[];
 }

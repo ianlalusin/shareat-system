@@ -203,6 +203,13 @@ export function grantSummaryLine(grants: Pick<GrantRow, 'grantSource'>[]): strin
  * row's line carries the covered row's position provenance too (`alsoVia`), so the page can add
  * "also via Cashier at SmokeStore" beside it and hide its hold button. Pure: a re-shaping of the
  * rows the page already has, no query.
+ *
+ * ⚠️ **T-349 S2c item 2 — the cover is chosen, not found first.** An org-wide (NULL-store) cover
+ * ALWAYS wins over a same-store cover, regardless of array order: the same preference as the
+ * repo's own covering select (`packages/db/src/repo/access.ts`'s `ORDER BY store_id NULLS FIRST`,
+ * §4b item 6), so the page and the "already held everywhere" banner agree. A plain `.find()` over
+ * `others` picked whichever row `grantsForPerson` happened to return first, so the "also via …"
+ * annotation could land on a different line after an UPDATE re-ordered the underlying scan.
  */
 export interface FoldedGrant {
   grant: GrantWithSource;
@@ -220,12 +227,15 @@ export function foldActiveGrants(grants: readonly GrantWithSource[]): FoldedGran
   const alsoViaByOtherId = new Map<string, PositionDefaultSource[]>();
   const coveredPositionIds = new Set<string>();
   for (const position of positions) {
-    const cover = others.find(
-      (g) =>
-        g.grantName === position.grantName &&
-        (g.grantSource === 'grant' || g.grantSource === 'owner') &&
-        (g.storeId === position.storeId || g.storeId === null),
-    );
+    // First, an org-wide cover (NULL store) — it wins even when a same-store cover also exists.
+    // Only when there is none, a same-store 'grant' row covers it.
+    const cover =
+      others.find(
+        (g) => g.grantName === position.grantName && (g.grantSource === 'grant' || g.grantSource === 'owner') && g.storeId === null,
+      ) ??
+      others.find(
+        (g) => g.grantName === position.grantName && g.grantSource === 'grant' && g.storeId === position.storeId,
+      );
     if (cover) {
       coveredPositionIds.add(position.id);
       if (position.positionSource) {

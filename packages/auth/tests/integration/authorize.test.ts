@@ -745,21 +745,30 @@ describe('T-248 — DEF-237: elevated grants are revoked when an administrator a
       grantCapabilityAsActor(tx, { personId: m1, orgId: org }, { personId: m2, capability: 'manage_users' }),
     );
 
-    const [after] = await sql<{ grant_source: string | null; revoked_at: Date | null }[]>`
-      select grant_source, revoked_at from person_grants where person_id = ${m2} and grant_name = 'manage_users'
+    // T-349 S2c (DEF-456) — Ian's Q2 ruling (2026-09-28) supersedes T-248's re-tag-in-place with a
+    // revoke-and-insert. Reading without `revoked_at is null` would now hit two rows (the revoked
+    // 'elevation' one and the new active 'grant' one) and take whichever Postgres happens to return
+    // first — the active-row assertion below is what actually pins the target.
+    const afterRows = await sql<{ grant_source: string | null; revoked_at: Date | null }[]>`
+      select grant_source, revoked_at from person_grants
+      where person_id = ${m2} and grant_name = 'manage_users' and revoked_at is null
     `;
+    expect(afterRows.length, 'exactly one active row after the supersede').toBe(1);
+    const after = afterRows[0];
     // ⛔ The whole point: a deliberate act by an authorised actor is new evidence, and must
-    // move this row OUT of the sweepable set — never leave it silently tagged 'elevation'.
+    // replace it with a non-sweepable row — never leave it silently tagged 'elevation'.
     expect(after!.grant_source).toBe('grant');
     expect(after!.revoked_at).toBeNull();
 
     const admin = await insertPerson(org, 'New Admin');
     await asPerson(org, (tx) => assignRole(tx, { personId: admin, orgId: org, role: 'admin', grantedBy: null }));
 
-    const [survived] = await sql<{ revoked_at: Date | null }[]>`
-      select revoked_at from person_grants where person_id = ${m2} and grant_name = 'manage_users'
+    const survivedRows = await sql<{ revoked_at: Date | null }[]>`
+      select revoked_at from person_grants
+      where person_id = ${m2} and grant_name = 'manage_users' and revoked_at is null
     `;
-    expect(survived!.revoked_at).toBeNull();
+    expect(survivedRows.length, 'exactly one active row after the admin-arrival sweep').toBe(1);
+    expect(survivedRows[0]!.revoked_at).toBeNull();
   });
 
   it('⭐ case 13 (lane D follow-up): the admin-arrival sweep is scoped to the arriving org by its OWN query, not merely masked by RLS', async () => {

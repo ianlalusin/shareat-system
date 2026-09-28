@@ -473,15 +473,9 @@ describe('H10 (S2b item 1) — org-scoped hold over an existing NULL-store "elev
   }
 
   it(
-    'the "elevation" row upgrades in place to "grant" — wrote:true (was red before S2b: unconditional wrote:false on the existing-row arm)',
+    'the "elevation" row is superseded by a new "grant" row — wrote:true (was red before S2b: unconditional wrote:false on the existing-row arm)',
     async () => {
       const f = await orgCapFixture('h10');
-      // ⚠️ repo/access.ts ~:721-739 — the person-level (org-scoped) "existing" arm: when a lower-
-      // ranked NULL-store row already exists, it upgrades `grantSource` in place (the UPDATE
-      // genuinely runs — `grantSourceRank('grant')=2 > grantSourceRank('elevation')=0`) but returns
-      // `{ wrote: false, heldEverywhere: true }` UNCONDITIONALLY, regardless of whether that UPDATE
-      // fired. The banner (`admin/users/actions.ts`) reads `wrote` to choose "…is now held…" vs
-      // "…was already held…" — so a real rank upgrade is reported as a no-op today.
       await sql`insert into person_grants (person_id, grant_name, grant_source, source_ref, granted_by) values (${f.staffId}, ${ORG_CAP}, 'elevation', null, ${f.adminId})`;
 
       const before = await activeGrantRows(f.staffId, ORG_CAP);
@@ -492,7 +486,7 @@ describe('H10 (S2b item 1) — org-scoped hold over an existing NULL-store "elev
       );
 
       const after = await activeGrantRows(f.staffId, ORG_CAP);
-      expect(after.length, 'no new row — the existing NULL-store row is upgraded in place, not duplicated').toBe(before.length);
+      expect(after.length, 'one active row: the elevation row is replaced, not duplicated').toBe(before.length);
       const row = after.find((r) => r.store_id === null);
       expect(row?.grant_source, 'the row rank-upgraded to grant').toBe('grant');
       expect(result.wrote, 'wanted: true — the upgrade IS a write').toBe(true);

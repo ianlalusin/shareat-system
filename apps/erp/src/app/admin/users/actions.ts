@@ -19,6 +19,7 @@ import { accessRepo } from '@shareat/db';
 import {
   assignRoleAsActor,
   authorize,
+  CAPABILITY_SCOPE,
   capabilityTitle,
   grantCapabilityAsActor,
   linkFirebaseCredential,
@@ -199,10 +200,15 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
         for (const capability of capabilities) {
           await grantCapabilityAsActor(tx, actor, { personId, capability });
         }
+        // T-349 S2c item 4 — the picker grant is always person-level (org-wide). For a
+        // store-scoped capability that reaches every store, so the banner says so; an
+        // org/platform-scoped capability has no store axis to name.
+        const phrase = (c: Capability) =>
+          CAPABILITY_SCOPE[c] === 'store' ? `${capabilityTitle(c)}, at every store` : capabilityTitle(c);
         ok =
           capabilities.length === 1
-            ? `Granted: ${capabilityTitle(capabilities[0]!)}.`
-            : `Granted ${capabilities.length} capabilities: ${capabilities.map((c) => capabilityTitle(c)).join('; ')}.`;
+            ? `Granted: ${phrase(capabilities[0]!)}.`
+            : `Granted ${capabilities.length} capabilities: ${capabilities.map(phrase).join('; ')}.`;
       } else {
         // ⚠️ The revoke branch keeps its own `authorize()` and is deliberately NOT self-checked:
         // revoking your own grant NARROWS your authority, so it cannot escalate, and refusing it

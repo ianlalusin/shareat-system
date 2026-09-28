@@ -592,11 +592,13 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
     grantCapabilityAsActor.mockReset();
   });
 
-  it('A1: granted, one capability → ok = "Granted: <Title>."', async () => {
+  // T-349 S2c (DEF-456), finding 3: `record_sale` is store-scoped (`CAPABILITY_SCOPE`), so a
+  // person-level grant covers every store — the banner now says so.
+  it('A1: granted, one store-scoped capability → ok = "Granted: <Title>, at every store."', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(grantFormData({ capabilities: ['record_sale'] })));
     const params = new URL(to, 'http://localhost').searchParams;
-    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${capabilityTitle('record_sale')}.`);
+    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${capabilityTitle('record_sale')}, at every store.`);
     expect(grantCapabilityAsActor).toHaveBeenCalledTimes(1);
   });
 
@@ -635,7 +637,9 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
     },
   );
 
-  it('A3: two capabilities, no intent → ok names both titles joined by "; ", with no "_"', async () => {
+  // T-349 S2c (DEF-456), finding 3: both `record_sale` and `submit_sales_day` are store-scoped, so
+  // each phrase in the join gains its own ", at every store".
+  it('A3: two store-scoped capabilities, no intent → ok names both titles (each ", at every store") joined by "; ", with no "_"', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() =>
       actions.setCapabilityGrantAction(grantFormData({ capabilities: ['record_sale', 'submit_sales_day'] })),
@@ -643,7 +647,7 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
     const params = new URL(to, 'http://localhost').searchParams;
     const ok = params.get('ok');
     expect(ok, `redirect URL was: ${to}`).toBe(
-      `Granted 2 capabilities: ${capabilityTitle('record_sale')}; ${capabilityTitle('submit_sales_day')}.`,
+      `Granted 2 capabilities: ${capabilityTitle('record_sale')}, at every store; ${capabilityTitle('submit_sales_day')}, at every store.`,
     );
     expect(ok).not.toMatch(/_/);
     expect(grantCapabilityAsActor).toHaveBeenCalledTimes(2);

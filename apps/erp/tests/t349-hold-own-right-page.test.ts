@@ -582,11 +582,13 @@ describe('A4 (⛔ green now — a guard) — the ordinary picker grant (no inten
     grantCapabilityAsActor.mockReset();
   });
 
-  it('grantCapabilityAsActor is called without a positionGrantId field; banner "Granted: …" unchanged', async () => {
+  // T-349 S2c (DEF-456), finding 3: `confirm_receipt` is store-scoped, so the person-level picker
+  // grant covers every store — the banner now names it.
+  it('grantCapabilityAsActor is called without a positionGrantId field; banner "Granted: …" names every store', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(pickerFormData()));
     const params = new URL(to, 'http://localhost').searchParams;
-    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${CAP_TITLE}.`);
+    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${CAP_TITLE}, at every store.`);
     expect(grantCapabilityAsActor).toHaveBeenCalledTimes(1);
     const callArg = grantCapabilityAsActor.mock.calls[0]?.[2] as Record<string, unknown>;
     expect('positionGrantId' in callArg, 'the ordinary grant path must not carry this field at all').toBe(false);
