@@ -2364,6 +2364,16 @@ binding.** Folded here because S5.5w already owns `items/index.ts` and `cutover/
    `recordAdjustment` takes typed numbers); per-call `fn` labels, message parity pin, regex hoisting — style, no
    failure scenario.
 
+
+**S5.5w Amendment A2 — from the batch pre-commit read, 2026-09-28, binding.** Whole-number boxes test the VALUE, not the
+digit run (the leading-zero class, fifth occurrence).
+1. `apps/erp/src/app/settings/attendance/actions.ts:62` `int()`: drop `/^\d{1,5}$/`; require `/^\d+$/` for shape, then
+   `n = Number(v)`, and refuse by range. Fields with no `max` get a stated ceiling of 99999 (keeps int4 safe) and the
+   sentence names it: "…enter a whole number from 0 to 99999." Legs W1 `lateGraceMinutes='000001'` saves 1; W2
+   `'100000'` → the sentence naming 99999 (red: "is not a whole number").
+2. `apps/erp/src/app/attendance/[dayId]/actions.ts` `wholeMinutes` (committed in `7896e2a`): same change — shape
+   `/^\d+$/`, value ≤ 99999. **Builder, +1 path.** Leg M5: `approvedOtMinutes='00030'` records 30 (red: refused).
+
 **S5.5w — build (after S5.5t and S5.5u commit; 8 elements, 28 fields, 12 files).**
 1. **Boxes.** `ap/invoices/[id]/page.tsx:167,190` (`decimal`), `cutover/count/page.tsx:140` (`decimal`),
    `prepaid/page.tsx:205` (`decimal`), `:223` and `prepaid/[id]/page.tsx:121` (`numeric`),
