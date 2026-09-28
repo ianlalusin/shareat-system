@@ -35,6 +35,7 @@ import {
 } from '@shareat/db';
 import { money, subtract, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
+import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { buildStraightLine, periodsThroughOf, type SchedulePeriod } from '../shared/straight-line';
 import { readPolicyOrRefuse } from '../fixed-assets/policy';
 import { refuse } from '../shared/refusal';
@@ -49,7 +50,9 @@ export interface CreatePrepaidItemInput {
   name: string;
   category: PrepaidCategory;
   coverageStartDate: string;
-  coverageMonths: number;
+  /** T-351 / DEF-481 — a raw form string, parsed here (after `authorize()`) by
+   *  `parseWholeNumberInput`, never in the action. A number still works for every direct caller. */
+  coverageMonths: number | string;
   totalCost: string;
   sourceExpenseId?: string | null;
   /** ⭐ True only when the TERM was guessed from a category default rather than read off the
@@ -101,6 +104,10 @@ async function runCreate(
   const name = input.name.trim();
   if (!name) throw new Error('createPrepaidItem: a prepaid item needs a name people will recognise.');
 
+  // T-351 / DEF-481 — parsed here, after `authorize()`, on the VALUE (never the digit run):
+  // "0012" is 12, not refused for its length.
+  const coverageMonths = parseWholeNumberInput(input.coverageMonths, 'createPrepaidItem: the coverage', 'The coverage', 1, 120, ' of months');
+
   // ⭐ ONE threshold, shared with fixed assets (bible row 141, ₱5,000). v1 kept TWO — an org-level
   // one for assets and a store-scoped one for prepaid, same default by coincidence, different
   // scope, never reconciled; v1's own blueprint still lists the split as unresolved. Settled here
@@ -125,7 +132,7 @@ async function runCreate(
     name,
     category: input.category,
     coverageStartDate: input.coverageStartDate,
-    coverageMonths: input.coverageMonths,
+    coverageMonths,
     totalCost: cost,
     // ⚠️ A human filling in the form has READ the document, so the term is not a guess. The flag
     // means "these are defaults nobody has confirmed", which is only ever true of the automatic
@@ -147,13 +154,12 @@ async function runCreate(
 export async function confirmPrepaidTerm(
   tx: Tx | null,
   actor: Actor,
-  input: { prepaidItemId: string; coverageMonths: number; coverageStartDate: string },
+  input: { prepaidItemId: string; coverageMonths: number | string; coverageStartDate: string },
 ): Promise<void> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_prepaid_items', {});
-    if (!Number.isInteger(input.coverageMonths) || input.coverageMonths < 1) {
-      throw new Error('confirmPrepaidTerm: coverage must be a whole number of months, at least 1.');
-    }
+    // T-351 / DEF-481 — parsed here, after `authorize()`, on the VALUE (never the digit run).
+    const coverageMonths = parseWholeNumberInput(input.coverageMonths, 'confirmPrepaidTerm: the coverage', 'The coverage', 1, 120, ' of months');
     const item = await prepaidRepo.getById(trx, actor.orgId, input.prepaidItemId);
     if (!item) {
       throw new Error(`confirmPrepaidTerm: prepaid item ${input.prepaidItemId} does not exist.`);
@@ -162,14 +168,14 @@ export async function confirmPrepaidTerm(
     // own cost — invariant 3 read backwards. Refused with both figures, because the reviewer needs
     // to know which months are already out.
     const posted = await prepaidRepo.postedPeriods(trx, actor.orgId, item.id);
-    if (posted.size > input.coverageMonths) {
+    if (posted.size > coverageMonths) {
       throw new Error(
         `confirmPrepaidTerm: ${posted.size} months have already been released, so the term cannot ` +
-          `be shortened to ${input.coverageMonths}. Reverse the extra months first.`,
+          `be shortened to ${coverageMonths}. Reverse the extra months first.`,
       );
     }
     await prepaidRepo.confirmTerm(trx, actor.orgId, item.id, {
-      coverageMonths: input.coverageMonths,
+      coverageMonths,
       coverageStartDate: input.coverageStartDate,
     });
   };

@@ -97,7 +97,7 @@ describe('⚠️ RULED EDIT (T-343 S5.5w) — the three legs below no longer pin
     expect(tag, 'must not carry a min= attribute').not.toMatch(/\bmin=/);
     expect(tag, 'must carry inputMode="decimal"').toMatch(/inputMode=["']decimal["']/);
   });
-  it('R-leg (S5.5w) — ap/invoices/[id]/page.tsx line${i}_unitPrice: no type="number"/step/min, inputMode="decimal" (SAFE server-side; input change only)', () => {
+  it('R-leg (S5.5w) — ap/invoices/[id]/page.tsx line${i}_unitPrice: no type="number"/step/min, inputMode="decimal" (server guard: T-351 A-legs; input change only)', () => {
     const tag = inputTagFor('apps/erp/src/app/ap/invoices/[id]/page.tsx', '{`line${i}_unitPrice`}');
     expect(tag, 'must not carry type="number"').not.toMatch(/type=["']number["']/);
     expect(tag, 'must not carry a step= attribute').not.toMatch(/\bstep=/);

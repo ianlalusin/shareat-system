@@ -110,6 +110,15 @@ export interface SettlementPreview {
   blockers: string[];
   /** True when the ONLY thing in the way is the explicit "recognise the gain" acknowledgement. */
   needsGainAcknowledgement: boolean;
+  /**
+   * T-351 / DEF-482 — false means every figure field above is a placeholder zero
+   * (`ZERO_COMPUTED_SETTLEMENT`), not a real answer: at least one gross/net/deduction box failed to
+   * parse, so there was no safe `Number()` to compute with. The form must show NONE of the figure
+   * rows when this is false — "Banked ₱0.00" under a typed `1,5` is as misleading as a green
+   * "reconciles exactly" would be. A config blocker (e.g. no payout account) does not affect this —
+   * the arithmetic is still real even when the settlement cannot post for an unrelated reason.
+   */
+  figuresComputed: boolean;
 }
 
 interface ComputedSettlement {
@@ -420,6 +429,7 @@ export async function previewChannelSettlement(
       destinationAccountName: ctx.destinationName,
       blockers: [...ctx.configBlockers, ...figureBlockers, ...c.blockers],
       needsGainAcknowledgement: c.needsGainAcknowledgement,
+      figuresComputed: figureBlockers.length === 0,
     };
   };
   if (tx) return run(tx);
@@ -650,7 +660,16 @@ export async function setChannelPayoutDestination(
   tx: Tx | null,
   actor: Actor,
   input: { channelId: string; moneyAccountId: string },
-): Promise<{ channelId: string; moneyAccountId: string; accountName: string; hadAccountBefore: boolean }> {
+): Promise<{
+  channelId: string;
+  moneyAccountId: string;
+  accountName: string;
+  hadAccountBefore: boolean;
+  /** T-350 S2 (F3/F5) — false only for the same-account no-op. The action gates `changed=1` on
+   *  this, never on `hadAccountBefore` alone: a re-click of the same account already had one, but
+   *  nothing was written, so the banner must not say "changed". */
+  wrote: boolean;
+}> {
   const run = async (trx: Tx) => {
     const config = await R.channelConfig(trx, actor.orgId, input.channelId);
     if (!config) {
@@ -693,11 +712,23 @@ export async function setChannelPayoutDestination(
     // T-350 (DEF-477): choosing the account that is already set is a no-op success — no write,
     // no `updated_at` movement.
     if (config.destinationMoneyAccountId === input.moneyAccountId) {
-      return { channelId: input.channelId, moneyAccountId: input.moneyAccountId, accountName: account.name, hadAccountBefore };
+      return {
+        channelId: input.channelId,
+        moneyAccountId: input.moneyAccountId,
+        accountName: account.name,
+        hadAccountBefore,
+        wrote: false,
+      };
     }
 
     await R.setDestinationAccount(trx, actor.orgId, input.channelId, input.moneyAccountId);
-    return { channelId: input.channelId, moneyAccountId: input.moneyAccountId, accountName: account.name, hadAccountBefore };
+    return {
+      channelId: input.channelId,
+      moneyAccountId: input.moneyAccountId,
+      accountName: account.name,
+      hadAccountBefore,
+      wrote: true,
+    };
   };
   if (tx) return run(tx);
   return transaction(run);

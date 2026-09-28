@@ -28,7 +28,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
-import type { Actor } from '@shareat/auth';
+import { AuthorizationError, type Actor } from '@shareat/auth';
 import { setChannelPayoutDestination } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
@@ -108,6 +108,21 @@ async function setDestinationCaught(
   return caught as (Error & { userMessage?: string }) | undefined;
 }
 
+// T-350 S2, F4/F8 (orchestrator ruling, 2026-09-28) — C3/C6 must pin the AUTHORIZATION refusal
+// specifically (the repo's `AuthorizationError`, capability `set_channel_payout`), not any throw —
+// a plain `.rejects.toThrow()` would pass just as happily for a refusal that fired for the WRONG
+// reason (a not-found channel, a bad account) as for the right one.
+async function expectAuthorizationRefusal(promise: Promise<unknown>): Promise<void> {
+  let caught: unknown;
+  try {
+    await promise;
+  } catch (err) {
+    caught = err;
+  }
+  expect(caught, 'expected a refusal at all').toBeInstanceOf(AuthorizationError);
+  expect((caught as AuthorizationError).capability).toBe('set_channel_payout');
+}
+
 async function channelRow(channelId: string) {
   const [row] = await sql<{ destination_money_account_id: string | null; updated_at: Date }[]>`
     select destination_money_account_id, updated_at from sales_channels where id = ${channelId}`;
@@ -166,11 +181,11 @@ describe('C3 — an actor without the right at that store is refused (⚠️ doc
       'true, so the manager actor succeeds',
     async () => {
       const f = await fixture('c3');
-      await expect(
+      await expectAuthorizationRefusal(
         asOrg(f.orgId, (tx) =>
           setChannelPayoutDestination(tx, f.manager, { channelId: f.channelId, moneyAccountId: f.bankB.id }),
         ),
-      ).rejects.toThrow();
+      );
     },
   );
 });
@@ -212,19 +227,63 @@ describe('C6 (extra, admin only) — a manager is refused BOTH a first set and a
     const [unwired] = await sql<{ id: string }[]>`
       insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code)
       values (${f.orgId}, ${f.storeId}, ${`GrabFood ${uid('c')}`}, false, '1220') returning id`;
-    await expect(
+    await expectAuthorizationRefusal(
       asOrg(f.orgId, (tx) =>
         setChannelPayoutDestination(tx, f.manager, { channelId: unwired!.id, moneyAccountId: f.bankA.id }),
       ),
-    ).rejects.toThrow();
+    );
   });
 
   it('change on an already-wired channel: manager refused', async () => {
     const f = await fixture('c6-change');
-    await expect(
+    await expectAuthorizationRefusal(
       asOrg(f.orgId, (tx) =>
         setChannelPayoutDestination(tx, f.manager, { channelId: f.channelId, moneyAccountId: f.bankB.id }),
       ),
-    ).rejects.toThrow();
+    );
   });
+});
+
+describe('C7 (S2, F3) — a same-account no-op result carries wrote:false', () => {
+  it(
+    'the domain result says nothing was written, so the action never sets changed=1 for it — was ' +
+      'red before this fix landed (see history); tightened here to assert on the RESULT the action reads',
+    async () => {
+      const f = await fixture('c7');
+      // Prime a real stamp first, same reasoning as C2's own fixture note.
+      await asOrg(f.orgId, (tx) =>
+        setChannelPayoutDestination(tx, f.admin, { channelId: f.channelId, moneyAccountId: f.bankB.id }),
+      );
+      const result = await asOrg(f.orgId, (tx) =>
+        setChannelPayoutDestination(tx, f.admin, { channelId: f.channelId, moneyAccountId: f.bankB.id }),
+      );
+      expect(result.hadAccountBefore, 'setup: the channel already had an account').toBe(true);
+      expect(
+        (result as { wrote?: boolean }).wrote,
+        'wanted: a same-account no-op reports wrote:false, which is what the action must gate changed=1 on',
+      ).toBe(false);
+    },
+  );
+});
+
+describe('C8 (S2, F4/F8) — held at store A only, channel at store B → refused', () => {
+  it(
+    'an actor holding set_channel_payout ONLY at store A is refused for a channel at store B (cross-store, not role) — ' +
+      'the authorization refusal, not any throw',
+    async () => {
+      const f = await fixture('c8');
+      const [otherChannel] = await sql<{ id: string }[]>`
+        insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code,
+                                    destination_money_account_id)
+        values (${f.orgId}, ${f.otherStoreId}, ${`Foodpanda B ${uid('c')}`}, false, '1220', ${f.otherStoreAccount.id})
+        returning id`;
+      // The admin fixture is scoped to storeId (A) only — never otherStoreId (B), so this exercises
+      // the cross-store axis (authorize.ts's store-scope check), not a role/capability gap.
+      await expectAuthorizationRefusal(
+        asOrg(f.orgId, (tx) =>
+          setChannelPayoutDestination(tx, f.admin, { channelId: otherChannel!.id, moneyAccountId: f.otherStoreAccount.id }),
+        ),
+      );
+    },
+  );
 });

@@ -651,16 +651,15 @@ async function deliveryUnitCostAttempt(
 }
 
 describe('C2 sibling — deliveries/documents.ts unitCost=".5" (same shared parseFourDecimalCost)', () => {
-  it('saves as 0.5000 once the shared parser widens (not yet built — currently refuses the same way as C2)', async () => {
+  // T-351 (DEF-483), ruled TESTER edit: measured directly (run-with-db, this lane) — the S5.5w
+  // Amendment A1 widening already landed in 0944455, so the delivery saves today. The
+  // `instanceof Error` branch this test used to need is gone; it proved nothing either way.
+  it('saves as 0.5000', async () => {
     const result = await deliveryUnitCostAttempt('c2-sibling', '.5');
-    if (result instanceof Error) {
-      expect(result.userMessage, 'wanted (target): the delivery saves; observed today: the same refusal as C2').toMatch(
-        /is not a valid amount/,
-      );
-    } else {
-      const [line] = await sql<{ unit_cost: string }[]>`select unit_cost from delivery_lines where delivery_id = ${result.deliveryId}`;
-      expect(line!.unit_cost, 'if this ever passes, the widening has landed — assert the real target here').toBe('0.5000');
-    }
+    expect(result, 'expected the delivery to save, not refuse').not.toBeInstanceOf(Error);
+    const { deliveryId } = result as { deliveryId: string };
+    const [line] = await sql<{ unit_cost: string }[]>`select unit_cost from delivery_lines where delivery_id = ${deliveryId}`;
+    expect(line!.unit_cost).toBe('0.5000');
   }, 30000);
 });
 

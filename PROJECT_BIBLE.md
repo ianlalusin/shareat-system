@@ -65,35 +65,35 @@
 - `1203–1237` 10. Phase plan
 - `1238–1254` 11. Migration & ETL rules
 - `1255–1319` 12. Inherited landmines — do not repeat these
-- `1320–1564` 13. Decision log
-- `1565–1584` 14. Amendment protocol
-- `1585–1589` 15. Engineering standards — the industry practices this project follows
-  - `1590–1595` 15.1 Build order: walking skeleton first
-  - `1596–1607` 15.2 Golden-master testing — the most important practice here
-  - `1608–1616` 15.3 Strangler Fig, not big-bang cutover
-  - `1617–1621` 15.4 No dual-write
-  - `1622–1630` 15.5 Expand/contract migrations
-  - `1631–1639` 15.6 Observability from day zero, not later
-  - `1640–1644` 15.7 CI gates
-  - `1645–1649` 15.8 Backups and a tested restore
-  - `1650–1654` 15.9 Twelve-Factor config
-  - `1655–1662` 15.10 Append-only ledgers — but not event sourcing
-  - `1663–1667` 15.11 Defence in depth
-  - `1668–1696` 15.12 Skills are lenses, not assurance
-  - `1697–1703` 15.13 Reconciliation is a permanent feature
-- `1704–1708` 16. The accounting spine
-  - `1709–1740` 16.0 What we are actually fixing — the diagnosis
-  - `1741–1784` 16.1 The ten invariants — non-negotiable
-  - `1785–1799` 16.2 The oracle: how "correct" is tested
-  - `1800–1821` 16.3 The model — header + lines, not legs
-  - `1822–1841` 16.4 Deliberately simpler than ERPNext
-  - `1842–1908` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1909–1933` 16.6 What v1 already gets right — preserve the intent
-  - `1934–1955` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1956–1970` 16.8 What v1's accounting already gets right
-  - `1971–2014` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2015–2065` 16.10 Posting patterns — one canonical pattern per business event
-  - `2066–2097` 16.11 Inventory's accounting integration
+- `1320–1566` 13. Decision log
+- `1567–1586` 14. Amendment protocol
+- `1587–1591` 15. Engineering standards — the industry practices this project follows
+  - `1592–1597` 15.1 Build order: walking skeleton first
+  - `1598–1609` 15.2 Golden-master testing — the most important practice here
+  - `1610–1618` 15.3 Strangler Fig, not big-bang cutover
+  - `1619–1623` 15.4 No dual-write
+  - `1624–1632` 15.5 Expand/contract migrations
+  - `1633–1641` 15.6 Observability from day zero, not later
+  - `1642–1646` 15.7 CI gates
+  - `1647–1651` 15.8 Backups and a tested restore
+  - `1652–1656` 15.9 Twelve-Factor config
+  - `1657–1664` 15.10 Append-only ledgers — but not event sourcing
+  - `1665–1669` 15.11 Defence in depth
+  - `1670–1698` 15.12 Skills are lenses, not assurance
+  - `1699–1705` 15.13 Reconciliation is a permanent feature
+- `1706–1710` 16. The accounting spine
+  - `1711–1742` 16.0 What we are actually fixing — the diagnosis
+  - `1743–1786` 16.1 The ten invariants — non-negotiable
+  - `1787–1801` 16.2 The oracle: how "correct" is tested
+  - `1802–1823` 16.3 The model — header + lines, not legs
+  - `1824–1843` 16.4 Deliberately simpler than ERPNext
+  - `1844–1910` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1911–1935` 16.6 What v1 already gets right — preserve the intent
+  - `1936–1957` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1958–1972` 16.8 What v1's accounting already gets right
+  - `1973–2016` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2017–2067` 16.10 Posting patterns — one canonical pattern per business event
+  - `2068–2099` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1560,6 +1560,8 @@ just a patch.**
 | 235 | 2026-09-28 | ⭐ **BLANK MEANS "NOT DECIDED", NOT ZERO.** Ian, 2026-09-28: a blank attendance minutes box (overtime etc.) leaves the decision open, never "approve 0 minutes" (DEF-471). Blank whole-number attendance settings are refused by name — **except auto clock-out, where blank = never**. Blank channel-settlement gross and net are refused. T-343 S5.5t–S5.5w. | Turning `''` into `0` recorded a real decision nobody made (DEF-471). A setting has no "undecided" state, so blank is refused rather than guessed — except where blank already has a stated meaning. | Yes, per field. |
 | 236 | 2026-09-28 | ⭐ **A CHANNEL'S PAYOUT ACCOUNT IS SET AND CHANGED BY ADMIN ONLY — NEW STORE-SCOPED CAPABILITY `set_channel_payout`.** Ian, 2026-09-28. Managers see the account but cannot set or change it. T-350 (`docs/tasks/350-def-477-change-channel-payout-account.md`), DEF-477; matrix row in `docs/decisions/CAPABILITY-MATRIX.md`. | The payout account decides where settlement money is recorded as landing; a wrong change misroutes every later settlement, so it sits with the administrator. DEF-477: once set it could not be changed at all. | Yes — a capability grant. |
 | 237 | 2026-09-28 | ⭐ **PAGE DESCRIPTIONS USE THE FULL WIDTH, CLAMP AT 3 LINES WITH AN ELLIPSIS, AND EXPAND ON DEMAND.** Ian, 2026-09-28. T-348 (`docs/tasks/348-def-440-two-column-page-width.md`), DEF-474. | 45 of 118 descriptions were capped to a narrow column and never clamped, so long ones pushed the page down and short screens wasted width. | Yes — presentation only. |
+| 238 | 2026-09-28 | ⭐ **A CHANNEL'S PAYOUT-ACCOUNT CHANGE IS RECORDED IN THE AUDIT LOG.** Ian, 2026-09-28: *"yes, record payout account changes in the audit log."* Who, when, old → new account, per change; a same-account no-op records nothing. T-350 S3 (`docs/tasks/350-def-477-change-channel-payout-account.md`). ⚠️ `audit_log` has no writer yet and carries FORCE RLS with zero policies (`0011:142-160`) — the S3 spec decides the mechanism. | T-350 made the account changeable, so it now changes repeatedly; a single UPDATE left no trace of what it was before (auditor finding F9 on `0ffb0fe`). | Yes — adds a record, changes no behaviour. |
+| 239 | 2026-09-28 | ⭐ **WITH NO ADMINISTRATOR, A MANAGER MAY SET AND CHANGE A CHANNEL'S PAYOUT ACCOUNT.** Ian, 2026-09-28: *"with no admin manager can update it."* `set_channel_payout` stays in `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` by derivation (admin ✅, manager ✗), exactly as `set_cash_policy` does (row 196's class). Row 236's "admin only" holds wherever an organisation has an admin. | Someone must be able to repoint a payout account in an organisation that has no admin yet. | Yes — the fallback already lapses when an admin arrives (row 188). |
 
 
 ## 14. Amendment protocol

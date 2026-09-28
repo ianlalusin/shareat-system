@@ -12,7 +12,6 @@ import {
   amortisePrepaidItem,
   confirmPrepaidTerm,
   createPrepaidItem,
-  refuse,
   reverseAmortisation,
   writeOffPrepaidItem,
 } from '@shareat/domain';
@@ -26,21 +25,6 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
-/** T-343 S5.5w item 4 — shared by both `coverageMonths` reads (create and confirm-term). */
-function wholeMonths(raw: string): number {
-  if (raw === '') {
-    throw refuse('coverageMonths is blank', 'The coverage — enter a whole number of months from 1 to 120.');
-  }
-  const n = Number(raw);
-  if (!/^\d{1,3}$/.test(raw) || n < 1 || n > 120) {
-    throw refuse(
-      `coverageMonths is not a whole number of months from 1 to 120: ${JSON.stringify(raw)}`,
-      `The coverage — "${raw}" is not a whole number of months from 1 to 120.`,
-    );
-  }
-  return n;
-}
-
 function back(path: string, params: Record<string, string>): never {
   const q = new URLSearchParams(params).toString();
   redirect(`${path}?${q}`);
@@ -52,14 +36,15 @@ export async function createPrepaidItemAction(formData: FormData): Promise<void>
   try {
     const storeId = str(formData, 'storeId');
     if (!storeId) throw new Error('Choose a store.');
-    const coverageMonths = wholeMonths(str(formData, 'coverageMonths'));
+    // T-351 / DEF-481 — the raw string, unparsed: `createPrepaidItem` parses it AFTER
+    // `authorize()`, in the domain (`whole-number-input.ts`'s `parseWholeNumberInput`).
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
       createPrepaidItem(tx, actor, {
         storeId,
         name: str(formData, 'name'),
         category: str(formData, 'category') as PrepaidCategory,
         coverageStartDate: str(formData, 'coverageStartDate'),
-        coverageMonths,
+        coverageMonths: str(formData, 'coverageMonths'),
         totalCost: str(formData, 'totalCost'),
         notes: str(formData, 'notes') || null,
       }),
@@ -104,7 +89,7 @@ export async function confirmTermAction(formData: FormData): Promise<void> {
     await withOrgPrincipal(actor.orgId, (tx) =>
       confirmPrepaidTerm(tx, actor, {
         prepaidItemId: id,
-        coverageMonths: wholeMonths(str(formData, 'coverageMonths')),
+        coverageMonths: str(formData, 'coverageMonths'),
         coverageStartDate: str(formData, 'coverageStartDate'),
       }),
     );

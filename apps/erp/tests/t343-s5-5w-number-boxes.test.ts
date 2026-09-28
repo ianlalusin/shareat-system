@@ -60,7 +60,7 @@ describe('R-legs — source-text: each converted box has no type="number"/step/m
     expect(tag).toMatch(/inputMode=["']decimal["']/);
   });
 
-  it('ap/invoices/[id]/page.tsx — line${i}_unitPrice (decimal, SAFE server-side)', () => {
+  it('ap/invoices/[id]/page.tsx — line${i}_unitPrice (decimal; server guard: T-351 A-legs)', () => {
     const tag = inputTagFor('apps/erp/src/app/ap/invoices/[id]/page.tsx', '{`line${i}_unitPrice`}');
     expect(tag).not.toMatch(/type=["']number["']/);
     expect(tag).not.toMatch(/\bstep=/);

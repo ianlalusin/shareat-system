@@ -393,27 +393,32 @@ describe('T-340 — a non-number never reaches the line arithmetic', () => {
     },
   );
 
-  it('I6 (optional, Amendment R1 §2): two lines summing to Infinity refuse at the HEADER check as finiteness, not "the lines total"', async () => {
-    const f = await fixture('t340-i6');
-    const item = await porkBelly(f);
-    const fileId = await evidence(f);
-    const created = await asOrg(f.orgId, (tx) =>
-      recordInvoice(tx, f.staff, {
-        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
-        totalAmount: '2900.00', receiptFileId: fileId, lines: [],
-      }),
-    );
-    const huge: InvoiceLineDraft = {
-      itemId: item, quantity: '1', purchaseUnit: 'kg', conversionFactor: '1',
-      unitPrice: '1e308', lineTotal: '1e308',
-    };
-    await expect(
-      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [huge, { ...huge }])),
-    ).rejects.toThrow(/finite/i);
-    await expect(
-      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [huge, { ...huge }])),
-    ).rejects.not.toThrow(/the lines total/);
-  });
+  it(
+    'I6 (T-351 M1, ruled edit) — unitPrice \'1e308\' now refuses at the cost PARSER, never reaching ' +
+      'the header finiteness check it used to hit: 1e308 is itself finite, but parseFourDecimalCost\'s ' +
+      'shape regex has no "e" in it, so it is "not a valid amount" before either line\'s sum is ever computed',
+    async () => {
+      const f = await fixture('t340-i6');
+      const item = await porkBelly(f);
+      const fileId = await evidence(f);
+      const created = await asOrg(f.orgId, (tx) =>
+        recordInvoice(tx, f.staff, {
+          storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+          totalAmount: '2900.00', receiptFileId: fileId, lines: [],
+        }),
+      );
+      const huge: InvoiceLineDraft = {
+        itemId: item, quantity: '1', purchaseUnit: 'kg', conversionFactor: '1',
+        unitPrice: '1e308', lineTotal: '1e308',
+      };
+      await expect(
+        asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [huge, { ...huge }])),
+      ).rejects.toThrow(/is not a valid amount/i);
+      await expect(
+        asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [huge, { ...huge }])),
+      ).rejects.not.toThrow(/the lines total/);
+    },
+  );
 
   it(
     'N1 (RULED FLIP, S5.5w item 2 landed) — an "abc" quantity now refuses via parseQuantityInput\'s ' +

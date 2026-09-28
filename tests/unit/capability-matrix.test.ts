@@ -424,11 +424,15 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         // so this line is why `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` fails to compile as
         // `Capability[]` today (see `t345-book-missed-month-capability.test.ts`).
         'book_missed_month',
-        // ⭐ T-350/DEF-477's `set_channel_payout` JOINS this set with no edit to any list —
-        // admin-yes / manager-no, same derivation as `set_cash_policy` above: a manager must not be
-        // able to raise the ceiling their own payout routing is measured against, and in an org with
-        // no admin the manager is the top of the tree and somebody must be able to point a channel's
-        // payout somewhere.
+        // T-350 S2 (F10) — the previous wording here borrowed `set_cash_policy`'s own reasoning
+        // ("raise the ceiling") for a capability that has no ceiling at all: `set_channel_payout`
+        // is ROUTING (which existing account a channel's payout lands in), not a limit anyone's
+        // custody is measured against. The real reason is the DERIVATION itself (bible §13 row
+        // 196): `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` is admin-yes/manager-no capabilities,
+        // computed from the matrix — so `set_channel_payout` JOINS this set with no edit to any
+        // list, the same way `override_period_lock` did. In an org with no admin the manager is
+        // the top of the tree, and somebody must still be able to point a channel's payout
+        // somewhere; the grant is revoked the instant an administrator arrives (row 188).
         'set_channel_payout',
       ].sort(),
     );

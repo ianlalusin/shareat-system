@@ -37,8 +37,14 @@ export type LinkStatus = (typeof LINK_STATUSES)[number];
  *  DEF-383's own remedy, its own task, and out of scope here. `parseFourDecimalCost` below is for
  *  new callers outside this file — `deliveries/documents.ts`'s `unitCost` is the first — so at
  *  least no THIRD shape of "test this pattern inline" gets added while DEF-383 is still open. */
-// S5.5w Amendment A1 item 1b — must not narrow what was already accepted (".5", "1." stay valid);
-// the lookahead requires at least one digit so "" and "." are still structurally rejected.
+// T-351 / DEF-483 — this comment used to claim the pattern only PRESERVED what already passed;
+// S5.5w Amendment A1 item 1b actually WIDENED it, replacing `/^\d+(\.\d{1,4})?$/` (which required
+// at least one digit before the decimal point, so it rejected ".5" and "1."). Of the three shapes
+// named here, only ".5" and "1." are NEWLY accepted by that change — "005" already passed under
+// the old pattern too, since a leading-zero digit run was never the problem. All three now pass
+// for every user of this pattern: `parseFourDecimalCost`'s callers (deliveries, cutover, and AP
+// invoice lines since T-351) and `upsertOffering`'s own manual cost (`:207`). The lookahead still
+// requires at least one digit, so "" and "." are still structurally rejected. Code is unchanged.
 const MANUAL_COST_PATTERN = /^(?=.*\d)\d*(?:\.\d{0,4})?$/;
 
 /**

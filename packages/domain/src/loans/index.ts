@@ -14,6 +14,7 @@ import { journalRepo, loansRepo, moneyAccountsRepo, transaction, type Tx } from 
 import { money, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
+import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { refuse } from '../shared/refusal';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -33,7 +34,9 @@ export interface CreateLoanInput {
   ratePeriod: 'day' | 'month' | 'year';
   interestMethod: 'straight' | 'amortizing' | 'equal_principal';
   paymentFrequency: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annual';
-  termPeriods: number;
+  /** T-351 / DEF-481 — a raw form string, parsed here (after `authorize()`) by
+   *  `parseWholeNumberInput`, never in the action. A number still works for every direct caller. */
+  termPeriods: number | string;
   startDate: string;
   notes?: string | null;
 }
@@ -68,6 +71,9 @@ export async function createLoan(
         `The interest rate — "${input.interestRate}" is not a valid rate. Use a number from 0 to 9999.9999 with up to four decimal places.`,
       );
     }
+    // T-351 / DEF-481 — parsed here, after `authorize()`, on the VALUE (never the digit run):
+    // "000012" is 12, not refused for its length.
+    const termPeriods = parseWholeNumberInput(input.termPeriods, 'createLoan: the number of payments', 'The number of payments', 1, 99999);
     return loansRepo.insertLoan(trx, {
       orgId: actor.orgId,
       storeId: input.storeId,
@@ -78,7 +84,7 @@ export async function createLoan(
       ratePeriod: input.ratePeriod,
       interestMethod: input.interestMethod,
       paymentFrequency: input.paymentFrequency,
-      termPeriods: input.termPeriods,
+      termPeriods,
       startDate: input.startDate,
       notes: input.notes?.trim() || null,
       createdBy: actor.personId,

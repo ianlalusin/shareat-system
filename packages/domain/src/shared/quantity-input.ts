@@ -24,7 +24,10 @@ export function parseQuantityInput(raw: string, rawLabel: string, humanLabel: st
     // S5.5u Amendment A1 item 2 — the mantissa also accepts a leading dot with no digit before it
     // (".5e300"), not just "digit(.digits)?"; update both together with `numeric(14,3)`'s own
     // 99,999,999,999.999 ceiling below if that column's precision ever changes.
-    const trimmed = raw.trim();
+    // T-351 / DEF-483 — `String(raw).trim()`, not `raw.trim()`: `money-input.ts`'s own reason
+    // (S5.5p) applies here too — a non-string crossing the `string` boundary must still yield a
+    // presentable sentence, not a bare `TypeError` from this catch block itself.
+    const trimmed = String(raw).trim();
     const hugeExponent =
       /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)e[+-]?\d+$/i.test(trimmed) && Math.abs(Number(trimmed)) > 99999999999.999;
     if (hugeExponent || (err instanceof RangeError && /out of range/.test(err.message))) {

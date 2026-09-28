@@ -1,6 +1,6 @@
 # T-351: follow-ups from the post-commit `/code-review 0944455` (DEF-480..483)
 
-**Status:** APPROVED 2026-09-28 (orchestrator, after an independent Opus spec audit; amendments M1–M6 at the end bind). **Model:** Sonnet, tester then builder.
+**Status:** DONE 2026-09-28 (full gates PASS; screens partly driven, AP/loan legs integration-only; post-commit audit pending). APPROVED 2026-09-28 (orchestrator, after an independent Opus spec audit; amendments M1–M6 at the end bind). **Model:** Sonnet, tester then builder.
 **Migration:** none. Every item is domain, action or render code; the one DB rule involved
 (`supplier_invoice_lines_unit_price_not_negative_check`, `0047:69`) already exists and is not changed.
 **Runs after** T-350 (`0ffb0fe`, which touched `channel-settlements/index.ts`) and T-349 S2c. No path here overlaps

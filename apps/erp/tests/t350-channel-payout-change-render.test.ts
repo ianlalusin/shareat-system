@@ -31,12 +31,26 @@ vi.mock('../src/lib/session', () => ({
 }));
 
 const heldCapabilitiesMock = vi.fn();
+// T-350 S2 (F2) — the page now also calls the REAL per-store `authorize()` (storeDetail's own
+// "throw -> value" idiom) after the org-wide `heldCapabilities` pre-check, so a mocked `tx: null`
+// would otherwise crash it with a TypeError. Stubbed against the SAME `held` set `renderPage`
+// already threads through `heldCapabilitiesMock` — not a second, independently-controlled fixture —
+// so the two mocks can never disagree about who holds what.
+let currentHeld = new Set<string>();
 vi.mock('@shareat/auth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@shareat/auth')>();
-  return { ...actual, heldCapabilities: (...args: unknown[]) => heldCapabilitiesMock(...args) };
+  return {
+    ...actual,
+    heldCapabilities: (...args: unknown[]) => heldCapabilitiesMock(...args),
+    authorize: async (_tx: unknown, _actor: unknown, capability: string, _ctx: unknown) => {
+      if (currentHeld.has(capability)) return;
+      throw new actual.AuthorizationError(`authorize: mocked refusal for '${capability}'`, capability as never);
+    },
+  };
 });
 
 const listChannelsMock = vi.fn();
+const listDestinationAccountsMock = vi.fn();
 vi.mock('../src/app/channel-settlements/lib', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/app/channel-settlements/lib')>();
   return {
@@ -45,7 +59,7 @@ vi.mock('../src/app/channel-settlements/lib', async (importOriginal) => {
     listWaitingDays: async () => [],
     listRecentSettlements: async () => [],
     listActiveLoans: async () => [],
-    listDestinationAccounts: async () => [DEST_A, DEST_B],
+    listDestinationAccounts: (...args: unknown[]) => listDestinationAccountsMock(...args),
     // ⛔ NOT a stub of the real DB wrapper — a pass-through so a future `heldCapabilities(tx, actor)`
     // call routed through this file's re-exported `withOrgPrincipal` never opens a real connection.
     withOrgPrincipal: async (_orgId: string, fn: (tx: null) => unknown) => fn(null),
@@ -108,6 +122,8 @@ beforeEach(() => {
   requireSessionMock.mockReset();
   heldCapabilitiesMock.mockReset();
   listChannelsMock.mockReset();
+  listDestinationAccountsMock.mockReset();
+  listDestinationAccountsMock.mockResolvedValue([DEST_A, DEST_B]);
   requireSessionMock.mockResolvedValue({
     actor: ACTOR,
     sessionId: 'session-1',
@@ -117,10 +133,16 @@ beforeEach(() => {
   });
 });
 
-async function renderPage(channels: unknown[], held: string[]) {
+async function renderPage(
+  channels: unknown[],
+  held: string[],
+  options: { searchParams?: Record<string, string>; accounts?: unknown[] } = {},
+) {
   listChannelsMock.mockResolvedValueOnce(channels);
-  heldCapabilitiesMock.mockResolvedValueOnce(new Set(held));
-  const element = await ChannelSettlementsPage({ searchParams: Promise.resolve({}) });
+  currentHeld = new Set(held);
+  heldCapabilitiesMock.mockResolvedValueOnce(currentHeld);
+  if (options.accounts) listDestinationAccountsMock.mockResolvedValueOnce(options.accounts);
+  const element = await ChannelSettlementsPage({ searchParams: Promise.resolve(options.searchParams ?? {}) });
   return renderToStaticMarkup(element as never);
 }
 
@@ -185,6 +207,78 @@ describe('R3 (extra, admin only) — a non-holder sees no form in the unwired pa
         html,
         'wanted the doc\'s named sentence ("an admin must set it") in place of the form',
       ).toMatch(/admin must set it/i);
+    },
+  );
+});
+
+// =================================================================================================
+// T-350 S2 — post-commit review of 0ffb0fe (F1/F3/F5/F6), docs/tasks/350-*.md §S2. S2-R2 (F2) is
+// NOT here: it needs a REAL per-store capability check, which this file's `heldCapabilities` mock
+// cannot express (it is a plain boolean set, store-blind by construction) — see
+// apps/erp/tests/integration/t350-s2-render.test.ts instead.
+// =================================================================================================
+
+describe('S2-R1 (F1) — a WIRED channel whose current account is retired (not in the active list)', () => {
+  it(
+    'wanted: a disabled, selected placeholder, no real option pre-selected, card names it "(retired)" — ' +
+      'was red today: defaultValue matches no <option>, so the browser silently falls back to the FIRST real option',
+    async () => {
+      const html = await renderPage(
+        [
+          wiredChannel({
+            destinationMoneyAccountId: 'acct-retired',
+            destinationAccountName: 'Retired Bank',
+          }),
+        ],
+        ['set_channel_payout'],
+        { accounts: [DEST_A, DEST_B] }, // neither is 'acct-retired' — it has been retired out of the active list
+      );
+
+      expect(html, 'expected the card to name the retired account, marked as such').toMatch(/Retired Bank[^<]*\(retired\)/);
+
+      const changeForm = /<form\b[^>]*>[\s\S]*?name="channelId"[^>]*value="chan-1"[\s\S]*?<\/form>/.exec(html)?.[0];
+      expect(changeForm, 'expected the Change form to still render').toBeTruthy();
+      const selectBlock = /<select[^>]*name="moneyAccountId"[^>]*>[\s\S]*?<\/select>/.exec(changeForm!)?.[0];
+      expect(selectBlock, 'expected the moneyAccountId select').toBeTruthy();
+
+      expect(
+        selectBlock,
+        'wanted: a disabled placeholder is selected — was red: no such placeholder exists at all today',
+      ).toMatch(/<option[^>]*value=""[^>]*disabled[^>]*selected|<option[^>]*value=""[^>]*selected[^>]*disabled/);
+      expect(selectBlock, 'neither real account may be pre-selected').not.toMatch(/<option[^>]*value="acct-a"[^>]*selected/);
+      expect(selectBlock, 'neither real account may be pre-selected').not.toMatch(/<option[^>]*value="acct-b"[^>]*selected/);
+    },
+  );
+});
+
+describe('S2-R3 (F3/F5) — the "changed" banner names the CHANNEL\'S OWN account, never the URL\'s', () => {
+  it(
+    'wanted: the banner reads the current account server-side — was red today: the banner echoes ?account= verbatim, ' +
+      'trusting a value a replayed/crafted URL fully controls',
+    async () => {
+      const html = await renderPage([wiredChannel({ destinationAccountName: 'Bank A' })], ['set_channel_payout'], {
+        searchParams: { ok: 'destination', changed: '1', account: 'Totally Wrong Bank' },
+      });
+
+      expect(
+        html,
+        'wanted: never trust the URL\'s account name — was red: it appears verbatim in the banner',
+      ).not.toContain('Totally Wrong Bank');
+    },
+  );
+});
+
+describe('S2-R4 (F6) — a wired channel with NO active accounts at its store', () => {
+  it(
+    'wanted: a sentence says so, no picker — was red today: an empty <select> with only the disabled placeholder option, still offered as if choosable',
+    async () => {
+      const html = await renderPage([wiredChannel()], ['set_channel_payout'], { accounts: [] });
+
+      const changeArea = /<form\b[^>]*>[\s\S]*?name="channelId"[^>]*value="chan-1"[\s\S]*?<\/form>/.exec(html)?.[0];
+      expect(
+        changeArea?.includes('name="moneyAccountId"'),
+        'wanted: no moneyAccountId picker when there is nothing to pick — was red: the select still renders, empty',
+      ).not.toBe(true);
     },
   );
 });

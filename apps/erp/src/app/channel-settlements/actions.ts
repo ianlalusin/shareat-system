@@ -186,30 +186,27 @@ export async function voidSettlementAction(formData: FormData): Promise<void> {
  */
 export async function setPayoutDestinationAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
-  let accountName = '';
-  let hadAccountBefore = false;
+  let channelId = '';
+  let changed = false;
 
   try {
+    channelId = str(formData, 'channelId');
     const moneyAccountId = str(formData, 'moneyAccountId');
     if (!moneyAccountId) throw new Error('Choose the account this channel pays into.');
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      setChannelPayoutDestination(tx, actor, {
-        channelId: str(formData, 'channelId'),
-        moneyAccountId,
-      }),
+      setChannelPayoutDestination(tx, actor, { channelId, moneyAccountId }),
     );
-    accountName = result.accountName;
-    hadAccountBefore = result.hadAccountBefore;
+    // T-350 S2 (F3) — "changed" means a WRITE happened to a channel that already had an account.
+    // `hadAccountBefore` alone is not enough: a same-account no-op leaves the channel exactly as
+    // it was, so it must not read "changed" just because an account already existed.
+    changed = result.wrote && result.hadAccountBefore;
   } catch (err) {
     redirect(`/channel-settlements?error=${encodeURIComponent(errorMessage(err))}`);
   }
 
-  // T-350 (DEF-477): the banner reads differently once the channel already had an account —
-  // `changed=1` carries the account name so the page never re-queries just to word the banner.
-  const params = new URLSearchParams({ ok: 'destination' });
-  if (hadAccountBefore) {
-    params.set('changed', '1');
-    params.set('account', accountName);
-  }
+  // T-350 S2 (F5): the banner names the account SERVER-SIDE, read from the channel by id on the
+  // next render — never echoed from a query param a crafted or replayed URL fully controls.
+  const params = new URLSearchParams({ ok: 'destination', channel: channelId });
+  if (changed) params.set('changed', '1');
   redirect(`/channel-settlements?${params.toString()}`);
 }

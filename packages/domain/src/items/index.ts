@@ -23,6 +23,7 @@ import { computeBranchPrice, type BranchPrice } from './branch-price';
 import { authorize, type Actor } from '@shareat/auth';
 import { assertFiguresReconcile } from '../shared/reconcile';
 import { parseQuantityInput } from '../shared/quantity-input';
+import { parseFourDecimalCost } from '../commissary/catalogue';
 import { refuse } from '../shared/refusal';
 
 export interface CreateItemInput {
@@ -233,8 +234,20 @@ export async function validateInvoiceLines(
     // path quotes, not the `NaN` computed from it (T-328 §4c). `Number.isFinite`, not a `>= 0`
     // comparison — that would add an out-of-scope negativity rule (money-positivity-guard shape).
     if (!Number.isFinite(price)) {
-      throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) — the unit price "${l.unitPrice}" is not a number.`);
+      throw refuse(
+        `validateInvoiceLines: line ${i + 1} (${item.name}) — the unit price "${l.unitPrice}" is not a number.`,
+        `Line ${i + 1} (${item.name})'s unit price — "${l.unitPrice}" is not a number.`,
+      );
     }
+    // T-351 / DEF-480 — shape and precision via the shared cost parser (`parseFourDecimalCost`),
+    // which never compares the value against zero (the money-positivity census, `NUMBER_CMP`) and
+    // refuses more than four decimals. That makes `quantity × price` in the action byte-for-byte
+    // the string that is stored, so the action needs no parse of its own.
+    const unitPrice = parseFourDecimalCost(
+      l.unitPrice,
+      `validateInvoiceLines: line ${i + 1} (${item.name})'s unit price`,
+      `Line ${i + 1} (${item.name})'s unit price`,
+    );
     if (!Number.isFinite(total)) {
       throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) — the line total "${l.lineTotal}" is not a number.`);
     }
@@ -263,7 +276,9 @@ export async function validateInvoiceLines(
       // S5.5w Amendment A1 item 3 — store the TRIMMED factor, not the raw box text (`' 2 '` saves
       // `2.000000`, not a value with stray whitespace reaching the column).
       conversionFactor: raw,
-      unitPrice: l.unitPrice,
+      // T-351 / DEF-480 — the PARSED, trimmed string (`parseFourDecimalCost`'s return), not the raw
+      // box text: `quantity × price` downstream (`ap/actions.ts`) then uses the exact string stored.
+      unitPrice,
       lineTotal: l.lineTotal,
     });
   }

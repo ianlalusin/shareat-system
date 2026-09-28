@@ -58,6 +58,8 @@ export interface PreviewShape {
   destinationAccountName: string | null;
   blockers: string[];
   needsGainAcknowledgement: boolean;
+  /** T-351 / DEF-482 — false means every figure above is a placeholder zero, not a real answer. */
+  figuresComputed: boolean;
 }
 
 const DEDUCTIONS = [
@@ -451,33 +453,7 @@ export function SettlementForm({
 
         {preview && (
           <div className={stale ? 'opacity-40' : ''}>
-            <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-              <Row label={`${preview.channelName} is owed`} value={money(preview.outstanding)} />
-              <Row label="This settlement clears" value={money(preview.outstandingCleared)} />
-              <Row label="Deductions" value={money(preview.feesTotal)} />
-              {Number(preview.loanDeduction) !== 0 && (
-                <Row label="Loan docked" value={money(preview.loanDeduction)} />
-              )}
-              <Row label="Banked" value={money(preview.netDeposited)} />
-              {Number(preview.variance) !== 0 && (
-                <Row
-                  label="Shortfall → 6420 Channel settlement variance"
-                  value={money(preview.variance)}
-                  tone="warn"
-                />
-              )}
-              {Number(preview.settlementGain) !== 0 && (
-                <Row
-                  label="Excess → 7100 Platform settlement gain"
-                  value={money(preview.settlementGain)}
-                  tone="warn"
-                />
-              )}
-              {Number(preview.variance) === 0 && Number(preview.settlementGain) === 0 && (
-                <Row label="Difference" value="none — it reconciles exactly" tone="good" />
-              )}
-              <Row label="Tolerance for this day" value={money(preview.tolerance)} />
-            </dl>
+            <SettlementPreviewFigures preview={preview} />
 
             {preview.blockers.length > 0 && (
               <ul className="mt-3 space-y-1 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
@@ -539,6 +515,50 @@ export function SettlementForm({
         this screen is the single place these legs are written.
       </p>
     </form>
+  );
+}
+
+/**
+ * T-351 / DEF-482 — the preview's figure rows, extracted so a render test can pin them without
+ * mounting the whole client form. `figuresComputed === false` means every field below is a
+ * placeholder zero (`ZERO_COMPUTED_SETTLEMENT`), so NO figure row renders — a config blocker
+ * sitting beside real arithmetic is worth seeing, but "Banked ₱0.00" under a typed `1,5` is not a
+ * figure, it is a bug pretending to be one. When figures ARE computed, the "reconciles exactly"
+ * row only reads as good when nothing else is blocking the post — a green line above a red blocker
+ * list said "this is fine" about a settlement that could not post.
+ */
+export function SettlementPreviewFigures({ preview }: { preview: PreviewShape }) {
+  if (!preview.figuresComputed) {
+    return (
+      <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        The arithmetic appears once every figure reads as an amount — fix the ones listed below,
+        then check again.
+      </p>
+    );
+  }
+  const reconciles = Number(preview.variance) === 0 && Number(preview.settlementGain) === 0;
+  return (
+    <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+      <Row label={`${preview.channelName} is owed`} value={money(preview.outstanding)} />
+      <Row label="This settlement clears" value={money(preview.outstandingCleared)} />
+      <Row label="Deductions" value={money(preview.feesTotal)} />
+      {Number(preview.loanDeduction) !== 0 && <Row label="Loan docked" value={money(preview.loanDeduction)} />}
+      <Row label="Banked" value={money(preview.netDeposited)} />
+      {Number(preview.variance) !== 0 && (
+        <Row label="Shortfall → 6420 Channel settlement variance" value={money(preview.variance)} tone="warn" />
+      )}
+      {Number(preview.settlementGain) !== 0 && (
+        <Row label="Excess → 7100 Platform settlement gain" value={money(preview.settlementGain)} tone="warn" />
+      )}
+      {reconciles && (
+        <Row
+          label="Difference"
+          value="none — it reconciles exactly"
+          tone={preview.blockers.length === 0 ? 'good' : undefined}
+        />
+      )}
+      <Row label="Tolerance for this day" value={money(preview.tolerance)} />
+    </dl>
   );
 }
 

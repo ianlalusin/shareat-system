@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { heldCapabilities } from '@shareat/auth';
+import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
 import { requireSession } from '../../lib/session';
 import {
   previewSettlementAction,
@@ -28,7 +28,6 @@ interface SearchParams {
   channel?: string;
   day?: string;
   changed?: string;
-  account?: string;
 }
 
 const OK_MESSAGE: Record<string, string> = {
@@ -45,23 +44,47 @@ export default async function ChannelSettlementsPage({
   const sp = await searchParams;
   const { actor } = await requireSession('/channel-settlements');
 
-  const [channels, waiting, settlements, loans, accounts, held] = await Promise.all([
+  const [channels, waiting, settlements, loans, accounts] = await Promise.all([
     listChannels(actor.orgId),
     listWaitingDays(actor.orgId),
     listRecentSettlements(actor.orgId),
     listActiveLoans(actor.orgId),
     listDestinationAccounts(actor.orgId),
-    withOrgPrincipal(actor.orgId, (tx) => heldCapabilities(tx, actor)),
   ]);
   // T-350 (DEF-477). Ian, 2026-09-28: admin only — gates both the unwired panel's form and the
-  // wired card's Change control. `authorize()` in the domain is the real gate; this only decides
-  // what renders.
-  const canSetChannelPayout = held.has('set_channel_payout');
+  // wired card's Change control. `authorize()` in the domain is the real gate; this decides what
+  // renders, PER CHANNEL AT ITS OWN STORE (T-350 S2 / F2 — `heldCapabilities` alone is store-blind
+  // by design, per its own JSDoc, so it cannot answer "at store Y"). `heldCapabilities` is still
+  // the cheap org-wide pre-check; a per-store `authorize()` call, its own real gate, narrows that
+  // down per store — the same "throw → value" idiom `admin/stores/lib.ts`'s `storeDetail` already
+  // uses, not a new auth helper.
+  const distinctStoreIds = [...new Set(channels.map((c) => c.storeId))];
+  const canSetChannelPayoutByStore = await withOrgPrincipal(actor.orgId, async (tx) => {
+    const held = await heldCapabilities(tx, actor);
+    if (!held.has('set_channel_payout')) return new Set<string>();
+    const ok = new Set<string>();
+    for (const storeId of distinctStoreIds) {
+      try {
+        await authorize(tx, actor, 'set_channel_payout', { storeId });
+        ok.add(storeId);
+      } catch (err) {
+        if (err instanceof AuthorizationError) continue;
+        throw err;
+      }
+    }
+    return ok;
+  });
+  const canSetChannelPayoutAt = (storeId: string) => canSetChannelPayoutByStore.has(storeId);
 
-  // T-350: `changed=1` carries the human sentence for a re-set; a first set keeps today's text.
+  // T-350 S2 (F5) — the account name comes from the CHANNEL, read server-side by id, never from a
+  // query param: `?account=` was a value a replayed or crafted URL fully controlled.
+  const changedChannel =
+    sp.ok === 'destination' && sp.changed === '1' && sp.channel
+      ? channels.find((c) => c.id === sp.channel)
+      : undefined;
   const okMessage =
-    sp.ok === 'destination' && sp.changed === '1' && sp.account
-      ? `Payout account changed. New settlements bank into ${sp.account}.`
+    sp.ok === 'destination' && sp.changed === '1'
+      ? `Payout account changed. New settlements bank into ${changedChannel?.destinationAccountName ?? 'the new account'}.`
       : sp.ok
         ? OK_MESSAGE[sp.ok]
         : undefined;
@@ -108,7 +131,7 @@ export default async function ChannelSettlementsPage({
           </div>
           <div className="space-y-2">
             {unwired.map((c) =>
-              canSetChannelPayout ? (
+              canSetChannelPayoutAt(c.storeId) ? (
                 <form
                   key={c.id}
                   action={setPayoutDestinationAction}
@@ -186,49 +209,77 @@ export default async function ChannelSettlementsPage({
                       {peso(c.outstanding)}
                     </span>
                   </div>
-                  <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                    {c.storeCode} · {c.destinationAccountName ?? 'no payout account'}
-                    {!c.isActive && ' · retired'}
-                  </div>
-                  {c.destinationMoneyAccountId && canSetChannelPayout && (
-                    <details className="mt-1">
-                      <summary className="cursor-pointer px-1 py-1.5 text-xs font-medium text-neutral-500 hover:text-neutral-800 dark:text-neutral-500 dark:hover:text-neutral-300">
-                        Change
-                      </summary>
-                      <form
-                        action={setPayoutDestinationAction}
-                        className="mt-2 flex flex-wrap items-center gap-2"
-                      >
-                        <input type="hidden" name="channelId" value={c.id} />
-                        <select
-                          name="moneyAccountId"
-                          required
-                          defaultValue={c.destinationMoneyAccountId}
-                          className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
-                        >
-                          {accounts
-                            .filter((a) => a.storeId === c.storeId)
-                            .map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.name} ({a.custodian} · {a.glAccountCode})
-                              </option>
-                            ))}
-                        </select>
-                        <button
-                          type="submit"
-                          className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-800 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
-                        >
-                          Save
-                        </button>
-                        <Link
-                          href="/channel-settlements"
-                          className="px-1 py-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"
-                        >
-                          Cancel
-                        </Link>
-                      </form>
-                    </details>
-                  )}
+                  {(() => {
+                    const storeAccounts = accounts.filter((a) => a.storeId === c.storeId);
+                    // T-350 S2 (F1) — `accounts` is active-only (`listDestinationAccounts`), so a
+                    // retired current account is absent from it. Naming it here, and never
+                    // pre-selecting a real option for it, is what stops Save silently repointing
+                    // to whichever account happens to render first.
+                    const currentRetired =
+                      c.destinationMoneyAccountId !== null &&
+                      !storeAccounts.some((a) => a.id === c.destinationMoneyAccountId);
+                    return (
+                      <>
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                          {c.storeCode} · {c.destinationAccountName ?? 'no payout account'}
+                          {currentRetired && ' (retired)'}
+                          {!c.isActive && ' · retired'}
+                        </div>
+                        {c.destinationMoneyAccountId && canSetChannelPayoutAt(c.storeId) && (
+                          <details className="mt-1">
+                            <summary className="cursor-pointer px-1 py-1.5 text-xs font-medium text-neutral-500 hover:text-neutral-800 dark:text-neutral-500 dark:hover:text-neutral-300">
+                              Change
+                            </summary>
+                            <form
+                              action={setPayoutDestinationAction}
+                              className="mt-2 flex flex-wrap items-center gap-2"
+                            >
+                              <input type="hidden" name="channelId" value={c.id} />
+                              {storeAccounts.length === 0 ? (
+                                // T-350 S2 (F6) — nothing to pick, so no picker is offered as if
+                                // choosable. Same sentinel idiom as the unwired panel's own gaps.
+                                <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                                  No active account at this store to change into.
+                                </span>
+                              ) : (
+                                <>
+                                  <select
+                                    name="moneyAccountId"
+                                    required
+                                    defaultValue={currentRetired ? '' : c.destinationMoneyAccountId}
+                                    className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                                  >
+                                    {currentRetired && (
+                                      <option value="" disabled>
+                                        — choose the new account —
+                                      </option>
+                                    )}
+                                    {storeAccounts.map((a) => (
+                                      <option key={a.id} value={a.id}>
+                                        {a.name} ({a.custodian} · {a.glAccountCode})
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="submit"
+                                    className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-800 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                                  >
+                                    Save
+                                  </button>
+                                </>
+                              )}
+                              <Link
+                                href="/channel-settlements"
+                                className="px-1 py-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"
+                              >
+                                Cancel
+                              </Link>
+                            </form>
+                          </details>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
