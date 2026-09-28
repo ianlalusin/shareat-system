@@ -40,8 +40,13 @@ solo re-run**. (Flaky under load; same shape as `no-committed-secrets` yesterday
 1. **T-349 S2e** — tester first (`docs/tasks/349-*.md` §4e): real `pg_stat_activity` barriers, branch assertions,
    the two-caller leg, "at every store they have access to". No source mutants in the shared tree.
 2. **T-352** (DEF-478) — `docs/tasks/352-*.md` incl. amendments M1–M6; Ian has already said go to the tester.
-3. **Post-commit audits still owed:** `fa83e01` (T-350 S5), `0cd0fb6` (T-354 / 0168), `aa14108` (T-353 S2). The
-   auditor needs Ian's "go" per sha and re-migrates its DB from its worktree.
+3. ⚠️ **SHIPPED UNAUDITED — audit these before the next deploy:** `fa83e01` (T-350 S5), `0cd0fb6` (T-354 / 0168),
+   `aa14108` (T-353 S2) are pushed but have had NO post-commit review. The S4 MEDIUMs (URL-only `same=1` banner,
+   unpinned `same`, audit row proving a write not a change) are closed **by claim**, not by verification, until
+   `fa83e01` is audited. For `0cd0fb6`: measured on the gate DB at `aa14108` — `tgenabled` **18 'A' / 39 'O'**, the
+   18 exactly the spec's list (journal_entries/lines included); the auditor still wants its mutant pass. The auditor
+   needs Ian's "go" per sha and re-migrates its DB from its worktree. (DEF-487's before-launch call WAS made: Ian,
+   2026-09-28, bible row 241.)
 4. Then **T-348 S1–S3**, **DEF-485** (verify on screen first), S5.4, S8, S9.
 
 ## Do not decide these alone — they are Ian's
