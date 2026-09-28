@@ -67,9 +67,6 @@ export function RecordTransferForm({
         <Field label="Amount that left" hint="What the source account was reduced by">
           <input
             name="amountOut"
-            type="number"
-            step="0.01"
-            min="0.01"
             required
             inputMode="decimal"
             placeholder="0.00"

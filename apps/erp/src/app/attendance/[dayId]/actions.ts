@@ -37,7 +37,9 @@ function wholeMinutes(fd: FormData, key: string, label: string, fn: string): num
   if (raw === '') {
     throw refuse(`${fn}: ${key} is blank`, `${label} — enter a whole number of minutes (0 to 99999).`);
   }
-  if (!/^\d{1,5}$/.test(raw)) {
+  // S5.5w Amendment A2 item 2 — tests the VALUE, not the digit run: `/^\d{1,5}$/` refused a
+  // leading-zero run like "000030" (6 characters) even though its value, 30, is well in range.
+  if (!/^\d+$/.test(raw) || Number(raw) > 99999) {
     throw refuse(
       `${fn}: ${key} is not a whole number of minutes: ${JSON.stringify(raw)}`,
       `${label} — "${raw}" is not a whole number of minutes from 0 to 99999.`,

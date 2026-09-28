@@ -175,10 +175,7 @@ export default async function OpeningPage({
             <label className="block">
               <span className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">Amount</span>
               <input
-                type="number"
                 name="amount"
-                step="0.01"
-                min="0.01"
                 required
                 inputMode="decimal"
                 placeholder="0.00"

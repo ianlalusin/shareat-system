@@ -22,6 +22,7 @@ import type { BaseUnit, ItemKind, PurchaseUnit } from '@shareat/db/schema';
 import { computeBranchPrice, type BranchPrice } from './branch-price';
 import { authorize, type Actor } from '@shareat/auth';
 import { assertFiguresReconcile } from '../shared/reconcile';
+import { parseQuantityInput } from '../shared/quantity-input';
 import { refuse } from '../shared/refusal';
 
 export interface CreateItemInput {
@@ -177,13 +178,32 @@ export async function validateInvoiceLines(
       );
     }
 
-    const qty = Number(l.quantity);
+    // S5.5w item 3 — routes the quantity through the shared parser first, so a comma/malformed
+    // string names itself instead of failing the plain `!(qty > 0)` guard below as a bare NaN.
+    const qty = Number(
+      parseQuantityInput(l.quantity, `validateInvoiceLines: line ${i + 1}'s quantity`, `Line ${i + 1}'s quantity`),
+    );
     const price = Number(l.unitPrice);
     const total = Number(l.lineTotal);
     const factor = Number(l.conversionFactor);
 
     if (!(qty > 0)) throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) needs a quantity above zero.`);
     if (!(factor > 0)) throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) needs a conversion factor above zero.`);
+    // S5.5w Amendment A1 item 2 — moved before the format/magnitude checks below: a same-unit line
+    // demands factor === 1 regardless of what shape the typed value takes, so a malformed factor on
+    // a same-unit line gets the "must be 1" sentence, not the six-decimal/too-large one.
+    if (l.purchaseUnit === item.baseUnit && Math.abs(factor - 1) > 1e-9) {
+      // ⚠️ S5.5w Amendment A1 (orchestrator) — now fronts the format/magnitude checks below, so a
+      // malformed factor on a same-unit line reaches this branch too; it must be presentable.
+      // userMessage is byte-identical to the raw (minus the function-name prefix) — the sentence a
+      // manager already saw via errorMessage()'s fallback strip stays exactly what they see now.
+      throw refuse(
+        `validateInvoiceLines: line ${i + 1} (${item.name}) is billed in ${l.purchaseUnit}, which is ` +
+          `already the item's own unit — the conversion factor must be 1, not ${l.conversionFactor}.`,
+        `line ${i + 1} (${item.name}) is billed in ${l.purchaseUnit}, which is already the item's own ` +
+          `unit — the conversion factor must be 1, not ${l.conversionFactor}.`,
+      );
+    }
     // S5.5t Amendment A2 (revision 1b, auditor edit) — the `factor > 0` guard above still runs
     // first, so a blank or zero value never reaches this check. The format check must not narrow
     // what was already accepted (".5", "1." stay valid) — only the fraction length and
@@ -233,13 +253,6 @@ export async function validateInvoiceLines(
           `₱${l.unitPrice} is ₱${(qty * price).toFixed(2)}, not ₱${l.lineTotal}.`,
       );
     }
-    if (l.purchaseUnit === item.baseUnit && Math.abs(factor - 1) > 1e-9) {
-      throw new Error(
-        `validateInvoiceLines: line ${i + 1} (${item.name}) is billed in ${l.purchaseUnit}, which is ` +
-          `already the item's own unit — the conversion factor must be 1, not ${l.conversionFactor}.`,
-      );
-    }
-
     sum += total;
     out.push({
       lineNo: i + 1,
@@ -247,7 +260,9 @@ export async function validateInvoiceLines(
       description: l.description?.trim() || null,
       quantity: l.quantity,
       purchaseUnit: l.purchaseUnit,
-      conversionFactor: l.conversionFactor,
+      // S5.5w Amendment A1 item 3 — store the TRIMMED factor, not the raw box text (`' 2 '` saves
+      // `2.000000`, not a value with stray whitespace reaching the column).
+      conversionFactor: raw,
       unitPrice: l.unitPrice,
       lineTotal: l.lineTotal,
     });

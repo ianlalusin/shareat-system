@@ -164,9 +164,7 @@ return (
                   </select>
                   <input
                     name={`line${i}_quantity`}
-                    type="number"
-                    step="0.001"
-                    min="0"
+                    inputMode="decimal"
                     placeholder="qty"
                     defaultValue={prior?.quantity ?? ''}
                     className={INPUT}
@@ -185,9 +183,7 @@ return (
                   />
                   <input
                     name={`line${i}_unitPrice`}
-                    type="number"
-                    step="0.0001"
-                    min="0"
+                    inputMode="decimal"
                     placeholder="₱ each"
                     defaultValue={prior?.unitPrice ?? ''}
                     className={INPUT}

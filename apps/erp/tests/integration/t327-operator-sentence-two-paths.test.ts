@@ -92,7 +92,8 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
-import { createItem, createPriceList, postEntry, setPrice } from '@shareat/domain';
+import { createItem, createPriceList, postEntry } from '@shareat/domain';
+import { customersRepo } from '@shareat/db';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { errorMessage } from '../../src/lib/constraint-messages';
 
@@ -214,10 +215,17 @@ describe('T-327 test 3 — the cashier reads a sentence, on two different constr
     );
     const list = await asOrg(f.orgId, (tx) => createPriceList(tx, f.admin, { name: `List ${uid('l')}` }));
 
+    // T-343 S5.5v item 6 — `setPrice` now routes `rate` through `parseMoneyInput` first, which
+    // refuses 'NaN' before it ever reaches this constraint (that path is closed by the parser).
+    // Repointed to the repo function directly — the same table, the same raw-string-to-numeric
+    // mechanism, just without the domain function that would now intercept it.
     const err = await provoke(
-      () => asOrg(f.orgId, (tx) => setPrice(tx, f.admin, { priceListId: list.id, itemId: item.id, rate: 'NaN' })),
-      // `setPrice` returns void — `upsertPriceListItem` upserts on the (priceListId, itemId)
-      // natural key, so that pair is what identifies the row it wrote.
+      () =>
+        asOrg(f.orgId, (tx) =>
+          customersRepo.upsertPriceListItem(tx, { orgId: f.orgId, priceListId: list.id, itemId: item.id, rate: 'NaN', unit: null }),
+        ),
+      // `upsertPriceListItem` upserts on the (priceListId, itemId) natural key, so that pair is
+      // what identifies the row it wrote.
       async () => {
         await sql`delete from price_list_items where price_list_id = ${list.id} and item_id = ${item.id}`;
       },
@@ -255,8 +263,13 @@ describe('T-327 test 3 — the cashier reads a sentence, on two different constr
         }),
       ),
     );
+    // T-343 S5.5v item 6 — same re-point as path 2: `setPrice` now closes this path via
+    // `parseMoneyInput`, so this leg calls the repo directly to still reach the constraint.
     const err2 = await provoke(
-      () => asOrg(f.orgId, (tx) => setPrice(tx, f.admin, { priceListId: list.id, itemId: item.id, rate: 'NaN' })),
+      () =>
+        asOrg(f.orgId, (tx) =>
+          customersRepo.upsertPriceListItem(tx, { orgId: f.orgId, priceListId: list.id, itemId: item.id, rate: 'NaN', unit: null }),
+        ),
       async () => {
         await sql`delete from price_list_items where price_list_id = ${list.id} and item_id = ${item.id}`;
       },

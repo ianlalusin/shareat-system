@@ -370,9 +370,7 @@ export default async function PayrollPage({
                       </select>
                       <input
                         name="amount"
-                        type="number"
-                        step="0.01"
-                        min="0.01"
+                        inputMode="decimal"
                         placeholder="0.00"
                         className={`${FIELD} w-28`}
                       />

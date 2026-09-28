@@ -12,6 +12,7 @@ import {
   amortisePrepaidItem,
   confirmPrepaidTerm,
   createPrepaidItem,
+  refuse,
   reverseAmortisation,
   writeOffPrepaidItem,
 } from '@shareat/domain';
@@ -25,6 +26,21 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
+/** T-343 S5.5w item 4 — shared by both `coverageMonths` reads (create and confirm-term). */
+function wholeMonths(raw: string): number {
+  if (raw === '') {
+    throw refuse('coverageMonths is blank', 'The coverage — enter a whole number of months from 1 to 120.');
+  }
+  const n = Number(raw);
+  if (!/^\d{1,3}$/.test(raw) || n < 1 || n > 120) {
+    throw refuse(
+      `coverageMonths is not a whole number of months from 1 to 120: ${JSON.stringify(raw)}`,
+      `The coverage — "${raw}" is not a whole number of months from 1 to 120.`,
+    );
+  }
+  return n;
+}
+
 function back(path: string, params: Record<string, string>): never {
   const q = new URLSearchParams(params).toString();
   redirect(`${path}?${q}`);
@@ -36,13 +52,14 @@ export async function createPrepaidItemAction(formData: FormData): Promise<void>
   try {
     const storeId = str(formData, 'storeId');
     if (!storeId) throw new Error('Choose a store.');
+    const coverageMonths = wholeMonths(str(formData, 'coverageMonths'));
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
       createPrepaidItem(tx, actor, {
         storeId,
         name: str(formData, 'name'),
         category: str(formData, 'category') as PrepaidCategory,
         coverageStartDate: str(formData, 'coverageStartDate'),
-        coverageMonths: Number(str(formData, 'coverageMonths')),
+        coverageMonths,
         totalCost: str(formData, 'totalCost'),
         notes: str(formData, 'notes') || null,
       }),
@@ -87,7 +104,7 @@ export async function confirmTermAction(formData: FormData): Promise<void> {
     await withOrgPrincipal(actor.orgId, (tx) =>
       confirmPrepaidTerm(tx, actor, {
         prepaidItemId: id,
-        coverageMonths: Number(str(formData, 'coverageMonths')),
+        coverageMonths: wholeMonths(str(formData, 'coverageMonths')),
         coverageStartDate: str(formData, 'coverageStartDate'),
       }),
     );
@@ -119,27 +136,46 @@ export async function writeOffAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'prepaidItemId');
   let summary = '';
+  const reason = str(formData, 'reason');
+  const refundAmount = str(formData, 'refundAmount');
+  const refundAccountCode = str(formData, 'refundAccountCode');
+  const writtenOffOn = str(formData, 'writtenOffOn');
   try {
-    const refund = str(formData, 'refundAmount');
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       writeOffPrepaidItem(tx, actor, {
         prepaidItemId: id,
-        writtenOffOn: str(formData, 'writtenOffOn'),
-        reason: str(formData, 'reason'),
+        writtenOffOn,
+        reason,
         // T-343 S5.5p / DEF-460 — was `refund && Number(refund) > 0`. `Number('1,000')` is `NaN`, so
         // a comma-typed refund was silently DROPPED rather than reaching `writeOffPrepaidItem`'s own
         // `parseMoneyInput`, and the write-off proceeded as if no refund had been typed at all — the
         // whole remaining balance expensed. Blank stays omitted (the domain defaults to '0');
         // anything else, '0' included, is left for `writeOffPrepaidItem` to accept or refuse with a
         // readable sentence — same fix shape as `customers/actions.ts`'s `creditApplied`.
-        ...(refund ? { refundAmount: refund, refundAccountCode: str(formData, 'refundAccountCode') } : {}),
+        //
+        // ⚠️ T-343 S5.5u item 1 (DEF-473) — each field is sent on its OWN non-empty text now, not
+        // both inside one `refund ?` spread: that used to drop `refundAccountCode` too whenever the
+        // amount box was blank, so a picked account with no amount silently vanished along with it.
+        // The domain now refuses that combination by name instead of silently discarding it.
+        ...(refundAmount ? { refundAmount } : {}),
+        ...(refundAccountCode ? { refundAccountCode } : {}),
       }),
     );
     summary =
       `Written off. ₱${result.expensed} recognised as expense` +
       (Number(result.refunded) > 0 ? `, ₱${result.refunded} refunded to the books.` : '.');
   } catch (err) {
-    back(`/prepaid/${id}`, { error: errorMessage(err) });
+    // T-343 S5.5u item 3 (DEF-473) — keeps what was typed after a refusal, the fixed-assets/[id]
+    // precedent (`sp.reason ?? ''`); omitted keys just mean the box was already blank.
+    // S5.5u Amendment A1 item 1 — `writtenOffOn` too: a back-dated write-off resubmitted after a
+    // refusal must not silently revert to today.
+    back(`/prepaid/${id}`, {
+      error: errorMessage(err),
+      ...(reason ? { reason } : {}),
+      ...(refundAmount ? { refundAmount } : {}),
+      ...(refundAccountCode ? { refundAccountCode } : {}),
+      ...(writtenOffOn ? { writtenOffOn } : {}),
+    });
   }
   back(`/prepaid/${id}`, { ok: summary });
 }

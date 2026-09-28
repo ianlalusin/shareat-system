@@ -241,10 +241,8 @@ export default async function AssetDetailPage({
                 </Field>
                 <Field label="Useful life (months)">
                   <input
-                    type="number"
                     name="usefulLifeMonths"
-                    min={1}
-                    step={1}
+                    inputMode="numeric"
                     required
                     defaultValue={asset.usefulLifeMonths}
                     className={INPUT}

@@ -53,7 +53,7 @@ export async function createCashRequest(
     if (!purpose) throw new Error('createCashRequest: say what the money is for.');
     const amount = parseMoneyInput(input.amount, 'createCashRequest: the amount', 'The amount requested');
     if (Number(amount) <= 0) {
-      throw new Error('createCashRequest: the amount has to be greater than zero.');
+      throw refuse('createCashRequest: the amount has to be greater than zero.', 'The amount requested has to be greater than zero.');
     }
     return cashRequestsRepo.insertRequest(trx, {
       orgId: actor.orgId,
@@ -109,7 +109,7 @@ export async function decideCashRequest(
 
     const approvedAmount = parseMoneyInput(input.amount, 'decideCashRequest: the approved amount', 'The approved amount');
     if (Number(approvedAmount) <= 0) {
-      throw new Error('decideCashRequest: an approved amount has to be greater than zero.');
+      throw refuse('decideCashRequest: an approved amount has to be greater than zero.', 'The approved amount has to be greater than zero.');
     }
     // ⚠️ Approving MORE than was asked for is allowed and is not an error — a manager may know the
     // errand costs more. Approving less is the common case.
@@ -186,6 +186,9 @@ export async function releaseCashRequest(
       );
     }
     const amount = parseMoneyInput(input.amount, 'releaseCashRequest: the amount', 'The amount released');
+    if (Number(amount) <= 0) {
+      throw refuse('releaseCashRequest: the amount released has to be greater than zero.', 'The amount released has to be greater than zero.');
+    }
     // ⛔ The approval is the authority for the amount. Releasing more would make the approval
     // decorative.
     if (Number(amount) > Number(req.approvedAmount ?? 0)) {

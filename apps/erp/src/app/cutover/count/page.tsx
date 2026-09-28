@@ -137,10 +137,7 @@ export default async function CountPage({
               <label className="block">
                 <span className="sr-only">Quantity in {r.baseUnit}</span>
                 <input
-                  type="number"
                   name="quantity"
-                  step="0.001"
-                  min="0"
                   required
                   defaultValue={r.quantity ?? ''}
                   placeholder={`Quantity (${r.baseUnit})`}

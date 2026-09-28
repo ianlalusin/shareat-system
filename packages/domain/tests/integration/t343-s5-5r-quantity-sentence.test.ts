@@ -120,3 +120,62 @@ describe('Q2n — a malformed (too many decimal places) quantity keeps the human
     expect(err.userMessage, 'wanted: no function name leaked on the malformed arm').not.toContain('createTradeOrder');
   });
 });
+
+describe('Q3 (T-343 S5.5u item 2) — scientific notation "1e15" says "too large", not the decimal-places sentence', () => {
+  it(
+    'wanted: userMessage contains "too large" (huge-exponent arm not yet added) — observed today ' +
+      '(measured, not presumed): userMessage is the decimal-places sentence, since "1e15" fails ' +
+      "parseQuantity's plain-decimal regex the same way any malformed string does",
+    async () => {
+      const f = await fixture('q3-exponent');
+      let caught: unknown;
+      try {
+        await asOrg(f.orgId, (tx) =>
+          createTradeOrder(tx, f.admin, {
+            storeId: f.storeId,
+            customerId: f.customerId,
+            orderDate: '2026-01-10',
+            lines: [{ itemId: f.itemId, quantity: '1e15', rate: '10.00' }],
+          }),
+        );
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught, 'expected the exponent-notation quantity to be refused at all').toBeInstanceOf(Error);
+      const err = caught as Error & { userMessage?: string };
+      expect(err.userMessage).toBeDefined();
+      expect(err.userMessage).toContain('too large');
+      expect(err.userMessage).not.toContain('decimal places');
+    },
+  );
+});
+
+describe('Q4 (S5.5u Amendment A1 item 2) — a leading-dot exponent mantissa ".5e300" also says "too large"', () => {
+  it(
+    'wanted: userMessage contains "too large" (huge-exponent regex needs a leading-dot arm, not yet ' +
+      'built) — observed today (measured, not presumed): userMessage is the decimal-places sentence ' +
+      '— the live regex /^[+-]?\\d+(\\.\\d+)?e[+-]?\\d+$/i requires a digit before the dot, which ' +
+      '".5e300" lacks, so it falls through to the malformed-string arm despite the VALUE being huge',
+    async () => {
+      const f = await fixture('q4-leading-dot-exponent');
+      let caught: unknown;
+      try {
+        await asOrg(f.orgId, (tx) =>
+          createTradeOrder(tx, f.admin, {
+            storeId: f.storeId,
+            customerId: f.customerId,
+            orderDate: '2026-01-10',
+            lines: [{ itemId: f.itemId, quantity: '.5e300', rate: '10.00' }],
+          }),
+        );
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught, 'expected the leading-dot exponent quantity to be refused at all').toBeInstanceOf(Error);
+      const err = caught as Error & { userMessage?: string };
+      expect(err.userMessage).toBeDefined();
+      expect(err.userMessage).toContain('too large');
+      expect(err.userMessage).not.toContain('decimal places');
+    },
+  );
+});

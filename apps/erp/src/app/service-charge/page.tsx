@@ -115,10 +115,7 @@ export default async function ServiceChargePage({
               <input
                 name="amount"
                 required
-                type="number"
-                step="0.01"
-                min="0.01"
-                max={balance}
+                inputMode="decimal"
                 className={INPUT}
               />
             </Field>

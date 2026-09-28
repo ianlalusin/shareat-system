@@ -202,9 +202,6 @@ export default async function PrepaidPage({
             <Field label="Total cost">
               <input
                 name="totalCost"
-                type="number"
-                step="0.01"
-                min="0.01"
                 required
                 inputMode="decimal"
                 placeholder="0.00"
@@ -220,9 +217,7 @@ export default async function PrepaidPage({
             >
               <input
                 name="coverageMonths"
-                type="number"
-                min="1"
-                max="120"
+                inputMode="numeric"
                 required
                 defaultValue={12}
                 className={INPUT}

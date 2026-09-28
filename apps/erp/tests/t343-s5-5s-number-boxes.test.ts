@@ -43,8 +43,11 @@ function inputTagFor(filePath: string, nameLiteral: string): string {
   const nameIdx = src.indexOf(needle);
   const tagStart = src.lastIndexOf('<input', nameIdx);
   expect(tagStart, `no preceding <input for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
-  const tagEnd = src.indexOf('>', nameIdx);
-  return src.slice(tagStart, tagEnd + 1);
+  // Anchor on the tag's real close (`/>`), not the first `>` — an inline `onChange={(e) => …}`
+  // arrow function's own `>` sits before the tag actually closes and would truncate the slice early.
+  const tagEnd = src.indexOf('/>', nameIdx);
+  expect(tagEnd, `no self-closing "/>" found for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
+  return src.slice(tagStart, tagEnd + 2);
 }
 
 function assertConverted(filePath: string, nameLiteral: string) {
@@ -114,11 +117,18 @@ describe('R-legs — real render: RecordTransferForm.tsx amountIn', () => {
     expect(tag).toMatch(/inputMode="decimal"/);
   });
 
-  it('⛔ green, unedited — amountOut (required) stays a real number spinner, untouched by this task', async () => {
+  // T-343 S5.5v ruled edit: amountOut is now converted (spec §S5.5v BUILDER path
+  // `money-transfers/RecordTransferForm.tsx`) — flipped from the "stays a real number spinner" pin
+  // to this slice's own R-leg assertion. Red until S5.5v's BUILDER lands.
+  it('amountOut: no type="number"/step/min/max; inputMode="decimal" (S5.5v R-leg)', async () => {
     const html = await renderTransferForm();
     const tag = inputByName(html, 'amountOut');
     expect(tag, 'expected the amountOut input').toBeTruthy();
-    expect(tag).toMatch(/type="number"/);
+    expect(tag).not.toMatch(/type="number"/);
+    expect(tag).not.toMatch(/\bstep="/);
+    expect(tag).not.toMatch(/\bmin="/);
+    expect(tag).not.toMatch(/\bmax="/);
+    expect(tag).toMatch(/inputMode="decimal"/);
   });
 });
 
@@ -171,9 +181,17 @@ describe('R-legs — real render: SettlementForm.tsx deductions + loanAmount', (
     expect(tag).toMatch(/inputMode="decimal"/);
   });
 
-  it('⛔ green, unedited — grossAmount and netDeposited (required) stay real number spinners, out of scope', async () => {
+  // T-343 S5.5v ruled edit: grossAmount/netDeposited are now converted (spec §S5.5v BUILDER path
+  // `channel-settlements/SettlementForm.tsx`) — flipped from the "stay real number spinners" pin to
+  // this slice's own R-leg assertion. Red until S5.5v's BUILDER lands.
+  it.each(['grossAmount', 'netDeposited'])('%s: no type="number"/step/min/max; inputMode="decimal" (S5.5v R-leg)', async (name) => {
     const html = await render();
-    expect(inputByName(html, 'grossAmount')).toMatch(/type="number"/);
-    expect(inputByName(html, 'netDeposited')).toMatch(/type="number"/);
+    const tag = inputByName(html, name);
+    expect(tag, `expected the ${name} input`).toBeTruthy();
+    expect(tag).not.toMatch(/type="number"/);
+    expect(tag).not.toMatch(/\bstep="/);
+    expect(tag).not.toMatch(/\bmin="/);
+    expect(tag).not.toMatch(/\bmax="/);
+    expect(tag).toMatch(/inputMode="decimal"/);
   });
 });

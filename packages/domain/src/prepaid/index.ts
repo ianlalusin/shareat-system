@@ -110,9 +110,10 @@ async function runCreate(
   // why. v1's prepaid path refuses too, but only incidentally — the exception escapes as a generic
   // "Failed to save prepaid item."
   const policy = await readPolicyOrRefuse(tx, actor.orgId);
-  if (Number(input.totalCost) < Number(policy.threshold)) {
+  const cost = parseMoneyInput(input.totalCost, 'createPrepaidItem: the total cost', 'The total cost');
+  if (Number(cost) < Number(policy.threshold)) {
     throw new Error(
-      `createPrepaidItem: total cost ${input.totalCost} is below the capitalisation threshold ` +
+      `createPrepaidItem: total cost ${cost} is below the capitalisation threshold ` +
         `(${policy.threshold}). File it as an immediate expense instead — spreading something this ` +
         'small over months costs more attention than the accuracy is worth.',
     );
@@ -125,7 +126,7 @@ async function runCreate(
     category: input.category,
     coverageStartDate: input.coverageStartDate,
     coverageMonths: input.coverageMonths,
-    totalCost: input.totalCost,
+    totalCost: cost,
     // ⚠️ A human filling in the form has READ the document, so the term is not a guess. The flag
     // means "these are defaults nobody has confirmed", which is only ever true of the automatic
     // path from an expense category.
@@ -439,6 +440,16 @@ async function runWriteOff(
     throw refuse(
       'writeOffPrepaidItem: a refund has to say which account it landed in.',
       'Say which account the refund landed in.',
+    );
+  }
+  // T-343 S5.5u item 1 (DEF-473) — the inverse of the check above: an account picked with no (or
+  // zero) refund is a picker left open, not "no refund" — the app layer now forwards the account
+  // even when the amount box is blank, so this refuses rather than silently expensing the whole
+  // balance with the picked account discarded.
+  if (Number(refunded) === 0 && input.refundAccountCode) {
+    throw refuse(
+      'writeOffPrepaidItem: a refund account was picked but the refund amount is blank or zero.',
+      'Enter the refund amount, or clear the refund account.',
     );
   }
 

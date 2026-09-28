@@ -138,7 +138,9 @@ export async function recordContribution(
 
     const amount = parseMoneyInput(input.amount, 'recordContribution: the amount', 'The contribution amount');
     if (Number(amount) <= 0) {
-      throw new Error('recordContribution: a contribution has to be greater than zero.');
+      // ⚠️ S5.5v — converted to `refuse` (satisfies the ratchet, T-343 R1.2) with the SAME text on
+      // both sides: the tester's followups file pins this exact lowercase sentence as UNCHANGED.
+      throw refuse('recordContribution: a contribution has to be greater than zero.', 'a contribution has to be greater than zero.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
     if (!account) throw new Error('recordContribution: that money account does not exist.');
@@ -270,8 +272,9 @@ export async function recordDrawing(
     if (!owner) throw new Error(`recordDrawing: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
 
-    const amount = Number(input.amount);
-    if (amount <= 0) throw new Error('recordDrawing: a drawing has to be greater than zero.');
+    const parsed = parseMoneyInput(input.amount, 'recordDrawing: the amount', 'The drawing amount');
+    const amount = Number(parsed);
+    if (amount <= 0) throw refuse('recordDrawing: a drawing has to be greater than zero.', 'A drawing has to be greater than zero.');
 
     await assertMonthOpen(trx, actor.orgId, owner.id, input.on, 'recordDrawing');
 
@@ -300,14 +303,14 @@ export async function recordDrawing(
         {
           accountCode: DRAWINGS_CODE,
           storeId: owner.storeId,
-          debit: input.amount,
+          debit: parsed,
           partyType: 'owner' as const,
           partyId: owner.id,
         },
         {
           accountCode: account.glAccountCode,
           storeId: owner.storeId,
-          credit: input.amount,
+          credit: parsed,
           ...(account.glAccountCode === '1140'
             ? { partyType: 'money_account' as const, partyId: account.id }
             : {}),
@@ -332,7 +335,7 @@ async function assertWithinReceivable(
   amount: number,
   context: string,
 ): Promise<void> {
-  if (amount <= 0) throw new Error(`${context}: the amount has to be greater than zero.`);
+  if (amount <= 0) throw refuse(`${context}: the amount has to be greater than zero.`, 'The amount settled has to be greater than zero.');
   const outstanding = Number(await ownersRepo.receivableOf(trx, orgId, ownerId));
   if (amount > outstanding + 0.005) {
     throw new Error(
@@ -357,7 +360,8 @@ export async function repayFromOwner(
     const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
     if (!owner) throw new Error(`repayFromOwner: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
-    await assertWithinReceivable(trx, actor.orgId, owner.id, Number(input.amount), 'repayFromOwner');
+    const parsed = parseMoneyInput(input.amount, 'repayFromOwner: the amount', 'The amount settled');
+    await assertWithinReceivable(trx, actor.orgId, owner.id, Number(parsed), 'repayFromOwner');
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
     if (!account) throw new Error('repayFromOwner: that money account does not exist.');
@@ -370,14 +374,14 @@ export async function repayFromOwner(
       entryDate: input.on,
       sourceType: 'owner_repayment',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:repayment:${input.on}:${Number(input.amount).toFixed(2)}`,
+      idempotencyKey: `owner:${owner.id}:repayment:${input.on}:${Number(parsed).toFixed(2)}`,
       memo: input.memo?.trim() || 'Owner repayment',
       postedBy: actor.personId,
       lines: [
         {
           accountCode: account.glAccountCode,
           storeId: owner.storeId,
-          debit: input.amount,
+          debit: parsed,
           ...(account.glAccountCode === '1140'
             ? { partyType: 'money_account' as const, partyId: account.id }
             : {}),
@@ -385,7 +389,7 @@ export async function repayFromOwner(
         {
           accountCode: DUE_FROM_OWNER_CODE,
           storeId: owner.storeId,
-          credit: input.amount,
+          credit: parsed,
           partyType: 'owner' as const,
           partyId: owner.id,
         },
@@ -425,7 +429,8 @@ export async function recoverFromPay(
     const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
     if (!owner) throw new Error(`recoverFromPay: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: owner.storeId });
-    await assertWithinReceivable(trx, actor.orgId, owner.id, Number(input.amount), 'recoverFromPay');
+    const parsed = parseMoneyInput(input.amount, 'recoverFromPay: the amount', 'The amount settled');
+    await assertWithinReceivable(trx, actor.orgId, owner.id, Number(parsed), 'recoverFromPay');
 
     // ⚠️ The best check available until payroll exists: this person must actually work here. It does
     // not prove they are PAID — nothing can, yet — and the screens say so rather than implying it.
@@ -442,21 +447,21 @@ export async function recoverFromPay(
       entryDate: input.on,
       sourceType: 'owner_pay_recovery',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:pay-recovery:${input.on}:${Number(input.amount).toFixed(2)}`,
+      idempotencyKey: `owner:${owner.id}:pay-recovery:${input.on}:${Number(parsed).toFixed(2)}`,
       memo: input.memo?.trim() || 'Owner receivable moved to salary advance',
       postedBy: actor.personId,
       lines: [
         {
           accountCode: EMPLOYEE_ADVANCE_CODE,
           storeId: owner.storeId,
-          debit: input.amount,
+          debit: parsed,
           partyType: 'employee' as const,
           partyId: owner.personId,
         },
         {
           accountCode: DUE_FROM_OWNER_CODE,
           storeId: owner.storeId,
-          credit: input.amount,
+          credit: parsed,
           partyType: 'owner' as const,
           partyId: owner.id,
         },
@@ -510,11 +515,12 @@ export async function writeOffReceivable(
           'indistinguishable from one that was never collected because nobody looked.',
       );
     }
+    const parsed = parseMoneyInput(input.amount, 'writeOffReceivable: the amount', 'The amount settled');
     await assertWithinReceivable(
       trx,
       actor.orgId,
       owner.id,
-      Number(input.amount),
+      Number(parsed),
       'writeOffReceivable',
     );
     await assertMonthOpen(trx, actor.orgId, owner.id, input.on, 'writeOffReceivable');
@@ -524,14 +530,14 @@ export async function writeOffReceivable(
       entryDate: input.on,
       sourceType: 'owner_writeoff',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:writeoff:${input.on}:${Number(input.amount).toFixed(2)}`,
+      idempotencyKey: `owner:${owner.id}:writeoff:${input.on}:${Number(parsed).toFixed(2)}`,
       memo: `Owner receivable written off — ${reason}`,
       postedBy: actor.personId,
       lines: [
         {
           accountCode: DRAWINGS_CODE,
           storeId: owner.storeId,
-          debit: input.amount,
+          debit: parsed,
           partyType: 'owner' as const,
           partyId: owner.id,
           lineMemo: reason,
@@ -539,7 +545,7 @@ export async function writeOffReceivable(
         {
           accountCode: DUE_FROM_OWNER_CODE,
           storeId: owner.storeId,
-          credit: input.amount,
+          credit: parsed,
           partyType: 'owner' as const,
           partyId: owner.id,
         },

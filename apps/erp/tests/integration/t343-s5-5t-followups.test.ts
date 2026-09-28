@@ -651,3 +651,42 @@ describe('Ruled (orchestrator) — exponent notation, digit-run vs value, and th
     30000,
   );
 });
+
+describe('M5 (S5.5w Amendment A2 item 2) — leading zeros: shape must test the VALUE, not the digit run', () => {
+  it(
+    'approvedOtMinutes="000030" (6 characters, value 30): wanted records 30 (wholeMinutes shape ' +
+      '/^\\d+$/, not yet built) — observed today (measured, not presumed): refused — 6 characters ' +
+      'fails the current /^\\d{1,5}$/ shape check even though the VALUE is 30',
+    async () => {
+      const f = await attendanceFixture('m5');
+      ACTOR_HOLDER.actor = f.admin;
+      ACTOR_HOLDER.sessionId = f.sessionId;
+      const { approveOvertimeAction } = await import('../../src/app/attendance/[dayId]/actions');
+      const to = await expectRedirectTo(() => approveOvertimeAction(dayFormData(f, { approvedOtMinutes: '000030' })));
+      expect(errorOf(to), `redirect URL was: ${to}`).toBeNull();
+      const [row] = await sql<{ approved_ot_minutes: number }[]>`
+        select approved_ot_minutes from attendance_adjustments
+        where employment_id = ${f.employment.id} and kind = 'overtime_approved' and superseded_by_adjustment_id is null`;
+      expect(row!.approved_ot_minutes).toBe(30);
+    },
+    30000,
+  );
+
+  it(
+    '⛔ green, unedited — approvedOtMinutes="00030" (exactly 5 characters) already records 30 today ' +
+      '— MEASURED, since it happens to fit /^\\d{1,5}$/\'s character count already, coincidentally',
+    async () => {
+      const f = await attendanceFixture('m5n');
+      ACTOR_HOLDER.actor = f.admin;
+      ACTOR_HOLDER.sessionId = f.sessionId;
+      const { approveOvertimeAction } = await import('../../src/app/attendance/[dayId]/actions');
+      const to = await expectRedirectTo(() => approveOvertimeAction(dayFormData(f, { approvedOtMinutes: '00030' })));
+      expect(errorOf(to), `redirect URL was: ${to}`).toBeNull();
+      const [row] = await sql<{ approved_ot_minutes: number }[]>`
+        select approved_ot_minutes from attendance_adjustments
+        where employment_id = ${f.employment.id} and kind = 'overtime_approved' and superseded_by_adjustment_id is null`;
+      expect(row!.approved_ot_minutes).toBe(30);
+    },
+    30000,
+  );
+});

@@ -213,18 +213,28 @@ describe('A1n/A2n (⛔ green, must stay unedited) — blank and ordinary numeric
   });
 });
 
-describe('A3n (⛔ green, must stay unedited) — a spaces-only box saves exactly as blank', () => {
-  it('lateGraceMinutes="   " saves 0; autoClockOutHour="   " saves null', async () => {
-    const f = await attendanceFixture('a3n');
+describe('A3n (RULED FLIP, S5.5w item 5 / Ian Q2 landed) — lateGraceMinutes spaces-only now REFUSES', () => {
+  it(
+    'lateGraceMinutes="   ": wanted a refusal, nothing changed — was green: saved 0 silently ' +
+      '(blank meant "not decided" but the fallback default looked like a real zero)',
+    async () => {
+      const f = await attendanceFixture('a3n-lategrace');
+      ACTOR_HOLDER.actor = f.admin;
+      const { updateAttendanceConfigAction } = await import('../../src/app/settings/attendance/actions');
+
+      const to = await expectRedirectTo(() => updateAttendanceConfigAction(attendanceFormData(f, { lateGraceMinutes: '   ' })));
+      expect(new URL(to, 'http://localhost').searchParams.get('error')).toBe('The late grace minutes — enter a whole number, 0 or more.');
+    },
+  );
+
+  it('⛔ green, unedited — autoClockOutHour="   " (spaces-only) still saves null ("never")', async () => {
+    const f = await attendanceFixture('a3n-autoclockout');
     ACTOR_HOLDER.actor = f.admin;
     const { updateAttendanceConfigAction } = await import('../../src/app/settings/attendance/actions');
 
-    const to = await expectRedirectTo(() =>
-      updateAttendanceConfigAction(attendanceFormData(f, { lateGraceMinutes: '   ', autoClockOutHour: '   ' })),
-    );
+    const to = await expectRedirectTo(() => updateAttendanceConfigAction(attendanceFormData(f, { autoClockOutHour: '   ' })));
     expect(new URL(to, 'http://localhost').searchParams.get('error')).toBeNull();
     const live = await asOrg(f.orgId, (tx) => getLiveConfig(tx, { storeId: f.storeId }));
-    expect(live.lateGraceMinutes).toBe(0);
     expect(live.autoClockOutHour).toBeNull();
   });
 });

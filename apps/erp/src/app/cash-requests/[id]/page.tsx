@@ -125,9 +125,7 @@ export default async function CashRequestPage({
                 <input
                   name="amount"
                   required
-                  type="number"
-                  step="0.01"
-                  min="0.01"
+                  inputMode="decimal"
                   defaultValue={req.requestedAmount}
                   className={INPUT}
                 />
@@ -175,9 +173,7 @@ export default async function CashRequestPage({
                 <input
                   name="amount"
                   required
-                  type="number"
-                  step="0.01"
-                  min="0.01"
+                  inputMode="decimal"
                   defaultValue={req.approvedAmount ?? ''}
                   className={INPUT}
                 />

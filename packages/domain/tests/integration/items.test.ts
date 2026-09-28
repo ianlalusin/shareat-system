@@ -366,27 +366,32 @@ describe('T-340 — a non-number never reaches the line arithmetic', () => {
     ).rejects.toThrow(/the line total "NaN" is not a number/);
   });
 
-  it('I5 (Amendment R1 §2): an overflow to Infinity is a finiteness refusal, never flattened into "does not add up"', async () => {
-    const f = await fixture('t340-i5');
-    const item = await porkBelly(f);
-    const fileId = await evidence(f);
-    const created = await asOrg(f.orgId, (tx) =>
-      recordInvoice(tx, f.staff, {
-        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
-        totalAmount: '2900.00', receiptFileId: fileId, lines: [],
-      }),
-    );
-    const bad: InvoiceLineDraft = {
-      itemId: item, quantity: '1e300', purchaseUnit: 'kg', conversionFactor: '1',
-      unitPrice: '1e10', lineTotal: '1',
-    };
-    await expect(
-      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
-    ).rejects.toThrow(/finite/i);
-    await expect(
-      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
-    ).rejects.not.toThrow(/does not add up/);
-  });
+  it(
+    'I5 (RULED FLIP, S5.5w item 2 landed) — quantity "1e300" now names itself via parseQuantityInput\'s ' +
+      'own "too large" sentence, never flattened into "does not add up" — was: the old bare finiteness ' +
+      'refusal, since quantity reached `Number()` unparsed before this fix',
+    async () => {
+      const f = await fixture('t340-i5');
+      const item = await porkBelly(f);
+      const fileId = await evidence(f);
+      const created = await asOrg(f.orgId, (tx) =>
+        recordInvoice(tx, f.staff, {
+          storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+          totalAmount: '2900.00', receiptFileId: fileId, lines: [],
+        }),
+      );
+      const bad: InvoiceLineDraft = {
+        itemId: item, quantity: '1e300', purchaseUnit: 'kg', conversionFactor: '1',
+        unitPrice: '1e10', lineTotal: '1',
+      };
+      await expect(
+        asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
+      ).rejects.toThrow(/is too large/i);
+      await expect(
+        asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
+      ).rejects.not.toThrow(/does not add up/);
+    },
+  );
 
   it('I6 (optional, Amendment R1 §2): two lines summing to Infinity refuse at the HEADER check as finiteness, not "the lines total"', async () => {
     const f = await fixture('t340-i6');
@@ -410,24 +415,28 @@ describe('T-340 — a non-number never reaches the line arithmetic', () => {
     ).rejects.not.toThrow(/the lines total/);
   });
 
-  it('N1: an "abc" quantity still refuses at the pre-existing quantity guard, unchanged', async () => {
-    const f = await fixture('t340-n1');
-    const item = await porkBelly(f);
-    const fileId = await evidence(f);
-    const created = await asOrg(f.orgId, (tx) =>
-      recordInvoice(tx, f.staff, {
-        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
-        totalAmount: '2900.00', receiptFileId: fileId, lines: [],
-      }),
-    );
-    const bad: InvoiceLineDraft = {
-      itemId: item, quantity: 'abc', purchaseUnit: 'kg', conversionFactor: '1',
-      unitPrice: 'abc', lineTotal: 'NaN',
-    };
-    await expect(
-      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
-    ).rejects.toThrow(/needs a quantity above zero/);
-  });
+  it(
+    'N1 (RULED FLIP, S5.5w item 2 landed) — an "abc" quantity now refuses via parseQuantityInput\'s ' +
+      'own malformed-string sentence, not the old bare "needs a quantity above zero" guard',
+    async () => {
+      const f = await fixture('t340-n1');
+      const item = await porkBelly(f);
+      const fileId = await evidence(f);
+      const created = await asOrg(f.orgId, (tx) =>
+        recordInvoice(tx, f.staff, {
+          storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+          totalAmount: '2900.00', receiptFileId: fileId, lines: [],
+        }),
+      );
+      const bad: InvoiceLineDraft = {
+        itemId: item, quantity: 'abc', purchaseUnit: 'kg', conversionFactor: '1',
+        unitPrice: 'abc', lineTotal: 'NaN',
+      };
+      await expect(
+        asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
+      ).rejects.toThrow(/is not a valid quantity/);
+    },
+  );
 
   it('N2: zero is a legitimate price and total (bible §12 landmine 8) — accepted, not refused', async () => {
     const f = await fixture('t340-n2');

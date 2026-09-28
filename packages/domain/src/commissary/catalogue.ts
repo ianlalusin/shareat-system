@@ -37,7 +37,9 @@ export type LinkStatus = (typeof LINK_STATUSES)[number];
  *  DEF-383's own remedy, its own task, and out of scope here. `parseFourDecimalCost` below is for
  *  new callers outside this file — `deliveries/documents.ts`'s `unitCost` is the first — so at
  *  least no THIRD shape of "test this pattern inline" gets added while DEF-383 is still open. */
-const MANUAL_COST_PATTERN = /^\d+(\.\d{1,4})?$/;
+// S5.5w Amendment A1 item 1b — must not narrow what was already accepted (".5", "1." stay valid);
+// the lookahead requires at least one digit so "" and "." are still structurally rejected.
+const MANUAL_COST_PATTERN = /^(?=.*\d)\d*(?:\.\d{0,4})?$/;
 
 /**
  * The `MANUAL_COST_PATTERN` shape, wrapped as a sentence-producing entry point — same relationship
@@ -55,6 +57,16 @@ export function parseFourDecimalCost(raw: string, rawLabel: string, humanLabel: 
       `${rawLabel} — "${raw}" is not a valid amount. Use a non-negative number with up to four ` +
         'decimal places.',
       `${humanLabel} — "${raw}" is not a valid amount. Use a non-negative number with up to four decimal places.`,
+    );
+  }
+  // S5.5w Amendment A1 item 1 — the pattern above caps decimals but not the integer part, and
+  // every caller writes numeric(14,4): an 11+-digit integer part reaches Postgres and returns the
+  // generic DB-refused fallback instead of naming what is wrong.
+  const integerPart = (trimmed.split('.')[0] ?? '').replace(/^0+(?=\d)/, '');
+  if (integerPart.length > 10) {
+    throw refuse(
+      `${rawLabel} — "${raw}" is too large. Use a number below 10000000000.`,
+      `${humanLabel} — "${raw}" is too large. Use a number below 10000000000.`,
     );
   }
   return trimmed;

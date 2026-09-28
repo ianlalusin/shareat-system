@@ -96,9 +96,6 @@ export default async function LoanPage({
             <Field label="Amount">
               <input
                 name="amount"
-                type="number"
-                step="0.01"
-                min="0.01"
                 required
                 defaultValue={undrawn.toFixed(2)}
                 inputMode="decimal"
@@ -163,9 +160,6 @@ export default async function LoanPage({
             <Field label="Amount paid">
               <input
                 name="amount"
-                type="number"
-                step="0.01"
-                min="0.01"
                 required
                 inputMode="decimal"
                 placeholder={loan.instalment}

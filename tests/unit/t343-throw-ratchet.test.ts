@@ -68,11 +68,11 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/ar': 34, // T-343 S5.5p: 35 -> 34, recordCollection's negative-credit throw converted to refuse(...)
   'packages/domain/src/attendance': 1,
   'packages/domain/src/budgets': 4,
-  'packages/domain/src/cash-requests': 21,
+  'packages/domain/src/cash-requests': 19, // T-343 S5.5v: 21 -> 19, createCashRequest's and decideCashRequest's <= 0 guards converted to refuse(...)
   'packages/domain/src/channel-settlements': 12,
   'packages/domain/src/commissary': 48, // T-343 S5.3: 64 -> 48, catalogue.ts converted to refuse/gone/internalFault
   'packages/domain/src/customers': 0, // T-343 S5.2: 11 -> 0, all converted to refuse/gone/internalFault
-  'packages/domain/src/cutover': 4, // T-343 S5.3: 13 -> 4, opening.ts converted to refuse/gone/internalFault
+  'packages/domain/src/cutover': 3, // T-343 S5.5w (RULED EDIT, red until BUILDER lands it): 4 -> 3, recordOpeningCount's quantity < 0 guard converted to refuse(...)
   'packages/domain/src/deliveries': 1, // T-343 S5.3: 11 -> 1, documents.ts converted to refuse/gone/internalFault
   'packages/domain/src/expenses': 0, // T-343 S5.1: 40 -> 0, all converted to refuse/gone/internalFault
   'packages/domain/src/files': 9,
@@ -81,13 +81,13 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/fixed-assets': 17,
   'packages/domain/src/items': 34,
   'packages/domain/src/ledger': 10,
-  'packages/domain/src/liabilities': 16,
-  'packages/domain/src/loans': 13,
+  'packages/domain/src/liabilities': 14, // T-343 S5.5v: 16 -> 14, chargeLiability's and payLiability's <= 0 guards converted to refuse(...)
+  'packages/domain/src/loans': 11, // T-343 S5.5v: 13 -> 11, disburseLoan's and recordLoanPayment's <= 0 guards converted to refuse(...)
   'packages/domain/src/missed-months': 13,
   'packages/domain/src/money-accounts': 9, // T-343 S5.5s: 10 -> 9, renameMoneyAccount's overdraftLimit converted to parseMoneyInput
   'packages/domain/src/money-transfers': 11,
   'packages/domain/src/organizations': 12,
-  'packages/domain/src/owners': 27, // T-343 S5.5s: 29 -> 27, createOwner's drawing-limit-zero guard and closeDrawingMonth's acknowledgedAmount (parse + negative guard) converted to refuse(...)
+  'packages/domain/src/owners': 24, // T-343 S5.5v: 27 -> 24, recordDrawing's, assertWithinReceivable's and recordContribution's <= 0 guards converted to refuse(...)
   'packages/domain/src/payroll': 34,
   'packages/domain/src/people': 0,
   'packages/domain/src/pos': 7,

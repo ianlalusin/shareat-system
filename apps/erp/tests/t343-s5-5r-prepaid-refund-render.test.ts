@@ -115,3 +115,85 @@ describe('B1 — the refund box is a text input, not a native number spinner', (
     30000,
   );
 });
+
+describe('K1 (T-343 S5.5u item 3) — after a refusal, the write-off form keeps what was typed', () => {
+  it(
+    'wanted: Reason/Refunded/Refund-account render as defaultValues from the redirect — observed ' +
+      "today (measured, not presumed): none of the three read searchParams at all — every box is " +
+      'blank again after a refusal, exactly the shape the page already avoids for `mode`/`reason` ' +
+      'on fixed-assets/[id]/page.tsx (grep precedent: `defaultValue={sp.reason ?? \'\'}`)',
+    async () => {
+      getDetailMock.mockResolvedValueOnce(activeItemDetail());
+      // The page's `SearchParams` interface only names `error`/`ok` today — reason/refundAmount/
+      // refundAccountCode are exactly the widening BUILDER's own fix adds (item 3). Routed through a
+      // typed intermediate (not a fresh object literal in the call) so this compiles against
+      // TODAY's narrower type without lying about it via a blanket `as any`.
+      const postRefusalParams: Record<string, string> = {
+        error: 'The refund amount — "1,000" is not a valid amount. Use at most two decimal places.',
+        reason: 'Cancelled early',
+        refundAmount: '1,000',
+        refundAccountCode: '1110',
+      };
+      const element = await PrepaidItemPage({
+        params: Promise.resolve({ id: 'item-1' }),
+        searchParams: Promise.resolve(postRefusalParams),
+      });
+      const html = renderToStaticMarkup(element as never);
+
+      const refundForm = formsIn(html).find((f) => f.includes('name="refundAmount"'));
+      expect(refundForm, 'expected a form carrying the refundAmount box').toBeTruthy();
+
+      const reasonTag = /<input\b[^>]*name="reason"[^>]*>/.exec(refundForm!)?.[0];
+      const refundTag = /<input\b[^>]*name="refundAmount"[^>]*>/.exec(refundForm!)?.[0];
+      const accountTag = /<input\b[^>]*name="refundAccountCode"[^>]*>/.exec(refundForm!)?.[0];
+      expect(reasonTag, 'expected the reason <input> tag').toBeTruthy();
+      expect(refundTag, 'expected the refundAmount <input> tag').toBeTruthy();
+      expect(accountTag, 'expected the refundAccountCode <input> tag').toBeTruthy();
+
+      expect(reasonTag, 'wanted: defaultValue="Cancelled early" — was red: no defaultValue at all').toMatch(
+        /defaultValue="Cancelled early"|value="Cancelled early"/,
+      );
+      expect(refundTag, 'wanted: defaultValue="1,000" — was red: no defaultValue at all').toMatch(
+        /defaultValue="1,000"|value="1,000"/,
+      );
+      expect(accountTag, 'wanted: defaultValue="1110" — was red: no defaultValue at all').toMatch(
+        /defaultValue="1110"|value="1110"/,
+      );
+    },
+    30000,
+  );
+});
+
+describe('K2 (S5.5u Amendment A1 item 1) — a refused, back-dated write-off keeps its typed date too', () => {
+  it(
+    'writtenOffOn="2026-08-15" after a refusal: wanted defaultValue="2026-08-15" — observed today ' +
+      '(measured, not presumed): the date box has no defaultValue from searchParams at all — it ' +
+      "defaults to `new Date().toISOString().slice(0, 10)` (today), so a back-dated write-off " +
+      're-submitted after a refusal would post in the wrong period with no cue',
+    async () => {
+      getDetailMock.mockResolvedValueOnce(activeItemDetail());
+      const postRefusalParams: Record<string, string> = {
+        error: 'The refund amount — "1,000" is not a valid amount. Use at most two decimal places.',
+        reason: 'Cancelled early',
+        refundAmount: '1,000',
+        refundAccountCode: '1110',
+        writtenOffOn: '2026-08-15',
+      };
+      const element = await PrepaidItemPage({
+        params: Promise.resolve({ id: 'item-1' }),
+        searchParams: Promise.resolve(postRefusalParams),
+      });
+      const html = renderToStaticMarkup(element as never);
+
+      const refundForm = formsIn(html).find((f) => f.includes('name="refundAmount"'));
+      expect(refundForm, 'expected a form carrying the refundAmount box').toBeTruthy();
+
+      const dateTag = /<input\b[^>]*name="writtenOffOn"[^>]*>/.exec(refundForm!)?.[0];
+      expect(dateTag, 'expected the writtenOffOn <input> tag').toBeTruthy();
+      expect(dateTag, 'wanted: defaultValue="2026-08-15" — was red: defaultValue is today\'s date').toMatch(
+        /defaultValue="2026-08-15"|value="2026-08-15"/,
+      );
+    },
+    30000,
+  );
+});

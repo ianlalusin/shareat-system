@@ -103,15 +103,15 @@ export default async function AttendanceSettingsPage({
           </label>
 
           <Group title="Shift & capture">
-            <NumField label="Required hours / shift" name="requiredHoursPerShift" defaultValue={cfg.requiredHoursPerShift} step="0.5" min={0.5} />
-            <NumField label="Half-day hours" name="halfDayHours" defaultValue={cfg.halfDayHours} step="0.5" min={0.5} />
+            <NumField label="Required hours / shift" name="requiredHoursPerShift" defaultValue={cfg.requiredHoursPerShift} />
+            <NumField label="Half-day hours" name="halfDayHours" defaultValue={cfg.halfDayHours} />
             <TextField
               label="Allowed shift-start hours"
               name="allowedShiftStartHours"
               defaultValue={cfg.allowedShiftStartHours.join(',')}
               hint="Comma-separated, 0–23, e.g. 9,10,11,14"
             />
-            <IntField label="Anchor window (min)" name="anchorWindowMinutes" defaultValue={cfg.anchorWindowMinutes} min={0} max={60} />
+            <IntField label="Anchor window (min)" name="anchorWindowMinutes" defaultValue={cfg.anchorWindowMinutes} />
             <SelectField
               label="Time mode"
               name="timeMode"
@@ -121,8 +121,8 @@ export default async function AttendanceSettingsPage({
                 ['fixed', 'fixed — posted shift grid'],
               ]}
             />
-            <NumField label="Default work hours" name="defaultWorkHours" defaultValue={cfg.defaultWorkHours} step="0.5" min={0} />
-            <NumField label="Default break hours" name="defaultBreakHours" defaultValue={cfg.defaultBreakHours} step="0.5" min={0} />
+            <NumField label="Default work hours" name="defaultWorkHours" defaultValue={cfg.defaultWorkHours} />
+            <NumField label="Default break hours" name="defaultBreakHours" defaultValue={cfg.defaultBreakHours} />
             <CheckField label="Break enabled" name="breakEnabled" defaultChecked={cfg.breakEnabled} />
             <CheckField
               label="Half day on missing tap"
@@ -153,25 +153,23 @@ export default async function AttendanceSettingsPage({
                 ['fixed', 'fixed — flat pesos / OT hour'],
               ]}
             />
-            <NumField label="Overtime multiplier" name="overtimeMultiplier" defaultValue={cfg.overtimeMultiplier} step="0.01" min={1} hint="used when mode is multiplier" />
+            <NumField label="Overtime multiplier" name="overtimeMultiplier" defaultValue={cfg.overtimeMultiplier} hint="used when mode is multiplier" />
             <NumField
               label="Overtime fixed hourly (₱)"
               name="overtimeFixedHourly"
               defaultValue={cfg.overtimeFixedHourly ?? ''}
-              step="0.01"
-              min={0}
               hint="required when mode is fixed"
             />
             <CheckField label="Night differential enabled" name="nightDiffEnabled" defaultChecked={cfg.nightDiffEnabled} />
-            <IntField label="Night diff start hour" name="nightDiffStartHour" defaultValue={cfg.nightDiffStartHour} min={0} max={23} />
-            <IntField label="Night diff end hour" name="nightDiffEndHour" defaultValue={cfg.nightDiffEndHour} min={0} max={23} />
-            <NumField label="Night diff multiplier" name="nightDiffMultiplier" defaultValue={cfg.nightDiffMultiplier} step="0.01" min={1} />
+            <IntField label="Night diff start hour" name="nightDiffStartHour" defaultValue={cfg.nightDiffStartHour} />
+            <IntField label="Night diff end hour" name="nightDiffEndHour" defaultValue={cfg.nightDiffEndHour} />
+            <NumField label="Night diff multiplier" name="nightDiffMultiplier" defaultValue={cfg.nightDiffMultiplier} />
           </Group>
 
           <Group title="Holiday multipliers">
-            <NumField label="Regular holiday" name="holidayRegularMultiplier" defaultValue={cfg.holidayRegularMultiplier} step="0.01" min={1} />
-            <NumField label="Special non-working" name="holidaySpecialNonWorkingMultiplier" defaultValue={cfg.holidaySpecialNonWorkingMultiplier} step="0.01" min={1} />
-            <NumField label="Special working" name="holidaySpecialWorkingMultiplier" defaultValue={cfg.holidaySpecialWorkingMultiplier} step="0.01" min={1} />
+            <NumField label="Regular holiday" name="holidayRegularMultiplier" defaultValue={cfg.holidayRegularMultiplier} />
+            <NumField label="Special non-working" name="holidaySpecialNonWorkingMultiplier" defaultValue={cfg.holidaySpecialNonWorkingMultiplier} />
+            <NumField label="Special working" name="holidaySpecialWorkingMultiplier" defaultValue={cfg.holidaySpecialWorkingMultiplier} />
           </Group>
 
           <Group title="Late policy">
@@ -185,11 +183,11 @@ export default async function AttendanceSettingsPage({
                 ['infraction', 'infraction — points only, no money'],
               ]}
             />
-            <NumField label="Late charge / minute (₱)" name="lateChargePerMinute" defaultValue={cfg.lateChargePerMinute} step="0.01" min={0} hint="required when policy is charge_per_minute" />
-            <IntField label="Late infraction points" name="lateInfractionPoints" defaultValue={cfg.lateInfractionPoints} min={0} />
-            <IntField label="Late grace (min)" name="lateGraceMinutes" defaultValue={cfg.lateGraceMinutes} min={0} />
-            <IntField label="Early-out grace (min)" name="earlyOutGraceMinutes" defaultValue={cfg.earlyOutGraceMinutes} min={0} />
-            <IntField label="Undertime grace (min)" name="undertimeGraceMinutes" defaultValue={cfg.undertimeGraceMinutes} min={0} />
+            <NumField label="Late charge / minute (₱)" name="lateChargePerMinute" defaultValue={cfg.lateChargePerMinute} hint="required when policy is charge_per_minute" />
+            <IntField label="Late infraction points" name="lateInfractionPoints" defaultValue={cfg.lateInfractionPoints} />
+            <IntField label="Late grace (min)" name="lateGraceMinutes" defaultValue={cfg.lateGraceMinutes} />
+            <IntField label="Early-out grace (min)" name="earlyOutGraceMinutes" defaultValue={cfg.earlyOutGraceMinutes} />
+            <IntField label="Undertime grace (min)" name="undertimeGraceMinutes" defaultValue={cfg.undertimeGraceMinutes} />
           </Group>
 
           <Group title="Pay periods">
@@ -203,7 +201,7 @@ export default async function AttendanceSettingsPage({
                 ['weekly', 'weekly'],
               ]}
             />
-            <IntField label="Semi-monthly cutoff day" name="semiMonthlyCutoffDay" defaultValue={cfg.semiMonthlyCutoffDay} min={1} max={27} hint="used when period type is semi-monthly" />
+            <IntField label="Semi-monthly cutoff day" name="semiMonthlyCutoffDay" defaultValue={cfg.semiMonthlyCutoffDay} hint="used when period type is semi-monthly" />
             <SelectField
               label="Payout mode"
               name="payoutMode"
@@ -213,7 +211,7 @@ export default async function AttendanceSettingsPage({
                 ['fixed_days', 'fixed days — e.g. paid on the 10th & 25th'],
               ]}
             />
-            <IntField label="Payout lag (days)" name="payoutLagDays" defaultValue={cfg.payoutLagDays} min={0} max={31} hint="used when payout mode is lag" />
+            <IntField label="Payout lag (days)" name="payoutLagDays" defaultValue={cfg.payoutLagDays} hint="used when payout mode is lag" />
             <TextField
               label="Payout days"
               name="payoutDays"
@@ -227,11 +225,9 @@ export default async function AttendanceSettingsPage({
               label="Auto clock-out hour"
               name="autoClockOutHour"
               defaultValue={cfg.autoClockOutHour ?? ''}
-              min={0}
-              max={23}
               hint="Blank = this store never auto-clears"
             />
-            <IntField label="Max shift hours" name="maxShiftHours" defaultValue={cfg.maxShiftHours} min={10} />
+            <IntField label="Max shift hours" name="maxShiftHours" defaultValue={cfg.maxShiftHours} />
           </Group>
 
           <button type="submit" className={BTN_PRIMARY}>
@@ -266,20 +262,16 @@ function NumField({
   label,
   name,
   defaultValue,
-  step,
-  min,
   hint,
 }: {
   label: string;
   name: string;
   defaultValue: string;
-  step: string;
-  min: number;
   hint?: string;
 }) {
   return (
     <FieldShell label={label} hint={hint}>
-      <input type="number" name={name} step={step} min={min} defaultValue={defaultValue} className={FIELD} />
+      <input name={name} inputMode="decimal" defaultValue={defaultValue} className={FIELD} />
     </FieldShell>
   );
 }
@@ -288,20 +280,16 @@ function IntField({
   label,
   name,
   defaultValue,
-  min,
-  max,
   hint,
 }: {
   label: string;
   name: string;
   defaultValue: number | string;
-  min?: number;
-  max?: number;
   hint?: string;
 }) {
   return (
     <FieldShell label={label} hint={hint}>
-      <input type="number" name={name} step={1} min={min} max={max} defaultValue={defaultValue} className={FIELD} />
+      <input name={name} inputMode="numeric" defaultValue={defaultValue} className={FIELD} />
     </FieldShell>
   );
 }

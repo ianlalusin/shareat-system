@@ -64,13 +64,15 @@ export type PreviewResponse = { ok: true; preview: SettlementPreview } | { ok: f
 export async function previewSettlementAction(req: PreviewRequest): Promise<PreviewResponse> {
   const actor = await requireActor();
   try {
+    // S5.5v Amendment A2 item 1 — the raw strings pass through unvalidated: the blank/parse
+    // refusal for gross/net now lives in the domain, AFTER authorize(), never before it.
     const preview = await withOrgPrincipal(actor.orgId, (tx) =>
       previewChannelSettlement(tx, actor, {
         storeId: req.storeId,
         channelId: req.channelId,
         businessDate: req.businessDate,
-        grossAmount: req.grossAmount || '0',
-        netDeposited: req.netDeposited || '0',
+        grossAmount: req.grossAmount,
+        netDeposited: req.netDeposited,
         deductions: {
           commission: req.commission || '0',
           marketing: req.marketing || '0',
@@ -109,6 +111,11 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
       );
     }
 
+    // S5.5v Amendment A2 item 1 — raw strings, unvalidated: the blank/parse refusal for gross/net
+    // now lives in the domain, AFTER authorize(), never before it.
+    const grossAmount = str(formData, 'grossAmount');
+    const netDeposited = str(formData, 'netDeposited');
+
     const loanId = str(formData, 'loanId');
     // ⚠️ A loan named with no amount is a picker left open, not a zero repayment — and the
     // schema's own CHECK refuses the pair anyway. Treated as "no loan" rather than surfaced as a
@@ -122,8 +129,8 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
         channelId,
         salesDayId,
         businessDate: str(formData, 'businessDate'),
-        grossAmount: money(formData, 'grossAmount'),
-        netDeposited: money(formData, 'netDeposited'),
+        grossAmount,
+        netDeposited,
         deductions: {
           commission: money(formData, 'commission'),
           marketing: money(formData, 'marketing'),

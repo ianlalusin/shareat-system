@@ -18,6 +18,7 @@ import {
   type Tx,
 } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
+import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseMoneyInput } from '../shared/money-input';
@@ -123,6 +124,20 @@ interface ComputedSettlement {
   needsGainAcknowledgement: boolean;
 }
 
+/** S5.5v Amendment A2 item 2 — what a preview shows while a figure refusal blocks the arithmetic:
+ *  zeroed, never NaN. */
+const ZERO_COMPUTED_SETTLEMENT: ComputedSettlement = {
+  outstandingCleared: 0,
+  feesTotal: 0,
+  loanDeduction: 0,
+  netDeposited: 0,
+  variance: 0,
+  settlementGain: 0,
+  tolerance: 0,
+  blockers: [],
+  needsGainAcknowledgement: false,
+};
+
 /**
  * T-343 S5.5s / DEF-470 item 8 — every figure below reached bare `Number()` in `computeSettlement`
  * with no parse at all: a comma-typed value became `NaN`, `NaN`-blind comparisons let it slip past
@@ -145,27 +160,89 @@ function lead(label: string): string {
   return label.charAt(0).toLowerCase() + label.slice(1);
 }
 
-/** `fn` is the caller's own name (`previewChannelSettlement`/`recordChannelSettlement`), so the raw
- *  names which one actually refused. */
-function assertSettlementFigures(
+/**
+ * S5.5v Amendment A2 item 1 — gross/net's blank refusal moved HERE from the app action, so it runs
+ * AFTER `authorize()` (the domain's own rule: "authorize() is the FIRST thing either does"). Ian's
+ * Q1 ruling (S5.5v): gross/net are copied off a physical payout statement, so a blank box is
+ * someone who has not looked yet, never a zero the way a deduction's blank is.
+ */
+function figureBlank(raw: string, key: string, label: string, fn: string): void {
+  if (raw.trim() === '') {
+    throw refuse(`${fn}: ${key} is blank`, `${label} — enter the figure from the payout statement.`);
+  }
+}
+
+/**
+ * Every field's own check, as a list of thunks — `fn` is the caller's own name
+ * (`previewChannelSettlement`/`recordChannelSettlement`), so the raw names which one actually
+ * refused. Shared by `assertSettlementFigures` (throws on the first) and
+ * `collectSettlementFigureBlockers` (item 3 — collects every one, for a preview).
+ */
+function figureChecks(
   fn: string,
   input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loan'>,
-): void {
-  parseMoneyInput(input.grossAmount, `${fn}: the gross amount`, 'The gross settled');
-  parseMoneyInput(input.netDeposited, `${fn}: the net deposited`, 'The net deposited');
+): Array<() => void> {
+  const checks: Array<() => void> = [
+    () => {
+      figureBlank(input.grossAmount, 'grossAmount', 'The gross settled', fn);
+      parseMoneyInput(input.grossAmount, `${fn}: the gross amount`, 'The gross settled');
+    },
+    () => {
+      figureBlank(input.netDeposited, 'netDeposited', 'The net deposited', fn);
+      parseMoneyInput(input.netDeposited, `${fn}: the net deposited`, 'The net deposited');
+    },
+  ];
   const d = input.deductions ?? {};
   for (const key of Object.keys(DEDUCTION_LABELS) as (keyof SettlementDeductions)[]) {
     const v = d[key];
     if (v !== undefined) {
-      parseMoneyInput(v, `${fn}: ${lead(DEDUCTION_LABELS[key])}`, DEDUCTION_LABELS[key]);
+      checks.push(() => parseMoneyInput(v, `${fn}: ${lead(DEDUCTION_LABELS[key])}`, DEDUCTION_LABELS[key]));
     }
   }
   if (input.loan) {
-    const amount = parseMoneyInput(input.loan.amount, `${fn}: the loan amount docked`, 'The amount docked');
-    if (Number(amount) < 0) {
-      throw refuse(`${fn}: the loan amount docked cannot be negative.`, 'The amount docked cannot be negative.');
+    checks.push(() => {
+      const amount = parseMoneyInput(input.loan!.amount, `${fn}: the loan amount docked`, 'The amount docked');
+      if (Number(amount) < 0) {
+        throw refuse(`${fn}: the loan amount docked cannot be negative.`, 'The amount docked cannot be negative.');
+      }
+    });
+  }
+  return checks;
+}
+
+/** `recordChannelSettlement`'s shape — all-or-nothing, throws on the first bad field. */
+function assertSettlementFigures(
+  fn: string,
+  input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loan'>,
+): void {
+  for (const check of figureChecks(fn, input)) check();
+}
+
+/** Presentable message off a thrown refusal — S5.5v Amendment A2 item 4: never developer text in
+ *  a blocker. An unpresentable error is logged with its raw, and the blocker names no detail. */
+function blockerMessageFor(err: unknown): string {
+  const userMessage = err instanceof Error ? (err as unknown as { userMessage?: unknown }).userMessage : undefined;
+  if (typeof userMessage === 'string') return userMessage;
+  logger.error({ err }, 'channel settlement figure refusal carried no presentable message');
+  return 'One of the figures could not be read.';
+}
+
+/** S5.5v Amendment A2 item 3 — the preview's own variant: collects EVERY field's refusal instead
+ *  of stopping at the first, because a form that fixes one error at a time makes four round trips
+ *  out of one. */
+function collectSettlementFigureBlockers(
+  fn: string,
+  input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loan'>,
+): string[] {
+  const blockers: string[] = [];
+  for (const check of figureChecks(fn, input)) {
+    try {
+      check();
+    } catch (err) {
+      blockers.push(blockerMessageFor(err));
     }
   }
+  return blockers;
 }
 
 /**
@@ -321,8 +398,14 @@ export async function previewChannelSettlement(
 ): Promise<SettlementPreview> {
   const run = async (trx: Tx): Promise<SettlementPreview> => {
     const ctx = await gatherSettlementContext(trx, actor, input);
-    assertSettlementFigures('previewChannelSettlement', input);
-    const c = computeSettlement(input, ctx.outstanding, ctx.config.name);
+    // S5.5v Amendment A1 / A2 item 3 — the docstring's promise is "every refusal it would hit", so
+    // EVERY bad figure is COLLECTED alongside the config blockers, never thrown past them.
+    // `recordChannelSettlement` (below) keeps the throw — a post is all-or-nothing, a preview is not.
+    const figureBlockers = collectSettlementFigureBlockers('previewChannelSettlement', input);
+    // S5.5v Amendment A2 item 2 — a figure that failed to parse has no safe Number() to compute
+    // with; running the arithmetic anyway is how "NaN" reaches the screen. Zero figures, blockers
+    // only, until every field parses.
+    const c = figureBlockers.length === 0 ? computeSettlement(input, ctx.outstanding, ctx.config.name) : ZERO_COMPUTED_SETTLEMENT;
     return {
       channelName: ctx.config.name,
       storeId: ctx.config.storeId,
@@ -335,7 +418,7 @@ export async function previewChannelSettlement(
       settlementGain: c.settlementGain.toFixed(2),
       tolerance: c.tolerance.toFixed(2),
       destinationAccountName: ctx.destinationName,
-      blockers: [...ctx.configBlockers, ...c.blockers],
+      blockers: [...ctx.configBlockers, ...figureBlockers, ...c.blockers],
       needsGainAcknowledgement: c.needsGainAcknowledgement,
     };
   };

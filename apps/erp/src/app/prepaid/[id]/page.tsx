@@ -17,6 +17,14 @@ export const dynamic = 'force-dynamic';
 interface SearchParams {
   error?: string;
   ok?: string;
+  /** T-343 S5.5u item 3 — set by `writeOffAction` on a refusal, so the write-off form keeps what
+   *  was typed instead of going blank (fixed-assets/[id]/page.tsx's `sp.reason` precedent). */
+  reason?: string;
+  refundAmount?: string;
+  refundAccountCode?: string;
+  /** S5.5u Amendment A1 item 1 — else a back-dated write-off resubmitted after a refusal silently
+   *  reverts to today's date. */
+  writtenOffOn?: string;
 }
 
 export default async function PrepaidItemPage({
@@ -118,9 +126,7 @@ export default async function PrepaidItemPage({
               <span className="text-xs font-medium text-amber-900 dark:text-amber-300">Months</span>
               <input
                 name="coverageMonths"
-                type="number"
-                min="1"
-                max="120"
+                inputMode="numeric"
                 required
                 defaultValue={item.coverageMonths}
                 className={`${INPUT} w-24`}
@@ -253,12 +259,12 @@ export default async function PrepaidItemPage({
                   name="writtenOffOn"
                   type="date"
                   required
-                  defaultValue={new Date().toISOString().slice(0, 10)}
+                  defaultValue={sp.writtenOffOn ?? new Date().toISOString().slice(0, 10)}
                   className={INPUT}
                 />
               </Field>
               <Field label="Reason">
-                <input name="reason" required maxLength={200} className={INPUT} />
+                <input name="reason" required maxLength={200} defaultValue={sp.reason ?? ''} className={INPUT} />
               </Field>
               <Field
                 label="Refunded"
@@ -267,11 +273,18 @@ export default async function PrepaidItemPage({
                 <input
                   name="refundAmount"
                   inputMode="decimal"
+                  defaultValue={sp.refundAmount ?? ''}
                   className={INPUT}
                 />
               </Field>
               <Field label="Refund landed in" hint="Account code, e.g. 1110 cash or 1140 e-wallet">
-                <input name="refundAccountCode" maxLength={8} placeholder="1110" className={INPUT} />
+                <input
+                  name="refundAccountCode"
+                  maxLength={8}
+                  placeholder="1110"
+                  defaultValue={sp.refundAccountCode ?? ''}
+                  className={INPUT}
+                />
               </Field>
             </div>
             {/* ⚠️ The trap worth naming on the page: booking the whole remainder as expense AND

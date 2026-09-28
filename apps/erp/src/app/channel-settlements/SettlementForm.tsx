@@ -186,8 +186,8 @@ export function SettlementForm({
         storeId: channel?.storeId ?? '',
         channelId,
         businessDate: day?.businessDate ?? '',
-        grossAmount: gross || '0',
-        netDeposited: net || '0',
+        grossAmount: gross,
+        netDeposited: net,
         commission: deductions.commission || '0',
         marketing: deductions.marketing || '0',
         platformFee: deductions.platformFee || '0',
@@ -297,8 +297,6 @@ export function SettlementForm({
             name="grossAmount"
             value={gross}
             onChange={(e) => setGross(e.target.value)}
-            type="number"
-            step="0.01"
             inputMode="decimal"
             placeholder="0.00"
             required
@@ -314,8 +312,6 @@ export function SettlementForm({
             name="netDeposited"
             value={net}
             onChange={(e) => setNet(e.target.value)}
-            type="number"
-            step="0.01"
             inputMode="decimal"
             placeholder="0.00"
             required

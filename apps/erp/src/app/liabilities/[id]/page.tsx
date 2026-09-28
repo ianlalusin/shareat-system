@@ -107,7 +107,7 @@ export default async function LiabilityPage({
           <form action={chargeAction} className="space-y-3">
             <input type="hidden" name="liabilityId" value={liability.id} />
             <Field label="Amount">
-              <input name="amount" required type="number" step="0.01" min="0.01" className={INPUT} />
+              <input name="amount" required inputMode="decimal" className={INPUT} />
             </Field>
             <Field label="For">
               <select name="againstAccountCode" required defaultValue="" className={INPUT}>
@@ -154,9 +154,7 @@ export default async function LiabilityPage({
                 <input
                   name="amount"
                   required
-                  type="number"
-                  step="0.01"
-                  min="0.01"
+                  inputMode="decimal"
                   defaultValue={liability.position.outstanding}
                   className={INPUT}
                 />

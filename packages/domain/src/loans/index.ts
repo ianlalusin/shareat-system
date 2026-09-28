@@ -14,6 +14,7 @@ import { journalRepo, loansRepo, moneyAccountsRepo, transaction, type Tx } from 
 import { money, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
+import { refuse } from '../shared/refusal';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { accruedInterest, splitPayment, type PaymentSplit } from './interest';
@@ -53,13 +54,27 @@ export async function createLoan(
     if (!name || !lender) {
       throw new Error('createLoan: a loan needs a name and a lender.');
     }
+    const principal = parseMoneyInput(input.principalAmount, 'createLoan: the amount agreed', 'The amount agreed');
+    if (Number(principal) <= 0) {
+      throw refuse('createLoan: the amount agreed has to be greater than zero.', 'The amount agreed has to be greater than zero.');
+    }
+    // S5.5v Amendment A2 item 5 — must not narrow what was already accepted (".5", "1." stay
+    // valid): shape first, then the VALUE ceiling — a leading-zero run like "00012.5" is a digit
+    // run, not the value, so it saves as 12.5, not a refusal.
+    const rate = input.interestRate.trim();
+    if (!/^(?=.*\d)\d*(?:\.\d{0,4})?$/.test(rate) || Number(rate) > 9999.9999) {
+      throw refuse(
+        `createLoan: the interest rate — "${input.interestRate}" is not a valid rate. Use a number from 0 to 9999.9999 with up to four decimal places.`,
+        `The interest rate — "${input.interestRate}" is not a valid rate. Use a number from 0 to 9999.9999 with up to four decimal places.`,
+      );
+    }
     return loansRepo.insertLoan(trx, {
       orgId: actor.orgId,
       storeId: input.storeId,
       lenderName: lender,
       name,
-      principalAmount: input.principalAmount,
-      interestRate: input.interestRate,
+      principalAmount: principal,
+      interestRate: rate,
       ratePeriod: input.ratePeriod,
       interestMethod: input.interestMethod,
       paymentFrequency: input.paymentFrequency,
@@ -91,7 +106,7 @@ export async function disburseLoan(
 
     const amount = parseMoneyInput(input.amount, 'disburseLoan: the amount', 'The loan amount');
     if (Number(amount) <= 0) {
-      throw new Error('disburseLoan: the amount has to be greater than zero.');
+      throw refuse('disburseLoan: the amount has to be greater than zero.', 'The loan amount has to be greater than zero.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
     if (!account) throw new Error('disburseLoan: that money account does not exist in this org.');
@@ -166,7 +181,7 @@ export async function recordLoanPayment(
 
     const amount = parseMoneyInput(input.amount, 'recordLoanPayment: the amount', 'The payment amount');
     if (Number(amount) <= 0) {
-      throw new Error('recordLoanPayment: the amount has to be greater than zero.');
+      throw refuse('recordLoanPayment: the amount has to be greater than zero.', 'The payment amount has to be greater than zero.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
     if (!account) throw new Error('recordLoanPayment: that money account does not exist.');

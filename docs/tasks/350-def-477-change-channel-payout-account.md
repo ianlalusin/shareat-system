@@ -17,7 +17,7 @@ setting is read only when a new settlement posts.
 
 ## Ian's ruling (2026-09-28): ADMIN ONLY
 Both the first set and every later change need a new store-scoped capability **`set_channel_payout`** (super ✅, admin ✅,
-manager ✗, staff ✗ — pre-wired in `docs/decisions/CAPABILITY-MATRIX.md` beside `set_cash_policy`). It replaces
+manager ✗, staff ✗). ⚠️ The CAPABILITY-MATRIX.md row is added BY THE ORCHESTRATOR IN THE SAME COMMIT as `capabilities.ts` — `tests/unit/capability-matrix.test.ts` fails if the document and the union disagree (a pre-wired row made the gates red, 2026-09-28). Row text: "| `set_channel_payout` | store | ✅ | ✅ | **✗** | ✗ | T-350 / DEF-477. Ian, 2026-09-28: admin only. |" beside `set_cash_policy`. It replaces
 `manage_store_settings` in `setChannelPayoutDestination`. Declare it exactly as `set_cash_policy` is declared in
 `packages/auth/src/capabilities.ts` (the union `:232`, the list `:360`, scope `:530`, tier `:714`, the role table
 `:921`, the human title `:1131` — "change where a sales channel's payouts bank"). Wherever this spec says

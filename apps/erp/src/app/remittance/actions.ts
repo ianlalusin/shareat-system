@@ -78,13 +78,14 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
       declaredOverage: str(formData, `lineOverage_${i}`) || null,
     }));
 
-    // T-328/7th-shape — used to be a bare `Number(amount) > 0` check, so a mistyped amount ('abc',
-    // or a thousands separator like '3,000') was silently treated as "no amount" — the same class
-    // of bug the filter has, just inline here twice. Blank is still legitimately "nothing handed
-    // over from this account"; a parsed-but-zero-or-negative amount is unchanged too (pre-existing
-    // rule, T-134 B3). Only a non-blank string that fails to parse is new: it now throws instead
-    // of vanishing. Kept as a plain `(amount) => boolean` — no account, no closure over anything
-    // else — so it stays a single, direct, independently-testable decision.
+    // T-328/7th-shape, updated by S5.5v Amendment A1 — used to be a bare `Number(amount) > 0`
+    // check, so a mistyped amount ('abc', or a thousands separator like '3,000') was silently
+    // treated as "no amount" — the same class of bug the filter has, just inline here twice. Blank
+    // is still legitimately "nothing handed over from this account" (T-134 B3). Two decisions now
+    // throw instead of vanishing: a non-blank string that fails to parse (below), and — since
+    // S5.5s dropped the box's `min="0"` — a parsed amount that is negative (:91-98). Kept as a
+    // plain `(amount) => boolean` — no account, no closure over anything else — so it stays a
+    // single, direct, independently-testable decision.
     const isHandedOver = (amount: string): boolean => {
       if (!amount) return false;
       const parsed = parseMoneyInput(amount, 'createRemittanceAction: the amount handed over', 'The amount handed over');

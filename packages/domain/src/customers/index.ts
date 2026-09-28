@@ -17,6 +17,7 @@ import { customersRepo, itemsRepo, transaction, type Tx } from '@shareat/db';
 import type { CustomerGroup, CustomerTreatment } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { gone, refuse } from '../shared/refusal';
+import { parseMoneyInput } from '../shared/money-input';
 
 export { treatmentOf } from '@shareat/db';
 
@@ -202,7 +203,8 @@ export async function setPrice(
     }
     // ⚠️ Zero is allowed — a genuinely free line exists (a sample, a promotional unit) and refusing
     // it would push people to enter 0.01. Negative is not: that is a discount, not a price.
-    if (Number(input.rate) < 0) {
+    const rate = parseMoneyInput(input.rate, 'setPrice: the rate', 'The rate');
+    if (Number(rate) < 0) {
       throw refuse('setPrice: a rate cannot be negative. A negative price is a discount.', 'A rate cannot be negative. A negative price is a discount.');
     }
 
@@ -210,7 +212,7 @@ export async function setPrice(
       orgId: actor.orgId,
       priceListId: list.id,
       itemId: item.id,
-      rate: input.rate,
+      rate,
       unit: input.unit?.trim() || null,
     });
   };

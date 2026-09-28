@@ -137,10 +137,8 @@ export default async function NewAssetPage({
               hint="Blank uses this category's default, then 24 months. How long until you would realistically REPLACE it — not how long it could last."
             >
               <input
-                type="number"
                 name="usefulLifeMonths"
-                min={1}
-                step={1}
+                inputMode="numeric"
                 placeholder="24"
                 className={INPUT}
               />

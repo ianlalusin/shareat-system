@@ -136,9 +136,7 @@ export default async function OwnerPage({
                 <input
                   name="amount"
                   required
-                  type="number"
-                  step="0.01"
-                  min="0.01"
+                  inputMode="decimal"
                   defaultValue={owner.position.receivable}
                   className={INPUT}
                 />
@@ -182,7 +180,7 @@ export default async function OwnerPage({
           <form action={contributionAction} className="space-y-3">
             <input type="hidden" name="ownerId" value={owner.id} />
             <Field label="Amount">
-              <input name="amount" required type="number" step="0.01" min="0.01" className={INPUT} />
+              <input name="amount" required inputMode="decimal" className={INPUT} />
             </Field>
             <Field label="Into">
               <select name="intoMoneyAccountId" required defaultValue="" className={INPUT}>
@@ -225,7 +223,7 @@ export default async function OwnerPage({
           <form action={drawingAction} className="space-y-3">
             <input type="hidden" name="ownerId" value={owner.id} />
             <Field label="Amount">
-              <input name="amount" required type="number" step="0.01" min="0.01" className={INPUT} />
+              <input name="amount" required inputMode="decimal" className={INPUT} />
             </Field>
             <Field label="From">
               <select name="fromMoneyAccountId" required defaultValue="" className={INPUT}>

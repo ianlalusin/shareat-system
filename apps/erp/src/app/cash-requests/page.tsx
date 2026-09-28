@@ -200,9 +200,7 @@ export default async function CashRequestsPage({
               <input
                 name="amount"
                 required
-                type="number"
-                step="0.01"
-                min="0.01"
+                inputMode="decimal"
                 className={INPUT}
               />
             </Field>

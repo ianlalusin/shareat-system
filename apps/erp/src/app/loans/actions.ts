@@ -10,6 +10,7 @@ import {
   createLoan,
   disburseLoan,
   recordLoanPayment,
+  refuse,
   reverseLoanEntry,
 } from '@shareat/domain';
 import type { InterestMethod, PaymentFrequency, RatePeriod } from '@shareat/db';
@@ -26,12 +27,27 @@ function back(path: string, params: Record<string, string>): never {
   redirect(`${path}?${new URLSearchParams(params).toString()}`);
 }
 
+/** T-343 S5.5v item 4, the `wholeMinutes` shape (S5.5t A1) — a blank box is refused by name. */
+function wholePayments(raw: string): number {
+  if (raw === '') {
+    throw refuse('createLoanAction: termPeriods is blank', 'The number of payments — enter a whole number from 1 to 99999.');
+  }
+  if (!/^\d{1,5}$/.test(raw) || Number(raw) < 1) {
+    throw refuse(
+      `createLoanAction: termPeriods is not a whole number from 1 to 99999: ${JSON.stringify(raw)}`,
+      `The number of payments — "${raw}" is not a whole number from 1 to 99999.`,
+    );
+  }
+  return Number(raw);
+}
+
 export async function createLoanAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let id = '';
   try {
     const storeId = str(formData, 'storeId');
     if (!storeId) throw new Error('Choose a store.');
+    const termPeriods = wholePayments(str(formData, 'termPeriods'));
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
       createLoan(tx, actor, {
         storeId,
@@ -42,7 +58,7 @@ export async function createLoanAction(formData: FormData): Promise<void> {
         ratePeriod: str(formData, 'ratePeriod') as RatePeriod,
         interestMethod: str(formData, 'interestMethod') as InterestMethod,
         paymentFrequency: str(formData, 'paymentFrequency') as PaymentFrequency,
-        termPeriods: Number(str(formData, 'termPeriods')),
+        termPeriods,
         startDate: str(formData, 'startDate'),
         notes: str(formData, 'notes') || null,
       }),

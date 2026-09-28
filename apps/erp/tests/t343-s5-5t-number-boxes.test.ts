@@ -81,18 +81,27 @@ describe('R-legs — source-text: each converted box has no type="number"/step/m
   });
 });
 
-describe('R-legs — green, unedited: the three REQUIRED spinners this task does not touch (DEF-470 "widens" list)', () => {
-  it('⛔ green, unedited — cutover/count/page.tsx quantity stays type="number", required', () => {
+describe('⚠️ RULED EDIT (T-343 S5.5w) — the three legs below no longer pin "stays type=number": S5.5w converts cutover quantity and AP quantity/unitPrice too, so they flip to R-legs here', () => {
+  it('R-leg (S5.5w) — cutover/count/page.tsx quantity: no type="number"/step/min, inputMode="decimal" (still required)', () => {
     const tag = inputTagFor('apps/erp/src/app/cutover/count/page.tsx', '"quantity"');
-    expect(tag).toMatch(/type=["']number["']/);
-    expect(tag).toMatch(/\brequired\b/);
+    expect(tag, 'must not carry type="number"').not.toMatch(/type=["']number["']/);
+    expect(tag, 'must not carry a step= attribute').not.toMatch(/\bstep=/);
+    expect(tag, 'must not carry a min= attribute').not.toMatch(/\bmin=/);
+    expect(tag, 'must carry inputMode="decimal"').toMatch(/inputMode=["']decimal["']/);
+    expect(tag, '`required` is unrelated to the number->text change and stays').toMatch(/\brequired\b/);
   });
-  it('⛔ green, unedited — ap/invoices/[id]/page.tsx line${i}_quantity stays type="number"', () => {
+  it('R-leg (S5.5w) — ap/invoices/[id]/page.tsx line${i}_quantity: no type="number"/step/min, inputMode="decimal"', () => {
     const tag = inputTagFor('apps/erp/src/app/ap/invoices/[id]/page.tsx', '{`line${i}_quantity`}');
-    expect(tag).toMatch(/type=["']number["']/);
+    expect(tag, 'must not carry type="number"').not.toMatch(/type=["']number["']/);
+    expect(tag, 'must not carry a step= attribute').not.toMatch(/\bstep=/);
+    expect(tag, 'must not carry a min= attribute').not.toMatch(/\bmin=/);
+    expect(tag, 'must carry inputMode="decimal"').toMatch(/inputMode=["']decimal["']/);
   });
-  it('⛔ green, unedited — ap/invoices/[id]/page.tsx line${i}_unitPrice stays type="number"', () => {
+  it('R-leg (S5.5w) — ap/invoices/[id]/page.tsx line${i}_unitPrice: no type="number"/step/min, inputMode="decimal" (SAFE server-side; input change only)', () => {
     const tag = inputTagFor('apps/erp/src/app/ap/invoices/[id]/page.tsx', '{`line${i}_unitPrice`}');
-    expect(tag).toMatch(/type=["']number["']/);
+    expect(tag, 'must not carry type="number"').not.toMatch(/type=["']number["']/);
+    expect(tag, 'must not carry a step= attribute').not.toMatch(/\bstep=/);
+    expect(tag, 'must not carry a min= attribute').not.toMatch(/\bmin=/);
+    expect(tag, 'must carry inputMode="decimal"').toMatch(/inputMode=["']decimal["']/);
   });
 });

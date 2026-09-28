@@ -55,13 +55,19 @@ import { censusKey, scanMoneyPositivitySites } from './money-positivity-census';
  * 2. **A number already unwrapped by a prior `Number(...)` assignment, then compared bare** — e.g.
  *    `const creditApplied = Number(input.creditApplied ?? '0'); if (creditApplied < 0) ...`. The
  *    comparison line itself contains no `Number(` for this regex to match. `ap/index.ts`'s
- *    `creditApplied`, `trade/index.ts`'s `deliveryFee`/`otherFees`, and `cash-requests/index.ts`'s
- *    `settleCashRequest` (`returned`, `short`) are this shape — logged in `docs/DEFECTS-REGISTER.md`
- *    §E as the strictly-quieter truncation class (always re-derived via `.toFixed(2)` before any DB
- *    write, so nothing is refused — an amount is silently rounded, never stored malformed), not
- *    fixed here, and NOT caught by this guard either. If one of those ever starts writing a raw
- *    string to the database, this guard will not notice; the DEFECTS-REGISTER row is the only record
- *    of that risk today.
+ *    `creditApplied` and `trade/index.ts`'s `deliveryFee`/`otherFees` are this shape — logged in
+ *    `docs/DEFECTS-REGISTER.md` §E as the strictly-quieter truncation class (always re-derived via
+ *    `.toFixed(2)` before any DB write, so nothing is refused — an amount is silently rounded, never
+ *    stored malformed), not fixed here, and NOT caught by this guard either. If one of those ever
+ *    starts writing a raw string to the database, this guard will not notice; the DEFECTS-REGISTER
+ *    row is the only record of that risk today.
+ *    ⭐ **S5.5v Amendment A1 — `cash-requests/index.ts`'s `settleCashRequest` (`returned`, `short`) no
+ *    longer belongs on this list.** S5.5s routed both through `parseMoneyInput` (DEF-277 PARTLY
+ *    FIXED) — `const returned = ... Number(parseMoneyInput(input.returnedAmount, ...))`, same for
+ *    `short`. The comparisons (`returned < 0 || short < 0`, `returned <= 0 && short <= 0`) still
+ *    match this same blind spot's SHAPE (a bare unwrapped local, not `Number(input.x)`), so this
+ *    guard still cannot see them — the fix closed the underlying defect, not the guard's blind
+ *    spot to it.
  * 3. **A property path, not a bare identifier**, e.g. `a.amountApplied` in `ap/index.ts`'s
  *    allocation loop. After DEF-272's fix that value IS pre-parsed (built in a `.map()` one block
  *    above via `parseMoneyInput`), but it no longer even matches this shape (the comparison is
@@ -168,8 +174,12 @@ const CLASSIFIED_ENTRIES: {
   {
     file: 'cash-requests/index.ts',
     comparison: 'Number(amount) <= 0',
-    reason: 'routed — createCashRequest, `amount = parseMoneyInput(...)` above',
-    checkFunctions: ['createCashRequest'],
+    reason:
+      'routed — MERGED (Contract §4, T-343 S5.5v item 2): covers BOTH createCashRequest and ' +
+      'releaseCashRequest, each `amount = parseMoneyInput(...)` above the respective site; the ' +
+      'comparison is byte-identical in both, so one key legitimately stands for two sites ' +
+      '(declared in EXPECTED_SITE_COUNT)',
+    checkFunctions: ['createCashRequest', 'releaseCashRequest'],
     checkIdentifiers: ['amount'],
   },
   {
@@ -206,6 +216,14 @@ const CLASSIFIED_ENTRIES: {
       'in both functions, so one key legitimately stands for two sites (declared in EXPECTED_SITE_COUNT)',
     checkFunctions: ['disburseLoan', 'recordLoanPayment'],
     checkIdentifiers: ['amount'],
+  },
+  {
+    // T-343 S5.5v item 3 (new site — createLoan did not parse principalAmount before this).
+    file: 'loans/index.ts',
+    comparison: 'Number(principal) <= 0',
+    reason: 'routed — createLoan, `principal = parseMoneyInput(input.principalAmount, ...)` above',
+    checkFunctions: ['createLoan'],
+    checkIdentifiers: ['principal'],
   },
   {
     file: 'money-transfers/index.ts',
@@ -397,8 +415,11 @@ const CLASSIFIED_ENTRIES: {
   // ---- quantity: a count/conversion factor, not money — different CHECK, different column ----
   {
     file: 'cutover/index.ts',
-    comparison: 'Number(input.quantity) < 0',
-    reason: 'quantity — recordOpeningCount, not a money field',
+    // T-343 S5.5w item 3 (RULED EDIT, red until BUILDER lands it): `input.quantity` is parsed via
+    // `parseQuantityInput` first and the guard moves to the parsed local — planner's own stated
+    // shape (task doc, TESTER paths note); re-key here to match, not yet true of the source.
+    comparison: 'Number(quantity) < 0',
+    reason: 'quantity — recordOpeningCount, not a money field; routed through parseQuantityInput (S5.5w)',
     checkFunctions: ['recordOpeningCount'],
   },
   {
@@ -447,9 +468,15 @@ const CLASSIFIED_ENTRIES: {
 
   // ---- rate: numeric(14,4), a different column type with its own precision — out of money() scope ----
   {
+    // T-343 S5.5v item 6 — was `Number(input.rate) < 0` (T-260 era: "do not force a rate through a
+    // 2dp parser"). setPrice now routes through `parseMoneyInput` first (2dp is the right scale —
+    // the column is `numeric(14,2)`, not `numeric(14,4)`; the old T-260 reason was itself stale),
+    // so the comparison reads the parsed local, not `input.rate` directly.
     file: 'customers/index.ts',
-    comparison: 'Number(input.rate) < 0',
-    reason: 'rate, numeric(14,4) — T-260 spec: "do not force a rate through a 2dp parser"',
+    comparison: 'Number(rate) < 0',
+    reason: 'routed — setPrice, `rate = parseMoneyInput(...)` above; column numeric(14,2)',
+    checkFunctions: ['setPrice'],
+    checkIdentifiers: ['rate'],
   },
   {
     file: 'pos/plan.ts',
@@ -523,6 +550,8 @@ const EXPECTED_SITE_COUNT: Record<string, number> = {
   [censusKey('loans/index.ts', 'Number(amount) <= 0')]: 2,
   [censusKey('prepaid/index.ts', 'Number(refunded) > 0')]: 2,
   [censusKey('recurring-expenses/index.ts', 'Number(defaultAmount) <= 0')]: 2,
+  // T-343 S5.5v item 2 — releaseCashRequest's new `<= 0` guard shares createCashRequest's key.
+  [censusKey('cash-requests/index.ts', 'Number(amount) <= 0')]: 2,
 };
 
 function functionIsDeclaredIn(file: string, functionName: string): boolean {
@@ -551,9 +580,13 @@ describe('DEF-272 — money-positivity shape guard (census as a test, not a cens
     // §3): deriving the expected value from the function under test means a bug in extraction
     // moves both sides of the assertion together and the control passes while controlling
     // nothing — the exact failure this control exists to prevent, arriving by a new route.
-    // Verified unique in the file, so this cannot drift onto a neighbouring site.
+    // ⭐ T-343 S5.5v item 6 re-point: customers/index.ts's rate check is NOW ROUTED (setPrice
+    // parses via parseMoneyInput above), so it can no longer serve as the "deliberately unrouted"
+    // control — pos/plan.ts's `Number(s) > 0` (classified above as a numeric(14,6) scale factor,
+    // untouched by this task) takes its place. Verified unique in that file, so this cannot drift
+    // onto a neighbouring site.
     const sites = scanMoneyPositivitySites(DOMAIN_SRC);
-    expect(sites.some((s) => s.key === 'customers/index.ts::Number(input.rate) < 0')).toBe(true);
+    expect(sites.some((s) => s.key === 'pos/plan.ts::Number(s) > 0')).toBe(true);
   });
 
   it('T7 — every match is classified — an unclassified hit is either a missed DEF-272 site or a new one', () => {

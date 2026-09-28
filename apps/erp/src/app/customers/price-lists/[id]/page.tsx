@@ -117,7 +117,7 @@ export default async function PriceListPage({
               </select>
             </Field>
             <Field label="Rate" hint="Zero is allowed — a sample is genuinely free.">
-              <input name="rate" required type="number" step="0.01" min="0" className={INPUT} />
+              <input name="rate" required inputMode="decimal" className={INPUT} />
             </Field>
             <Field label="Unit" hint="Optional.">
               <input name="unit" placeholder="kg" className={INPUT} />

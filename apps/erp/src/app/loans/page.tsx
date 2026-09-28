@@ -140,9 +140,6 @@ export default async function LoansPage({
             <Field label="Amount agreed">
               <input
                 name="principalAmount"
-                type="number"
-                step="0.01"
-                min="0.01"
                 required
                 inputMode="decimal"
                 placeholder="0.00"
@@ -153,9 +150,6 @@ export default async function LoansPage({
             <Field label="Interest rate (%)">
               <input
                 name="interestRate"
-                type="number"
-                step="0.0001"
-                min="0"
                 required
                 inputMode="decimal"
                 className={INPUT}
@@ -195,7 +189,7 @@ export default async function LoansPage({
             </Field>
 
             <Field label="Number of payments">
-              <input name="termPeriods" type="number" min="1" required defaultValue={12} className={INPUT} />
+              <input name="termPeriods" inputMode="numeric" required defaultValue={12} className={INPUT} />
             </Field>
             <Field label="Starts">
               <input name="startDate" type="date" required defaultValue={today()} className={INPUT} />

@@ -163,6 +163,7 @@ describe('P1 (DEF-460) — a comma-typed refund is silently dropped, never reach
         'The refund amount — "1,000" is not a valid amount. Use at most two decimal places.',
       );
       expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
+      expect(await prepaidStatus(f.itemId), 'a refusal must not flip the item to written_off').toBe('active');
     },
     30000,
   );
@@ -179,6 +180,30 @@ describe('P1 (DEF-460) — a comma-typed refund is silently dropped, never reach
       expect(params.get('error'), `redirect URL was: ${to}`).toBeNull();
       expect(params.get('ok')).toContain('Written off');
       expect(await prepaidStatus(f.itemId)).toBe('written_off');
+      expect(await journalEntryCountFor(f.itemId), 'the positive control — a real write-off DOES post exactly one entry').toBe(1);
+    },
+    30000,
+  );
+});
+
+describe('A1 (T-343 S5.5u item 1) — refundAccountCode set, refundAmount blank: today drops BOTH together', () => {
+  it(
+    'wanted: refusal "Enter the refund amount, or clear the refund account.", nothing written — ' +
+      'observed today (measured, not presumed): the action\'s `refund ? {both} : {}` spread treats ' +
+      'a blank refundAmount as falsy and drops refundAccountCode too, so the write-off SUCCEEDS with ' +
+      'the whole remaining balance expensed and no refund at all — a real ok= banner, not an error',
+    async () => {
+      const f = await prepaidFixture('a1');
+      ACTOR_HOLDER.actor = f.admin;
+      const { writeOffAction } = await import('../../src/app/prepaid/actions');
+
+      const to = await expectRedirectTo(() =>
+        writeOffAction(writeOffFormData(f, { refundAmount: '', refundAccountCode: '1110' })),
+      );
+      const params = new URL(to, 'http://localhost').searchParams;
+      expect(params.get('error'), `redirect URL was: ${to}`).toBe('Enter the refund amount, or clear the refund account.');
+      expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
+      expect(await prepaidStatus(f.itemId), 'a refusal must not flip the item to written_off').toBe('active');
     },
     30000,
   );
@@ -219,6 +244,7 @@ describe('P2 (DEF-460) — a negative refund, at the DOMAIN layer, is still a pl
         'The refund amount cannot be negative.',
       );
       expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
+      expect(await prepaidStatus(f.itemId), 'a refusal must not flip the item to written_off').toBe('active');
     },
     30000,
   );
@@ -236,6 +262,7 @@ describe('P3 (DEF-460) — a positive refund with no account refuses by name', (
       const params = new URL(to, 'http://localhost').searchParams;
       expect(params.get('error'), `redirect URL was: ${to}`).toBe('Say which account the refund landed in.');
       expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
+      expect(await prepaidStatus(f.itemId), 'a refusal must not flip the item to written_off').toBe('active');
     },
     30000,
   );
@@ -257,6 +284,7 @@ describe('P4 (DEF-460) — a refund above what is left refuses by name', () => {
         /^The refund can.t be more than what.s left on this item\./,
       );
       expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
+      expect(await prepaidStatus(f.itemId), 'a refusal must not flip the item to written_off').toBe('active');
     },
     30000,
   );

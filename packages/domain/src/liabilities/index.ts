@@ -17,6 +17,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
+import { refuse } from '../shared/refusal';
 
 export const LIABILITY_CONTROL_CODE = '2500';
 
@@ -77,8 +78,11 @@ export async function chargeLiability(
     if (!liability) throw new Error(`chargeLiability: liability ${input.liabilityId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
 
+    // ⚠️ S5.5v item 5 — deliberately NOT `parseMoneyInput`: a comma/imprecise amount falls through
+    // to today's raw-string DB behaviour unchanged (measured; the followups file's O3 and comma
+    // legs pin this). Only the zero-guard's SENTENCE changes.
     const amount = Number(input.amount);
-    if (amount <= 0) throw new Error('chargeLiability: a charge has to be greater than zero.');
+    if (amount <= 0) throw refuse('chargeLiability: a charge has to be greater than zero.', 'A charge has to be greater than zero.');
 
     await assertChargeableAccount(trx, actor.orgId, input.againstAccountCode);
 
@@ -156,7 +160,7 @@ export async function payLiability(
     await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
 
     const amount = Number(input.amount);
-    if (amount <= 0) throw new Error('payLiability: a payment has to be greater than zero.');
+    if (amount <= 0) throw refuse('payLiability: a payment has to be greater than zero.', 'A payment has to be greater than zero.');
 
     const before = Number(
       (await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id)).outstanding,

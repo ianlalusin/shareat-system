@@ -1,6 +1,6 @@
 # T-343: DEF-417 (part 2) — user-visible refusals name things in human terms, never raw ids or keys
 
-**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27 (morning). **S6a, S6b, S6c, S6d, S5.5m, S5.5n, S5.5p, S5.5q, S5.5r, S5.5s, S7 DONE 2026-09-27** (each: tester red, builder, Opus pre-commit read, gates, Opus post-commit /code-review in a worktree). **S5.5t (+A1, A2) DONE 2026-09-28.** **Open:** S5.5u (APPROVED, DEF-473), S5.4 (after S6 — now unblocked), S8, S9; **S5.5v (APPROVED, DEF-472 census part 1, 21 files) and S5.5w (APPROVED, part 2, after S5.5t+S5.5u commit)**.
+**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27 (morning). **S6a, S6b, S6c, S6d, S5.5m, S5.5n, S5.5p, S5.5q, S5.5r, S5.5s, S7 DONE 2026-09-27** (each: tester red, builder, Opus pre-commit read, gates, Opus post-commit /code-review in a worktree). **S5.5t (+A1, A2), S5.5u (+A1), S5.5v (+A1-A3), S5.5w (+A1-A3) DONE 2026-09-28.** **Open:** S5.4 (after S6 — now unblocked), S8, S9. Follow-up: DEF-478 (attendance forms refuse before authorize).
 **Orchestrator defaults (Ian may override any time):** fallback wording as proposed in S1.3; the 96 capability labels
 are Sonnet-drafted from CAPABILITY-MATRIX.md notes and fixed later if Ian wants; staging S1 = fail closed on
 IDENTIFIERS, strict flip at S9; S3 names the record's KIND, not its number; cross-org refusals never name the other

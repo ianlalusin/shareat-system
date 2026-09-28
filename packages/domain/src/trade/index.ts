@@ -39,8 +39,7 @@ import {
 import { authorize, AuthorizationError, type Actor, type Capability } from '@shareat/auth';
 import { parseMoneyInput } from '../shared/money-input';
 import { assertFiguresReconcile } from '../shared/reconcile';
-import { refuse } from '../shared/refusal';
-import { quantity as parseQuantity } from '../stock/quantity';
+import { parseQuantityInput } from '../shared/quantity-input';
 import { recordCharge, voidCharge } from '../ar';
 import { branchPriceFor } from '../items';
 import { postEntry } from '../ledger/post-entry';
@@ -102,32 +101,6 @@ export const WHOLESALE_REVENUE_CODE = '4300';
 /** Decimal noise only, never a business allowance. Same value and reasoning as AP's and AR's. */
 const EPSILON = 0.005;
 
-/**
- * `quantity()` (`packages/domain/src/stock/quantity.ts`) is a `numeric(14,3)` value's own choke
- * point, the same relationship `money()` has to `parseMoneyInput` — it throws a raw `TypeError`,
- * never a sentence a cashier can act on. This is that wrapper, local to this file rather than a
- * new shared module: only this file currently needs a readable refusal for a typed quantity.
- */
-function parseQuantityInput(raw: string, rawLabel: string, humanLabel: string): string {
-  try {
-    return parseQuantity(raw);
-  } catch (err) {
-    // T-343 S5.5r / DEF-469 — `fromThousandths`'s ceiling (`stock/quantity.ts`) throws a RangeError
-    // distinct from every other malformed-string failure; collapsing both into one "not a valid
-    // quantity... at most three decimal places" sentence told an operator whose number was too big
-    // that their DECIMAL PLACES were wrong.
-    if (err instanceof RangeError && /out of range/.test(err.message)) {
-      throw refuse(
-        `${rawLabel} — "${raw}" is too large. The most a quantity can be is 99,999,999,999.999.`,
-        `${humanLabel} — "${raw}" is too large. The most a quantity can be is 99,999,999,999.999.`,
-      );
-    }
-    throw refuse(
-      `${rawLabel} — "${raw}" is not a valid quantity. Use at most three decimal places.`,
-      `${humanLabel} — "${raw}" is not a valid quantity. Use at most three decimal places.`,
-    );
-  }
-}
 
 /**
  * T-328 Contract §4b — the reconciliation check as a pure, exported, directly-callable function,
