@@ -2374,6 +2374,16 @@ digit run (the leading-zero class, fifth occurrence).
 2. `apps/erp/src/app/attendance/[dayId]/actions.ts` `wholeMinutes` (committed in `7896e2a`): same change — shape
    `/^\d+$/`, value ≤ 99999. **Builder, +1 path.** Leg M5: `approvedOtMinutes='00030'` records 30 (red: refused).
 
+
+**S5.5w Amendment A3 — from the S5.5w A2 read, 2026-09-28, binding.**
+1. `dec2` (`apps/erp/src/app/settings/attendance/actions.ts`, 9 fields) uses a digit-run shape `/^\d{1,2}(\.\d{1,2})?$/`:
+   `005` and `.5` are refused, and `.5` is the MINIMUM legal value of `requiredHoursPerShift`/`halfDayHours`. Shape
+   `/^(?=.*\d)\d*(?:\.\d{1,2})?$/`, then the value against `numeric(4,2)`'s ceiling 99.99 and the field's own min/max.
+   Legs D3 `halfDayHours='.5'` saves 0.5; D4 `'005'` saves 5; D5 `'100'` → the sentence naming 99.99.
+2. **Ian, 2026-09-28:** with overtime mode `fixed`, a blank fixed hourly OT rate REFUSES ("Enter the fixed hourly
+   overtime rate, or pick a different overtime mode."); blank stays allowed in other modes. `lateChargePerMinute` blank →
+   `'0'` stays (pre-existing, defensible). Leg O1: fixed mode + blank rate → that sentence, no new config row.
+
 **S5.5w — build (after S5.5t and S5.5u commit; 8 elements, 28 fields, 12 files).**
 1. **Boxes.** `ap/invoices/[id]/page.tsx:167,190` (`decimal`), `cutover/count/page.tsx:140` (`decimal`),
    `prepaid/page.tsx:205` (`decimal`), `:223` and `prepaid/[id]/page.tsx:121` (`numeric`),
