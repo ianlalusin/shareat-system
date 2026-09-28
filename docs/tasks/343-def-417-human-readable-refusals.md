@@ -2394,6 +2394,13 @@ digit run (the leading-zero class, fifth occurrence).
    rate needs a peso amount — a fixed mode with no amount would price every overtime hour at zero." That satisfies Ian's
    ruling; **no builder change**. O1 is a green pin of that sentence, no new config row.
 
+
+**Audit-coverage correction for `0944455` (2026-09-28).** That commit's body overstates the pre-commit reads. Accurate:
+the auditor read S5.5v (+A2) source and tests EXCEPT the two owners legs (mid-edit at the time); S5.5u SOURCE only (its
+three test files unread); S5.5w (+A1-A3) EXCEPT legs D3-D5; and 0166 including its RLS leg. **S5.5v Amendment A3**
+(`SettlementForm.tsx` gross/net sent raw, leg PV4) had NO pre-commit read. The post-commit `/code-review` of `0944455`
+covers all of it.
+
 **S5.5w — build (after S5.5t and S5.5u commit; 8 elements, 28 fields, 12 files).**
 1. **Boxes.** `ap/invoices/[id]/page.tsx:167,190` (`decimal`), `cutover/count/page.tsx:140` (`decimal`),
    `prepaid/page.tsx:205` (`decimal`), `:223` and `prepaid/[id]/page.tsx:121` (`numeric`),
