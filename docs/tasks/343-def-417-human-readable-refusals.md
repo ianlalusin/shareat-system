@@ -2383,6 +2383,9 @@ digit run (the leading-zero class, fifth occurrence).
 2. **Ian, 2026-09-28:** with overtime mode `fixed`, a blank fixed hourly OT rate REFUSES ("Enter the fixed hourly
    overtime rate, or pick a different overtime mode."); blank stays allowed in other modes. `lateChargePerMinute` blank →
    `'0'` stays (pre-existing, defensible). Leg O1: fixed mode + blank rate → that sentence, no new config row.
+   **Measured (tester): already refused** by `store_attendance_config_fixed_ot_needs_amount_check`, mapped to "A flat overtime
+   rate needs a peso amount — a fixed mode with no amount would price every overtime hour at zero." That satisfies Ian's
+   ruling; **no builder change**. O1 is a green pin of that sentence, no new config row.
 
 **S5.5w — build (after S5.5t and S5.5u commit; 8 elements, 28 fields, 12 files).**
 1. **Boxes.** `ap/invoices/[id]/page.tsx:167,190` (`decimal`), `cutover/count/page.tsx:140` (`decimal`),
