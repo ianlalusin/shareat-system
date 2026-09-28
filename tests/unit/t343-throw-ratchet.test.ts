@@ -69,7 +69,14 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/attendance': 1,
   'packages/domain/src/budgets': 4,
   'packages/domain/src/cash-requests': 19, // T-343 S5.5v: 21 -> 19, createCashRequest's and decideCashRequest's <= 0 guards converted to refuse(...)
-  'packages/domain/src/channel-settlements': 12,
+  // T-350 (RULED EDIT, red until BUILDER lands it): 12 -> 8. ⚠️ Contract item 3(b) calls these
+  // "the three throw new Error( refusals" but then lists FOUR resulting human sentences — measured
+  // against the actual source (`setChannelPayoutDestination`, index.ts:656/662/669/675), there are
+  // four separate raw `throw new Error(` call sites (channel-not-found, account-not-found,
+  // belongs-to-another-store, retired), not three: the doc's own line-range "(:595-601)" spans two
+  // adjacent throws, not one. All four carry a named human sentence in the same item, so all four
+  // are in scope; the ceiling is measured against that, not the miscounted "three".
+  'packages/domain/src/channel-settlements': 8,
   'packages/domain/src/commissary': 48, // T-343 S5.3: 64 -> 48, catalogue.ts converted to refuse/gone/internalFault
   'packages/domain/src/customers': 0, // T-343 S5.2: 11 -> 0, all converted to refuse/gone/internalFault
   'packages/domain/src/cutover': 3, // T-343 S5.5w (RULED EDIT, red until BUILDER lands it): 4 -> 3, recordOpeningCount's quantity < 0 guard converted to refuse(...)

@@ -639,46 +639,65 @@ export async function recordChannelSettlement(
  * correctly refused every real settlement — *"there is nowhere to bank this"*. A screen alone
  * would not have fixed DEF-137; the configuration it depends on had to become reachable too.
  *
- * ⚠️ **`manage_store_settings`, not `manage_chart_of_accounts`.** Bible row 149 reserves for an
- * admin the act of *creating a place money can be recorded against*. This creates nothing: it
- * chooses among money accounts that already exist, which is operational routing of the same kind
- * as `receivable_account_code`. A branch manager who already accepts a remittance — the largest
- * transfer this business makes (row 150) — may say which wallet Foodpanda pays into.
+ * ⚠️ **`set_channel_payout`, not `manage_chart_of_accounts` — and, since T-350 (DEF-477, Ian
+ * 2026-09-28), not `manage_store_settings` either.** This creates nothing: it chooses among money
+ * accounts that already exist, which is operational routing of the same kind as
+ * `receivable_account_code`. But Ian ruled it admin-only, both for the first set AND for every
+ * later change — a manager who already accepts a remittance may not say which wallet Foodpanda
+ * pays into. Choosing the account already set is a no-op success (no write).
  */
 export async function setChannelPayoutDestination(
   tx: Tx | null,
   actor: Actor,
   input: { channelId: string; moneyAccountId: string },
-): Promise<{ channelId: string; moneyAccountId: string }> {
+): Promise<{ channelId: string; moneyAccountId: string; accountName: string; hadAccountBefore: boolean }> {
   const run = async (trx: Tx) => {
     const config = await R.channelConfig(trx, actor.orgId, input.channelId);
     if (!config) {
-      throw new Error(`setChannelPayoutDestination: channel ${input.channelId} does not exist.`);
+      throw refuse(
+        `setChannelPayoutDestination: channel ${input.channelId} does not exist.`,
+        'That channel no longer exists.',
+      );
     }
-    await authorize(trx, actor, 'manage_store_settings', { storeId: config.storeId });
+    // T-350 (DEF-477). Ian, 2026-09-28: admin only — replaces `manage_store_settings`.
+    await authorize(trx, actor, 'set_channel_payout', { storeId: config.storeId });
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
     if (!account) {
-      throw new Error('setChannelPayoutDestination: that money account does not exist.');
+      throw refuse(
+        'setChannelPayoutDestination: that money account does not exist.',
+        'That money account no longer exists.',
+      );
     }
     // ⚠️ Same store, and this is a money-safety rule rather than tidiness: a payout banked into
     // another store's wallet moves one store's revenue into another store's custody with no
     // due-from/due-to pair to make it visible (bible rows 152–153). Cross-store money movement
     // is a transfer, made deliberately, never a side effect of a configuration screen.
     if (account.storeId !== config.storeId) {
-      throw new Error(
+      throw refuse(
         `setChannelPayoutDestination: ${account.name} belongs to another store. A channel banks ` +
           'into its own store’s account; moving money between stores is a transfer, not a setting.',
+        `${account.name} belongs to another store. A channel banks into its own store's account — ` +
+          'moving money between stores is a transfer, not a setting.',
       );
     }
     if (!account.isActive) {
-      throw new Error(
+      throw refuse(
         `setChannelPayoutDestination: ${account.name} is retired, so nothing can be banked into it.`,
+        `${account.name} is retired, so nothing can be banked into it.`,
       );
     }
 
+    const hadAccountBefore = config.destinationMoneyAccountId !== null;
+
+    // T-350 (DEF-477): choosing the account that is already set is a no-op success — no write,
+    // no `updated_at` movement.
+    if (config.destinationMoneyAccountId === input.moneyAccountId) {
+      return { channelId: input.channelId, moneyAccountId: input.moneyAccountId, accountName: account.name, hadAccountBefore };
+    }
+
     await R.setDestinationAccount(trx, actor.orgId, input.channelId, input.moneyAccountId);
-    return { channelId: input.channelId, moneyAccountId: input.moneyAccountId };
+    return { channelId: input.channelId, moneyAccountId: input.moneyAccountId, accountName: account.name, hadAccountBefore };
   };
   if (tx) return run(tx);
   return transaction(run);

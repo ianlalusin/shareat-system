@@ -480,6 +480,9 @@ describe('DEF-137 — what the screen needed, and what wiring it found', () => {
   describe('setChannelPayoutDestination — the setting that had no writer at all', () => {
     it('points a channel at its store’s account, and the settlement then banks there', async () => {
       const f = await fixture('setdest');
+      // T-350: setChannelPayoutDestination now gates on set_channel_payout (admin and up), not
+      // manage_store_settings (manager and up) — f.manager needs the grant to still be a holder.
+      await sql`insert into person_grants (person_id, grant_name) values (${f.personId}, 'set_channel_payout')`;
       // A channel with nowhere to bank: exactly the state every real channel was in.
       const [channel] = await sql<{ id: string }[]>`
         insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code)
@@ -506,6 +509,9 @@ describe('DEF-137 — what the screen needed, and what wiring it found', () => {
 
     it('⛔ refuses another store’s account — that is a transfer, not a setting', async () => {
       const f = await fixture('crossdest');
+      // T-350: same grant as above — this leg tests the cross-store refusal, not the capability
+      // gate, so f.manager must hold set_channel_payout to reach that check at all.
+      await sql`insert into person_grants (person_id, grant_name) values (${f.personId}, 'set_channel_payout')`;
       const [other] = await sql<{ id: string }[]>`
         insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
         values (${f.orgId}, ${f.otherStoreId}, 'Other store wallet', 'bank', '1140', 'office')

@@ -245,9 +245,16 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // `app/admin/stores/[id]/page.tsx` add only `type="hidden"` inputs (`confirmReversal`) and
     // reuse each form's EXISTING submit button (relabelled, not a new element) — the census does
     // not count hidden inputs, and an unchanged button contributes nothing to the delta.
+    // 1054 -> 1058, T-350 (DEF-477). +4 PASS, FAIL/UNRESOLVED unmoved (both asserted above).
+    // Itemised, verified directly against runCensus()'s own filtered results for
+    // `app/channel-settlements/page.tsx` (not by arithmetic alone): the new wired-channel-card
+    // Change control — the `<details>`'s `<summary>Change</summary>` at :195 (28px), the
+    // `moneyAccountId` `<select>` at :203 (26px), its "Save" submit `<button>` at :217 (26px), and
+    // the "Cancel" `<Link>` at :223 (28px). All four PASS; nothing else in that file's census
+    // entries moved.
     // 1054 = 151 FAIL + 58 UNRESOLVED + 845 PASS, all measured together via runCensus() (not
     // computed from the other two numbers, so this cannot become circular with them).
-    expect(results.length).toBe(1054);
+    expect(results.length).toBe(1058);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

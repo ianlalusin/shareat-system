@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { heldCapabilities } from '@shareat/auth';
 import { requireSession } from '../../lib/session';
 import {
   previewSettlementAction,
@@ -14,6 +15,7 @@ import {
   listRecentSettlements,
   listWaitingDays,
   peso,
+  withOrgPrincipal,
 } from './lib';
 import { Page } from '@/components/shell/Page';
 
@@ -25,6 +27,8 @@ interface SearchParams {
   ok?: string;
   channel?: string;
   day?: string;
+  changed?: string;
+  account?: string;
 }
 
 const OK_MESSAGE: Record<string, string> = {
@@ -41,13 +45,26 @@ export default async function ChannelSettlementsPage({
   const sp = await searchParams;
   const { actor } = await requireSession('/channel-settlements');
 
-  const [channels, waiting, settlements, loans, accounts] = await Promise.all([
+  const [channels, waiting, settlements, loans, accounts, held] = await Promise.all([
     listChannels(actor.orgId),
     listWaitingDays(actor.orgId),
     listRecentSettlements(actor.orgId),
     listActiveLoans(actor.orgId),
     listDestinationAccounts(actor.orgId),
+    withOrgPrincipal(actor.orgId, (tx) => heldCapabilities(tx, actor)),
   ]);
+  // T-350 (DEF-477). Ian, 2026-09-28: admin only — gates both the unwired panel's form and the
+  // wired card's Change control. `authorize()` in the domain is the real gate; this only decides
+  // what renders.
+  const canSetChannelPayout = held.has('set_channel_payout');
+
+  // T-350: `changed=1` carries the human sentence for a re-set; a first set keeps today's text.
+  const okMessage =
+    sp.ok === 'destination' && sp.changed === '1' && sp.account
+      ? `Payout account changed. New settlements bank into ${sp.account}.`
+      : sp.ok
+        ? OK_MESSAGE[sp.ok]
+        : undefined;
 
   const today = new Date().toISOString().slice(0, 10);
   const unwired = channels.filter((c) => !c.destinationMoneyAccountId && c.isActive);
@@ -71,9 +88,9 @@ export default async function ChannelSettlementsPage({
           {sp.error}
         </div>
       )}
-      {sp.ok && OK_MESSAGE[sp.ok] && (
+      {okMessage && (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {OK_MESSAGE[sp.ok]}
+          {okMessage}
         </div>
       )}
 
@@ -90,41 +107,56 @@ export default async function ChannelSettlementsPage({
             reaching another store&apos;s account is a transfer, not a setting.
           </div>
           <div className="space-y-2">
-            {unwired.map((c) => (
-              <form
-                key={c.id}
-                action={setPayoutDestinationAction}
-                className="flex flex-wrap items-center gap-2"
-              >
-                <input type="hidden" name="channelId" value={c.id} />
-                <span className="min-w-40 text-sm font-medium text-amber-900 dark:text-amber-200">
-                  {c.storeName} — {c.name}
-                </span>
-                <select
-                  name="moneyAccountId"
-                  required
-                  defaultValue=""
-                  className="rounded border border-amber-300 bg-white px-2 py-1.5 text-sm dark:border-amber-700 dark:bg-neutral-950"
+            {unwired.map((c) =>
+              canSetChannelPayout ? (
+                <form
+                  key={c.id}
+                  action={setPayoutDestinationAction}
+                  className="flex flex-wrap items-center gap-2"
                 >
-                  <option value="" disabled>
-                    Choose an account…
-                  </option>
-                  {accounts
-                    .filter((a) => a.storeId === c.storeId)
-                    .map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} ({a.custodian} · {a.glAccountCode})
-                      </option>
-                    ))}
-                </select>
-                <button
-                  type="submit"
-                  className="rounded border border-amber-400 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900"
+                  <input type="hidden" name="channelId" value={c.id} />
+                  <span className="min-w-40 text-sm font-medium text-amber-900 dark:text-amber-200">
+                    {c.storeName} — {c.name}
+                  </span>
+                  <select
+                    name="moneyAccountId"
+                    required
+                    defaultValue=""
+                    className="rounded border border-amber-300 bg-white px-2 py-1.5 text-sm dark:border-amber-700 dark:bg-neutral-950"
+                  >
+                    <option value="" disabled>
+                      Choose an account…
+                    </option>
+                    {accounts
+                      .filter((a) => a.storeId === c.storeId)
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} ({a.custodian} · {a.glAccountCode})
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="submit"
+                    className="rounded border border-amber-400 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900"
+                  >
+                    Set
+                  </button>
+                </form>
+              ) : (
+                // T-350: a non-holder sees the channel named, but no picker — an admin has to do this.
+                <div
+                  key={c.id}
+                  className="flex flex-wrap items-center gap-2 text-sm text-amber-900 dark:text-amber-200"
                 >
-                  Set
-                </button>
-              </form>
-            ))}
+                  <span className="min-w-40 font-medium">
+                    {c.storeName} — {c.name}
+                  </span>
+                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                    An admin must set it.
+                  </span>
+                </div>
+              ),
+            )}
           </div>
         </section>
       )}
@@ -158,6 +190,45 @@ export default async function ChannelSettlementsPage({
                     {c.storeCode} · {c.destinationAccountName ?? 'no payout account'}
                     {!c.isActive && ' · retired'}
                   </div>
+                  {c.destinationMoneyAccountId && canSetChannelPayout && (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer px-1 py-1.5 text-xs font-medium text-neutral-500 hover:text-neutral-800 dark:text-neutral-500 dark:hover:text-neutral-300">
+                        Change
+                      </summary>
+                      <form
+                        action={setPayoutDestinationAction}
+                        className="mt-2 flex flex-wrap items-center gap-2"
+                      >
+                        <input type="hidden" name="channelId" value={c.id} />
+                        <select
+                          name="moneyAccountId"
+                          required
+                          defaultValue={c.destinationMoneyAccountId}
+                          className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                        >
+                          {accounts
+                            .filter((a) => a.storeId === c.storeId)
+                            .map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.name} ({a.custodian} · {a.glAccountCode})
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          type="submit"
+                          className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-800 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                        >
+                          Save
+                        </button>
+                        <Link
+                          href="/channel-settlements"
+                          className="px-1 py-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"
+                        >
+                          Cancel
+                        </Link>
+                      </form>
+                    </details>
+                  )}
                 </div>
               ))}
             </div>

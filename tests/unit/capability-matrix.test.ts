@@ -222,12 +222,15 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // remedy for a scheduled charge missed in a closed/locked/missing month, booked once into an
     // open month (Ian 2026-09-25). Not offerable to a position, same reasoning as
     // `create_missing_period` immediately above.
+    // ⭐ 98 -> 99 (T-350/DEF-477): `set_channel_payout`. STORE-scoped, admin and up only — Ian,
+    // 2026-09-28: "admin must be able to change that when set". Replaces `manage_store_settings`
+    // as the gate on `setChannelPayoutDestination`, both the first set and every later change.
     // Having to edit this number is the guard WORKING: a capability cannot be slipped
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     // ⛔ RED until the builder adds the row — today's document still has 97 rows.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(98);
+    expect(rows.length).toBe(99);
   });
 
   it('has no duplicate capability names', () => {
@@ -298,11 +301,11 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 98 capabilities', () => {
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 99 capabilities', () => {
     // ⛔ T-345 RED — today these are 97 until `book_missed_month` lands.
-    expect(CAPABILITIES.length).toBe(98);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(98);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(98);
+    expect(CAPABILITIES.length).toBe(99);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(99);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(99);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -421,6 +424,12 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         // so this line is why `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` fails to compile as
         // `Capability[]` today (see `t345-book-missed-month-capability.test.ts`).
         'book_missed_month',
+        // ⭐ T-350/DEF-477's `set_channel_payout` JOINS this set with no edit to any list —
+        // admin-yes / manager-no, same derivation as `set_cash_policy` above: a manager must not be
+        // able to raise the ceiling their own payout routing is measured against, and in an org with
+        // no admin the manager is the top of the tree and somebody must be able to point a channel's
+        // payout somewhere.
+        'set_channel_payout',
       ].sort(),
     );
   });

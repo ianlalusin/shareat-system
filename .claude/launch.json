@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 9008
+    },
+    {
+      "name": "erp-smoke",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:/Users/ianla/.claude/skills/orchestrator/tools/run-with-db.mjs", "shareat_test_setup", "npm", "run", "dev"],
+      "port": 9008
     }
   ]
 }

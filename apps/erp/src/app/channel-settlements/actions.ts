@@ -186,19 +186,30 @@ export async function voidSettlementAction(formData: FormData): Promise<void> {
  */
 export async function setPayoutDestinationAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
+  let accountName = '';
+  let hadAccountBefore = false;
 
   try {
     const moneyAccountId = str(formData, 'moneyAccountId');
     if (!moneyAccountId) throw new Error('Choose the account this channel pays into.');
-    await withOrgPrincipal(actor.orgId, (tx) =>
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
       setChannelPayoutDestination(tx, actor, {
         channelId: str(formData, 'channelId'),
         moneyAccountId,
       }),
     );
+    accountName = result.accountName;
+    hadAccountBefore = result.hadAccountBefore;
   } catch (err) {
     redirect(`/channel-settlements?error=${encodeURIComponent(errorMessage(err))}`);
   }
 
-  redirect('/channel-settlements?ok=destination');
+  // T-350 (DEF-477): the banner reads differently once the channel already had an account —
+  // `changed=1` carries the account name so the page never re-queries just to word the banner.
+  const params = new URLSearchParams({ ok: 'destination' });
+  if (hadAccountBefore) {
+    params.set('changed', '1');
+    params.set('account', accountName);
+  }
+  redirect(`/channel-settlements?${params.toString()}`);
 }

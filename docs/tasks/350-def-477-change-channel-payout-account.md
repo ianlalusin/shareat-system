@@ -1,6 +1,6 @@
 # T-350: an admin can change a channel's payout account after it is set (DEF-477)
 
-**Status:** APPROVED 2026-09-28 (orchestrator). **Model:** Sonnet, tester then builder. **Migration:** none.
+**Status:** DONE 2026-09-28 (gates PASS; §9.4 forged-session smoketest 19/19; post-commit audit pending, option (a)). APPROVED 2026-09-28 (orchestrator). **Model:** Sonnet, tester then builder. **Migration:** none.
 **Runs after** the T-343 S5.5v/u/w commit (`channel-settlements/actions.ts` is an S5.5v path).
 
 ## Why

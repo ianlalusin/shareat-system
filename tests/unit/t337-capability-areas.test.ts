@@ -55,9 +55,10 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 98 capabilities; every 
 
     // ⛔ T-345 RED — today CAPABILITY_AREA still has 97 keys, so these are 97/96/98 until the
     // builder adds `book_missed_month`.
-    expect(Object.keys(_control).length, 'positive control: unmutated form has all 98 keys').toBe(98);
-    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(97);
-    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(99);
+    // ⭐ 98 -> 99 (T-350/DEF-477): `set_channel_payout` joins CAPABILITY_AREA.
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 99 keys').toBe(99);
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(98);
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(100);
   });
 });
 
@@ -112,6 +113,10 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
   admin: [
     'manage_users', 'manage_stores', 'grant_capability', 'manage_store_settings', 'set_cash_policy',
     'manage_price_lists',
+    // ⭐ T-350/DEF-477: `set_channel_payout` — same area as `set_cash_policy` directly above
+    // (packages/auth/src/capabilities.ts:721, matching :720), same reasoning: admin-only routing
+    // of an existing resource, not a new one.
+    'set_channel_payout',
   ],
   franchise: ['cross_org_access', 'view_franchise_sales'],
 };
@@ -125,8 +130,9 @@ describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', ()
     expect(sortedInverted).toEqual(sortedOracle);
 
     // ⛔ T-345 RED — CAPABILITY_AREA still totals 97 until the builder adds `book_missed_month`.
+    // ⭐ 98 -> 99 (T-350/DEF-477): `set_channel_payout`.
     const total = Object.values(ORACLE).reduce((sum, caps) => sum + caps.length, 0);
-    expect(total).toBe(98);
+    expect(total).toBe(99);
   });
 
   it('NEGATIVE: the oracle is itself a partition — no capability id appears in two areas', () => {

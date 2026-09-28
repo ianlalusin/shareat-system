@@ -230,6 +230,10 @@ export type Capability =
   | 'manage_store_settings'
   /** ⭐ Separate from `manage_store_settings` ON PURPOSE — see the role grid below. */
   | 'set_cash_policy'
+  /** T-350 (DEF-477). Admin-only — Ian, 2026-09-28: a channel's payout account can be changed
+   *  after it is set, but not by a manager. Separate from `manage_store_settings`, same as
+   *  `set_cash_policy` above. */
+  | 'set_channel_payout'
   | 'manage_price_lists'
   /** T-171 (DEF-129, 2026-09-03). What THIS commissary offers and at what manual cost, plus the
    *  link that says which branch may order here. Store-scoped to the COMMISSARY. Manager+. */
@@ -358,6 +362,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'provision_clock_terminal',
   'manage_store_settings',
   'set_cash_policy',
+  'set_channel_payout',
   'manage_price_lists',
   'manage_commissary_offerings',
   'manage_commissary_map',
@@ -528,6 +533,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
 
   manage_store_settings: 'store',
   set_cash_policy: 'store',
+  set_channel_payout: 'store',
   manage_price_lists: 'org',
   // T-171. STORE-scoped, unlike price lists: an offering belongs to one commissary, a map to one
   // branch, and invariant 9 says a caller may only edit the side they hold.
@@ -712,6 +718,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   grant_capability: 'admin',
   manage_store_settings: 'admin',
   set_cash_policy: 'admin',
+  set_channel_payout: 'admin',
   manage_price_lists: 'admin',
 
   cross_org_access: 'franchise',
@@ -919,6 +926,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
    * CAPABILITY-MATRIX row). This one is not an operating setting; it is a risk limit.
    */
   set_cash_policy: { super_admin: true, admin: true, manager: false, staff: false },
+  /** T-350 (DEF-477). Ian, 2026-09-28: admin only. */
+  set_channel_payout: { super_admin: true, admin: true, manager: false, staff: false },
   manage_price_lists: { super_admin: true, admin: true, manager: false, staff: false },
   // T-171. Manager+, same bar as manage_items: a store manager curates what their commissary
   // offers and what their branch receives it as. ⚠️ NOT admin-only like price lists — a map row
@@ -1129,6 +1138,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   provision_clock_terminal: 'set up a clock-in tablet',
   manage_store_settings: 'manage store settings',
   set_cash_policy: "set a store's cash policy",
+  set_channel_payout: "change where a sales channel's payouts bank",
   manage_price_lists: 'manage price lists',
   manage_commissary_offerings: 'choose what the commissary offers',
   manage_commissary_map: 'match commissary items to stock items',
