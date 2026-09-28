@@ -2311,6 +2311,25 @@ S5.5v already owns the neighbouring files; all disjoint from S5.5t/S5.5u.
    figures refusal, thrown).
 
 
+
+**S5.5v Amendment A2 — from the S5.5v pre-commit diff read, 2026-09-28, binding.**
+1. **Parse after authorize (invariant).** `channel-settlements/actions.ts:80-81,127-128` parse gross/net with `figure()`
+   BEFORE the domain's `authorize()` (`index.ts:258`: "authorize() is the FIRST thing either does"). Move the blank/parse
+   refusals for gross and net INTO the domain, after `authorize`, beside `assertSettlementFigures`; the action passes the
+   raw strings. Leg AZ1: an actor without `record_ar_collection` submitting a blank gross gets the authorization refusal,
+   not the figure sentence (both preview and record).
+2. **No NaN on screen.** `previewChannelSettlement` runs `computeSettlement` only when there are no figure refusals;
+   otherwise it returns zero figures plus the refusals. Leg PV2: preview with gross `'1,5'` renders no "NaN" anywhere.
+3. **Every figure refusal, not the first.** `assertSettlementFigures` collects all field refusals (a collect variant for
+   preview; the post path may still throw the first). Leg PV3: two bad deductions → both sentences in one preview.
+4. **Fail closed on the fallback.** `index.ts:330`'s `String(err)` fallback becomes a fixed human sentence ("One of the
+   figures could not be read.") and the raw goes to the log; never developer text in a blocker.
+5. **Interest rate, no narrowing.** `loans/index.ts`'s rate check accepts `.5` and `1.` and tests the VALUE (≤ 9999.9999),
+   not the digit run: pattern `/^(?=.*\d)\d*(?:\.\d{0,4})?$/` for shape, then the value ceiling. Legs L6 `'.5'` saves 0.5,
+   L7 `'00012.5'` saves 12.5; L2 `'12345'` still refuses.
+6. **Gate batching (orchestrator).** The ratchet and money-positivity-guard files carry S5.5w's cutover edits, so
+   S5.5v, S5.5u and S5.5w are gated and committed together.
+
 **S5.5w Amendment A1 — from the S5.5t post-commit /code-review (`7896e2a`, run by Ian in the worktree), 2026-09-28,
 binding.** Folded here because S5.5w already owns `items/index.ts` and `cutover/index.ts`.
 1. **Cost overflow (CONFIRMED).** `parseFourDecimalCost` (`packages/domain/src/commissary/catalogue.ts:40-56`) caps
@@ -2324,6 +2343,9 @@ binding.** Folded here because S5.5w already owns `items/index.ts` and `cutover/
    the new format/magnitude checks, so a same-unit line with a malformed factor gets the format sentence. Move the
    same-unit check BEFORE the format/magnitude checks. Tester leg SU1: `purchaseUnit` = base unit,
    `conversionFactor='1.2345678'` → the same-unit sentence (red: the six-decimal sentence).
+1b. **No narrowing in `parseFourDecimalCost` either** (`MANUAL_COST_PATTERN`, `catalogue.ts:40`): accept `.5` and `1.`
+   (shape `/^(?=.*\d)\d*(?:\.\d{0,4})?$/`); the inline copy in `upsertOffering` stays (DEF-383). Leg C2: cutover
+   `unitCost='.5'` saves 0.5000.
 3. **Trim on persist (PLAUSIBLE, cheap).** `items/index.ts:192` validates the trimmed factor but stores the raw; store
    the trimmed string. Leg T1: `' 2 '` saves `2.000000`.
 4. **Dismissed (orchestrator):** fraction-before-magnitude order (ruled in S5.5t A2 — format first); the fourth inline
