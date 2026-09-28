@@ -19,8 +19,13 @@
  * re-exports every domain module and several import `@shareat/db`, so `from '@shareat/domain'`
  * here pulls the Postgres driver into the browser bundle. `next build` refuses it — which is how
  * this was caught rather than shipped, and why `judgeDraw` now lives in its own DB-free file.
+ *
+ * ⭐ **T-353 / DEF-484 — issues are computed live, but SHOWN only once a field is touched or a
+ * submit attempt fires.** `validateMoneyLines` still judges every line on every render, exactly as
+ * before; the server re-runs the same function regardless. What changed is presentation timing
+ * (`money-line-visibility.ts`'s `visibleIssues`), never the rule.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   METHOD_LABELS,
   availableOf,
@@ -40,6 +45,9 @@ import {
   type SourceOption,
 } from '@shareat/domain/money-lines';
 import { money } from '@shareat/core/money';
+import { visibleIssues, type LineField } from './money-line-visibility';
+
+const ALL_LINE_FIELDS: readonly LineField[] = ['method', 'amount', 'moneyAccountId', 'cashRequestId', 'staffId'];
 
 const INPUT =
   'w-full rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950';
@@ -78,9 +86,34 @@ export function MoneyLines({
   const [lines, setLines] = useState<MoneyLine[]>(
     initialLines?.length ? initialLines : [blankLine()],
   );
+  // T-353 (R2.3) — server-supplied lines are judged at once, same as v1's edit-mode `trigger()`:
+  // every field of an initial line starts touched. A fresh blank line starts untouched.
+  const [touched, setTouched] = useState<ReadonlySet<LineField>[]>(
+    initialLines?.length ? initialLines.map(() => new Set<LineField>(ALL_LINE_FIELDS)) : [new Set<LineField>()],
+  );
+  const [attempted, setAttempted] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const patch = (i: number, change: Partial<MoneyLine>) =>
     setLines((prev) => prev.map((l, n) => (n === i ? { ...l, ...change } : l)));
+  const markTouched = (i: number, fields: readonly LineField[]) =>
+    setTouched((prev) => prev.map((set, n) => (n === i ? new Set([...set, ...fields]) : set)));
+
+  // T-353 (R4) — the submit attempt is detected on the ENCLOSING form, never cancelled: `invalid`
+  // fires (capture phase; it does not bubble) on each control the browser's own `required`/etc.
+  // blocks, which is why `submit` alone is not enough — on a fresh `/expenses/new`, Category and
+  // Particulars are native-required, so the browser blocks the submit and `submit` never fires.
+  useEffect(() => {
+    const form = rootRef.current?.closest('form');
+    if (!form) return;
+    const onAttempt = () => setAttempted(true);
+    form.addEventListener('submit', onAttempt);
+    form.addEventListener('invalid', onAttempt, true);
+    return () => {
+      form.removeEventListener('submit', onAttempt);
+      form.removeEventListener('invalid', onAttempt, true);
+    };
+  }, []);
 
   const methods = methodsForDirection(direction);
   const byKey = useMemo(() => new Map(sources.map((s) => [keyOfSource(s), s] as const)), [sources]);
@@ -105,9 +138,13 @@ export function MoneyLines({
     [direction, lines, sources, supplierId, supplierCreditTermsDays, supplierName, mustTotal],
   );
 
+  // T-353 / DEF-484 — the DOMAIN decides what is wrong (`issues`, above); this decides only WHEN
+  // it is shown: a field that has been touched, or a submit attempt, or an initial (server-loaded)
+  // line (already all-touched in `touched`'s initial state).
+  const shown = useMemo(() => visibleIssues(issues, touched, attempted), [issues, touched, attempted]);
   const issueFor = (i: number, field: MoneyLine extends never ? never : string) =>
-    issues.find((s) => s.line === i && s.field === field)?.message;
-  const documentIssues = issues.filter((s) => s.line === null);
+    shown.find((s) => s.line === i && s.field === field)?.message;
+  const documentIssues = shown.filter((s) => s.line === null);
 
   /**
    * ⭐ The overdraft verdict is `judgeDraw()` ITSELF — the same pure function `approveExpense`
@@ -147,7 +184,7 @@ export function MoneyLines({
   const needsSource = (m: MoneyLineMethod) => m === 'cash' || m === 'online';
 
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={rootRef} className="flex flex-col gap-3">
       <input type="hidden" name={`${name}Count`} value={lines.length} />
 
       {lines.map((line, i) => {
@@ -186,7 +223,11 @@ export function MoneyLines({
                       cashRequestId: needsSource(method) ? line.cashRequestId : null,
                       staffId: method === 'reimbursable' ? line.staffId : null,
                     });
+                    // T-353 — a pick is a finished answer; a select marks touched on change too,
+                    // not only on blur.
+                    markTouched(i, ['method']);
                   }}
+                  onBlur={() => markTouched(i, ['method'])}
                 >
                   {methods.map((m) => {
                     // ⭐ Credit is OFFERED and disabled, never hidden — a person needs to see that
@@ -221,7 +262,9 @@ export function MoneyLines({
                         // ⭐ Picking a float IS picking its request. The user never sees an id.
                         cashRequestId: source?.kind === 'float' ? source.cashRequestId : null,
                       });
+                      markTouched(i, ['moneyAccountId', 'cashRequestId']);
                     }}
+                    onBlur={() => markTouched(i, ['moneyAccountId', 'cashRequestId'])}
                   >
                     <option value="">— choose —</option>
                     {groupSourcesByCoverage(sources, needed, new Map(
@@ -255,7 +298,11 @@ export function MoneyLines({
                     name={`${name}Staff_${i}`}
                     value={line.staffId ?? ''}
                     className={INPUT}
-                    onChange={(e) => patch(i, { staffId: e.target.value || null })}
+                    onChange={(e) => {
+                      patch(i, { staffId: e.target.value || null });
+                      markTouched(i, ['staffId']);
+                    }}
+                    onBlur={() => markTouched(i, ['staffId'])}
                   >
                     <option value="">— choose —</option>
                     {staff.map((s) => (
@@ -281,6 +328,9 @@ export function MoneyLines({
                   placeholder="0.00"
                   className={`${INPUT} text-right tabular-nums`}
                   onChange={(e) => patch(i, { amount: e.target.value })}
+                  // T-353 — NOT on change: a half-typed "1." must show nothing until the box is
+                  // left, or every keystroke of a valid amount would flash "not a valid amount".
+                  onBlur={() => markTouched(i, ['amount'])}
                 />
               </label>
             </div>
@@ -318,7 +368,10 @@ export function MoneyLines({
               <button
                 type="button"
                 className="mt-3 inline-flex items-center rounded px-2 py-1.5 text-xs text-neutral-500 underline hover:bg-neutral-100 hover:text-red-700 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-red-400"
-                onClick={() => setLines((prev) => prev.filter((_, n) => n !== i))}
+                onClick={() => {
+                  setLines((prev) => prev.filter((_, n) => n !== i));
+                  setTouched((prev) => prev.filter((_, n) => n !== i));
+                }}
               >
                 Remove this line
               </button>
@@ -331,7 +384,10 @@ export function MoneyLines({
         <button
           type="button"
           className="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          onClick={() => setLines((prev) => [...prev, blankLine()])}
+          onClick={() => {
+            setLines((prev) => [...prev, blankLine()]);
+            setTouched((prev) => [...prev, new Set<LineField>()]);
+          }}
         >
           Add another {direction === 'out' ? 'payment' : 'receipt'}
         </button>

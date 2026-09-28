@@ -1,6 +1,6 @@
 # T-353: the payment lines show no errors before input (DEF-484)
 
-**Status:** APPROVED 2026-09-28 (orchestrator; presentation-only, no money/auth invariant) (Opus spec). **Model:** Sonnet, tester then builder.
+**Status:** DONE 2026-09-28 (gates PASS; §9.4 14/14 at 375 + 1366, forged session). APPROVED 2026-09-28 (orchestrator; presentation-only, no money/auth invariant) (Opus spec). **Model:** Sonnet, tester then builder.
 **Migration:** none. One domain sentence, one pure helper, and the timing of when a client component shows
 what the domain already says.
 **Ian, 2026-09-28:** "yes fix def 484" (before launch).

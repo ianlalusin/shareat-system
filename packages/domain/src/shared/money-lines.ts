@@ -331,10 +331,14 @@ export function validateMoneyLines(input: ValidateMoneyLinesInput): MoneyLineIss
 
     const amount = tryMoney(line.amount);
     if (!amount) {
+      // T-353 / DEF-484 — a BLANK amount asks for a value; only a malformed one is quoted back.
+      // `String(… ?? '')` covers a hand-posted non-string reaching this far. A string test, not a
+      // `Number(…) <op> 0` comparison — no new site for the money-positivity census.
+      const blank = String(line.amount ?? '').trim() === '';
       issues.push({
         line: i,
         field: 'amount',
-        message: `"${line.amount}" is not a valid amount. Use at most two decimal places.`,
+        message: blank ? 'Enter an amount.' : `"${line.amount}" is not a valid amount. Use at most two decimal places.`,
       });
     } else if (compare(amount, ZERO) <= 0) {
       issues.push({ line: i, field: 'amount', message: 'An amount has to be above zero.' });
