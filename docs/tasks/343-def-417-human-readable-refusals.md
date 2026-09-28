@@ -2069,6 +2069,17 @@ project, reported to Ian. Blank legs for the three minutes boxes become REFUSAL 
   - K1: after a refusal the form re-renders with the typed Reason/Refunded/account as default values.
 - Done when: reds red→green, typecheck clean, screen check of the refusal keeping typed values.
 
+**S5.5u Amendment A1 — from the S5.5u pre-commit read, 2026-09-28, binding.**
+1. **The write-off date must be kept too.** `prepaid/[id]/page.tsx:258` restores reason/refund/account after a refusal
+   but resets `writtenOffOn` to today, so a back-dated write-off re-submitted after a refusal posts in the wrong period
+   with no cue. Carry `writtenOffOn` in the same redirect and render `sp.writtenOffOn ?? today`. Leg K2: a refused
+   write-off dated 2026-08-15 re-renders with 2026-08-15 (red: today).
+2. **Leading-dot exponent.** `trade/index.ts`'s huge-exponent arm accepts a mantissa with no leading digit:
+   `/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)e[+-]?\d+$/i`. Leg Q4: `'.5e300'` → the "too large" sentence.
+3. **Typed amounts and reason in the URL — accepted (orchestrator), logged as DEF-476.** The success banner already puts
+   amounts in the URL on every write-off; S5.5u adds no new class. A one-shot server-side flash for both is DEF-476's fix.
+
+
 ### S5.5v: the rest of the number boxes (DEF-472 census)
 **Status:** APPROVED 2026-09-27 (orchestrator, after independent Opus spec audit; Ian's Q1/Q2 folded). **Model:** Sonnet, tester then builder. **Migration:** none.
 **Split:** the census is 31 `<input type="number">` elements (51 fields, since two `settings/attendance` helpers render
