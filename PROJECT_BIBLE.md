@@ -65,35 +65,35 @@
 - `1203–1237` 10. Phase plan
 - `1238–1254` 11. Migration & ETL rules
 - `1255–1319` 12. Inherited landmines — do not repeat these
-- `1320–1567` 13. Decision log
-- `1568–1587` 14. Amendment protocol
-- `1588–1592` 15. Engineering standards — the industry practices this project follows
-  - `1593–1598` 15.1 Build order: walking skeleton first
-  - `1599–1610` 15.2 Golden-master testing — the most important practice here
-  - `1611–1619` 15.3 Strangler Fig, not big-bang cutover
-  - `1620–1624` 15.4 No dual-write
-  - `1625–1633` 15.5 Expand/contract migrations
-  - `1634–1642` 15.6 Observability from day zero, not later
-  - `1643–1647` 15.7 CI gates
-  - `1648–1652` 15.8 Backups and a tested restore
-  - `1653–1657` 15.9 Twelve-Factor config
-  - `1658–1665` 15.10 Append-only ledgers — but not event sourcing
-  - `1666–1670` 15.11 Defence in depth
-  - `1671–1699` 15.12 Skills are lenses, not assurance
-  - `1700–1706` 15.13 Reconciliation is a permanent feature
-- `1707–1711` 16. The accounting spine
-  - `1712–1743` 16.0 What we are actually fixing — the diagnosis
-  - `1744–1787` 16.1 The ten invariants — non-negotiable
-  - `1788–1802` 16.2 The oracle: how "correct" is tested
-  - `1803–1824` 16.3 The model — header + lines, not legs
-  - `1825–1844` 16.4 Deliberately simpler than ERPNext
-  - `1845–1911` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1912–1936` 16.6 What v1 already gets right — preserve the intent
-  - `1937–1958` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1959–1973` 16.8 What v1's accounting already gets right
-  - `1974–2017` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2018–2068` 16.10 Posting patterns — one canonical pattern per business event
-  - `2069–2100` 16.11 Inventory's accounting integration
+- `1320–1568` 13. Decision log
+- `1569–1588` 14. Amendment protocol
+- `1589–1593` 15. Engineering standards — the industry practices this project follows
+  - `1594–1599` 15.1 Build order: walking skeleton first
+  - `1600–1611` 15.2 Golden-master testing — the most important practice here
+  - `1612–1620` 15.3 Strangler Fig, not big-bang cutover
+  - `1621–1625` 15.4 No dual-write
+  - `1626–1634` 15.5 Expand/contract migrations
+  - `1635–1643` 15.6 Observability from day zero, not later
+  - `1644–1648` 15.7 CI gates
+  - `1649–1653` 15.8 Backups and a tested restore
+  - `1654–1658` 15.9 Twelve-Factor config
+  - `1659–1666` 15.10 Append-only ledgers — but not event sourcing
+  - `1667–1671` 15.11 Defence in depth
+  - `1672–1700` 15.12 Skills are lenses, not assurance
+  - `1701–1707` 15.13 Reconciliation is a permanent feature
+- `1708–1712` 16. The accounting spine
+  - `1713–1744` 16.0 What we are actually fixing — the diagnosis
+  - `1745–1788` 16.1 The ten invariants — non-negotiable
+  - `1789–1803` 16.2 The oracle: how "correct" is tested
+  - `1804–1825` 16.3 The model — header + lines, not legs
+  - `1826–1845` 16.4 Deliberately simpler than ERPNext
+  - `1846–1912` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1913–1937` 16.6 What v1 already gets right — preserve the intent
+  - `1938–1959` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1960–1974` 16.8 What v1's accounting already gets right
+  - `1975–2018` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2019–2069` 16.10 Posting patterns — one canonical pattern per business event
+  - `2070–2101` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1563,6 +1563,7 @@ just a patch.**
 | 238 | 2026-09-28 | ⭐ **A CHANNEL'S PAYOUT-ACCOUNT CHANGE IS RECORDED IN THE AUDIT LOG.** Ian, 2026-09-28: *"yes, record payout account changes in the audit log."* Who, when, old → new account, per change; a same-account no-op records nothing. T-350 S3 (`docs/tasks/350-def-477-change-channel-payout-account.md`). Built in T-350 S3 (`fc9a1d4`, migration 0167): `audit_log` became org-scoped and append-only, and this is its first writer. | T-350 made the account changeable, so it now changes repeatedly; a single UPDATE left no trace of what it was before (auditor finding F9 on `0ffb0fe`). | Yes — adds a record, changes no behaviour. |
 | 239 | 2026-09-28 | ⭐ **WITH NO ADMINISTRATOR, A MANAGER MAY SET AND CHANGE A CHANNEL'S PAYOUT ACCOUNT.** Ian, 2026-09-28: *"with no admin manager can update it."* `set_channel_payout` stays in `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` by derivation (admin ✅, manager ✗), exactly as `set_cash_policy` does (row 196's class). Row 236's "admin only" holds wherever an organisation has an admin. | Someone must be able to repoint a payout account in an organisation that has no admin yet. | Yes — the fallback already lapses when an admin arrives (row 188). |
 | 240 | 2026-09-28 | ⭐ **LONG PAGE DESCRIPTIONS GET AN INLINE CHEVRON (T1); WIDE-SCREEN FORMS USE TABLE DENSITY WITH CONTENT UNCHANGED (W2). DEF-484 IS FIXED BEFORE LAUNCH.** Ian, 2026-09-28, from the rendered T-348 S0 sheets: *"t1 w2, yes fix def 484."* T-348 Amendment A1; DEF-484 (a fresh New-expense form shows errors before input) gets its own task. | Picked on screen, not in prose (render before deciding). | Yes — presentation only. |
+| 241 | 2026-09-28 | ⭐ **EVERY IMMUTABILITY / APPEND-ONLY TRIGGER IS FIXED BEFORE LAUNCH SO REPLICA MODE CANNOT SWITCH IT OFF (DEF-487); 0167 IS APPLIED TO DEV.** Ian, 2026-09-28: *"yes fix def 487 before launch, apply 0167 to dev."* T-354 specs it (a migration over the ledger's triggers). `shareat_dev` migrated to 0167 the same evening (`audit_log` had 0 rows). | The auditor showed a superuser DELETE succeeding on `audit_log` inside `session_replication_role = 'replica'`; all 12 immutability triggers, the journal's included, are origin-only. | Yes — a later migration can revert, but the protection is the point. |
 
 
 ## 14. Amendment protocol

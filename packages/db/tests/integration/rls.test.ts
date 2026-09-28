@@ -456,6 +456,65 @@ describe('T-221 — every person-keyed access table uses the via_person form', (
 });
 
 /**
+ * T-354 / DEF-487 (R7) — every table the RLS registry marks with `actorPersonColumn` must prove,
+ * in its INSERT (or ALL) policy's WITH CHECK, that the named column's person belongs to the
+ * current org (the DEF-183 pattern, applied to an ACTOR column rather than a subject column).
+ *
+ * `actorPersonColumn` does not exist on `RlsEntry` yet (BUILDER adds it in T-354) — read it
+ * dynamically so this file still typechecks before that lands; X1 today reads an EMPTY list, not
+ * a type error (Orchestrator amendment M3).
+ */
+describe('T-354 — every actor-marked table\'s INSERT policy proves the actor\'s org', () => {
+  function actorMarkedTables(): { table: string; column: string }[] {
+    const out: { table: string; column: string }[] = [];
+    for (const [table, entry] of Object.entries(RLS_REGISTRY)) {
+      const column = (entry as { actorPersonColumn?: string }).actorPersonColumn;
+      if (typeof column === 'string' && column.length > 0) out.push({ table, column });
+    }
+    return out;
+  }
+
+  it('X1 — the marker floor: at least one entry, including audit_log — was red today: 0 entries, the field does not exist on RlsEntry yet', () => {
+    const tables = actorMarkedTables();
+    expect(tables.length, 'no table carries actorPersonColumn yet').toBeGreaterThanOrEqual(1);
+    expect(tables.map((t) => t.table)).toEqual(expect.arrayContaining(['audit_log']));
+  });
+
+  it('X2 — each marked table\'s INSERT/ALL policy WITH CHECK proves the actor column\'s person is in app_current_org() — was red today: as X1, the enumeration is empty so this assertion is vacuous', async () => {
+    const tables = actorMarkedTables();
+    // Guards against the enumeration silently going empty again and this test passing vacuously.
+    expect(tables.length, 'actorMarkedTables() must be non-empty for this assertion to mean anything').toBeGreaterThanOrEqual(1);
+
+    const names = tables.map((t) => t.table);
+    const policies = await sql<{ tablename: string; policyname: string; cmd: string; wc: string }[]>`
+      select tablename, policyname, cmd, coalesce(with_check::text, '') as wc
+      from pg_policies where schemaname = 'public' and tablename = any(${sql.array(names)})
+    `;
+    expect(policies.length, 'no policies found for the actor-marked tables — wrong database?').toBeGreaterThan(0);
+
+    const offenders: string[] = [];
+    for (const { table, column } of tables) {
+      const candidates = policies.filter((p) => p.tablename === table && (p.cmd === 'INSERT' || p.cmd === '*'));
+      if (candidates.length === 0) {
+        offenders.push(`${table} — no INSERT or ALL policy at all`);
+        continue;
+      }
+      const provesActorOrg = (expr: string): boolean =>
+        /FROM persons/i.test(expr) && expr.includes(column) && /p\.org_id = app_current_org\(\)/.test(expr);
+      const ok = candidates.some((p) => provesActorOrg(p.wc));
+      if (!ok) offenders.push(`${table} — INSERT/ALL WITH CHECK does not prove ${column}'s person is in app_current_org()`);
+    }
+
+    expect(
+      offenders,
+      offenders.length === 0
+        ? ''
+        : `These actor-marked tables do not prove the actor's org in WITH CHECK (DEF-487 R7):\n  ${offenders.join('\n  ')}`,
+    ).toEqual([]);
+  });
+});
+
+/**
  * T-231 slice 2 / DEF-211 — the ONE Drizzle-shaped principal helper.
  *
  * ⭐ Imported by RELATIVE PATH on purpose: the barrel line in `packages/db/src/index.ts` is the

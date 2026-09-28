@@ -104,16 +104,21 @@ describe('L3 (M1) — org A inserting a row naming org B\'s org_id: 42501 (WITH 
   });
 });
 
-describe('L4 — the append-only trigger: app role UPDATE/DELETE no-op, owner UPDATE/DELETE refused', () => {
-  it('app role affects 0 rows and leaves it unchanged; owner gets restrict_violation (23001) — was red today: the seed itself throws 42703 (no org_id column); once seeded, the trigger is also missing (23001 never fires)', async () => {
+describe('L4 (T-354) — the app-role privilege revoke: app role UPDATE/DELETE rejected 42501; owner UPDATE/DELETE refused by the trigger', () => {
+  it('app role gets insufficient_privilege (42501), row unchanged; owner gets restrict_violation (23001) — was red today: the app role had no UPDATE/DELETE policy, so it silently affected 0 rows instead of being rejected outright', async () => {
     const a = await orgAndPerson('l4');
     const id = await seedRow(a.orgId, a.personId);
     const before = await sql<{ action: string }[]>`select action from audit_log where id = ${id}`;
 
-    const appUpdate = await asOrg(a.orgId, (tx) => tx`update audit_log set action = 'tampered' where id = ${id}`);
-    expect(appUpdate.count, 'the app role has no UPDATE policy at all — 0 rows affected').toBe(0);
+    const appUpdateErr = await caught(asOrg(a.orgId, (tx) => tx`update audit_log set action = 'tampered' where id = ${id}`));
+    expect(appUpdateErr, 'wanted: insufficient_privilege — was red: the app role had no UPDATE policy, so the statement just ran and affected 0 rows').toBeInstanceOf(Error);
+    expect(appUpdateErr?.code).toBe('42501');
     const after = await sql<{ action: string }[]>`select action from audit_log where id = ${id}`;
     expect(after[0]?.action).toBe(before[0]?.action);
+
+    const appDeleteErr = await caught(asOrg(a.orgId, (tx) => tx`delete from audit_log where id = ${id}`));
+    expect(appDeleteErr, 'wanted: insufficient_privilege — was red: the app role had no DELETE policy, so the statement just ran and affected 0 rows').toBeInstanceOf(Error);
+    expect(appDeleteErr?.code).toBe('42501');
 
     const ownerErr = await caught(sql`update audit_log set action = 'tampered' where id = ${id}`);
     expect(ownerErr, 'wanted: restrict_violation — was red: no trigger, the owner update just succeeds').toBeInstanceOf(Error);

@@ -50,6 +50,23 @@ export interface RlsEntry {
    * is what extends the guard to a person-keyed access table defined elsewhere.
    */
   readonly personKeyedAccess?: true;
+  /**
+   * T-354 (DEF-487, R7) — this table's INSERT (or `FOR ALL`) policy's `WITH CHECK` must prove
+   * the person NAMED IN THIS COLUMN belongs to `app_current_org()` (the same DEF-183 pattern as
+   * `personKeyedAccess`, applied to a table that is not itself keyed by a person but carries an
+   * actor reference anyway — `audit_log.actor_person_id`, which names who acted, not who the row
+   * is "about"):
+   *
+   * ```sql
+   * <actor_person_id> IS NULL OR EXISTS (SELECT 1 FROM persons p WHERE p.id = <actor_person_id> AND p.org_id = app_current_org())
+   * ```
+   *
+   * A registry marker, not a column-name heuristic: 141 FK columns reference `persons` under
+   * names other than `person_id` (measured), and auditing all of them is a separate task (R7). A
+   * table opts in here when it has one. Enforced by `rls.test.ts`'s sibling block to the T-221
+   * `personKeyedAccess` guard, which reads the LIVE policy out of `pg_policies`.
+   */
+  readonly actorPersonColumn?: string;
 }
 
 export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
@@ -284,12 +301,15 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
 
   audit_log: {
     scope: 'org_column',
+    actorPersonColumn: 'actor_person_id',
     reason:
       'T-350 S3 / DEF-169 (migration 0167) added org_id, this table\'s first writer. Two policies, ' +
       'SELECT and INSERT — never FOR ALL: there is no UPDATE/DELETE policy, so under FORCE RLS the ' +
       'app role can never touch a written row, and a hand-added append-only trigger (0167) refuses ' +
       'UPDATE/DELETE unconditionally as a second, independent lock. The INSERT policy also checks ' +
-      'actor_person_id belongs to the org (DEF-183 pattern, S3 amendment M6).',
+      'actor_person_id belongs to the org (DEF-183 pattern, S3 amendment M6). UPDATE and DELETE are ' +
+      'also REVOKEd from the app role (0168, T-354), so an attempt is a loud 42501, not a silent ' +
+      '0-row success.',
   },
 
   // T-122 — expenses: non-inventory spend (docs/tasks/122-expenses.md, bible rows 118-120).

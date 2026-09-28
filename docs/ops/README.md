@@ -209,6 +209,27 @@ nothing behind them the moment a second organisation exists.
   watching. `docs/discovery/29` §5.3 has been re-derived by T-300; both of its unknowns are now
   measured.
 
+## Restores and replica mode (T-354)
+
+DEF-487: 18 history-guard triggers (append-only / posted-immutable / frozen / commit-once /
+terminal tables — `packages/db/src/triggers/registry.ts` names all of them) are `ENABLE ALWAYS`
+since migration 0168, so they keep firing under `session_replication_role = 'replica'` — the mode
+logical-replication apply workers use, and the classic hand-rolled-bulk-load trick ("turn off
+triggers"). Three things to know before touching this database directly:
+
+- **A full restore (`pg_dump` / `pg_restore`, or a managed physical backup) keeps `ENABLE ALWAYS`.**
+  Triggers are created in the post-data section, after the rows load, and `pg_dump` records each
+  trigger's firing mode — a full restore reproduces the same protection, nothing to redo.
+- **A data-only restore needs `pg_restore --disable-triggers`, run as the table owner, and that
+  deliberately bypasses every history guard — ALWAYS ones included.** It is the correct tool for
+  loading rows into a database that has none yet (no risk of overwriting real history because there
+  is none to overwrite). Restore this way **only into an empty database.** Restoring data-only into
+  a database that already holds live rows disables the guards for the whole operation.
+- **Never run `SET session_replication_role = replica` against a live database.** It is exactly the
+  bypass DEF-487 closed for the 18 history guards, and it silently reopens it for anything still
+  running in that session. There is no legitimate reason to set it here — this codebase runs no
+  logical-replication subscriber and no bulk loader that needs it (grepped, whole tree: zero hits).
+
 ## ✅ Status as of 2026-09-06 (evening) — the deploy pipeline WORKS, four timers are ARMED, and production held ZERO organizations ON THAT DATE
 
 > ⛔ **SUPERSEDED AS A STATEMENT OF TODAY, AND ACCURATE AS A STATEMENT OF 2026-09-06. Do not

@@ -125,6 +125,9 @@ const CEILINGS: Record<string, number> = {
   // that only ever runs by hand against a single pre-cutover database, never a user-facing path —
   // the header's own rule: T-347's tester adds this key at T-347's commit, measured at ITS OWN HEAD.
   'packages/db/src/cutover': 2,
+  // T-354 (DEF-487), own commit — `packages/db/src/triggers/registry.ts` is a pure classification
+  // table (TRIGGER_REGISTRY) with no raw throws at all.
+  'packages/db/src/triggers': 0,
   // /code-review, S5.0 (2026-09-26): the two covered roots' own LOOSE contents — everything the
   // per-subdirectory entries above do not reach. Without these, a raw throw added directly at
   // `packages/domain/src/index.ts` escaped both the ceiling and the "new directory" fail-closed
