@@ -15,6 +15,15 @@ only for channels with NO account (`unwired`, `:53`). Once set, the channel card
 Changing the account is safe for history: a posted settlement's journal lines carry the account they used; the channel
 setting is read only when a new settlement posts.
 
+## Ian's ruling (2026-09-28): ADMIN ONLY
+Both the first set and every later change need a new store-scoped capability **`set_channel_payout`** (super ✅, admin ✅,
+manager ✗, staff ✗ — pre-wired in `docs/decisions/CAPABILITY-MATRIX.md` beside `set_cash_policy`). It replaces
+`manage_store_settings` in `setChannelPayoutDestination`. Declare it exactly as `set_cash_policy` is declared in
+`packages/auth/src/capabilities.ts` (the union `:232`, the list `:360`, scope `:530`, tier `:714`, the role table
+`:921`, the human title `:1131` — "change where a sales channel's payouts bank"). Wherever this spec says
+`manage_store_settings` below, read `set_channel_payout`. A manager now sees the account but neither the unwired panel's
+form nor Change (the unwired warning still shows, with "an admin must set it").
+
 ## Contract
 1. **Screen — `apps/erp/src/app/channel-settlements/page.tsx`.** Every channel card (`:142-160`) for a WIRED channel
    shows its payout account and, when the viewer holds `manage_store_settings` at that channel's store, a **Change**
@@ -34,7 +43,7 @@ setting is read only when a new settlement posts.
 4. **Banner.** On success after a change: `?ok=destination` reads "Payout account changed. New settlements bank into
    <account>." when the channel already had one; keep today's text for a first set. (Pass `changed=1` in the redirect.)
 
-- **BUILDER paths:** `apps/erp/src/app/channel-settlements/page.tsx`, `apps/erp/src/app/channel-settlements/actions.ts`,
+- **BUILDER paths:** `packages/auth/src/capabilities.ts`, `apps/erp/src/app/channel-settlements/page.tsx`, `apps/erp/src/app/channel-settlements/actions.ts`,
   `packages/domain/src/channel-settlements/index.ts`.
 - **TESTER paths:** `apps/erp/tests/t350-channel-payout-change-render.test.ts` (new),
   `apps/erp/tests/integration/t350-channel-payout-change.test.ts` (new); ruled edit: `tests/unit/t343-throw-ratchet.test.ts`
@@ -50,6 +59,8 @@ setting is read only when a new settlement posts.
   - R1 (render): a wired channel card for a manager shows "Change" and a select pre-selected to the current account
     (red: no control today); R2: a viewer without the right sees no control.
 - **§9.4:** tester changes a channel's payout account in Chrome on 9008 and records a settlement afterwards.
-- **Out of scope:** restricting the right to admins only (the domain gate is `manage_store_settings`, bible row 149's
-  reasoning: routing, not creating an account). A change history screen.
+- **Extra legs (admin only):** C6 a MANAGER is refused both a first set and a change (red: allowed today); R3 a manager
+  sees no form in the unwired panel and no Change. Capability-matrix tests (grep `CAPABILITY-MATRIX` in tests) must
+  stay green with the new row — the tester adds the ✗-fires proof there if the suite requires one per capability.
+- **Out of scope:** a change history screen.
 - **Done when:** reds red→green, typecheck clean, ratchet not raised, smoketest done.
