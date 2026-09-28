@@ -444,7 +444,7 @@ sweep note asks for ("read each candidate before filing it") is now made **once,
 exemption map**, and a second assertion deletes an entry the moment its export gains a caller.
 
 ⛔ **Check 3 (every table, checked for a writer) is deliberately NOT a test.** *"Is this table
-supposed to have no writer?"* needs a per-table judgement a scan cannot make — `audit_log` with no *(2026-09-28: no longer zero — T-350 S3 made payout-account changes its first writer; see DEF-169.)*
+supposed to have no writer?"* needs a per-table judgement a scan cannot make — `audit_log` with no
 writer is DEF-169, a seeded reference table with no writer is correct. The method above stays the
 record for it.
 

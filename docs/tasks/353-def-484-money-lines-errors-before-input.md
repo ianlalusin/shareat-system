@@ -251,3 +251,21 @@ Smoketest in Chrome on 9008, per `docs/SMOKETEST.md`, on `/expenses/new`. Take a
 ## Questions for Ian
 None. Timing and wording are HOW (RULES §4). The one behaviour choice, not cancelling the submit, keeps
 today's server refusals exactly, as the brief requires.
+
+## S2: follow-ups from the executed review of `f69a9ff` (APPROVED 2026-09-29, orchestrator — DONE 2026-09-29)
+The fix is sound; the wiring is unpinned. **Model** Sonnet, tester then builder. **Migration** none.
+- **K1 (MED-HIGH, tester).** Deleting all 7 `markTouched` call sites, the four `onBlur` handlers and the `invalid`
+  listener kept 17/17 green. The repo has no DOM test library and this slice adds none, so: a SOURCE guard test
+  (the repo's static-guard idiom, like `action-link-sweep`) asserting every line input/select in `MoneyLines.tsx`
+  carries a blur/change handler that calls `markTouched` for its own field, and that the form `invalid` capture
+  listener is registered. It must go red under that exact deletion mutant.
+- **K2 (MED, builder + tester).** `attempted` never resets, so a row added after a submit attempt paints both errors
+  before input — DEF-484 one row over. Ruling: a submit attempt reveals the lines that existed AT the attempt; rows
+  added later start quiet (record the attempted line count, or mark those lines touched at attempt time).
+- **K3 (MED, builder + tester).** A document-level issue unlocks on a bare tab-through (the method select has a
+  default and marks touched on blur). Ruling: document-level issues show only after a submit attempt or once an
+  AMOUNT field has been touched. Latent today (no host passes `mustTotal`) — fixed now, before the AP host does.
+- Doc slip (CAPABILITY-GAPS.md:446 annotation) fixed by the orchestrator; scope note (f69a9ff carried T-350
+  bookkeeping) recorded.
+- **BUILDER paths:** `apps/erp/src/components/money/money-line-visibility.ts`, `apps/erp/src/components/money/MoneyLines.tsx`.
+  **TESTER paths:** the three t353 test files + a new `apps/erp/tests/t353-s2-money-lines-wiring-guard.test.ts`.

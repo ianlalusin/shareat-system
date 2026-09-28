@@ -91,8 +91,16 @@ export function MoneyLines({
   const [touched, setTouched] = useState<ReadonlySet<LineField>[]>(
     initialLines?.length ? initialLines.map(() => new Set<LineField>(ALL_LINE_FIELDS)) : [new Set<LineField>()],
   );
-  const [attempted, setAttempted] = useState(false);
+  // T-353 S2 (K2, review of `f69a9ff`) — `null` until a submit attempt; a number is the count of
+  // lines that existed AT the attempt. A row appended afterwards (index >= this count) starts
+  // quiet, same as a fresh line — without this, one attempt on a 1-line form would permanently
+  // paint every future row too.
+  const [attemptedLineCount, setAttemptedLineCount] = useState<number | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  // Read inside the attempt handler below so it sees the CURRENT line count, not the value from
+  // the effect's own mount (the effect registers its listeners once, with `[]` deps).
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
 
   const patch = (i: number, change: Partial<MoneyLine>) =>
     setLines((prev) => prev.map((l, n) => (n === i ? { ...l, ...change } : l)));
@@ -106,7 +114,7 @@ export function MoneyLines({
   useEffect(() => {
     const form = rootRef.current?.closest('form');
     if (!form) return;
-    const onAttempt = () => setAttempted(true);
+    const onAttempt = () => setAttemptedLineCount(linesRef.current.length);
     form.addEventListener('submit', onAttempt);
     form.addEventListener('invalid', onAttempt, true);
     return () => {
@@ -141,7 +149,10 @@ export function MoneyLines({
   // T-353 / DEF-484 — the DOMAIN decides what is wrong (`issues`, above); this decides only WHEN
   // it is shown: a field that has been touched, or a submit attempt, or an initial (server-loaded)
   // line (already all-touched in `touched`'s initial state).
-  const shown = useMemo(() => visibleIssues(issues, touched, attempted), [issues, touched, attempted]);
+  const shown = useMemo(
+    () => visibleIssues(issues, touched, attemptedLineCount),
+    [issues, touched, attemptedLineCount],
+  );
   const issueFor = (i: number, field: MoneyLine extends never ? never : string) =>
     shown.find((s) => s.line === i && s.field === field)?.message;
   const documentIssues = shown.filter((s) => s.line === null);

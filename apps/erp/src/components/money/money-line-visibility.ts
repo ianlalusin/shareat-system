@@ -7,8 +7,22 @@
  * testing-library, and the unit glob is `apps/**\/*.test.ts`, never `.tsx`).
  *
  * An issue shows once: the field it names has been touched (R2), OR the enclosing form saw a
- * submit attempt (R4), OR it came in as `initialLines` — that third case is the caller's job
- * (`MoneyLines.tsx` seeds `touched` as all-fields-set per initial line), not this function's.
+ * submit attempt that reveals its line (R4/S2 K2), OR it came in as `initialLines` — that third
+ * case is the caller's job (`MoneyLines.tsx` seeds `touched` as all-fields-set per initial line),
+ * not this function's.
+ *
+ * T-353 S2 (K2/K3, review of `f69a9ff`) — two rulings that narrow S1's "any touch, or attempted":
+ *   - K2: `attempted` widened from a boolean to `attemptedLineCount: number | null`. `null` means no
+ *     submit attempt yet; a number is the count of lines that existed AT the attempt. A per-line
+ *     issue is revealed by the attempt only when `issue.line < attemptedLineCount` — a row APPENDED
+ *     after the attempt (index `>= attemptedLineCount`) starts quiet, same as a fresh line, until its
+ *     own field is touched. Without this, a submit attempt on a 1-line form would permanently mark
+ *     every FUTURE row as "attempted" too, painting both DEF-484 sentences on a row nobody has
+ *     reached yet — the exact defect one row over.
+ *   - K3: a document-level issue no longer unlocks on "any field on any line" — a bare tab-through
+ *     the method select (which has a default value and marks touched on blur) must not reveal a
+ *     `mustTotal` sentence nobody asked for. It shows only once an AMOUNT field has been touched, or
+ *     once a submit was attempted (`attemptedLineCount !== null`).
  */
 import type { MoneyLineIssue } from '@shareat/domain/money-lines'; // ⛔ subpath, never the barrel
 
@@ -20,20 +34,18 @@ function isLineField(field: MoneyLineIssue['field']): field is LineField {
   );
 }
 
-/**
- * `touched` is index-aligned with the lines `issues` was computed from. A document-level issue
- * (`line: null` — `mustTotal`, "one credit line") shows once ANY line field anywhere is touched;
- * `referenceNo`/`document` are never themselves per-field touchable, so a per-line issue naming
- * either stays hidden until a submit attempt.
- */
+/** `touched` is index-aligned with the lines `issues` was computed from. */
 export function visibleIssues(
   issues: readonly MoneyLineIssue[],
   touched: readonly ReadonlySet<LineField>[],
-  attempted: boolean,
+  attemptedLineCount: number | null,
 ): MoneyLineIssue[] {
-  if (attempted) return [...issues];
   return issues.filter((issue) => {
-    if (issue.line === null) return touched.some((t) => t.size > 0);
-    return isLineField(issue.field) && (touched[issue.line]?.has(issue.field) ?? false);
+    if (issue.line === null) {
+      return attemptedLineCount !== null || touched.some((t) => t.has('amount'));
+    }
+    const revealedByAttempt = attemptedLineCount !== null && issue.line < attemptedLineCount;
+    const revealedByTouch = isLineField(issue.field) && (touched[issue.line]?.has(issue.field) ?? false);
+    return revealedByAttempt || revealedByTouch;
   });
 }
