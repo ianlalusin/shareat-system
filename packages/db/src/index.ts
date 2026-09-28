@@ -184,6 +184,8 @@ export * as apRepo from './repo/ap';
 export * as arRepo from './repo/ar';
 export * as tradeRepo from './repo/trade';
 export * as channelSettlementsRepo from './repo/channel-settlements';
+export * as auditLogRepo from './repo/audit-log';
+export type { AuditLogSource } from './repo/audit-log';
 export * as findingsRepo from './repo/findings';
 // T-245 — the prerequisite-refusal counter. docs/tasks/245-prerequisite-refusal-counter.md.
 export * as prerequisiteRefusalsRepo from './repo/prerequisite-refusals';

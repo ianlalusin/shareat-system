@@ -1,6 +1,6 @@
 # T-350: an admin can change a channel's payout account after it is set (DEF-477)
 
-**Status:** DONE 2026-09-28 (gates PASS; §9.4 forged-session smoketest 19/19; post-commit audit pending, option (a)). APPROVED 2026-09-28 (orchestrator). **Model:** Sonnet, tester then builder. **Migration:** none.
+**Status:** S3 DONE 2026-09-28 (migration 0167; audit rows proven live). DONE 2026-09-28 (gates PASS; §9.4 forged-session smoketest 19/19; post-commit audit pending, option (a)). APPROVED 2026-09-28 (orchestrator). **Model:** Sonnet, tester then builder. **Migration:** none.
 **Runs after** the T-343 S5.5v/u/w commit (`channel-settlements/actions.ts` is an S5.5v path).
 
 ## Why
@@ -223,3 +223,6 @@ The header names T-350 S3 / bible row 238 / DEF-169, gives the why (above), and 
   `actor_person_id IS NULL OR EXISTS (select 1 from persons p where p.id = actor_person_id and p.org_id = app_current_org())`.
   Red leg **L7**: an insert naming another org's person as actor → 42501.
 - B6's line numbers are against the S2 tree; re-derive at the S2 commit.
+- **Tester deviation, accepted (orchestrator):** L6 uses a raw `TRUNCATE audit_log CASCADE` instead of `applyPurge`
+  (which needs a scratch-DB harness). It still proves the append-only trigger does not block TRUNCATE, which is what
+  `purge.ts:355` issues. All S3 reds are 42703 today (no `org_id`), so L3/L7 only become 42501 assertions after 0167.

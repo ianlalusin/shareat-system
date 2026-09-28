@@ -99,9 +99,15 @@ describe('RLS registry — every table declares its scoping', () => {
     expect(e?.via).toContain('journal_entries');
   });
 
-  it('the ETL tables and audit_log are system_only — no tenant may read captured PII', () => {
-    for (const t of ['etl_source_documents', 'etl_runs', 'etl_quarantine', 'etl_reconciliation', 'audit_log']) {
+  it('the ETL tables are system_only — no tenant may read captured PII', () => {
+    for (const t of ['etl_source_documents', 'etl_runs', 'etl_quarantine', 'etl_reconciliation']) {
       expect(RLS_REGISTRY[t]?.scope, `${t} must be system_only`).toBe('system_only');
     }
+  });
+
+  // T-350 S3 (DEF-169) — ruled edit: audit_log gained an org_id column in migration 0167, so it is
+  // the first tenant-scoped audit trail. `audit_log` is NO LONGER in the system_only list above.
+  it('audit_log is org_column — 0167 gave it an org_id, RLS confines it to the tenant that wrote it', () => {
+    expect(RLS_REGISTRY['audit_log']?.scope, 'was red: still system_only').toBe('org_column');
   });
 });

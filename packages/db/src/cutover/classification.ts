@@ -169,9 +169,12 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
   },
   audit_log: {
     class: 'purge',
+    // T-350 S3 amendment M3 (planner ruling) — org-scoped since migration 0167, but classification
+    // is unchanged: what it records before cutover is rehearsal and pilot activity, not production
+    // history, regardless of which org wrote it.
     reason:
-      'It records pilot actions against rows that will not exist. An audit trail pointing at ' +
-      'deleted ids is worse than no audit trail: it looks authoritative and resolves to nothing.',
+      'Rows written before cutover record rehearsal and pilot actions, not production history; ' +
+      'they are dropped at cutover.',
   },
 
   // ---- T-122: expenses ------------------------------------------------------------------

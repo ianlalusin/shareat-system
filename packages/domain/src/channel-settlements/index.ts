@@ -11,6 +11,7 @@
  * function owns these legs, which makes the double-count impossible rather than merely forbidden.
  */
 import {
+  auditLogRepo,
   channelSettlementsRepo,
   moneyAccountsRepo,
   moneyTransfersRepo,
@@ -721,7 +722,29 @@ export async function setChannelPayoutDestination(
       };
     }
 
+    // T-350 S3 / DEF-169 (bible §13 row 238, Ian 2026-09-28) — the old account's NAME, read before
+    // the UPDATE overwrites which account the channel points at. `getById` returns a retired
+    // account too, so a change away from a since-retired account still names it correctly.
+    const oldAccount = config.destinationMoneyAccountId
+      ? await moneyAccountsRepo.getById(trx, actor.orgId, config.destinationMoneyAccountId)
+      : null;
+
     await R.setDestinationAccount(trx, actor.orgId, input.channelId, input.moneyAccountId);
+
+    // Same transaction, only on an actual write (never the no-op above, never a refusal — every
+    // refusal already returned before this point). `source` is `'web'` because the ERP screen
+    // (`actions.ts`'s `setPayoutDestinationAction`) is this function's only caller today; a second
+    // front-end calling this must thread its own `source` through, not inherit this one.
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'set_channel_payout',
+      entity: 'sales_channels',
+      entityId: input.channelId,
+      before: { moneyAccountId: oldAccount?.id ?? null, moneyAccountName: oldAccount?.name ?? null },
+      after: { moneyAccountId: account.id, moneyAccountName: account.name },
+      source: 'web',
+    });
+
     return {
       channelId: input.channelId,
       moneyAccountId: input.moneyAccountId,

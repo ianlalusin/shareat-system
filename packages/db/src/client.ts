@@ -140,12 +140,14 @@ export function getSystemDb() {
  *     contradicted itself, guarding with an unprincipalled read before a privileged write
  *   - the **ETL pipeline** — `packages/etl/src/run.ts` (6 sites) and `repo/etl.ts`'s
  *     `startRun`/`finishRun` (row 194 subsystem 3, DEF-289). ⚠️ Different in kind from the
- *     others: `etl_runs`, `etl_source_documents`, `etl_quarantine`, `etl_reconciliation` and
- *     `audit_log` carry FORCE RLS with **zero policies** (migration `0011:142-160`), so no
+ *     others: `etl_runs`, `etl_source_documents`, `etl_quarantine` and `etl_reconciliation`
+ *     carry FORCE RLS with **zero policies** (migration `0011:142-160`), so no
  *     principal can ever satisfy them. Elsewhere on this list a principal is merely *wrong*;
  *     here it is **unsatisfiable**. ⛔ Never add a policy to those tables to make the app role
  *     work — they hold captured production PII and a policy that admits the app role admits
- *     every tenant
+ *     every tenant. `audit_log` was on this list too until T-350 S3 (migration `0167`) gave it
+ *     an `org_id` column and ordinary read/append policies — it is now one of the tables an
+ *     org-scoped `tx` reaches directly, not an exception any more
  *
  * ⛔ **Not a general escape hatch.** The list grows only by a NAMED RULING recorded in the bible,
  * never by analogy — row 185 closed it at three, row 194 admitted three subsystems after a day of

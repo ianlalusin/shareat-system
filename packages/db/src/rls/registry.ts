@@ -283,12 +283,13 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
   },
 
   audit_log: {
-    scope: 'system_only',
+    scope: 'org_column',
     reason:
-      'Has no org column today, so it CANNOT be org-scoped yet — stated plainly rather than given a ' +
-      'policy that looks like scoping and is not. RLS is enabled with no staff policy, so it is ' +
-      'invisible to every tenant until Phase 2 adds the column. **Failing closed is the correct ' +
-      'direction**: a missing policy breaks a feature loudly instead of leaking quietly.',
+      'T-350 S3 / DEF-169 (migration 0167) added org_id, this table\'s first writer. Two policies, ' +
+      'SELECT and INSERT — never FOR ALL: there is no UPDATE/DELETE policy, so under FORCE RLS the ' +
+      'app role can never touch a written row, and a hand-added append-only trigger (0167) refuses ' +
+      'UPDATE/DELETE unconditionally as a second, independent lock. The INSERT policy also checks ' +
+      'actor_person_id belongs to the org (DEF-183 pattern, S3 amendment M6).',
   },
 
   // T-122 — expenses: non-inventory spend (docs/tasks/122-expenses.md, bible rows 118-120).

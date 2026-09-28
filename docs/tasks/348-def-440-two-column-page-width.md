@@ -1,6 +1,6 @@
 # T-348: page descriptions use the full width and clamp at 3 lines (DEF-474); two-column pages use the full width (DEF-440)
 
-**Status:** APPROVED 2026-09-28 (orchestrator) — S0 renders first; S1-S3 follow Ian's picks. Planner: Opus, 2026-09-28. Supersedes the reservation text.
+**Status:** APPROVED 2026-09-28 (orchestrator) — S0 DONE — Ian picked T1 + W2 (Amendment A1); S1-S3 follow. Planner: Opus, 2026-09-28. Supersedes the reservation text.
 **Defects:** DEF-474 (🔸, Ian 2026-09-28, from `/liabilities`), DEF-440 (⚠️, Ian 2026-09-26). **Migration:** none, any slice.
 **Governing rules:** bible §1.2c (one uniform, reusable pattern set across screens); "render before deciding" (a
 rendering-dependent choice is made from screenshots, not argument); RULES §2 (tests first and red for the right
@@ -328,3 +328,13 @@ literal). Class A = class contains `text-neutral-600` and does not start `mt-4 `
 **Status:** RESERVED 2026-09-26 (orchestrator). Spec not written. Queued after T-346; Ian: "must be fixed". **+DEF-474 (2026-09-28, Ian):** page descriptions use the full width, adapt to screen size, clamp at 3 lines with an ellipsis and an expand control — one shared component, every title description.
 
 Root cause and blast radius: `docs/DEFECTS-REGISTER.md` DEF-440. Method: render the width options on the eight pages at 1366/1920 and phone width, Ian picks from screenshots, then one slice fixes all eight.
+
+## Amendment A1 — Ian's S0 picks (2026-09-28)
+- **Descriptions (DEF-474): T1 — inline chevron.** `line-clamp-3`, a chevron button pinned to the end of line 3 over
+  a short fade, native "…" visible, zero layout shift. Sheets: `~/.claude/skills/orchestrator/tools/t348-s0-*.png`.
+- **Widths (DEF-440): W2 — `density="table"`, content unchanged (fields stretch).** Sheets:
+  `t348-s0b-*-1366-sheet.png`.
+- ⚠️ **S0 finding to carry into S1–S3:** on `admin/stores/[id]` W2 widens the container but the page's existing
+  `lg:grid-cols-2` Readiness | Details grid keeps its column sizes, so a wide empty gutter opens between them. The S1
+  spec must make those columns fill the width (not add a gutter) and show it at 1366 in the smoketest.
+- S0 left no residue (`git status` clean of S0 files, confirmed by the tester).
