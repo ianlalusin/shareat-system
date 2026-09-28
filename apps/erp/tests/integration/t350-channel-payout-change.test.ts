@@ -14,7 +14,7 @@
  * explicitly): C1/R1 use an ADMIN actor below, not a manager — manager is C6/R3's actor, refused.
  */
 import { config } from 'dotenv';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
 
@@ -28,8 +28,49 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
-import { AuthorizationError, type Actor } from '@shareat/auth';
+import { AuthorizationError, signInWithPin, setPin, type Actor } from '@shareat/auth';
 import { setChannelPayoutDestination } from '@shareat/domain';
+
+// ============================================================================================
+// G1 (S4) — the ACTION's own redirect, not the domain function. `next/navigation`'s `redirect()`
+// throws to unwind, exactly like `sign-out-action.test.ts`'s own `RedirectSignal` — same idiom,
+// not Next's internal digest format. Real sign-in (`setPin` + `signInWithPin`) puts a real session
+// token in a fake cookie jar so `requireActor()` resolves a real actor, exactly as the button would.
+// ============================================================================================
+class RedirectSignal extends Error {
+  constructor(public to: string) {
+    super(`redirect:${to}`);
+  }
+}
+vi.mock('next/navigation', () => ({
+  redirect: (to: string) => {
+    throw new RedirectSignal(to);
+  },
+}));
+
+class FakeJar {
+  store = new Map<string, string>();
+  set(name: string, value: string) {
+    this.store.set(name, value);
+  }
+  get(name: string) {
+    const v = this.store.get(name);
+    return v === undefined ? undefined : { name, value: v };
+  }
+  delete(name: string) {
+    this.store.delete(name);
+  }
+}
+let g1Jar: FakeJar;
+vi.mock('next/headers', () => ({
+  cookies: async () => g1Jar,
+}));
+
+// ⛔ NOT a stub — forwards to the real module. `actions.ts` imports the bare `@/...` specifier the
+// root `vitest.config.mts` never resolves (s5-5p/s5-5q, t343-s5-5r-render precedent).
+vi.mock('@/lib/constraint-messages', async () => {
+  return await import('../../src/lib/constraint-messages');
+});
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -284,6 +325,45 @@ describe('C8 (S2, F4/F8) — held at store A only, channel at store B → refuse
           setChannelPayoutDestination(tx, f.admin, { channelId: otherChannel!.id, moneyAccountId: f.otherStoreAccount.id }),
         ),
       );
+    },
+  );
+});
+
+describe('G1 (S4) — the ACTION redirect for a same-account save carries no changed=1', () => {
+  it(
+    'a same-account Save redirects with no changed=1 — this catches a builder reverting ' +
+      '`changed = result.wrote && result.hadAccountBefore` back to `changed = result.wrote` alone: ' +
+      'C7 above only pins the DOMAIN result (result.wrote === false), never that the ACTION actually ' +
+      'reads it — a regression there would leave C7 green while this goes red',
+    async () => {
+      const f = await fixture('g1');
+      g1Jar = new FakeJar();
+
+      await asOrg(f.orgId, (tx) =>
+        setPin(tx, { orgId: f.orgId, personId: f.admin.personId, storeId: f.storeId, pin: '117733' }),
+      );
+      const signIn = await asOrg(f.orgId, (tx) =>
+        signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '117733' }),
+      );
+      g1Jar.set('shareat_session', signIn.token);
+
+      const { setPayoutDestinationAction } = await import('../../src/app/channel-settlements/actions');
+
+      // f.channelId already banks into f.bankA (the fixture's own INSERT) — choosing it again is
+      // the no-op case.
+      const fd = new FormData();
+      fd.set('channelId', f.channelId);
+      fd.set('moneyAccountId', f.bankA.id);
+
+      let caught: unknown;
+      try {
+        await setPayoutDestinationAction(fd);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught, 'expected the action to redirect (success or error)').toBeInstanceOf(RedirectSignal);
+      const to = (caught as RedirectSignal).to;
+      expect(to, `wanted no changed=1 on a same-account no-op — got ${to}`).not.toMatch(/changed=1/);
     },
   );
 });

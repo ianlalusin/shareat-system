@@ -92,11 +92,16 @@ export async function createOwner(
 
     // T-343 S5.5s / DEF-470 item 3 — no parse existed at all: a raw comma-typed or out-of-range
     // string reached `numeric(6,3)` and the unmapped `owners_ownership_percentage_range_check`.
+    // T-350 S4 (G6) / DEF-486 — `\d{1,3}` capped the INTEGER PART at three digits typed, so
+    // "0050" (four digits, value 50) was refused though 50 is well within range: a digit-run cap
+    // standing in for the value ceiling, the same DEF-481-shaped bug whole-number-input.ts fixed
+    // for loans/prepaid. `\d+` accepts any digit run (a zero-padded "000050" still saves as 50);
+    // the ceiling is the `Number(t) > 100` comparison below, on the parsed VALUE, never the string.
     let ownershipPercentage: string | null = null;
     if (input.ownershipPercentage != null) {
       const raw = input.ownershipPercentage;
       const t = raw.trim();
-      if (!/^\d{1,3}(\.\d{1,3})?$/.test(t) || !(Number(t) > 0) || Number(t) > 100) {
+      if (!/^\d+(\.\d{1,3})?$/.test(t) || !(Number(t) > 0) || Number(t) > 100) {
         throw refuse(
           `createOwner: ownershipPercentage must be above 0 and at most 100 with at most three decimal places, got ${JSON.stringify(raw)}.`,
           `The ownership percentage — "${raw}" is not a percentage. Use a number above 0 and up to 100, with at most three decimal places.`,

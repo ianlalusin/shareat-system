@@ -49,6 +49,23 @@ vi.mock('@shareat/auth', async (importOriginal) => {
   };
 });
 
+// T-350 S4 (G2/G3) — `page.tsx` now reads `auditLogRepo.latestForEntity` (`@shareat/db`) directly,
+// not through `./lib`'s mocked `withOrgPrincipal`. Mocked here so the "changed" banner's legs are
+// controlled explicitly by THIS file rather than falling through to the real function with a
+// mocked `tx: null` — which crashes, and (per the builder's removal of the catch-fallback) must now
+// render NO banner rather than a best-effort one.
+const latestAuditEntryMock = vi.fn();
+vi.mock('@shareat/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@shareat/db')>();
+  return {
+    ...actual,
+    auditLogRepo: {
+      ...actual.auditLogRepo,
+      latestForEntity: (...args: unknown[]) => latestAuditEntryMock(...args),
+    },
+  };
+});
+
 const listChannelsMock = vi.fn();
 const listDestinationAccountsMock = vi.fn();
 vi.mock('../src/app/channel-settlements/lib', async (importOriginal) => {
@@ -124,6 +141,8 @@ beforeEach(() => {
   listChannelsMock.mockReset();
   listDestinationAccountsMock.mockReset();
   listDestinationAccountsMock.mockResolvedValue([DEST_A, DEST_B]);
+  latestAuditEntryMock.mockReset();
+  latestAuditEntryMock.mockResolvedValue(undefined);
   requireSessionMock.mockResolvedValue({
     actor: ACTOR,
     sessionId: 'session-1',
@@ -279,6 +298,90 @@ describe('S2-R4 (F6) — a wired channel with NO active accounts at its store', 
         changeArea?.includes('name="moneyAccountId"'),
         'wanted: no moneyAccountId picker when there is nothing to pick — was red: the select still renders, empty',
       ).not.toBe(true);
+    },
+  );
+});
+
+// =================================================================================================
+// T-350 S4 — follow-ups from the executed review of 55077ef, docs/tasks/350-*.md §S4 (G3/G4/G5).
+// G2's own real-audit-log legs live in `apps/erp/tests/integration/t350-s4-banner.test.ts` (needs
+// real Postgres); these stay in the mocked file because they turn on URL-param wiring alone or on
+// the `auditLogRepo.latestForEntity` mock above.
+// =================================================================================================
+
+describe('G3 — positive control on S2-R3: a real changedChannel renders the real account name', () => {
+  it(
+    'wanted: `changedChannel=<real id>` names the real account in the banner, reading a FRESH ' +
+      'audit_log entry by this same viewer — was red today: the page reads `sp.channel`, never ' +
+      '`sp.changedChannel`, so nothing names it and the banner falls back to the generic ' +
+      '"the new account" text',
+    async () => {
+      // A fresh row by THIS viewer (ACTOR.personId), so the page takes the real audit_log path —
+      // not the "no backing row" or "someone else's row" branch.
+      latestAuditEntryMock.mockResolvedValueOnce({
+        actorPersonId: ACTOR.personId,
+        occurredAt: new Date(),
+        after: { moneyAccountId: 'acct-a', moneyAccountName: 'Bank A' },
+      });
+      const html = await renderPage([wiredChannel({ destinationAccountName: 'Bank A' })], ['set_channel_payout'], {
+        searchParams: { ok: 'destination', changed: '1', changedChannel: 'chan-1' },
+      });
+      expect(html, 'wanted the real account name reported via changedChannel').toMatch(
+        /New settlements bank into Bank A/,
+      );
+    },
+  );
+});
+
+describe('G2 (mock) — a failed audit_log read shows NO change banner (fallback removed)', () => {
+  it(
+    'wanted: the read throwing renders no "changed" banner at all — was red before the builder ' +
+      'removed the catch-fallback: a failed read used to fall back to the channel\'s live account ' +
+      'name and show the banner anyway',
+    async () => {
+      latestAuditEntryMock.mockRejectedValueOnce(new Error('audit_log read failed'));
+      const html = await renderPage([wiredChannel({ destinationAccountName: 'Bank A' })], ['set_channel_payout'], {
+        searchParams: { ok: 'destination', changed: '1', changedChannel: 'chan-1' },
+      });
+      expect(
+        html,
+        'wanted no "changed" banner when the audit_log read throws — no live-data fallback',
+      ).not.toMatch(/Payout account changed/i);
+    },
+  );
+});
+
+describe('G4 — `channel` alone no longer drives the banner (reserved for the settlement-form preselect)', () => {
+  it(
+    'wanted: `channel=<id>` with no `changedChannel` names no account in the banner — was red today: ' +
+      'the page still reads `sp.channel` directly for the banner, so the two params collide',
+    async () => {
+      const html = await renderPage([wiredChannel({ destinationAccountName: 'Bank A' })], ['set_channel_payout'], {
+        searchParams: { ok: 'destination', changed: '1', channel: 'chan-1' },
+      });
+      expect(
+        html,
+        'wanted no account name leaked into the banner via the legacy `channel` param alone',
+      ).not.toMatch(/New settlements bank into Bank A/);
+    },
+  );
+});
+
+describe('G5 — a same-account save shows the no-op sentence, not the first-set one', () => {
+  it(
+    'wanted: `?ok=destination&same=1` renders "No change — <account> is already this channel\'s ' +
+      'payout account." — was red today: `same` is never read, so `ok=destination` alone falls back ' +
+      'to the generic first-set sentence',
+    async () => {
+      const html = await renderPage([wiredChannel({ destinationAccountName: 'Bank A' })], ['set_channel_payout'], {
+        searchParams: { ok: 'destination', same: '1', changedChannel: 'chan-1' },
+      });
+      // React escapes every apostrophe in a text node to `&#x27;` — normalise before matching, the
+      // same idiom `t343-s6b-admin-users-labels.test.ts` and siblings already use.
+      const normalised = html.replace(/&#x27;/gi, "'");
+      expect(normalised, 'wanted the named no-op sentence, naming the account').toMatch(
+        /No change — Bank A is already this channel's payout account\./,
+      );
     },
   );
 });

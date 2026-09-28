@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
+import { auditLogRepo } from '@shareat/db';
+import { logger } from '@shareat/core/logger';
 import { requireSession } from '../../lib/session';
 import {
   previewSettlementAction,
@@ -25,9 +27,15 @@ export const dynamic = 'force-dynamic';
 interface SearchParams {
   error?: string;
   ok?: string;
+  /** The settlement form's own preselect register (`page.tsx`'s `<SettlementForm>` below) — never
+   *  read for the banner (T-350 S4 / G4: the two collided when both used `channel`). */
   channel?: string;
   day?: string;
   changed?: string;
+  /** T-350 S4 (G5) — a same-account save. */
+  same?: string;
+  /** T-350 S4 (G4) — which channel `changed`/`same` is about, separate from `channel` above. */
+  changedChannel?: string;
 }
 
 const OK_MESSAGE: Record<string, string> = {
@@ -76,18 +84,57 @@ export default async function ChannelSettlementsPage({
   });
   const canSetChannelPayoutAt = (storeId: string) => canSetChannelPayoutByStore.has(storeId);
 
-  // T-350 S2 (F5) — the account name comes from the CHANNEL, read server-side by id, never from a
-  // query param: `?account=` was a value a replayed or crafted URL fully controlled.
-  const changedChannel =
-    sp.ok === 'destination' && sp.changed === '1' && sp.channel
-      ? channels.find((c) => c.id === sp.channel)
+  // T-350 S4 (G5) — a same-account save names the account from the CHANNEL's own current data
+  // (no write happened, so there is no audit row to read).
+  const sameChannel =
+    sp.ok === 'destination' && sp.same === '1' && sp.changedChannel
+      ? channels.find((c) => c.id === sp.changedChannel)
       : undefined;
-  const okMessage =
-    sp.ok === 'destination' && sp.changed === '1'
-      ? `Payout account changed. New settlements bank into ${changedChannel?.destinationAccountName ?? 'the new account'}.`
-      : sp.ok
-        ? OK_MESSAGE[sp.ok]
-        : undefined;
+
+  // T-350 S4 (G2) — the "changed" banner must be backed by a REAL audit_log fact, never a query
+  // param alone: it shows only when the channel's latest `set_channel_payout` row exists, was
+  // written by THIS viewer, and is under 10 minutes old — and then names THAT row's captured
+  // `after.moneyAccountName`, not the channel's current live name (which may have moved again
+  // since). A forged `?changed=1` with no backing row, someone else's change, or a stale one all
+  // render no banner at all.
+  let changedBannerAccountName: string | undefined;
+  if (sp.ok === 'destination' && sp.changed === '1' && sp.changedChannel) {
+    const changedChannelId = sp.changedChannel;
+    try {
+      const entry = await withOrgPrincipal(actor.orgId, (tx) =>
+        auditLogRepo.latestForEntity(tx, actor.orgId, {
+          entity: 'sales_channels',
+          entityId: changedChannelId,
+          action: 'set_channel_payout',
+        }),
+      );
+      const TEN_MINUTES_MS = 10 * 60 * 1000;
+      const fresh =
+        entry !== undefined &&
+        entry.actorPersonId === actor.personId &&
+        Date.now() - entry.occurredAt.getTime() < TEN_MINUTES_MS;
+      if (fresh) {
+        const after = entry.after as { moneyAccountName?: string } | null;
+        changedBannerAccountName = after?.moneyAccountName ?? 'the new account';
+      }
+    } catch (err) {
+      // A failed READ must not fall back to the channel's live data — that would re-create the
+      // exact unverified "changed" claim G2 exists to remove, just moved from a query param to a
+      // caught exception. No banner, logged once, and the page still renders (bible §7's "loud,
+      // never silent" is for the log, not for taking the whole page down over a banner).
+      logger.warn({ err }, 'channel-settlements: could not verify the "changed" banner against audit_log');
+    }
+  }
+
+  const okMessage = sameChannel
+    ? `No change — ${sameChannel.destinationAccountName ?? 'that account'} is already this channel's payout account.`
+    : changedBannerAccountName
+      ? `Payout account changed. New settlements bank into ${changedBannerAccountName}.`
+      : sp.ok === 'destination' && sp.changed === '1'
+        ? undefined
+        : sp.ok
+          ? OK_MESSAGE[sp.ok]
+          : undefined;
 
   const today = new Date().toISOString().slice(0, 10);
   const unwired = channels.filter((c) => !c.destinationMoneyAccountId && c.isActive);

@@ -188,6 +188,7 @@ export async function setPayoutDestinationAction(formData: FormData): Promise<vo
   const actor = await requireActor();
   let channelId = '';
   let changed = false;
+  let same = false;
 
   try {
     channelId = str(formData, 'channelId');
@@ -200,13 +201,18 @@ export async function setPayoutDestinationAction(formData: FormData): Promise<vo
     // `hadAccountBefore` alone is not enough: a same-account no-op leaves the channel exactly as
     // it was, so it must not read "changed" just because an account already existed.
     changed = result.wrote && result.hadAccountBefore;
+    // T-350 S4 (G5) — the same-account case gets its own sentence, not the first-set one. Every
+    // no-op has `hadAccountBefore: true` (§domain), so `!wrote` alone identifies it here.
+    same = !result.wrote;
   } catch (err) {
     redirect(`/channel-settlements?error=${encodeURIComponent(errorMessage(err))}`);
   }
 
-  // T-350 S2 (F5): the banner names the account SERVER-SIDE, read from the channel by id on the
-  // next render — never echoed from a query param a crafted or replayed URL fully controls.
-  const params = new URLSearchParams({ ok: 'destination', channel: channelId });
+  // T-350 S4 (G4) — `changedChannel`, not `channel`: `channel` is the settlement form's own
+  // preselect register (`page.tsx`'s `preselectChannelId`), and the two collided. The banner still
+  // never trusts an account NAME from the URL — only the id, which `page.tsx` resolves itself.
+  const params = new URLSearchParams({ ok: 'destination', changedChannel: channelId });
   if (changed) params.set('changed', '1');
+  if (same) params.set('same', '1');
   redirect(`/channel-settlements?${params.toString()}`);
 }

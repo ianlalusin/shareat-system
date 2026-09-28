@@ -733,3 +733,26 @@ mutants (four killed). **Model** Sonnet, tester then builder. **Migration** none
 - **TESTER paths:** `packages/auth/tests/integration/t349-s2c-supersede-elevation.test.ts` (E7, E9),
   `apps/erp/tests/t349-s2c-fold-and-banner.test.ts` (G4, P9), plus the banner pins in
   `apps/erp/tests/t343-s6b-admin-users-labels.test.ts` / `t349-hold-own-right-page.test.ts` that the new wording moves.
+
+### 4e. S2e: follow-ups from the executed review of `bad8c32` (APPROVED 2026-09-28, orchestrator)
+The committed CODE is correct (invariants a–e untouched, D4 clean). The gaps are test determinism and one wording.
+- **E1 (HIGH, tester).** E9's "barrier" is `setTimeout(300)`: at 0 ms the SUT takes the virgin-insert branch and E9
+  passes even under the F1 mutant. Replace the sleep with a real barrier: hold the row lock, start the SUT, **poll
+  `pg_stat_activity` until the SUT's backend is waiting on that lock** (`wait_event_type = 'Lock'`), then revoke and
+  commit. Assert the branch was reached (the revoke affected 0 rows for the SUT) — not only the outcome.
+- **E2 (HIGH, tester).** E7: same sleep, and `result.id === winner.id` cannot tell the ON CONFLICT re-select from the
+  same-rank no-op. Same barrier; assert something only the ON CONFLICT arm produces (e.g. the SUT's own UPDATE
+  revoked 0 rows AND its INSERT returned nothing — expose via the result shape the test can see, or a DB-side fact).
+  If that needs a source hook, report BLOCKED rather than adding one.
+- **E3 (MED, tester).** Restore a leg with TWO concurrent real `grantCapabilityAsActor` calls on the person-level
+  supersede branch: no raw 23505, exactly one revoked row, exactly one `wrote: true` (the old E7's assertions).
+- **E4 (MED, builder + tester pins).** "at every store they work at" is neither necessary nor sufficient (axis 2 is a
+  `person_store_scope` row — employment, manual or fan-out). Wording becomes
+  `` `${capabilityTitle(c)}, at every store they have access to` `` (store-scoped only).
+- **E5 (LOW, builder + pin).** `actions.ts:180` "…was already held in their own right everywhere." → for a
+  store-scoped capability "…at every store they have access to."; org/platform unchanged.
+- **E6 (LOW).** Stale comments: builder `actions.ts:203-208`; tester `t343-s6b-admin-users-labels.test.ts:595`,
+  `t349-hold-own-right-page.test.ts:584-586` + its `it()` title.
+- **BUILDER paths:** `apps/erp/src/app/admin/users/actions.ts`. **TESTER paths:**
+  `packages/auth/tests/integration/t349-s2c-supersede-elevation.test.ts`, `apps/erp/tests/t349-s2c-fold-and-banner.test.ts`,
+  `apps/erp/tests/t343-s6b-admin-users-labels.test.ts`, `apps/erp/tests/t349-hold-own-right-page.test.ts`.

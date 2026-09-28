@@ -226,3 +226,29 @@ The header names T-350 S3 / bible row 238 / DEF-169, gives the why (above), and 
 - **Tester deviation, accepted (orchestrator):** L6 uses a raw `TRUNCATE audit_log CASCADE` instead of `applyPurge`
   (which needs a scratch-DB harness). It still proves the append-only trigger does not block TRUNCATE, which is what
   `purge.ts:355` issues. All S3 reds are 42703 today (no `org_id`), so L3/L7 only become 42501 assertions after 0167.
+
+## S4: follow-ups from the executed review of `55077ef` (APPROVED 2026-09-28, orchestrator)
+F1, F2, F6, F3's domain half and DEF-480..483 were verified closed by mutants. Open items. **Model** Sonnet, tester
+then builder. **Migration** none.
+- **G1 (MED, tester).** F3's action half is unpinned: reverting `changed = result.wrote && result.hadAccountBefore`
+  (`actions.ts:129`) keeps all 35 tests green. New leg: the ACTION's redirect for a same-account save carries no
+  `changed=1` (and, per G5, the no-op sentence).
+- **G2 (MED, builder + tester).** The "changed" banner still asserts a write with no DB fact behind it. Now that S3
+  records changes, the banner reads the channel's latest `audit_log` row (`action` for payout changes, this org): it
+  says "Payout account changed. New settlements bank into <after name>." only when that row exists, was written by
+  the VIEWER, and is under 10 minutes old; otherwise no change banner. Legs: a forged URL with no audit row → no
+  banner; a real change → banner with the audit row's name.
+- **G3 (MED, tester).** S2-R3 needs a positive control: pass a real `changedChannel=` and assert the real account name
+  renders (the server-side lookup is otherwise untested).
+- **G4 (LOW, builder + pin).** The redirect's `channel=<id>` collides with the settlement form's preselect register
+  (`page.tsx:398`). Use `changedChannel=<id>` for the banner.
+- **G5 (LOW, builder + pin).** A same-account save must not show the first-set sentence: `?ok=destination&same=1` →
+  "No change — <account> is already this channel's payout account."
+- **G6 (LOW, builder + tester leg) = DEF-486.** `packages/domain/src/owners/index.ts:99` `/^\d{1,3}(\.\d{1,3})?$/`
+  refuses `"0050"` though 50 is in range (the last DEF-481-shaped digit-run cap). Check the value, state the ceiling.
+- **Dismissed (orchestrator, reasons recorded):** F8 — `items/index.ts:290`'s header finiteness re-throw is now
+  unreachable (price ≤ 10 integer digits, quantity ≤ ~1e11); losing I6's coverage of it is correct, noted here. F9 —
+  one `authorize()` per distinct store on load: stores per org are single digits today; revisit if an org passes ~10.
+- **BUILDER paths:** `apps/erp/src/app/channel-settlements/{page.tsx,actions.ts}`, `packages/db/src/repo/audit-log.ts`
+  (a read), `packages/domain/src/owners/index.ts`. **TESTER paths:** the T-350 test files + a new
+  `apps/erp/tests/integration/t350-s4-banner.test.ts`, and an owners test for G6.
