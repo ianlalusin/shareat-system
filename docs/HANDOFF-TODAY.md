@@ -1,86 +1,80 @@
-# Handoff — 2026-09-29
+# Handoff — 2026-09-29 (evening)
 
 > ⚠️ NOT LAUNCHED. A green push to `main` runs CI, and a green CI **deploys** (`.github/workflows/deploy.yml`).
-> This wrap-up PUSHED `141de73..HEAD`, including **migrations 0167 and 0168**. Local `shareat_dev` is at **0167**
-> (Ian ruled 0167 → dev); **0168 is NOT applied to dev** — Ian's call.
+> This wrap-up PUSHES `46f006d..HEAD`, including **migrations 0169, 0170, 0171**. ⛔ **Before the deploy that carries
+> 0169, Ian runs the read-only `pg_default_acl` query in `docs/ops/README.md` ("Restores and replica mode" →
+> DEF-489) as `doadmin` on the database `SYSTEM_DATABASE_URL` names.** 0169 aborts (safely, before the symlink swap)
+> if a stray grantor holds a wide default — the query finds that first. Local `shareat_dev` is at **0168** (Ian
+> approved 0168 today); 0169–0171 are NOT applied to dev.
 
 ## Where things stand
-Nine defects closed toward deployment: DEF-477 (admin-only payout account, T-350 S1–S5), DEF-480–483 (T-351),
-DEF-484 (T-353 + S2), DEF-486, DEF-487 (T-354: 18 immutability triggers ALWAYS on). `audit_log` now has its first
-writer (payout-account changes; org-scoped + append-only, 0167). T-349 S2c/S2d shipped. Specced and ready: **T-349
-S2e**, **T-352** (DEF-478), **T-348 S1–S3** (Ian picked T1 + W2).
+Queue cleared. Nine slices shipped since the last wrap-up; DEF-478, 484, 485, 489, 490 FIXED; DEF-474 in progress
+(S1 component shipped, S2 sweep next). The three post-commit audits Ian authorised (`fa83e01`, `0cd0fb6`, `aa14108`)
+ran with executed mutants; each produced follow-ups, all shipped. Nothing is half-built in the tree.
 
-## Gates at `aa14108`
-Full suite on a fresh DB (`shareat_test_gate_0929a`): typecheck 0 · integration **3624/3624** (191 files) · build 0 ·
-unit **3488 passed, 1 skipped**; the one unit red was `db-generate-retired` timing out at 6.8 s under load — **2/2 on a
-solo re-run**. (Flaky under load; same shape as `no-committed-secrets` yesterday.)
+## Gates at `6ac13d0` (fresh DB `shareat_test_gate_0929w`, FULL suite)
+typecheck 0 · unit **3532/3532** (1 skipped) · integration **3876/3876** (200 files, 49.5 min) · build **0**
 
 ## What happened this session (by theme; Ian's rulings and where recorded)
-- **Post-commit audits RAN code this time.** The auditor now has its own DB (`shareat_test_auditor`) and runs mutants
-  in its own worktree; every slice got an executed review. Pattern it named twice: *a remedy reintroduces its own
-  defect class one slot over* (T-350 S4→S5). Acceptance criterion adopted: every rendered sentence has a leg that reds
-  when its own arm is deleted.
-- **T-350** (`0ffb0fe`, `55077ef`, `fc9a1d4`, `abe22f2`, `fa83e01`): capability `set_channel_payout`; audit row per
-  change (0167); banner derived only from the audit row. Ian: **audit log YES** (bible row 238), **adminless manager
-  keeps it** (row 239).
-- **T-349 S2c/S2d** (`7415676`, `bad8c32`): Ian Q2 close-and-replace; banner wording. **S2e specced** (§4e) — the
-  concurrency legs E7/E9 rely on a 300 ms sleep and pass under the mutant at 0 ms; wording → "at every store they have
-  access to".
-- **T-351** (DEF-480–483), **T-353** (DEF-484 — Ian: before launch; row 240), **T-354** (DEF-487 — Ian: before
-  launch; row 241).
-- **T-348 S0**: Ian picked **T1** (inline chevron) and **W2** (table density) from rendered sheets (Amendment A1,
-  row 240).
-- **New defects:** DEF-484 (fixed), 485 (AP-invoice embedded expense form probably can't save — **unverified on
-  screen**), 486 (fixed), 487 (fixed). DEF-169 partly fixed.
-- **Tools** (`~/.claude/skills/orchestrator/tools`): `run-with-db.mjs` now runs in the CALLER's cwd (it forced the
-  main tree — a worktree review ran main-tree code). `.claude/launch.json` gained `erp-smoke` (9008 against
-  `shareat_test_setup` for forged-session smoketests; that DB is at 0167).
+- **Shipped** (all audited pre-commit, reds first, smoketested where there is a screen):
+  `24b0f1d` T-349 S2e · `a47e0a7` T-352/DEF-478 · `8c145d4` T-348 S1/DEF-474 · `88fcba7` T-350 S6 ·
+  `f32fb24` T-353 S3/DEF-484 (+ the day's records) · `2fa99ab` T-355 (0169) · `6d24297` T-356 (0170) ·
+  `cf7f71c` T-358/DEF-485 · `6ac13d0` T-357 (0171).
+- **Ian's rulings today** (bible §13): row **242** DEF-489 option (a), before launch; **243** T-356 yes + Ian runs the
+  prod `pg_default_acl` query; **244** DEF-490 before launch; **245** DEF-485 before launch; **246** the other
+  same-org FKs (DEF-491) before a SECOND org onboards, persons + stores first; **247** AP-invoice expense defaults to
+  Credit (remaining pre-filled) for suppliers with terms, Cash for COD. Also: 0168 → `shareat_dev` (done).
+- **New defects:** DEF-488 (attendance `shiftDay` never parsed), DEF-489 (fixed), DEF-490 (fixed), DEF-491 (schema-wide
+  same-org FKs; before a 2nd org), DEF-492 (COD-credit rule only in the web action, not the domain).
+- **New request (Ian):** an **AI business brain** — phase 1 watches expenses daily (correctness, anomalies,
+  non-business spend). Recorded as `docs/plans/ai-business-brain.md` + **T-359** (assessment first, nothing built).
+- **Incident:** a lane's worktree had `node_modules` junctioned to the main tree; a recursive delete followed it and
+  wiped `.bin` and most `@`-scoped packages. Repaired with `npm ci`. Standing rule now: **no node_modules junction in
+  any worktree; mutants never in the shared tree** (auditor's worktree now has its own install).
+- **Process notes that paid off:** independent Opus spec audits caught a stock-transfer-breaking revoke (T-355 R3) and
+  a wrong actor (T-357 B1); the builder BLOCKED three times on tests that pinned retired behaviour (T-353) — right.
 
-## Pick up here
-1. **T-349 S2e** — tester first (`docs/tasks/349-*.md` §4e): real `pg_stat_activity` barriers, branch assertions,
-   the two-caller leg, "at every store they have access to". No source mutants in the shared tree.
-2. **T-352** (DEF-478) — `docs/tasks/352-*.md` incl. amendments M1–M6; Ian has already said go to the tester.
-3. ⚠️ **SHIPPED UNAUDITED — audit these before the next deploy:** `fa83e01` (T-350 S5), `0cd0fb6` (T-354 / 0168),
-   `aa14108` (T-353 S2) are pushed but have had NO post-commit review. The S4 MEDIUMs (URL-only `same=1` banner,
-   unpinned `same`, audit row proving a write not a change) are closed **by claim**, not by verification, until
-   `fa83e01` is audited. For `0cd0fb6`: measured on the gate DB at `aa14108` — `tgenabled` **18 'A' / 39 'O'**, the
-   18 exactly the spec's list (journal_entries/lines included); the auditor still wants its mutant pass. The auditor
-   needs Ian's "go" per sha and re-migrates its DB from its worktree. (DEF-487's before-launch call WAS made: Ian,
-   2026-09-28, bible row 241.)
-4. Then **T-348 S1–S3**, **DEF-485** (verify on screen first), S5.4, S8, S9.
+## What's left (Ian's standing ask: always listed at wrap-up)
+1. **T-348 S2** — sweep ~102 page descriptions onto `PageDescription`. **First** teach the action-link resolver that
+   `PageDescription` supplies `text-sm` (Amendment A2), red first.
+2. **T-359** — the AI business brain assessment (`/research-evaluate-propose`; Opus; plan stub has the questions).
+3. **DEF-488** (spec it: parse `shiftDay` in the domain after `authorize()`), **DEF-492** (move the COD-credit rule
+   into the domain) — both small, both unowned.
+4. **DEF-491** — before a second organisation onboards (not a launch blocker).
+5. Carried: T-343 remainder, S5.4, S8, S9 (see ROADMAP), T-353 S4 latent notes (L1/L2).
 
 ## Do not decide these alone — they are Ian's
-- **Apply 0168 to `shareat_dev`?** Recommendation: yes, so dev matches the code (dev `audit_log` has 0 rows).
-- **DEF-485** fix before launch? Recommendation: verify on screen first; if real, yes (it blocks expenses from AP).
-- Carried: erp2 hold-button grants check (0166); DEF-476 before launch?; DEF-443; ADR-014; fiscal-period cleanup
-  (DEF-424/426/433/434/439); arm `shareat-fiscal-period-seed.timer` before 2027-09-01; dark-mode `--brand`/`--warning`;
-  create the terminal Firebase account (real sign-in for §9.4 is still impossible locally — every smoketest today used
-  forged sessions: screens, not authentication).
+- **Run the prod `pg_default_acl` query before the deploy carrying 0169** (row 243).
+- **Apply 0169–0171 to `shareat_dev`?** Recommendation: yes, so dev matches the code.
+- Carried: DEF-476 before launch?; DEF-443; ADR-014; fiscal-period cleanup (DEF-424/426/433/434/439); arm
+  `shareat-fiscal-period-seed.timer` before 2027-09-01; dark-mode `--brand`/`--warning`; the terminal Firebase account
+  (real sign-in for §9.4 is still impossible locally — smoketests use forged sessions).
 
 ## Traps that have actually bitten
-- **Two helpers on one lane DB** truncate each other — every tester/subagent gets its own `_test` DB.
-- **`page.content()` includes Next's RSC payload** (it embeds searchParams) — assert on the visible element's text.
-- **`renderToStaticMarkup` emits `&#x27;`** — normalise before matching (bit four times today).
-- **A negative assertion with no positive control** passes when the feature is deleted — pair every "not" with a "is".
-- **A fixed `setTimeout` is not a concurrency barrier.**
-- **Adding a directory under `packages/*/src`** needs a `t343-throw-ratchet` CEILINGS entry.
-- **Bible rows shift the TOC** — `npm run toc` after every row.
+- **Never junction `node_modules` into a worktree; never recursive-delete one.** `rmdir` a junction first.
+- **The Edit tool writes CRLF here** — check `file <path>` before READY; whole-file diffs mean line endings.
+- **A raw `SAVEPOINT` inside `sql.begin` lets an error escape `caught()`** — use `tx.savepoint(...)` (T-355 N2, T-357 F4/F5).
+- **A test with `app.org_id` unset under RLS affects 0 rows silently** — reds forever for the wrong reason (T-356).
+- **`SELECT … FOR UPDATE` needs UPDATE privilege** — never revoke it from a table something row-locks.
+- **Unit timeouts under load are flakes** (5–30 s legs while another lane runs mutants) — re-run solo before believing.
+- **A bible row shifts the TOC** — `npm run toc`.
 
-## Sessions
-Tester `webapps-30` (no uncommitted files; next S2e then T-352; asks Ian per new task). Builder `system32-19` (clean,
-idle). Auditor `auto-assign-staff-role-on-hire` (worktree `wt-t350`, DB `shareat_test_auditor` at 0167; queue: `fa83e01`,
-`0cd0fb6`, `aa14108`). Lane DBs: `shareat_test_t343s5_{tester,builder}`, `shareat_test_helper_s5` — re-run
-`make-test-dbs.mjs` for 0168. All three sessions are safe to clear and re-brief from this file.
+## Sessions (all safe to clear; re-brief from this file)
+Tester `webapps-30` · Builder `system32-19` · Auditor `auto-assign-staff-role-on-hire` (worktree `wt-t350`, its OWN
+`node_modules` now, DB `shareat_test_auditor`). Lane DBs: `shareat_test_t343s5_{tester,builder}` (builder at 0171;
+re-run `make-test-dbs.mjs`), smoke DB `shareat_test_setup` (0168; `erp-smoke` on 9008). Nothing in flight, no
+uncommitted lane work (the three `apps/erp/src/app/{ap,liabilities,money-accounts}/page.tsx` "M" entries are a stale
+stat cache — `git diff` is empty).
 
 ## The paste-ready prompt
 ```
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global
-/orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all), docs/RULES.md, then
-docs/tasks/349-def-456-store-scoped-hold-own-right.md §4e and docs/tasks/352-def-478-attendance-parse-after-authorize.md.
-GREP the register and bible, never Read them whole. Goal (Ian): close as many defects as possible toward
-deployment; NOT launched. STANDING: commit slices locally; push ONLY at wrap-up unless Ian says otherwise.
-Queue: T-349 S2e → T-352 → post-commit audits of fa83e01, 0cd0fb6, aa14108 (Ian's go per sha) → T-348 S1
-→ DEF-485 (verify on screen) → wrap up. Reds assert the target; every "not" gets a positive control.
-Each tester/helper gets its own _test DB. Freeze lanes during gates. Messages are short. Render before
-deciding. Ian runs this terminal on Opus 5.5 at medium effort; do not ask him to switch.
+/orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all) and docs/RULES.md.
+GREP the register and bible, never Read them whole. Goal (Ian): close defects toward deployment; NOT
+launched. STANDING: commit slices locally; push ONLY at wrap-up; every wrap-up updates "what's left" and
+ROADMAP.html. Queue: T-348 S2 (resolver first, Amendment A2) → T-359 AI-brain assessment (Opus) →
+DEF-488 → DEF-492 → wrap up. Reds assert the target; every "not" gets a positive control. Each
+tester/helper gets its own _test DB. No node_modules junctions; mutants only in a worktree with its own
+install. Freeze lanes during gates. Messages are short. Render before deciding. Ian runs this terminal
+on Opus 5.5 at medium effort; do not ask him to switch.
 ```
