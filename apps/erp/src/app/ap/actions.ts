@@ -16,6 +16,7 @@ import {
   setInvoiceLines,
   uploadFile,
   type InvoiceLineDraft,
+  type UnrecognisedTermsMode,
   verifyInvoice,
   voidInvoice,
   recordPayment,
@@ -57,7 +58,30 @@ function supplierFieldsFrom(fd: FormData) {
     bankName: s('bankName'),
     bankAccountName: s('bankAccountName'),
     bankAccountNumber: s('bankAccountNumber'),
+    creditTermsDays: creditTermsFrom(fd),
   };
+}
+
+/**
+ * T-362 / DEF-495 — R4: the form offers an explicit choice, never a bare number box, so a person
+ * cannot type `0` meaning "no credit" and switch credit ON. The value is passed raw and judged in
+ * the domain after `authorize` (T-362 / DEF-495) — this only maps fields, it judges nothing.
+ *
+ * ⛔ Audit finding F1 (2026-09-29): an earlier version returned the unrecognised MODE string
+ * itself as the raw days value — `termsMode='30'` with no `creditTermsDays` field then read as a
+ * genuine 30-day entry, because `'30'` the mode selector and `'30'` a real day count are the same
+ * string once they leave this function. `UnrecognisedTermsMode` flags "the MODE was unrecognised"
+ * structurally, so the domain can refuse it without ever having to guess whether a string was a
+ * selector or a day count.
+ */
+function creditTermsFrom(fd: FormData): string | null | undefined | UnrecognisedTermsMode {
+  if (!fd.has('termsMode')) return undefined;
+  const mode = str(fd, 'termsMode');
+  if (mode === 'cod') return null;
+  if (mode === 'credit') return str(fd, 'creditTermsDays');
+  // An unrecognised mode is never silently read as COD, and never silently accepted just because
+  // it happens to look like a valid day count either.
+  return { unrecognisedTermsMode: mode };
 }
 
 /**

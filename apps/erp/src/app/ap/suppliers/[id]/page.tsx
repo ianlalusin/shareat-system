@@ -143,6 +143,39 @@ export default async function SupplierDetailPage({
             </span>
           </label>
 
+          <fieldset className="grid gap-3 rounded border border-neutral-200 p-3 sm:grid-cols-2 dark:border-neutral-800">
+            <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+              Payment terms
+            </legend>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Terms</span>
+              <select
+                name="termsMode"
+                defaultValue={supplier.creditTermsDays === null ? 'cod' : 'credit'}
+                className={INPUT}
+              >
+                <option value="cod">Cash on delivery (no credit)</option>
+                <option value="credit">On credit (AP)</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Days to pay</span>
+              <input
+                type="number"
+                name="creditTermsDays"
+                min="0"
+                max="365"
+                step="1"
+                defaultValue={supplier.creditTermsDays ?? ''}
+                className={INPUT}
+              />
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                Cash on delivery means Credit (AP) cannot be used. On credit means Credit is allowed, and is
+                pre-selected when a bill is recorded against a verified invoice.
+              </span>
+            </label>
+          </fieldset>
+
           <fieldset className="grid gap-3 rounded border border-neutral-200 p-3 sm:grid-cols-3 dark:border-neutral-800">
             <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
               Where payment goes

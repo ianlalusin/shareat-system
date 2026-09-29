@@ -30,6 +30,7 @@
  */
 import {
   apRepo,
+  auditLogRepo,
   itemsRepo,
   expensesRepo,
   filesRepo,
@@ -87,6 +88,28 @@ export interface CreateSupplierInput {
   bankName?: string | null;
   bankAccountName?: string | null;
   bankAccountNumber?: string | null;
+
+  /**
+   * T-362 / DEF-495 — R1: `null` means cash-on-delivery; `0` to `365` means credit (0 is legal:
+   * on credit, due on the invoice date). The value is RAW here and parsed by `parseCreditTermsDays`
+   * after `authorize` (R2, the DEF-478 / T-352 / T-360 shape) — never judged at the call site.
+   *
+   * `UnrecognisedTermsMode` (audit finding F1, 2026-09-29): a caller mapping a `termsMode` selector
+   * outside `{cod, credit}` (R4) passes this instead of a bare string. A bare string could not
+   * distinguish "an unrecognised MODE" from "a real day-count box that happens to read the same
+   * digits" — `termsMode='30'` with no `creditTermsDays` field was silently accepted as 30 days,
+   * because the string `'30'` is indistinguishable from a genuine 30-day entry once it reaches this
+   * function. The wrapper is a structural marker, not a value the caller validates: the action still
+   * judges nothing about whether a NUMBER is in range (R4's "judges nothing" holds), it only flags
+   * that the mode itself was unrecognised — the same distinction the action already makes to route
+   * `cod`/`credit`/other in the first place.
+   */
+  creditTermsDays?: number | string | null | UnrecognisedTermsMode;
+}
+
+/** See `CreateSupplierInput.creditTermsDays`'s own comment (audit finding F1, 2026-09-29). */
+export interface UnrecognisedTermsMode {
+  readonly unrecognisedTermsMode: string;
 }
 
 /**
@@ -111,6 +134,40 @@ function orNull(v: string | null | undefined): string | null | undefined {
   return v?.trim() || null;
 }
 
+const TERMS_BLANK = 'Enter how many days of credit this supplier gives (0 to 365), or choose Cash on delivery.';
+const termsMalformed = (v: string) => `Payment terms — "${v}" is not a whole number of days from 0 to 365.`;
+
+/**
+ * T-362 / DEF-495 — R2: parses a supplier's raw `creditTermsDays` box. `null`/`undefined` (the key
+ * absent, or explicitly cleared) means cash-on-delivery. `0` is legal and means "on credit, due on
+ * the invoice date" (R1) — never coerced into "no credit". The upper bound (365) is the CHECK
+ * constraint's own typo guard (`0141:47-48`); refusing it here first keeps the sentence readable,
+ * with the database CHECK as the backstop (RULES §6.3).
+ */
+function parseCreditTermsDays(
+  raw: number | string | null | undefined | UnrecognisedTermsMode,
+  fn: string,
+): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'object') {
+    const v = raw.unrecognisedTermsMode;
+    throw refuse(`${fn}: credit terms mode ${JSON.stringify(v)} is not recognised`, termsMalformed(v));
+  }
+  if (typeof raw === 'number') {
+    if (Number.isInteger(raw) && raw >= 0 && raw <= 365) return raw;
+    const v = String(raw);
+    throw refuse(`${fn}: credit terms ${JSON.stringify(v)} is not a whole number of days from 0 to 365`, termsMalformed(v));
+  }
+  const t = raw.trim();
+  if (t === '') {
+    throw refuse(`${fn}: credit terms is blank`, TERMS_BLANK);
+  }
+  if (!/^\d+$/.test(t) || Number(t) > 365) {
+    throw refuse(`${fn}: credit terms ${JSON.stringify(t)} is not a whole number of days from 0 to 365`, termsMalformed(t));
+  }
+  return Number(t);
+}
+
 export async function createSupplier(
   tx: Tx | null,
   actor: Actor,
@@ -120,6 +177,7 @@ export async function createSupplier(
     await authorize(trx, actor, 'approve_supplier', {});
     const name = input.name.trim();
     if (!name) throw refuse('createSupplier: a supplier needs a name people will recognise.', 'A supplier needs a name people will recognise.');
+    const creditTermsDays = parseCreditTermsDays(input.creditTermsDays, 'createSupplier');
     return apRepo.insertSupplier(trx, {
       orgId: actor.orgId,
       name,
@@ -136,6 +194,7 @@ export async function createSupplier(
       bankName: orNull(input.bankName) ?? null,
       bankAccountName: orNull(input.bankAccountName) ?? null,
       bankAccountNumber: orNull(input.bankAccountNumber) ?? null,
+      creditTermsDays: creditTermsDays ?? null,
     });
   };
   if (tx) return run(tx);
@@ -157,6 +216,9 @@ export async function createSupplier(
  * ⚠️ Only keys actually PRESENT on `input` are written. An absent key leaves the column alone;
  * a present-but-empty one clears it. Passing a whole object would blank every field the caller
  * did not happen to render.
+ *
+ * T-362 / DEF-495 — a real change to `creditTermsDays` is audited in `audit_log` (R3), since it
+ * decides whether AP credit may be booked against this supplier.
  */
 export async function editSupplier(
   tx: Tx | null,
@@ -176,6 +238,12 @@ export async function editSupplier(
       const name = input.name.trim();
       if (!name) throw refuse('editSupplier: a supplier needs a name people will recognise.', 'A supplier needs a name people will recognise.');
       values.name = name;
+    }
+    // T-362 / DEF-495 — R2's order: authorize -> gone -> name -> TERMS -> the other fields.
+    let creditTermsDays: number | null | undefined;
+    if (input.creditTermsDays !== undefined) {
+      creditTermsDays = parseCreditTermsDays(input.creditTermsDays, 'editSupplier');
+      values.creditTermsDays = creditTermsDays;
     }
     if (input.address !== undefined) values.address = orNull(input.address) ?? null;
     if (input.contactNo !== undefined) values.contactNo = orNull(input.contactNo) ?? null;
@@ -200,6 +268,23 @@ export async function editSupplier(
     }
 
     await apRepo.updateSupplier(trx, actor.orgId, input.supplierId, values);
+
+    // T-362 / DEF-495 — R3: audited in the table that already exists, same transaction, only on a
+    // real change (the `setChannelPayoutDestination` precedent, `channel-settlements/index.ts:738`).
+    // It decides whether AP credit may be booked against this supplier, so it is a control.
+    if (creditTermsDays !== undefined && creditTermsDays !== existing.creditTermsDays) {
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'set_supplier_credit_terms',
+        entity: 'suppliers',
+        entityId: input.supplierId,
+        before: { creditTermsDays: existing.creditTermsDays },
+        after: { creditTermsDays },
+        // The ERP screen is this function's only caller today; a second front-end must thread its
+        // own source through, not inherit this one (same comment as the precedent).
+        source: 'web',
+      });
+    }
   };
   if (tx) return run(tx);
   return transaction(run);

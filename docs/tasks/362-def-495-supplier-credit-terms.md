@@ -1,6 +1,6 @@
 # T-362: supplier credit terms can be set (DEF-495)
 
-**Status:** APPROVED 2026-09-29 (orchestrator, after Opus spec audit) with Amendment A1 — builds after T-360. **Model:** Sonnet, tester then builder.
+**Status:** DONE 2026-09-29 (DEF-495 fixed) — APPROVED 2026-09-29 (orchestrator, after Opus spec audit) with Amendment A1 — builds after T-360. **Model:** Sonnet, tester then builder.
 **Migration:** **none** (R6 gives the reasons). No new table, so there is no `classification.ts` or `rls/registry.ts` entry either.
 **Order:** this lands **before T-361** (bible §13 row 249). T-361's specs, legs and fixture edits are unchanged by it.
 **Line numbers** were checked at HEAD `191d147`. None of the BUILDER paths is dirty at that HEAD. The dirty files are

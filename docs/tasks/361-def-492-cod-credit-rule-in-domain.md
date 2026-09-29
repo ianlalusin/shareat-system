@@ -1,6 +1,6 @@
 # T-361: "no credit for a cash-on-delivery supplier" is enforced in the domain (DEF-492)
 
-**Status:** SPEC 2026-09-29 (Opus planner) — awaiting orchestrator approval. ⛔ **Q1 (below) is a sequencing decision for
+**Status:** APPROVED 2026-09-29 (orchestrator, after Opus spec audit) with Amendments A1 + A2 — builds after T-362 commits. ⛔ **Q1 (below) is a sequencing decision for
 Ian and it gates the BUILD.** The tester may start. **Model:** Sonnet, tester then builder.
 **Migration:** none, and the reason is given in R7.
 **Line numbers** were checked at HEAD `e4d9ff3`. None of the BUILDER paths is dirty at that HEAD.
@@ -268,3 +268,32 @@ as "refused" each morning until it is fixed.
 
 (c) can be combined with (a). Exempting the job from the rule is not offered, because that exemption is the defect
 itself.
+
+## Amendment A1 — T-362 landed first (2026-09-29, orchestrator; overrides the text above where they differ)
+1. **Q1 is answered:** Ian chose (a), bible §13 row 249 — T-362 gave `credit_terms_days` a writer (`createSupplier` /
+   `editSupplier`, `approve_supplier` gate, row 250). §"Finding that changes the blast radius" (l.27-40) is history,
+   not current state.
+2. **Fixtures set terms through `editSupplier` (or `createSupplier`), not raw SQL** — in the new D/E/J/P files and
+   in the five existing-file edits, wherever an actor holding `approve_supplier` is in reach. Raw SQL only where no
+   such actor exists in that file, with a one-line comment saying why.
+3. **§9.4 step 2:** set the terms on the real `/ap/suppliers/<id>` screen (T-362), not by SQL.
+4. **Build is unblocked** once T-362 commits and this spec clears its Opus spec audit.
+
+## Amendment A2 — spec audit (2026-09-29, orchestrator; auditor findings adopted; overrides A1 and the text above)
+1. **B3's anchor:** in `expenses/edit.ts` the invoice/supplier re-point block closes at **:131**; insert the
+   cash-on-delivery check **after :131, before the particulars block at :132** — never inside
+   `if (invoiceId !== undefined)`, or R3's "payments given without re-pointing" trigger (E1) can never fire.
+2. **Line numbers are at `e4d9ff3`; after T-362 commits, find every anchor by CONTENT.** Known shift: `ap/index.ts`
+   +62 (`recordExpenseForInvoice` 668 → 730; B4's `:661-667` comment is now ~`:723-729` — confirm by text, it is
+   NOT the T-196 void-cascade docstring). `CreateSupplierInput` / `EditSupplierInput` changed in T-362. The
+   money-lines sentence is `:398-399`.
+3. **Replaces A1 item 2 — terms in fixtures, per file:** `ap.test.ts` (`:184`, `:354`), `ap-aging` (`:113`),
+   `ap-auto-allocate` (`:112`) already call `createSupplier` → add the `creditTermsDays` **argument** (no extra call;
+   `createSupplier` writes no `audit_log` row, `editSupplier` does). `supplier-returns` (`:112-113`) and
+   `recurring-expenses-job` (`:81-83`) insert suppliers by raw SQL with no domain import → add `credit_terms_days`
+   to that same raw insert (one column, no new import), with a one-line comment citing this amendment. New t361
+   files use `createSupplier(…, { creditTermsDays })`.
+4. **Second mutant for R2's named boundary:** the COD check moved **above the supplier-mismatch refusal**
+   (`create.ts:168`) must red **D8 alone** (in addition to the planned "above `authorize`" mutant).
+5. **R4's cycle question is settled:** `money-lines.ts` imports only `@shareat/core/money` (`:25`); importing it
+   from `create.ts` / `edit.ts` cannot form a cycle. No STOP needed.

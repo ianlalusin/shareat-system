@@ -298,7 +298,15 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // `<select>`) is REPLACED by `<MoneyLines>`, a plain custom tag the census walk does not resolve
     // (same reasoning as `PageDescription` above) — three candidates leave the population outright,
     // they do not move buckets.
-    expect(results.length).toBe(1056);
+    // 1056 -> 1060, T-362 (DEF-495), 2026-09-29. +4 PASS, FAIL/UNRESOLVED unmoved (both asserted
+    // above — confirmed unchanged at 151/58 before this re-pin). The new "Payment terms" fieldset's
+    // four native controls, all styled through the pages' own `INPUT` constant (`text-sm` + `py-2`
+    // + `border` = 38px, the repo's existing form-control convention): `app/ap/page.tsx:119`
+    // (`termsMode` `<select>`) and `:125` (`creditTermsDays` `<input>`); `app/ap/suppliers/[id]/
+    // page.tsx:152` (`termsMode` `<select>`) and `:163` (`creditTermsDays` `<input>`). Verified by
+    // filtering `runCensus()`'s own results to these two files and reading each new candidate's
+    // line/px directly, not by arithmetic alone.
+    expect(results.length).toBe(1060);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

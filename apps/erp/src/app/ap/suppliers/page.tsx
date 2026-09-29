@@ -99,13 +99,14 @@ export default async function SuppliersPage({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[52rem] text-sm">
+          <table className="w-full min-w-[58rem] text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
                 <th className="py-2 pr-3 font-medium">Supplier</th>
                 <th className="py-2 pr-3 font-medium">TIN</th>
                 <th className="py-2 pr-3 font-medium">VAT</th>
                 <th className="py-2 pr-3 font-medium">OR</th>
+                <th className="py-2 pr-3 font-medium">Terms</th>
                 <th className="py-2 pr-3 font-medium">Bank</th>
                 <th className="py-2 pr-3 text-right font-medium">Payable</th>
               </tr>
@@ -136,6 +137,10 @@ export default async function SuppliersPage({
                   <td className="py-2 pr-3 text-xs">
                     {/* ⭐ The one ported field that does work: it defaults the document type. */}
                     {s.issuesOfficialReceipt ? 'Official receipt' : 'No OR'}
+                  </td>
+                  <td className="py-2 pr-3 text-xs">
+                    {/* T-362 / DEF-495 — === null, never truthiness: 0 days is credit (R1). */}
+                    {s.creditTermsDays === null ? 'Cash on delivery' : `${s.creditTermsDays} days`}
                   </td>
                   <td className="py-2 pr-3 font-mono text-xs">
                     {/* ⚠️ Masked on a list, whole on the detail page. */}

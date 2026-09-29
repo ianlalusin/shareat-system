@@ -95,6 +95,8 @@ export async function insertSupplier(
     bankName?: string | null;
     bankAccountName?: string | null;
     bankAccountNumber?: string | null;
+    // ---- T-362
+    creditTermsDays?: number | null;
   },
 ): Promise<{ id: string }> {
   const [row] = await tx.insert(suppliers).values(input).returning({ id: suppliers.id });
@@ -148,6 +150,8 @@ export async function updateSupplier(
     bankName: string | null;
     bankAccountName: string | null;
     bankAccountNumber: string | null;
+    // ---- T-362
+    creditTermsDays: number | null;
   }>,
 ): Promise<void> {
   const updated = await tx
