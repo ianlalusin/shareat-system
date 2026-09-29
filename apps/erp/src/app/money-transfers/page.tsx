@@ -5,6 +5,7 @@ import { createMoneyTransferAction, voidMoneyTransferAction } from './actions';
 import { RecordTransferForm } from './RecordTransferForm';
 import { CUSTODIAN_LABEL, listRecentTransfers, listStores, listTransferableAccounts, peso } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Money transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -61,7 +62,7 @@ export default async function MoneyTransfersPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Money transfers</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Moving money between the places it already sits — drawer to safe, safe to drawer, cash
           to wallet, wallet to bank. Money never appears or disappears here; it only changes
           hands.{' '}
@@ -69,7 +70,7 @@ export default async function MoneyTransfersPage({
             Manage the accounts themselves
           </Link>
           .
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

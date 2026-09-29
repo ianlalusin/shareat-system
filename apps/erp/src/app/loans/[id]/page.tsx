@@ -5,6 +5,7 @@ import { disburseLoanAction, recordPaymentAction, reverseEntryAction } from '../
 import { METHOD_LABEL, STATUS_LABEL, getDetail, moneyAccounts, peso, today } from '../lib';
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Loan — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -41,10 +42,10 @@ export default async function LoanPage({
           ← Loans
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{loan.name}</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           {loan.lenderName} · {STATUS_LABEL[loan.status]} · {Number(loan.interestRate)}% per{' '}
           {loan.ratePeriod} · {METHOD_LABEL[loan.interestMethod]}
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

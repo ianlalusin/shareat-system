@@ -2,6 +2,7 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { setOrganizationIdentityAction } from './actions';
 import { identityView } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Organisation — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -63,14 +64,14 @@ export default async function OrganizationSettingsPage({
           / Organisation
         </p>
         <h1 className="text-2xl font-semibold">Organisation</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           The registered identity the books are kept under — what a document printed from this
           system should carry. Each branch&apos;s own address and TIN branch code live on{' '}
           <a href="/admin/stores" className="underline">
             its store
           </a>
           .
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && <Banner tone="error">{sp.error}</Banner>}

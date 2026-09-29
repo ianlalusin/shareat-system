@@ -5,6 +5,7 @@ import { listStores } from './lib';
 import { requireSession } from '../../lib/session';
 import { withOrgPrincipal } from '../expenses/lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Sales days — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -56,10 +57,10 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Sales days</h1>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          <PageDescription>
             A day&apos;s selling, per store. <strong>Verifying is what recognises the revenue</strong> —
             an unverified day posts nothing (docs/tasks/123-sales-day.md).
-          </p>
+          </PageDescription>
         </div>
         <a
           href={`/sales-days/new?${carry.toString()}`}

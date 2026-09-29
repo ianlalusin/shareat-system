@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireSession } from '../../../lib/session';
 import { scorecardFor, scorecardRange } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Responsiveness scorecard — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -33,10 +34,10 @@ export default async function ScorecardPage() {
           ← Findings
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">Responsiveness scorecard</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Findings raised between {range.from} and {range.to}, and how many of them stopped being
           true. A finding clears when the condition goes away — nobody can clear one by clicking.
-        </p>
+        </PageDescription>
       </div>
 
       {/* ⛔ The disclosure is part of the deliverable, not a nicety. There is no backfill and there

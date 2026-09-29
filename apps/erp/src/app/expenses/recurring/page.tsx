@@ -23,6 +23,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { Input } from '@/components/ui';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Recurring expenses — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -79,10 +80,10 @@ export default async function RecurringExpensesPage({
           ← Expenses
         </Link>
         <h1 className="mt-1 text-2xl font-semibold">Recurring expenses</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           The fixed bills — rent, internet, utilities, subscriptions, leases. A branch that forgets
           rent does not fail to pay it; it pays it late, off-book, and the month closes wrong.
-        </p>
+        </PageDescription>
       </div>
 
       {/* ⛔ The banner that said "the job is not built" is gone because the job is built. What

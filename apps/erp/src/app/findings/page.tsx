@@ -21,6 +21,7 @@ import { heldCapabilities } from '@shareat/auth';
 // T-345 Amendment R3.4 — the Manila month, not UTC.
 import { currentPeriod } from '../fixed-assets/lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Findings — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -79,11 +80,11 @@ export default async function FindingsPage({
             Responsiveness scorecard →
           </Link>
         </div>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Every question the books are asked, answered on this page load. There is no findings
           table — <strong>a finding cannot be resolved while it is still true</strong>, only fixed
           or accepted for now.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

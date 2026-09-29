@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/reports/EmptyState';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { StoreComparisonTable, type StoreComparisonColumn } from '@/components/reports/StoreComparisonTable';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Store Comparison — Shareat System' };
 
@@ -83,11 +84,11 @@ export default async function StoreComparisonPage({
     <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">Store Comparison</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Each store's income statement, side by side — every figure calls the same
           `getIncomeStatement` the single-store screen does, never a second definition of the same
           number.
-        </p>
+        </PageDescription>
       </div>
 
       <form method="GET" action="/reports/store-comparison" className="flex flex-wrap items-end gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900">

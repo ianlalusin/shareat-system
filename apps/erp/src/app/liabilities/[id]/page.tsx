@@ -14,6 +14,7 @@ import {
 } from '../lib';
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Liability — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -54,13 +55,13 @@ export default async function LiabilityPage({
           ← Liabilities
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{liability.name}</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           {CATEGORY_LABEL[liability.category] ?? liability.category} · {store?.name ?? '—'} ·{' '}
           {liability.dueOn ? `due ${liability.dueOn}` : 'no due date'}
           {liability.overdue && (
             <span className="text-amber-700 dark:text-amber-400"> · overdue</span>
           )}
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

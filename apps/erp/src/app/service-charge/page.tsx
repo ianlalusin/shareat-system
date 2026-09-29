@@ -2,6 +2,7 @@ import { requirePageAccess } from '../../lib/page-access';
 import { distributeAction } from './actions';
 import { floatBalance, listStores, moneyAccounts, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Service charge — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -29,7 +30,7 @@ export default async function ServiceChargePage({
     return (
       <Page density="table">
         <h1 className="text-2xl font-semibold">Service charge</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">No stores yet.</p>
+        <PageDescription>No stores yet.</PageDescription>
       </Page>
     );
   }
@@ -45,12 +46,12 @@ export default async function ServiceChargePage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Service charge</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           RA 11360 sends 100% of the service charge to rank-and-file staff, at least twice a
           month. This records that the float was discharged and by how much.{' '}
           <strong>ERP does not know the split, who is eligible, or the odd centavo</strong> — the
           business processes and documents that by hand.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

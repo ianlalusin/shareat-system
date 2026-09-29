@@ -3,6 +3,7 @@ import { requireSession } from '../../../lib/session';
 import { createPriceListAction } from '../actions';
 import { listLists } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Price lists — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -28,12 +29,12 @@ export default async function PriceListsPage({
           ← Customers
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">Price lists</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           What the business charges, per item. A customer names one, and an order line takes its
           rate. ⛔ <strong>No volume breaks or dated promotions</strong> — one rate per item per
           list is what the business does today, and a pricing-rule engine is generality nothing has
           asked for yet.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

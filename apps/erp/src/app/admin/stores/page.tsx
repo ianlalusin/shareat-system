@@ -3,6 +3,7 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { listStoresForAdmin } from './lib';
 import { createStoreAction } from './actions';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Stores — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -34,10 +35,10 @@ export default async function StoresPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Stores</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+        <PageDescription>
           Opening a branch creates its default room and grants every admin access, in one
           transaction — so a half-made store cannot exist. What is left is the business half.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.ok && (

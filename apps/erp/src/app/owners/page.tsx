@@ -10,6 +10,7 @@ import {
   peso,
 } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Owners — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -45,11 +46,11 @@ export default async function OwnersPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Owners</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           What each owner has put in, taken out, and still owes. Every figure is summed from the
           ledger — <strong>no total is stored anywhere</strong>, so none of them can drift from the
           books.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

@@ -13,6 +13,7 @@ import {
   readPolicyForDisplay,
 } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Fixed assets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -68,11 +69,11 @@ export default async function FixedAssetsPage({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Fixed assets</h1>
-          <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+          <PageDescription>
             The register. <strong>Accumulated depreciation and book value are computed from the
             ledger on every view</strong> — they are not stored anywhere, so they cannot drift from
             the entries that produced them (docs/tasks/124-fixed-assets-and-depreciation.md §3).
-          </p>
+          </PageDescription>
         </div>
         <a
           href={`/fixed-assets/new?${carry.toString()}`}

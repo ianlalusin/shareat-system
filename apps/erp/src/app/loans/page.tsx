@@ -4,6 +4,7 @@ import { requirePageAccess } from '../../lib/page-access';
 import { createLoanAction } from './actions';
 import { METHOD_LABEL, STATUS_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Loans — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -33,10 +34,10 @@ export default async function LoansPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Loans</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           What the business has borrowed, what it has repaid, and what is left. Every figure here is
           summed from the ledger — <strong>there is no stored balance to go stale</strong>.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

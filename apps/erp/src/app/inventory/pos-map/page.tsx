@@ -4,6 +4,7 @@ import { upsertPosItemMapAction, decideMapRequestAction } from './actions';
 import { listStores, posMapScreenData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'POS item mapping — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -45,10 +46,10 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">POS item mapping</h1>
-          <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+          <PageDescription className="mt-1">
             A standing decision: what a POS item means for stock — one item, a recipe, or an
             explicit &ldquo;sells, consumes nothing.&rdquo;
-          </p>
+          </PageDescription>
         </div>
         <Link href={`/inventory/pos-usage?store=${storeId}`} className="text-sm underline underline-offset-4">
           Daily usage pull →

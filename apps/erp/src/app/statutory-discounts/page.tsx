@@ -7,6 +7,7 @@ import { listStores, withOrgPrincipal } from '../expenses/lib';
 import { requireSession } from '../../lib/session';
 import { recordStatutoryDiscountAction, voidStatutoryDiscountAction } from './actions';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'SC/PWD register — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -58,11 +59,11 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
     <Page density="table">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Senior citizen / PWD register</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           The per-transaction record required by <strong>RR 5-2017 §5.9</strong> (PWD) and{' '}
           <strong>RR 7-2010</strong> (senior citizen): name, ID number, gross, discount, date and
           invoice number, for every discounted sale.
-        </p>
+        </PageDescription>
       </header>
 
       {/* ⛔ Bible row 75, on the face of the screen rather than buried in a doc. The disclaimer in

@@ -5,6 +5,7 @@ import { deleteUsageDraftAction, postUsageAction, voidUsageAction } from '../act
 import { usageRecordDetail } from '../lib';
 import { wastageReasonLabel } from '@shareat/domain';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Usage record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -50,10 +51,10 @@ export default async function UsageRecordPage({
         <h1 className="mt-2 text-2xl font-semibold">
           {KIND_LABEL[record.kind] ?? record.kind} — {locationName}
         </h1>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription className="mt-1">
           {record.usedOn} · <strong>{STATUS_LABEL[record.status] ?? record.status}</strong>
           {record.reasonCode && <> · {wastageReasonLabel(record.reasonCode)}</>}
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

@@ -6,6 +6,7 @@ import { requireSession } from '../../../lib/session';
 import { approveExpenseAction, voidExpenseAction, updateDraftAction, deleteDraftAction } from '../actions';
 import { withOrgPrincipal } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
 // that reader returns, so the two cannot drift.
@@ -108,9 +109,9 @@ export default async function ExpenseDetailPage({
             ← All expenses
           </a>
           <h1 className="mt-1 text-2xl font-semibold">{expense.particulars}</h1>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          <PageDescription>
             {expense.businessDate} · {storeById.get(expense.storeId)?.name ?? expense.storeId} · {categoryLabel}
-          </p>
+          </PageDescription>
         </div>
         <div className="text-right">
           <StatusBadge status={expense.status} />

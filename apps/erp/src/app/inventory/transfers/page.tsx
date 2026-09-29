@@ -13,6 +13,7 @@ import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Stock transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -93,10 +94,10 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
           ← Stock on hand
         </Link>
       </div>
-      <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+      <PageDescription className="mt-1">
         Room to room, within one store. ⭐ Posts no journal entry and consumes no FIFO layer — a
         transfer moves quantity only.
-      </p>
+      </PageDescription>
 
       <FilterRow className="mt-6">
         <label className="text-sm">

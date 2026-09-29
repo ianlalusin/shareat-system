@@ -9,6 +9,7 @@ import { listStores, withOrgPrincipal } from '../expenses/lib';
 import { recordOrderWastageAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Order wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -89,10 +90,10 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Order wastage</h1>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription className="mt-1">
           A refunded or remade order — economics and staff accountability, never stock. Raw-stock
           wastage is recorded under Inventory.
-        </p>
+        </PageDescription>
       </div>
 
       <FilterRow>

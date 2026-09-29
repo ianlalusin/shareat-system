@@ -19,6 +19,7 @@ import {
   type TillCountRow,
 } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Till custody — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -44,9 +45,9 @@ export default async function TillPage({
     return (
       <Page density="table" className="space-y-4">
         <h1 className="text-2xl font-semibold">Till custody</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           No store is set up yet.
-        </p>
+        </PageDescription>
       </Page>
     );
   }
@@ -65,12 +66,12 @@ export default async function TillPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Till custody</h1>
-        <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Who is holding the till, and what they counted. ⭐ A count here is a{' '}
           <strong>physical</strong> figure measured against the ledger — not the ledger measured
           against a target. Those look identical as a number and mean opposite things, and only
           this one names somebody who owes money.
-        </p>
+        </PageDescription>
       </div>
 
       <form className="flex flex-wrap items-end gap-3">

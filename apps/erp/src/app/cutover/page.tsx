@@ -3,6 +3,7 @@ import { requireSession } from '../../lib/session';
 import { attestStepAction } from './actions';
 import { PHASE_TITLE, kindLabel, listStores, loadGaps, loadProgress, peso } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'The conversion — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -38,11 +39,11 @@ export default async function CutoverPage({
     <Page density="form">
       <div>
         <h1 className="text-2xl font-semibold">The 31 December conversion</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Closing the old books and opening these ones. It runs twice — a rehearsal in November
           against a restored copy, then the real thing — and it is meant to be picked up and put
           down over several days.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

@@ -26,6 +26,24 @@ const appRoot = resolve(here, '..', 'src', 'app');
 const globalsCssPath = resolve(appRoot, 'globals.css');
 const actionLinkPath = resolve(srcRoot, 'components', 'action-link.ts');
 
+// Pins by CONTENT, not by line number — T-348 S2's new `PageDescription` import shifted every
+// line below it in `customers/page.tsx` by one, and a bare line pin drifts on the next unrelated
+// edit too. `distinguishing` is a string unique to the one opening tag's own attributes, found
+// within `lookahead` lines of the tag so a multi-line opening element still resolves to the tag's
+// OWN first line — the same line `runCensus()` reports via `node.getStart()`.
+function lineOfOpeningTag(filePath: string, tagNeedle: string, distinguishing: string, lookahead = 4): number {
+  const lines = readFileSync(filePath, 'utf8').split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const openingLine = lines[i];
+    if (openingLine === undefined || !openingLine.includes(tagNeedle)) continue;
+    for (let j = i; j <= i + lookahead && j < lines.length; j++) {
+      const line = lines[j];
+      if (line !== undefined && line.includes(distinguishing)) return i + 1;
+    }
+  }
+  throw new Error(`no ${tagNeedle} element containing "${distinguishing}" found in ${filePath}`);
+}
+
 const TARGET_FILES = [
   'app/admin/stores/[id]/page.tsx',
   'app/customers/[customerId]/page.tsx',
@@ -74,14 +92,24 @@ describe('T-262 — the guard\'s own inputs (fail-closed applies to them too, §
 });
 
 describe('T-262 — geometry model self-check (§6.2 step 4, measured in a real browser at 390×844)', () => {
-  it('app/customers/page.tsx:131 <button className="px-2 py-0.5 text-xs …"> models to 22px, under the 24px floor (measured 56×22 exact)', () => {
-    const hit = results.find((r) => r.file === 'app/customers/page.tsx' && r.line === 131 && r.tag === 'button');
+  it('app/customers/page.tsx <button className="px-2 py-0.5 text-xs …"> models to 22px, under the 24px floor (measured 56×22 exact)', () => {
+    const line = lineOfOpeningTag(
+      resolve(srcRoot, 'app/customers/page.tsx'),
+      '<button',
+      'className="rounded border border-neutral-300 px-2 py-0.5 text-xs dark:border-neutral-700"',
+    );
+    const hit = results.find((r) => r.file === 'app/customers/page.tsx' && r.line === line && r.tag === 'button');
     expect(hit).toBeDefined();
     expect(hit).toMatchObject({ status: 'fail', px: 22 });
   });
 
-  it('app/customers/page.tsx:93 <Link> inheriting text-sm models to 20px, under the 24px floor (measured 196×19 — 1px is inline content-height, not model error)', () => {
-    const hit = results.find((r) => r.file === 'app/customers/page.tsx' && r.line === 93 && r.tag === 'Link');
+  it('app/customers/page.tsx <Link> inheriting text-sm models to 20px, under the 24px floor (measured 196×19 — 1px is inline content-height, not model error)', () => {
+    const line = lineOfOpeningTag(
+      resolve(srcRoot, 'app/customers/page.tsx'),
+      '<Link',
+      'href={`/customers/${c.id}`}',
+    );
+    const hit = results.find((r) => r.file === 'app/customers/page.tsx' && r.line === line && r.tag === 'Link');
     expect(hit).toBeDefined();
     expect(hit).toMatchObject({ status: 'fail', px: 20 });
   });

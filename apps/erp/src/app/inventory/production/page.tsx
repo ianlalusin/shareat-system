@@ -5,6 +5,7 @@ import { saveProductionDraftAction } from './actions';
 import { listStores, productionScreenData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Production — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -51,10 +52,10 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Production</h1>
-          <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+          <PageDescription className="mt-1">
             A slicing run or a prep batch posts as ONE stock transaction — inputs out, outputs in,
             cost carried across. A floor worker records the run; a manager posts it.
-          </p>
+          </PageDescription>
         </div>
         <Link href={`/inventory?store=${storeId}`} className="text-sm underline underline-offset-4">
           ← Stock on hand

@@ -13,6 +13,7 @@ import {
 } from '../lib';
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Cash request — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -57,10 +58,10 @@ export default async function CashRequestPage({
           ← Cash requests
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{req.purpose}</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           {holder?.displayName ?? 'Unknown holder'} · {store?.name ?? '—'} ·{' '}
           {STATUS_LABEL[req.status] ?? req.status} · asked {req.requestedOn}
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

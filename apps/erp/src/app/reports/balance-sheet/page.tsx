@@ -8,6 +8,7 @@ import { BalanceSheetFilters } from '@/components/reports/BalanceSheetFilters';
 import { BalanceSheetTable, BalanceSheetTieIndicator } from '@/components/reports/BalanceSheetTable';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Balance Sheet — Shareat System' };
 
@@ -51,12 +52,12 @@ export default async function BalanceSheetPage({
     <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">Balance Sheet</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Every figure below is computed live from journal_lines — nothing here is a stored
           total. &ldquo;Current period earnings&rdquo; is the running total of unclosed
           revenue and expense, folded into Equity so the equation ties on any date, not only
           right after a year-close.
-        </p>
+        </PageDescription>
       </div>
 
       <BalanceSheetFilters

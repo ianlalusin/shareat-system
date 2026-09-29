@@ -4,6 +4,7 @@ import { reportScope, runReport } from '../lib';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { JournalLinesTable, type JournalLineRow } from '@/components/reports/JournalLinesTable';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Journal Lines — Shareat System' };
 
@@ -82,10 +83,10 @@ export default async function JournalLinesPage({
         <h1 className="text-2xl font-semibold">
           Journal Lines{sp.code ? ` — ${sp.code}` : ''} {sp.name ?? ''}
         </h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Every line posted to this account for the range below — the drill-down behind a report
           line.
-        </p>
+        </PageDescription>
       </div>
 
       <p className="text-sm text-neutral-600 dark:text-neutral-400">

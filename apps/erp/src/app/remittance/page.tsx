@@ -21,6 +21,7 @@ import {
   today,
 } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Remittance — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -46,7 +47,7 @@ export default async function RemittancePage({
     return (
       <Page density="table">
         <h1 className="text-2xl font-semibold">Remittance</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">No stores yet.</p>
+        <PageDescription>No stores yet.</PageDescription>
       </Page>
     );
   }
@@ -77,12 +78,12 @@ export default async function RemittancePage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Remittance</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           What the cashier holds, day by day, and the handover that clears it. A day is owed{' '}
           <strong>everything the cashier touched</strong> — sales, collections and returns in;
           expenses paid from the till, cash requests and advances out. One handover can settle
           several days.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

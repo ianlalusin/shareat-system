@@ -9,6 +9,7 @@ import {
 import { listItems, pendingRequests, duplicateCandidates, soldAsLabel } from './lib';
 import { ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Items — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -36,11 +37,11 @@ export default async function ItemsPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Items</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           One identity per thing the business buys, for the whole organisation. ⭐ Only a
           <strong> super-admin</strong> can add one — everyone else requests it, because a duplicate
           is not a row you delete later, it is a price history split in two.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

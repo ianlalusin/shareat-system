@@ -5,6 +5,7 @@ import { listStores, positionsForStore, rosterForStore } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { Input } from '@/components/ui';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Staff — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -45,11 +46,11 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Staff</h1>
-          <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+          <PageDescription className="mt-1">
             Who is on the roster at this store right now. ⭐ Every attendance, payroll and
             credential screen in this app needs an employment to point at — this is where one gets
             created (DEF-131).
-          </p>
+          </PageDescription>
         </div>
         <Link href={`/staff/hire?store=${storeId}`} className={BTN}>
           Hire

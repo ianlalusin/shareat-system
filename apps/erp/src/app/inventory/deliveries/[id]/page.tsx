@@ -6,6 +6,7 @@ import { peso } from '../../../../lib/format';
 import { receiveDeliveryAction } from '../actions';
 import { deliveryDetail } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Delivery — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -61,10 +62,10 @@ export default async function DeliveryPage({
           {KIND_LABEL[doc.kind] ?? doc.kind}
           {doc.supplierName && <> — {doc.supplierName}</>}
         </h1>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription className="mt-1">
           {doc.deliveredOn} · <strong>{STATUS_LABEL[doc.status] ?? doc.status}</strong>
           {doc.referenceNo && <> · ref {doc.referenceNo}</>}
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

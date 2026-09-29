@@ -3,6 +3,7 @@ import { setWastageMonitorAction } from './actions';
 import { listActivePersons, listStores, monitorView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Wastage Monitor — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -56,9 +57,9 @@ export default async function WastageMonitorSettingsPage({
       <Page density="form" className="space-y-4">
         <Crumb />
         <h1 className="text-2xl font-semibold">Wastage Monitor</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           This organisation has no stores yet. A Monitor belongs to a branch.
-        </p>
+        </PageDescription>
       </Page>
     );
   }
@@ -73,12 +74,12 @@ export default async function WastageMonitorSettingsPage({
       <div>
         <Crumb />
         <h1 className="text-2xl font-semibold">Wastage Monitor</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Who answers for a wasted or refunded order at this branch when nobody else is named. A
           reviewed wastage is created in this person&apos;s name, and{' '}
           <strong>if it is still unresolved after 15 days it is charged to them automatically</strong>
           .
-        </p>
+        </PageDescription>
       </div>
 
       <FilterRow>

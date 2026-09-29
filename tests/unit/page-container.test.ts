@@ -174,7 +174,14 @@ describe('T-234 — every route uses the Page container', () => {
    * `max-w-*` anywhere in a page and went red on 30 routes — every one of them a `<p>` carrying a
    * **prose measure**, which is ordinary typography: a description paragraph capped at `max-w-2xl`
    * so a 1280 px line does not run to 200 characters. Fifty `<p>`s and one `<span>` do this, and
-   * they are right to.
+   * they were right to — until T-348.
+   *
+   * ⛔ **T-348 / DEF-474 (2026-09-29): no longer true for the page-TITLE description.** 47 of those
+   * capped paragraphs sat under a page's `<h1>` and are swept into the shared `<PageDescription>`
+   * component, which drops the cap on purpose — DEF-474 wants the full content width, clamped at 3
+   * lines with an ellipsis and an expand control, not a narrower prose measure. Prose elsewhere on
+   * the page (the section blurbs this test still leaves alone, out of scope for that sweep) is
+   * unaffected: capping THEIR width is still ordinary typography, not the centring container below.
    *
    * ⛔ What must not come back is the CENTRING CONTAINER — `mx-auto` together with a `max-w-*`,
    * a page deciding its own width. That is the pattern this task replaced on 98 routes, and it is
@@ -236,11 +243,22 @@ describe('T-234 — every route uses the Page container', () => {
 
   it('⭐ and a prose measure on a paragraph is still allowed — the control for the rule above', () => {
     // Without this, the next person to read the assertion above tightens it to "no max-w at all",
-    // the suite goes red on 30 routes, and the natural repair is to delete 50 legitimate
-    // line-length caps. Naming what is PERMITTED is what stops that.
+    // the suite goes red, and the natural repair is to delete every legitimate line-length cap.
+    // Naming what is PERMITTED is what stops that.
+    //
+    // ⛔ T-348 / DEF-474 (2026-09-29): >10 -> 5. The 47 title descriptions that used to supply most
+    // of this population are swept into `<PageDescription>` (page-container.test.ts's OTHER
+    // docstring above), which drops the cap on purpose — they no longer count here, and that is
+    // the fix working, not a regression. What is left: the 4 section-blurb files the sweep left
+    // alone (`findings/page.tsx`, `payroll/page.tsx`, `remittance/page.tsx`, `till/page.tsx`) plus
+    // one unrelated pre-existing site (`attendance/lane/page.tsx:417`, a `sm:max-w-[12rem]` label,
+    // nothing to do with a title or a section blurb). Pinned exact, like the rest of this file's
+    // guards, so the NEXT change to this number states itself instead of quietly drifting: this
+    // control still does its one job — proving `<p className="...max-w-...">` is not vacuously
+    // forbidden — with 5 of them, same as with 50.
     const withProseMeasure = pageFiles().filter((f) =>
       /<p className="[^"]*\bmax-w-/.test(readFileSync(join(repoRoot, f), 'utf8')),
     );
-    expect(withProseMeasure.length).toBeGreaterThan(10);
+    expect(withProseMeasure.length).toBe(5);
   });
 });

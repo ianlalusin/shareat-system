@@ -2,6 +2,7 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { post13thMonthRunAction, void13thMonthRunAction } from './actions';
 import { cashAccountsFor, listStores, payoutsFor, peso, preview, runsFor } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: '13th-month pay — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -37,7 +38,7 @@ export default async function ThirteenthMonthPage({
     return (
       <Page density="table" className="space-y-4">
         <h1 className="text-2xl font-semibold">13th-month pay</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">No store is set up yet.</p>
+        <PageDescription>No store is set up yet.</PageDescription>
       </Page>
     );
   }
@@ -55,13 +56,13 @@ export default async function ThirteenthMonthPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">13th-month pay</h1>
-        <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Total basic pay each person earned in <b>{year}</b>, divided by 12 — DOLE&rsquo;s
           formula, applied to what payroll already posted. Nobody who has no posted basic pay for
           the year is included. ⚠️{' '}
           <b>2026 is not real here</b> — v2 pilots Oct&ndash;Dec 2026 and every operational table
           purges 1 Jan 2027 (ADR-007); the real 2026 payout has to happen outside v2.
-        </p>
+        </PageDescription>
       </div>
 
       <form className="flex flex-wrap items-end gap-3">

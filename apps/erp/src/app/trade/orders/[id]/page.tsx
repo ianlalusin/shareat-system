@@ -6,6 +6,7 @@ import { dispatchOrderAction, receiveOrderAction, voidOrderAction } from '../act
 import { STATUS_LABEL, orderDetail, peso, today } from '../lib';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Trade order — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -64,10 +65,10 @@ export default async function TradeOrderPage({
         <h1 className="mt-2 text-2xl font-semibold">
           {sellingStore?.name ?? '—'} → {isInternal ? (receivingStore?.name ?? '—') : customer.name}
         </h1>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription className="mt-1">
           {order.orderDate} · <strong>{STATUS_LABEL[order.status]}</strong> · {peso(order.totalAmount)}
           {order.referenceNo && <> · ref {order.referenceNo}</>}
-        </p>
+        </PageDescription>
         <p className={`mt-1 text-xs ${TREATMENT_TONE[treatment] ?? ''}`}>
           {customer.name} · {TREATMENT_LABEL[treatment]}
         </p>

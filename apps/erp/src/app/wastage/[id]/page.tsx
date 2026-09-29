@@ -14,6 +14,7 @@ import {
   reverseAutoChargeAction,
 } from '../actions';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Order wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -87,10 +88,10 @@ export default async function WastageDetailPage({
         <h1 className="mt-2 text-2xl font-semibold">
           {row.channel} — {peso(row.amount)}
         </h1>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription className="mt-1">
           {row.typeMode === 'instant' ? 'Instant' : 'Tracked'} · opened {row.openedAt.toISOString().slice(0, 10)}
           {row.orderRef ? ` · order ${row.orderRef}` : ''}
-        </p>
+        </PageDescription>
         <p className="mt-1 text-sm">&ldquo;{row.reason}&rdquo;</p>
       </div>
 

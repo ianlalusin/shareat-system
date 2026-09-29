@@ -8,6 +8,7 @@ import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Supplier returns — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -116,10 +117,10 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
           ← Stock on hand
         </Link>
       </div>
-      <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+      <PageDescription className="mt-1">
         The goods go back, and we hold a credit. ⭐ Which account it lands in is derived from
         whether the receipt was invoiced — never a choice on this form.
-      </p>
+      </PageDescription>
 
       <FilterRow className="mt-6">
         <label className="text-sm">

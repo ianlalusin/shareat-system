@@ -9,6 +9,7 @@ import { enrolCardAction, enrolFingerprintAction, revokeCredentialAction } from 
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { Input } from '@/components/ui';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Credentials — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -80,11 +81,11 @@ export default async function CredentialsPage({
         <h1 className="mt-1 text-2xl font-semibold">
           Credentials{personName ? ` — ${personName}` : ''}
         </h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           <span className="font-mono">{employment.staffCode}</span> · {storeName}
           {employment.endedOn ? ' · employment ended' : ''}. What is enrolled here — hint and
           metadata only, never a secret a badge could be cloned from.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

@@ -14,6 +14,7 @@ import {
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Branch orders — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -62,10 +63,10 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
           ⭐ BOTH directions in one list, deliberately. Two screens showing "my orders" from opposite
           ends is how the two sides end up disagreeing about what was sent.
         */}
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription className="mt-1">
           Every internal order this store is on — as the commissary filling one, or as the branch
           waiting for it.
-        </p>
+        </PageDescription>
       </div>
 
       <FilterRow>

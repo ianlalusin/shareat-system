@@ -10,6 +10,7 @@ import {
 } from './lib';
 import type { QueuedDay, ReviewDayRow } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Attendance review — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -54,7 +55,7 @@ export default async function AttendanceReviewPage({
     return (
       <Page density="table" className="space-y-4">
         <h1 className="text-2xl font-semibold">Attendance review</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">No store is set up yet.</p>
+        <PageDescription>No store is set up yet.</PageDescription>
       </Page>
     );
   }
@@ -76,11 +77,11 @@ export default async function AttendanceReviewPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Attendance review</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           The days waiting on a decision, and every day in the period. ⭐ A correction is recorded
           <strong> beside </strong>the punches, never in place of them — the original tap is a
           label, and it is never rewritten.
-        </p>
+        </PageDescription>
       </div>
 
       <form className="flex flex-wrap items-end gap-3">

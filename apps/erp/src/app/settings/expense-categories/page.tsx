@@ -8,6 +8,7 @@ import {
 import { categoriesForAdmin, mappableAccounts } from './lib';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Expense categories — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -62,12 +63,12 @@ export default async function ExpenseCategoriesSettingsPage({
           / Expense categories
         </p>
         <h1 className="text-2xl font-semibold">Expense categories</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Which account each kind of spend debits. A category with{' '}
           <strong>no account mapped blocks posting</strong> rather than guessing — nothing here
           ever falls back to a catch-all account, so an unmapped category is a decision waiting,
           not a default.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && <Banner tone="error">{sp.error}</Banner>}

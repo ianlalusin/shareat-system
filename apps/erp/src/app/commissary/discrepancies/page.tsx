@@ -8,6 +8,7 @@ import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Transit shortfalls — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -62,10 +63,10 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
   return (
     <Page density="table" className="">
       <h1 className="text-2xl font-semibold">Transit shortfalls</h1>
-      <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+      <PageDescription className="mt-1">
         Goods that left this store and did not arrive. They sit in <strong>1340</strong> at cost —
         a real asset — until somebody says what happened to them.
-      </p>
+      </PageDescription>
 
       {sp.error && (
         <div className="mt-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">

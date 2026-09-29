@@ -12,6 +12,7 @@ import {
   reviewCount,
 } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Prepaid expenses — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -50,11 +51,11 @@ export default async function PrepaidPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Prepaid expenses</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Things already paid for but not yet used up — a year of insurance, a mayor&apos;s permit,
           rent paid in advance. Each sits on the balance sheet and is released into the month it
           actually covers.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

@@ -3,6 +3,7 @@ import { SEPARATION_CAUSES } from '@shareat/db/schema';
 import { postSeparationAction, voidSeparationAction } from './actions';
 import { cashAccountsFor, listStores, peso, preview, separationsFor, worklistFor } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Separations — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -47,7 +48,7 @@ export default async function SeparationsPage({
     return (
       <Page density="table" className="space-y-4">
         <h1 className="text-2xl font-semibold">Separations</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">No store is set up yet.</p>
+        <PageDescription>No store is set up yet.</PageDescription>
       </Page>
     );
   }
@@ -68,14 +69,14 @@ export default async function SeparationsPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Separations</h1>
-        <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Final pay&rsquo;s wages are just a regular pay run whose period ends on the last worked
           day — use <a href="/payroll" className="underline">/payroll</a> for that. This screen
           prices the pro-rated 13th month and gates the payout on clearance. ⚠️{' '}
           <b>Separation pay is a decision, not a calculation</b> — the amount below is never
           pre-filled from the cause; PH law owes it only for specific authorized causes, and this
           build does not guess which.
-        </p>
+        </PageDescription>
       </div>
 
       <form className="flex flex-wrap items-end gap-3">

@@ -4,6 +4,7 @@ import { getCountSessionDetail, type SheetLine } from '../lib';
 import { advanceCountAction, cancelCountAction, commitCountAction, recordCountAction } from '../actions';
 import { requireSession } from '../../../../lib/session';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Count sheet — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -108,10 +109,10 @@ export default async function CountSessionPage({
         <h1 className="mt-2 text-2xl font-semibold">
           {detail.storeName} — {detail.locations.map((l) => l.name).join(', ')}
         </h1>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription className="mt-1">
           Counted on {detail.countedOn} · <strong>{STATUS_LABEL[detail.status] ?? detail.status}</strong>
           {detail.note && <> · {detail.note}</>}
-        </p>
+        </PageDescription>
         {editable && (
           <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
             ⛔ Frozen — {detail.locations.map((l) => l.name).join(', ')} refuse every other stock post until

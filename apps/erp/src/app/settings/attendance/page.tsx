@@ -3,6 +3,7 @@ import { addShiftDays, toShiftDay } from '@shareat/domain';
 import { updateAttendanceConfigAction } from './actions';
 import { liveConfigFor, listStores } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Attendance & payroll settings — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,7 @@ export default async function AttendanceSettingsPage({
     return (
       <Page density="form" className="space-y-4">
         <h1 className="text-2xl font-semibold">Attendance & payroll settings</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">No store is set up yet.</p>
+        <PageDescription>No store is set up yet.</PageDescription>
       </Page>
     );
   }
@@ -50,14 +51,14 @@ export default async function AttendanceSettingsPage({
     <Page density="form">
       <div>
         <h1 className="text-2xl font-semibold">Attendance & payroll settings</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           One store, one policy, effective from a chosen day. ⚠️ A change never rewrites a day
           already computed — it governs from the date below onward. See it reflected on{' '}
           <a href="/payroll" className="underline">
             /payroll
           </a>
           .
-        </p>
+        </PageDescription>
       </div>
 
       <form className="flex flex-wrap items-end gap-3">

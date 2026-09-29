@@ -6,6 +6,7 @@ import { discardEventAction, retryEventAction } from './actions';
 import { ago, listStores, loadHealth, loadQuarantine, rawJson, when } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'The clock lane — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -66,10 +67,10 @@ export default async function LanePage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">The clock lane</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Whether the terminals are talking to us, and what did not make it through. Every event
           here is recoverable — nothing is ever dropped.
-        </p>
+        </PageDescription>
       </div>
 
       {/* ── Store picker. A GET form, so the URL stays shareable. ────────────────────── */}

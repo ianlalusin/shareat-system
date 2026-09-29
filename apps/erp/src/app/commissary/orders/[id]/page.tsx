@@ -20,6 +20,7 @@ import {
 } from './actions';
 import { BRANCH_ORDER_STAGE_LABEL, actorStoreIds, orderView, peso, today, type OrderView } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Branch order — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -82,10 +83,10 @@ export default async function BranchOrderPage({
         <h1 className="mt-2 text-2xl font-semibold">
           {commissary.name} → {branch.name}
         </h1>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription className="mt-1">
           {order.orderDate} · <strong>{BRANCH_ORDER_STAGE_LABEL[stage]}</strong> · {peso(order.totalAmount)}
           {order.referenceNo && <> · ref {order.referenceNo}</>}
-        </p>
+        </PageDescription>
         {order.notes && <p className="mt-1 text-xs text-neutral-500">{order.notes}</p>}
         <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
           You are on this order as{' '}

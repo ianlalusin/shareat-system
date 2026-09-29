@@ -5,6 +5,7 @@ import { NewOrderForm } from './NewOrderForm';
 import { STATUS_LABEL, listStores, orderFormData, orderRegister, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Trade orders — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -41,12 +42,12 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
           Customer returns →
         </Link>
       </div>
-      <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
+      <PageDescription>
         One document for a wholesale sale and an internal transfer alike — the commissary packs the
         same crates whoever is receiving; only the books differ. ⭐ <strong>Dispatch is the event</strong>:
         a sale bills the customer and relieves stock with cost of sales; a transfer puts the goods in
         transit at cost, and both stores&rsquo; books move when the branch confirms what arrived.
-      </p>
+      </PageDescription>
 
       {sp.error && (
         <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">

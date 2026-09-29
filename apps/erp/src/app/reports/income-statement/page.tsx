@@ -7,6 +7,7 @@ import { ReportBasis } from '@/components/reports/ReportBasis';
 import { ReportFilters } from '@/components/reports/ReportFilters';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Income Statement — Shareat System' };
 
@@ -62,10 +63,10 @@ export default async function IncomeStatementPage({
     <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">Income Statement</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           A GROUP BY query over journal_lines — a new revenue or expense account appears
           here automatically, with no code change.
-        </p>
+        </PageDescription>
       </div>
 
       <ReportFilters

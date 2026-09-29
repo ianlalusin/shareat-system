@@ -15,6 +15,7 @@ import {
 } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Opening balances — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -53,10 +54,10 @@ export default async function OpeningPage({
           ← Back to the conversion
         </Link>
         <h1 className="mt-1 text-2xl font-semibold">Opening balances</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           What the business owns and owes on the morning the new books open. Enter them over as
           many days as it takes — nothing is final until you post at the end.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

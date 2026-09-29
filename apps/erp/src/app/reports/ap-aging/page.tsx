@@ -7,6 +7,7 @@ import { AgingFilters } from '@/components/reports/AgingFilters';
 import { ApAgingTable, ApAgingReconciliationIndicator, type ApAgingTableRow } from '@/components/reports/ApAgingTable';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'AP Aging — Shareat System' };
 
@@ -59,11 +60,11 @@ export default async function ApAgingPage({
     <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">AP Aging</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Every open payable, bucketed by due date. The total below is checked against the
           2110 control account on every load — two independent queries that must agree to the
           centavo.
-        </p>
+        </PageDescription>
       </div>
 
       <AgingFilters

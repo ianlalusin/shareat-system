@@ -14,6 +14,7 @@ import {
   type SalesPeriodRow,
 } from '@/components/reports/SalesRollupTable';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Sales Rollup — Shareat System' };
 
@@ -69,11 +70,11 @@ export default async function SalesRollupPage({
     <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">Sales Rollup</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Recognised sales revenue (verified sales days only), by period, channel, and mode.
           Every total below is computed live and checked against the other two, which are sourced
           independently.
-        </p>
+        </PageDescription>
       </div>
 
       <form

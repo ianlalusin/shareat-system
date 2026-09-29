@@ -6,6 +6,7 @@ import { listStores, positionsForStore, searchPersonsFor } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { Input } from '@/components/ui';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Hire — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -58,11 +59,11 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
           ← Staff
         </a>
         <h1 className="mt-1 text-2xl font-semibold">Hire</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Find the person first — a typo in an existing name must never mint a duplicate. Someone
           who already works another store shows up here too; hiring them again just opens a second
           employment for the same person (T-154 invariant 8).
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

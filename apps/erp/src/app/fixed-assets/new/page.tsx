@@ -5,6 +5,7 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { createAssetAction } from '../actions';
 import { CATEGORY_LABEL, INTERVAL_LABEL, listStores, readPolicyForDisplay } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Add asset — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -31,11 +32,11 @@ export default async function NewAssetPage({
     <Page density="form">
       <div>
         <h1 className="text-2xl font-semibold">Add asset</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Adding it here records what the business owns.{' '}
           <strong>It does not post the purchase</strong> — an asset bought through an expense is
           already in 1510. Use this for something being brought onto the register directly.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

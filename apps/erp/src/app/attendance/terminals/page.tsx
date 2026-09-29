@@ -5,6 +5,7 @@ import { ProvisionForm } from './ProvisionForm';
 import { RepairButton } from './RepairButton';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Clock terminals — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -75,12 +76,12 @@ export default async function TerminalsPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Clock terminals</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Provision a device to punch attendance at a store, and see its one-time pairing token —
           as text and as a QR code — while it is still online. ⭐ Provisioning, re-pairing and
           revoking need <strong>admin or super-admin</strong>; everyone with manage-attendance
           (manager and up) can read this list.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

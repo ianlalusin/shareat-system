@@ -12,6 +12,7 @@ import {
 import { listStores, locationsPageData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Stock locations — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -67,10 +68,10 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Stock locations</h1>
-          <p className="mt-1 max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
+          <PageDescription className="mt-1">
             The rooms every stock movement is keyed to — Stockroom, Kitchen, Receiving, and so on.
             No movement in this store can happen without a room to name.
-          </p>
+          </PageDescription>
         </div>
         <Link href="/inventory" className="text-sm underline underline-offset-4">
           ← Stock on hand

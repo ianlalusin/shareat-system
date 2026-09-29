@@ -13,6 +13,7 @@ import {
 } from './actions';
 import { isBlockingAnomaly } from '@shareat/domain';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 /**
  * Plain-language names for the engine's anomaly codes.
@@ -86,11 +87,11 @@ export default async function AttendanceDayPage({
         <h1 className="text-2xl font-semibold">
           {day.personName} · {day.shiftDay}
         </h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           {asHours(day.computedMinutes)} paid{day.isHalfDay ? ' (half day)' : ''} ·{' '}
           {day.pendingOtMinutes > 0 ? `${asHours(day.pendingOtMinutes)} overtime recorded` : 'no overtime'} ·
           status <strong>{day.status}</strong>
-        </p>
+        </PageDescription>
       </div>
 
       {sp.ok && (

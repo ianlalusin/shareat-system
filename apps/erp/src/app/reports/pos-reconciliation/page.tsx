@@ -3,6 +3,7 @@ import { reportScope, runReport } from '../lib';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { PosReconciliationCard } from '@/components/reports/PosReconciliationCard';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'POS Reconciliation — Shareat System' };
 
@@ -46,10 +47,10 @@ export default async function PosReconciliationPage({
     <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">POS Reconciliation</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           POS&apos;s live day-level sales figure beside Shareat System&apos;s own sales-day
           record, so the reconciliation is rendered rather than left to goodwill.
-        </p>
+        </PageDescription>
       </div>
 
       <form

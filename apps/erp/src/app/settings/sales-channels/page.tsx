@@ -9,6 +9,7 @@ import { channelsForStore, moneyAccountNames, receivableOptions, type SalesChann
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { ACTION_LINK } from '@/components/action-link';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Sales channels — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -61,13 +62,13 @@ export default async function SalesChannelsSettingsPage({
       <Page density="form" className="space-y-4">
         <Crumb />
         <h1 className="text-2xl font-semibold">Sales channels</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           This organisation has no stores yet. Create one under{' '}
           <a href="/admin/stores" className="underline">
             Stores
           </a>{' '}
           first — a channel belongs to a branch.
-        </p>
+        </PageDescription>
       </Page>
     );
   }
@@ -86,12 +87,12 @@ export default async function SalesChannelsSettingsPage({
       <div>
         <Crumb />
         <h1 className="text-2xl font-semibold">Sales channels</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           How this branch sells: walk-in, and each delivery platform. A channel decides{' '}
           <strong>whether its money reaches the till on the day</strong> or is owed to us until the
           platform settles — and <strong>whether a wasted order gets reviewed</strong> or is
           decided on the spot.
-        </p>
+        </PageDescription>
       </div>
 
       <FilterRow>

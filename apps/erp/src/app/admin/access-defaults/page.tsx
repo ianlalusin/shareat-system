@@ -4,6 +4,7 @@ import { gridCapabilityGroups, gridDataForStore, parseOpenParams, storesForActor
 import { DesktopGrid, MobileSections } from './grid';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Position access defaults — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -87,11 +88,11 @@ export default async function AccessDefaultsPage({
     <Page density="wide" className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Position access defaults</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           What can a Cashier do here? Set, per position and per store, which capabilities every
           holder of that job gets in addition to the role matrix. Additive only — nothing here can
           switch off a capability the role matrix already grants.
-        </p>
+        </PageDescription>
       </div>
 
       <FilterRow>

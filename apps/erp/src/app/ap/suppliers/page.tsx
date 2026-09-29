@@ -9,6 +9,7 @@ import {
   VAT_STATUS_LABEL,
 } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Suppliers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -48,11 +49,11 @@ export default async function SuppliersPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Suppliers</h1>
-        <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           The register, org-wide. ⭐ One row per supplier — not one per store. v1 keyed suppliers
           under each branch, so a fleet-wide vendor became <strong>up to twenty</strong> separate
           records that each had to be edited, reconciled and paid.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

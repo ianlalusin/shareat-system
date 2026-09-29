@@ -11,6 +11,7 @@ import {
   today,
 } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Cash requests — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -46,11 +47,11 @@ export default async function CashRequestsPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Cash requests</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Money handed to a person for an errand, spent, and reconciled. Every figure is summed from
           the ledger — <strong>a request closes when its float reaches zero</strong>, not when
           someone marks it done.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

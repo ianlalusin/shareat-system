@@ -97,6 +97,21 @@ export const FLOOR_PX = 24;
 const NATIVE_ALWAYS_INTERACTIVE = new Set(['a', 'button', 'input', 'select', 'textarea', 'summary']);
 const OPAQUE_COMPONENTS = new Set(['TokenReveal', 'SidebarNav']);
 
+// T-348 S2a / DEF-474 Amendment A2 — `<PageDescription>` renders `text-sm` inside its OWN file
+// (`PageDescription.tsx`), never in the call site's className, so `resolveAncestorFontSize`'s
+// className walk can never see it: S1's temporary wiring measured `money-accounts/page.tsx`'s
+// `<Link>` go FAIL -> UNRESOLVED the moment it was wrapped. Keyed by BARE tag name only — matches
+// `<PageDescription>`, never a qualified `<Shell.PageDescription>` or an aliased import binding —
+// same shape as `OPAQUE_COMPONENTS`, not an import-origin gate like `KNOWN_COMPONENT_HEIGHT_PX`'s
+// `@/components/ui` check, because unlike that table this is a font size default, not a fixed pixel
+// height: any component named `PageDescription` renders the identical `text-sm` wrapper, so a
+// same-named local stub is meant to resolve the same way as the real one — but only as a fallback.
+// `PageDescription.tsx:103` appends the caller's className LAST (`` `text-sm ... ${className}` ``),
+// so a caller-supplied `text-*` overrides the component's own default the way the browser renders
+// it; `resolveAncestorFontSize` therefore resolves this node's own className FIRST and only falls
+// back to this table when that resolves cleanly but yields no font-size class of its own.
+const ANCESTOR_FONT_SIZE_COMPONENTS: Record<string, keyof typeof FONT_SIZE_PX> = { PageDescription: 'sm' };
+
 // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): a call site adopting `<Input>`/`<Button>`
 // (T-334 slice 3) is a CAPITALISED tag — invisible to NATIVE_ALWAYS_INTERACTIVE, not `Link`, and
 // (being capitalised) never matches the onClick-div rule either. It is also NOT in
@@ -513,16 +528,32 @@ function resolveAncestorFontSize(
   let current: ts.Node | undefined = node.parent;
   while (current) {
     let attrs: ts.JsxAttributes | undefined;
-    if (ts.isJsxElement(current)) attrs = current.openingElement.attributes;
-    else if (ts.isJsxSelfClosingElement(current)) attrs = current.attributes;
+    let tag: string | undefined;
+    if (ts.isJsxElement(current)) {
+      attrs = current.openingElement.attributes;
+      tag = tagNameOf(current);
+    } else if (ts.isJsxSelfClosingElement(current)) {
+      attrs = current.attributes;
+      tag = tagNameOf(current);
+    }
 
     if (attrs) {
       const resolved = resolveClassName(attrs, info, infos);
       if (!resolved.ok) {
+        // Deliberate: a DYNAMIC className on a table component (e.g. `<PageDescription
+        // className={expr}>`) returns unresolved HERE, before ANCESTOR_FONT_SIZE_COMPONENTS is
+        // ever consulted — the expression could carry its own text-*, and the table is only a
+        // fallback for a cleanly-resolved-but-size-less className (R1/R4), never a blanket default.
         return { unresolvedReason: 'an ancestor className could not be resolved statically' };
       }
       const size = bareFontSize(resolved.value.split(/\s+/).filter(Boolean));
       if (size) return { size };
+      // R5 — a caller-supplied text-* above already returned; this node's OWN className resolved
+      // cleanly but carries no font-size class of its own, so only now fall back to the table
+      // (PageDescription.tsx:103 appends the caller's className last, so an explicit size on the
+      // call site must win over the component's internal default, never the other way round).
+      const knownSize = tag !== undefined ? ANCESTOR_FONT_SIZE_COMPONENTS[tag] : undefined;
+      if (knownSize) return { size: knownSize };
     }
     current = current.parent;
   }

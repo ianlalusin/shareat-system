@@ -7,6 +7,7 @@ import { AgingFilters } from '@/components/reports/AgingFilters';
 import { ArAgingTable, ArAgingReconciliationIndicator, type ArAgingTableRow } from '@/components/reports/ArAgingTable';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'AR Aging — Shareat System' };
 
@@ -58,11 +59,11 @@ export default async function ArAgingPage({
     <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">AR Aging</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Every open receivable, bucketed by due date. The total below is checked against the
           1210 control account on every load — two independent queries that must agree to the
           centavo.
-        </p>
+        </PageDescription>
       </div>
 
       <AgingFilters

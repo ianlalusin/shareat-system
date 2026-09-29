@@ -18,6 +18,7 @@ import {
 } from '../lib';
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Owner — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -59,13 +60,13 @@ export default async function OwnerPage({
           ← Owners
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{who?.displayName ?? 'Unknown owner'}</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           {owner.role ?? '—'} · {store?.name ?? '—'} ·{' '}
           {owner.drawingLimit
             ? `${peso(owner.drawingLimit)} ${owner.drawingLimitPeriod} limit`
             : 'no drawing limit'}{' '}
           · {TREATMENT_LABEL[owner.personalExpenseTreatment]}
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

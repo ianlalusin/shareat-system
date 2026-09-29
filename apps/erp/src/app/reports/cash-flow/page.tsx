@@ -7,6 +7,7 @@ import { ReportFilters } from '@/components/reports/ReportFilters';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { CashFlowTable, CashFlowReconciliationIndicator } from '@/components/reports/CashFlowTable';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Cash Flow — Shareat System' };
 
@@ -56,11 +57,11 @@ export default async function CashFlowPage({
     <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">Cash Flow</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Indirect method — net income, adjusted for non-cash items and working-capital changes,
           computed live from balance-sheet account deltas. Checked against the actual change in
           cash and cash-equivalent balances on every load.
-        </p>
+        </PageDescription>
       </div>
 
       <ReportFilters

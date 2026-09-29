@@ -1,6 +1,6 @@
 # T-348: page descriptions use the full width and clamp at 3 lines (DEF-474); two-column pages use the full width (DEF-440)
 
-**Status:** APPROVED 2026-09-28 (orchestrator) — S0 DONE — Ian picked T1 + W2 (Amendment A1); S1-S3 follow. Planner: Opus, 2026-09-28. Supersedes the reservation text.
+**Status:** APPROVED 2026-09-28 (orchestrator) — S0 DONE — S1 DONE — **S2 DONE 2026-09-29** (DEF-474 fixed); S3 (DEF-440) next — Ian picked T1 + W2 (Amendment A1); S1-S3 follow. Planner: Opus, 2026-09-28. Supersedes the reservation text.
 **Defects:** DEF-474 (🔸, Ian 2026-09-28, from `/liabilities`), DEF-440 (⚠️, Ian 2026-09-26). **Migration:** none, any slice.
 **Governing rules:** bible §1.2c (one uniform, reusable pattern set across screens); "render before deciding" (a
 rendering-dependent choice is made from screenshots, not argument); RULES §2 (tests first and red for the right
@@ -345,7 +345,7 @@ Root cause and blast radius: `docs/DEFECTS-REGISTER.md` DEF-440. Method: render 
   `text-sm` that now lives in `PageDescription.tsx`: measured in S1's temporary wiring, `money-accounts/page.tsx`
   went 1 FAIL → 1 UNRESOLVED. S2 moves all 9 linked descriptions (Census) inside the component, so **S2's first slice
   teaches the resolver that `PageDescription` supplies `text-sm`** (a known-component table, like `OPAQUE_COMPONENTS`),
-  red first, before any sweep file moves. Tester path: `apps/erp/tests/touch-target-geometry.ts` + its test.
+  red first, before any sweep file moves. **Builder path:** `apps/erp/tests/touch-target-geometry.ts` (resolver = implementation); **tester path:** `apps/erp/tests/t348-resolver-page-description.test.ts` (orchestrator correction 2026-09-29: the resolver carries the fix, so it is the builder's; the original wording blended the roles).
 - **D2 root cause, for S2's reviewers:** `line-clamp`'s `overflow: hidden` makes the `<p>` a scroll container; the
   browser scrolls a focused hidden link into view BEFORE `onFocus` runs, so a `getBoundingClientRect` comparison is
   always "visible". The handler checks `p.scrollTop > 0` instead.

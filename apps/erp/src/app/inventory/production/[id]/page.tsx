@@ -4,6 +4,7 @@ import { requireSession } from '../../../../lib/session';
 import { postProductionAction, voidProductionAction } from '../actions';
 import { productionRecordDetail } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Production record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -45,10 +46,10 @@ export default async function ProductionRecordPage({
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{KIND_LABEL[record.kind] ?? record.kind}</h1>
-          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+          <PageDescription className="mt-1">
             {record.producedOn} · {locationName} · revision {record.revision} ·{' '}
             <span className="font-medium">{STATUS_LABEL[record.status] ?? record.status}</span>
-          </p>
+          </PageDescription>
         </div>
         <Link href="/inventory/production" className="text-sm underline underline-offset-4">
           ← Production

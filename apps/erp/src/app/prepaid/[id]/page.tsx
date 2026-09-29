@@ -10,6 +10,7 @@ import {
 import { CATEGORY_LABEL, STATUS_LABEL, getDetail, peso, thisPeriod } from '../lib';
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Prepaid item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -52,10 +53,10 @@ export default async function PrepaidItemPage({
           ← Prepaid expenses
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{item.name}</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           {CATEGORY_LABEL[item.category] ?? item.category} · {STATUS_LABEL[item.status]} · covers{' '}
           {item.coverageMonths} months from {item.coverageStartDate}
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

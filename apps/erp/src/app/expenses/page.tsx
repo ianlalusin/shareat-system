@@ -4,6 +4,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listCategoriesGrouped, withOrgPrincipal } from './lib';
 import { requireSession } from '../../lib/session';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Expenses — Shareat System' };
 
@@ -47,10 +48,10 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Expenses</h1>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          <PageDescription>
             Non-inventory spend — create · approve · void, posted through the real ledger
             (docs/tasks/122-expenses.md).
-          </p>
+          </PageDescription>
         </div>
         <a
           href={`/expenses/new?${carry}`}

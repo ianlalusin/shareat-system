@@ -5,6 +5,7 @@ import { requireSession } from '../../../lib/session';
 import { createSalesDayAction } from '../actions';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'New sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -46,10 +47,10 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
           ← All sales days
         </a>
         <h1 className="mt-1 text-2xl font-semibold">New sales day</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Saved as a draft. <strong>Nothing posts to the ledger until it is verified</strong> — and
           verifying is what recognises the revenue.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

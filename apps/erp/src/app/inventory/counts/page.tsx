@@ -4,6 +4,7 @@ import { openCountSessionAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Physical counts — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -55,10 +56,10 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
           ← Stock on hand
         </Link>
       </div>
-      <p className="text-sm text-neutral-600 dark:text-neutral-400">
+      <PageDescription>
         Freeze a room, count it, and the difference between what was counted and what the ledger said
         posts to <strong>5400</strong> at FIFO cost — the gap v1 never closed.
-      </p>
+      </PageDescription>
 
       {sp.error && (
         <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">

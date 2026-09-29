@@ -20,6 +20,7 @@ import {
   withOrgPrincipal,
 } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Channel settlements — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -139,12 +140,12 @@ export default async function ChannelSettlementsPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Channel settlements</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Foodpanda and Grab sell today and pay days later, so every verified platform day raises a
           receivable on <span className="font-mono">1220</span>. This is the screen that clears it —
           the platform&apos;s gross, every deduction it made as its own signed line, and what
           actually reached the bank.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

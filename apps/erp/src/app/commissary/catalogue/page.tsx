@@ -14,6 +14,7 @@ import {
 import { selectDefaultCommissaryStoreId } from './default-store';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Commissary catalogue — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -76,12 +77,12 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
     <Page density="table" className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold">Commissary catalogue</h1>
-        <p className="mt-1 max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription className="mt-1">
           What a commissary offers, which branches may buy from it, and which of a branch&rsquo;s own
           items each commissary line becomes. ⭐ <strong>A line with no map cannot be submitted, and
           a real internal receipt with no map throws</strong> — this screen is what makes both
           possible (DEF-129).
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

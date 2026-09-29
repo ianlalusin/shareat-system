@@ -2,6 +2,7 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { listUsers } from './lib';
 import { ROLE_LABEL } from '@shareat/auth';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Users and roles — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -25,10 +26,10 @@ export default async function UsersPage() {
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Users and roles</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+        <PageDescription>
           Who holds which role, which stores they can see, and what they have been granted beyond
           their role.
-        </p>
+        </PageDescription>
       </div>
 
       {roleless > 0 && (

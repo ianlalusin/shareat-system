@@ -4,6 +4,7 @@ import { requireSession } from '../../lib/session';
 import { createSupplierAction, recordInvoiceAction } from './actions';
 import { listSuppliersWithPosition, listInvoices, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -29,10 +30,10 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Accounts payable</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           No expense — cash or credit — can be recorded until its supplier invoice is verified
           here. Verification <strong>is</strong> the approval (T-130).
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

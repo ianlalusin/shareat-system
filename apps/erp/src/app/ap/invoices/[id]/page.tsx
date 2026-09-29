@@ -9,6 +9,7 @@ import { withOrgPrincipal } from '../../../expenses/lib';
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { MoneyLines } from '@/components/money/MoneyLines';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Supplier invoice — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -83,10 +84,10 @@ return (
           <h1 className="mt-1 text-2xl font-semibold">
             {supplier?.name ?? invoice.supplierId} — {invoice.invoiceNo ?? id.slice(0, 8)}
           </h1>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          <PageDescription>
             {invoice.invoiceDate}
             {invoice.dueDate ? ` · due ${invoice.dueDate}` : ''}
-          </p>
+          </PageDescription>
         </div>
         <div className="text-right">
           <StatusBadge status={invoice.status} />

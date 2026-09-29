@@ -7,6 +7,7 @@ import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Low stock — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -60,10 +61,10 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
           ← Stock on hand
         </Link>
       </div>
-      <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+      <PageDescription className="mt-1">
         Recomputed on every load from the ledger — there is no cached alert list, because a stale
         low-stock alert is indistinguishable from a real one.
-      </p>
+      </PageDescription>
 
       <FilterRow className="mt-6">
         <label className="text-sm">

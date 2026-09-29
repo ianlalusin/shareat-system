@@ -14,6 +14,7 @@ import {
   today,
 } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Customers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -45,7 +46,7 @@ export default async function CustomersPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Customers</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Who the business sells to <strong>on terms</strong>. ⛔ A diner who pays at the counter is
           not a customer — a row here exists because there is a balance or a credit relationship,
           and a retail sale creates neither.{' '}
@@ -53,7 +54,7 @@ export default async function CustomersPage({
             Price lists
           </Link>
           .
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

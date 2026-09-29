@@ -5,6 +5,7 @@ import { setPriceAction } from '../../actions';
 import { getListDetail, peso } from '../../lib';
 import { listItems } from '../../../items/lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Price list — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -39,7 +40,7 @@ export default async function PriceListPage({
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{list.name}</h1>
         {list.description && (
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">{list.description}</p>
+          <PageDescription>{list.description}</PageDescription>
         )}
       </div>
 

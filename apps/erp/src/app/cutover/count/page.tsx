@@ -4,6 +4,7 @@ import { recordCountAction } from '../actions';
 import { countedValueFor, listStores, loadCountSheet, peso } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Opening count — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -51,10 +52,10 @@ export default async function CountPage({
           ← Back to the conversion
         </Link>
         <h1 className="mt-1 text-2xl font-semibold">Opening count — {store.name}</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           What is physically on the shelf on 31 December, and what it cost. This becomes the
           opening inventory figure, so a guess here is a wrong number in every month that follows.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

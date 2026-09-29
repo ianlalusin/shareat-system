@@ -6,6 +6,20 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 // Workspace packages are resolved from source, matching tsconfig paths and
 // next.config's transpilePackages. One copy of the truth, three resolvers agreeing.
 const alias = {
+  // T-348 S2 — apps/erp's own tsconfig maps `@/*` -> `./src/*` (Next's own resolver honours it
+  // fine), but nothing here did: every prior `@/components/...` import in a rendered page was
+  // covered by a `vi.mock`, so the gap was silent until `PageDescription` became a SECOND,
+  // unmocked `@/components/shell/*` import next to the always-mocked `Page` — "Cannot find
+  // package '@/components/shell/PageDescription'" is this alias missing, not the component.
+  // ⚠️ Single-app assumption, kept at ROOT deliberately, not scoped into a project's own
+  // `resolve.alias`: the only project that runs `apps/erp/tests/*.test.ts` is `unit` below, and
+  // `unit`'s own include glob already spans `packages/**` and `tests/unit/**` — repo-wide, not
+  // erp-scoped — plus `apps/**` for EVERY app, so a future `apps/pos`/`apps/customer` test would
+  // land in that same project and inherit this alias either way. Moving it into `unit`'s block
+  // would look narrower without being narrower. `apps/pos`/`apps/customer` are reserved, not
+  // built today (RULES §"out of scope") — the day either gets its own `@/` imports under test,
+  // `unit`'s glob needs splitting into a per-app project FIRST, and this alias follows that split.
+  '@': `${root}apps/erp/src`,
   '@shareat/core/money': `${root}packages/core/src/money.ts`,
   '@shareat/core/datetime': `${root}packages/core/src/datetime.ts`,
   '@shareat/core/logger': `${root}packages/core/src/logger.ts`,

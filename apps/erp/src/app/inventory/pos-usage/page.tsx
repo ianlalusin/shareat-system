@@ -4,6 +4,7 @@ import { buildPlanAction, finalizeSectionAction, requestMapFromPullAction } from
 import { findLivePull, listOperatingLocationsForStore, listSalesDaysForStore, listStores, pullView, type PullLineView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Daily POS usage pull — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -168,10 +169,10 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Daily POS usage pull</h1>
-          <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+          <PageDescription className="mt-1">
             A day&apos;s POS sales, turned into inventory consumption — physical quantity (sold +
             comped − voided), never the billable one.
-          </p>
+          </PageDescription>
         </div>
         <Link href={`/inventory/pos-map?store=${storeId}`} className="text-sm underline underline-offset-4">
           POS item mapping →

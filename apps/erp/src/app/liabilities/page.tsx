@@ -4,6 +4,7 @@ import { requirePageAccess } from '../../lib/page-access';
 import { createLiabilityAction } from './actions';
 import { CATEGORY_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Liabilities — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -34,12 +35,12 @@ export default async function LiabilitiesPage({
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Liabilities</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           What the business owes that nothing else already tracks. Supplier invoices, loans, wages
           and statutory contributions each have their own home —{' '}
           <strong>this is the residual</strong>, and naming it precisely is what stops it becoming a
           dumping ground.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

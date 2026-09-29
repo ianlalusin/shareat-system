@@ -8,6 +8,7 @@ import { budgetsRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../lib';
 import { BudgetHint } from './BudgetHint';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'New expense — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -50,13 +51,13 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
     <Page density="form">
       <div>
         <h1 className="text-2xl font-semibold">New expense</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           Saves as a <strong>draft</strong> against the supplier invoice you pick — verified or
           still pending. No manager and no verification wait: verifying the invoice later posts
           this automatically, or approve it yourself from the expense once you can (T-196). No
           invoice to pick from?{' '}
           <a href="/ap" className="underline">Log one first</a>.
-        </p>
+        </PageDescription>
       </div>
 
       {sp.error && (

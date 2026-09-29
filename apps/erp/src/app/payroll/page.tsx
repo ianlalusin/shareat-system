@@ -15,6 +15,7 @@ import {
   slipsFor,
 } from './lib';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Payroll — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -51,7 +52,7 @@ export default async function PayrollPage({
     return (
       <Page density="table" className="space-y-4">
         <h1 className="text-2xl font-semibold">Payroll</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">No store is set up yet.</p>
+        <PageDescription>No store is set up yet.</PageDescription>
       </Page>
     );
   }
@@ -82,11 +83,11 @@ export default async function PayrollPage({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold">Payroll</h1>
-          <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
+          <PageDescription>
             Pay computed from attendance, with what each person already drew netted off{' '}
             <code>1230</code>. ⭐ Posting <strong>freezes</strong> the days it paid — after that a
             correction goes through payroll, not by restating the day.
-          </p>
+          </PageDescription>
         </div>
         <span className="flex shrink-0 gap-3 text-sm">
           <a href="/payroll/thirteenth-month" className="underline">

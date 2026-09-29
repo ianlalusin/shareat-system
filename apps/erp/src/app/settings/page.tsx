@@ -1,5 +1,6 @@
 import { requirePageAccess } from '../../lib/page-access';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Settings — Shareat System' };
 // Reads the session cookie, so it can never be statically rendered — declared rather than left to
@@ -53,10 +54,10 @@ export default async function SettingsPage() {
     <Page density="form">
       <div>
         <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <PageDescription>
           The reference data the rest of the system reads. Changing something here changes what
           every screen can record against — it does not change anything already recorded.
-        </p>
+        </PageDescription>
       </div>
 
       {/* ⚠️ `grid-cols-1` first and no `min-w` anywhere: DEF-199 measured 24 of 66 routes

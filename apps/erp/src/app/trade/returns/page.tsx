@@ -8,6 +8,7 @@ import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Customer returns — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -116,11 +117,11 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
           ← Stock on hand
         </Link>
       </div>
-      <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+      <PageDescription className="mt-1">
         The goods come back, and the customer holds a credit — or takes cash. ⭐ An internal
         (branch → commissary) return is not a credit at all — T-173 backwards, derived, never a
         choice.
-      </p>
+      </PageDescription>
 
       <FilterRow className="mt-6">
         <label className="text-sm">
