@@ -749,6 +749,9 @@ export interface RecordExpenseForInvoiceResult extends ApproveExpenseResult {
  * building a second posting path. Requiring BOTH `create_expense` and `approve_expense` is what
  * keeps this manager-gated (a manager holds both; staff does not hold `approve_expense`) without
  * a new capability — posting has always been the gate that matters in this system.
+ *
+ * T-361 / DEF-492 — the cash-on-delivery rule reaches this function through `createExpense`,
+ * which it calls below; there is no separate copy of it here.
  */
 export async function recordExpenseForInvoice(
   tx: Tx | null,

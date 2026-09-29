@@ -1,6 +1,6 @@
 # T-361: "no credit for a cash-on-delivery supplier" is enforced in the domain (DEF-492)
 
-**Status:** APPROVED 2026-09-29 (orchestrator, after Opus spec audit) with Amendments A1 + A2 — builds after T-362 commits. ⛔ **Q1 (below) is a sequencing decision for
+**Status:** DONE 2026-09-30 (DEF-492 fixed) — APPROVED 2026-09-29 (orchestrator, after Opus spec audit) with Amendments A1 + A2 — builds after T-362 commits. ⛔ **Q1 (below) is a sequencing decision for
 Ian and it gates the BUILD.** The tester may start. **Model:** Sonnet, tester then builder.
 **Migration:** none, and the reason is given in R7.
 **Line numbers** were checked at HEAD `e4d9ff3`. None of the BUILDER paths is dirty at that HEAD.

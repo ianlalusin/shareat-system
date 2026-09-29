@@ -109,7 +109,10 @@ async function fixture(hint: string) {
 
   const managerActor = actor(orgId, manager!.id);
   const loggerActor = actor(orgId, logger!.id);
-  const supplier = await asOrg(orgId, (tx) => createSupplier(tx, managerActor, { name: `${hint} Supplier` }));
+  // T-361: credit needs terms now the domain enforces it (DEF-492).
+  const supplier = await asOrg(orgId, (tx) =>
+    createSupplier(tx, managerActor, { name: `${hint} Supplier`, creditTermsDays: 30 }),
+  );
 
   return {
     orgId, storeId, managerId: manager!.id, loggerId: logger!.id, staffId: staff!.id,

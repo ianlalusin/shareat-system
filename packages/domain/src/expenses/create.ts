@@ -33,6 +33,9 @@
  * transaction — `packages/domain/src/ap`'s `recordExpenseForInvoice` does exactly that, which is
  * what makes Ian's *"expense may already be posted, no need for draft"* true from the caller's
  * side without this file or `approve.ts` needing a second, parallel posting path.
+ *
+ * ⭐ T-361 / DEF-492 — the cash-on-delivery rule (no credit line against a supplier with no terms)
+ * is enforced HERE, for every caller, not only the web action's own copy.
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { apRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
@@ -40,6 +43,7 @@ import { add, money } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import type { ExpensePaymentMethod } from './routing';
 import { refuse, gone } from '../shared/refusal';
+import { cashOnDeliverySentence } from '../shared/money-lines';
 
 /**
  * S2/R2's `savepointLookup` (`packages/auth/src/authorize.ts`), applied here: `createExpense`
@@ -175,6 +179,16 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
         `${input.supplierInvoiceId} — that invoice belongs to supplier ${invoice.supplierId}. ` +
         'An expense takes its supplier from the invoice it is recorded against.',
       `That invoice is from ${supplier.name}, not ${picked?.name ?? 'the supplier you picked'}. An expense takes its supplier from its invoice.`,
+    );
+  }
+
+  // T-361 / DEF-492 — R2: after the supplier-mismatch refusal (so a picked/invoice-supplier
+  // disagreement still wins) and before any write. `supplier` above is already the invoice's own
+  // supplier — the authoritative one, never the caller's `input.supplierId`.
+  if (input.payments.some((p) => p.method === 'credit') && supplier.creditTermsDays === null) {
+    throw refuse(
+      `createExpense: ${supplier.name} is cash-on-delivery (credit_terms_days is null) — a credit payment cannot be recorded against it`,
+      cashOnDeliverySentence(supplier.name),
     );
   }
 

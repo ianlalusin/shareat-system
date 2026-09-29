@@ -110,7 +110,10 @@ async function fixture(hint: string) {
   const category = await sql<{ id: string }[]>`
     select id from expense_categories where org_id = ${orgId} and category = 'Cost of Goods Sold — General'
   `;
-  const supplier = await asOrg(orgId, (tx) => createSupplier(tx, actor(orgId, manager!.id), { name: `${hint} Supplier` }));
+  // T-361: credit needs terms now the domain enforces it (DEF-492).
+  const supplier = await asOrg(orgId, (tx) =>
+    createSupplier(tx, actor(orgId, manager!.id), { name: `${hint} Supplier`, creditTermsDays: 30 }),
+  );
 
   return {
     orgId, storeId, store2Id, managerId: manager!.id, staffId: staff!.id,

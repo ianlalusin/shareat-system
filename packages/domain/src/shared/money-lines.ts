@@ -304,6 +304,16 @@ export interface ValidateMoneyLinesInput {
 }
 
 /**
+ * T-361 / DEF-492 — the one sentence for "this supplier takes no credit," shared by two callers:
+ * `validateMoneyLines` below (the web action's early, per-line answer) and the domain's own gate
+ * on `createExpense`/`editExpense` (the authority for every caller, including the recurring job) —
+ * one rule definition, two call sites (bible §15.11, the same shape as `assertNotInverted`).
+ */
+export function cashOnDeliverySentence(supplierName: string | null): string {
+  return `${supplierName ?? 'This supplier'} is cash-on-delivery. Set payment terms on the supplier to pay on credit.`;
+}
+
+/**
  * Every rule that can be decided without a database, in one pass.
  *
  * ⚠️ Deliberately NOT here: whether the actor may use a given account (an authorization question —
@@ -395,9 +405,7 @@ export function validateMoneyLines(input: ValidateMoneyLinesInput): MoneyLineIss
         issues.push({
           line: i,
           field: 'method',
-          message:
-            `${input.supplierName ?? 'This supplier'} is cash-on-delivery. Set payment terms on ` +
-            'the supplier to pay on credit.',
+          message: cashOnDeliverySentence(input.supplierName ?? null),
         });
       }
     }

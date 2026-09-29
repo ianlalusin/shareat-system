@@ -109,7 +109,9 @@ async function fixture(): Promise<Fixture> {
     insert into items (org_id, code, name, kind, base_unit, created_by)
     values (${orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${staff!.id}) returning id`;
 
-  const [supplier] = await sql<{ id: string }[]>`insert into suppliers (org_id, name, created_by) values (${orgId}, 'Acme Meats', ${staff!.id}) returning id`;
+  // T-361: credit needs terms now the domain enforces it (DEF-492) — Acme Meats is the credit
+  // payer above; Beta Foods stays cash-on-delivery, no credit expense ever names it.
+  const [supplier] = await sql<{ id: string }[]>`insert into suppliers (org_id, name, created_by, credit_terms_days) values (${orgId}, 'Acme Meats', ${staff!.id}, 30) returning id`;
   const [otherSupplier] = await sql<{ id: string }[]>`insert into suppliers (org_id, name, created_by) values (${orgId}, 'Beta Foods', ${staff!.id}) returning id`;
 
   const [file] = await sql<{ id: string }[]>`

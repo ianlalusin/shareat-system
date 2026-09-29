@@ -78,8 +78,11 @@ async function fixture(hint: string, opts: { periodStatus?: 'open' | 'closed' } 
   const [category] = await sql<{ id: string }[]>`
     insert into expense_categories (org_id, "group", category, account_code)
     values (${orgId}, 'OPEX', ${uid('cat')}, '6200') returning id`;
+  // T-361: credit needs terms now the domain enforces it (DEF-492) — every bare dueTemplate(f)
+  // call in this file drafts on credit by default (no defaultMoneyAccountId, paymentForAccount
+  // falls to credit), so the Landlord needs real terms to keep those existing drafts green.
   const [supplier] = await sql<{ id: string }[]>`
-    insert into suppliers (org_id, name, created_by) values (${orgId}, ${`Landlord ${hint}`}, ${managerId})
+    insert into suppliers (org_id, name, created_by, credit_terms_days) values (${orgId}, ${`Landlord ${hint}`}, ${managerId}, 30)
     returning id`;
   const [office] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId} and custodian = 'office' and instrument = 'cash' limit 1`;

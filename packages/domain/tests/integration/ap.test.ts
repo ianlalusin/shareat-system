@@ -181,7 +181,10 @@ async function verifiedInvoice(f: FixtureWithSupplier, totalAmount: string, over
 
 async function fixtureWithSupplier(hint: string): Promise<FixtureWithSupplier> {
   const f = await fixture(hint);
-  const supplier = await asOrg(f.orgId, (tx) => createSupplier(tx, f.manager, { name: `${hint} Supplier` }));
+  // T-361: credit needs terms now the domain enforces it (DEF-492).
+  const supplier = await asOrg(f.orgId, (tx) =>
+    createSupplier(tx, f.manager, { name: `${hint} Supplier`, creditTermsDays: 30 }),
+  );
   return { ...f, supplierId: supplier.id };
 }
 
@@ -351,7 +354,10 @@ describe('the open-item allocation this task exists for', () => {
 describe('the refusals', () => {
   it('⛔ an allocation naming an expense from a DIFFERENT supplier is refused, nothing posts', async () => {
     const f = await fixtureWithSupplier('wrongsup');
-    const other = await asOrg(f.orgId, (tx) => createSupplier(tx, f.manager, { name: 'Someone Else' }));
+    // T-361: credit needs terms now the domain enforces it (DEF-492).
+    const other = await asOrg(f.orgId, (tx) =>
+      createSupplier(tx, f.manager, { name: 'Someone Else', creditTermsDays: 30 }),
+    );
     const invOther = await verifiedInvoice({ ...f, supplierId: other.id }, '1000.00');
     const { expenseId } = await creditExpense({ ...f, supplierId: other.id }, invOther, '1000.00');
 

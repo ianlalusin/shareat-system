@@ -17,6 +17,7 @@ import { add, money } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import type { CreateExpensePaymentInput } from './create';
 import { refuse, gone } from '../shared/refusal';
+import { cashOnDeliverySentence } from '../shared/money-lines';
 
 /** S2/R2's `savepointLookup` (`packages/auth/src/authorize.ts`), same reasoning as
  *  `expenses/create.ts`'s own copy: a refusal-path naming lookup here must not abort a
@@ -129,6 +130,28 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
     patch.supplierId = invoice.supplierId;
     patch.businessDate = invoice.invoiceDate;
   }
+
+  // T-361 / DEF-492 — R3: the same cash-on-delivery rule `createExpense` holds, so a draft cannot
+  // be walked around it by editing it afterward. Judged only when payments or the supplier/invoice
+  // actually changed — an edit that touches neither gains no query. The payments judged are the
+  // ones this edit leaves in place: the replacement set if given, otherwise the row's current set.
+  if (input.payments !== undefined || input.supplierInvoiceId !== undefined || input.supplierId !== undefined) {
+    const judgedPayments = input.payments ?? (await expensesRepo.getPaymentsForExpense(tx, expenseId));
+    if (judgedPayments.some((p) => p.method === 'credit')) {
+      const supplierId = patch.supplierId ?? expense.supplierId;
+      const supplier = await apRepo.getSupplierById(tx, actor.orgId, supplierId);
+      // `supplier` is only ever undefined if the row is gone — `expenses.supplier_id` is NOT NULL
+      // (T-130) and org-filtered here, and a supplier is deactivated, never deleted, so this guard
+      // never silently skips a real cash-on-delivery supplier.
+      if (supplier && supplier.creditTermsDays === null) {
+        throw refuse(
+          `editExpense: ${supplier.name} is cash-on-delivery (credit_terms_days is null) — a credit payment cannot be recorded against it`,
+          cashOnDeliverySentence(supplier.name),
+        );
+      }
+    }
+  }
+
   if (input.particulars !== undefined) {
     const trimmed = input.particulars.trim();
     if (!trimmed) throw refuse('editExpense: particulars cannot be blank', 'Particulars cannot be blank.');
