@@ -592,13 +592,15 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
     grantCapabilityAsActor.mockReset();
   });
 
-  // T-349 S2c (DEF-456), finding 3: `record_sale` is store-scoped (`CAPABILITY_SCOPE`), so a
-  // person-level grant covers every store — the banner now says so.
-  it('A1: granted, one store-scoped capability → ok = "Granted: <Title>, at every store they work at."', async () => {
+  // T-349 S2c (DEF-456), finding 3 / S2e (E4) — `record_sale` is store-scoped (`CAPABILITY_SCOPE`),
+  // so the banner names the store axis — but never "covers every store" outright: axis 2 is a
+  // `person_store_scope` row (employment, manual or fan-out), which this grant does not itself
+  // create, so the wording says "at every store they have access to", not "every store".
+  it('A1: granted, one store-scoped capability → ok = "Granted: <Title>, at every store they have access to."', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(grantFormData({ capabilities: ['record_sale'] })));
     const params = new URL(to, 'http://localhost').searchParams;
-    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${capabilityTitle('record_sale')}, at every store they work at.`);
+    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${capabilityTitle('record_sale')}, at every store they have access to.`);
     expect(grantCapabilityAsActor).toHaveBeenCalledTimes(1);
   });
 
@@ -637,9 +639,9 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
     },
   );
 
-  // T-349 S2c (DEF-456), finding 3: both `record_sale` and `submit_sales_day` are store-scoped, so
-  // each phrase in the join gains its own ", at every store they work at".
-  it('A3: two store-scoped capabilities, no intent → ok names both titles (each ", at every store they work at") joined by "; ", with no "_"', async () => {
+  // T-349 S2c (DEF-456), finding 3 / S2e (E4): both `record_sale` and `submit_sales_day` are
+  // store-scoped, so each phrase in the join gains its own ", at every store they have access to".
+  it('A3: two store-scoped capabilities, no intent → ok names both titles (each ", at every store they have access to") joined by "; ", with no "_"', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() =>
       actions.setCapabilityGrantAction(grantFormData({ capabilities: ['record_sale', 'submit_sales_day'] })),
@@ -647,7 +649,7 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
     const params = new URL(to, 'http://localhost').searchParams;
     const ok = params.get('ok');
     expect(ok, `redirect URL was: ${to}`).toBe(
-      `Granted 2 capabilities: ${capabilityTitle('record_sale')}, at every store they work at; ${capabilityTitle('submit_sales_day')}, at every store they work at.`,
+      `Granted 2 capabilities: ${capabilityTitle('record_sale')}, at every store they have access to; ${capabilityTitle('submit_sales_day')}, at every store they have access to.`,
     );
     expect(ok).not.toMatch(/_/);
     expect(grantCapabilityAsActor).toHaveBeenCalledTimes(2);

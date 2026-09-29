@@ -181,7 +181,7 @@ describe('P8 — foldActiveGrants: NULL-store cover wins over same-store cover, 
 // G1-G3 — setCapabilityGrantAction's banner names the store axis for a store-scoped capability.
 // =================================================================================================
 
-describe('G1-G3 — the picker-grant banner names "at every store they work at" for a store-scoped capability only', () => {
+describe('G1-G3 — the picker-grant banner names "at every store they have access to" for a store-scoped capability only', () => {
   let grantCapabilityAsActor: ReturnType<typeof vi.fn>;
 
   beforeAll(() => {
@@ -192,11 +192,11 @@ describe('G1-G3 — the picker-grant banner names "at every store they work at" 
     grantCapabilityAsActor.mockReset();
   });
 
-  it('G1: one store-scoped capability (confirm_receipt) → "Granted: <Title>, at every store they work at."', async () => {
+  it('G1: one store-scoped capability (confirm_receipt) → "Granted: <Title>, at every store they have access to."', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(grantFormData({ capabilities: ['confirm_receipt'] })));
     const params = new URL(to, 'http://localhost').searchParams;
-    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${capabilityTitle('confirm_receipt')}, at every store they work at.`);
+    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${capabilityTitle('confirm_receipt')}, at every store they have access to.`);
   });
 
   it('G2 (⛔ green today, a guard): one org-scoped capability (manage_fixed_assets) → "Granted: <Title>." with no store phrase', async () => {
@@ -215,7 +215,7 @@ describe('G1-G3 — the picker-grant banner names "at every store they work at" 
     );
     const params = new URL(to, 'http://localhost').searchParams;
     expect(params.get('ok'), `redirect URL was: ${to}`).toBe(
-      `Granted 2 capabilities: ${capabilityTitle('confirm_receipt')}, at every store they work at; ${capabilityTitle('manage_fixed_assets')}.`,
+      `Granted 2 capabilities: ${capabilityTitle('confirm_receipt')}, at every store they have access to; ${capabilityTitle('manage_fixed_assets')}.`,
     );
   });
 });

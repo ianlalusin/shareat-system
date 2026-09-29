@@ -117,6 +117,60 @@ async function rowById(id: string): Promise<RowShape> {
 
 const PAST = new Date('2020-01-01T00:00:00Z');
 
+/** S2e (E1/E2) — a real barrier, not a sleep: poll until some backend is blocked SPECIFICALLY BY
+ * the lock-holding connection (`holderPid = ANY(pg_blocking_pids(pid))`), never a looser
+ * `wait_event_type = 'Lock'` + query-text match — that would also match an unrelated backend
+ * blocked on a different lock that merely still has `person_grants` in its last query text. Being
+ * blocked BY THIS HOLDER is DB-side proof the SUT's SELECT already ran and reached its own UPDATE
+ * — the ONLY statement in `grantCapability`'s person-level "existing" branch that touches an
+ * existing row; the same-rank no-op branch returns before ever executing one (§4c item 1). A
+ * 300ms sleep only made that likely; this makes it certain, regardless of machine load. Asserts
+ * exactly one such backend — more than one means something else is also contending.
+ *
+ * S2e audit F4 — `sutPromise` races the poll: if the SUT rejects (or resolves) before it is ever
+ * observed blocked, that surfaces as ITSELF immediately, not as a `timeoutMs`-later "timed out"
+ * error that would hide the real failure behind an unrelated one. `Promise.race` still attaches a
+ * handler to the losing side internally, so this never produces an unhandled rejection when the
+ * poll wins normally.
+ *
+ * S2e audit F7 — `timeoutMs` derived from this file's own `testTimeout`/`hookTimeout` budget
+ * (`vitest.config.mts:107,122`, both 30s): 20s leaves headroom for the rest of the leg (the
+ * revoke/insert/commit and assertions after the barrier fires) inside that ceiling, where the old
+ * 5s default was an arbitrary number unrelated to it.
+ */
+async function waitUntilBlockedByHolder(
+  holderPid: number,
+  sutPromise: Promise<unknown>,
+  timeoutMs = 20_000,
+): Promise<{ pid: number; query: string }> {
+  const sutRace: Promise<never> = sutPromise.then(
+    () => {
+      throw new Error('the SUT settled (resolved) before its blocked state was ever observed — the barrier never fired');
+    },
+    (err) => {
+      throw err;
+    },
+  );
+  const poll = (async (): Promise<{ pid: number; query: string }> => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const rows = await sql<{ pid: number; query: string }[]>`
+        select pid, query
+        from pg_stat_activity
+        where datname = current_database()
+          and ${holderPid} = any(pg_blocking_pids(pid))`;
+      if (rows.length > 1) {
+        throw new Error(`expected exactly one backend blocked by pid ${holderPid}, found ${rows.length}: ${JSON.stringify(rows)}`);
+      }
+      const [row] = rows;
+      if (row) return row;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw new Error(`Timed out waiting for a backend blocked by holder pid ${holderPid}`);
+  })();
+  return Promise.race([poll, sutRace]);
+}
+
 describe('E1 — a hand-grant over a seeded elevation row (granted_by = a third person)', () => {
   it(
     'supersedes: one active "grant" row (granted_by = actor), the seeded row revoked with the named reason, no gap — was red today: active row keeps granted_by = third person, no revoked row',
@@ -328,6 +382,9 @@ describe('E7 (S2d, D2 — made deterministic) — the ON CONFLICT arm is actuall
       const conn = await sql.reserve();
       try {
         await conn`begin`;
+        const [pidRow] = await conn<{ pid: number }[]>`select pg_backend_pid() as pid`;
+        if (!pidRow) throw new Error('pg_backend_pid() returned no row');
+        const connPid = pidRow.pid;
         await conn`select id from person_grants where id = ${seededId} for update`;
 
         // `accessRepo.grantCapability` directly (like E8) — its return carries `id`, which
@@ -336,7 +393,15 @@ describe('E7 (S2d, D2 — made deterministic) — the ON CONFLICT arm is actuall
         const sutPromise = asOrg(f.orgId, (tx) =>
           accessRepo.grantCapability(tx, { personId: f.targetId, grantName: CAP, grantedBy: f.adminId, grantSource: 'grant' }),
         );
-        await new Promise((r) => setTimeout(r, 300));
+        // S2e (E2) — the barrier IS the distinguishing assertion. `grantCapability`'s same-rank
+        // no-op branch returns before ever executing an UPDATE, so a blocked UPDATE on
+        // `person_grants` can only be THIS call's "upgraded" arm reaching its own revoke — proof
+        // it already committed to that branch before the winner row (inserted below) exists.
+        // `result.id === winner.id` alone cannot tell that arm from the same-rank no-op: if the
+        // SUT's SELECT ran late enough to see the winner itself as "existing" (same rank as the
+        // input), it takes the no-op path and still returns the winner's id.
+        const blocked = await waitUntilBlockedByHolder(connPid, sutPromise);
+        expect(blocked.query, `unexpected blocked backend: ${blocked.query}`).toMatch(/update[\s\S]*person_grants/i);
 
         await conn`update person_grants set revoked_at = now(), revoke_reason = ${accessRepo.SUPERSEDED_BY_HAND_GRANT_REASON} where id = ${seededId} and revoked_at is null`;
         const [winner] = await conn<{ id: string }[]>`
@@ -353,6 +418,10 @@ describe('E7 (S2d, D2 — made deterministic) — the ON CONFLICT arm is actuall
         expect(active.length, "exactly one active row (the winner's)").toBe(1);
         expect(active[0]!.id).toBe(winner!.id);
       } finally {
+        // S2e audit F1 — a failed leg above (e.g. the barrier throwing) left `finally` releasing an
+        // OPEN transaction back to the max:5 pool. That leaked FOR-UPDATE lock then blocked every
+        // later leg's own row lock until the pool starved. Roll back first, always.
+        await conn`rollback`.catch(() => {});
         conn.release();
       }
     },
@@ -370,12 +439,18 @@ describe('E9 (S2d, D1) — a concurrent revoke lands between the SELECT and the 
       const conn = await sql.reserve();
       try {
         await conn`begin`;
+        const [pidRow] = await conn<{ pid: number }[]>`select pg_backend_pid() as pid`;
+        if (!pidRow) throw new Error('pg_backend_pid() returned no row');
+        const connPid = pidRow.pid;
         await conn`select id from person_grants where id = ${seededId} for update`;
 
         const sutPromise = asOrg(f.orgId, (tx) => grantCapabilityAsActor(tx, f.admin, { personId: f.targetId, capability: CAP }));
-        // Give the SUT's own (non-locking) SELECT time to complete and its own UPDATE time to
-        // reach and block on the row lock this connection holds.
-        await new Promise((r) => setTimeout(r, 300));
+        // S2e (E1) — a real barrier: poll until the SUT's own backend is actually WAITING on the
+        // row lock this connection holds, proving its SELECT already ran and it reached its own
+        // UPDATE (the branch this leg pins) before the concurrent revoke below lands. A 300ms
+        // sleep only made that likely; this makes it certain.
+        const blocked = await waitUntilBlockedByHolder(connPid, sutPromise);
+        expect(blocked.query, `unexpected blocked backend: ${blocked.query}`).toMatch(/update[\s\S]*person_grants/i);
 
         // The barrier: a REAL concurrent revoke, landing exactly between the SUT's SELECT and its
         // own UPDATE — by the time this connection releases the lock, the SUT's UPDATE (`WHERE
@@ -395,8 +470,49 @@ describe('E9 (S2d, D1) — a concurrent revoke lands between the SELECT and the 
         expect(seeded.revoked_at, 'revoked by the barrier — the SUT\'s own UPDATE hit 0 rows').not.toBeNull();
         expect(seeded.revoke_reason).toBe('concurrent revoke (E9 barrier)');
       } finally {
+        // S2e audit F1 — same leak as E7's: roll back the open transaction before releasing the
+        // connection back to the max:5 pool.
+        await conn`rollback`.catch(() => {});
         conn.release();
       }
+    },
+    30000,
+  );
+});
+
+describe('E10 (S2e, spec §4e item E3) — restored: two real concurrent callers, no manual barrier (⛔ smoke, not a mutation-catcher — see the it() title)', () => {
+  it(
+    '⛔ SMOKE, not a mutation-catcher (S2e audit F3) — both fulfil, exactly one active row, exactly one revoked row, exactly one wrote:true. Measured: removing access.ts\'s onConflictDoNothing (:783-786) left this GREEN 8/8 runs even with `expect(rejected).toEqual([])` — natural concurrency here reliably serialises before either caller reaches the INSERT, so the ON CONFLICT arm this leg was meant to force is never actually exercised. It still exercises genuine unmanufactured concurrency through the connection pool, which the deterministic E7/E9 barriers above deliberately do not — that is the leg\'s real, remaining value.',
+    async () => {
+      const f = await fixture('e10');
+      await seedRow(f.targetId, CAP, 'elevation', f.thirdId, PAST);
+
+      const results = await Promise.allSettled([
+        asOrg(f.orgId, (tx) => grantCapabilityAsActor(tx, f.admin, { personId: f.targetId, capability: CAP })),
+        asOrg(f.orgId, (tx) => grantCapabilityAsActor(tx, f.admin, { personId: f.targetId, capability: CAP })),
+      ]);
+
+      const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+      // S2e audit F3 — `.not.toContain('23505')` alone pins nothing: it is satisfied by an EMPTY
+      // rejected array just as much as by one with a different code in it, so it never actually
+      // asserts "no rejection at all". A real ON CONFLICT DO NOTHING never throws either way.
+      expect(rejected, 'no rejection at all — a real ON CONFLICT DO NOTHING never throws').toEqual([]);
+
+      const active = await activeRows(f.targetId, CAP);
+      expect(active.length, 'exactly one active row').toBe(1);
+      expect(active[0]!.grant_source).toBe('grant');
+
+      const allRows = await sql<RowShape[]>`
+        select id, grant_source, store_id, granted_by, granted_at, revoked_at, revoke_reason
+        from person_grants where person_id = ${f.targetId} and grant_name = ${CAP}`;
+      const revoked = allRows.filter((r) => r.revoked_at !== null);
+      expect(revoked.length, 'wanted: exactly one revoked row (the seeded one)').toBe(1);
+
+      const fulfilled = results.filter(
+        (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof grantCapabilityAsActor>>> => r.status === 'fulfilled',
+      );
+      const wroteTrueCount = fulfilled.filter((r) => r.value.wrote).length;
+      expect(wroteTrueCount, 'wanted: exactly one call reports wrote:true').toBe(1);
     },
     30000,
   );

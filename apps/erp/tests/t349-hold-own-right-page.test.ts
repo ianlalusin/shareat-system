@@ -527,15 +527,34 @@ describe('A1/A2/A2e — the hold banner names the store (was red before T-349 S2
     expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`${CAP_TITLE} was already held in their own right at SmokeStore.`);
   });
 
-  it('A2e: wrote false, heldEverywhere true — wanted "… was already held in their own right everywhere.", no store name — was red before T-349 S2: the plain "now held" sentence, unconditioned on wrote/heldEverywhere', async () => {
+  // S2e (E5): `CAP` (`confirm_receipt`) is store-scoped, so "everywhere" overclaimed the same way
+  // E4's "Granted:" phrase did — the wording names the axis actually reached: every store the
+  // person has access to, not literally every store in the org.
+  it('A2e: wrote false, heldEverywhere true — wanted "… was already held in their own right at every store they have access to.", no literal "everywhere" — was red before T-349 S2: the plain "now held" sentence, unconditioned on wrote/heldEverywhere', async () => {
     grantCapabilityAsActor.mockResolvedValue({ wrote: false, storeName: null, heldEverywhere: true });
     const to = await expectRedirectTo(() =>
       actions.setCapabilityGrantAction(holdFormData({ positionGrantId: 'grant-position-a' })),
     );
     const params = new URL(to, 'http://localhost').searchParams;
     const ok = params.get('ok');
-    expect(ok, `redirect URL was: ${to}`).toBe(`${CAP_TITLE} was already held in their own right everywhere.`);
+    expect(ok, `redirect URL was: ${to}`).toBe(`${CAP_TITLE} was already held in their own right at every store they have access to.`);
     expect(ok).not.toContain('SmokeStore');
+  });
+
+  // S2e — actions.ts:180 branches on CAPABILITY_SCOPE: store-scoped already-held gets A2e's "at
+  // every store they have access to"; an org/platform-scoped capability has no store axis to
+  // overclaim, so it keeps the plain "everywhere." `manage_fixed_assets` is org-scoped
+  // (`CAPABILITY_SCOPE`, `packages/auth/src/capabilities.ts:542`).
+  it('A2f: org-scoped capability (manage_fixed_assets), wrote false, heldEverywhere true — wanted "… was already held in their own right everywhere.", never "have access to"', async () => {
+    grantCapabilityAsActor.mockResolvedValue({ wrote: false, storeName: null, heldEverywhere: true });
+    const orgCapTitle = capabilityTitle('manage_fixed_assets');
+    const to = await expectRedirectTo(() =>
+      actions.setCapabilityGrantAction(holdFormData({ positionGrantId: 'grant-position-a', capabilities: ['manage_fixed_assets'] })),
+    );
+    const params = new URL(to, 'http://localhost').searchParams;
+    const ok = params.get('ok');
+    expect(ok, `redirect URL was: ${to}`).toBe(`${orgCapTitle} was already held in their own right everywhere.`);
+    expect(ok, 'org/platform-scoped must never claim a store axis it does not have').not.toContain('have access to');
   });
 });
 
@@ -582,13 +601,15 @@ describe('A4 (⛔ green now — a guard) — the ordinary picker grant (no inten
     grantCapabilityAsActor.mockReset();
   });
 
-  // T-349 S2c (DEF-456), finding 3: `confirm_receipt` is store-scoped, so the person-level picker
-  // grant covers every store — the banner now names it.
-  it('grantCapabilityAsActor is called without a positionGrantId field; banner "Granted: …" names every store', async () => {
+  // T-349 S2c (DEF-456), finding 3 / S2e (E4) — `confirm_receipt` is store-scoped, so the
+  // person-level picker grant's banner names the store axis — but never "covers every store"
+  // outright: axis 2 is a `person_store_scope` row (employment, manual or fan-out), which this
+  // grant does not itself create, so the wording says "at every store they have access to".
+  it('grantCapabilityAsActor is called without a positionGrantId field; banner "Granted: …" names every store they have access to', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(pickerFormData()));
     const params = new URL(to, 'http://localhost').searchParams;
-    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${CAP_TITLE}, at every store they work at.`);
+    expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${CAP_TITLE}, at every store they have access to.`);
     expect(grantCapabilityAsActor).toHaveBeenCalledTimes(1);
     const callArg = grantCapabilityAsActor.mock.calls[0]?.[2] as Record<string, unknown>;
     expect('positionGrantId' in callArg, 'the ordinary grant path must not carry this field at all').toBe(false);

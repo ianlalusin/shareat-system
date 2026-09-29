@@ -167,7 +167,7 @@ When `intent === 'hold_own_right'`:
 
 Banners (success, after commit):
 - wrote → `` `${capabilityTitle(cap)} is now held in their own right at ${storeName}.` ``
-- not wrote, `heldEverywhere` → `` `${capabilityTitle(cap)} was already held in their own right everywhere.` ``
+- not wrote, `heldEverywhere` → store-scoped: `` `${capabilityTitle(cap)} was already held in their own right at every store they have access to.` ``; org/platform: `` `…in their own right everywhere.` `` (amended by §4e E5, S2e)
 - not wrote, otherwise → `` `${capabilityTitle(cap)} was already held in their own right at ${storeName}.` ``
 
 Every other banner is unchanged.
@@ -240,7 +240,8 @@ store-scoped capability that Cashier can hold, and names it).
 | P4 | S2 | `grantSummaryLine` over P1's rows | `0 inherited from positions · 1 granted` | `1 inherited … · 1 granted` |
 | A1 | S2 | action: hold, mock returns `{wrote: true, storeName: 'SmokeStore'}` | `ok === '<Title> is now held in their own right at SmokeStore.'` | old sentence |
 | A2 | S2 | same with `wrote: false, heldEverywhere: false` | `ok === '<Title> was already held in their own right at SmokeStore.'` | as A1 |
-| A2e | S2 | same with `wrote: false, heldEverywhere: true` | `ok === '<Title> was already held in their own right everywhere.'`; ⛔ no store name in `ok` | as A1 |
+| A2e | S2 | same with `wrote: false, heldEverywhere: true` (store-scoped) | `ok === '<Title> was already held in their own right at every store they have access to.'` (§4e E5); ⛔ no store name in `ok` | as A1 |
+| A2f | S2e | same, ORG-scoped capability | `ok === '<Title> was already held in their own right everywhere.'`; ⛔ no "have access to" | pins the non-store arm |
 | A3 | S2 | ⛔ `intent=hold_own_right` with no `positionGrantId`, or two capabilities | `error` param; `grantCapabilityAsActor` **not called** | called / org-wide |
 | A4 | S2 | ⛔ picker grant (no intent) | `grantCapabilityAsActor` called without `positionGrantId`; banner `Granted: …` unchanged | green now (guard) |
 
@@ -734,7 +735,7 @@ mutants (four killed). **Model** Sonnet, tester then builder. **Migration** none
   `apps/erp/tests/t349-s2c-fold-and-banner.test.ts` (G4, P9), plus the banner pins in
   `apps/erp/tests/t343-s6b-admin-users-labels.test.ts` / `t349-hold-own-right-page.test.ts` that the new wording moves.
 
-### 4e. S2e: follow-ups from the executed review of `bad8c32` (APPROVED 2026-09-28, orchestrator)
+### 4e. S2e: follow-ups from the executed review of `bad8c32` (APPROVED 2026-09-28, orchestrator — DONE 2026-09-29)
 The committed CODE is correct (invariants a–e untouched, D4 clean). The gaps are test determinism and one wording.
 - **E1 (HIGH, tester).** E9's "barrier" is `setTimeout(300)`: at 0 ms the SUT takes the virgin-insert branch and E9
   passes even under the F1 mutant. Replace the sleep with a real barrier: hold the row lock, start the SUT, **poll

@@ -177,7 +177,9 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
               ? `${capabilityTitle(capabilities[0]!)} is now held in their own right.`
               : `${capabilityTitle(capabilities[0]!)} is now held in their own right at ${holdResult.storeName}.`
             : holdResult.heldEverywhere
-              ? `${capabilityTitle(capabilities[0]!)} was already held in their own right everywhere.`
+              ? CAPABILITY_SCOPE[capabilities[0]!] === 'store'
+                ? `${capabilityTitle(capabilities[0]!)} was already held in their own right at every store they have access to.`
+                : `${capabilityTitle(capabilities[0]!)} was already held in their own right everywhere.`
               : `${capabilityTitle(capabilities[0]!)} was already held in their own right at ${holdResult.storeName}.`;
           return;
         }
@@ -200,14 +202,18 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
         for (const capability of capabilities) {
           await grantCapabilityAsActor(tx, actor, { personId, capability });
         }
-        // T-349 S2c item 4 — the picker grant is always person-level (org-wide). For a
-        // store-scoped capability that reaches every store, so the banner says so; an
+        // T-349 S2c item 4 — the picker grant is always person-level (org-wide); an
         // org/platform-scoped capability has no store axis to name.
-        // T-349 S2d (D3) — "at every store" overclaimed: a store-scoped capability ALSO needs a
-        // `person_store_scope` row at each store (authorize()'s axis 2), which this grant does not
-        // create. "at every store they work at" is honest about that second axis.
+        // T-349 S2e (E4) — for a store-scoped capability, "at every store they work at" was
+        // neither necessary nor sufficient: axis 2 (a `person_store_scope` row, authorize()'s
+        // second gate) can come from employment, a manual grant, or fan-out, not only "where
+        // they work" — and this picker grant still does not create it. "at every store they
+        // have access to" names that axis correctly, without claiming the grant itself reaches
+        // every store.
         const phrase = (c: Capability) =>
-          CAPABILITY_SCOPE[c] === 'store' ? `${capabilityTitle(c)}, at every store they work at` : capabilityTitle(c);
+          CAPABILITY_SCOPE[c] === 'store'
+            ? `${capabilityTitle(c)}, at every store they have access to`
+            : capabilityTitle(c);
         ok =
           capabilities.length === 1
             ? `Granted: ${phrase(capabilities[0]!)}.`
