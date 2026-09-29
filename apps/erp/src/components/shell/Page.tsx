@@ -38,6 +38,7 @@
  * identical to the lists on their laptop and assumes something is broken.
  */
 import type { ReactNode } from 'react';
+import { PageDescription } from './PageDescription';
 
 export type PageDensity = 'narrow' | 'form' | 'table' | 'wide';
 
@@ -128,11 +129,9 @@ export interface PageHeaderProps {
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <h1 className="text-2xl font-semibold">{title}</h1>
-        {description && (
-          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">{description}</p>
-        )}
+        {description && <PageDescription className="mt-1">{description}</PageDescription>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>

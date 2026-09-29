@@ -252,9 +252,19 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // `moneyAccountId` `<select>` at :203 (26px), its "Save" submit `<button>` at :217 (26px), and
     // the "Cancel" `<Link>` at :223 (28px). All four PASS; nothing else in that file's census
     // entries moved.
-    // 1054 = 151 FAIL + 58 UNRESOLVED + 845 PASS, all measured together via runCensus() (not
-    // computed from the other two numbers, so this cannot become circular with them).
-    expect(results.length).toBe(1058);
+    // 1058 = 151 FAIL + 58 UNRESOLVED + 849 PASS, all measured together via runCensus() (not
+    // computed from the other two numbers, so this cannot become circular with them). Corrects
+    // this comment's own stale "1054 = ...845" breakdown, left behind when T-350 bumped the
+    // assertion below without updating the arithmetic note beside it (T-348 S1 audit).
+    // 1058 -> 1059, T-348 S1 (DEF-474). +1 PASS, FAIL/UNRESOLVED unmoved (both asserted above).
+    // The ONLY new candidate is `PageDescription.tsx`'s own `<button type="button" ...
+    // min-h-11 min-w-11>` (44x44, well above the 24px floor) — its JSX literally exists once, in
+    // that one file, which `runCensus()`'s walk of `apps/erp/src` reaches directly. The component's
+    // ~102 call sites across `app/**` contribute NOTHING: `<PageDescription>` is a plain custom tag
+    // (not native, not `Link`, not an onClick-div, not in `KNOWN_COMPONENT_HEIGHT_PX`, and — per
+    // spec item 8 — deliberately never added to `OPAQUE_COMPONENTS`), so every branch in
+    // `runCensus()`'s visitor skips it silently, same as `<Page>`/`<PageHeader>` themselves today.
+    expect(results.length).toBe(1059);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

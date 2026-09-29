@@ -338,3 +338,14 @@ Root cause and blast radius: `docs/DEFECTS-REGISTER.md` DEF-440. Method: render 
   `lg:grid-cols-2` Readiness | Details grid keeps its column sizes, so a wide empty gutter opens between them. The S1
   spec must make those columns fill the width (not add a gutter) and show it at 1366 in the smoketest.
 - S0 left no residue (`git status` clean of S0 files, confirmed by the tester).
+
+## Amendment A2 — S2 precondition from the S1 build (2026-09-29, orchestrator)
+- **The action-link-sweep resolver cannot see through `<PageDescription>`.** `touch-target-geometry.ts`'s
+  `resolveAncestorFontSize` walks JSX `.parent` within ONE file, so a `<Link>` inside `<PageDescription>` loses the
+  `text-sm` that now lives in `PageDescription.tsx`: measured in S1's temporary wiring, `money-accounts/page.tsx`
+  went 1 FAIL → 1 UNRESOLVED. S2 moves all 9 linked descriptions (Census) inside the component, so **S2's first slice
+  teaches the resolver that `PageDescription` supplies `text-sm`** (a known-component table, like `OPAQUE_COMPONENTS`),
+  red first, before any sweep file moves. Tester path: `apps/erp/tests/touch-target-geometry.ts` + its test.
+- **D2 root cause, for S2's reviewers:** `line-clamp`'s `overflow: hidden` makes the `<p>` a scroll container; the
+  browser scrolls a focused hidden link into view BEFORE `onFocus` runs, so a `getBoundingClientRect` comparison is
+  always "visible". The handler checks `p.scrollTop > 0` instead.
