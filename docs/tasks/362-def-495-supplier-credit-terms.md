@@ -311,6 +311,7 @@ Smoketest on **9008**, per `docs/SMOKETEST.md`, signed in as admin:
   - Unblock T-361.
 
 ## Questions for Ian
+> **Answered — Ian, 2026-09-29 (bible §13 row 250):** *"managers and admins is fine"* — terms are gated by `approve_supplier` (super/admin/manager ✅, staff ✗), as written. No new capability.
 **Q1 (does not block the build; the default is written above).** Who may change a supplier's payment terms? The
 spec keeps the gate that already covers editing a supplier, including its bank account: **admins and managers**
 (`approve_supplier`). After T-361, terms decide whether a manager may book a bill on credit against that supplier.

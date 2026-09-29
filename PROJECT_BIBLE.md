@@ -65,35 +65,35 @@
 - `1203–1237` 10. Phase plan
 - `1238–1254` 11. Migration & ETL rules
 - `1255–1319` 12. Inherited landmines — do not repeat these
-- `1320–1576` 13. Decision log
-- `1577–1596` 14. Amendment protocol
-- `1597–1601` 15. Engineering standards — the industry practices this project follows
-  - `1602–1607` 15.1 Build order: walking skeleton first
-  - `1608–1619` 15.2 Golden-master testing — the most important practice here
-  - `1620–1628` 15.3 Strangler Fig, not big-bang cutover
-  - `1629–1633` 15.4 No dual-write
-  - `1634–1642` 15.5 Expand/contract migrations
-  - `1643–1651` 15.6 Observability from day zero, not later
-  - `1652–1656` 15.7 CI gates
-  - `1657–1661` 15.8 Backups and a tested restore
-  - `1662–1666` 15.9 Twelve-Factor config
-  - `1667–1674` 15.10 Append-only ledgers — but not event sourcing
-  - `1675–1679` 15.11 Defence in depth
-  - `1680–1708` 15.12 Skills are lenses, not assurance
-  - `1709–1715` 15.13 Reconciliation is a permanent feature
-- `1716–1720` 16. The accounting spine
-  - `1721–1752` 16.0 What we are actually fixing — the diagnosis
-  - `1753–1796` 16.1 The ten invariants — non-negotiable
-  - `1797–1811` 16.2 The oracle: how "correct" is tested
-  - `1812–1833` 16.3 The model — header + lines, not legs
-  - `1834–1853` 16.4 Deliberately simpler than ERPNext
-  - `1854–1920` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1921–1945` 16.6 What v1 already gets right — preserve the intent
-  - `1946–1967` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1968–1982` 16.8 What v1's accounting already gets right
-  - `1983–2026` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2027–2077` 16.10 Posting patterns — one canonical pattern per business event
-  - `2078–2109` 16.11 Inventory's accounting integration
+- `1320–1577` 13. Decision log
+- `1578–1597` 14. Amendment protocol
+- `1598–1602` 15. Engineering standards — the industry practices this project follows
+  - `1603–1608` 15.1 Build order: walking skeleton first
+  - `1609–1620` 15.2 Golden-master testing — the most important practice here
+  - `1621–1629` 15.3 Strangler Fig, not big-bang cutover
+  - `1630–1634` 15.4 No dual-write
+  - `1635–1643` 15.5 Expand/contract migrations
+  - `1644–1652` 15.6 Observability from day zero, not later
+  - `1653–1657` 15.7 CI gates
+  - `1658–1662` 15.8 Backups and a tested restore
+  - `1663–1667` 15.9 Twelve-Factor config
+  - `1668–1675` 15.10 Append-only ledgers — but not event sourcing
+  - `1676–1680` 15.11 Defence in depth
+  - `1681–1709` 15.12 Skills are lenses, not assurance
+  - `1710–1716` 15.13 Reconciliation is a permanent feature
+- `1717–1721` 16. The accounting spine
+  - `1722–1753` 16.0 What we are actually fixing — the diagnosis
+  - `1754–1797` 16.1 The ten invariants — non-negotiable
+  - `1798–1812` 16.2 The oracle: how "correct" is tested
+  - `1813–1834` 16.3 The model — header + lines, not legs
+  - `1835–1854` 16.4 Deliberately simpler than ERPNext
+  - `1855–1921` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1922–1946` 16.6 What v1 already gets right — preserve the intent
+  - `1947–1968` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1969–1983` 16.8 What v1's accounting already gets right
+  - `1984–2027` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2028–2078` 16.10 Posting patterns — one canonical pattern per business event
+  - `2079–2110` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1572,6 +1572,7 @@ just a patch.**
 | 247 | 2026-09-29 | ⭐ **AN EXPENSE RECORDED AGAINST A SUPPLIER INVOICE DEFAULTS TO CREDIT FOR A SUPPLIER WITH TERMS (ONE LINE, THE REMAINING AMOUNT PRE-FILLED); CASH FOR A CASH-ON-DELIVERY SUPPLIER.** Ian, 2026-09-29: *"yes keep credit default for suppliers with terms."* T-358 passes `initialLines=[{ method: 'credit', amount: <remaining> }]` to `<MoneyLines>` on `/ap/invoices/[id]` when `creditTermsDays` is set. | v1 defaults to credit on a supplier delivery (`LinkExpenseDialog.tsx:89`, `DeliveryExpenseSplitDialog.tsx:112`) and the pre-T-358 v2 form pre-selected it; `<MoneyLines>`' own default is Cash, and a slip there posts a real drawer cash-out instead of AP. | Yes. |
 | 248 | 2026-09-29 | ⭐ **THE AI BUSINESS BRAIN STARTS RULES-FIRST: PHASE 0 (≈8 SQL expense checks in the existing findings engine, no AI) IS APPROVED AND BUILT AFTER LAUNCH; A "LOOKS PERSONAL" FLAG IS SEEN BY OWNER AND ADMIN ONLY (T-359).** Ian, 2026-09-29: *"approve Phase 0, after launch; owner and admin only"*. Answers assessment §9 Q1, Q2, Q4 (`docs/discovery/ai-business-brain-assessment.md`). **Still open (Ian):** Q3 personal-spend classifier as the first AI feature in place of ADR-014's daily-briefing pilot; Q5 receipt photos to the AI provider; Q6 who labels ≈150 v1 expenses for the precision test. Phase 0 is not a launch blocker; nothing AI is built before Q3 is answered and the §6 base-rate count is taken | Ian | T-359 |
 | 249 | 2026-09-29 | ⭐ **SUPPLIER CREDIT TERMS GET A WRITER BEFORE THE COD-CREDIT RULE MOVES INTO THE DOMAIN (DEF-495 option (a)).** Ian, 2026-09-29: *"(a) — build supplier terms editing first"*. Today `suppliers.credit_terms_days` has no writer, so every supplier reads as cash-on-delivery and row 247's credit default never fires; landing T-361 (DEF-492) first would make the recurring-expense job's credit drafts refuse daily. Order: **T-362 (supplier terms editing) → T-361** | Ian | DEF-495 · T-362 · T-361 |
+| 250 | 2026-09-29 | **SUPPLIER CREDIT TERMS ARE CHANGED UNDER THE EXISTING `approve_supplier` GATE — MANAGERS AND ADMINS, NOT ADMIN-ONLY (T-362 Q1).** Ian, 2026-09-29: *"managers and admins is fine"*. The same gate already covers the supplier bank account, the riskier field; every change writes an `audit_log` row | Ian | T-362 |
 
 
 ## 14. Amendment protocol
