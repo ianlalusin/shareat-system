@@ -13,6 +13,8 @@ import {
   type Tx,
 } from '@shareat/db';
 import type { AdjustmentKind } from '@shareat/db/schema';
+import { refuse } from '../shared/refusal';
+import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { adjudicateDay } from './adjudicate';
 import { type DayAdjustments, type DayPolicy } from './compute-day';
 import { shiftDayOffsetMsForHour, type ShiftDay } from './shift-day';
@@ -28,14 +30,43 @@ export interface RecordAdjustmentInput {
   employmentId: string;
   shiftDay: ShiftDay;
   kind: AdjustmentKind;
-  chosenAnchorMinute?: number;
-  effectiveOutMinute?: number;
+  chosenAnchorMinute?: number | string;
+  effectiveOutMinute?: number | string;
   isHalfDay?: boolean;
   /** ⭐ `overtime_approved` only — how many of the day's PENDING minutes are accepted. */
-  approvedOtMinutes?: number;
+  approvedOtMinutes?: number | string;
   reason?: string;
   /** The verified session the decision was made under. From `resolveActor` (§7.1). */
   sessionId: string;
+}
+
+/** `RecordAdjustmentInput` with its three minute fields parsed to `number` — T-352 / DEF-478. */
+type ParsedAdjustmentInput = Omit<
+  RecordAdjustmentInput,
+  'chosenAnchorMinute' | 'effectiveOutMinute' | 'approvedOtMinutes'
+> & {
+  chosenAnchorMinute?: number;
+  effectiveOutMinute?: number;
+  approvedOtMinutes?: number;
+};
+
+const MINUTE_LABELS: Record<'chosenAnchorMinute' | 'effectiveOutMinute' | 'approvedOtMinutes', string> = {
+  approvedOtMinutes: 'The minutes to pay',
+  chosenAnchorMinute: 'The paid-from minute',
+  effectiveOutMinute: 'The paid-until minute',
+};
+
+/**
+ * T-352 / DEF-478 — moved from the action's `wholeMinutes()`. Blank keeps DEF-471's own sentence
+ * (Ian: a blank minutes box means "not decided", not 0), which `parseWholeNumberInput`'s blank
+ * wording does not match; a non-blank value defers to it for the whole-number/range check.
+ */
+function parseMinutes(raw: string | number, key: string, label: string): number {
+  const t = String(raw).trim();
+  if (t === '') {
+    throw refuse(`recordAdjustment: ${key} is blank`, `${label} — enter a whole number of minutes (0 to 99999).`);
+  }
+  return parseWholeNumberInput(t, `recordAdjustment: ${key}`, label, 0, 99999, ' of minutes');
 }
 
 /**
@@ -54,6 +85,24 @@ export async function recordAdjustment(
     storeId: employment.storeId,
     orgId: employment.orgId,
   });
+
+  // T-352 / DEF-478 — parsed directly after `authorize()`, so a non-holder sees the authorization
+  // refusal rather than a field sentence for a form they were never allowed to submit.
+  const parsed: ParsedAdjustmentInput = {
+    ...input,
+    chosenAnchorMinute:
+      input.chosenAnchorMinute === undefined
+        ? undefined
+        : parseMinutes(input.chosenAnchorMinute, 'chosenAnchorMinute', MINUTE_LABELS.chosenAnchorMinute),
+    effectiveOutMinute:
+      input.effectiveOutMinute === undefined
+        ? undefined
+        : parseMinutes(input.effectiveOutMinute, 'effectiveOutMinute', MINUTE_LABELS.effectiveOutMinute),
+    approvedOtMinutes:
+      input.approvedOtMinutes === undefined
+        ? undefined
+        : parseMinutes(input.approvedOtMinutes, 'approvedOtMinutes', MINUTE_LABELS.approvedOtMinutes),
+  };
 
   // ⛔ Self-adjudication. Bible §7 rule 6: *"no one approves, pays, adjusts, or scores their own
   // record. Admins may be exempted, explicitly and auditably."* The exemption is explicit here and
@@ -95,7 +144,7 @@ export async function recordAdjustment(
     shiftDay: input.shiftDay,
   });
 
-  assertNotInverted({ live, incoming: input });
+  assertNotInverted({ live, incoming: parsed });
 
   const superseded = live.find((a) => a.kind === input.kind);
 
@@ -115,10 +164,10 @@ export async function recordAdjustment(
     employmentId: employment.id,
     shiftDay: input.shiftDay,
     kind: input.kind,
-    chosenAnchorMinute: input.chosenAnchorMinute ?? null,
-    effectiveOutMinute: input.effectiveOutMinute ?? null,
+    chosenAnchorMinute: parsed.chosenAnchorMinute ?? null,
+    effectiveOutMinute: parsed.effectiveOutMinute ?? null,
     isHalfDay: input.isHalfDay === undefined ? null : String(input.isHalfDay),
-    approvedOtMinutes: input.approvedOtMinutes ?? null,
+    approvedOtMinutes: parsed.approvedOtMinutes ?? null,
     reason: input.reason ?? null,
     decidedBySessionId: input.sessionId,
     decidedByPersonId: actor.personId,
@@ -157,7 +206,7 @@ export async function listAdjustments(
  */
 function assertNotInverted(params: {
   live: readonly AttendanceAdjustmentRow[];
-  incoming: RecordAdjustmentInput;
+  incoming: ParsedAdjustmentInput;
 }): void {
   const { live, incoming } = params;
 

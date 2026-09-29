@@ -272,3 +272,18 @@ criterion instead of another per-symptom fix:
 - F (the repo-level `orgId` filter is test-unpinned) → add one leg; RLS already proven.
 - **BUILDER paths:** `apps/erp/src/app/channel-settlements/{page.tsx,actions.ts}`. **TESTER paths:** the T-350 test
   files (render + integration) and `t350-s4-banner.test.ts`.
+
+### S6 — follow-ups from the executed post-commit review of `fa83e01` (APPROVED 2026-09-29, orchestrator)
+S4's three MEDIUMs are closed by verification: every S5 banner arm and all three round-trips die under mutation;
+`same=1` and the unpinned `same` flag are structurally gone (the action sets no flag; the banner reads the audit row).
+- **G1 (MED, tester).** S5 item F was never done: `packages/db/src/repo/audit-log.ts:89`'s `eq(auditLog.orgId, orgId)`
+  is unpinned. The auditor deleted it and every banner/audit test stayed green (each fixture has ONE org). Add a leg
+  with TWO orgs, the other org holding a newer payout audit row for the same channel id shape: `latestForEntity`
+  returns this org's row. Must go red with the filter deleted. Run it as a role that can SELECT both orgs' rows (or
+  RLS masks the filter's absence) — say which.
+- **G2 (LOW, builder + tester pin).** `packages/domain/src/channel-settlements/index.ts:743`: `before.moneyAccountId`
+  comes from the account LOOKUP (`oldAccount?.id ?? null`); key it off `config.destinationMoneyAccountId` and keep
+  the lookup for the name only. Unreachable today (no hard-delete of `money_accounts`); fix is one line.
+- **G3 (LOW, tester).** One unreproduced cold-run red of `t350-channel-payout-change.test.ts > C1` (5/6 and 10/10
+  green since; text lost). Reproduce cold (`--no-cache`, full reporter, all four slice files, ×5) or record "not
+  reproduced".

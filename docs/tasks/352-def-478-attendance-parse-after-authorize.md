@@ -1,6 +1,6 @@
 # T-352: attendance forms parse their fields after `authorize()` (DEF-478)
 
-**Status:** APPROVED 2026-09-28 (orchestrator, after an independent Opus spec audit; amendments M1–M6 at the end bind). **Model:** Sonnet, tester then builder.
+**Status:** DONE 2026-09-29 — APPROVED 2026-09-28 (orchestrator, after an independent Opus spec audit; amendments M1–M6 at the end bind). **Model:** Sonnet, tester then builder.
 **Migration:** none. Every item is domain or action code. The DB CHECKs involved
 (`store_attendance_config_fixed_ot_needs_amount_check`, `…_positive_hours_check`, `…_half_day_below_required_check`)
 already exist and are not changed.

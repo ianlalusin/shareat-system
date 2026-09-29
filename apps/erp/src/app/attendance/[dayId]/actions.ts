@@ -16,9 +16,12 @@
  * ⚠️ One action per kind rather than one generic action taking a `kind` from the form: the form
  * would then choose which decision was made, and "widening one op grants ALL" is a mistake this
  * codebase has already paid for once.
+ *
+ * T-352 / DEF-478 — the three minute fields are passed RAW and parsed inside `recordAdjustment`,
+ * after its `authorize()` call, not here.
  */
 import { redirect } from 'next/navigation';
-import { recordAdjustment, refuse } from '@shareat/domain';
+import { recordAdjustment } from '@shareat/domain';
 import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../lib';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -26,26 +29,6 @@ import { errorMessage } from '@/lib/constraint-messages';
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-/**
- * T-343 S5.5t item 2, Amendment A1 (DEF-471). A blank or spaces-only box means "not decided", so it
- * REFUSES rather than defaulting to 0 — a typed `0` is still a real decision.
- */
-function wholeMinutes(fd: FormData, key: string, label: string, fn: string): number {
-  const raw = str(fd, key);
-  if (raw === '') {
-    throw refuse(`${fn}: ${key} is blank`, `${label} — enter a whole number of minutes (0 to 99999).`);
-  }
-  // S5.5w Amendment A2 item 2 — tests the VALUE, not the digit run: `/^\d{1,5}$/` refused a
-  // leading-zero run like "000030" (6 characters) even though its value, 30, is well in range.
-  if (!/^\d+$/.test(raw) || Number(raw) > 99999) {
-    throw refuse(
-      `${fn}: ${key} is not a whole number of minutes: ${JSON.stringify(raw)}`,
-      `${label} — "${raw}" is not a whole number of minutes from 0 to 99999.`,
-    );
-  }
-  return Number(raw);
 }
 
 function back(dayId: string, params: Record<string, string>): never {
@@ -94,7 +77,7 @@ export async function approveOvertimeAction(formData: FormData): Promise<void> {
     formData,
     (fd) => ({
       kind: 'overtime_approved',
-      approvedOtMinutes: wholeMinutes(fd, 'approvedOtMinutes', 'The minutes to pay', 'approveOvertimeAction'),
+      approvedOtMinutes: str(fd, 'approvedOtMinutes'),
     }),
     'Overtime decided. ⭐ It is paid by the next run — approved minutes only, capped at what was worked.',
   );
@@ -105,7 +88,7 @@ export async function setStartAnchorAction(formData: FormData): Promise<void> {
     formData,
     (fd) => ({
       kind: 'start_anchor',
-      chosenAnchorMinute: wholeMinutes(fd, 'chosenAnchorMinute', 'The paid-from minute', 'setStartAnchorAction'),
+      chosenAnchorMinute: str(fd, 'chosenAnchorMinute'),
     }),
     'Start recorded. ⚠️ The original tap is unchanged — this is the start the day is PAID from.',
   );
@@ -116,7 +99,7 @@ export async function approveEarlyOutAction(formData: FormData): Promise<void> {
     formData,
     (fd) => ({
       kind: 'early_out_approved',
-      effectiveOutMinute: wholeMinutes(fd, 'effectiveOutMinute', 'The paid-until minute', 'approveEarlyOutAction'),
+      effectiveOutMinute: str(fd, 'effectiveOutMinute'),
     }),
     'Early out approved. The day is paid to that time rather than to the actual tap.',
   );

@@ -1,9 +1,9 @@
 /**
- * A raw box STRING that must be a whole number in a caller-given range — the same shape
- * `apps/erp/src/app/settings/attendance/actions.ts`'s local `int()` already has (T-343 S5.5w
- * Amendment A3), extracted here so a second `'use server'` file does not grow its own copy. A
- * `'use server'` file may export only async functions, so `int()` itself could not become the
- * shared entry point directly.
+ * A raw box STRING that must be a whole number in a caller-given range — a shared parse for
+ * whole-number form fields whose check runs in the domain, after `authorize()`. Its shape came
+ * from the attendance settings action's old `int()` (T-343 S5.5w Amendment A3); since T-352 /
+ * DEF-478 that action no longer parses at all, and its fields reach this function through
+ * `parseConfigWholeNumber` in `packages/domain/src/attendance/config-input.ts`.
  *
  * T-351 / DEF-481 — loans' `termPeriods` and prepaid's `coverageMonths` were parsed BEFORE
  * `authorize()`, in the action, and by checking the DIGIT RUN rather than the VALUE (a

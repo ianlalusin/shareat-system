@@ -111,7 +111,7 @@ all three.
 
 - **BUILDER paths (2):** `apps/erp/src/components/shell/PageDescription.tsx` (new), `apps/erp/src/components/shell/Page.tsx`.
 - **TESTER paths (2):** `apps/erp/tests/t348-page-description.test.ts` (new); `apps/erp/tests/action-link-sweep.test.ts`
-  (baseline only: candidate total `1054 → 1055` at `:250` and PASS +1, with a dated history comment in the file's own
+  (baseline only: candidate total `1058 → 1059` at `:257` (was written as 1054 → 1055 at :250; T-350 moved it, corrected 2026-09-29) and PASS +1, with a dated history comment in the file's own
   style — if the resolver instead reports the button UNRESOLVED, STOP and report; do not bump FAIL/UNRESOLVED).
   No jsdom/happy-dom is installed and `vitest.config.mts` runs `environment: 'node'` — **do not add one**; browser
   behaviour is the smoketest leg.

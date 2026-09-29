@@ -8,7 +8,22 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { attendanceConfigRepo, type AttendanceConfigRow, type Tx } from '@shareat/db';
-import type { ShiftDay } from './shift-day';
+import { parseShiftDay, type ShiftDay } from './shift-day';
+import { parseConfigChanges, type ConfigChangesInput } from './config-input';
+
+export type { ConfigChangesInput } from './config-input';
+
+/**
+ * T-352 F2 — a distinct alias for the caller's raw, unparsed box string. `ShiftDay | string` would
+ * collapse to plain `string`: every branded string is assignable to `string`, `ShiftDay` included,
+ * so the union silently admitted the WRONG branded date too — `BusinessDate`
+ * (`@shareat/core/datetime`) is a `YYYY-MM-DD` string just like a shift day, and nothing would have
+ * caught the mix-up. `RawShiftDay` shares `ShiftDay`'s own brand KEY (`__brand`) but pins it to
+ * `undefined`: a plain unbranded string has no `__brand` property at all, so it satisfies the
+ * optional field vacuously and is still admitted — but any OTHER Shareat brand using that same key
+ * (`BusinessDate` included) carries a real, non-`undefined` literal there and is rejected.
+ */
+type RawShiftDay = string & { readonly __brand?: undefined };
 
 export class AttendanceConfigError extends Error {
   constructor(message: string) {
@@ -63,17 +78,24 @@ export type ConfigChanges = Partial<
 /**
  * Change a store's policy from a given shift day, by inserting a new row and retiring the old one
  * **in one transaction**. Never an in-place edit.
+ *
+ * T-352 / DEF-478 — `changes` and `effectiveFrom` arrive raw (the caller's own box strings) and are
+ * parsed HERE, directly after `authorize()`, so an actor without the right sees the authorization
+ * refusal rather than a field sentence for a form they were never allowed to submit.
  */
 export async function supersedeConfig(
   tx: Tx,
   actor: Actor,
-  input: { storeId: string; effectiveFrom: ShiftDay; changes: ConfigChanges },
+  input: { storeId: string; effectiveFrom: ShiftDay | RawShiftDay; changes: ConfigChangesInput },
 ): Promise<AttendanceConfigRow> {
   await authorize(tx, actor, 'manage_store_settings', { storeId: input.storeId });
 
+  const changes = parseConfigChanges(input.changes);
+  const effectiveFrom = parseShiftDay(input.effectiveFrom);
+
   const live = await getLiveConfig(tx, { storeId: input.storeId });
 
-  if (input.effectiveFrom <= live.effectiveFrom) {
+  if (effectiveFrom <= live.effectiveFrom) {
     throw new AttendanceConfigError(
       `A new policy must take effect after the current one (${live.effectiveFrom}), not on or ` +
         `before it. Two policies claiming the same day cannot both be the answer.`,
@@ -83,9 +105,9 @@ export async function supersedeConfig(
   // ⛔ Backdating a policy change across days that have already been adjudicated silently moves what
   // those days paid. Refusing is cheaper than detecting it afterwards — and far cheaper than
   // explaining it to whoever was paid the other amount.
-  if (await attendanceConfigRepo.hasAdjudicatedDaysFrom(tx, input.storeId, input.effectiveFrom)) {
+  if (await attendanceConfigRepo.hasAdjudicatedDaysFrom(tx, input.storeId, effectiveFrom)) {
     throw new AttendanceConfigError(
-      `Attendance has already been computed for days on or after ${input.effectiveFrom}. A policy ` +
+      `Attendance has already been computed for days on or after ${effectiveFrom}. A policy ` +
         'change from that date would silently restate what those days paid. Choose a later date, ' +
         'or void the affected days first and say why.',
     );
@@ -99,10 +121,10 @@ export async function supersedeConfig(
 
   return attendanceConfigRepo.insertConfig(tx, {
     ...stripLifecycle(live),
-    ...input.changes,
+    ...changes,
     orgId: live.orgId,
     storeId: live.storeId,
-    effectiveFrom: input.effectiveFrom,
+    effectiveFrom,
     createdBy: actor.personId,
   });
 }

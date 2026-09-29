@@ -9,10 +9,13 @@
  *
  * ⭐ One form, one submit, one `supersedeConfig` call — every field on the row changes together,
  * because the row itself is the unit `supersedeConfig` writes. See the task spec §2.2.
+ *
+ * T-352 / DEF-478 — every field is passed RAW and parsed inside `supersedeConfig`, after its
+ * `authorize()` call, not here. Parsing before the gate let a non-holder's malformed field draw a
+ * field sentence instead of the authorization refusal.
  */
 import { redirect } from 'next/navigation';
-import { supersedeConfig, parseShiftDay, refuse, type ConfigChanges } from '@shareat/domain';
-import { parseMoneyInput } from '@shareat/domain/money-input';
+import { supersedeConfig, type ConfigChangesInput } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal, parseIntList } from './lib';
@@ -24,120 +27,6 @@ function str(fd: FormData, key: string): string {
 
 function bool(fd: FormData, key: string): boolean {
   return fd.get(key) === 'on';
-}
-
-/**
- * S5.5w Amendment A2 items 1/2 — a deliberate sane ceiling, far inside int4: no grace period,
- * points value or minutes count is legitimately larger than a five-figure number, so a field with
- * no explicit `max` still needs SOME bound to keep a wildly mistyped value out of the column — and
- * the sentence must still name a real number, never "unbounded". Applies only to the malformed/
- * out-of-range sentence (a typed value); the BLANK sentence is unchanged (`${min} or more`) — Ian's
- * Q2 ruling never asked for a ceiling on "not decided".
- */
-const NO_MAX_CEILING = 99999;
-
-/** `${label} — enter a whole number from ${min} to ${max}.` / `…, ${min} or more.` without `max`. */
-function wholeNumberSentence(label: string, min: number, max: number | undefined, value?: string): string {
-  if (value !== undefined) {
-    return `${label} — "${value}" is not a whole number from ${min} to ${max ?? NO_MAX_CEILING}.`;
-  }
-  return max !== undefined
-    ? `${label} — enter a whole number from ${min} to ${max}.`
-    : `${label} — enter a whole number, ${min} or more.`;
-}
-
-/**
- * S5.5w item 5 — `min`/`max` moved here from the page's dropped `IntField` attributes.
- * **Order is load-bearing for `1,5`:** `Number('1,5')` is `NaN`, so S5.5q's finiteness refusal
- * (sentence unchanged, pinned by `t343-s5-5q-followups.test.ts:167,187`) fires FIRST; the
- * whole-number/range sentence below is reached only by finite non-whole or out-of-range text
- * (`1.5`, `-1`, `70`). **Blank (Ian, Q2)** — `''`/spaces refuses by name; the `fallback` this used
- * to return is gone.
- */
-function int(fd: FormData, key: string, label: string, min: number, max?: number): number {
-  const v = str(fd, key);
-  if (v === '') {
-    throw refuse(`updateAttendanceConfigAction: ${key} is blank`, wholeNumberSentence(label, min, max));
-  }
-  const n = Number(v);
-  if (!Number.isFinite(n)) {
-    throw refuse(
-      `updateAttendanceConfigAction: ${key} is not a number: ${JSON.stringify(v)}`,
-      `${label} — "${v}" is not a number.`,
-    );
-  }
-  if (!/^\d+$/.test(v) || n < min || n > (max ?? NO_MAX_CEILING)) {
-    throw refuse(
-      `updateAttendanceConfigAction: ${key} is not a whole number from ${min} to ${max ?? NO_MAX_CEILING}: ${JSON.stringify(v)}`,
-      wholeNumberSentence(label, min, max, v),
-    );
-  }
-  return n;
-}
-
-/**
- * Blank means "not set", never `0` — `Number('')` is `0`, DEF-087's exact failure shape.
- * ⭐ Auto clock-out hour only (Ian, 2026-09-28 confirmed): blank stays `null` — the page's own
- * hint "Blank = this store never auto-clears". A NON-blank value still gets the whole-number/
- * range treatment, same as `int()`.
- */
-function intOrNull(fd: FormData, key: string, label: string, min: number, max?: number): number | null {
-  const v = str(fd, key);
-  if (v === '') return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) {
-    throw refuse(
-      `updateAttendanceConfigAction: ${key} is not a number: ${JSON.stringify(v)}`,
-      `${label} — "${v}" is not a number.`,
-    );
-  }
-  if (!/^\d+$/.test(v) || n < min || n > (max ?? NO_MAX_CEILING)) {
-    throw refuse(
-      `updateAttendanceConfigAction: ${key} is not a whole number from ${min} to ${max ?? NO_MAX_CEILING}: ${JSON.stringify(v)}`,
-      wholeNumberSentence(label, min, max, v),
-    );
-  }
-  return n;
-}
-
-/** `numeric(4,2)`'s own ceiling — two integer digits, two decimal digits. */
-const DEC2_CEILING = 99.99;
-
-/**
- * S5.5w item 5 — the nine `numeric(4,2)` `NumField`s (everything except `overtimeFixedHourly` and
- * `lateChargePerMinute`, which are money and use `parseMoneyInput` instead). Returns the validated
- * raw string; the column itself holds the two-decimal value, not a JS number.
- *
- * S5.5w Amendment A3 item 1 — the shape must not narrow what was already accepted (".5" is
- * `halfDayHours`/`requiredHoursPerShift`'s own MINIMUM, and a leading-zero run like "005" is a
- * digit run, not the value): shape first, then the value against `numeric(4,2)`'s own ceiling and
- * the field's own min (no field currently needs a narrower `max` than the column's own).
- */
-function dec2(fd: FormData, key: string, label: string, min: number, max: number = DEC2_CEILING): string {
-  const v = str(fd, key);
-  if (v === '') {
-    throw refuse(`updateAttendanceConfigAction: ${key} is blank`, `${label} — enter a number.`);
-  }
-  if (!/^(?=.*\d)\d*(?:\.\d{0,2})?$/.test(v)) {
-    throw refuse(
-      `updateAttendanceConfigAction: ${key} is not a valid number: ${JSON.stringify(v)}`,
-      `${label} — "${v}" is not a valid number. Use at most two decimal places.`,
-    );
-  }
-  const n = Number(v);
-  if (n < min) {
-    throw refuse(
-      `updateAttendanceConfigAction: ${key} has to be at least ${min}: ${JSON.stringify(v)}`,
-      `${label} has to be at least ${min}.`,
-    );
-  }
-  if (n > max) {
-    throw refuse(
-      `updateAttendanceConfigAction: ${key} has to be at most ${max}: ${JSON.stringify(v)}`,
-      `${label} has to be at most ${max}.`,
-    );
-  }
-  return v;
 }
 
 function back(store: string, params: Record<string, string>): never {
@@ -162,14 +51,14 @@ export async function updateAttendanceConfigAction(formData: FormData): Promise<
   const timeMode = (str(formData, 'timeMode') || 'open') as 'open' | 'fixed';
 
   try {
-    const changes: ConfigChanges = {
-      requiredHoursPerShift: dec2(formData, 'requiredHoursPerShift', 'The required hours / shift', 0.5),
-      halfDayHours: dec2(formData, 'halfDayHours', 'The half-day hours', 0.5),
+    const changes: ConfigChangesInput = {
+      requiredHoursPerShift: str(formData, 'requiredHoursPerShift'),
+      halfDayHours: str(formData, 'halfDayHours'),
       allowedShiftStartHours: parseIntList(str(formData, 'allowedShiftStartHours')),
-      anchorWindowMinutes: int(formData, 'anchorWindowMinutes', 'The anchor window', 0, 60),
+      anchorWindowMinutes: str(formData, 'anchorWindowMinutes'),
       timeMode,
-      defaultWorkHours: dec2(formData, 'defaultWorkHours', 'The default work hours', 0),
-      defaultBreakHours: dec2(formData, 'defaultBreakHours', 'The default break hours', 0),
+      defaultWorkHours: str(formData, 'defaultWorkHours'),
+      defaultBreakHours: str(formData, 'defaultBreakHours'),
       breakEnabled: bool(formData, 'breakEnabled'),
       halfDayOnMissingTap: bool(formData, 'halfDayOnMissingTap'),
 
@@ -179,43 +68,40 @@ export async function updateAttendanceConfigAction(formData: FormData): Promise<
 
       shortShiftHalfDayOt: bool(formData, 'shortShiftHalfDayOt'),
       nightDiffEnabled: bool(formData, 'nightDiffEnabled'),
-      nightDiffStartHour: int(formData, 'nightDiffStartHour', 'The night diff start hour', 0, 23),
-      nightDiffEndHour: int(formData, 'nightDiffEndHour', 'The night diff end hour', 0, 23),
-      nightDiffMultiplier: dec2(formData, 'nightDiffMultiplier', 'The night diff multiplier', 1),
+      nightDiffStartHour: str(formData, 'nightDiffStartHour'),
+      nightDiffEndHour: str(formData, 'nightDiffEndHour'),
+      nightDiffMultiplier: str(formData, 'nightDiffMultiplier'),
       overtimeMode,
-      overtimeMultiplier: dec2(formData, 'overtimeMultiplier', 'The overtime multiplier', 1),
-      overtimeFixedHourly:
-        overtimeMode === 'fixed' && str(formData, 'overtimeFixedHourly')
-          ? parseMoneyInput(str(formData, 'overtimeFixedHourly'), 'updateAttendanceConfigAction: the overtime fixed hourly', 'The overtime fixed hourly')
-          : null,
+      overtimeMultiplier: str(formData, 'overtimeMultiplier'),
+      // R6 — the mode choice stays here: it never throws, and a malformed rate in multiplier
+      // mode is silently discarded today, unchanged by T-352.
+      overtimeFixedHourly: overtimeMode === 'fixed' ? str(formData, 'overtimeFixedHourly') : null,
 
-      holidayRegularMultiplier: dec2(formData, 'holidayRegularMultiplier', 'The regular holiday multiplier', 1),
-      holidaySpecialNonWorkingMultiplier: dec2(formData, 'holidaySpecialNonWorkingMultiplier', 'The special non-working holiday multiplier', 1),
-      holidaySpecialWorkingMultiplier: dec2(formData, 'holidaySpecialWorkingMultiplier', 'The special working holiday multiplier', 1),
+      holidayRegularMultiplier: str(formData, 'holidayRegularMultiplier'),
+      holidaySpecialNonWorkingMultiplier: str(formData, 'holidaySpecialNonWorkingMultiplier'),
+      holidaySpecialWorkingMultiplier: str(formData, 'holidaySpecialWorkingMultiplier'),
 
       latePolicy,
-      lateChargePerMinute: str(formData, 'lateChargePerMinute')
-        ? parseMoneyInput(str(formData, 'lateChargePerMinute'), 'updateAttendanceConfigAction: the late charge per minute', 'The late charge per minute')
-        : '0',
-      lateInfractionPoints: int(formData, 'lateInfractionPoints', 'The late infraction points', 0),
-      lateGraceMinutes: int(formData, 'lateGraceMinutes', 'The late grace minutes', 0),
-      earlyOutGraceMinutes: int(formData, 'earlyOutGraceMinutes', 'The early-out grace minutes', 0),
-      undertimeGraceMinutes: int(formData, 'undertimeGraceMinutes', 'The undertime grace minutes', 0),
+      lateChargePerMinute: str(formData, 'lateChargePerMinute'),
+      lateInfractionPoints: str(formData, 'lateInfractionPoints'),
+      lateGraceMinutes: str(formData, 'lateGraceMinutes'),
+      earlyOutGraceMinutes: str(formData, 'earlyOutGraceMinutes'),
+      undertimeGraceMinutes: str(formData, 'undertimeGraceMinutes'),
 
       payrollPeriodType,
-      semiMonthlyCutoffDay: int(formData, 'semiMonthlyCutoffDay', 'The semi-monthly cutoff day', 1, 27),
+      semiMonthlyCutoffDay: str(formData, 'semiMonthlyCutoffDay'),
       payoutMode,
-      payoutLagDays: int(formData, 'payoutLagDays', 'The payout lag days', 0, 31),
+      payoutLagDays: str(formData, 'payoutLagDays'),
       payoutDays: parseIntList(str(formData, 'payoutDays')),
 
-      autoClockOutHour: intOrNull(formData, 'autoClockOutHour', 'The auto clock-out hour', 0, 23),
-      maxShiftHours: int(formData, 'maxShiftHours', 'The max shift hours', 10),
+      autoClockOutHour: str(formData, 'autoClockOutHour'),
+      maxShiftHours: str(formData, 'maxShiftHours'),
     };
 
     await withOrgPrincipal(actor.orgId, (tx) =>
       supersedeConfig(tx, actor, {
         storeId: store,
-        effectiveFrom: parseShiftDay(effectiveFrom),
+        effectiveFrom,
         changes,
       }),
     );

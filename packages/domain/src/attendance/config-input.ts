@@ -1,0 +1,255 @@
+/**
+ * T-352 / DEF-478 — `supersedeConfig`'s field parsing, moved here from
+ * `apps/erp/src/app/settings/attendance/actions.ts` so it runs AFTER `authorize()`, in the domain,
+ * instead of before it in the action. `docs/tasks/352-def-478-attendance-parse-after-authorize.md`.
+ *
+ * Every human sentence is byte-identical to the action's old ones (R3) — only the raw (developer)
+ * prefix changed, from `updateAttendanceConfigAction:` to `supersedeConfig:`.
+ */
+import type { ConfigChanges } from './config';
+import { refuse } from '../shared/refusal';
+import { parseWholeNumberInput } from '../shared/whole-number-input';
+import { parseMoneyInput } from '../shared/money-input';
+
+/**
+ * S5.5w Amendment A2 items 1/2 — a deliberate sane ceiling, far inside int4: no grace period,
+ * points value or minutes count is legitimately larger than a five-figure number, so a field with
+ * no explicit `max` still needs SOME bound to keep a wildly mistyped value out of the column — and
+ * the sentence must still name a real number, never "unbounded". Applies only to the malformed/
+ * out-of-range sentence (a typed value); the BLANK sentence is unchanged (`${min} or more`) — Ian's
+ * Q2 ruling never asked for a ceiling on "not decided".
+ */
+const NO_MAX_CEILING = 99999;
+
+/** `${label} — enter a whole number from ${min} to ${max}.` / `…, ${min} or more.` without `max`. */
+function wholeNumberSentence(label: string, min: number, max: number | undefined, value?: string): string {
+  if (value !== undefined) {
+    return `${label} — "${value}" is not a whole number from ${min} to ${max ?? NO_MAX_CEILING}.`;
+  }
+  return max !== undefined
+    ? `${label} — enter a whole number from ${min} to ${max}.`
+    : `${label} — enter a whole number, ${min} or more.`;
+}
+
+/**
+ * S5.5w item 5 — `min`/`max` moved here from the page's dropped `IntField` attributes.
+ * **Order is load-bearing for `1,5`:** `Number('1,5')` is `NaN`, so S5.5q's finiteness refusal
+ * (sentence unchanged, pinned by `t343-s5-5q-followups.test.ts:167,187`) fires FIRST; the
+ * whole-number/range check — `parseWholeNumberInput` in `../shared/whole-number-input.ts` — is
+ * reached only by finite non-whole or out-of-range text (`1.5`, `-1`, `70`). **Blank (Ian, Q2)** —
+ * `''`/spaces refuses by name; the `fallback` this used to return is gone.
+ */
+function parseConfigWholeNumber(raw: string | number, key: string, label: string, min: number, max?: number): number {
+  const v = String(raw).trim();
+  if (v === '') {
+    throw refuse(`supersedeConfig: ${key} is blank`, wholeNumberSentence(label, min, max));
+  }
+  if (!Number.isFinite(Number(v))) {
+    throw refuse(`supersedeConfig: ${key} is not a number: ${JSON.stringify(v)}`, `${label} — "${v}" is not a number.`);
+  }
+  return parseWholeNumberInput(v, `supersedeConfig: ${key}`, label, min, max ?? NO_MAX_CEILING);
+}
+
+/**
+ * Blank means "not set", never `0` — `Number('')` is `0`, DEF-087's exact failure shape.
+ * ⭐ Auto clock-out hour only (Ian, 2026-09-28 confirmed): blank stays `null` — the page's own
+ * hint "Blank = this store never auto-clears". A NON-blank value still gets the whole-number/
+ * range treatment, same as `parseConfigWholeNumber()`.
+ */
+function parseConfigWholeNumberOrNull(
+  raw: string | number | null,
+  key: string,
+  label: string,
+  min: number,
+  max?: number,
+): number | null {
+  if (raw === null) return null;
+  const v = String(raw).trim();
+  if (v === '') return null;
+  return parseConfigWholeNumber(v, key, label, min, max);
+}
+
+/** `numeric(4,2)`'s own ceiling — two integer digits, two decimal digits. */
+const DEC2_CEILING = 99.99;
+
+/**
+ * S5.5w item 5 — the nine `numeric(4,2)` `NumField`s (everything except `overtimeFixedHourly` and
+ * `lateChargePerMinute`, which are money and use `parseMoneyInput` instead). Returns the validated
+ * raw string; the column itself holds the two-decimal value, not a JS number.
+ *
+ * S5.5w Amendment A3 item 1 — the shape must not narrow what was already accepted (".5" is
+ * `halfDayHours`/`requiredHoursPerShift`'s own MINIMUM, and a leading-zero run like "005" is a
+ * digit run, not the value): shape first, then the value against `numeric(4,2)`'s own ceiling and
+ * the field's own min (no field currently needs a narrower `max` than the column's own).
+ */
+function dec2(raw: string, key: string, label: string, min: number, max: number = DEC2_CEILING): string {
+  const v = String(raw).trim();
+  if (v === '') {
+    throw refuse(`supersedeConfig: ${key} is blank`, `${label} — enter a number.`);
+  }
+  if (!/^(?=.*\d)\d*(?:\.\d{0,2})?$/.test(v)) {
+    throw refuse(
+      `supersedeConfig: ${key} is not a valid number: ${JSON.stringify(v)}`,
+      `${label} — "${v}" is not a valid number. Use at most two decimal places.`,
+    );
+  }
+  const n = Number(v);
+  if (n < min) {
+    throw refuse(`supersedeConfig: ${key} has to be at least ${min}: ${JSON.stringify(v)}`, `${label} has to be at least ${min}.`);
+  }
+  if (n > max) {
+    throw refuse(`supersedeConfig: ${key} has to be at most ${max}: ${JSON.stringify(v)}`, `${label} has to be at most ${max}.`);
+  }
+  return v;
+}
+
+/** `null` or blank gives `null` (fixed-OT rate is only meaningful in fixed mode); M4 trims first. */
+function parseOvertimeFixedHourly(raw: string | null): string | null {
+  if (raw === null) return null;
+  const v = String(raw).trim();
+  if (v === '') return null;
+  return parseMoneyInput(v, 'supersedeConfig: the overtime fixed hourly', 'The overtime fixed hourly');
+}
+
+/** Blank gives `'0'` (today's rule — no charge policy chosen means no charge); M4 trims first. */
+function parseLateChargePerMinute(raw: string): string {
+  const v = String(raw).trim();
+  if (v === '') return '0';
+  return parseMoneyInput(v, 'supersedeConfig: the late charge per minute', 'The late charge per minute');
+}
+
+/**
+ * `ConfigChanges` with the ten integer keys and `autoClockOutHour` widened so a caller may pass the
+ * raw box string — the action does, now that it no longer parses before `authorize()` (T-352).
+ */
+export type ConfigChangesInput = Omit<
+  ConfigChanges,
+  | 'anchorWindowMinutes'
+  | 'nightDiffStartHour'
+  | 'nightDiffEndHour'
+  | 'lateInfractionPoints'
+  | 'lateGraceMinutes'
+  | 'earlyOutGraceMinutes'
+  | 'undertimeGraceMinutes'
+  | 'semiMonthlyCutoffDay'
+  | 'payoutLagDays'
+  | 'maxShiftHours'
+  | 'autoClockOutHour'
+> & {
+  anchorWindowMinutes?: number | string;
+  nightDiffStartHour?: number | string;
+  nightDiffEndHour?: number | string;
+  lateInfractionPoints?: number | string;
+  lateGraceMinutes?: number | string;
+  earlyOutGraceMinutes?: number | string;
+  undertimeGraceMinutes?: number | string;
+  semiMonthlyCutoffDay?: number | string;
+  payoutLagDays?: number | string;
+  maxShiftHours?: number | string;
+  autoClockOutHour?: number | string | null;
+};
+
+type Dec2Key =
+  | 'requiredHoursPerShift'
+  | 'halfDayHours'
+  | 'defaultWorkHours'
+  | 'defaultBreakHours'
+  | 'nightDiffMultiplier'
+  | 'overtimeMultiplier'
+  | 'holidayRegularMultiplier'
+  | 'holidaySpecialNonWorkingMultiplier'
+  | 'holidaySpecialWorkingMultiplier';
+
+type IntKey =
+  | 'anchorWindowMinutes'
+  | 'nightDiffStartHour'
+  | 'nightDiffEndHour'
+  | 'lateInfractionPoints'
+  | 'lateGraceMinutes'
+  | 'earlyOutGraceMinutes'
+  | 'undertimeGraceMinutes'
+  | 'semiMonthlyCutoffDay'
+  | 'payoutLagDays'
+  | 'maxShiftHours';
+
+/**
+ * R2/B1 item 3 — ONE ordered table mirroring the action's old literal order (`:166-212`), label/
+ * min/max copied verbatim from there. A key this table does not name (booleans, enums, the two int
+ * arrays) passes through `parseConfigChanges` untouched.
+ */
+type FieldRow =
+  | { kind: 'dec2'; key: Dec2Key; label: string; min: number }
+  | { kind: 'int'; key: IntKey; label: string; min: number; max?: number }
+  | { kind: 'intOrNull'; key: 'autoClockOutHour'; label: string; min: number; max: number }
+  | { kind: 'moneyOrNull'; key: 'overtimeFixedHourly' }
+  | { kind: 'moneyBlankZero'; key: 'lateChargePerMinute' };
+
+const FIELD_TABLE: readonly FieldRow[] = [
+  { kind: 'dec2', key: 'requiredHoursPerShift', label: 'The required hours / shift', min: 0.5 },
+  { kind: 'dec2', key: 'halfDayHours', label: 'The half-day hours', min: 0.5 },
+  { kind: 'int', key: 'anchorWindowMinutes', label: 'The anchor window', min: 0, max: 60 },
+  { kind: 'dec2', key: 'defaultWorkHours', label: 'The default work hours', min: 0 },
+  { kind: 'dec2', key: 'defaultBreakHours', label: 'The default break hours', min: 0 },
+  { kind: 'int', key: 'nightDiffStartHour', label: 'The night diff start hour', min: 0, max: 23 },
+  { kind: 'int', key: 'nightDiffEndHour', label: 'The night diff end hour', min: 0, max: 23 },
+  { kind: 'dec2', key: 'nightDiffMultiplier', label: 'The night diff multiplier', min: 1 },
+  { kind: 'dec2', key: 'overtimeMultiplier', label: 'The overtime multiplier', min: 1 },
+  { kind: 'moneyOrNull', key: 'overtimeFixedHourly' },
+  { kind: 'dec2', key: 'holidayRegularMultiplier', label: 'The regular holiday multiplier', min: 1 },
+  {
+    kind: 'dec2',
+    key: 'holidaySpecialNonWorkingMultiplier',
+    label: 'The special non-working holiday multiplier',
+    min: 1,
+  },
+  { kind: 'dec2', key: 'holidaySpecialWorkingMultiplier', label: 'The special working holiday multiplier', min: 1 },
+  { kind: 'moneyBlankZero', key: 'lateChargePerMinute' },
+  { kind: 'int', key: 'lateInfractionPoints', label: 'The late infraction points', min: 0 },
+  { kind: 'int', key: 'lateGraceMinutes', label: 'The late grace minutes', min: 0 },
+  { kind: 'int', key: 'earlyOutGraceMinutes', label: 'The early-out grace minutes', min: 0 },
+  { kind: 'int', key: 'undertimeGraceMinutes', label: 'The undertime grace minutes', min: 0 },
+  { kind: 'int', key: 'semiMonthlyCutoffDay', label: 'The semi-monthly cutoff day', min: 1, max: 27 },
+  { kind: 'int', key: 'payoutLagDays', label: 'The payout lag days', min: 0, max: 31 },
+  { kind: 'intOrNull', key: 'autoClockOutHour', label: 'The auto clock-out hour', min: 0, max: 23 },
+  { kind: 'int', key: 'maxShiftHours', label: 'The max shift hours', min: 10 },
+] as const;
+
+/** T-352 / DEF-478 — parses every field `supersedeConfig` accepts, called directly after `authorize()`. */
+export function parseConfigChanges(c: ConfigChangesInput): ConfigChanges {
+  const out = { ...c } as unknown as ConfigChanges;
+  for (const row of FIELD_TABLE) {
+    switch (row.kind) {
+      case 'dec2': {
+        const raw = c[row.key];
+        if (raw === undefined) break;
+        out[row.key] = dec2(raw, row.key, row.label, row.min);
+        break;
+      }
+      case 'int': {
+        const raw = c[row.key];
+        if (raw === undefined) break;
+        out[row.key] = parseConfigWholeNumber(raw, row.key, row.label, row.min, row.max);
+        break;
+      }
+      case 'intOrNull': {
+        const raw = c[row.key];
+        if (raw === undefined) break;
+        out[row.key] = parseConfigWholeNumberOrNull(raw, row.key, row.label, row.min, row.max);
+        break;
+      }
+      case 'moneyOrNull': {
+        const raw = c[row.key];
+        if (raw === undefined) break;
+        out[row.key] = parseOvertimeFixedHourly(raw);
+        break;
+      }
+      case 'moneyBlankZero': {
+        const raw = c[row.key];
+        if (raw === undefined) break;
+        out[row.key] = parseLateChargePerMinute(raw);
+        break;
+      }
+    }
+  }
+  return out;
+}
