@@ -1,6 +1,6 @@
 # T-358: the AP-invoice expense form posts what the parser reads (DEF-485)
 
-**Status:** APPROVED 2026-09-29 (orchestrator, after an independent Opus spec audit; amendments C1–C4 at the end bind; C1 answered). Runs after T-353 S3 commits.
+**Status:** DONE 2026-09-29 — APPROVED 2026-09-29 (orchestrator, after an independent Opus spec audit; amendments C1–C4 at the end bind; C1 answered). Runs after T-353 S3 commits.
 **Migration:** none.
 **Why now:** Ian, 2026-09-29 (bible §13 row 245): *"yes fix DEF-485 before launch."*
 - ⛔ **It runs AFTER T-353 S3 commits.** `apps/erp/src/components/money/MoneyLines.tsx` is being changed right now

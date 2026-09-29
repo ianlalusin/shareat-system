@@ -4,8 +4,10 @@ import { peso } from '../../../../lib/format';
 import { requireSession } from '../../../../lib/session';
 import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction } from '../../actions';
 import { recordExpenseForInvoiceAction } from '../../../expenses/actions';
-import { getInvoice, getSupplier, listCategoriesGrouped, listMoneyAccountsForPicker, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
+import { getInvoice, getSupplier, listCategoriesGrouped, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
 import { withOrgPrincipal } from '../../../expenses/lib';
+import { loadMoneyLines } from '@/lib/money-lines/load';
+import { MoneyLines } from '@/components/money/MoneyLines';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Supplier invoice — Shareat System' };
@@ -33,18 +35,30 @@ export default async function InvoiceDetailPage({
   if (!invoice) notFound();
   const supplier = await getSupplier(orgId, invoice.supplierId);
 
-  const [capacity, linkedExpenses, categories, wallets] = await Promise.all([
+  const [capacity, linkedExpenses, categories, moneyLines] = await Promise.all([
     withOrgPrincipal(orgId, (tx) => apRepo.capacityOf(tx, orgId, id)),
     withOrgPrincipal(orgId, async (tx) => {
       const all = await expensesRepo.listExpenses(tx, { orgId, limit: 500 });
       return all.filter((e) => e.supplierInvoiceId === id);
     }),
     listCategoriesGrouped(orgId),
-    listMoneyAccountsForPicker(orgId),
+    loadMoneyLines(orgId, invoice.storeId),
   ]);
 
+  // ⚠️ `remaining >= 1` is load-bearing for C1 below, not just a display gate: a fully paid
+  // invoice (remaining 0.00) would seed a Credit initialLine of 0.00, and T-353 marks an initial
+  // line touched immediately, so "An amount has to be above zero." would paint on first render —
+  // DEF-484's shape, reintroduced by this form's own default.
   const canRecord = invoice.status === 'verified' && Number(capacity?.remaining ?? 0) >= 1;
   const groups: Array<'COGS' | 'OPEX' | 'PERSONAL' | 'CAPEX'> = ['COGS', 'OPEX', 'PERSONAL', 'CAPEX'];
+  // C1 (Ian, bible row 247) — a supplier WITH terms defaults to one credit line pre-filled with
+  // the remaining amount, so the common case (bill on terms) needs no method click and no empty
+  // amount box painted (T-353: an initial line starts touched and is judged at once). A
+  // cash-on-delivery supplier gets no initialLines at all — MoneyLines' own blank line is cash.
+  const initialLines =
+    supplier?.creditTermsDays != null
+      ? [{ method: 'credit' as const, amount: capacity?.remaining ?? invoice.totalAmount }]
+      : undefined;
 
   // ⭐ T-196 §6 — what verifying is about to POST. Oldest first, matching verifyInvoice's own
   // posting order (apRepo.liveExpensesForInvoice) exactly, so the running total on screen is the
@@ -364,25 +378,19 @@ return (
                 <input name="particulars" required className={INPUT} />
               </Field>
             </div>
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="Method">
-                <select name="method_1" defaultValue="credit" className={INPUT}>
-                  <option value="cash">Cash</option>
-                  <option value="online">Online / e-wallet</option>
-                  <option value="credit">Credit (AP)</option>
-                </select>
-              </Field>
-              <Field label="Amount">
-                <input name="amount_1" required placeholder="0.00" className={INPUT} />
-              </Field>
-              <Field label="Paid from (cash/online only)">
-                <select name="moneyAccountId_1" defaultValue="" className={INPUT}>
-                  <option value="">— not needed for credit —</option>
-                  {wallets.filter((w) => w.storeId === invoice.storeId).map((w) => (
-                    <option key={w.id} value={w.id}>{w.name} ({w.custodian})</option>
-                  ))}
-                </select>
-              </Field>
+            <div>
+              <h2 className="mb-2 text-sm font-medium">
+                Payments — add a line for each place the money came from.
+              </h2>
+              <MoneyLines
+                direction="out"
+                sources={moneyLines.sources}
+                staff={moneyLines.staff}
+                supplierId={invoice.supplierId}
+                supplierName={supplier?.name ?? null}
+                supplierCreditTermsDays={supplier?.creditTermsDays ?? null}
+                initialLines={initialLines}
+              />
             </div>
             <button type="submit" className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900">
               Record expense

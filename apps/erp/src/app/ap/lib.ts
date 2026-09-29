@@ -12,7 +12,7 @@ import {
 import { withOrgPrincipal, listStores } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
-export { listStores, withOrgPrincipal, listCategoriesGrouped, listMoneyAccountsForPicker } from '../expenses/lib';
+export { listStores, withOrgPrincipal, listCategoriesGrouped } from '../expenses/lib';
 export type { StoreOption } from '../expenses/lib';
 
 export async function listSuppliers(orgId: string): Promise<SupplierRow[]> {

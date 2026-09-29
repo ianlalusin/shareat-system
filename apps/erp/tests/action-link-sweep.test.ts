@@ -264,7 +264,13 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // (not native, not `Link`, not an onClick-div, not in `KNOWN_COMPONENT_HEIGHT_PX`, and — per
     // spec item 8 — deliberately never added to `OPAQUE_COMPONENTS`), so every branch in
     // `runCensus()`'s visitor skips it silently, same as `<Page>`/`<PageHeader>` themselves today.
-    expect(results.length).toBe(1059);
+    // 1059 -> 1056, T-358 (DEF-485), 2026-09-29. -3 PASS, FAIL/UNRESOLVED unmoved (both asserted
+    // above — confirmed unchanged at 151/58 before this re-pin). `apps/ap/invoices/[id]/page.tsx`'s
+    // hand-rolled trio (the `method_1` `<select>`, `amount_1` `<input>` and `moneyAccountId_1`
+    // `<select>`) is REPLACED by `<MoneyLines>`, a plain custom tag the census walk does not resolve
+    // (same reasoning as `PageDescription` above) — three candidates leave the population outright,
+    // they do not move buckets.
+    expect(results.length).toBe(1056);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
