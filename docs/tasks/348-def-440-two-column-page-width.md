@@ -349,3 +349,17 @@ Root cause and blast radius: `docs/DEFECTS-REGISTER.md` DEF-440. Method: render 
 - **D2 root cause, for S2's reviewers:** `line-clamp`'s `overflow: hidden` makes the `<p>` a scroll container; the
   browser scrolls a focused hidden link into view BEFORE `onFocus` runs, so a `getBoundingClientRect` comparison is
   always "visible". The handler checks `p.scrollTop > 0` instead.
+
+## Amendment A3 — S3 rewritten for W2 (2026-09-30, orchestrator)
+Ian picked **W2** (A1), so S3 items 1–2 and the P3 leg are replaced; everything else in S3 stands.
+1. The eight pages' **main** return `<Page density="form">` becomes `density="table"`. Content is unchanged (fields
+   stretch). The three early-return branches (`admin/stores/[id]:49`, `settings/attendance:40`, `staff/hire:42`) stay
+   `form`.
+2. **P3 is dropped** (it asserted W3's section grid). No `lg:grid-cols-2` is added anywhere.
+3. **A1's gutter finding** on `admin/stores/[id]` (Readiness | Details at `:102`): the two sections must fill the
+   widened row with no empty gutter between them. Rendering-dependent → judged on screen at 1366 (smoketest), fixed
+   in `admin/stores/[id]/page.tsx` only if the render shows the gutter.
+- **Red legs:** P1 each of the eight's main return uses `density="table"` (red: `form`).
+- **Positive controls:** P2 the three early returns still use `form` (green before and after); P0 the detector,
+  pointed at a `form`-density page outside the eight, reports `form` (proves P1 can see `form` at all).
+- Paths, smoketest and done-when as S3.

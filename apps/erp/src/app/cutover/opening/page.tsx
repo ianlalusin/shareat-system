@@ -45,7 +45,7 @@ export default async function OpeningPage({
   const storeName = (id: string | null) => stores.find((s) => s.id === id)?.name ?? '—';
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <Link
           href="/cutover"

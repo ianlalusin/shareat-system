@@ -74,7 +74,7 @@ export default async function UserAccessPage({
   const storeNameById = new Map(stores.map((s) => [s.id, s.name]));
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <a href="/admin/users" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Users and roles

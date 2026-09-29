@@ -64,7 +64,7 @@ export default async function StoreDetailPage({
   const blocking = readiness.filter((c) => !c.ok && c.blocking);
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <Link href="/admin/stores" className="text-sm underline underline-offset-2">
           ← Stores

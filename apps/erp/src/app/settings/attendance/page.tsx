@@ -48,7 +48,7 @@ export default async function AttendanceSettingsPage({
   const defaultEffectiveFrom = addShiftDays(toShiftDay(), 1);
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Attendance & payroll settings</h1>
         <PageDescription>

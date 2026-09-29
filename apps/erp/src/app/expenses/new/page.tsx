@@ -48,7 +48,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
   const groups: Array<'COGS' | 'OPEX' | 'PERSONAL' | 'CAPEX'> = ['COGS', 'OPEX', 'PERSONAL', 'CAPEX'];
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">New expense</h1>
         <PageDescription>

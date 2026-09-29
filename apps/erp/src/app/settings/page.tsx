@@ -51,7 +51,7 @@ export default async function SettingsPage() {
   if (refusal) return refusal;
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Settings</h1>
         <PageDescription>

@@ -29,7 +29,7 @@ export default async function NewAssetPage({
   const today = toBusinessDate();
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Add asset</h1>
         <PageDescription>

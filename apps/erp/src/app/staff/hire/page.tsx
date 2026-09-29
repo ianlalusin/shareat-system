@@ -53,7 +53,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
   ]);
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <a href="/staff" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Staff
