@@ -270,6 +270,8 @@ that passes the eval.
 
 ## 9. Decisions for Ian
 
+> **Ian, 2026-09-29 (bible §13 row 248):** Q1 **yes** · Q2 **after launch** · Q4 **owner and admin only**. Q3, Q5, Q6 still open.
+
 1. **Rules first?** Approve Phase 0 (about 4 to 5 days, no AI) as the first slice of the "brain".
    *Recommended: yes.*
 2. **When does Phase 0 run?** Before launch (cheap, no vendor, and it closes DEF-492 from the ledger
