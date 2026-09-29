@@ -65,35 +65,35 @@
 - `1203–1237` 10. Phase plan
 - `1238–1254` 11. Migration & ETL rules
 - `1255–1319` 12. Inherited landmines — do not repeat these
-- `1320–1577` 13. Decision log
-- `1578–1597` 14. Amendment protocol
-- `1598–1602` 15. Engineering standards — the industry practices this project follows
-  - `1603–1608` 15.1 Build order: walking skeleton first
-  - `1609–1620` 15.2 Golden-master testing — the most important practice here
-  - `1621–1629` 15.3 Strangler Fig, not big-bang cutover
-  - `1630–1634` 15.4 No dual-write
-  - `1635–1643` 15.5 Expand/contract migrations
-  - `1644–1652` 15.6 Observability from day zero, not later
-  - `1653–1657` 15.7 CI gates
-  - `1658–1662` 15.8 Backups and a tested restore
-  - `1663–1667` 15.9 Twelve-Factor config
-  - `1668–1675` 15.10 Append-only ledgers — but not event sourcing
-  - `1676–1680` 15.11 Defence in depth
-  - `1681–1709` 15.12 Skills are lenses, not assurance
-  - `1710–1716` 15.13 Reconciliation is a permanent feature
-- `1717–1721` 16. The accounting spine
-  - `1722–1753` 16.0 What we are actually fixing — the diagnosis
-  - `1754–1797` 16.1 The ten invariants — non-negotiable
-  - `1798–1812` 16.2 The oracle: how "correct" is tested
-  - `1813–1834` 16.3 The model — header + lines, not legs
-  - `1835–1854` 16.4 Deliberately simpler than ERPNext
-  - `1855–1921` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1922–1946` 16.6 What v1 already gets right — preserve the intent
-  - `1947–1968` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1969–1983` 16.8 What v1's accounting already gets right
-  - `1984–2027` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2028–2078` 16.10 Posting patterns — one canonical pattern per business event
-  - `2079–2110` 16.11 Inventory's accounting integration
+- `1320–1578` 13. Decision log
+- `1579–1598` 14. Amendment protocol
+- `1599–1603` 15. Engineering standards — the industry practices this project follows
+  - `1604–1609` 15.1 Build order: walking skeleton first
+  - `1610–1621` 15.2 Golden-master testing — the most important practice here
+  - `1622–1630` 15.3 Strangler Fig, not big-bang cutover
+  - `1631–1635` 15.4 No dual-write
+  - `1636–1644` 15.5 Expand/contract migrations
+  - `1645–1653` 15.6 Observability from day zero, not later
+  - `1654–1658` 15.7 CI gates
+  - `1659–1663` 15.8 Backups and a tested restore
+  - `1664–1668` 15.9 Twelve-Factor config
+  - `1669–1676` 15.10 Append-only ledgers — but not event sourcing
+  - `1677–1681` 15.11 Defence in depth
+  - `1682–1710` 15.12 Skills are lenses, not assurance
+  - `1711–1717` 15.13 Reconciliation is a permanent feature
+- `1718–1722` 16. The accounting spine
+  - `1723–1754` 16.0 What we are actually fixing — the diagnosis
+  - `1755–1798` 16.1 The ten invariants — non-negotiable
+  - `1799–1813` 16.2 The oracle: how "correct" is tested
+  - `1814–1835` 16.3 The model — header + lines, not legs
+  - `1836–1855` 16.4 Deliberately simpler than ERPNext
+  - `1856–1922` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1923–1947` 16.6 What v1 already gets right — preserve the intent
+  - `1948–1969` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1970–1984` 16.8 What v1's accounting already gets right
+  - `1985–2028` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2029–2079` 16.10 Posting patterns — one canonical pattern per business event
+  - `2080–2111` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1573,6 +1573,7 @@ just a patch.**
 | 248 | 2026-09-29 | ⭐ **THE AI BUSINESS BRAIN STARTS RULES-FIRST: PHASE 0 (≈8 SQL expense checks in the existing findings engine, no AI) IS APPROVED AND BUILT AFTER LAUNCH; A "LOOKS PERSONAL" FLAG IS SEEN BY OWNER AND ADMIN ONLY (T-359).** Ian, 2026-09-29: *"approve Phase 0, after launch; owner and admin only"*. Answers assessment §9 Q1, Q2, Q4 (`docs/discovery/ai-business-brain-assessment.md`). **Still open (Ian):** Q3 personal-spend classifier as the first AI feature in place of ADR-014's daily-briefing pilot; Q5 receipt photos to the AI provider; Q6 who labels ≈150 v1 expenses for the precision test. Phase 0 is not a launch blocker; nothing AI is built before Q3 is answered and the §6 base-rate count is taken | Ian | T-359 |
 | 249 | 2026-09-29 | ⭐ **SUPPLIER CREDIT TERMS GET A WRITER BEFORE THE COD-CREDIT RULE MOVES INTO THE DOMAIN (DEF-495 option (a)).** Ian, 2026-09-29: *"(a) — build supplier terms editing first"*. Today `suppliers.credit_terms_days` has no writer, so every supplier reads as cash-on-delivery and row 247's credit default never fires; landing T-361 (DEF-492) first would make the recurring-expense job's credit drafts refuse daily. Order: **T-362 (supplier terms editing) → T-361** | Ian | DEF-495 · T-362 · T-361 |
 | 250 | 2026-09-29 | **SUPPLIER CREDIT TERMS ARE CHANGED UNDER THE EXISTING `approve_supplier` GATE — MANAGERS AND ADMINS, NOT ADMIN-ONLY (T-362 Q1).** Ian, 2026-09-29: *"managers and admins is fine"*. The same gate already covers the supplier bank account, the riskier field; every change writes an `audit_log` row | Ian | T-362 |
+| 251 | 2026-09-29 | ⭐ **THE AI LEARNS FROM PEOPLE'S LABELS AFTER DEPLOY, NOT FROM A V1 LABELLING PASS: MANAGERS AND ADMINS GET A MANUAL "FLAG EXPENSE" (DOUBTFUL) CONTROL NOW; RECEIPT PHOTOS ARE NEVER SENT TO THE AI (T-359 Q3, Q5, Q6).** Ian, 2026-09-29: *"q3 agree with reco, q5 no need for receipt be sent to ai, q6 lets teach ai when we deploy rather than now so it will be trained, lets add a flag expense feature manually for manager and admin to label any doubtful expense. so as time goes by ai will be good at judging"*. **Q3:** the "looks personal" check is the first AI feature (replacing ADR-014's briefing pilot), built only once the §6 base-rate count shows it earns its keep. **Q5:** no receipt images to the provider — Phase 1b is dropped. **Q6:** no half-day v1 labelling; instead **T-363**, a manual flag on any expense (manager + admin), whose flags and resolutions become the labelled set the Phase 1 precision gate is measured against once enough accumulate | Ian | T-359 · T-363 |
 
 
 ## 14. Amendment protocol

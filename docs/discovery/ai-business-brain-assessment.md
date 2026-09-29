@@ -270,7 +270,7 @@ that passes the eval.
 
 ## 9. Decisions for Ian
 
-> **Ian, 2026-09-29 (bible §13 row 248):** Q1 **yes** · Q2 **after launch** · Q4 **owner and admin only**. Q3, Q5, Q6 still open.
+> **Ian, 2026-09-29 (bible §13 rows 248, 251):** Q1 **yes** · Q2 **after launch** · Q3 **yes, after the base-rate count** · Q4 **owner and admin only** · Q5 **no — receipts never go to the AI; Phase 1b dropped** · Q6 **no v1 labelling pass: a manual "flag expense" for managers + admins (T-363) builds the labelled set after deploy**.
 
 1. **Rules first?** Approve Phase 0 (about 4 to 5 days, no AI) as the first slice of the "brain".
    *Recommended: yes.*
