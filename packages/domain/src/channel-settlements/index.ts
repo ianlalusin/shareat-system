@@ -740,7 +740,18 @@ export async function setChannelPayoutDestination(
       action: 'set_channel_payout',
       entity: 'sales_channels',
       entityId: input.channelId,
-      before: { moneyAccountId: oldAccount?.id ?? null, moneyAccountName: oldAccount?.name ?? null },
+      // T-350 S6 (G2) — the STORED id, never the lookup's: `oldAccount` is org-scoped
+      // (`getById`'s `eq(id) AND eq(orgId)`) and genuinely misses when the stored destination
+      // belongs to another org. Reachable as a DB STATE, not through any app write path: this
+      // function only ever WRITES an id `moneyAccountsRepo.getById(trx, actor.orgId, …)` above has
+      // already fetched org-scoped, so `setChannelPayoutDestination` itself can never point a
+      // channel at another org's account — but `destination_money_account_id`'s FK (`money_accounts.id`)
+      // does not itself constrain the referenced row to the channel's own org (now DEF-490), so
+      // some OTHER path (a migration, a manual fix, a future caller) can still leave a cross-org id
+      // stored, and this code must not assume it never will. `config.destinationMoneyAccountId` is
+      // the value that was actually on the row and is never wrong; the lookup is kept for the NAME
+      // only, which really can be unknown.
+      before: { moneyAccountId: config.destinationMoneyAccountId, moneyAccountName: oldAccount?.name ?? null },
       after: { moneyAccountId: account.id, moneyAccountName: account.name },
       source: 'web',
     });
