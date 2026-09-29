@@ -17,7 +17,7 @@ import { refuse } from '../shared/refusal';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { adjudicateDay } from './adjudicate';
 import { type DayAdjustments, type DayPolicy } from './compute-day';
-import { shiftDayOffsetMsForHour, type ShiftDay } from './shift-day';
+import { addShiftDays, parseShiftDay, shiftDayOffsetMsForHour, type RawShiftDay, type ShiftDay } from './shift-day';
 
 export class AdjustmentError extends Error {
   constructor(message: string) {
@@ -28,7 +28,7 @@ export class AdjustmentError extends Error {
 
 export interface RecordAdjustmentInput {
   employmentId: string;
-  shiftDay: ShiftDay;
+  shiftDay: ShiftDay | RawShiftDay;
   kind: AdjustmentKind;
   chosenAnchorMinute?: number | string;
   effectiveOutMinute?: number | string;
@@ -67,6 +67,35 @@ function parseMinutes(raw: string | number, key: string, label: string): number 
     throw refuse(`recordAdjustment: ${key} is blank`, `${label} — enter a whole number of minutes (0 to 99999).`);
   }
   return parseWholeNumberInput(t, `recordAdjustment: ${key}`, label, 0, 99999, ' of minutes');
+}
+
+const SHIFT_DAY_MISSING = 'The shift day is missing. Reopen the day from the attendance list and try again.';
+const shiftDayMalformed = (v: string) =>
+  `The shift day — "${v}" is not a date. Reopen the day from the attendance list and try again.`;
+
+/**
+ * T-360 / DEF-488 — parses `RecordAdjustmentInput.shiftDay` so a malformed value gets a sentence
+ * instead of reaching Postgres as `'abc'::date`. The calendar round-trip (step 4) exists because
+ * `parseBusinessDate` accepts `2026-02-30` (it only checks `d <= 31`, `packages/core/src/
+ * datetime.ts:48`); `addShiftDays(day, 0)` goes through `Date.UTC`, which normalises an
+ * impossible date to a different one (`2026-02-30` -> `2026-03-02`), so a mismatch catches what the
+ * format check alone would miss — a VALUE check, not a digit-run check (bible §13 row 234).
+ */
+function parseShiftDayInput(raw: string): ShiftDay {
+  const t = String(raw).trim();
+  if (t === '') {
+    throw refuse('recordAdjustment: shiftDay is blank', SHIFT_DAY_MISSING);
+  }
+  let day: ShiftDay;
+  try {
+    day = parseShiftDay(t);
+  } catch {
+    throw refuse(`recordAdjustment: shiftDay ${JSON.stringify(t)} is not a YYYY-MM-DD shift day`, shiftDayMalformed(t));
+  }
+  if (addShiftDays(day, 0) !== day) {
+    throw refuse(`recordAdjustment: shiftDay ${JSON.stringify(t)} is not a real calendar date`, shiftDayMalformed(t));
+  }
+  return day;
 }
 
 /**
@@ -117,9 +146,15 @@ export async function recordAdjustment(
     }
   }
 
+  // T-360 / DEF-488 — parsed after `authorize()` and the self-adjudication check (R3): a non-holder
+  // still sees the authorization refusal, and a manager adjudicating their own day still sees that
+  // refusal, for a malformed shiftDay exactly as for a valid one. Only from here on does the parsed
+  // local replace `input.shiftDay`.
+  const shiftDay = parseShiftDayInput(input.shiftDay);
+
   const existingDay = await attendanceDaysRepo.findDay(tx, {
     employmentId: input.employmentId,
-    shiftDay: input.shiftDay,
+    shiftDay,
   });
   if (existingDay?.frozenAt) {
     throw new AdjustmentError(
@@ -141,7 +176,7 @@ export async function recordAdjustment(
 
   const live = await attendanceAdjustmentsRepo.listLive(tx, {
     employmentId: input.employmentId,
-    shiftDay: input.shiftDay,
+    shiftDay,
   });
 
   assertNotInverted({ live, incoming: parsed });
@@ -162,7 +197,7 @@ export async function recordAdjustment(
     orgId: employment.orgId,
     storeId: employment.storeId,
     employmentId: employment.id,
-    shiftDay: input.shiftDay,
+    shiftDay,
     kind: input.kind,
     chosenAnchorMinute: parsed.chosenAnchorMinute ?? null,
     effectiveOutMinute: parsed.effectiveOutMinute ?? null,
@@ -178,7 +213,7 @@ export async function recordAdjustment(
   // caller of a parameter whose whole purpose was to be forgotten by everyone else — see DEF-115.
   const day = await adjudicateDay(tx, {
     employmentId: input.employmentId,
-    shiftDay: input.shiftDay,
+    shiftDay,
   });
 
   return { adjustment, day };

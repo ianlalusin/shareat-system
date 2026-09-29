@@ -52,6 +52,21 @@ export const SHIFT_DAY_START_HOUR = 5;
 export type ShiftDay = string & { readonly __brand: 'ShiftDay' };
 
 /**
+ * T-352 F2 — a distinct alias for the caller's raw, unparsed box string, shared by `supersedeConfig`
+ * and `recordAdjustment`. `ShiftDay | string` would collapse to plain `string`: every branded string
+ * is assignable to `string`, `ShiftDay` included, so the union silently admitted the WRONG branded
+ * date too — `BusinessDate` (`@shareat/core/datetime`) is a `YYYY-MM-DD` string just like a shift
+ * day, and nothing would have caught the mix-up. `RawShiftDay` shares `ShiftDay`'s own brand KEY
+ * (`__brand`) but pins it to `undefined`: a plain unbranded string has no `__brand` property at all,
+ * so it satisfies the optional field vacuously and is still admitted — but any OTHER Shareat brand
+ * using that same key (`BusinessDate` included) carries a real, non-`undefined` literal there and is
+ * rejected.
+ *
+ * UNVALIDATED — any string satisfies this; parse with `parseShiftDayInput` before use.
+ */
+export type RawShiftDay = string & { readonly __brand?: undefined };
+
+/**
  * The shift day an instant belongs to.
  *
  * Shifting the instant back by five hours and then asking core which business date it lands on

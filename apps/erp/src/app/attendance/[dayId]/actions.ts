@@ -18,7 +18,8 @@
  * codebase has already paid for once.
  *
  * T-352 / DEF-478 — the three minute fields are passed RAW and parsed inside `recordAdjustment`,
- * after its `authorize()` call, not here.
+ * after its `authorize()` call, not here. `shiftDay` is passed raw the same way and parsed in
+ * `recordAdjustment` after `authorize()` (T-360 / DEF-488).
  */
 import { redirect } from 'next/navigation';
 import { recordAdjustment } from '@shareat/domain';

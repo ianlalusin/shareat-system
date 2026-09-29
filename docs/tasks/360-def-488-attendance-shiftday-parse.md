@@ -1,6 +1,6 @@
 # T-360: the attendance day actions parse `shiftDay` in the domain, after `authorize()` (DEF-488)
 
-**Status:** APPROVED 2026-09-29 (orchestrator, after Opus spec audit) with Amendment A1. **Model:** Sonnet, tester then builder.
+**Status:** DONE 2026-09-29 (DEF-488 fixed) — APPROVED 2026-09-29 (orchestrator, after Opus spec audit) with Amendment A1. **Model:** Sonnet, tester then builder.
 **Migration:** none. Domain code only, plus one comment line in an action. `shift_day` is already a
 `date` column (`packages/db/schema/attendance-adjustments.ts:88`, `attendance-days.ts:96`) and no CHECK changes.
 **Line numbers** were checked at HEAD `e4d9ff3` and re-verified by the auditor at `3372e5e` (the baseline; `page.tsx` hidden input is l.221 there, l.220 at e4d9ff3). None of the paths below is dirty in the tree at that HEAD. T-348

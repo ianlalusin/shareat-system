@@ -8,22 +8,10 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { attendanceConfigRepo, type AttendanceConfigRow, type Tx } from '@shareat/db';
-import { parseShiftDay, type ShiftDay } from './shift-day';
+import { parseShiftDay, type RawShiftDay, type ShiftDay } from './shift-day';
 import { parseConfigChanges, type ConfigChangesInput } from './config-input';
 
 export type { ConfigChangesInput } from './config-input';
-
-/**
- * T-352 F2 — a distinct alias for the caller's raw, unparsed box string. `ShiftDay | string` would
- * collapse to plain `string`: every branded string is assignable to `string`, `ShiftDay` included,
- * so the union silently admitted the WRONG branded date too — `BusinessDate`
- * (`@shareat/core/datetime`) is a `YYYY-MM-DD` string just like a shift day, and nothing would have
- * caught the mix-up. `RawShiftDay` shares `ShiftDay`'s own brand KEY (`__brand`) but pins it to
- * `undefined`: a plain unbranded string has no `__brand` property at all, so it satisfies the
- * optional field vacuously and is still admitted — but any OTHER Shareat brand using that same key
- * (`BusinessDate` included) carries a real, non-`undefined` literal there and is rejected.
- */
-type RawShiftDay = string & { readonly __brand?: undefined };
 
 export class AttendanceConfigError extends Error {
   constructor(message: string) {
