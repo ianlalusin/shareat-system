@@ -19,7 +19,7 @@
  * same platform fee has rebuilt the confirmed v1 defect (`POSTING-PATTERNS.md:411`).
  */
 import { sql } from 'drizzle-orm';
-import { check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, date, foreignKey, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { journalEntries } from './journal';
 import { loans } from './loans';
 import { moneyAccounts } from './money-accounts';
@@ -154,5 +154,14 @@ export const channelSettlements = pgTable(
     check('channel_settlements_settlement_gain_finite_check', sql`${t.settlementGain} > '-Infinity'::numeric and ${t.settlementGain} < 'Infinity'::numeric`),
     check('channel_settlements_loan_deduction_finite_check', sql`${t.loanDeduction} > '-Infinity'::numeric and ${t.loanDeduction} < 'Infinity'::numeric`),
     check('channel_settlements_net_deposited_finite_check', sql`${t.netDeposited} > '-Infinity'::numeric and ${t.netDeposited} < 'Infinity'::numeric`),
+    // T-357 / DEF-490, migration 0171 — the single-column FK above accepts a cross-org account
+    // (RLS checks only this row's own org_id; the FK check runs as the table owner). References
+    // `money_accounts_org_id_id_unique` (`schema/money-accounts.ts` — hand-added in migration
+    // 0171).
+    foreignKey({
+      columns: [t.orgId, t.destinationMoneyAccountId],
+      foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
+      name: 'channel_settlements_destination_money_account_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

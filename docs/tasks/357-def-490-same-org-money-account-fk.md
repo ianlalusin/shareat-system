@@ -1,6 +1,6 @@
 # T-357: money-account references are same-org in the schema (DEF-490)
 
-**Status:** APPROVED 2026-09-29 (orchestrator, after an independent Opus spec audit; amendments B1–B4 at the end bind). **Model:** Sonnet, tester then builder.
+**Status:** DONE 2026-09-29 — APPROVED 2026-09-29 (orchestrator, after an independent Opus spec audit; amendments B1–B4 at the end bind). **Model:** Sonnet, tester then builder.
 **Migration:** `0171_t357_def490_same_org_money_account_fk.sql`. The journal entry is idx 171, `when` = 1800847907084.
 That is 0170's `1800761507084` (T-356) + 86_400_000.
 **Why now:** Ian, 2026-09-29 (bible §13 row 244): *"yes fix DEF-490 before launch."*
@@ -212,3 +212,9 @@ Existing suites stay green UNCHANGED, apart from R6's ruled edits:
   channel row; 0171's pre-flight correctly aborts there). Never edit the migration to pass.
 - **B4 — Q1 ANSWERED (Ian, row 246): DEF-491, before a second org is onboarded.** Was: recommended trigger
   "before a second organisation is onboarded", not open-ended; persons + stores first. Ian decides.
+
+## Record (orchestrator, 2026-09-29, from the pre-commit review)
+- **T-350 S6's G2 fix (`index.ts:743`, `before.moneyAccountId` = the stored id) now has NO test guard.** The rewritten
+  G2 is honest that it cannot tell "stored column" from "the lookup hit's own id" — the auditor reverted the fix and
+  G2 stayed green. Acceptable only because 0171 makes the protected state (a cross-org lookup miss) impossible. If
+  0171 is ever rolled back, that code is unguarded; do not read the green G2 as coverage of the stored-id rule.

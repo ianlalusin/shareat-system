@@ -20,7 +20,7 @@
  * a different action entirely. Those are NOT this module — see `docs/tasks/131-*.md`.
  */
 import { sql } from 'drizzle-orm';
-import { check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, date, foreignKey, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { customers } from './customers';
 import { journalEntries } from './journal';
 import { moneyAccounts } from './money-accounts';
@@ -111,6 +111,15 @@ export const arCollections = pgTable(
     check('ar_collections_fee_not_negative_check', sql`${t.platformFee} >= 0`),
     check('ar_collections_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
     check('ar_collections_platform_fee_finite_check', sql`${t.platformFee} > '-Infinity'::numeric and ${t.platformFee} < 'Infinity'::numeric`),
+    // T-357 / DEF-490, migration 0171 — the single-column FK above accepts a cross-org account
+    // (RLS checks only this row's own org_id; the FK check runs as the table owner). References
+    // `money_accounts_org_id_id_unique` (`schema/money-accounts.ts` — hand-added in migration
+    // 0171).
+    foreignKey({
+      columns: [t.orgId, t.moneyAccountId],
+      foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
+      name: 'ar_collections_money_account_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

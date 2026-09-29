@@ -40,6 +40,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   numeric,
@@ -142,5 +143,15 @@ export const recurringExpenses = pgTable(
           or (${t.interval} in ('monthly','quarterly','annually') and ${t.anchorDay} between 1 and 31)`,
     ),
     check('recurring_expenses_default_amount_finite_check', sql`${t.defaultAmount} > '-Infinity'::numeric and ${t.defaultAmount} < 'Infinity'::numeric`),
+    // T-357 / DEF-490, migration 0171 — the single-column FK above accepts a cross-org account
+    // (RLS checks only this row's own org_id; the FK check runs as the table owner). MATCH SIMPLE
+    // (Drizzle's default, unwritten): a NULL default account skips this FK entirely. References
+    // `money_accounts_org_id_id_unique` (`schema/money-accounts.ts` — hand-added in migration
+    // 0171).
+    foreignKey({
+      columns: [t.orgId, t.defaultMoneyAccountId],
+      foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
+      name: 'recurring_expenses_default_money_account_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

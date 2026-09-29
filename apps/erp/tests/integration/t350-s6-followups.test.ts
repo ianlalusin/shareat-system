@@ -132,36 +132,42 @@ describe('G1 — latestForEntity filters by org even when two orgs share an enti
 });
 
 // =================================================================================================
-// G2 (S6) — index.ts:743's `before.moneyAccountId` must come from `config.destinationMoneyAccountId`
-// (the value actually stored), never from the account LOOKUP, which can miss. Reachable for real,
-// no source hook, no mock: point the channel's stored destination at a REAL account that belongs
-// to ANOTHER org. `channelConfig` (`packages/db/src/repo/channel-settlements.ts:167-183`) reads
-// the raw column with no join, so it returns that foreign id unchanged; `moneyAccountsRepo.getById`
-// is org-scoped (`eq(id) AND eq(orgId)`) and genuinely misses it.
+// G2 (S6, RETIRED by T-357/0171 — amendment B2) — index.ts:743's `before.moneyAccountId` must come
+// from `config.destinationMoneyAccountId` (the value actually stored), never from the account
+// LOOKUP.
+//
+// ⛔ The ORIGINAL leg pointed an org-A channel's stored destination at a REAL org-B account, to
+// force `moneyAccountsRepo.getById`'s org-scoped lookup to miss and prove `before.moneyAccountId`
+// still came from the raw stored column, not the (failed) lookup. T-357/0171 adds a composite
+// `FOREIGN KEY (org_id, destination_money_account_id) REFERENCES money_accounts (org_id, id)` —
+// that cross-org row is no longer insertable at all (23503), so the scenario this leg exercised is
+// UNREACHABLE by schema. The lookup-miss fallback near `index.ts:740` is now defence in depth: the
+// FK refusal (T-357's F1/F4) is the real guard, not this one.
+//
+// Rewritten as a same-org change: WEAKER (a same-org `getById` HIT and the stored column always
+// agree, since a hit returns the very row you looked up, so this cannot distinguish "reads the
+// stored column" from "reads the hit's own id"), but still catches a real regression — if the code
+// ever stopped reading `config.destinationMoneyAccountId` for `before` and read something else
+// entirely, this would red.
 // =================================================================================================
 
-describe('G2 — before.moneyAccountId survives a lookup miss (the old account belongs to another org)', () => {
-  it('the audit row records the STORED id, not null, even though getById cannot find it — was red today: null, because before.moneyAccountId came from the failed lookup', async () => {
+describe('G2 (retired cross-org case, T-357/0171 — now a same-org guard) — before.moneyAccountId is the STORED id', () => {
+  it('same-org change: the audit row records the id that was actually stored on the channel', async () => {
     const orgA = await orgFixture('g2a');
-    const orgB = await orgFixture('g2b');
 
     const [newAccount] = await sql<{ id: string }[]>`
       insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian, is_active)
       values (${orgA.orgId}, ${orgA.storeId}, ${`New Bank ${uid('m')}`}, 'bank', '1140', 'office', true)
       returning id`;
-    const [foreignAccount] = await sql<{ id: string }[]>`
+    const [oldAccount] = await sql<{ id: string }[]>`
       insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian, is_active)
-      values (${orgB.orgId}, ${orgB.storeId}, ${`Foreign Bank ${uid('m')}`}, 'bank', '1140', 'office', true)
+      values (${orgA.orgId}, ${orgA.storeId}, ${`Old Bank ${uid('m')}`}, 'bank', '1140', 'office', true)
       returning id`;
 
-    // The channel itself belongs to org A; only its STORED destination points at org B's account —
-    // a real fixture shape (no APP write path produces it, since setChannelPayoutDestination only
-    // ever writes an id it just validated as org A's own — but the state IS reachable in the DB,
-    // DEF-490), not a mock of the repo.
     const [channel] = await sql<{ id: string }[]>`
       insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code,
                                   destination_money_account_id)
-      values (${orgA.orgId}, ${orgA.storeId}, ${`Foodpanda ${uid('c')}`}, false, '1220', ${foreignAccount!.id})
+      values (${orgA.orgId}, ${orgA.storeId}, ${`Foodpanda ${uid('c')}`}, false, '1220', ${oldAccount!.id})
       returning id`;
 
     const result = await asOrg(orgA.orgId, (tx) =>
@@ -178,10 +184,7 @@ describe('G2 — before.moneyAccountId survives a lookup miss (the old account b
     );
     expect(auditRow, 'expected an audit row').toBeDefined();
     const before = auditRow!.before as { moneyAccountId: string | null; moneyAccountName: string | null };
-    expect(
-      before.moneyAccountId,
-      'wanted: the id actually stored on the channel (unreachable via getById across orgs)',
-    ).toBe(foreignAccount!.id);
-    expect(before.moneyAccountName, 'the name genuinely cannot be known when the lookup misses').toBeNull();
+    expect(before.moneyAccountId, 'wanted: the id actually stored on the channel before the change').toBe(oldAccount!.id);
+    expect(before.moneyAccountName, "same-org lookup hits — the name IS known").not.toBeNull();
   });
 });

@@ -21,6 +21,7 @@ import { sql } from 'drizzle-orm';
 import {
   check,
   date,
+  foreignKey,
   numeric,
   pgTable,
   text,
@@ -99,6 +100,15 @@ export const apPayments = pgTable(
           or (${t.voidedBy} is not null and ${t.voidedAt} is not null and ${t.voidReason} is not null)`,
     ),
     check('ap_payments_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    // T-357 / DEF-490, migration 0171 — the single-column FK above accepts a cross-org account
+    // (RLS checks only this row's own org_id; the FK check runs as the table owner). References
+    // `money_accounts_org_id_id_unique` (`schema/money-accounts.ts` — hand-added in migration
+    // 0171).
+    foreignKey({
+      columns: [t.orgId, t.moneyAccountId],
+      foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
+      name: 'ap_payments_money_account_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

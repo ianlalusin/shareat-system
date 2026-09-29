@@ -23,6 +23,7 @@ import { sql } from 'drizzle-orm';
 import {
   check,
   date,
+  foreignKey,
   index,
   integer,
   numeric,
@@ -153,6 +154,15 @@ export const payRuns = pgTable(
       'pay_runs_void_shape_check',
       sql`(${t.status} = 'voided') = (${t.voidedAt} is not null and ${t.voidReason} is not null)`,
     ),
+    // T-357 / DEF-490, migration 0171 — the single-column FK above accepts a cross-org account
+    // (RLS checks only this row's own org_id; the FK check runs as the table owner). References
+    // `money_accounts_org_id_id_unique` (`schema/money-accounts.ts` — hand-added in migration
+    // 0171).
+    foreignKey({
+      columns: [t.orgId, t.moneyAccountId],
+      foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
+      name: 'pay_runs_money_account_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

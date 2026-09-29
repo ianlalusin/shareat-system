@@ -218,5 +218,10 @@ export const moneyAccounts = pgTable(
     ),
     check('money_accounts_overdraft_limit_finite_check', sql`${t.overdraftLimit} > '-Infinity'::numeric and ${t.overdraftLimit} < 'Infinity'::numeric`),
     check('money_accounts_float_target_finite_check', sql`${t.floatTarget} > '-Infinity'::numeric and ${t.floatTarget} < 'Infinity'::numeric`),
+    // NOTE: money_accounts_org_id_id_unique UNIQUE (org_id, id) — hand-added in migration 0171
+    // (T-357 / DEF-490), no Drizzle mirror here. It is trivially true (id alone is already
+    // unique) and exists only so the 11 composite `(org_id, "<col>") REFERENCES money_accounts
+    // (org_id, id)` same-org FKs elsewhere in this schema (each declared beside its own table)
+    // have a real unique target — Postgres requires one for a composite FK's referenced columns.
   ],
 );

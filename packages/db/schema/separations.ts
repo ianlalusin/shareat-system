@@ -14,7 +14,7 @@
  * `hasPostedSeparationInYear`.
  */
 import { sql } from 'drizzle-orm';
-import { check, date, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, date, foreignKey, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { employments } from './employment';
 import { moneyAccounts } from './money-accounts';
 import { organizations } from './organizations';
@@ -141,5 +141,16 @@ export const separations = pgTable(
     check('separations_separation_pay_amount_finite_check', sql`${t.separationPayAmount} > '-Infinity'::numeric and ${t.separationPayAmount} < 'Infinity'::numeric`),
     check('separations_advance_recovered_finite_check', sql`${t.advanceRecovered} > '-Infinity'::numeric and ${t.advanceRecovered} < 'Infinity'::numeric`),
     check('separations_net_pay_finite_check', sql`${t.netPay} > '-Infinity'::numeric and ${t.netPay} < 'Infinity'::numeric`),
+    // T-357 / DEF-490, migration 0171 — the single-column FK above accepts a cross-org account
+    // (RLS checks only this row's own org_id; the FK check runs as the table owner). MATCH SIMPLE
+    // (Drizzle's default, unwritten): a NULL account skips this FK entirely, which is what a
+    // draft separation (no account chosen yet) needs. References
+    // `money_accounts_org_id_id_unique` (`schema/money-accounts.ts` — hand-added in migration
+    // 0171).
+    foreignKey({
+      columns: [t.orgId, t.moneyAccountId],
+      foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
+      name: 'separations_money_account_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

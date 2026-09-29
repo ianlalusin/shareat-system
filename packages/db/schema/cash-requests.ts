@@ -21,6 +21,7 @@ import { sql } from 'drizzle-orm';
 import {
   check,
   date,
+  foreignKey,
   index,
   numeric,
   pgTable,
@@ -120,5 +121,15 @@ export const cashRequests = pgTable(
     check('cash_requests_approved_positive_check', sql`${t.approvedAmount} is null or ${t.approvedAmount} > 0`),
     check('cash_requests_requested_amount_finite_check', sql`${t.requestedAmount} > '-Infinity'::numeric and ${t.requestedAmount} < 'Infinity'::numeric`),
     check('cash_requests_approved_amount_finite_check', sql`${t.approvedAmount} > '-Infinity'::numeric and ${t.approvedAmount} < 'Infinity'::numeric`),
+    // T-357 / DEF-490, migration 0171 — the single-column FK above accepts a cross-org account
+    // (RLS checks only this row's own org_id; the FK check runs as the table owner). MATCH SIMPLE
+    // (Drizzle's default, unwritten): a NULL release account skips this FK entirely — "not yet
+    // released" stays representable. References `money_accounts_org_id_id_unique`
+    // (`schema/money-accounts.ts` — hand-added in migration 0171).
+    foreignKey({
+      columns: [t.orgId, t.releasedFromMoneyAccountId],
+      foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
+      name: 'cash_requests_released_from_money_account_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

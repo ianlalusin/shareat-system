@@ -44,7 +44,7 @@
  * they cannot drift from the channel configuration that defines them.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, date, foreignKey, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { journalEntries } from './journal';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -156,6 +156,16 @@ export const salesChannels = pgTable(
       'sales_channels_wastage_type_mode_check',
       sql`${t.wastageTypeMode} in ('tracked', 'instant')`,
     ),
+    // T-357 / DEF-490, migration 0171 — the single-column FK above accepts a cross-org account
+    // (RLS checks only this row's own org_id; the FK check runs as the table owner). MATCH SIMPLE
+    // (Drizzle's default, unwritten): a NULL destination skips this FK entirely, so "no account
+    // chosen yet" is still representable. References `money_accounts_org_id_id_unique`
+    // (`schema/money-accounts.ts` — hand-added in migration 0171).
+    foreignKey({
+      columns: [t.orgId, t.destinationMoneyAccountId],
+      foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
+      name: 'sales_channels_destination_money_account_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

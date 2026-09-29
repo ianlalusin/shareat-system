@@ -28,6 +28,7 @@ import { sql } from 'drizzle-orm';
 import {
   check,
   date,
+  foreignKey,
   index,
   numeric,
   pgTable,
@@ -130,5 +131,19 @@ export const moneyTransfers = pgTable(
     ),
     check('money_transfers_amount_out_finite_check', sql`${t.amountOut} > '-Infinity'::numeric and ${t.amountOut} < 'Infinity'::numeric`),
     check('money_transfers_amount_in_finite_check', sql`${t.amountIn} > '-Infinity'::numeric and ${t.amountIn} < 'Infinity'::numeric`),
+    // T-357 / DEF-490, migration 0171 — the single-column FKs above accept a cross-org account
+    // (RLS checks only this row's own org_id; the FK check runs as the table owner). References
+    // `money_accounts_org_id_id_unique` (`schema/money-accounts.ts` — hand-added in migration
+    // 0171).
+    foreignKey({
+      columns: [t.orgId, t.fromMoneyAccountId],
+      foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
+      name: 'money_transfers_from_money_account_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.toMoneyAccountId],
+      foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
+      name: 'money_transfers_to_money_account_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
