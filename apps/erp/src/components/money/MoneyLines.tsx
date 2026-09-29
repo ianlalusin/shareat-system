@@ -114,7 +114,15 @@ export function MoneyLines({
   useEffect(() => {
     const form = rootRef.current?.closest('form');
     if (!form) return;
-    const onAttempt = () => setAttemptedLineCount(linesRef.current.length);
+    // T-353 S3 (H1) — also marks every THEN-EXISTING line's fields touched: a count cannot survive
+    // a later remove (`attemptedLineCount` stays fixed while `touched` correctly re-indexes), so
+    // `money-line-visibility.ts`'s `visibleIssues` now reveals a per-line issue only via `touched`.
+    // `attemptedLineCount` itself is kept only for the document-level gate (K3).
+    const onAttempt = () => {
+      const currentLines = linesRef.current;
+      setAttemptedLineCount(currentLines.length);
+      currentLines.forEach((_, i) => markTouched(i, ALL_LINE_FIELDS));
+    };
     form.addEventListener('submit', onAttempt);
     form.addEventListener('invalid', onAttempt, true);
     return () => {

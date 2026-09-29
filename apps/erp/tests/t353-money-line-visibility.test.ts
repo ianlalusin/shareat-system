@@ -62,6 +62,14 @@ function issuesFor(lines: MoneyLine[], mustTotal?: string | null): MoneyLineIssu
 const touchedSet = (fields: LineField[] = []): Set<LineField> => new Set(fields);
 
 /**
+ * T-353 S3 H1 — mirrors `MoneyLines.tsx`'s `ALL_LINE_FIELDS`. After H1's remedy, `onAttempt` marks
+ * every one of these touched for each THEN-EXISTING line — this is what a leg simulating that
+ * component behaviour passes as the line's touched set, instead of relying on `attemptedLineCount`
+ * alone (the retired per-line mechanic).
+ */
+const ALL_FIELDS_TOUCHED: LineField[] = ['method', 'amount', 'moneyAccountId', 'cashRequestId', 'staffId'];
+
+/**
  * `noUncheckedIndexedAccess` (tsconfig.json) types `arr[0]` as possibly `undefined` even right
  * after `toHaveLength(1)` — a bare `!` would silently switch that check off at the point of use
  * (docs/RULES.md §2 row 206), so this is the guard instead (same idiom as
@@ -109,14 +117,33 @@ describe('H3 — touching only the source fields shows only the Choose-where iss
   });
 });
 
-describe('H4 — a submit attempt shows every issue regardless of touch', () => {
-  it('wanted: both issues (amount + moneyAccountId) — red today: import fails', () => {
+/**
+ * H4 — RE-PINNED by T-353 S3's H1 (not weakened). The ORIGINAL H4 asserted
+ * `visibleIssues(issues, [touchedSet()], 1)` (an UNTOUCHED line, attemptedLineCount 1) shows BOTH
+ * issues — but S3's H1 leg (below, "append then remove the ORIGINAL row") calls `visibleIssues` with
+ * the IDENTICAL arguments (an untouched line, attemptedLineCount 1) and wants `[]`. A pure function
+ * cannot satisfy both on the same input — H1's remedy RETIRES attemptedLineCount as the per-line
+ * gate entirely: the COMPONENT (`MoneyLines.tsx`'s `onAttempt`) now marks every then-existing line's
+ * fields TOUCHED at attempt time, and `visibleIssues` reveals a per-line issue only via `touched`,
+ * never via `issue.line < attemptedLineCount`. attemptedLineCount survives only for the
+ * DOCUMENT-level gate (K3).
+ */
+describe('H4 (re-pinned by T-353 S3 H1) — after H1: an attempt reveals a line\'s issues because the COMPONENT marks its fields touched, never via attemptedLineCount alone', () => {
+  it('touched already carries the fields an attempt would have marked (simulating onAttempt\'s post-H1 behaviour) — wanted: both issues (amount + moneyAccountId)', () => {
     const issues = issuesFor([blankCashLineNoSource]);
-    // K2: one line existed at the attempt, so attemptedLineCount is 1.
-    const visible = visibleIssues(issues, [touchedSet()], 1);
+    // attemptedLineCount is still set (K2/K3 bookkeeping, and it still gates the document-level
+    // issue below) — but per-line revelation here comes from `touched`, not from `0 < 1`.
+    const visible = visibleIssues(issues, [touchedSet(ALL_FIELDS_TOUCHED)], 1);
     expect(visible).toHaveLength(2);
     expect(visible.some((i) => i.field === 'amount')).toBe(true);
     expect(visible.some((i) => i.field === 'moneyAccountId')).toBe(true);
+  });
+
+  it('the document-level "attempted" gate still shows document issues on its own (K3, unaffected by H1\'s per-line retirement)', () => {
+    const line: MoneyLine = { method: 'cash', amount: '50.00', moneyAccountId: cashierAccount.id };
+    const issues = issuesFor([line], '100.00');
+    const visible = visibleIssues(issues, [touchedSet()], 1);
+    expect(visible.some((i) => i.field === 'document')).toBe(true);
   });
 });
 
@@ -166,16 +193,26 @@ describe('H6 — touch is tracked per LINE, not globally across the form', () =>
 });
 
 describe('K2 (S2 follow-up) — a line added AFTER a submit attempt starts quiet', () => {
+  /**
+   * Legs 1-2 RE-PINNED by T-353 S3 H1 (not weakened) — the ORIGINAL legs passed
+   * `[touchedSet(), touchedSet()]` (both lines UNTOUCHED) and relied on `attemptedLineCount` alone
+   * to reveal line 0's issues, which is the exact per-line mechanic H1 retires (same contradiction
+   * as H4's, against the H1 leg below). Post-H1, `onAttempt` marks every THEN-EXISTING line's
+   * fields touched at attempt time, so these legs now pass touched sets reflecting that: only the
+   * lines present AT each attempt are marked, lines appended afterwards stay untouched. The
+   * OUTCOME (line 0 shows, line 1 stays quiet until it existed at its own attempt) is unchanged —
+   * only how it's produced changes, from "attemptedLineCount" to "touched".
+   */
   it(
-    'attemptedLineCount 1 (only line 0 existed at the attempt): line 0 fully shows, line 1 ' +
-      '(appended later, untouched) shows nothing — red today: attemptedLineCount does not exist yet',
+    'attempt when only line 0 existed: onAttempt marks line 0 touched, line 1 (appended later, ' +
+      'still untouched) shows nothing',
     () => {
       const lines: MoneyLine[] = [blankCashLineNoSource, { ...blankCashLineNoSource }];
       const issues = issuesFor(lines);
       // Both lines are identical and blank, so `issues` has 2 amount + 2 moneyAccountId issues,
-      // one pair per line. attemptedLineCount: 1 means the attempt happened when only line 0
-      // existed; line 1 was appended afterwards and neither of its fields has been touched.
-      const visible = visibleIssues(issues, [touchedSet(), touchedSet()], 1);
+      // one pair per line. Only line 0 existed at the attempt, so only its fields were marked
+      // touched; line 1 was appended afterwards and neither of its fields has been touched.
+      const visible = visibleIssues(issues, [touchedSet(ALL_FIELDS_TOUCHED), touchedSet()], 1);
 
       expect(visible.every((i) => i.line === 0)).toBe(true);
       expect(visible.some((i) => i.field === 'amount')).toBe(true);
@@ -185,12 +222,16 @@ describe('K2 (S2 follow-up) — a line added AFTER a submit attempt starts quiet
   );
 
   it(
-    'a later attempt (attemptedLineCount 2, both lines now present) reveals line 1 too — the ' +
-      'quiet period is only until the NEXT attempt, not forever',
+    'a later attempt, both lines now present: onAttempt marks BOTH lines touched, revealing line 1 ' +
+      'too — the quiet period is only until the NEXT attempt, not forever',
     () => {
       const lines: MoneyLine[] = [blankCashLineNoSource, { ...blankCashLineNoSource }];
       const issues = issuesFor(lines);
-      const visible = visibleIssues(issues, [touchedSet(), touchedSet()], 2);
+      const visible = visibleIssues(
+        issues,
+        [touchedSet(ALL_FIELDS_TOUCHED), touchedSet(ALL_FIELDS_TOUCHED)],
+        2,
+      );
 
       expect(visible.some((i) => i.line === 0)).toBe(true);
       expect(visible.some((i) => i.line === 1)).toBe(true);
@@ -208,6 +249,24 @@ describe('K2 (S2 follow-up) — a line added AFTER a submit attempt starts quiet
       const line1Issues = visible.filter((i) => i.line === 1);
       expect(line1Issues).toHaveLength(1);
       expect(first(line1Issues).field).toBe('amount');
+    },
+  );
+});
+
+describe('H1 (S3 follow-up) — append then remove the ORIGINAL row: the remaining, never-touched row must show nothing', () => {
+  it(
+    'attempt with 1 line, append a row, delete the ORIGINAL (index 0) — attemptedLineCount survives ' +
+      'the shift unchanged (1) and the re-indexed appended row lands at index 0, so 0 < 1 still holds — ' +
+      'wanted: [] (nobody touched this row and it was not present at the attempt), got today: both ' +
+      "DEF-484 sentences, on a row nobody touched. A count can't survive an index shift.",
+    () => {
+      // The remaining row IS the appended one, re-indexed to 0 by MoneyLines.tsx's remove handler
+      // (`setLines`/`setTouched` both `.filter((_, n) => n !== i)`) — its own validation issues, from
+      // the real domain function, exactly like every other leg in this file. Its touched set is
+      // genuinely empty: it was appended after the attempt and nobody has touched it.
+      const issues = issuesFor([blankCashLineNoSource]);
+      const visible = visibleIssues(issues, [touchedSet()], 1);
+      expect(visible, `expected [], got: ${JSON.stringify(visible)}`).toEqual([]);
     },
   );
 });

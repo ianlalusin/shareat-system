@@ -13,16 +13,23 @@
  *
  * T-353 S2 (K2/K3, review of `f69a9ff`) — two rulings that narrow S1's "any touch, or attempted":
  *   - K2: `attempted` widened from a boolean to `attemptedLineCount: number | null`. `null` means no
- *     submit attempt yet; a number is the count of lines that existed AT the attempt. A per-line
- *     issue is revealed by the attempt only when `issue.line < attemptedLineCount` — a row APPENDED
- *     after the attempt (index `>= attemptedLineCount`) starts quiet, same as a fresh line, until its
- *     own field is touched. Without this, a submit attempt on a 1-line form would permanently mark
- *     every FUTURE row as "attempted" too, painting both DEF-484 sentences on a row nobody has
- *     reached yet — the exact defect one row over.
+ *     submit attempt yet; a number is the count of lines that existed AT the attempt.
  *   - K3: a document-level issue no longer unlocks on "any field on any line" — a bare tab-through
  *     the method select (which has a default value and marks touched on blur) must not reveal a
  *     `mustTotal` sentence nobody asked for. It shows only once an AMOUNT field has been touched, or
  *     once a submit was attempted (`attemptedLineCount !== null`).
+ *
+ * T-353 S3 (H1, review of `aa14108`) — `attemptedLineCount` is RETIRED as the per-line gate. K2's own
+ * `issue.line < attemptedLineCount` could not survive a remove: the count is fixed at the attempt,
+ * but a later remove re-indexes the remaining rows, so a row APPENDED after the attempt and never
+ * touched could land at an index the stale count still covers, showing both DEF-484 sentences on a
+ * row nobody touched — a pure function fed only (issues, touched, attemptedLineCount) has no way to
+ * tell "this row existed at the attempt" from "this row was re-indexed into that slot afterwards".
+ * The fix moves per-line reveal onto `touched` alone: `MoneyLines.tsx`'s `onAttempt` now marks every
+ * THEN-EXISTING line's fields touched directly, and `touched`'s OWN remove handling (already
+ * index-filtered) carries that identity through a later remove correctly, which a bare count cannot.
+ * `attemptedLineCount` survives only for the DOCUMENT-level gate (K3), which needs no per-row
+ * identity — "was there ever an attempt" is enough.
  */
 import type { MoneyLineIssue } from '@shareat/domain/money-lines'; // ⛔ subpath, never the barrel
 
@@ -44,8 +51,6 @@ export function visibleIssues(
     if (issue.line === null) {
       return attemptedLineCount !== null || touched.some((t) => t.has('amount'));
     }
-    const revealedByAttempt = attemptedLineCount !== null && issue.line < attemptedLineCount;
-    const revealedByTouch = isLineField(issue.field) && (touched[issue.line]?.has(issue.field) ?? false);
-    return revealedByAttempt || revealedByTouch;
+    return isLineField(issue.field) && (touched[issue.line]?.has(issue.field) ?? false);
   });
 }

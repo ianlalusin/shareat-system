@@ -65,35 +65,35 @@
 - `1203–1237` 10. Phase plan
 - `1238–1254` 11. Migration & ETL rules
 - `1255–1319` 12. Inherited landmines — do not repeat these
-- `1320–1568` 13. Decision log
-- `1569–1588` 14. Amendment protocol
-- `1589–1593` 15. Engineering standards — the industry practices this project follows
-  - `1594–1599` 15.1 Build order: walking skeleton first
-  - `1600–1611` 15.2 Golden-master testing — the most important practice here
-  - `1612–1620` 15.3 Strangler Fig, not big-bang cutover
-  - `1621–1625` 15.4 No dual-write
-  - `1626–1634` 15.5 Expand/contract migrations
-  - `1635–1643` 15.6 Observability from day zero, not later
-  - `1644–1648` 15.7 CI gates
-  - `1649–1653` 15.8 Backups and a tested restore
-  - `1654–1658` 15.9 Twelve-Factor config
-  - `1659–1666` 15.10 Append-only ledgers — but not event sourcing
-  - `1667–1671` 15.11 Defence in depth
-  - `1672–1700` 15.12 Skills are lenses, not assurance
-  - `1701–1707` 15.13 Reconciliation is a permanent feature
-- `1708–1712` 16. The accounting spine
-  - `1713–1744` 16.0 What we are actually fixing — the diagnosis
-  - `1745–1788` 16.1 The ten invariants — non-negotiable
-  - `1789–1803` 16.2 The oracle: how "correct" is tested
-  - `1804–1825` 16.3 The model — header + lines, not legs
-  - `1826–1845` 16.4 Deliberately simpler than ERPNext
-  - `1846–1912` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1913–1937` 16.6 What v1 already gets right — preserve the intent
-  - `1938–1959` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1960–1974` 16.8 What v1's accounting already gets right
-  - `1975–2018` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2019–2069` 16.10 Posting patterns — one canonical pattern per business event
-  - `2070–2101` 16.11 Inventory's accounting integration
+- `1320–1574` 13. Decision log
+- `1575–1594` 14. Amendment protocol
+- `1595–1599` 15. Engineering standards — the industry practices this project follows
+  - `1600–1605` 15.1 Build order: walking skeleton first
+  - `1606–1617` 15.2 Golden-master testing — the most important practice here
+  - `1618–1626` 15.3 Strangler Fig, not big-bang cutover
+  - `1627–1631` 15.4 No dual-write
+  - `1632–1640` 15.5 Expand/contract migrations
+  - `1641–1649` 15.6 Observability from day zero, not later
+  - `1650–1654` 15.7 CI gates
+  - `1655–1659` 15.8 Backups and a tested restore
+  - `1660–1664` 15.9 Twelve-Factor config
+  - `1665–1672` 15.10 Append-only ledgers — but not event sourcing
+  - `1673–1677` 15.11 Defence in depth
+  - `1678–1706` 15.12 Skills are lenses, not assurance
+  - `1707–1713` 15.13 Reconciliation is a permanent feature
+- `1714–1718` 16. The accounting spine
+  - `1719–1750` 16.0 What we are actually fixing — the diagnosis
+  - `1751–1794` 16.1 The ten invariants — non-negotiable
+  - `1795–1809` 16.2 The oracle: how "correct" is tested
+  - `1810–1831` 16.3 The model — header + lines, not legs
+  - `1832–1851` 16.4 Deliberately simpler than ERPNext
+  - `1852–1918` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1919–1943` 16.6 What v1 already gets right — preserve the intent
+  - `1944–1965` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1966–1980` 16.8 What v1's accounting already gets right
+  - `1981–2024` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2025–2075` 16.10 Posting patterns — one canonical pattern per business event
+  - `2076–2107` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1564,6 +1564,12 @@ just a patch.**
 | 239 | 2026-09-28 | ⭐ **WITH NO ADMINISTRATOR, A MANAGER MAY SET AND CHANGE A CHANNEL'S PAYOUT ACCOUNT.** Ian, 2026-09-28: *"with no admin manager can update it."* `set_channel_payout` stays in `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` by derivation (admin ✅, manager ✗), exactly as `set_cash_policy` does (row 196's class). Row 236's "admin only" holds wherever an organisation has an admin. | Someone must be able to repoint a payout account in an organisation that has no admin yet. | Yes — the fallback already lapses when an admin arrives (row 188). |
 | 240 | 2026-09-28 | ⭐ **LONG PAGE DESCRIPTIONS GET AN INLINE CHEVRON (T1); WIDE-SCREEN FORMS USE TABLE DENSITY WITH CONTENT UNCHANGED (W2). DEF-484 IS FIXED BEFORE LAUNCH.** Ian, 2026-09-28, from the rendered T-348 S0 sheets: *"t1 w2, yes fix def 484."* T-348 Amendment A1; DEF-484 (a fresh New-expense form shows errors before input) gets its own task. | Picked on screen, not in prose (render before deciding). | Yes — presentation only. |
 | 241 | 2026-09-28 | ⭐ **EVERY IMMUTABILITY / APPEND-ONLY TRIGGER IS FIXED BEFORE LAUNCH SO REPLICA MODE CANNOT SWITCH IT OFF (DEF-487); 0167 IS APPLIED TO DEV.** Ian, 2026-09-28: *"yes fix def 487 before launch, apply 0167 to dev."* T-354 specs it (a migration over the ledger's triggers). `shareat_dev` migrated to 0167 the same evening (`audit_log` had 0 rows). | The auditor showed a superuser DELETE succeeding on `audit_log` inside `session_replication_role = 'replica'`; all 12 immutability triggers, the journal's included, are origin-only. | Yes — a later migration can revert, but the protection is the point. |
+| 242 | 2026-09-29 | ⭐ **NEW TABLES ARE BORN READ + INSERT ONLY FOR THE APP ROLE; UPDATE AND DELETE ARE GRANTED PER TABLE (DEF-489, option a). FIXED BEFORE LAUNCH. 0168 IS APPLIED TO DEV.** Ian, 2026-09-29: *"DEF-489 go with (a), fix before launch"*; *"yes migration 0168"*. A new migration narrows `0011_row_level_security.sql:72`'s `ALTER DEFAULT PRIVILEGES … GRANT SELECT, INSERT, UPDATE, DELETE` to SELECT + INSERT; every table that needs UPDATE/DELETE gets an explicit grant, and ADR-012 §5's checklist gains that line. Spec: T-355. | The executed review of `0cd0fb6` created a fresh table as `postgres` and `shareat_app` held UPDATE and DELETE on it: the standing default is how `audit_log` got the grant 0168 revoked, and T-354's trigger-keyed registry cannot see a new history table shipped with neither trigger nor REVOKE. (a) fails closed — a forgotten grant is a loud 42501 in tests — where (b), a marker-keyed guard, fails open when the marker is forgotten. | Yes — a later migration can widen the default again; existing tables keep their grants either way. |
+| 243 | 2026-09-29 | ⭐ **EXISTING HISTORY TABLES LOSE THE APP ROLE'S UNUSED UPDATE/DELETE TOO (T-356), NOT ONLY NEW TABLES; IAN READS PROD'S `pg_default_acl` BEFORE T-355 MERGES.** Ian, 2026-09-29: *"yes T-356, I'll run the pg_default_acl query."* Extends row 242 to existing tables: `stock_movements` and `attendance_adjustments` lose DELETE only (a transfer's `SELECT … FOR UPDATE` needs UPDATE; the supersede path UPDATEs), `trade_order_messages`, `attendance_punches`, `etl_source_documents`, `missed_month_adjustments` lose both. | The T-355 spec audit showed the planner's first cut would have 42501'd every stock-transfer dispatch (`stock-ledger.ts:86-91`); split out so row 242's scope stays as Ian ruled it, and re-scoped by grep for row locks as well as writes. | Yes — a GRANT restores any of them. |
+| 244 | 2026-09-29 | ⭐ **A CROSS-ENTITY MONEY-ACCOUNT REFERENCE MUST BE SAME-ORG IN THE SCHEMA, NOT ONLY IN THE DOMAIN (DEF-490). FIXED BEFORE LAUNCH.** Ian, 2026-09-29: *"yes fix DEF-490 before launch."* `sales_channels.destination_money_account_id` gets a composite `(org_id, destination_money_account_id) → money_accounts(org_id, id)` FK (precedent: 0159 step 8), after a pre-flight count of existing cross-org rows; the same shape on other `*_money_account_id` columns is censused in the same task. Spec: T-357. | The T-350 S6 review measured that, as `shareat_app` with `app.org_id` = A, a channel could be pointed at org B's account — RLS checks the row's own `org_id` and the FK runs as the owner — so one domain function was the only defence (§15.11). | Yes — a later migration can drop the composite FK. |
+| 245 | 2026-09-29 | ⭐ **DEF-485 IS FIXED BEFORE LAUNCH: THE AP-INVOICE EXPENSE FORM USES `<MoneyLines>`.** Ian, 2026-09-29: *"yes fix DEF-485 before launch."* The hand-rolled `method_1`/`amount_1`/`moneyAccountId_1` trio on `/ap/invoices/[id]` is replaced by `<MoneyLines direction="out">`, which emits the parser's own names. Spec: T-358. | Confirmed by execution: every submit is refused with "Add at least one payment line."; a rename alone would still fail (0-based loop) and would drop the account (`moneyAccountId_1` maps to nothing). | Yes. |
+| 246 | 2026-09-29 | ⭐ **THE REMAINING SAME-ORG FOREIGN KEYS (≈360 org-to-org + 79 from tables without `org_id`, incl. T-357's five derived-scope money FKs) ARE FIXED BEFORE A SECOND ORGANISATION IS ONBOARDED; PERSONS AND STORES FIRST.** Ian, 2026-09-29: *"yes T-357 Q1."* Not a launch blocker: production holds one organisation, so no cross-tenant pointer can leak until a second exists. | The T-357 census (DEF-490) found the same single-column shape across the schema; T-357 fixes only the 11 money-account references. | Yes — the trigger is an onboarding gate, not a date. |
+| 247 | 2026-09-29 | ⭐ **AN EXPENSE RECORDED AGAINST A SUPPLIER INVOICE DEFAULTS TO CREDIT FOR A SUPPLIER WITH TERMS (ONE LINE, THE REMAINING AMOUNT PRE-FILLED); CASH FOR A CASH-ON-DELIVERY SUPPLIER.** Ian, 2026-09-29: *"yes keep credit default for suppliers with terms."* T-358 passes `initialLines=[{ method: 'credit', amount: <remaining> }]` to `<MoneyLines>` on `/ap/invoices/[id]` when `creditTermsDays` is set. | v1 defaults to credit on a supplier delivery (`LinkExpenseDialog.tsx:89`, `DeliveryExpenseSplitDialog.tsx:112`) and the pre-T-358 v2 form pre-selected it; `<MoneyLines>`' own default is Cash, and a slip there posts a real drawer cash-out instead of AP. | Yes. |
 
 
 ## 14. Amendment protocol

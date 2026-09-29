@@ -269,3 +269,30 @@ The fix is sound; the wiring is unpinned. **Model** Sonnet, tester then builder.
   bookkeeping) recorded.
 - **BUILDER paths:** `apps/erp/src/components/money/money-line-visibility.ts`, `apps/erp/src/components/money/MoneyLines.tsx`.
   **TESTER paths:** the three t353 test files + a new `apps/erp/tests/t353-s2-money-lines-wiring-guard.test.ts`.
+
+## S3 — follow-ups from the executed post-commit review of `aa14108` (APPROVED 2026-09-29, orchestrator)
+- **H1 (MED, tester red → builder).** K2 holds on APPEND and breaks on REMOVE. Measured: attempt with 1 line
+  (`attemptedLineCount = 1`), append a row, then delete the ORIGINAL row → `MoneyLines.tsx:383-384` re-indexes, the
+  untouched appended row becomes index 0, `0 < 1` holds → both DEF-484 sentences on a row nobody touched. A count
+  cannot survive an index shift. **Remedy (spec's second option): at attempt time, mark every then-existing line's
+  fields touched** (the remove handler already filters `touched` by index, so identity follows the row) and retire
+  `attemptedLineCount` as the per-line gate. Keep the document-level "attempted" gate. Red first: a pure
+  `visibleIssues` leg for append-then-remove-original → 0 issues.
+- **H2 (MED, tester).** The K1 wiring guard pins TEXT, not effect: neutering `markTouched` or `onAttempt` to a no-op
+  keeps 28/28 green. Add, in the same static idiom, legs asserting `markTouched`'s body calls `setTouched` and the
+  attempt handler's body records the attempt (after H1: marks lines touched). Each must go red under its no-op mutant.
+- **H3 (LOW, record).** K1's "must go red under the deletion mutant" was never executed by the slice; the auditor
+  executed it (6 of 8 legs red). Every future mutant claim is executed by the tester, not stated.
+- **H4 (LOW, note only).** `MoneyLines.tsx:99-100` writes `linesRef.current` during render; becomes real only under
+  concurrent features/Suspense around this form. No change now.
+**TESTER paths:** `apps/erp/tests/t353-money-line-visibility.test.ts`, `apps/erp/tests/t353-s2-money-lines-wiring-guard.test.ts`.
+**BUILDER paths:** `apps/erp/src/components/money/MoneyLines.tsx`, `apps/erp/src/components/money/money-line-visibility.ts`.
+
+## S4 — latent follow-ups from the S3 pre-commit review (recorded 2026-09-29, orchestrator; not built)
+- **L1 (LOW, latent).** With the attempt fallback retired, a per-line issue on a NON-line field (`referenceNo`,
+  `document`) can never be revealed. Unreachable today (`document` issues are `line: null`, `money-lines.ts:319,410,421`;
+  nothing pushes `referenceNo`), but `lineRef_${i}` is rendered. Close by narrowing `MoneyLineIssue`'s per-line field
+  union to the five line fields so the compiler refuses the combination.
+- **L2 (LOW, wider since S3).** `linesRef.current = lines` is a render-phase write (`MoneyLines.tsx:103`); `onAttempt`
+  now marks rows touched from it, so a stale-ahead ref (concurrent features / Suspense) marks the wrong SET of rows.
+  Move the assignment into an effect the next time this file is touched (T-358 does not touch it).
