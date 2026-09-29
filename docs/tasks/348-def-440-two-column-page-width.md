@@ -1,6 +1,6 @@
 # T-348: page descriptions use the full width and clamp at 3 lines (DEF-474); two-column pages use the full width (DEF-440)
 
-**Status:** APPROVED 2026-09-28 (orchestrator) — S0 DONE — S1 DONE — **S2 DONE 2026-09-29** (DEF-474 fixed); S3 (DEF-440) next — Ian picked T1 + W2 (Amendment A1); S1-S3 follow. Planner: Opus, 2026-09-28. Supersedes the reservation text.
+**Status:** APPROVED 2026-09-28 (orchestrator) — S0 DONE — S1 DONE — **S2 DONE 2026-09-29** (DEF-474 fixed); **S3 DONE 2026-09-30 (`b08d8c8`, DEF-440 fixed)** — Ian picked T1 + W2 (Amendment A1); S1-S3 follow. Planner: Opus, 2026-09-28. Supersedes the reservation text.
 **Defects:** DEF-474 (🔸, Ian 2026-09-28, from `/liabilities`), DEF-440 (⚠️, Ian 2026-09-26). **Migration:** none, any slice.
 **Governing rules:** bible §1.2c (one uniform, reusable pattern set across screens); "render before deciding" (a
 rendering-dependent choice is made from screenshots, not argument); RULES §2 (tests first and red for the right
