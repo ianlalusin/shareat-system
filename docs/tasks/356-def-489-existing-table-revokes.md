@@ -1,6 +1,6 @@
 # T-356: existing history tables lose the app role's unused UPDATE/DELETE (DEF-489 follow-up)
 
-**Status:** APPROVED 2026-09-29 (orchestrator, after an independent Opus spec audit; amendments A1–A4 at the end bind). Runs after T-355. **Model:** Sonnet, tester then builder.
+**Status:** DONE 2026-09-29 — APPROVED 2026-09-29 (orchestrator, after an independent Opus spec audit; amendments A1–A4 at the end bind). Runs after T-355. **Model:** Sonnet, tester then builder.
 **Migration:** `0170_t356_def489_existing_table_revokes.sql`. The journal entry is idx 170, `when` = 1800761507084.
 That is 0169's `1800675107084` (T-355) + 86_400_000.
 **Why now:** Ian said yes (bible §13 row 243). It replaces T-355's dropped R3 (T-355 "Orchestrator amendments", S1).

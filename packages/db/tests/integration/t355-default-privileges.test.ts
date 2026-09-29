@@ -275,11 +275,39 @@ describe('E2 — the fixture is not vacuous', () => {
   });
 });
 
-describe('E1 — snapshot compare: live privileges = fixture, deep-equal, EVERY table (S1: R3 not built here — no exceptions; guard, expected green both before and after 0169)', () => {
+/**
+ * E1′ (T-356 amendment A3) — the six tables 0170 revokes get an EXACT delta, not an exception. Every
+ * delta key must exist in the fixture, and every removed privilege must have been present in it
+ * (both asserted below, once, as a fixture-sanity check — a typo'd table name or a removed privilege
+ * the fixture never had would otherwise silently no-op the subtraction).
+ */
+const T356_REVOKES: Record<string, readonly string[]> = {
+  stock_movements: ['DELETE'],
+  attendance_adjustments: ['DELETE'],
+  trade_order_messages: ['UPDATE', 'DELETE'],
+  attendance_punches: ['UPDATE', 'DELETE'],
+  etl_source_documents: ['UPDATE', 'DELETE'],
+  missed_month_adjustments: ['UPDATE', 'DELETE'],
+};
+
+describe('E1 sanity — every T356_REVOKES key exists in the fixture, and every removed privilege was present in it', () => {
+  it('no typo in a table name; no privilege subtracted that was never granted', () => {
+    for (const [table, removed] of Object.entries(T356_REVOKES)) {
+      expect(fixture[table], `T356_REVOKES names "${table}", which is not in the fixture`).toBeDefined();
+      for (const priv of removed) {
+        expect(fixture[table]!, `fixture[${table}] never had ${priv} to remove`).toContain(priv);
+      }
+    }
+  });
+});
+
+describe("E1′ — snapshot compare: live privileges = fixture MINUS T-356's delta, deep-equal, EVERY table (no subset/'at most' comparison)", () => {
   const names = Object.keys(fixture);
-  it.each(names)('%s: live privileges match the fixture exactly', async (name) => {
+  it.each(names)('%s: live privileges match fixture − delta exactly', async (name) => {
+    const removed = new Set(T356_REVOKES[name] ?? []);
+    const expected = fixture[name]!.filter((p) => !removed.has(p));
     const live = await livePrivilegesFor(name);
-    expect(live, `fixture: ${JSON.stringify(fixture[name])}, live: ${JSON.stringify(live)}`).toEqual(fixture[name]);
+    expect(live, `expected: ${JSON.stringify(expected)}, live: ${JSON.stringify(live)}`).toEqual(expected);
   });
 });
 

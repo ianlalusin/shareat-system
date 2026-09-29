@@ -1051,6 +1051,13 @@
       "when": 1800675107084,
       "tag": "0169_t355_def489_default_privileges_read_insert",
       "breakpoints": true
+    },
+    {
+      "idx": 170,
+      "version": "7",
+      "when": 1800761507084,
+      "tag": "0170_t356_def489_existing_table_revokes",
+      "breakpoints": true
     }
   ]
 }

@@ -102,7 +102,8 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason:
       'A conversation between two stores of one org. ⚠️ It carries its own `org_id` rather than ' +
-      'reaching through the order, because it is read on its own far more often than with one.',
+      'reaching through the order, because it is read on its own far more often than with one. ' +
+      'UPDATE and DELETE REVOKEd from the app role (0170, T-356), so an attempt is a loud 42501.',
   },
 
   // ---- T-174: the transit shortfall ------------------------------------------------------
@@ -170,7 +171,9 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason:
       'Every movement carries its org directly. ⚠️ org_column rather than derived through the ' +
       'location: this is the highest-volume table in the domain and every on-hand query filters ' +
-      'it, so the policy belongs on the row being read, not behind a join.',
+      'it, so the policy belongs on the row being read, not behind a join. DELETE REVOKEd from the ' +
+      'app role (0170, T-356), so an attempt is a loud 42501. UPDATE is kept: `onHandForUpdate` ' +
+      'row-locks it, and FOR UPDATE needs UPDATE privilege.',
   },
 
   // ---- T-167: stock transfers ------------------------------------------------------------
@@ -567,7 +570,9 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
   // scheduled charges for is its own business, and the row names the admin and the reason.
   missed_month_adjustments: {
     scope: 'org_column',
-    reason: 'As fiscal_periods — each org catches up its own missed months, on its own calendar.',
+    reason:
+      'As fiscal_periods — each org catches up its own missed months, on its own calendar. UPDATE ' +
+      'and DELETE REVOKEd from the app role (0170, T-356), so an attempt is a loud 42501.',
   },
 
   // T-130 — suppliers, supplier invoices, AP payments (docs/tasks/130-accounts-payable.md).
@@ -794,7 +799,8 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'Who was physically at which terminal, when. Per-org like the employment it points at — and ' +
       'sensitive beyond the org boundary in its own right: a punch stream is a record of a named ' +
       'person’s movements, which is exactly the field-level concern bible §7 rule 10 raises about ' +
-      'store membership implying too much.',
+      'store membership implying too much. UPDATE and DELETE REVOKEd from the app role (0170, ' +
+      'T-356), so an attempt is a loud 42501.',
   },
 
   // ---- T-157: the adjudicated day (Phase 4, lane B) -------------------------------------
@@ -812,7 +818,8 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason:
       'Who decided what about whose day. Per-org, and it is the audit trail every self-dealing ' +
       'control in this phase rests on — a decision readable or writable across an org boundary ' +
-      'would make attribution meaningless.',
+      'would make attribution meaningless. DELETE REVOKEd from the app role (0170, T-356), so an ' +
+      'attempt is a loud 42501; UPDATE stays because `markSuperseded` legitimately uses it.',
   },
 
   // ---- T-159: device identity (Phase 4, lane B) -----------------------------------------
@@ -855,7 +862,8 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'system_only',
     reason:
       'Holds captured v1 production documents including real PII. No tenant has any business reading ' +
-      'it; the system principal alone can, which is what the audit and the ETL run as.',
+      'it; the system principal alone can, which is what the audit and the ETL run as. UPDATE and ' +
+      'DELETE REVOKEd from the app role (0170, T-356), so an attempt is a loud 42501.',
   },
   etl_quarantine: { scope: 'system_only', reason: 'As etl_source_documents — ETL machinery.' },
   etl_reconciliation: { scope: 'system_only', reason: 'As etl_source_documents — ETL machinery.' },
