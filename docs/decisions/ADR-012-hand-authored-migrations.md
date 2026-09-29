@@ -146,6 +146,12 @@ step are named so nobody has to trust memory.
    `app_current_org()` — never raw `current_setting(...)` (DEF-077). The table is registered in
    `packages/db/src/rls/registry.ts` and classified in `packages/db/src/cutover/classification.ts`;
    the build stops you until both are done.
+4a. **Grant what the app mutates.** A new table is born SELECT + INSERT for `shareat_app` (0169,
+    DEF-489). If the app UPDATEs, DELETEs, or upserts (`onConflictDoUpdate`) it, add
+    `GRANT UPDATE[, DELETE] ON "<t>" TO "shareat_app"` in the same migration. An append-only table
+    gets neither. A forgotten grant is a 42501 in the integration suite IF that table's UPDATE/DELETE
+    path is covered by a test, which runs as a member of `shareat_app`. Never re-widen the default:
+    T-355's G1 and D3 go red.
 5. **Journal it on the grid.** Append `{ idx, version: "7", when, tag, breakpoints: true }` with
    `when = previous.when + 86_400_000 × (idx − previous.idx)`. Never the wall clock, never a round
    future value off the grid — `migration-journal.test.ts` refuses both, and the migrator silently

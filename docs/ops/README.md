@@ -225,10 +225,35 @@ triggers"). Three things to know before touching this database directly:
   loading rows into a database that has none yet (no risk of overwriting real history because there
   is none to overwrite). Restore this way **only into an empty database.** Restoring data-only into
   a database that already holds live rows disables the guards for the whole operation.
-- **Never run `SET session_replication_role = replica` against a live database.** It is exactly the
-  bypass DEF-487 closed for the 18 history guards, and it silently reopens it for anything still
-  running in that session. There is no legitimate reason to set it here — this codebase runs no
-  logical-replication subscriber and no bulk loader that needs it (grepped, whole tree: zero hits).
+- **Never run `SET session_replication_role = replica` against a live database.** The 18 history
+  guards keep firing under it (that is what 0168 fixed), but the other 39 triggers — every
+  origin-mode derivation and bookkeeping trigger, e.g. the store money-account seeding — silently
+  stop for everything that session does, so rows it writes skip their derived side effects. There
+  is no legitimate reason to set it here: no application or ops path does (this codebase runs no
+  logical-replication subscriber and no bulk loader); the only hit in the tree is the T-354 test
+  that proves the 18 guards fire under it.
+
+## Default privileges (T-355)
+
+DEF-489: migration 0169 narrows the standing default (0011) so a new table is born SELECT + INSERT
+only for `shareat_app` — UPDATE/DELETE are granted per table, in the migration that needs them
+(ADR-012 §5 step 4a). Three things to know:
+
+- **The migrator must be the role that ran 0011** (`doadmin` in production — `docs/ops/README.md:43`
+  above). `ALTER DEFAULT PRIVILEGES` with no `FOR ROLE` changes only `current_user`'s own entry; run
+  as any other role, 0169's REVOKE is a silent no-op on a default nobody uses.
+- **If 0169's post-assertion fires on deploy, nothing was applied** — the migration rolled itself
+  back before `deploy.yml`'s symlink swap. Read, as the admin role, connected to the SAME database
+  `SYSTEM_DATABASE_URL` names in `/srv/shareat-shared/.env.local` (`pg_default_acl` is a
+  **per-database** catalog — the managed Postgres cluster also holds `defaultdb` and others, and a
+  read against the wrong one silently shows nothing wrong):
+  `select defaclrole::regrole, defaclobjtype, defaclacl from pg_default_acl;` and bring the output to
+  Ian. Before merging this task, Ian/ops runs this same read-only query, against that same database,
+  as `doadmin` — S2's pre-check, so a stray grantor's row is found ahead of the first deploy, not by
+  it.
+- **Never add UPDATE/DELETE back to the default.** A table that needs them gets an explicit
+  `GRANT UPDATE[, DELETE] ON "<t>" TO "shareat_app"` in its own migration. Re-widening the default
+  reds T-355's G1 (static) and D3 (live) guards.
 
 ## ✅ Status as of 2026-09-06 (evening) — the deploy pipeline WORKS, four timers are ARMED, and production held ZERO organizations ON THAT DATE
 

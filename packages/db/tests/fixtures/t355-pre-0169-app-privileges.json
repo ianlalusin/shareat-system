@@ -1,0 +1,816 @@
+{
+  "accounts": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "ap_payment_allocations": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "ap_payments": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "ar_charges": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "ar_collection_allocations": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "ar_collections": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "ar_write_offs": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "asset_category_lives": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "asset_policy": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "attendance_adjustments": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "attendance_credentials": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "attendance_days": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "attendance_punches": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "audit_log": [
+    "INSERT",
+    "SELECT"
+  ],
+  "cash_requests": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "channel_settlements": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "clock_terminals": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "commissary_item_map": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "commissary_item_offerings": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "commissary_links": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "count_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "count_session_locations": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "count_sessions": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "customer_return_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "customer_returns": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "customers": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "cutover_steps": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "deliveries": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "delivery_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "departments": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "employment_positions": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "employments": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "etl_quarantine": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "etl_reconciliation": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "etl_runs": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "etl_source_documents": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "expense_budgets": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "expense_categories": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "expense_payments": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "expenses": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "finding_acknowledgements": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "finding_occurrences": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "finding_views": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "fiscal_periods": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "fixed_assets": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "inbox_quarantine": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "item_pricing": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "item_requests": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "items": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "journal_entries": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "journal_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "liabilities": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "loans": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "location_types": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "mirror_outbox": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "missed_month_adjustments": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "money_accounts": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "money_transfers": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "opening_counts": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "order_wastage_allocations": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "order_wastages": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "organizations": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "owner_drawing_closes": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "owners": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "pay_rates": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "pay_runs": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "payslips": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "period_overrides": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "person_credentials": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "person_grants": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "person_identities": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "person_roles": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "person_store_scope": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "persons": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "pin_attempt_throttle": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "pos_item_maps": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "pos_map_requests": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "pos_usage_pull_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "pos_usage_pulls": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "position_capability_defaults": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "positions": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "prepaid_items": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "prerequisite_refusals": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "price_list_items": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "price_lists": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "production_recipe_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "production_recipes": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "production_record_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "production_records": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "recurring_expense_drafts": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "recurring_expenses": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "remittance_allocations": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "remittance_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "remittance_variances": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "remittances": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "sales_channels": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "sales_day_channels": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "sales_day_tenders": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "sales_days": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "scheduler_runs": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "separations": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "sessions": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "statutory_discount_records": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "stock_layer_consumptions": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "stock_layers": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "stock_locations": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "stock_movements": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "stock_reservations": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "stock_transfer_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "stock_transfers": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "stock_usage_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "stock_usage_records": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "store_attendance_config": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "store_item_sellability": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "store_item_thresholds": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "stored_files": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "stores": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "supplier_invoice_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "supplier_invoices": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "supplier_items": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "supplier_return_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "supplier_returns": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "suppliers": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "thirteenth_month_payouts": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "thirteenth_month_runs": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "till_count_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "till_custody_shifts": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "trade_discrepancies": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "trade_order_lines": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "trade_order_messages": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "trade_orders": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "v_account_balance": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "v_active_employments": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "v_balance_sheet": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "v_income_statement": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ],
+  "v_trial_balance": [
+    "DELETE",
+    "INSERT",
+    "SELECT",
+    "UPDATE"
+  ]
+}

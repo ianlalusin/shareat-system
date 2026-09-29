@@ -16,8 +16,9 @@
  * ⭐ ROLES ARE CLUSTER-WIDE; TABLE GRANTS ARE PER-DATABASE. This script does the cluster
  * half only: it creates the two roles once per Postgres instance and grants the membership
  * that ties them together. The per-database half — USAGE on the schema, DML on every
- * table, sequence usage, and `ALTER DEFAULT PRIVILEGES` so future tables inherit the same
- * grants — already exists in `packages/db/migrations/0011_row_level_security.sql:66-72` and
+ * table, sequence usage, and `ALTER DEFAULT PRIVILEGES` so future tables inherit SELECT +
+ * INSERT only (0169 / DEF-489 narrowed this; UPDATE/DELETE are granted per table from then
+ * on) — already exists in `packages/db/migrations/0011_row_level_security.sql:66-72` and
  * MUST NOT be duplicated here: `shareat_app` membership carries into every lane database
  * automatically once that lane's own migrations have applied migration 0011.
  *
