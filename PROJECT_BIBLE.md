@@ -65,35 +65,35 @@
 - `1203–1237` 10. Phase plan
 - `1238–1254` 11. Migration & ETL rules
 - `1255–1319` 12. Inherited landmines — do not repeat these
-- `1320–1575` 13. Decision log
-- `1576–1595` 14. Amendment protocol
-- `1596–1600` 15. Engineering standards — the industry practices this project follows
-  - `1601–1606` 15.1 Build order: walking skeleton first
-  - `1607–1618` 15.2 Golden-master testing — the most important practice here
-  - `1619–1627` 15.3 Strangler Fig, not big-bang cutover
-  - `1628–1632` 15.4 No dual-write
-  - `1633–1641` 15.5 Expand/contract migrations
-  - `1642–1650` 15.6 Observability from day zero, not later
-  - `1651–1655` 15.7 CI gates
-  - `1656–1660` 15.8 Backups and a tested restore
-  - `1661–1665` 15.9 Twelve-Factor config
-  - `1666–1673` 15.10 Append-only ledgers — but not event sourcing
-  - `1674–1678` 15.11 Defence in depth
-  - `1679–1707` 15.12 Skills are lenses, not assurance
-  - `1708–1714` 15.13 Reconciliation is a permanent feature
-- `1715–1719` 16. The accounting spine
-  - `1720–1751` 16.0 What we are actually fixing — the diagnosis
-  - `1752–1795` 16.1 The ten invariants — non-negotiable
-  - `1796–1810` 16.2 The oracle: how "correct" is tested
-  - `1811–1832` 16.3 The model — header + lines, not legs
-  - `1833–1852` 16.4 Deliberately simpler than ERPNext
-  - `1853–1919` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1920–1944` 16.6 What v1 already gets right — preserve the intent
-  - `1945–1966` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1967–1981` 16.8 What v1's accounting already gets right
-  - `1982–2025` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2026–2076` 16.10 Posting patterns — one canonical pattern per business event
-  - `2077–2108` 16.11 Inventory's accounting integration
+- `1320–1576` 13. Decision log
+- `1577–1596` 14. Amendment protocol
+- `1597–1601` 15. Engineering standards — the industry practices this project follows
+  - `1602–1607` 15.1 Build order: walking skeleton first
+  - `1608–1619` 15.2 Golden-master testing — the most important practice here
+  - `1620–1628` 15.3 Strangler Fig, not big-bang cutover
+  - `1629–1633` 15.4 No dual-write
+  - `1634–1642` 15.5 Expand/contract migrations
+  - `1643–1651` 15.6 Observability from day zero, not later
+  - `1652–1656` 15.7 CI gates
+  - `1657–1661` 15.8 Backups and a tested restore
+  - `1662–1666` 15.9 Twelve-Factor config
+  - `1667–1674` 15.10 Append-only ledgers — but not event sourcing
+  - `1675–1679` 15.11 Defence in depth
+  - `1680–1708` 15.12 Skills are lenses, not assurance
+  - `1709–1715` 15.13 Reconciliation is a permanent feature
+- `1716–1720` 16. The accounting spine
+  - `1721–1752` 16.0 What we are actually fixing — the diagnosis
+  - `1753–1796` 16.1 The ten invariants — non-negotiable
+  - `1797–1811` 16.2 The oracle: how "correct" is tested
+  - `1812–1833` 16.3 The model — header + lines, not legs
+  - `1834–1853` 16.4 Deliberately simpler than ERPNext
+  - `1854–1920` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1921–1945` 16.6 What v1 already gets right — preserve the intent
+  - `1946–1967` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1968–1982` 16.8 What v1's accounting already gets right
+  - `1983–2026` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2027–2077` 16.10 Posting patterns — one canonical pattern per business event
+  - `2078–2109` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1571,6 +1571,7 @@ just a patch.**
 | 246 | 2026-09-29 | ⭐ **THE REMAINING SAME-ORG FOREIGN KEYS (≈360 org-to-org + 79 from tables without `org_id`, incl. T-357's five derived-scope money FKs) ARE FIXED BEFORE A SECOND ORGANISATION IS ONBOARDED; PERSONS AND STORES FIRST.** Ian, 2026-09-29: *"yes T-357 Q1."* Not a launch blocker: production holds one organisation, so no cross-tenant pointer can leak until a second exists. | The T-357 census (DEF-490) found the same single-column shape across the schema; T-357 fixes only the 11 money-account references. | Yes — the trigger is an onboarding gate, not a date. |
 | 247 | 2026-09-29 | ⭐ **AN EXPENSE RECORDED AGAINST A SUPPLIER INVOICE DEFAULTS TO CREDIT FOR A SUPPLIER WITH TERMS (ONE LINE, THE REMAINING AMOUNT PRE-FILLED); CASH FOR A CASH-ON-DELIVERY SUPPLIER.** Ian, 2026-09-29: *"yes keep credit default for suppliers with terms."* T-358 passes `initialLines=[{ method: 'credit', amount: <remaining> }]` to `<MoneyLines>` on `/ap/invoices/[id]` when `creditTermsDays` is set. | v1 defaults to credit on a supplier delivery (`LinkExpenseDialog.tsx:89`, `DeliveryExpenseSplitDialog.tsx:112`) and the pre-T-358 v2 form pre-selected it; `<MoneyLines>`' own default is Cash, and a slip there posts a real drawer cash-out instead of AP. | Yes. |
 | 248 | 2026-09-29 | ⭐ **THE AI BUSINESS BRAIN STARTS RULES-FIRST: PHASE 0 (≈8 SQL expense checks in the existing findings engine, no AI) IS APPROVED AND BUILT AFTER LAUNCH; A "LOOKS PERSONAL" FLAG IS SEEN BY OWNER AND ADMIN ONLY (T-359).** Ian, 2026-09-29: *"approve Phase 0, after launch; owner and admin only"*. Answers assessment §9 Q1, Q2, Q4 (`docs/discovery/ai-business-brain-assessment.md`). **Still open (Ian):** Q3 personal-spend classifier as the first AI feature in place of ADR-014's daily-briefing pilot; Q5 receipt photos to the AI provider; Q6 who labels ≈150 v1 expenses for the precision test. Phase 0 is not a launch blocker; nothing AI is built before Q3 is answered and the §6 base-rate count is taken | Ian | T-359 |
+| 249 | 2026-09-29 | ⭐ **SUPPLIER CREDIT TERMS GET A WRITER BEFORE THE COD-CREDIT RULE MOVES INTO THE DOMAIN (DEF-495 option (a)).** Ian, 2026-09-29: *"(a) — build supplier terms editing first"*. Today `suppliers.credit_terms_days` has no writer, so every supplier reads as cash-on-delivery and row 247's credit default never fires; landing T-361 (DEF-492) first would make the recurring-expense job's credit drafts refuse daily. Order: **T-362 (supplier terms editing) → T-361** | Ian | DEF-495 · T-362 · T-361 |
 
 
 ## 14. Amendment protocol
