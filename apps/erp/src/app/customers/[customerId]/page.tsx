@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
 import { ACTION_LINK } from '@/components/action-link';
 import { requireSession } from '../../../lib/session';
 import {
@@ -23,6 +24,7 @@ import {
   peso,
   storesWithOpenItems,
   today,
+  withOrgPrincipal,
 } from '../lib';
 import { Page } from '@/components/shell/Page';
 
@@ -45,9 +47,19 @@ export const dynamic = 'force-dynamic';
  * and its *"recompute balance"*, *"repair collection"* and *"mark reconciled"* buttons all exist
  * only to patch that. Nothing to recompute here, so none of the three is ported.
  *
- * ⛔ **The page gates nothing itself.** Every domain function authorizes by contract; this file
- * renders controls and surfaces refusals. DEF-189's lesson binds the reads: never call a gated
- * domain function to satisfy a page read — that returns HTTP 500 where a refusal is wanted.
+ * ⛔ **The page gates nothing itself, with one exception.** Every domain function authorizes by
+ * contract; this file renders controls and surfaces refusals. DEF-189's lesson binds the reads:
+ * never call a gated domain function to satisfy a page read — that returns HTTP 500 where a
+ * refusal is wanted.
+ *
+ * ⭐ **T-367 S1 audit finding 4 (Ian's ruling) — the write-off/void section IS gated per store.**
+ * `writeOffCharge`, `voidCharge` and `voidCollection` all give a non-holder the SAME uniform
+ * "does not exist" sentence as a forged id (the DEF-497 shape, `ar/index.ts`'s
+ * `CHARGE_OUT_OF_REACH` / `CHARGE_VOID_OUT_OF_REACH` / `COLLECTION_VOID_OUT_OF_REACH`, DEF-546), so
+ * showing either form to someone who cannot use it would tell them a real charge or collection does
+ * not exist. `heldCapabilities` is the cheap org-wide pre-check; a per-store `authorize()` probe
+ * narrows it down per store — the same idiom `channel-settlements/page.tsx` uses, not a new auth
+ * helper. `authorize()` in the domain stays the real gate; this only decides what renders.
  */
 interface SearchParams {
   error?: string;
@@ -97,6 +109,32 @@ export default async function CustomerDetailPage({
 
   const now = today();
   const storeName = (id: string) => storeOptions.find((s) => s.storeId === id)?.storeName ?? '—';
+
+  // T-367 S1 audit finding 4 — see the file header. `write_off_receivable` and `approve_buyer`
+  // (`voidCharge`'s own capability) are checked per store, over only the stores a POSTED charge
+  // is actually at.
+  const postedChargeStoreIds = [...new Set(charges.filter((c) => c.status === 'posted').map((c) => c.storeId))];
+  const [canWriteOffAtStore, canVoidAtStore] = await withOrgPrincipal(orgId, async (tx) => {
+    const held = await heldCapabilities(tx, actor);
+    const probe = async (capability: 'write_off_receivable' | 'approve_buyer') => {
+      if (!held.has(capability)) return new Set<string>();
+      const ok = new Set<string>();
+      for (const sid of postedChargeStoreIds) {
+        try {
+          await authorize(tx, actor, capability, { storeId: sid });
+          ok.add(sid);
+        } catch (err) {
+          if (err instanceof AuthorizationError) continue;
+          throw err;
+        }
+      }
+      return ok;
+    };
+    return Promise.all([probe('write_off_receivable'), probe('approve_buyer')]);
+  });
+  const canWriteOffAt = (id: string) => canWriteOffAtStore.has(id);
+  const canVoidAt = (id: string) => canVoidAtStore.has(id);
+  const canActOnCharge = (c: { storeId: string }) => canWriteOffAt(c.storeId) || canVoidAt(c.storeId);
 
   return (
     <Page density="table">
@@ -284,7 +322,7 @@ export default async function CustomerDetailPage({
       </section>
 
       {/* --------------------------------------------------------- Write off / void a charge */}
-      {charges.some((c) => c.status === 'posted') && (
+      {charges.some((c) => c.status === 'posted' && canActOnCharge(c)) && (
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Write off or void a charge</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -294,7 +332,7 @@ export default async function CustomerDetailPage({
             different act: it says the charge should never have existed, and reverses its entry.
           </p>
           {charges
-            .filter((c) => c.status === 'posted')
+            .filter((c) => c.status === 'posted' && canActOnCharge(c))
             .map((c) => (
               <div
                 key={c.chargeId}
@@ -305,7 +343,7 @@ export default async function CustomerDetailPage({
                   {peso(c.totalAmount)}
                   <span className="ml-2 text-xs font-normal text-neutral-500">{storeName(c.storeId)}</span>
                 </p>
-                {Number(c.outstanding) > 0 && (
+                {Number(c.outstanding) > 0 && canWriteOffAt(c.storeId) && (
                   <form action={writeOffChargeAction} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="customerId" value={customerId} />
                     <input type="hidden" name="storeId" value={storeId} />
@@ -329,20 +367,22 @@ export default async function CustomerDetailPage({
                     </button>
                   </form>
                 )}
-                <form action={voidChargeAction} className="flex flex-wrap items-end gap-2">
-                  <input type="hidden" name="customerId" value={customerId} />
-                  <input type="hidden" name="storeId" value={storeId} />
-                  <input type="hidden" name="chargeId" value={c.chargeId} />
-                  <Field label="Void this charge — why?">
-                    <input name="reason" required className={`${INPUT} w-64`} />
-                  </Field>
-                  <button
-                    type="submit"
-                    className="rounded border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                  >
-                    Void charge
-                  </button>
-                </form>
+                {canVoidAt(c.storeId) && (
+                  <form action={voidChargeAction} className="flex flex-wrap items-end gap-2">
+                    <input type="hidden" name="customerId" value={customerId} />
+                    <input type="hidden" name="storeId" value={storeId} />
+                    <input type="hidden" name="chargeId" value={c.chargeId} />
+                    <Field label="Void this charge — why?">
+                      <input name="reason" required className={`${INPUT} w-64`} />
+                    </Field>
+                    <button
+                      type="submit"
+                      className="rounded border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                    >
+                      Void charge
+                    </button>
+                  </form>
+                )}
               </div>
             ))}
         </section>

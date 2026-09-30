@@ -1072,6 +1072,13 @@
       "when": 1800934307084,
       "tag": "0172_t366_def386_remittance_variance_posting",
       "breakpoints": true
+    },
+    {
+      "idx": 173,
+      "version": "7",
+      "when": 1801020707084,
+      "tag": "0173_t367_def201_write_off_once",
+      "breakpoints": true
     }
   ]
 }

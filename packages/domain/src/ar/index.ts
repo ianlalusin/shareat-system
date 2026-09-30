@@ -8,9 +8,9 @@
  * ⛔ **The platform fee is booked here, once.** v1 recognised it twice and it cost ₱198,148.29
  * across two stores. `POSTING-PATTERNS.md`'s `ar_collection` is the authority for these legs.
  */
-import { arRepo, customersRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { arRepo, customersRepo, journalRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
-import { money } from '@shareat/core/money';
+import { compare, money, ZERO } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -145,15 +145,38 @@ export async function recordCharge(
   return transaction(run);
 }
 
+/**
+ * DEF-546 (T-364 Q1 (a) shape, same as `writeOffCharge`'s `CHARGE_OUT_OF_REACH`) — the ONE sentence
+ * an unauthorised caller gets for a charge id, whether it exists and is out of reach or does not
+ * exist at all.
+ */
+const CHARGE_VOID_OUT_OF_REACH = 'That charge does not exist, or it is not at a store where you may void it.';
+
 export async function voidCharge(
   tx: Tx | null,
   actor: Actor,
   input: { chargeId: string; reason: string },
 ): Promise<{ entryId: string }> {
   const run = async (trx: Tx) => {
+    // DEF-546 — see `writeOffCharge`'s identical comment: the lookup stays first for the gate's
+    // store, but a missing charge and one the caller may not act on surface as ONE refusal.
     const charge = await arRepo.getChargeById(trx, actor.orgId, input.chargeId);
-    if (!charge) throw new Error(`voidCharge: charge ${input.chargeId} does not exist.`);
-    await authorize(trx, actor, 'approve_buyer', { storeId: charge.storeId });
+    if (!charge) {
+      const raw = `voidCharge: no charge ${input.chargeId} in org ${actor.orgId}`;
+      logger.warn({ chargeId: input.chargeId, actorOrgId: actor.orgId }, raw);
+      throw new AuthorizationError(raw, 'approve_buyer', CHARGE_VOID_OUT_OF_REACH);
+    }
+    try {
+      await authorize(trx, actor, 'approve_buyer', { storeId: charge.storeId });
+    } catch (err) {
+      if (err instanceof AuthorizationError) {
+        logger.warn({ chargeId: input.chargeId, err }, `voidCharge: ${err.message}`);
+        const uniform = new AuthorizationError(`voidCharge: ${err.message}`, 'approve_buyer', CHARGE_VOID_OUT_OF_REACH);
+        uniform.cause = err;
+        throw uniform;
+      }
+      throw err;
+    }
     if (charge.status !== 'posted') throw new Error(`voidCharge: charge is ${charge.status}, not posted.`);
     if (!charge.journalEntryId) throw new Error('voidCharge: posted charge carries no journal entry.');
     const reason = input.reason.trim();
@@ -449,15 +472,38 @@ export async function recordCollection(
 }
 
 /** Reversal, never deletion. The allocations stay so the charge correctly reopens. */
+/**
+ * DEF-546 (T-364 Q1 (a) shape, same as `writeOffCharge`'s `CHARGE_OUT_OF_REACH`) — the ONE sentence
+ * an unauthorised caller gets for a collection id, whether it exists and is out of reach or does
+ * not exist at all.
+ */
+const COLLECTION_VOID_OUT_OF_REACH = 'That collection does not exist, or it is not at a store where you may void it.';
+
 export async function voidCollection(
   tx: Tx | null,
   actor: Actor,
   input: { collectionId: string; reason: string },
 ): Promise<{ entryId: string }> {
   const run = async (trx: Tx) => {
+    // DEF-546 — see `writeOffCharge`'s identical comment: the lookup stays first for the gate's
+    // store, but a missing collection and one the caller may not act on surface as ONE refusal.
     const collection = await arRepo.getCollectionById(trx, actor.orgId, input.collectionId);
-    if (!collection) throw new Error(`voidCollection: collection ${input.collectionId} does not exist.`);
-    await authorize(trx, actor, 'record_ar_collection', { storeId: collection.storeId });
+    if (!collection) {
+      const raw = `voidCollection: no collection ${input.collectionId} in org ${actor.orgId}`;
+      logger.warn({ collectionId: input.collectionId, actorOrgId: actor.orgId }, raw);
+      throw new AuthorizationError(raw, 'record_ar_collection', COLLECTION_VOID_OUT_OF_REACH);
+    }
+    try {
+      await authorize(trx, actor, 'record_ar_collection', { storeId: collection.storeId });
+    } catch (err) {
+      if (err instanceof AuthorizationError) {
+        logger.warn({ collectionId: input.collectionId, err }, `voidCollection: ${err.message}`);
+        const uniform = new AuthorizationError(`voidCollection: ${err.message}`, 'record_ar_collection', COLLECTION_VOID_OUT_OF_REACH);
+        uniform.cause = err;
+        throw uniform;
+      }
+      throw err;
+    }
     if (collection.status !== 'posted') throw new Error(`voidCollection: it is ${collection.status}, not posted.`);
     if (!collection.journalEntryId) throw new Error('voidCollection: posted collection carries no journal entry.');
     const reason = input.reason.trim();
@@ -485,83 +531,157 @@ export async function voidCollection(
 // -------------------------------------------------------------------------------------
 
 /**
- * ⛔ **Admin only, and never by the charge's own author.**
+ * ⛔ **Admin or manager, store-scoped — `write_off_receivable` (CAPABILITY-MATRIX) — and never by
+ * the charge's own author.**
  *
- * v1 makes write-off admin-only — stricter than its manager-level void — and that part is ported.
  * What v1 has NO check for anywhere in AR is identity: nothing compares the actor to the person
  * who created the record. Writing off your own receivable is how a shortfall gets buried, so the
  * second-party control T-130 added to invoice verification applies here too.
+ *
+ * T-367 / DEF-201 / DEF-517 / DEF-520 (R1, R3, R8):
+ * - **R3** — the charge row is LOCKED (`lockChargesForAllocation`) right after `authorize`, before
+ *   anything reads what is owed, so two different write-offs on one charge (DEF-517) serialise with
+ *   each other and with `recordCollection` on the same charge, instead of both reading a
+ *   pre-write-off outstanding figure and together clearing more than is owed.
+ * - **R1** — the idempotency key is looked up AFTER the lock but BEFORE the outstanding cap: a
+ *   double-click (DEF-201) must resolve as a harmless retry even when the SAME amount would now
+ *   exceed what the first write-off already left outstanding — meeting the cap instead of the retry
+ *   would tell a double-click "only ₱X is outstanding" rather than "already recorded".
+ * - **R8** — the amount is parsed once, with `parseMoneyInput`, so a non-numeric amount (DEF-520,
+ *   `Number()` was NaN-blind) is refused in a plain sentence instead of reaching Postgres as a raw
+ *   23514/22P02.
  */
+/**
+ * T-367 S1 audit finding 4 — the ONE sentence an unauthorised caller gets for a charge id, whether
+ * the id exists and is out of reach or does not exist at all (the DEF-497 oracle shape; T-364 Q1
+ * (a): one uniform refusal).
+ */
+const CHARGE_OUT_OF_REACH = 'That charge does not exist, or it is not at a store where you may write off receivables.';
+
 export async function writeOffCharge(
   tx: Tx | null,
   actor: Actor,
   input: { chargeId: string; amount: string; reason: string },
-): Promise<{ writeOffId: string; entryId: string }> {
+): Promise<{ writeOffId: string; entryId: string; alreadyRecorded: boolean }> {
   const run = async (trx: Tx) => {
+    // T-367 S1 audit finding 4 — the lookup stays first because it supplies the gate's store, but a
+    // missing charge and one the caller may not act on both surface as ONE refusal (AuthorizationError,
+    // same userMessage), so the reply cannot be used to probe ids. The real diagnosis goes to the
+    // server log (never the screen) and rides on `cause`.
     const charge = await arRepo.getChargeById(trx, actor.orgId, input.chargeId);
-    if (!charge) throw new Error(`writeOffCharge: charge ${input.chargeId} does not exist.`);
-    await authorize(trx, actor, 'write_off_receivable', { storeId: charge.storeId });
+    if (!charge) {
+      const raw = `writeOffCharge: no charge ${input.chargeId} in org ${actor.orgId}`;
+      logger.warn({ chargeId: input.chargeId, actorOrgId: actor.orgId }, raw);
+      throw new AuthorizationError(raw, 'write_off_receivable', CHARGE_OUT_OF_REACH);
+    }
+    try {
+      await authorize(trx, actor, 'write_off_receivable', { storeId: charge.storeId });
+    } catch (err) {
+      if (err instanceof AuthorizationError) {
+        logger.warn({ chargeId: input.chargeId, err }, `writeOffCharge: ${err.message}`);
+        const uniform = new AuthorizationError(`writeOffCharge: ${err.message}`, 'write_off_receivable', CHARGE_OUT_OF_REACH);
+        uniform.cause = err;
+        throw uniform;
+      }
+      throw err;
+    }
 
+    // T-367 S1 audit finding 3 — the self-author refusal sits BEFORE the lock, so a refused caller
+    // never waits on it ("the charge's own author (X) is refused immediately (without waiting)
+    // while A holds the lock", t367-s1-write-off-once.test.ts, pins this).
     if (charge.createdBy === actor.personId) {
       throw new Error(
         'writeOffCharge: you recorded this charge, so you cannot also write it off. Declaring a ' +
           'debt uncollectible needs a second pair of eyes — ask another admin.',
       );
     }
-    if (charge.status !== 'posted') throw new Error(`writeOffCharge: charge is ${charge.status}, not posted.`);
+
+    // ⛔ T-367 / DEF-517 (R3) — lock BEFORE re-reading what is owed, then re-read: a write-off that
+    // was waiting on this lock must see whatever the lock-holder just committed, not a stale row.
+    await arRepo.lockChargesForAllocation(trx, actor.orgId, [charge.id]);
+    const locked = await arRepo.getChargeById(trx, actor.orgId, input.chargeId);
+    // ⛔ Unreachable in practice (a charge already confirmed to exist, moments earlier, in this SAME
+    // transaction, is never deleted) — `refuse`, not a new raw throw (T-343 ratchet, packages/domain
+    // stays at its ceiling).
+    if (!locked) {
+      throw refuse(
+        `writeOffCharge: charge ${input.chargeId} vanished between its first read and the lock.`,
+        'Something went wrong loading this charge. Try again, or contact support if it keeps happening.',
+      );
+    }
+
+    if (locked.status !== 'posted') throw new Error(`writeOffCharge: charge is ${locked.status}, not posted.`);
 
     const reason = input.reason.trim();
     if (!reason) throw new Error('writeOffCharge: say why this is uncollectible.');
-    const amount = Number(input.amount);
-    if (amount <= 0) throw new Error('writeOffCharge: a write-off has to be greater than zero.');
+    const amount = parseMoneyInput(input.amount, 'writeOffCharge: the amount', 'The write-off amount');
+    if (compare(amount, ZERO) <= 0) throw new Error('writeOffCharge: a write-off has to be greater than zero.');
 
-    const open = await arRepo.openItems(trx, actor.orgId, charge.customerId, charge.storeId);
-    const item = open.find((o) => o.chargeId === charge.id);
+    // ⛔ T-367 / DEF-201 (R1) — the retry check comes BEFORE the outstanding cap: a double-click of
+    // an amount that would now exceed what is left outstanding must still resolve as a retry, not
+    // meet the cap sentence (W1b).
+    const idempotencyKey = `ar_write_off:${locked.id}:${amount}:${actor.personId}`;
+    const existing = await journalRepo.findEntryByIdempotencyKey(trx, actor.orgId, idempotencyKey);
+    if (existing) {
+      const writeOff = await arRepo.getWriteOffByEntryId(trx, actor.orgId, existing.id);
+      if (writeOff) return { writeOffId: writeOff.id, entryId: existing.id, alreadyRecorded: true };
+    }
+
+    const open = await arRepo.openItems(trx, actor.orgId, locked.customerId, locked.storeId);
+    const item = open.find((o) => o.chargeId === locked.id);
     if (!item) throw new Error('writeOffCharge: that charge has nothing left outstanding.');
-    if (amount > Number(item.outstanding) + 0.005) {
+    if (compare(amount, money(item.outstanding)) > 0) {
       throw new Error(
         `writeOffCharge: only ₱${item.outstanding} is outstanding — ₱${input.amount} is more than that.`,
       );
     }
 
-    const customer = await customersRepo.getById(trx, actor.orgId, charge.customerId);
+    const customer = await customersRepo.getById(trx, actor.orgId, locked.customerId);
     const result = await postEntry(trx, {
       orgId: actor.orgId,
-      entryDate: charge.chargeDate,
+      entryDate: locked.chargeDate,
       sourceType: 'ar_write_off',
-      sourceId: charge.id,
+      sourceId: locked.id,
       // ⚠️ Partial write-offs repeat on one charge, so the key carries the amount and the actor —
-      // two identical keys would silently collapse into one posting.
-      idempotencyKey: `ar_write_off:${charge.id}:${amount.toFixed(2)}:${actor.personId}`,
-      memo: `Bad debt — ${customer?.name ?? charge.customerId}`,
+      // two identical keys would silently collapse into one posting. `amount` is already rendered
+      // to 2dp by `parseMoneyInput` (a `Money` string), byte-equal to the lookup key above.
+      idempotencyKey,
+      memo: `Bad debt — ${customer?.name ?? locked.customerId}`,
       postedBy: actor.personId,
       lines: [
         {
           accountCode: arRepo.BAD_DEBT_CODE,
-          storeId: charge.storeId,
-          debit: amount.toFixed(2),
+          storeId: locked.storeId,
+          debit: amount,
           lineMemo: reason,
         },
         {
           accountCode: AR_CONTROL_CODE,
-          storeId: charge.storeId,
-          credit: amount.toFixed(2),
+          storeId: locked.storeId,
+          credit: amount,
           partyType: 'customer' as const,
-          partyId: charge.customerId,
+          partyId: locked.customerId,
           lineMemo: reason,
         },
       ],
     });
 
+    // ⛔ Bible §15.11 — `postEntry`'s OWN idempotency check is the second layer beyond the lookup
+    // above: if it still found the entry first (an edge this lock should make unreachable), read
+    // the write-off row back rather than inserting a second one.
+    if (!result.created) {
+      const writeOff = await arRepo.getWriteOffByEntryId(trx, actor.orgId, result.entryId);
+      if (writeOff) return { writeOffId: writeOff.id, entryId: result.entryId, alreadyRecorded: true };
+    }
     const { id: writeOffId } = await arRepo.insertWriteOff(trx, {
       orgId: actor.orgId,
-      arChargeId: charge.id,
-      amount: amount.toFixed(2),
+      arChargeId: locked.id,
+      amount,
       reason,
       journalEntryId: result.entryId,
       writtenOffBy: actor.personId,
     });
-    return { writeOffId, entryId: result.entryId };
+    return { writeOffId, entryId: result.entryId, alreadyRecorded: false };
   };
   if (tx) return run(tx);
   return transaction(run);

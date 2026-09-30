@@ -1,6 +1,6 @@
 # T-367: AP/AR money — DEF-201, DEF-396, DEF-420, DEF-499, DEF-500, DEF-395, DEF-508, DEF-054
 
-**Status:** **S1 IN PROGRESS — reds + step 1 parked on branch `wip/2026-09-30-reds`; step 2 = migration 0173 (after 0172)** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
+**Status:** **S1 DONE 2026-10-01 (DEF-201, 517, 520 + DEF-546; migration 0173 — ⛔ prod duplicate count with Ian before the push, docs/ops)** — ⭐ allocation 2026-10-01 (orchestrator): T-367 S1 = 0173, T-368 S0 = 0174, T-372 S2 = 0175; supersedes the order on line 11 — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
 1–7 and the minors applied. Spec by the Opus planner, 2026-09-30. Batch B of the money-defect
 push (Ian, 2026-09-30: *"close all open money defects in v2"*), `docs/plans/money-defects-2026-09-30.md`.
 **Model:** Sonnet for each slice, tester first and then builder. One lane runs the slices in order.
@@ -290,6 +290,29 @@ lock"*. Fixture: a ₱1,000.00 posted charge dated 2027-02-03, recorded by admin
 again (browser back + resubmit). Screenshot the "already recorded" notice and the write-off list showing ONE row.
 
 ---
+
+### S1 audit of step 1 (`a8554d9`, auditor, read-only, 2026-10-01) — to apply when S1 resumes
+Verdict: DEF-201 implemented correctly and race-safely pending 0173 (key byte-equal to main's; `for update` lock
+org-filtered and ordered; R1 ordering right; authorize first; centavos throughout). Findings, all kept:
+1. **0173 deploy blocker** — the unique index on `ar_write_offs(journal_entry_id)` aborts (23505) if prod already has
+   duplicates. Run the duplicate count in the production prechecks and show Ian each row (his Q6) **before** 0173 ships.
+2. TESTER — `alreadyRecorded: false` (`ar/index.ts:609`) and the ERP message (`customers/actions.ts:295`) are asserted
+   nowhere; a mutant returning `true` passes every red. Add the positive leg.
+3. BUILDER — the self-author refusal (`ar/index.ts:532`) sits after the lock (`:520`); move it before, so a refused
+   caller never waits (W4 pins this).
+4. BUILDER — `charge <id> does not exist` (`ar/index.ts:514-515`) fires before `authorize` — the DEF-497 oracle shape;
+   fold into the uniform refusal as R7 does on the AP side.
+5. TESTER — test at `t367-s1-write-off-once.test.ts:360-367` claims parseMoneyInput's sentence but asserts no text.
+6. TESTER — the "~5000ms" rationale at `:354` is wrong (a lock-waiting mutant hangs to the vitest timeout); fix the comment.
+7. TESTER — add a red for retrying a FULL write-off (the cleanest proof of R1's ordering).
+
+### S1 audit of the finished slice (auditor, 2026-10-01) — triage
+Sound: no TOCTOU (author read unlocked is safe — `created_by` has no updater); the AuthorizationError re-wrap breaks no
+caller; 0173 is ADR-012 §5 clean (`when` grid exact, schema mirrored). (1) the lock-held author refusal and (2) the AR
+E15-twin (nonexistent vs out-of-scope charge → same CHARGE_OUT_OF_REACH, no uuid) were untested → TESTER. (3) P1 lives
+only in a SQL comment → **orchestrator: now a push gate in `docs/ops/README.md`** (prod count, with Ian, before the push
+carrying 0173). (4) the write-off section shows to non-holders, whom the uniform sentence then misleads → **ruled:
+gate the section on the held capability** (standard: don't render a control the caller cannot use) → BUILDER.
 
 ## S2: DEF-396 + DEF-508 (+DEF-518, DEF-519) — the supplier-invoice gate
 **BUILDER** (source):

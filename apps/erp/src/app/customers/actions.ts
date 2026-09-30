@@ -289,7 +289,11 @@ export async function writeOffChargeAction(formData: FormData): Promise<void> {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       writeOffCharge(tx, actor, { chargeId: str(formData, 'chargeId'), amount, reason }),
     );
-    message = `₱${amount} written off to bad debt (6860). Entry ${result.entryId.slice(0, 8)}.`;
+    // ⭐ T-367 / DEF-201 — a double-click (or a resubmit) resolves harmlessly; say so rather than
+    // implying a second write-off just posted.
+    message = result.alreadyRecorded
+      ? 'This write-off was already recorded — nothing new was posted.'
+      : `₱${amount} written off to bad debt (6860). Entry ${result.entryId.slice(0, 8)}.`;
   } catch (err) {
     // ⛔ The domain refuses the charge's own author, and that refusal is SURFACED rather than
     // pre-empted. Hiding the button for that person would teach that write-off is unavailable,

@@ -447,6 +447,21 @@ export async function insertWriteOff(
   return row!;
 }
 
+/** T-367 / DEF-201 (R1) — a write-off retry resolves the journal entry its idempotency key already
+ *  named back to the `ar_write_offs` row it posted, instead of inserting a second one. */
+export async function getWriteOffByEntryId(
+  tx: Tx,
+  orgId: string,
+  journalEntryId: string,
+): Promise<{ id: string } | undefined> {
+  const [row] = await tx
+    .select({ id: arWriteOffs.id })
+    .from(arWriteOffs)
+    .where(and(eq(arWriteOffs.orgId, orgId), eq(arWriteOffs.journalEntryId, journalEntryId)))
+    .limit(1);
+  return row;
+}
+
 // -------------------------------------------------------------------------------------
 // registers — T-226
 // -------------------------------------------------------------------------------------

@@ -159,5 +159,11 @@ export const arWriteOffs = pgTable(
     writtenOffBy: uuid('written_off_by').notNull().references(() => persons.id, { onDelete: 'restrict' }),
     writtenOffAt: timestamp('written_off_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('ar_write_offs_charge_idx').on(t.arChargeId), check('ar_write_offs_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`)],
+  (t) => [
+    index('ar_write_offs_charge_idx').on(t.arChargeId),
+    check('ar_write_offs_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    // T-367 S1 / DEF-201 (R2): one write-off decision makes exactly one row — the DB backstop
+    // beside `writeOffCharge`'s own idempotency-key retry (bible §15.11). Migration 0173.
+    uniqueIndex('ar_write_offs_journal_entry_unique').on(t.journalEntryId),
+  ],
 );
