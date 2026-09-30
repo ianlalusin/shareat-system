@@ -324,7 +324,7 @@ Smoketest on **http://localhost:9008**, signed in as admin:
   (`:110-111`, `:113`); log the sibling-oracle row.
 
 ## Questions for Ian
-**Q1 — default (a) ADOPTED (orchestrator, 2026-09-30), pending Ian.** Build R6 as written. Switching to (b) later is a
+**Q1 — RULED (a) by Ian, 2026-09-30 — one uniform sentence.** Build R6 as written. Switching to (b) later is a
 change to one function (`recordAdjustment`'s gate block) plus A1-A3's expected sentences; nothing else depends on it.
  When someone who may not manage attendance at a store posts an attendance
 decision for an employment there (only possible by hand or from a stale page), what do they see?
