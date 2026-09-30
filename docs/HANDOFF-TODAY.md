@@ -1,81 +1,76 @@
-# Handoff — 2026-09-30 (early morning)
+# Handoff — 2026-10-01 (after the 30 Sep money-defect day)
 
 > ⚠️ NOT LAUNCHED. A green push to `main` runs CI, and a green CI **deploys** (`.github/workflows/deploy.yml`).
-> This wrap-up pushes `8229a71..HEAD` — **no migrations** in it (0169–0171 went out with the previous push; the
-> `pg_default_acl` check in `docs/ops/README.md` still applies to whichever deploy first carries 0169).
+> This push carries **migration 0172** (T-366 S2). The `pg_default_acl` check for 0169 (`docs/ops/README.md`) is
+> still unrun on prod — Ian asked the orchestrator to run it with him.
+>
+> ⚠️ Integration was **not clean in the full run**: 13 failures ("column `source` does not exist") in two files that
+> pass solo 77/77 — DEF-545. Item 2 below.
 
 ## Where things stand
-Queue cleared: T-348 S2, T-359 (assessed + decided), T-360, T-362, T-361 all shipped and audited with executed
-mutants. DEF-474, 488, 492, 495 FIXED. Nothing half-built in the tree. Next: T-348 S3 (DEF-440).
+Money-defect push (Ian: "close all open money defects in v2"): census 34 → **29 open**; 12 closed on 30 Sep
+(DEF-108, 374, 494, 496, 497, 498, 506, 516, 529, 534, 535, 541). Specs T-364..T-372 all APPROVED after independent
+Opus review (`docs/plans/money-defects-2026-09-30.md` is the map). T-364, T-365 done; T-366 S1/S1b/S1c done and **S2
+committed (`94f38e2`, DEF-386) pending its live-charge screen test**; T-370 S1+S2 done. Red tests for T-367 S1,
+T-368 S0/S1, T-372 S1 and T-367 S1 step-1 code are parked on branch **`wip/2026-09-30-reds`** (pushed), off `main` so
+typecheck stays green.
 
-## Gates at `4e8f770` (fresh DB `shareat_test_gate_0930a`, FULL suite)
-typecheck **0** · unit **3551/3551** (1 skipped) · integration **3952/3952** (207 files, 46 min) · build **0**
+## Gates at `3f326c8` (main tree, `shareat_test`)
+typecheck **0** · unit **3623/3627** (3 memory timeouts, pass solo 48/48; 1 skipped) · docs unit re-run after the
+last commit **1162/1162** · integration **4054/4068** (13 fail in the full run only — DEF-545; 1 todo) · build
+**skipped — dev server live on 9008**.
 
-## What happened this session (by theme; Ian's rulings and where recorded)
-- **Shipped** (red first, audited pre-commit, smoketested on 9008): `3372e5e` T-348 S2 / DEF-474 (102 descriptions on
-  `PageDescription`, resolver taught the component) · `1aaa0dd` T-360 / DEF-488 (shift day parsed after
-  `authorize()`, calendar round-trip) · `6ff230d` T-362 / DEF-495 (supplier credit terms get a writer, audited) ·
-  `4e8f770` T-361 / DEF-492 (COD-credit rule in the domain; recurring job obeys it).
-- **Ian's rulings** (bible §13): **248** AI brain Phase 0 approved, after launch; "looks personal" flags seen by owner +
-  admin · **249** DEF-495 option (a): supplier terms editing before T-361 · **250** terms gated by `approve_supplier`
-  (managers + admins) · **251** Q3 yes after the base-rate count; Q5 no receipt images to the AI (Phase 1b dropped);
-  Q6 no v1 labelling — a manual "doubtful expense" flag (**T-363, after launch**) builds the labelled set.
-- **Assessment:** `docs/discovery/ai-business-brain-assessment.md` (T-359).
-- **New defects:** DEF-493 (app-boundaries can't see `@/`), 494 (core date parser accepts 2026-02-30), 496 (expenses
-  form validates before `authorize()`), 497 (employment existence oracle before `authorize()`), 498 (supplier bank
-  edits unaudited), 499 (due date from terms never built), 500 (Drizzle lacks the 0–365 CHECK), 501 ("0 day terms"
-  copy), 502 (`no-committed-secrets` times out under full-suite load), 503 (one-off console 404 on first load).
-- **Housekeeping (Ian approved):** 73 stale lane DBs dropped; stale worktrees `wt-t350`, `wt-s6b` removed. **Both held
-  links into the main tree** (`wt-s6b/node_modules` was a junction to the main `node_modules`; `wt-t350/packages/db/
-  node_modules` to the main one) — unlinked non-recursively first; main tree verified intact after.
-- **Process:** orchestrator briefing template now requires `file <path>` (no CRLF) before READY/RED.
+## What happened (decisions and where they are recorded)
+- Rulings in chat → bible rows **253–259** (shortage always charged, write-off retired; overage manager-confirmed;
+  commissary ready-is-final, blocked until received/cancelled, freight on receiving branch; closed-month stock fixed;
+  bad pay cycle refused on save, oldest owner debt first; period cleanup + asset-term reverse/rebook; payment
+  methods; uniform refusal).
+- **Open Questions page** (row 252): https://claude.ai/artifact/LMQCEXDZqHyAJz69FCy7FN — Ian answered 24 there;
+  recorded as **row 260** and in the plan file. Still open: DEF-539 charge scope, T-370 monthly floor, HR data owner,
+  new **T-367 Q3b** (only 2900 void-cash suspense exists), Firebase credentials (told: `.env.local`
+  DEV_TERMINAL_EMAIL/PASSWORD/UID, then "saved").
+- What's Left board: https://claude.ai/artifact/7uvWzSMRGikq4P7PRmCQTf (republished at this wrap-up).
+- Roadmap: T-348 done; T-364..T-372 rows added.
 
-## What's left (Ian's standing ask)
-1. **T-348 S3** — DEF-440, the eight two-column pages at full width (Ian's W2). Spec: `docs/tasks/348-*.md` §S3.
-2. **Cheap follow-ups, all specced in their register rows:** DEF-496 + DEF-497 (authorise-first, T-352 pattern),
-   DEF-494, DEF-500, DEF-501, DEF-502, DEF-498 (audit supplier bank edits — money-adjacent), DEF-499 (due date
-   from terms), DEF-493 (before apps/pos|customer get source), DEF-503 (diagnose).
-3. Carried: T-343 S5.4, S8, S9; DEF-491 (before a 2nd org); DEF-476 (before launch?); T-353 S4 latent notes.
-4. **After launch:** AI-brain Phase 0 (spec it then), T-363 manual expense flag.
+## Pick up here
+1. **T-366 S2 screen test → close DEF-386.** Tester needs 2026-09 reopened in `shareat_test_setup`; the permission
+   check blocked that and it's waiting on Ian. Or date the smoke ≥ 2027-02 (all of 2026 is closed there).
+2. **DEF-545** — find which file leaves `shareat_test` without 0172 mid-run; re-run the full suite on a fresh gate DB.
+3. `git restore --source=wip/2026-09-30-reds -- <paths>` then: builder T-372 S1 (DEF-511); builder T-367 S1 step 2
+   (migration **0173**, unique `ar_write_offs(journal_entry_id)`); tester T-368 S0 red check (next free index).
+4. Then T-366 S3/S5/S6, T-367 S2–S6, T-368, T-369, T-370 S3 (DEF-409), T-372 S2–S6, T-371 last.
+5. Ops Ian handed to the orchestrator (run WITH him): fiscal-period timer on erp2, 0169 `pg_default_acl` check,
+   T-367 Q0 count of v1 "other"/"ar_collection" payments; apply 0169–0171 to `shareat_dev` (he said yes).
 
 ## Do not decide these alone — they are Ian's
-- **After this deploy: set credit terms on real suppliers** (~68 carried a balance in v1; none importable). Until set,
-  each is cash-on-delivery and credit is refused (row 247's default can't fire).
-- **Apply 0169–0171 to `shareat_dev`?** (carried; recommendation yes). The prod `pg_default_acl` check before 0169.
-- Carried: DEF-476; DEF-443; fiscal-period cleanup (DEF-424/426/433/434/439); arm `shareat-fiscal-period-seed.timer`
-  before 2027-09-01; dark-mode `--brand`/`--warning`; the terminal Firebase account.
+DEF-539 (reco: only that person's handover days) · T-370 monthly floor (reco: never below zero) · T-367 Q3b
+(reco: new "Unclassified payments" account) · HR statutory data owner. All on the Open Questions page.
 
 ## Traps that have actually bitten
-- **Worktrees can hold junctions INTO the main tree** (whole `node_modules`, or `packages/*/node_modules`). Before
-  deleting any worktree: `cmd /c dir /AL /S /B <wt>`, unlink each with `[IO.Directory]::Delete(p,$false)`, re-scan,
-  then delete. `git worktree remove --force` deregisters even when the delete fails ("Filename too long").
-- **CRLF:** the Edit tool rewrote three files whole-file CRLF in two days. `file <path>` before every commit.
-- **Stopping `next dev` can leave `apps/erp/.next/dev/types/routes.d.ts` half-written** — typecheck/build then fail
-  with TS1109 on it. Delete `apps/erp/.next/dev/types` and re-run.
-- **`shareat_test_setup` has every fiscal period Jan 2026 – Jan 2027 CLOSED** (closed 25–26 Sep by earlier smokes).
-  Smoketest postings must be dated ≥ 2027-02, or reset the DB.
-- **`no-committed-secrets.test.ts` / `t343-scheduler-status.test.ts` time out under full-suite load** — re-run solo
-  before believing (DEF-502).
-- Carried: raw `SAVEPOINT` inside `sql.begin` escapes `caught()`; `app.org_id` unset under RLS = 0 rows silently;
-  `SELECT … FOR UPDATE` needs UPDATE; a bible row shifts the TOC → `npm run toc`.
+- **Integration full run ≠ solo** (DEF-545, DEF-502 timeouts): re-run failing files solo before believing either way.
+- **`shareat_test_setup` has every period Jan 2026 – Jan 2027 CLOSED**; the smoke flow for charges hits it.
+- **Edit tool writes CRLF** — `file <path>` before every commit; `sed -i 's/\r$//'`.
+- **Don't reset `wt-audit` while the auditor uses it** — ask first. Both worktrees (`wt-audit`, `wt-audit2`) have
+  their own `npm ci`; scan for links before deleting (`cmd /c dir /AL /S /B <wt>`).
+- A bible row shifts the TOC → `npm run toc`; §13 rows need 5 cells (Rationale, Reversible) or the facts guard fails.
 
-## Sessions (all safe to clear; re-brief from this file)
-Tester `webapps-30` · Builder `system32-19` · Auditor `auto-assign-staff-role-on-hire` (no worktree now — make a
-fresh one with its OWN `npm ci` for mutants; DB `shareat_test_auditor`). Lane DBs: `shareat_test_t361_{tester,
-builder}` (at HEAD's migrations; reusable or re-create with `make-test-dbs.mjs`), smoke `shareat_test_setup`
-(`erp-smoke` on 9008), gate `shareat_test_gate_0930a`. Nothing in flight; no uncommitted lane work
-(`apps/erp/next-env.d.ts` "M" is `next dev`'s own regeneration).
+## Sessions (safe to clear; re-brief from this file)
+Tester `webapps-30` · Builder `system32-19` · Auditor `auto-assign-staff-role-on-hire` — all frozen, no uncommitted
+work in the tree (everything is on `main` or `wip/2026-09-30-reds`). Lane DBs survive by name
+(`shareat_test_t366_*`, `shareat_test_t367_*`, `shareat_test_t372_builder`, `shareat_test_auditor`); smoke
+`shareat_test_setup` on 9008 (`erp-smoke`).
 
 ## The paste-ready prompt
 ```
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global
-/orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all) and docs/RULES.md.
-GREP the register and bible, never Read them whole. Goal (Ian): close defects toward deployment; NOT
-launched. STANDING: commit slices locally; push ONLY at wrap-up; every wrap-up updates "what's left",
-ROADMAP.html and the What's Left board. Queue: T-348 S3 (DEF-440) → DEF-496 + DEF-497 (authorise-first)
-→ DEF-498 → DEF-494/500/501/502 → wrap up. Reds assert the target; every "not" gets a positive control.
-Each tester/helper gets its own _test DB. No node_modules junctions; mutants only in a worktree with its
-own install; scan a worktree for links before deleting it. `file` every edited file (no CRLF). Freeze
-lanes during gates. Messages are short. Render before deciding. Ian runs this terminal on Opus 5.5 at
-medium effort; do not ask him to switch.
+/orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all), docs/RULES.md, and
+docs/plans/money-defects-2026-09-30.md. Read the Open Questions page (bible row 252) with ArtifactData
+before building anything gated on Ian. GREP the register and bible, never Read them whole. Goal (Ian):
+close all open money defects in v2; NOT launched. Queue: HANDOFF "Pick up here" 1→5.
+STANDING: commit slices locally; push ONLY at wrap-up; republish the What's Left board after every commit
+that closes a DEF; every wrap-up updates "what's left", ROADMAP.html and the board. Reds assert the target;
+every "not" gets a positive control. Each tester/helper gets its own _test DB. No node_modules junctions;
+mutants only in a worktree with its own install; scan a worktree for links before deleting it. `file`
+every edited file (no CRLF). Freeze lanes during gates. Messages are short. Render before deciding. Ian
+runs this terminal on Opus 5.5 at medium effort; do not ask him to switch.
 ```
