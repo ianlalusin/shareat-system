@@ -158,6 +158,8 @@ export async function payLiability(
     const liability = await liabilitiesRepo.getById(trx, actor.orgId, input.liabilityId);
     if (!liability) throw new Error(`payLiability: liability ${input.liabilityId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
+    // ⛔ T-366 S1 / DEF-374 — row-lock the liability before `positionOf` reads what is owed.
+    await liabilitiesRepo.lockForPayment(trx, actor.orgId, liability.id);
 
     const amount = Number(input.amount);
     if (amount <= 0) throw refuse('payLiability: a payment has to be greater than zero.', 'A payment has to be greater than zero.');

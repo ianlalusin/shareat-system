@@ -20,8 +20,10 @@
  * drifted apart.
  */
 import { authorize, type Actor } from '@shareat/auth';
+import { internalFault } from '../shared/refusal-leaf';
 import {
   REMITTANCE_CADENCES,
+  advisoryLocksRepo,
   moneyAccountsRepo,
   remittanceRepo,
   storesRepo,
@@ -101,6 +103,8 @@ async function runCreate(
 ): Promise<CreateRemittanceResult> {
   // DEF-052 records that in v1 this grant enforced NOTHING. It needs a denial test, and it has one.
   await authorize(tx, actor, 'accept_remittance', { storeId: input.storeId });
+  // ⛔ T-366 S1 / DEF-374 — serialise per store BEFORE the first cap read below.
+  await advisoryLocksRepo.lockStoreCashCustody(tx, input.storeId);
 
   if (input.lines.length === 0) {
     throw new Error('createRemittance: a remittance has to hand over something.');
@@ -393,11 +397,19 @@ export async function reverseRemittance(
       throw new Error(`reverseRemittance: remittance ${input.remittanceId} does not exist.`);
     }
     await authorize(trx, actor, 'accept_remittance', { storeId: remittance.storeId });
+    // ⛔ T-366 S1 / DEF-374 — lock, then RE-READ: the status read above is stale once we have
+    // waited, and two reversals would both pass 'posted'. (The variance's journal_entry_id joins
+    // this re-read when S2 adds the column.)
+    await advisoryLocksRepo.lockStoreCashCustody(trx, remittance.storeId);
+    const locked = await remittanceRepo.getById(trx, actor.orgId, input.remittanceId);
+    if (!locked) {
+      throw internalFault(`reverseRemittance: remittance ${input.remittanceId} does not exist.`);
+    }
 
     const reason = input.reason.trim();
     if (!reason) throw new Error('reverseRemittance: a reason is required.');
-    if (remittance.status !== 'posted') {
-      throw new Error(`reverseRemittance: this remittance is already ${remittance.status}.`);
+    if (locked.status !== 'posted') {
+      throw new Error(`reverseRemittance: this remittance is already ${locked.status}.`);
     }
 
     for (const line of await remittanceRepo.linesFor(trx, remittance.id)) {
@@ -440,6 +452,8 @@ export async function resolveRemittanceVariance(
       throw new Error(`resolveRemittanceVariance: variance ${input.varianceId} does not exist.`);
     }
     await authorize(trx, actor, 'accept_remittance', { storeId: variance.storeId });
+    // ⛔ T-366 S1 / DEF-374 — same per-store key as create and reverse.
+    await advisoryLocksRepo.lockStoreCashCustody(trx, variance.storeId);
 
     if (input.action === 'charge') {
       if (!input.personId) {

@@ -137,6 +137,7 @@ export * as moneyTransfersRepo from './repo/money-transfers';
 export * as prepaidRepo from './repo/prepaid';
 export * as schedulerRepo from './repo/scheduler';
 export * as remittanceRepo from './repo/remittance';
+export * as advisoryLocksRepo from './repo/advisory-locks';
 export * as payrollRepo from './repo/payroll';
 // T-191 — 13th-month pay (Phase 5, after T-189).
 export * as thirteenthMonthRepo from './repo/thirteenth-month';

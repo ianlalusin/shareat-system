@@ -15,7 +15,7 @@
  * ⛔ **No per-employee, eligibility or rounding logic in any form** (§2 Q1–Q3). ERP records only
  * that the float was discharged and by how much; the split is processed and documented by hand.
  */
-import { moneyAccountsRepo, serviceChargeRepo, storesRepo, transaction, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, moneyAccountsRepo, serviceChargeRepo, storesRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
 import { checkDraw } from '../money-accounts/overdraft';
@@ -42,6 +42,8 @@ export async function distributeServiceCharge(
 ): Promise<{ entryId: string; created: boolean; warning?: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_expense', { storeId: input.storeId });
+    // ⛔ T-366 S1 / DEF-374 — serialise per store before the float cap is read.
+    await advisoryLocksRepo.lockServiceChargeFloat(trx, input.storeId);
 
     // ⛔ DEF-272's own guard — `Number(x) > 0` accepts "10.005", and posting that raw string to a
     // numeric(14,2) column lets Postgres round it AFTER the cap and checkDraw already compared

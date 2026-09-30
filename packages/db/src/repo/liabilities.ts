@@ -77,6 +77,17 @@ export async function getById(tx: Tx, orgId: string, id: string): Promise<Liabil
   return row as LiabilityRow | undefined;
 }
 
+/**
+ * ⛔ T-366 S1 / DEF-374 — row-lock the liability before `positionOf` reads what is still owed, so
+ * two concurrent payments cannot both pass the overpayment ceiling. Held to COMMIT/ROLLBACK.
+ * Call AFTER `authorize` so a refused caller never queues on the row.
+ */
+export async function lockForPayment(tx: Tx, orgId: string, liabilityId: string): Promise<void> {
+  await tx.execute(
+    sql`select 1 from ${liabilities} where ${liabilities.id} = ${liabilityId} and ${liabilities.orgId} = ${orgId} for update`,
+  );
+}
+
 export async function listLiabilities(
   tx: Tx,
   orgId: string,
