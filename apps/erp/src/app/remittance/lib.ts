@@ -53,7 +53,17 @@ export async function recentRemittances(orgId: string, storeId?: string) {
 
 /** ⭐ The list that must not hide (Ian, bible row 147). */
 export async function openVariances(orgId: string) {
-  return withOrgPrincipal(orgId, (tx) => remittanceRepo.listVariances(tx, orgId, 'open'));
+  return withOrgPrincipal(orgId, async (tx) => {
+    const rows = await remittanceRepo.listVariances(tx, orgId, 'open');
+    // T-366 S2 / R5: a charge is credited to the cashier account the handover came from. With one
+    // account nothing needs choosing; with several the screen asks, so each row carries its own.
+    return Promise.all(
+      rows.map(async (v) => ({
+        ...v,
+        fromAccounts: await remittanceRepo.fromAccountsFor(tx, v.remittanceId),
+      })),
+    );
+  });
 }
 
 export const STATE_LABEL: Record<string, string> = {

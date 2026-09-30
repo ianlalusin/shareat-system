@@ -70,26 +70,26 @@
 - ` 967–973  ` Remittance (remittance) — 10 legs
   - ` 974–982  ` remittance.exact — The conditional leg genuinely absent
   - ` 983–992  ` remittance.overage — 7350 swings positive
-  - ` 993–1007 ` remittance.shortage — Charged to the responsible cashier, not P&L
-- `1008–1012 ` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
-  - `1013–1030 ` balanceadjustment.plug — Included so nobody ports it forward
-- `1031–1035 ` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
-  - `1036–1045 ` prepaidpurchase.cash — An asset, not an immediate expense
-  - `1046–1054 ` assetpurchase.cash — Fixed asset purchase, cash
-  - `1055–1065 ` assetpurchase.credit — Fixed asset purchase, on account
-- `1066–1070 ` Slicer/payroll payout (slicerpayment) — 4 legs
-  - `1071–1081 ` slicerpayment.park — Settling an already-parked liability
-- `1082–1087 ` Statutory remittance (liabilitypayment)
-  - `1088–1106` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
-- `1107–1115` Owner equity movements (capitalcontribution / drawing)
-  - `1116–1124` equity.capitalcontribution — Cash in, equity grows
-  - `1125–1141` equity.drawing — Reduces equity, on the books at last
-- `1142–1148` Year close (yearclose) — v2-only, ADR-006
-  - `1149–1168` yearclose.annual — One entry, into 3300, dated the following January 1st
-- `1169–1176` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
-  - `1177–1199` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
-  - `1200–1219` openingbalance.reconcile — Reconciling 3900 to exactly zero
-- `1220–1241` Reversal — the correction path (T-106)
+  - ` 993–1014 ` remittance.shortage — Charged to the responsible cashier, not P&L
+- `1015–1019 ` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
+  - `1020–1037 ` balanceadjustment.plug — Included so nobody ports it forward
+- `1038–1042 ` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
+  - `1043–1052 ` prepaidpurchase.cash — An asset, not an immediate expense
+  - `1053–1061 ` assetpurchase.cash — Fixed asset purchase, cash
+  - `1062–1072 ` assetpurchase.credit — Fixed asset purchase, on account
+- `1073–1077 ` Slicer/payroll payout (slicerpayment) — 4 legs
+  - `1078–1088 ` slicerpayment.park — Settling an already-parked liability
+- `1089–1094 ` Statutory remittance (liabilitypayment)
+  - `1095–1113` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
+- `1114–1122` Owner equity movements (capitalcontribution / drawing)
+  - `1123–1131` equity.capitalcontribution — Cash in, equity grows
+  - `1132–1148` equity.drawing — Reduces equity, on the books at last
+- `1149–1155` Year close (yearclose) — v2-only, ADR-006
+  - `1156–1175` yearclose.annual — One entry, into 3300, dated the following January 1st
+- `1176–1183` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
+  - `1184–1206` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
+  - `1207–1226` openingbalance.reconcile — Reconciling 3900 to exactly zero
+- `1227–1248` Reversal — the correction path (T-106)
 
 <!-- TOC:END -->
 
@@ -1002,6 +1002,13 @@ Expected ₱10,000, only ₱9,850 counted — a ₱150 shortage, charged to the 
 
 **Trap:** 7350 is **one** account that swings **either** way — never a separate account per
 direction. A shortage does not touch 7350 at all; it goes to 1230, not P&L.
+
+**In v2 this is two entries, and the net is identical (T-366 S2, DEF-386).** The handover posts the
+transfer of what was counted (Dr 1130 9,850 / Cr 1110 9,850, `remittance`). Charging the shortage is a
+second entry when a manager resolves the variance: Dr 1230 150.00 (party employee) / Cr 1110 150.00,
+`source_type 'remittance_variance'`, linked from `remittance_variances.journal_entry_id` (the database
+refuses a `charged` variance without one). Together they equal the table above. Charging from a wallet
+credits 1140 instead, with party `money_account` = that wallet. Reversing the remittance reverses both.
 
 ---
 

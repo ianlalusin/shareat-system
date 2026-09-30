@@ -31,12 +31,16 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { journalEntries } from './journal';
 import { moneyAccounts } from './money-accounts';
 import { moneyTransfers } from './money-transfers';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { salesDays } from './sales-days';
 import { stores } from './stores';
+
+export const REMITTANCE_ALLOCATION_SOURCES = ['cash', 'charge'] as const;
+export type RemittanceAllocationSource = (typeof REMITTANCE_ALLOCATION_SOURCES)[number];
 
 export const REMITTANCE_STATUSES = ['posted', 'reversed'] as const;
 export type RemittanceStatus = (typeof REMITTANCE_STATUSES)[number];
@@ -46,7 +50,9 @@ export type RemittanceStatus = (typeof REMITTANCE_STATUSES)[number];
  * forces it out, deliberately: an open variance does not block the next remittance (Ian). Blocking
  * would push people to fudge a count to keep trading, which is worse than a visible open item.
  */
-export const VARIANCE_STATUSES = ['open', 'charged', 'written_off'] as const;
+// T-366 S2 (migration 0172): 'income' is S3's recognised overage (Dr cashier / Cr 7350).
+// 'written_off' stays so existing rows read; the domain refuses NEW write-offs (Amendment A1).
+export const VARIANCE_STATUSES = ['open', 'charged', 'written_off', 'income'] as const;
 export type VarianceStatus = (typeof VARIANCE_STATUSES)[number];
 
 // -------------------------------------------------------------------------------------
@@ -158,13 +164,17 @@ export const remittanceAllocations = pgTable(
     /** The day's sales component, when there is one. ⚠️ A link, never the identity. */
     salesDayId: uuid('sales_day_id').references(() => salesDays.id, { onDelete: 'restrict' }),
     amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    /** T-366 S2 (0172): 'cash' = FIFO over a handover; 'charge' = a shortage charged to a person,
+     *  which completes the day without any cash arriving. Both count as settled. */
+    source: text('source', { enum: REMITTANCE_ALLOCATION_SOURCES }).notNull().default('cash'),
   },
   (t) => [
     index('remittance_allocations_sales_day_idx').on(t.salesDayId),
     index('remittance_allocations_date_idx').on(t.businessDate),
     /** ⚠️ One batch settles a given DATE once. Two rows for the same pair would double-count the
      *  day's settlement and quietly mark it fully remitted. */
-    uniqueIndex('remittance_allocations_unique').on(t.remittanceId, t.businessDate),
+    uniqueIndex('remittance_allocations_unique').on(t.remittanceId, t.businessDate, t.source),
+    check('remittance_allocations_source_check', sql`${t.source} in ('cash', 'charge')`),
     check('remittance_allocations_amount_positive_check', sql`${t.amount} > 0`),
     check('remittance_allocations_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
   ],
@@ -213,6 +223,10 @@ export const remittanceVariances = pgTable(
     reason: text('reason'),
     resolvedBy: uuid('resolved_by').references(() => persons.id, { onDelete: 'restrict' }),
     resolvedOn: date('resolved_on'),
+    /** T-366 S2 (0172): the entry this resolution posted (charge, or S3's income). Null while open. */
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntries.id, {
+      onDelete: 'restrict',
+    }),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -224,15 +238,29 @@ export const remittanceVariances = pgTable(
     check('remittance_variances_amount_nonzero_check', sql`${t.amount} <> 0`),
     check(
       'remittance_variances_status_check',
-      sql`${t.status} in ('open', 'charged', 'written_off')`,
+      sql`${t.status} in ('open', 'charged', 'written_off', 'income')`,
     ),
+    index('remittance_variances_journal_entry_idx').on(t.journalEntryId),
     /** ⛔ THE REFUSAL, in the schema so no code path can skip it: charged needs a person,
      *  written_off needs a reason, and both need a resolver. */
     check(
       'remittance_variances_resolution_shape_check',
       sql`(${t.status} = 'open' and ${t.chargedToPersonId} is null and ${t.resolvedBy} is null)
           or (${t.status} = 'charged' and ${t.chargedToPersonId} is not null and ${t.resolvedBy} is not null)
-          or (${t.status} = 'written_off' and ${t.reason} is not null and ${t.resolvedBy} is not null)`,
+          or (${t.status} = 'written_off' and ${t.reason} is not null and ${t.resolvedBy} is not null)
+          or (${t.status} = 'income' and ${t.chargedToPersonId} is null and ${t.resolvedBy} is not null)`,
+    ),
+    // NOTE: the two checks below are NOT VALID, hand-added in migration 0172 — a legacy database may
+    // hold `charged` rows with no entry. Drizzle cannot say NOT VALID; do not "fix" it to match.
+    check(
+      'remittance_variances_sign_check',
+      sql`(${t.status} <> 'income' or ${t.amount} > 0) and (${t.status} <> 'charged' or ${t.amount} < 0)`,
+    ),
+    check(
+      'remittance_variances_posting_check',
+      sql`(${t.status} = 'open' and ${t.journalEntryId} is null)
+          or (${t.status} in ('charged', 'income') and ${t.journalEntryId} is not null)
+          or ${t.status} = 'written_off'`,
     ),
     check('remittance_variances_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
   ],

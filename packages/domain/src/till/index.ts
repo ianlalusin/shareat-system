@@ -21,7 +21,7 @@
 import { money, compare, ZERO, type Money } from '@shareat/core/money';
 import { authorize, type Actor } from '@shareat/auth';
 import { moneyAccountsRepo, tillShiftsRepo, transaction, type Tx } from '@shareat/db';
-import { postEntry } from '../ledger/post-entry';
+import { postStaffShortageCharge } from '../shared/staff-shortage-charge';
 import { parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
 
@@ -309,8 +309,13 @@ export async function chargeTillShortage(
     // Short: the variance is negative, so the amount charged is its magnitude.
     const amount = money(variance.toString().replace('-', ''));
 
-    await postEntry(trx, {
+    await postStaffShortageCharge(trx, {
       orgId: actor.orgId,
+      storeId: line.storeId,
+      personId: input.personId,
+      amount: amount.toString(),
+      creditAccountCode: line.glAccountCode,
+      // No credit-line party: HEAD's till credit line carries none (T-366 S2 R8 — byte-identical).
       entryDate: line.businessDate,
       sourceType: 'tillcountshortage',
       sourceId: input.countLineId,
@@ -320,20 +325,6 @@ export async function chargeTillShortage(
         input.note?.trim() ||
         `Counted shortage on ${line.moneyAccountName}, shift ${line.shiftNo} ${line.businessDate}`,
       postedBy: actor.personId,
-      lines: [
-        {
-          accountCode: STAFF_ADVANCE_ACCOUNT,
-          storeId: line.storeId,
-          debit: amount.toString(),
-          partyType: 'employee',
-          partyId: input.personId,
-        },
-        {
-          accountCode: line.glAccountCode,
-          storeId: line.storeId,
-          credit: amount.toString(),
-        },
-      ],
     });
 
     return { posted: true };

@@ -19,13 +19,33 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { recordGone } from './record-gone';
+import { moneyAccounts } from '../../schema/money-accounts';
 import {
   remittanceAllocations,
   remittanceLines,
   remittanceVariances,
   remittances,
+  type RemittanceAllocationSource,
   type VarianceStatus,
 } from '../../schema/remittance';
+
+/**
+ * ⭐ T-366 S2 / R3 — journal `source_type`s that are CUSTODY movements, not activity of a trading
+ * day, and so never count toward what a day owes. ONE list, used by `endDayReports`,
+ * `cashierMovementByAccount` and `findings.ts`'s cashier-movement read, so the copies cannot drift.
+ *
+ * - `transfer`: money moving between the business's own accounts.
+ * - `remittance_variance`: a charged shortage / recognised overage posted AFTER the handover. Dated
+ *   a trading day it would otherwise reduce what that day owes, and the next remittance would read
+ *   as over by the same amount.
+ */
+export const CUSTODY_SOURCE_TYPES = ['transfer', 'remittance_variance'] as const;
+
+/** `and je.source_type not in ('transfer', …)` — a fragment, never an interpolated string. */
+export const notCustodySourceType = sql`je.source_type not in (${sql.join(
+  CUSTODY_SOURCE_TYPES.map((t) => sql`${t}`),
+  sql`, `,
+)})`;
 
 export interface EndDayReport {
   businessDate: string;
@@ -78,7 +98,7 @@ export async function endDayReports(
         and a.code ~ '^11[0-9]{2}$'
         and coalesce(ma.custodian, ca.custodian) = 'cashier'
         -- ⚠️ See the note above: custody movement, not a transaction of the day.
-        and je.source_type <> 'transfer'
+        and ${notCustodySourceType}
         and je.entry_date <= ${input.upTo}
       group by je.entry_date
     ),
@@ -234,7 +254,7 @@ export async function cashierMovementByAccount(
         and je.status <> 'draft'
         and jl.store_id = ${storeId}
         and a.code ~ '^11[0-9]{2}$'
-        and je.source_type <> 'transfer'
+        and ${notCustodySourceType}
         and je.entry_date in (${dateList})
         and coalesce(ma.custodian, ca.custodian) = 'cashier'
     )
@@ -296,6 +316,8 @@ export async function insertAllocation(
     businessDate: string;
     salesDayId: string | null;
     amount: string;
+    /** Defaults to 'cash'. 'charge' = a shortage charged to a person (T-366 S2). */
+    source?: RemittanceAllocationSource;
   },
 ): Promise<void> {
   await tx.insert(remittanceAllocations).values(input);
@@ -337,10 +359,37 @@ export async function linesFor(tx: Tx, remittanceId: string) {
 
 export async function allocationsFor(tx: Tx, remittanceId: string) {
   return tx
-    .select()
+    .select({
+      id: remittanceAllocations.id,
+      remittanceId: remittanceAllocations.remittanceId,
+      businessDate: remittanceAllocations.businessDate,
+      salesDayId: remittanceAllocations.salesDayId,
+      amount: remittanceAllocations.amount,
+      source: remittanceAllocations.source,
+    })
     .from(remittanceAllocations)
     .where(eq(remittanceAllocations.remittanceId, remittanceId))
-    .orderBy(asc(remittanceAllocations.businessDate));
+    .orderBy(asc(remittanceAllocations.businessDate), asc(remittanceAllocations.source));
+}
+
+/**
+ * The distinct cashier accounts a remittance handed over from, with names — T-366 S2 / R5. A charge
+ * credits one of these; the caller names it when there is more than one.
+ */
+export async function fromAccountsFor(
+  tx: Tx,
+  remittanceId: string,
+): Promise<{ id: string; name: string; glAccountCode: string }[]> {
+  return tx
+    .selectDistinct({
+      id: moneyAccounts.id,
+      name: moneyAccounts.name,
+      glAccountCode: moneyAccounts.glAccountCode,
+    })
+    .from(remittanceLines)
+    .innerJoin(moneyAccounts, eq(moneyAccounts.id, remittanceLines.fromMoneyAccountId))
+    .where(eq(remittanceLines.remittanceId, remittanceId))
+    .orderBy(asc(moneyAccounts.name));
 }
 
 export async function listRemittances(tx: Tx, orgId: string, storeId?: string) {
@@ -394,16 +443,52 @@ export async function getVarianceWithStore(
   tx: Tx,
   orgId: string,
   id: string,
-): Promise<{ id: string; storeId: string; status: VarianceStatus } | undefined> {
+): Promise<
+  | {
+      id: string;
+      storeId: string;
+      status: VarianceStatus;
+      remittanceId: string;
+      amount: string;
+      businessDate: string;
+      journalEntryId: string | null;
+      remittanceStatus: 'posted' | 'reversed';
+      remittedOn: string;
+    }
+  | undefined
+> {
   const [row] = await tx
     .select({
       id: remittanceVariances.id,
       storeId: remittances.storeId,
       status: remittanceVariances.status,
+      remittanceId: remittanceVariances.remittanceId,
+      amount: remittanceVariances.amount,
+      businessDate: remittanceVariances.businessDate,
+      journalEntryId: remittanceVariances.journalEntryId,
+      remittanceStatus: remittances.status,
+      remittedOn: remittances.remittedOn,
     })
     .from(remittanceVariances)
     .innerJoin(remittances, eq(remittances.id, remittanceVariances.remittanceId))
     .where(and(eq(remittanceVariances.id, id), eq(remittanceVariances.orgId, orgId)))
+    .limit(1);
+  return row;
+}
+
+/** The remittance's variance row, if it has one — `reverseRemittance` reads it AFTER the lock. */
+export async function varianceForRemittance(
+  tx: Tx,
+  remittanceId: string,
+): Promise<{ id: string; status: VarianceStatus; journalEntryId: string | null } | undefined> {
+  const [row] = await tx
+    .select({
+      id: remittanceVariances.id,
+      status: remittanceVariances.status,
+      journalEntryId: remittanceVariances.journalEntryId,
+    })
+    .from(remittanceVariances)
+    .where(eq(remittanceVariances.remittanceId, remittanceId))
     .limit(1);
   return row;
 }
@@ -413,11 +498,13 @@ export async function resolveVariance(
   orgId: string,
   id: string,
   input: {
-    status: 'charged' | 'written_off';
+    status: 'charged' | 'written_off' | 'income';
     chargedToPersonId: string | null;
     reason: string | null;
     resolvedBy: string;
     resolvedOn: string;
+    /** T-366 S2: the entry this resolution posted. */
+    journalEntryId?: string | null;
   },
 ): Promise<void> {
   const updated = await tx

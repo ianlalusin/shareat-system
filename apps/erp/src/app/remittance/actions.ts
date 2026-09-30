@@ -205,38 +205,35 @@ export async function resolveVarianceAction(formData: FormData): Promise<void> {
   const action = str(formData, 'action');
 
   try {
-    if (action === 'charge') {
-      const personId = str(formData, 'personId');
-      // ⛔ The refusal, surfaced early so the message is about the decision rather than a
-      // constraint violation. FIFO put the residual on that date; the date says nothing about
-      // who was holding the money.
-      if (!personId) {
-        throw new Error(
-          'Choose who is being charged. The date the shortage landed on says where the ' +
-            'arithmetic stopped, not who was holding the money.',
-        );
-      }
-      await withOrgPrincipal(actor.orgId, (tx) =>
-        resolveRemittanceVariance(tx, actor, {
-          varianceId,
-          action: 'charge',
-          personId,
-          reason: str(formData, 'reason') || null,
-        }),
-      );
-    } else {
-      await withOrgPrincipal(actor.orgId, (tx) =>
-        resolveRemittanceVariance(tx, actor, {
-          varianceId,
-          action: 'write_off',
-          reason: str(formData, 'reason'),
-        }),
+    // T-366 A1 (Ian, 2026-09-30): no write-off — a shortage is always charged to a person. The
+    // screen no longer offers one, and the domain refuses it regardless of what a form posts.
+    if (action !== 'charge') {
+      throw new Error('A shortage is always charged to the person who was holding the money.');
+    }
+    const personId = str(formData, 'personId');
+    // ⛔ The refusal, surfaced early so the message is about the decision rather than a
+    // constraint violation. FIFO put the residual on that date; the date says nothing about
+    // who was holding the money.
+    if (!personId) {
+      throw new Error(
+        'Choose who is being charged. The date the shortage landed on says where the ' +
+          'arithmetic stopped, not who was holding the money.',
       );
     }
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      resolveRemittanceVariance(tx, actor, {
+        varianceId,
+        action: 'charge',
+        personId,
+        // Present only when the handover came from more than one account (R5).
+        fromMoneyAccountId: str(formData, 'fromMoneyAccountId') || null,
+        reason: str(formData, 'reason') || null,
+      }),
+    );
   } catch (err) {
     back({ error: errorMessage(err), store: storeId });
   }
-  back({ ok: 'Variance closed.', store: storeId });
+  back({ ok: 'Shortage charged. The person now owes it, and the day reads remitted.', store: storeId });
 }
 
 /**

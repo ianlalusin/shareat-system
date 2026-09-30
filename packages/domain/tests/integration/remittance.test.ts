@@ -366,7 +366,7 @@ describe('the refusals', () => {
       ),
     ).rejects.toThrow(/needs a person/);
 
-    // Writing it off needs a reason instead — but it must say something.
+    // Ian, 2026-09-30: NO write-off — a shortage is always charged to staff. Refused permanently.
     await expect(
       asOrg(f.orgId, (tx) =>
         resolveRemittanceVariance(tx, f.admin, {
@@ -375,7 +375,7 @@ describe('the refusals', () => {
           reason: '   ',
         }),
       ),
-    ).rejects.toThrow(/needs a reason/);
+    ).rejects.toThrow(/write_off is retired/);
 
     // Naming a person closes it.
     const cashierId = await person(f.orgId, f.storeId, 'Cashier on duty');
@@ -384,6 +384,7 @@ describe('the refusals', () => {
         varianceId: r.varianceId!,
         action: 'charge',
         personId: cashierId,
+        on: '2026-01-02',
       }),
     );
     const [v] = await sql<{ status: string }[]>`

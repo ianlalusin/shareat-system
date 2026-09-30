@@ -14,24 +14,36 @@
  *
  * ## ⭐ And a remittance IS a transfer, with allocations attached
  *
- * ⛔ **Nothing here posts to the ledger.** Each line moves through `createMoneyTransfer` like any
+ * A handover posts NOTHING of its own: each line moves through `createMoneyTransfer` like any
  * other cashier→office transfer, and `remittance_lines.money_transfer_id` records which one. One
  * posting path. Growing a second is exactly how v1 ended up with two amortisation runners that
  * drifted apart.
+ *
+ * ⭐ **The one other posting is a CHARGED SHORTAGE** (T-366 S2, DEF-386): `resolveRemittanceVariance`
+ * posts Dr 1230 (the person) / Cr the cashier account as a SECOND entry beside the transfer — never
+ * merged into it — and writes `source 'charge'` allocation rows so the day reads remitted. Its
+ * journal entry has `source_type 'remittance_variance'`, a custody movement excluded from what a
+ * day owes (`CUSTODY_SOURCE_TYPES`), and reverses with the remittance. Both go through
+ * `postStaffShortageCharge`, shared with the till (DEF-105).
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { internalFault } from '../shared/refusal-leaf';
+import { gone, refuse } from '../shared/refusal';
+import { reverseEntry } from '../ledger/reverse-entry';
+import { postStaffShortageCharge } from '../shared/staff-shortage-charge';
 import {
   REMITTANCE_CADENCES,
   advisoryLocksRepo,
   moneyAccountsRepo,
+  personsRepo,
   remittanceRepo,
   storesRepo,
   transaction,
   type RemittanceCadence,
   type Tx,
 } from '@shareat/db';
-import { add, compare, formatMoney, money, subtract, type Money } from '@shareat/core/money';
+import { add, compare, formatMoney, money, negate, subtract, ZERO, type Money } from '@shareat/core/money';
+import { parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { createMoneyTransfer, voidMoneyTransfer } from '../money-transfers';
 import { parseMoneyInput } from '../shared/money-input';
 import { allocateFifo, type DayOwed } from './allocate';
@@ -352,6 +364,7 @@ async function runCreate(
       businessDate: a.salesDayId,
       salesDayId: byDate.get(a.salesDayId)?.salesDayId ?? null,
       amount: String(a.amount),
+      source: 'cash',
     });
   }
 
@@ -398,8 +411,9 @@ export async function reverseRemittance(
     }
     await authorize(trx, actor, 'accept_remittance', { storeId: remittance.storeId });
     // ⛔ T-366 S1 / DEF-374 — lock, then RE-READ: the status read above is stale once we have
-    // waited, and two reversals would both pass 'posted'. (The variance's journal_entry_id joins
-    // this re-read when S2 adds the column.)
+    // waited, and two reversals would both pass 'posted'. T-366 S2: the variance's status AND
+    // journal_entry_id are read below, AFTER this lock, for the same reason — a charge that was
+    // holding the lock has committed its entry by the time we get here.
     await advisoryLocksRepo.lockStoreCashCustody(trx, remittance.storeId);
     const locked = await remittanceRepo.getById(trx, actor.orgId, input.remittanceId);
     if (!locked) {
@@ -420,6 +434,19 @@ export async function reverseRemittance(
       });
     }
 
+    // ⭐ T-366 S2 / DEF-386: the charge (or recognised overage) is a second entry beside the
+    // transfers, so it reverses with them or the person's 1230 keeps a receivable for a handover
+    // that no longer exists. Read AFTER the lock (see above).
+    const variance = await remittanceRepo.varianceForRemittance(trx, remittance.id);
+    if (variance?.journalEntryId) {
+      await reverseEntry(trx, {
+        entryId: variance.journalEntryId,
+        reason: `Remittance reversed: ${reason}`,
+        reversalDate: input.reversedOn,
+        reversedBy: actor.personId,
+      });
+    }
+
     await remittanceRepo.markReversed(trx, actor.orgId, remittance.id, {
       reversedOn: input.reversedOn ?? remittance.remittedOn,
       reverseReason: reason,
@@ -430,58 +457,197 @@ export async function reverseRemittance(
 }
 
 /**
- * Closes an open variance — by charging a named person, or by writing it off with a reason.
+ * Closes an open SHORTAGE by charging it to a named person — and posts the receivable.
  *
  * ⛔ **A shortage cannot be charged to nobody.** v1's remittance builder throws rather than infer a
  * `chargeToStaffId`, and that refusal is ported here AND in a CHECK constraint, because inferring
  * the person from the date is exactly the wrong inference: FIFO put the residual on that date, and
  * the date says nothing about who was holding the money (bible rows 128, 144).
+ *
+ * ## ⭐ What a charge does (T-366 S2, DEF-386 + DEF-105)
+ *
+ * ```
+ * Dr  1230  Advances to employees   party = the person          (source_type 'remittance_variance')
+ *     Cr  <the cashier account the handover came from>
+ * ```
+ * beside the handover's own transfer — never merged into it — so the two together net to exactly
+ * `POSTING-PATTERNS` `remittance.shortage`. It also writes `source 'charge'` settlement rows, so
+ * "charge closes" (row 216(3)): the day reads remitted. And it is CAPPED at what is still owed
+ * (R4): if a later cash remittance has covered part of the shortage, nobody is charged for money
+ * that has since arrived.
+ *
+ * ⛔ **`write_off` is retired** (Amendment A1, Ian 2026-09-30: "a shortage is always charged to
+ * staff"). The action stays in the type so a stale caller gets a plain sentence, not a crash.
+ * Existing `written_off` rows are untouched. An OVERAGE is S3's `recognise_income`, not this.
  */
 export async function resolveRemittanceVariance(
   tx: Tx | null,
   actor: Actor,
   input:
-    | { varianceId: string; action: 'charge'; personId: string; reason?: string | null; on?: string }
+    | {
+        varianceId: string;
+        action: 'charge';
+        personId: string;
+        /** Required only when the remittance handed over from more than one account (R5). */
+        fromMoneyAccountId?: string | null;
+        reason?: string | null;
+        on?: string;
+      }
     | { varianceId: string; action: 'write_off'; reason: string; on?: string },
 ): Promise<void> {
   const run = async (trx: Tx) => {
     // ⚠️ The store comes from the variance's remittance — `accept_remittance` is store-scoped, so
     // gating this without one would either fail loudly or, worse, not gate at all.
-    const variance = await remittanceRepo.getVarianceWithStore(trx, actor.orgId, input.varianceId);
-    if (!variance) {
-      throw new Error(`resolveRemittanceVariance: variance ${input.varianceId} does not exist.`);
+    const first = await remittanceRepo.getVarianceWithStore(trx, actor.orgId, input.varianceId);
+    if (!first) {
+      throw gone(`resolveRemittanceVariance: variance ${input.varianceId} does not exist.`, 'remittance variance');
     }
-    await authorize(trx, actor, 'accept_remittance', { storeId: variance.storeId });
-    // ⛔ T-366 S1 / DEF-374 — same per-store key as create and reverse.
-    await advisoryLocksRepo.lockStoreCashCustody(trx, variance.storeId);
+    await authorize(trx, actor, 'accept_remittance', { storeId: first.storeId });
 
-    if (input.action === 'charge') {
-      if (!input.personId) {
-        throw new Error(
-          'resolveRemittanceVariance: charging a shortage needs a person. The date FIFO left it ' +
-            'on says where the arithmetic stopped, not who was holding the money.',
+    if (input.action !== 'charge') {
+      throw refuse(
+        'resolveRemittanceVariance: write_off is retired — a shortage is always charged.',
+        "A shortage can't be written off. Charge it to the person responsible.",
+      );
+    }
+
+    // ⛔ T-366 S1 / DEF-374 — same per-store key as create and reverse.
+    await advisoryLocksRepo.lockStoreCashCustody(trx, first.storeId);
+
+    // ⭐ Re-read after the lock: the first read is stale once we have waited — a concurrent charge
+    // or a reversal of this remittance may have committed while we queued.
+    const variance = await remittanceRepo.getVarianceWithStore(trx, actor.orgId, input.varianceId);
+    if (!variance || variance.status !== 'open') {
+      throw refuse(
+        `resolveRemittanceVariance: variance ${input.varianceId} is not open.`,
+        'That shortage has already been dealt with — reload the page to see where it stands.',
+      );
+    }
+    if (compare(money(variance.amount), ZERO) >= 0) {
+      throw refuse(
+        'resolveRemittanceVariance: only a shortage (negative variance) can be charged.',
+        'Only a shortage can be charged to a person. An overage is recognised as other income instead.',
+      );
+    }
+    if (variance.remittanceStatus !== 'posted') {
+      throw refuse(
+        'resolveRemittanceVariance: the remittance is reversed.',
+        'That handover was reversed, so there is nothing left to charge.',
+      );
+    }
+
+    if (!input.personId) {
+      throw refuse(
+        'resolveRemittanceVariance: charging a shortage needs a person.',
+        'Choose who is being charged. The date the shortage landed on says where the arithmetic ' +
+          'stopped, not who was holding the money.',
+      );
+    }
+    const person = await personsRepo.getPersonById(trx, actor.orgId, input.personId);
+    if (!person) {
+      throw refuse(
+        'resolveRemittanceVariance: the person does not exist in this organisation.',
+        'That person could not be found — choose someone from the list.',
+      );
+    }
+
+    // R6 — the entry date: today in MANILA unless given, never before the handover.
+    const on = input.on ? parseBusinessDate(input.on) : toBusinessDate();
+    if (on < variance.remittedOn) {
+      throw refuse(
+        `resolveRemittanceVariance: ${on} is before the remittance date ${variance.remittedOn}.`,
+        `A shortage cannot be charged on a date before the handover it came from (${variance.remittedOn}).`,
+      );
+    }
+
+    // R5 — the cashier account is NAMED, never guessed.
+    const fromAccounts = await remittanceRepo.fromAccountsFor(trx, variance.remittanceId);
+    let account = fromAccounts.length === 1 ? fromAccounts[0] : undefined;
+    if (fromAccounts.length > 1) {
+      const names = fromAccounts.map((a) => `"${a.name}"`).join(', ');
+      if (!input.fromMoneyAccountId) {
+        throw refuse(
+          'resolveRemittanceVariance: the remittance has several from-accounts; name one.',
+          `This handover came from more than one account (${names}). Choose which account the ` +
+            'shortage comes out of.',
         );
       }
-      await remittanceRepo.resolveVariance(trx, actor.orgId, input.varianceId, {
-        status: 'charged',
-        chargedToPersonId: input.personId,
-        reason: input.reason?.trim() || null,
-        resolvedBy: actor.personId,
-        resolvedOn: input.on ?? new Date().toISOString().slice(0, 10),
-      });
-      return;
+      account = fromAccounts.find((a) => a.id === input.fromMoneyAccountId);
+      if (!account) {
+        throw refuse(
+          'resolveRemittanceVariance: the named account is not on the remittance.',
+          `That account is not one this handover came from. Choose one of ${names}.`,
+        );
+      }
+    } else if (input.fromMoneyAccountId && account && account.id !== input.fromMoneyAccountId) {
+      throw refuse(
+        'resolveRemittanceVariance: the named account is not on the remittance.',
+        `That account is not the one this handover came from ("${account.name}").`,
+      );
+    }
+    if (!account) {
+      throw internalFault(`resolveRemittanceVariance: remittance ${variance.remittanceId} has no lines.`);
     }
 
-    const reason = input.reason.trim();
-    if (!reason) {
-      throw new Error('resolveRemittanceVariance: writing a variance off needs a reason.');
+    // R4 — CAP at what is still owed. The days are the ones the handover could have settled:
+    // verified and owing, on or before its date.
+    const reports = await remittanceRepo.endDayReports(trx, actor.orgId, {
+      storeId: variance.storeId,
+      upTo: variance.remittedOn,
+    });
+    const owedDays: DayOwed[] = reports
+      .filter((r) => r.remittable && compare(money(r.owed), ZERO) > 0)
+      .map((r) => ({ salesDayId: r.businessDate, businessDate: r.businessDate, owed: money(r.owed) }));
+    const stillOwed = owedDays.reduce((sum, d) => add(sum, d.owed), ZERO);
+    const shortBy = negate(money(variance.amount));
+    const chargeable = compare(shortBy, stillOwed) <= 0 ? shortBy : stillOwed;
+    if (compare(chargeable, ZERO) <= 0) {
+      throw refuse(
+        'resolveRemittanceVariance: nothing is left to charge — the days are covered.',
+        'That shortage has since been remitted in cash — nothing is left to charge.',
+      );
     }
-    await remittanceRepo.resolveVariance(trx, actor.orgId, input.varianceId, {
-      status: 'written_off',
-      chargedToPersonId: null,
-      reason,
+
+    // "Charge closes": settle the days the shortage left owing, oldest first.
+    const settled = allocateFifo(owedDays, chargeable);
+    const byDate = new Map(reports.map((r) => [r.businessDate, r]));
+    for (const a of settled.allocations) {
+      await remittanceRepo.insertAllocation(trx, {
+        remittanceId: variance.remittanceId,
+        businessDate: a.salesDayId,
+        salesDayId: byDate.get(a.salesDayId)?.salesDayId ?? null,
+        amount: String(a.amount),
+        source: 'charge',
+      });
+    }
+
+    const posted = await postStaffShortageCharge(trx, {
+      orgId: actor.orgId,
+      storeId: variance.storeId,
+      personId: input.personId,
+      amount: String(chargeable),
+      creditAccountCode: account.glAccountCode,
+      // A 1140 wallet requires a party naming itself — payLiability's own conditional.
+      ...(account.glAccountCode === '1140'
+        ? { creditParty: { partyType: 'money_account', partyId: account.id } }
+        : {}),
+      entryDate: on,
+      sourceType: 'remittance_variance',
+      sourceId: variance.id,
+      idempotencyKey: `remittance-variance:${variance.id}:charge`,
+      memo:
+        input.reason?.trim() ||
+        `Remittance shortage ${variance.remittedOn} charged to ${person.displayName}`,
+      postedBy: actor.personId,
+    });
+
+    await remittanceRepo.resolveVariance(trx, actor.orgId, variance.id, {
+      status: 'charged',
+      chargedToPersonId: input.personId,
+      reason: input.reason?.trim() || null,
       resolvedBy: actor.personId,
-      resolvedOn: input.on ?? new Date().toISOString().slice(0, 10),
+      resolvedOn: on,
+      journalEntryId: posted.entryId,
     });
   };
   if (tx) return run(tx);

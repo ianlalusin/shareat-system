@@ -18,6 +18,7 @@ import { formatMoney, money } from '@shareat/core/money';
 // ⛔ T-218 — the ONE definition of "today" for the repo layer. Never bare `current_date`.
 import { MANILA_TODAY, daysBetweenDates } from './sql-time';
 import { isPreOpeningSql } from './stores';
+import { notCustodySourceType } from './remittance';
 import { periodBounds } from './fiscal-periods';
 
 /**
@@ -366,7 +367,7 @@ async function storePositions(tx: Tx, orgId: string): Promise<StorePositionRow[]
         and a.code ~ '^11[0-9]{2}$'
         and coalesce(ma.custodian, ca.custodian) = 'cashier'
         -- Custody movement, not a transaction of the day. Same exclusion as endDayReports.
-        and je.source_type <> 'transfer'
+        and ${notCustodySourceType}
       group by jl.store_id, je.entry_date
     ),
     settled as (

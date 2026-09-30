@@ -168,43 +168,61 @@ export default async function RemittancePage({
                 </span>
                 <span className="ml-2 text-xs">on {v.businessDate}</span>
               </div>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
-                  Charge to
+              {/* T-366 S2: only a SHORTAGE can be charged, and there is no write-off (Amendment
+                  A1 — a shortage is always charged to a person). An overage carries no controls
+                  here; recognising it as other income is a manager action (S3). */}
+              {Number(v.amount) < 0 ? (
+                <>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
+                      Charge to
+                    </span>
+                    <select name="personId" defaultValue="" className={`${INPUT} w-44`}>
+                      <option value="">Nobody yet…</option>
+                      {people.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {/* R5: shown only when the handover came from more than one account — with one
+                      there is nothing to choose. */}
+                  {v.fromAccounts.length > 1 && (
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
+                        Comes out of
+                      </span>
+                      <select name="fromMoneyAccountId" defaultValue="" className={`${INPUT} w-44`}>
+                        <option value="">Choose an account…</option>
+                        {v.fromAccounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
+                      Reason
+                    </span>
+                    <input name="reason" className={`${INPUT} w-48`} />
+                  </label>
+                  <button
+                    type="submit"
+                    name="action"
+                    value="charge"
+                    className="rounded bg-amber-700 px-3 py-2 text-xs font-medium text-white hover:bg-amber-600"
+                  >
+                    Charge
+                  </button>
+                </>
+              ) : (
+                <span className="text-xs text-amber-900 dark:text-amber-300">
+                  An overage is not charged to anyone.
                 </span>
-                <select name="personId" defaultValue="" className={`${INPUT} w-44`}>
-                  <option value="">Nobody yet…</option>
-                  {people.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.displayName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
-                  Reason
-                </span>
-                <input name="reason" className={`${INPUT} w-48`} />
-              </label>
-              <button
-                type="submit"
-                name="action"
-                value="charge"
-                className="rounded bg-amber-700 px-3 py-2 text-xs font-medium text-white hover:bg-amber-600"
-              >
-                Charge
-              </button>
-              {/* ⚠️ Writing off needs a reason instead of a person — the two ways out, and both
-                  require somebody to say something. */}
-              <button
-                type="submit"
-                name="action"
-                value="write_off"
-                className="rounded border border-amber-400 px-3 py-2 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900"
-              >
-                Write off
-              </button>
+              )}
             </form>
           ))}
         </section>

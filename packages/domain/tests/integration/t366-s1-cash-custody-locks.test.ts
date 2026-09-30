@@ -13,9 +13,9 @@ import { sql as dsql } from 'drizzle-orm';
  * `accrue`, two-store shape), and `liabilities.test.ts` (`fund`, `createLiability`,
  * `chargeLiability`, `positionOf`).
  *
- * T4 (charge vs reversal) needs S2's `resolveRemittanceVariance` charge action, which does not
- * exist yet — per the task doc's own instruction ("the tester adds it to this file when S2
- * lands"), it is deliberately NOT written here.
+ * T4 (charge vs reversal) — added 2026-09-30 now that S2's `resolveRemittanceVariance` charge
+ * action has landed, per the task doc's own instruction ("the tester adds it to this file when S2
+ * lands").
  *
  * Every leg below must be red today because no lock exists yet: without one, the second caller
  * reads the cap under READ COMMITTED before the first commits, so both pass a cap only one should
@@ -33,7 +33,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, liabilitiesRepo, remittanceRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { createRemittance, chargeLiability, createLiability, payLiability } from '@shareat/domain';
+import { createRemittance, chargeLiability, createLiability, payLiability, resolveRemittanceVariance, reverseRemittance } from '@shareat/domain';
 import { postEntry } from '../../src/ledger/post-entry';
 import { distributeServiceCharge } from '../../src/service-charge';
 
@@ -190,11 +190,12 @@ async function remittanceFixture(hint: string) {
   const [staff] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Staff') returning id`;
   await sql`insert into person_roles (person_id, org_id, role) values (${staff!.id}, ${orgId}, 'staff')`;
   await sql`insert into person_store_scope (person_id, store_id, source) values (${staff!.id}, ${storeId}, 'manual')`;
+  const [cashier] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Cashier') returning id`;
   const [till] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'cashier' and is_foundation`;
   const [safe] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
-  return { orgId, storeId, admin: actor(orgId, admin!.id), adminId: admin!.id, staff: actor(orgId, staff!.id), till: till!.id, safe: safe!.id };
+  return { orgId, storeId, admin: actor(orgId, admin!.id), adminId: admin!.id, staff: actor(orgId, staff!.id), cashierId: cashier!.id, till: till!.id, safe: safe!.id };
 }
 type RemittanceFixture = Awaited<ReturnType<typeof remittanceFixture>>;
 
@@ -523,5 +524,71 @@ describe('T3 — payLiability: two payments cannot both pass one outstanding cap
     const f = await liabilityFixture('t3solo');
     const result = await asOrg(f.orgId, payOp(f, '700.00'));
     expect(result.outstanding).toBe('300.00');
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// T4 — charge vs reversal (both take lockStoreCashCustody, the SAME advisory key as T1)
+// -----------------------------------------------------------------------------------------------
+
+async function partyBalance1230(orgId: string, personId: string): Promise<string> {
+  const [row] = await sql<{ total: string }[]>`
+    select coalesce(sum(l.debit - l.credit), 0)::text as total
+    from journal_lines l join journal_entries e on e.id = l.entry_id join accounts a on a.id = l.account_id
+    where e.org_id = ${orgId} and e.status <> 'draft' and a.code = '1230' and l.party_type = 'employee' and l.party_id = ${personId}`;
+  return Number(row!.total).toFixed(2);
+}
+async function totalReversalEntries(orgId: string): Promise<number> {
+  const [row] = await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where org_id = ${orgId} and reversal_of_entry_id is not null`;
+  return Number(row!.n);
+}
+async function chargedRemittance(hint: string) {
+  const f = await remittanceFixture(hint);
+  await verifiedDay(f, '2026-01-05');
+  await tillMovement(f, '2026-01-05', '10000.00');
+  const r = await asOrg(f.orgId, (tx) =>
+    createRemittance(tx, f.admin, { storeId: f.storeId, remittedOn: '2026-01-05', lines: [{ fromMoneyAccountId: f.till, toMoneyAccountId: f.safe, amount: '9850.00' }] }),
+  );
+  return { f, r };
+}
+const chargeOp = (f: RemittanceFixture, varianceId: string) => (tx: Tx) =>
+  resolveRemittanceVariance(tx, f.admin, { varianceId, action: 'charge', personId: f.cashierId, on: '2026-01-06' });
+const reverseOp = (f: RemittanceFixture, remittanceId: string, reason: string) => (tx: Tx) =>
+  reverseRemittance(tx, f.admin, { remittanceId, reason });
+
+describe('T4 — charge vs reversal', () => {
+  it('A holds a charge open; B reverses -> B waits, then reverses the transfer AND the charge entry: 1230 back to 0.00, exactly one reversal of the charge entry — Mutant: status/journal_entry_id read before the lock -> 1230 stays 150.00, red', async () => {
+    const { f, r } = await chargedRemittance('t4a');
+
+    const { aResult, bResult, bWaited } = await runConcurrencyLeg(f.orgId, chargeOp(f, r.varianceId!), reverseOp(f, r.id, 'T4a'), ADVISORY);
+
+    expect(bWaited, 'B never waited: no lock').toBe(true);
+    expect(aResult.status, 'the charge itself always succeeds here').toBe('fulfilled');
+    expect(bResult.status, 'the reversal re-reads and must still succeed').toBe('fulfilled');
+    expect(await partyBalance1230(f.orgId, f.cashierId)).toBe('0.00');
+    expect(await totalReversalEntries(f.orgId)).toBe(2); // the transfer's reversal + the charge's reversal
+  });
+
+  it('reverse order: A reverses, B (charge) is refused — the remittance is no longer posted; nothing charged', async () => {
+    const { f, r } = await chargedRemittance('t4b');
+
+    const { aResult, bResult, bWaited } = await runConcurrencyLeg(f.orgId, reverseOp(f, r.id, 'T4b'), chargeOp(f, r.varianceId!), ADVISORY);
+
+    expect(bWaited, 'B never waited: no lock').toBe(true);
+    expect(aResult.status).toBe('fulfilled');
+    expect(bResult.status, 'the remittance is reversed — nothing left to charge against').toBe('rejected');
+    expect(await partyBalance1230(f.orgId, f.cashierId)).toBe('0.00');
+  });
+
+  it('two concurrent reversals: exactly one succeeds, the other is refused as already reversed; exactly one reversal entry per transfer — Mutant: status read before the lock -> both succeed, two reversal entries, red', async () => {
+    const { f, r } = await chargedRemittance('t4c');
+
+    const { aResult, bResult, bWaited } = await runConcurrencyLeg(f.orgId, reverseOp(f, r.id, 'A'), reverseOp(f, r.id, 'B'), ADVISORY);
+
+    expect(bWaited, 'B never waited: no lock').toBe(true);
+    const outcomes = [aResult, bResult];
+    expect(outcomes.filter((o) => o.status === 'fulfilled').length, 'exactly one reversal succeeds').toBe(1);
+    expect(outcomes.filter((o) => o.status === 'rejected').length, 'the other is refused as already reversed').toBe(1);
+    expect(await totalReversalEntries(f.orgId), 'the one transfer has exactly one reversal entry (this fixture never reaches the charge)').toBe(1);
   });
 });

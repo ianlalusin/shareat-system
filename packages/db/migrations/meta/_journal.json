@@ -1065,6 +1065,13 @@
       "when": 1800847907084,
       "tag": "0171_t357_def490_same_org_money_account_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 172,
+      "version": "7",
+      "when": 1800934307084,
+      "tag": "0172_t366_def386_remittance_variance_posting",
+      "breakpoints": true
     }
   ]
 }
