@@ -1,6 +1,6 @@
 # T-367: AP/AR money — DEF-201, DEF-396, DEF-420, DEF-499, DEF-500, DEF-395, DEF-508, DEF-054
 
-**Status:** APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
+**Status:** **S1 IN PROGRESS — reds + step 1 parked on branch `wip/2026-09-30-reds`; step 2 = migration 0173 (after 0172)** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
 1–7 and the minors applied. Spec by the Opus planner, 2026-09-30. Batch B of the money-defect
 push (Ian, 2026-09-30: *"close all open money defects in v2"*), `docs/plans/money-defects-2026-09-30.md`.
 **Model:** Sonnet for each slice, tester first and then builder. One lane runs the slices in order.

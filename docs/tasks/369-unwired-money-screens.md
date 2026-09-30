@@ -1,6 +1,6 @@
 # T-369: Unwired money screens — DEF-198, DEF-314, DEF-302, DEF-479, DEF-291
 
-**Status:** APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q1–Q4 defaults ship). Review changes
+**Status:** **Not started — Q1–Q4 answered 2026-09-30 (row 260; Q1 re-entry manager-only)** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q1–Q4 defaults ship). Review changes
 1–7 and both minors applied (marked ✎R). Written 2026-09-30 by the Opus planner at HEAD `594f600`. Batch D of
 the money-defect push (Ian, 2026-09-30: *"close all open money defects in v2"*), `docs/plans/money-defects-2026-09-30.md`.
 DEF-302 is included under Ian's ruling **(a)** of 2026-09-30.

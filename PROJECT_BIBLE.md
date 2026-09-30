@@ -65,35 +65,35 @@
 - `1203–1237` 10. Phase plan
 - `1238–1254` 11. Migration & ETL rules
 - `1255–1319` 12. Inherited landmines — do not repeat these
-- `1320–1579` 13. Decision log
-- `1580–1599` 14. Amendment protocol
-- `1600–1604` 15. Engineering standards — the industry practices this project follows
-  - `1605–1610` 15.1 Build order: walking skeleton first
-  - `1611–1622` 15.2 Golden-master testing — the most important practice here
-  - `1623–1631` 15.3 Strangler Fig, not big-bang cutover
-  - `1632–1636` 15.4 No dual-write
-  - `1637–1645` 15.5 Expand/contract migrations
-  - `1646–1654` 15.6 Observability from day zero, not later
-  - `1655–1659` 15.7 CI gates
-  - `1660–1664` 15.8 Backups and a tested restore
-  - `1665–1669` 15.9 Twelve-Factor config
-  - `1670–1677` 15.10 Append-only ledgers — but not event sourcing
-  - `1678–1682` 15.11 Defence in depth
-  - `1683–1711` 15.12 Skills are lenses, not assurance
-  - `1712–1718` 15.13 Reconciliation is a permanent feature
-- `1719–1723` 16. The accounting spine
-  - `1724–1755` 16.0 What we are actually fixing — the diagnosis
-  - `1756–1799` 16.1 The ten invariants — non-negotiable
-  - `1800–1814` 16.2 The oracle: how "correct" is tested
-  - `1815–1836` 16.3 The model — header + lines, not legs
-  - `1837–1856` 16.4 Deliberately simpler than ERPNext
-  - `1857–1923` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1924–1948` 16.6 What v1 already gets right — preserve the intent
-  - `1949–1970` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1971–1985` 16.8 What v1's accounting already gets right
-  - `1986–2029` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2030–2080` 16.10 Posting patterns — one canonical pattern per business event
-  - `2081–2112` 16.11 Inventory's accounting integration
+- `1320–1587` 13. Decision log
+- `1588–1607` 14. Amendment protocol
+- `1608–1612` 15. Engineering standards — the industry practices this project follows
+  - `1613–1618` 15.1 Build order: walking skeleton first
+  - `1619–1630` 15.2 Golden-master testing — the most important practice here
+  - `1631–1639` 15.3 Strangler Fig, not big-bang cutover
+  - `1640–1644` 15.4 No dual-write
+  - `1645–1653` 15.5 Expand/contract migrations
+  - `1654–1662` 15.6 Observability from day zero, not later
+  - `1663–1667` 15.7 CI gates
+  - `1668–1672` 15.8 Backups and a tested restore
+  - `1673–1677` 15.9 Twelve-Factor config
+  - `1678–1685` 15.10 Append-only ledgers — but not event sourcing
+  - `1686–1690` 15.11 Defence in depth
+  - `1691–1719` 15.12 Skills are lenses, not assurance
+  - `1720–1726` 15.13 Reconciliation is a permanent feature
+- `1727–1731` 16. The accounting spine
+  - `1732–1763` 16.0 What we are actually fixing — the diagnosis
+  - `1764–1807` 16.1 The ten invariants — non-negotiable
+  - `1808–1822` 16.2 The oracle: how "correct" is tested
+  - `1823–1844` 16.3 The model — header + lines, not legs
+  - `1845–1864` 16.4 Deliberately simpler than ERPNext
+  - `1865–1931` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1932–1956` 16.6 What v1 already gets right — preserve the intent
+  - `1957–1978` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1979–1993` 16.8 What v1's accounting already gets right
+  - `1994–2037` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2038–2088` 16.10 Posting patterns — one canonical pattern per business event
+  - `2089–2120` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1575,6 +1575,14 @@ just a patch.**
 | 250 | 2026-09-29 | **SUPPLIER CREDIT TERMS ARE CHANGED UNDER THE EXISTING `approve_supplier` GATE — MANAGERS AND ADMINS, NOT ADMIN-ONLY (T-362 Q1).** Ian, 2026-09-29: *"managers and admins is fine"*. The same gate already covers the supplier bank account, the riskier field; every change writes an `audit_log` row | Ian | T-362 |
 | 251 | 2026-09-29 | ⭐ **THE AI LEARNS FROM PEOPLE'S LABELS AFTER DEPLOY, NOT FROM A V1 LABELLING PASS: MANAGERS AND ADMINS GET A MANUAL "FLAG EXPENSE" (DOUBTFUL) CONTROL NOW; RECEIPT PHOTOS ARE NEVER SENT TO THE AI (T-359 Q3, Q5, Q6).** Ian, 2026-09-29: *"q3 agree with reco, q5 no need for receipt be sent to ai, q6 lets teach ai when we deploy rather than now so it will be trained, lets add a flag expense feature manually for manager and admin to label any doubtful expense. so as time goes by ai will be good at judging"*. **Q3:** the "looks personal" check is the first AI feature (replacing ADR-014's briefing pilot), built only once the §6 base-rate count shows it earns its keep. **Q5:** no receipt images to the provider — Phase 1b is dropped. **Q6:** no half-day v1 labelling; instead **T-363**, a manual flag on any expense (manager + admin), whose flags and resolutions become the labelled set the Phase 1 precision gate is measured against once enough accumulate | Ian | T-359 · T-363 |
 | 252 | 2026-09-30 | ⭐ **EVERY QUESTION FOR IAN LIVES ON THE "OPEN QUESTIONS" PAGE — https://claude.ai/artifact/LMQCEXDZqHyAJz69FCy7FN.** Ian, 2026-09-30: *"list all questions there that need my answer in layman's terms, provide an example so I know what I am deciding on, leave a textbox I can type my answer … move the answered one at the bottom, priority questions on top."* Each question is one document in the page's `questions` collection (read and written with the `ArtifactData` tool): `title`, `why` (plain words), `example`, `options` (one marked `recommended`), `priority` (1 = most urgent), optional `urgent` deadline, `source` (task/DEF), `status` open/answered, and Ian's `answer` + `answeredAt`. **Rules:** (1) a session that needs Ian's decision ADDS it there, in plain language with an example, as well as asking in chat; (2) every session READS the page at start and before building anything gated on Ian — an answer typed there is Ian's ruling exactly as if said in chat; (3) an answer given in chat is also written there (status answered) so the page stays the one list; (4) each ruling is still recorded in the task spec / register / this log as before. Only the owner can write answers (page rule). | Ian wants one place to see and answer every open decision, so a ruling never lives only in a transcript | Yes — the page sits on top of the specs, register and this log, which stay the record |
+| 253 | 2026-09-30 | ⭐ **A REMITTANCE SHORTAGE IS ALWAYS CHARGED TO THE PERSON RESPONSIBLE — NEVER WRITTEN OFF; AN OVERAGE BECOMES INCOME ONLY WHEN A MANAGER CONFIRMS IT (T-366 Q1, Q3, Q2).** Ian, 2026-09-30: *"no remittance shortage always charge to staff"*, *"manager confirm"*. `write_off` is retired (refused permanently, gone from the UI); legacy `written_off` rows are reported, not re-posted. A shortage posts Dr 1230 (party employee) / Cr 1110 (`remittance_variance`, POSTING-PATTERNS). Q2 (a): a negative 2120/2130 balance is a finding only; 2160 alone blocks close. | Cash that goes missing is always someone's; a write-off hides it | Yes — re-enable a write-off path with its own capability |
+| 254 | 2026-09-30 | ⭐ **COMMISSARY ORDERS: READY IS FINAL; A BRANCH STAYS BLOCKED UNTIL ITS ORDER IS RECEIVED OR CANCELLED; FREIGHT IS THE RECEIVING BRANCH'S EXPENSE (DEF-127 (a), DEF-511, T-372 Q1–Q3).** Ian, 2026-09-30: *"when it is prepared … it cant go back to being unprepared"*, *"like v1 blocked, until received or cancelled"*. Outbound freight posts as haulage on the receiving branch at confirmReceipt; the commissary credits its own 6630; freight posts even when nothing arrives; over-receipt books only what was sent, the excess is an "over" discrepancy blocking day-open. v1's received-quantity discrepancy record is copied and hardened. | Matches how the kitchen actually works; v1's block is kept | Yes — lifecycle is code, no data shape depends on it |
+| 255 | 2026-09-30 | **CLOSED MONTHS' STOCK STAYS FIXED — THE ADMIN CLOSED-PERIOD OVERRIDE DOES NOT COVER STOCK MOVEMENTS (DEF-302 (a)).** confirmReceipt, runProductionPosting and recordInternalReturn refuse with a plain closed-period sentence instead of a stock error. | Re-costing a closed month's stock silently changes reported margins | Yes |
+| 256 | 2026-09-30 | **PAYROLL: A BAD PAY CYCLE IS REFUSED ON SAVE; RECOVERIES CLEAR AN OWNER'S OLDEST DEBT FIRST (DEF-409, T-370 Q1).** Semi-monthly needs exactly two pay days ≤16 days apart. A voided pay run takes the freed drawing cap back. | Catch the error when it is typed, not at pay day | Yes |
+| 257 | 2026-09-30 | **FISCAL PERIODS: NO MONTH CLOSES WHILE AN EARLIER MONTH IS MISSING; AN IN-SERVICE ASSET'S TERMS ARE CORRECTED BY REVERSING AND RE-BOOKING (T-368 Q0 yes, Q1 (b)).** The term lock ships first; the reverse-and-rebook correction is a follow-up slice. | Gaps in the period chain make every later close unsound | Yes |
+| 258 | 2026-09-30 | **PAYMENT METHODS: `ar_collection` IS RETIRED AS AN EXPENSE METHOD; v1 `other` SPLITS INTO SUPPLIER CREDIT/REBATE AND VOUCHER/POINTS/GIFT CERTIFICATE (DEF-054).** The collection fee is a deduction line on the customer receipt; the ETL skips v1's auto fee-expense docs; v1 `other` rows land in suspense, flagged. Count from landed data before building. | Standard accounting; one method, one meaning | Yes — ETL mapping only until built |
+| 259 | 2026-09-30 | **AN EMPLOYMENT THE CALLER CANNOT SEE GETS ONE UNIFORM REFUSAL SENTENCE (T-364 Q1 (a)); SAME-ORG FOREIGN KEYS WAIT UNTIL BEFORE A SECOND ORGANISATION (DEF-491).** | A specific "not found" leaks existence | Yes |
+| 260 | 2026-09-30 | **IAN'S ANSWERS ON THE OPEN QUESTIONS PAGE, 2026-09-30 — T-367 Q1–Q7, T-369 Q1–Q4, T-371, DEF-443, DEF-476, T-315, T-316 (full list: `docs/plans/money-defects-2026-09-30.md`).** Headlines: a supplier rebate reduces the payable; a paid bill cannot be voided until its payment is; a duplicate write-off by the same person is the same write-off; a voided sales day frees its date but **only a manager may re-enter it, never staff**; an empty money box is refused only when the amount is required, never turned into zero; a cancelled order's thread is read-only; amounts leave page addresses before launch; existing staff get store access through a one-time admin-reviewed list; cashiers count before handing over. | Answers typed on the page are rulings (row 252) | Yes, each |
 
 
 ## 14. Amendment protocol

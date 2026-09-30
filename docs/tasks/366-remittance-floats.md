@@ -1,6 +1,6 @@
 # T-366: Remittance and floats — DEF-386 (+DEF-105), DEF-374, DEF-398, DEF-399, DEF-406
 
-**Status:** APPROVED 2026-09-30 (orchestrator, after independent Opus review; 7 review changes applied). Spec by the Opus planner, 2026-09-30. Part of the money-defect push
+**Status:** **S1 DONE (`d0ceb2c`), S1b DONE (`891bc1e`), S1c DONE (`f1fa09c`); S2 BUILT + AUDITED, committed at the 2026-09-30 wrap-up (live-charge smoke pending); S3/S5/S6 next** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; 7 review changes applied). Spec by the Opus planner, 2026-09-30. Part of the money-defect push
 (Ian, 2026-09-30: *"close all open money defects in v2"*), batch A of `docs/plans/money-defects-2026-09-30.md`.
 **Model:** Sonnet for each slice, tester first and then builder. One lane runs the slices in order.
 **Migration:** YES, exactly one: `0172_t366_def386_remittance_variance_posting.sql`, hand-authored per ADR-012 §5, in

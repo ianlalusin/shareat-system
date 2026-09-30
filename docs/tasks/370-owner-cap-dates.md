@@ -1,6 +1,6 @@
 # T-370: owner drawing cap after payroll (and its concurrency, DEF-516), real calendar dates, and a semi-monthly pay cycle refused on save — DEF-108, DEF-494, DEF-409
 
-**Status:** APPROVED 2026-09-30 (orchestrator, after independent Opus review) — review changes 1–11 applied in place. Spec by the Opus planner, 2026-09-30. **Model:** Sonnet, tester then
+**Status:** **S1 DONE (`42da29b`), S2 DONE (`85eb34e`); S3 (DEF-409 migration) next; monthly-floor question open** — APPROVED 2026-09-30 (orchestrator, after independent Opus review) — review changes 1–11 applied in place. Spec by the Opus planner, 2026-09-30. **Model:** Sonnet, tester then
 builder, per slice.
 **Census:** `docs/plans/money-defects-2026-09-30.md` (batch E). DEF-409 was added by Ian's ruling of 2026-09-30:
 *"refuse on save: semi-monthly needs exactly two pay days ≤16 days apart."*

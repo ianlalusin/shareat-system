@@ -91,3 +91,18 @@ Decided-unbuilt: 260. Privacy: 476. v1 requirements v2 already beats: 051, 059, 
   and harden it (T-372 S6 if v2 lacks or is weaker).
 - **T-372 Q3 → (i)** (Ian, 2026-09-30): over-receipt books only what was sent; the excess is an "over" discrepancy blocking day-open (top-up dispatch or return).
 - **T-370 Q1 → ok** (Ian, 2026-09-30): payroll recoveries clear an owner's oldest debt first; a voided pay run takes the freed cap back.
+
+## Ian's answers on the Open Questions page (read at wrap-up, 2026-09-30) — bible row 260
+- **T-367**: Q1 rebate → reduces the payable · Q2 voucher account → only if the count shows more than a handful ·
+  Q3 v1 `other` rows → an EXISTING suspense account (⚠️ which one not named — re-asked on the page) · Q4 → refuse voiding
+  a paid bill until the payment is voided · Q5 → an identical second write-off by the same person is the same write-off ·
+  Q6 bad prod data → show Ian each one before anything changes · Q7 → add write-off and bill-void to POSTING-PATTERNS.
+  Q0 (prod count) → "run it on session terminal": the orchestrator runs the read-only count itself.
+- **T-369**: Q1 (a) voiding frees the date, **but only a manager can re-enter it, never staff** · Q2 (a) · Q3 (a) · Q4 (a).
+- **T-371**: empty money box → "field decides" (required→refuse; defaulted→keep; optional→empty, never zero).
+- **Other**: DEF-443 → thread read-only on a cancelled order · DEF-476 → fix before launch · T-315 → (2) one-time
+  admin-reviewed list · T-316 → cashiers count BEFORE handing over · service charge → on after T-366 · dark colours → keep ·
+  dev migrations 0169–0171 → apply to the shared dev DB · supplier terms after deploy → the tester does it.
+- **Ops handed to the orchestrator by Ian**: fiscal-period timer on prod ("do it with orchestrator"); prod ACL check for
+  0169 ("run it with session"); T-367 Q0 count; Firebase terminal account exists — Ian asks where to put the credentials.
+- **Still open**: DEF-539 charge scope · T-370 monthly floor · HR statutory data owner · T-367 Q3 which suspense account.

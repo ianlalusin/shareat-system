@@ -1,6 +1,6 @@
 # T-368: Periods and depreciation — DEF-424, 426, 433, 434, 435, 441, 442, 436
 
-**Status:** APPROVED 2026-09-30 (orchestrator, after independent Opus review; its eight CHANGES folded in). Written 2026-09-30 by the Opus planner for the money-defect push
+**Status:** **S1 reds written (on `wip/2026-09-30-reds`; 5 TS errors = expected red); S0 migration test written, not yet run** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; its eight CHANGES folded in). Written 2026-09-30 by the Opus planner for the money-defect push
 (Ian, 2026-09-30: *"close all open money defects in v2"*). Census: `docs/plans/money-defects-2026-09-30.md`, batch C.
 **Model:** Sonnet for every slice, tester first, then builder. Any spec amendment is written in plan mode (Opus).
 **Line numbers** were checked at HEAD `3ed900f`.

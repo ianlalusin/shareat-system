@@ -1,6 +1,6 @@
 # T-364: authorise before validating — expenses form (DEF-496) and recordAdjustment (DEF-497)
 
-**Status:** APPROVED 2026-09-30 (orchestrator, after independent Opus review). Spec: Opus planner, 2026-09-30. **Model:** Sonnet, tester then
+**Status:** **DONE 2026-09-30 (`61ea2e0`, DEF-496/497 fixed)** — APPROVED 2026-09-30 (orchestrator, after independent Opus review). Spec: Opus planner, 2026-09-30. **Model:** Sonnet, tester then
 builder, one slice at a time.
 **Migration:** **none.** Both slices change action or domain code only. No table, column, CHECK or policy is touched,
 so there is no `classification.ts` or `rls/registry.ts` entry.

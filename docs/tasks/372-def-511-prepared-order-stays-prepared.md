@@ -1,6 +1,6 @@
 # T-372: a prepared commissary order never goes back (DEF-511); internal freight posts at receipt (DEF-127)
 
-**Status:** APPROVED 2026-09-30 (orchestrator, Ian's Q1/Q2). Written 2026-09-30 by the Opus planner at HEAD `3ed900f`.
+**Status:** **S1 reds written (on `wip/2026-09-30-reds`); builder next** — APPROVED 2026-09-30 (orchestrator, Ian's Q1/Q2). Written 2026-09-30 by the Opus planner at HEAD `3ed900f`.
 **Lane:** commissary, one lane. **Model:** Sonnet (tester first, then builder, per slice).
 **Migration:** YES, one hand-authored migration (ADR-012 §5). T-366 holds 0172 and T-368 takes the next index, so
 use **0174** (after T-366's 0172 and T-368's 0173) unless the index is reassigned at build. It carries S2 and nothing else.

@@ -1,6 +1,6 @@
 # T-371: NaN sweep, by the column and not by the spelling (DEF-382, DEF-395)
 
-**Status:** APPROVED 2026-09-30 (orchestrator, after independent Opus review). Spec by the Opus planner, 2026-09-30.
+**Status:** **Not started (last) — empty-box ruling "field decides" 2026-09-30** — APPROVED 2026-09-30 (orchestrator, after independent Opus review). Spec by the Opus planner, 2026-09-30.
 The review asked for 14 changes; all are applied (marked ✎R1 to ✎R14). This is the last task of Ian's money-defect
 push (*"close all open money defects in v2"*), batch F of `docs/plans/money-defects-2026-09-30.md`.
 

@@ -1,6 +1,6 @@
 # T-365: audit every supplier bank-account change (DEF-498) and never wipe unsent supplier fields (DEF-506)
 
-**Status:** APPROVED 2026-09-30 (orchestrator, after independent Opus review). Spec: Opus planner, 2026-09-30. **Model:** Sonnet, tester then
+**Status:** **DONE 2026-09-30 (`ba14ba0`, DEF-498/506 fixed)** — APPROVED 2026-09-30 (orchestrator, after independent Opus review). Spec: Opus planner, 2026-09-30. **Model:** Sonnet, tester then
 builder.
 **Migration:** **none.** `audit_log` and its policies exist (0167); `suppliers.bank_name`, `bank_account_name` and
 `bank_account_number` exist (`packages/db/schema/suppliers.ts:156-158`). No new table, so no `classification.ts` or
