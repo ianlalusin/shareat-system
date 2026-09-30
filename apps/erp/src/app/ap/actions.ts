@@ -43,15 +43,20 @@ function back(path: string, params: Record<string, string>): never {
  * companion hidden marker rather than from the checkbox alone — otherwise un-ticking it on an
  * edit form would be indistinguishable from not rendering the field, and the value would never
  * turn off. That is why `orPresent` exists.
+ *
+ * T-365 / DEF-506 — R8: absent means untouched, sent-blank means clear. A key the form did not
+ * render must map to `undefined` (`editSupplier` leaves it alone), never to `null` (a clear) —
+ * otherwise a partial edit form wipes every field it does not happen to show.
  */
 function supplierFieldsFrom(fd: FormData) {
-  const s = (k: string) => str(fd, k) || null;
-  const cls = str(fd, 'classification');
+  const s = (k: string) => (fd.has(k) ? str(fd, k) || null : undefined);
   return {
     email: s('email'),
     representativeName: s('representativeName'),
     tin: s('tin'),
-    classification: (cls || null) as 'corporate' | 'individual' | 'other' | null,
+    classification: fd.has('classification')
+      ? ((str(fd, 'classification') || null) as 'corporate' | 'individual' | 'other' | null)
+      : undefined,
     issuesOfficialReceipt: fd.has('issuesOfficialReceiptPresent')
       ? fd.get('issuesOfficialReceipt') === 'on'
       : undefined,

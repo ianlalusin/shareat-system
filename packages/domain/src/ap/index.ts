@@ -218,7 +218,8 @@ export async function createSupplier(
  * did not happen to render.
  *
  * T-362 / DEF-495 — a real change to `creditTermsDays` is audited in `audit_log` (R3), since it
- * decides whether AP credit may be booked against this supplier.
+ * decides whether AP credit may be booked against this supplier. T-365 / DEF-498 — a real change
+ * to any of the three bank fields is audited too, same transaction, full before/after triple.
  */
 export async function editSupplier(
   tx: Tx | null,
@@ -282,6 +283,38 @@ export async function editSupplier(
         after: { creditTermsDays },
         // The ERP screen is this function's only caller today; a second front-end must thread its
         // own source through, not inherit this one (same comment as the precedent).
+        source: 'web',
+      });
+    }
+
+    // T-365 / DEF-498 — R1/R2: one `set_supplier_bank_account` row per edit that REALLY changes
+    // where money goes, judged on the WRITTEN value (reusing `values`' already-normalised bank
+    // keys, not renormalising), never on the raw input. Full before/after triple even when only
+    // one field changed, so a row reads on its own. After the terms append (R1's ordering).
+    const bankBefore = {
+      bankName: existing.bankName,
+      bankAccountName: existing.bankAccountName,
+      bankAccountNumber: existing.bankAccountNumber,
+    };
+    const bankAfter = {
+      bankName: input.bankName !== undefined ? values.bankName ?? null : bankBefore.bankName,
+      bankAccountName:
+        input.bankAccountName !== undefined ? values.bankAccountName ?? null : bankBefore.bankAccountName,
+      bankAccountNumber:
+        input.bankAccountNumber !== undefined ? values.bankAccountNumber ?? null : bankBefore.bankAccountNumber,
+    };
+    if (
+      bankBefore.bankName !== bankAfter.bankName ||
+      bankBefore.bankAccountName !== bankAfter.bankAccountName ||
+      bankBefore.bankAccountNumber !== bankAfter.bankAccountNumber
+    ) {
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'set_supplier_bank_account',
+        entity: 'suppliers',
+        entityId: input.supplierId,
+        before: bankBefore,
+        after: bankAfter,
         source: 'web',
       });
     }
