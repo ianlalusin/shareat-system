@@ -11,6 +11,10 @@
  * unenforceable. No business rule is re-implemented here — `createExpense` / `approveExpense`
  * / `editExpense` / `voidExpense` (packages/domain/src/expenses/*.ts) already own every
  * invariant; this file only wires HTML forms to them.
+ *
+ * ⭐ T-364 / DEF-496 (bible §7 rule 1) — `parseExpenseForm` is authorised BEFORE any field is
+ * judged or any row (an invoice, a store's money sources, a supplier) is read; the domain gate
+ * inside `createExpense` / `recordExpenseForInvoice` is unchanged and still decides.
  */
 import { redirect } from 'next/navigation';
 import {
@@ -21,6 +25,7 @@ import {
   deleteExpenseDraft,
   recordExpenseForInvoice,
   validateMoneyLines,
+  internalFault,
   type ExpensePaymentMethod,
   type MoneyLine,
 } from '@shareat/domain';
@@ -29,6 +34,7 @@ import { withOrgPrincipal } from './lib';
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { authorize, type Actor, type Capability } from '@shareat/auth';
 
 /**
  * ⭐ Screen-local, deliberately — T-266, migration 0141, and the same reasoning `till/actions.ts`
@@ -93,13 +99,29 @@ interface ParsedExpenseForm {
  * are in hand (create a draft vs. record-and-post against an already-verified invoice), never in
  * how they are parsed. `supplierId` is resolved from the invoice when the form did not supply it
  * (the invoice already names its supplier — the form only has to pick ONE thing).
+ *
+ * ⭐ T-364 / DEF-496 — `capabilities` is authorised, in `@shareat/auth`'s own order, before any
+ * field below is judged or any row (an invoice, a store's money sources, a supplier) is read.
+ * `Choose a store.` stays the one check ahead of the gate because WITHOUT a store the gate's
+ * refusal varies by role (`authorize` throws `noActiveRole` or `roleMayNot` before it ever reaches
+ * the store-scope check) — running it anyway would re-open the oracle this task closes. It reads
+ * nothing and reveals nothing.
  */
 async function parseExpenseForm(
   formData: FormData,
-  actor: { orgId: string },
+  actor: Actor,
   fallbackReturnTo: string,
+  capabilities: readonly Capability[],
 ): Promise<ParsedExpenseForm> {
   const storeId = str(formData, 'storeId');
+  if (!storeId) throw new Error('Choose a store.');
+  // An empty list would authorise nothing while every read below still runs — an unreachable
+  // invariant (both callers pass a fixed, non-empty list), never a user-facing refusal.
+  if (capabilities.length === 0) throw internalFault('parseExpenseForm: capabilities must not be empty');
+  await withOrgPrincipal(actor.orgId, async (tx) => {
+    for (const c of capabilities) await authorize(tx, actor, c, { storeId });
+  });
+
   const qs = carryQs(formData);
   // ⭐ Each form names where it actually lives (`/expenses/new` or `/ap/invoices/[id]`) — a
   // hardcoded error redirect back to one screen silently drops the other caller onto the wrong
@@ -132,7 +154,6 @@ async function parseExpenseForm(
     });
   }
 
-  if (!storeId) throw new Error('Choose a store.');
   if (!supplierInvoiceId) throw new Error('Choose a supplier invoice.');
   if (!supplierId) {
     const invoice = await withOrgPrincipal(actor.orgId, (tx) =>
@@ -195,7 +216,7 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let parsed: ParsedExpenseForm;
   try {
-    parsed = await parseExpenseForm(formData, actor, '/expenses/new');
+    parsed = await parseExpenseForm(formData, actor, '/expenses/new', ['create_expense']);
   } catch (err) {
     const qs = carryQs(formData);
     const returnTo = str(formData, 'returnTo') || '/expenses/new';
@@ -233,7 +254,7 @@ export async function recordExpenseForInvoiceAction(formData: FormData): Promise
   const actor = await requireActor();
   let parsed: ParsedExpenseForm;
   try {
-    parsed = await parseExpenseForm(formData, actor, '/ap');
+    parsed = await parseExpenseForm(formData, actor, '/ap', ['create_expense', 'approve_expense']);
   } catch (err) {
     const qs = carryQs(formData);
     const returnTo = str(formData, 'returnTo') || '/ap';

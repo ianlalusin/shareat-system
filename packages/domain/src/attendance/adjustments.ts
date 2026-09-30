@@ -3,7 +3,8 @@
  * `docs/tasks/158-attendance-adjustments.md`.
  */
 import { sql } from 'drizzle-orm';
-import { authorize, type Actor } from '@shareat/auth';
+import { logger } from '@shareat/core/logger';
+import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import {
   attendanceAdjustmentsRepo,
   attendanceDaysRepo,
@@ -69,6 +70,13 @@ function parseMinutes(raw: string | number, key: string, label: string): number 
   return parseWholeNumberInput(t, `recordAdjustment: ${key}`, label, 0, 99999, ' of minutes');
 }
 
+/**
+ * T-364 / DEF-497 (R6) — the ONE sentence an unauthorised caller gets for an employment id, whether
+ * the id exists and is out of reach or does not exist at all. Two sentences would be an oracle.
+ */
+const EMPLOYMENT_OUT_OF_REACH =
+  'That employment does not exist, or it is not at a store where you manage attendance.';
+
 const SHIFT_DAY_MISSING = 'The shift day is missing. Reopen the day from the attendance list and try again.';
 const shiftDayMalformed = (v: string) =>
   `The shift day — "${v}" is not a date. Reopen the day from the attendance list and try again.`;
@@ -107,13 +115,30 @@ export async function recordAdjustment(
   actor: Actor,
   input: RecordAdjustmentInput,
 ): Promise<{ adjustment: AttendanceAdjustmentRow; day: AttendanceDayRow }> {
+  // T-364 / DEF-497 — the lookup stays first because it supplies the gate's store, but a missing
+  // row, another org's row and a row the caller may not manage all surface as ONE refusal
+  // (AuthorizationError, same userMessage), so the reply cannot be used to probe ids or learn a
+  // person's store. The real diagnosis goes to the server log (never the screen) and rides on `cause`.
   const employment = await employmentRepo.getEmployment(tx, input.employmentId);
-  if (!employment) throw new AdjustmentError(`No employment ${input.employmentId}`);
-
-  await authorize(tx, actor, 'manage_attendance', {
-    storeId: employment.storeId,
-    orgId: employment.orgId,
-  });
+  if (!employment || employment.orgId !== actor.orgId) {
+    const raw = `recordAdjustment: no employment ${input.employmentId} in org ${actor.orgId}`;
+    logger.warn({ employmentId: input.employmentId, actorOrgId: actor.orgId }, raw);
+    throw new AuthorizationError(raw, 'manage_attendance', EMPLOYMENT_OUT_OF_REACH);
+  }
+  try {
+    await authorize(tx, actor, 'manage_attendance', {
+      storeId: employment.storeId,
+      orgId: employment.orgId,
+    });
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      logger.warn({ employmentId: input.employmentId, err }, `recordAdjustment: ${err.message}`);
+      const uniform = new AuthorizationError(`recordAdjustment: ${err.message}`, 'manage_attendance', EMPLOYMENT_OUT_OF_REACH);
+      uniform.cause = err;
+      throw uniform;
+    }
+    throw err;
+  }
 
   // T-352 / DEF-478 — parsed directly after `authorize()`, so a non-holder sees the authorization
   // refusal rather than a field sentence for a form they were never allowed to submit.
