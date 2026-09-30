@@ -47,6 +47,7 @@
 | **Parallel agents must share no STATE, not merely no files.** Two agents running `test:integration` against the one `shareat_test` database truncate each other's fixtures. Before parallelising, ask what else is shared: the test DB, `migrations/meta/_journal.json`, a port | §3.4 · row 94 |
 | ⚠️ **Prefer a guard to `!` on a regex match**, and where `!` is used, a comment names what makes it safe. `noUncheckedIndexedAccess` is on deliberately and `!` is the one remedy that silently switches it off at the point of use | §13 row 206 |
 | **Messages are short** (Ian, 2026-09-24). A status line, real numbers, paths, and what the reader must act on. No narration, no restated brief, no bare ACKs. Ian hears only what needs him. Reports 15 lines or fewer, FINDINGS 30 or fewer. Evidence is never cut | §3.5a |
+| ⭐ **Every question for Ian goes on the Open Questions page** (Ian, 2026-09-30) — https://claude.ai/artifact/LMQCEXDZqHyAJz69FCy7FN, collection `questions` via `ArtifactData`: plain words, an example, options with one recommended, a priority. **Read it at session start and before building anything gated on Ian** — an answer typed there is his ruling. Answers given in chat are copied there too | §13 row 252 |
 | **Every report ends with a `FOR IAN` block** — plain language, what changed, what needs a decision | §3.5 |
 
 ### Definition of done — all of it, every time

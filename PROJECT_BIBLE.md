@@ -65,35 +65,35 @@
 - `1203–1237` 10. Phase plan
 - `1238–1254` 11. Migration & ETL rules
 - `1255–1319` 12. Inherited landmines — do not repeat these
-- `1320–1578` 13. Decision log
-- `1579–1598` 14. Amendment protocol
-- `1599–1603` 15. Engineering standards — the industry practices this project follows
-  - `1604–1609` 15.1 Build order: walking skeleton first
-  - `1610–1621` 15.2 Golden-master testing — the most important practice here
-  - `1622–1630` 15.3 Strangler Fig, not big-bang cutover
-  - `1631–1635` 15.4 No dual-write
-  - `1636–1644` 15.5 Expand/contract migrations
-  - `1645–1653` 15.6 Observability from day zero, not later
-  - `1654–1658` 15.7 CI gates
-  - `1659–1663` 15.8 Backups and a tested restore
-  - `1664–1668` 15.9 Twelve-Factor config
-  - `1669–1676` 15.10 Append-only ledgers — but not event sourcing
-  - `1677–1681` 15.11 Defence in depth
-  - `1682–1710` 15.12 Skills are lenses, not assurance
-  - `1711–1717` 15.13 Reconciliation is a permanent feature
-- `1718–1722` 16. The accounting spine
-  - `1723–1754` 16.0 What we are actually fixing — the diagnosis
-  - `1755–1798` 16.1 The ten invariants — non-negotiable
-  - `1799–1813` 16.2 The oracle: how "correct" is tested
-  - `1814–1835` 16.3 The model — header + lines, not legs
-  - `1836–1855` 16.4 Deliberately simpler than ERPNext
-  - `1856–1922` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1923–1947` 16.6 What v1 already gets right — preserve the intent
-  - `1948–1969` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1970–1984` 16.8 What v1's accounting already gets right
-  - `1985–2028` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2029–2079` 16.10 Posting patterns — one canonical pattern per business event
-  - `2080–2111` 16.11 Inventory's accounting integration
+- `1320–1579` 13. Decision log
+- `1580–1599` 14. Amendment protocol
+- `1600–1604` 15. Engineering standards — the industry practices this project follows
+  - `1605–1610` 15.1 Build order: walking skeleton first
+  - `1611–1622` 15.2 Golden-master testing — the most important practice here
+  - `1623–1631` 15.3 Strangler Fig, not big-bang cutover
+  - `1632–1636` 15.4 No dual-write
+  - `1637–1645` 15.5 Expand/contract migrations
+  - `1646–1654` 15.6 Observability from day zero, not later
+  - `1655–1659` 15.7 CI gates
+  - `1660–1664` 15.8 Backups and a tested restore
+  - `1665–1669` 15.9 Twelve-Factor config
+  - `1670–1677` 15.10 Append-only ledgers — but not event sourcing
+  - `1678–1682` 15.11 Defence in depth
+  - `1683–1711` 15.12 Skills are lenses, not assurance
+  - `1712–1718` 15.13 Reconciliation is a permanent feature
+- `1719–1723` 16. The accounting spine
+  - `1724–1755` 16.0 What we are actually fixing — the diagnosis
+  - `1756–1799` 16.1 The ten invariants — non-negotiable
+  - `1800–1814` 16.2 The oracle: how "correct" is tested
+  - `1815–1836` 16.3 The model — header + lines, not legs
+  - `1837–1856` 16.4 Deliberately simpler than ERPNext
+  - `1857–1923` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1924–1948` 16.6 What v1 already gets right — preserve the intent
+  - `1949–1970` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1971–1985` 16.8 What v1's accounting already gets right
+  - `1986–2029` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2030–2080` 16.10 Posting patterns — one canonical pattern per business event
+  - `2081–2112` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1574,6 +1574,7 @@ just a patch.**
 | 249 | 2026-09-29 | ⭐ **SUPPLIER CREDIT TERMS GET A WRITER BEFORE THE COD-CREDIT RULE MOVES INTO THE DOMAIN (DEF-495 option (a)).** Ian, 2026-09-29: *"(a) — build supplier terms editing first"*. Today `suppliers.credit_terms_days` has no writer, so every supplier reads as cash-on-delivery and row 247's credit default never fires; landing T-361 (DEF-492) first would make the recurring-expense job's credit drafts refuse daily. Order: **T-362 (supplier terms editing) → T-361** | Ian | DEF-495 · T-362 · T-361 |
 | 250 | 2026-09-29 | **SUPPLIER CREDIT TERMS ARE CHANGED UNDER THE EXISTING `approve_supplier` GATE — MANAGERS AND ADMINS, NOT ADMIN-ONLY (T-362 Q1).** Ian, 2026-09-29: *"managers and admins is fine"*. The same gate already covers the supplier bank account, the riskier field; every change writes an `audit_log` row | Ian | T-362 |
 | 251 | 2026-09-29 | ⭐ **THE AI LEARNS FROM PEOPLE'S LABELS AFTER DEPLOY, NOT FROM A V1 LABELLING PASS: MANAGERS AND ADMINS GET A MANUAL "FLAG EXPENSE" (DOUBTFUL) CONTROL NOW; RECEIPT PHOTOS ARE NEVER SENT TO THE AI (T-359 Q3, Q5, Q6).** Ian, 2026-09-29: *"q3 agree with reco, q5 no need for receipt be sent to ai, q6 lets teach ai when we deploy rather than now so it will be trained, lets add a flag expense feature manually for manager and admin to label any doubtful expense. so as time goes by ai will be good at judging"*. **Q3:** the "looks personal" check is the first AI feature (replacing ADR-014's briefing pilot), built only once the §6 base-rate count shows it earns its keep. **Q5:** no receipt images to the provider — Phase 1b is dropped. **Q6:** no half-day v1 labelling; instead **T-363**, a manual flag on any expense (manager + admin), whose flags and resolutions become the labelled set the Phase 1 precision gate is measured against once enough accumulate | Ian | T-359 · T-363 |
+| 252 | 2026-09-30 | ⭐ **EVERY QUESTION FOR IAN LIVES ON THE "OPEN QUESTIONS" PAGE — https://claude.ai/artifact/LMQCEXDZqHyAJz69FCy7FN.** Ian, 2026-09-30: *"list all questions there that need my answer in layman's terms, provide an example so I know what I am deciding on, leave a textbox I can type my answer … move the answered one at the bottom, priority questions on top."* Each question is one document in the page's `questions` collection (read and written with the `ArtifactData` tool): `title`, `why` (plain words), `example`, `options` (one marked `recommended`), `priority` (1 = most urgent), optional `urgent` deadline, `source` (task/DEF), `status` open/answered, and Ian's `answer` + `answeredAt`. **Rules:** (1) a session that needs Ian's decision ADDS it there, in plain language with an example, as well as asking in chat; (2) every session READS the page at start and before building anything gated on Ian — an answer typed there is Ian's ruling exactly as if said in chat; (3) an answer given in chat is also written there (status answered) so the page stays the one list; (4) each ruling is still recorded in the task spec / register / this log as before. Only the owner can write answers (page rule). | orchestrator |
 
 
 ## 14. Amendment protocol

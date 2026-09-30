@@ -1,10 +1,10 @@
 # T-372: a prepared commissary order never goes back (DEF-511); internal freight posts at receipt (DEF-127)
 
-**Status:** APPROVED-PENDING (orchestrator review). Written 2026-09-30 by the Opus planner at HEAD `3ed900f`.
+**Status:** APPROVED 2026-09-30 (orchestrator, Ian's Q1/Q2). Written 2026-09-30 by the Opus planner at HEAD `3ed900f`.
 **Lane:** commissary, one lane. **Model:** Sonnet (tester first, then builder, per slice).
 **Migration:** YES, one hand-authored migration (ADR-012 §5). T-366 holds 0172 and T-368 takes the next index, so
 use **0174** (after T-366's 0172 and T-368's 0173) unless the index is reassigned at build. It carries S2 and nothing else.
-⛔ **S3 and S4 are gated on Q1 (Ian).** S1, S2 and S5 are not gated and may start now.
+S1 to S5 are un-gated: Ian answered Q1 and Q2 on 2026-09-30. ⛔ **Part b of S6 (over-receipt) is gated on Q3.**
 **Line numbers** were checked at `3ed900f`. None of the BUILDER paths is dirty at that HEAD.
 
 ## Goal
@@ -150,6 +150,13 @@ use **0174** (after T-366's 0172 and T-368's 0173) unless the index is reassigne
     lock on a large table with rows of unknown shape. This table is small, it has one writer, and the precheck
     proves 0 violators;
   - mirrored in `packages/db/schema/trade.ts` beside `:171-172`, with a `// NOTE: … migration NNNN` comment.
+- **R5b (S6a). A second CHECK in the same migration:**
+  - `trade_order_lines_received_quantity_non_negative_check CHECK (received_quantity IS NULL OR received_quantity >= 0)`.
+  - It gets the same read-only production precheck: `select count(*) from trade_order_lines where received_quantity < 0`.
+    Expect 0; if not, STOP.
+  - It is mirrored in `packages/db/schema/trade.ts` beside `:301`.
+  - The sibling `delivery_lines` already has this rule (`0066_t166_deliveries.sql:93`), and `trade_order_lines`
+    never got it.
 - **R6. Freight is ONE figure**, `delivery_fee + other_fees` (v1 `:136`), posted to `6630` on the branch.
   - A split of `other_fees` to `6900` was considered and declined: v1 never split them, and both are
     per-shipment charges from the commissary.
@@ -186,7 +193,7 @@ use **0174** (after T-366's 0172 and T-368's 0173) unless the index is reassigne
   | 1 | `6630` Vehicle and transportation | branch | F | | |
   | 2 | `2150` Due to related store | branch | | F | store `C` |
   | 3 | `1250` Due from related store | commissary | F | | store `B` |
-  | 4 | **Q1** (recommended: `6630`) | commissary | | F | |
+  | 4 | `6630` Vehicle and transportation (**Ian, Q1 (a)**) | commissary | | F | |
 
   - **The debit side is Ian's ruling:** the receiving branch bears the haulage in its P&L.
   - **The credit side is who owed and paid the freight.**
@@ -212,9 +219,10 @@ use **0174** (after T-366's 0172 and T-368's 0173) unless the index is reassigne
 |---|---|---|
 | S1 | DEF-511 domain + UI: refuse at ready, delete `clearReady`, hide the edit forms | none |
 | S2 | DEF-511 DB backstop + fee CHECK: the migration, schema NOTE, trigger registry | after S1 (T-legs need S1's domain refusal to write the positive controls) |
-| S3 | DEF-127 posting: `postInternalFreight` + wiring | ⛔ Q1 |
-| S4 | DEF-127 posting pattern + fixture | ⛔ Q1; after S3 |
+| S3 | DEF-127 posting: `postInternalFreight` + wiring | after S2 |
+| S4 | DEF-127 posting pattern + fixture | after S3 and after T-366 commits |
 | S5 | Open-order guard tests (no source change) | none; may run first |
+| S6 | Receipt discrepancy hardening (Ian: "copy and harden" v1) | a: after S2 · b: ⛔ Q3 |
 
 ### S1: BUILDER
 1. `packages/domain/src/commissary/fulfilment.ts`:
@@ -245,7 +253,7 @@ use **0174** (after T-366's 0172 and T-368's 0173) unless the index is reassigne
 ### S2: BUILDER
 1. `packages/db/migrations/NNNN_t372_def511_ready_is_final.sql` (NNNN is the next free index at build):
    - R4: the function, the trigger, and `ENABLE ALWAYS`;
-   - R5: the CHECK, a plain `ADD CONSTRAINT`, after the production precheck;
+   - R5 and R5b: the two CHECKs, each a plain `ADD CONSTRAINT`, after the production prechecks;
    - a header naming T-372, DEF-511, DEF-127 R5 and the rulings.
 2. `packages/db/migrations/meta/_journal.json`: the entry on the one-day grid (README step 5).
 3. `packages/db/src/triggers/registry.ts`: add `trade_orders_ready_is_final_trg` (R4).
@@ -263,7 +271,7 @@ use **0174** (after T-366's 0172 and T-368's 0173) unless the index is reassigne
   - Delete `:503`.
   - Then assert `readyAt` is null.
 
-### S3: BUILDER (after Q1)
+### S3: BUILDER
 1. `packages/domain/src/commissary/transfer.ts`: add `postInternalFreight` (R8, R9) and a header paragraph
    "Outbound freight (T-372/DEF-127)".
 2. `packages/domain/src/trade/index.ts`: wire it into `receiveTradeOrder` (R8), extend `ReceiveTradeOrderResult`,
@@ -293,6 +301,89 @@ are the proof, and they run green.
 ### S5: TESTER only
 - **New:** `packages/domain/tests/integration/t372-open-order-block.test.ts`.
 - **BUILDER:** none. If any leg is red, STOP and report it: a red leg here is a new defect, not a fix.
+
+## S6: receipt discrepancy (Ian, 2026-09-30: "copy and harden" v1)
+
+### v1, studied at source (RULES §1.2d step 1)
+- Source: `ERP-rebuild/src/lib/actions/branch-order-receive.actions.ts`.
+- `:106-128`: per line, the branch supplies `receivedQuantity`, which defaults to fulfilled and is clamped at 0
+  (`:121`). v1 stamps `hasDiscrepancy = |received − fulfilled| > 0.005`, **in both directions**, plus an optional
+  `discrepancyNote`.
+- `:131-144`: the order-level `discrepancyTotalAmount = dispatched total − received total`.
+- `:380-381`: a short line's reason is `count_correction` and its note is carried.
+- Resolution happens later, by manager or admin (`branch-order-fulfilment.actions.ts:~390-445`):
+  - `audit`, write-off as loss, or `charge` to a named staffer (the charge needs a grant);
+  - only after `status === 'received'`.
+- v1 **books both sides at the received quantity** (`:60-70`). A discrepancy is "a pure audit flag"; neither
+  side's books are adjusted for the gap.
+
+### Its GOAL (step 2)
+- Every line records what the branch actually counted against what the commissary says it sent.
+- Any variance beyond scale noise is flagged, with who received it, when, and why.
+- A manager decides what the gap was, so a transit loss is never silently absorbed by either store's books.
+
+### What v2 already has (step 3). It beats v1 on SHORTAGES, and needs no change there.
+- **Per-line received quantity** is recorded: `trade/index.ts:874-875` (override, else dispatched) and `:892`
+  (`setLineReceivedQuantity`). It is also written to the branch `deliveries` row with `orderedQuantity`,
+  `receivedQuantity` and `shortageReason` (`transfer.ts:433-449`).
+- **Flag at receipt, same transaction:** a shortfall above `RECEIPT_DISCREPANCY_TOLERANCE` (0.005, v1's figure,
+  `transfer.ts:89`, check at `:341-344`) raises a `trade_discrepancies` row (`:405-430`). There is no separate
+  "raise" step that could fail.
+- **Books are honest where v1's were not:** only what arrived posts. The short value stays in `1340` **at cost**
+  until somebody decides (`transfer.ts:452-458`, `:519-522`).
+- **Resolution:** `resolveDiscrepancy`/`deferDiscrepancy` (`commissary/discrepancy.ts:57`, `:149`) with
+  `audit | loss | charge | late_receipt`.
+  - Documented postings: `commissary.discrepancy-loss` (Dr 5300 / Cr 1340) and `commissary.discrepancy-charge`
+    (Dr 1230 employee / Cr 1340), plus the two that post nothing (`POSTING-PATTERNS.md:769-812`).
+  - The row is locked `FOR UPDATE`, and a terminality trigger backs it.
+- **It blocks** day-open until decided (`packages/db/src/repo/findings.ts:1620-1623`). The UI is
+  `apps/erp/src/app/commissary/discrepancies/`.
+- **Who and when:** `trade_discrepancies.created_at`, `resolved_by`/`resolved_at` and `note`
+  (`packages/db/schema/trade-discrepancies.ts`), and the order's `received_by` (`markReceived`).
+
+### Gaps where v2 is WEAKER than v1 (verified), and the slice
+- **G1: a negative received quantity is accepted, and it corrupts the dispute value.**
+  - `quantity()` is signed, so `receiveTradeOrder` passes it through (`:874-875`).
+  - `trade_order_lines.received_quantity` has only a finite CHECK (`0155…sql:420-421`).
+  - In `confirmReceipt` a negative `r` makes `shortfall > dispatched` (`:341`), and `proportionOfCost` goes
+    negative (`:99-108`), so the discrepancy `value` exceeds the line's `dispatchCost` (`:425-428`).
+  - A later `loss`/`charge` then relieves `1340` by **more than the dispatch put in**, with a trial balance that
+    still ties.
+  - v1 clamps at 0.
+- **G2: an over-receipt is neither flagged nor booked correctly.**
+  - v2 flags shortfalls only (`:341-344`).
+  - For `received > dispatched`, `proportionOfCost` caps cost at `dispatchCost` (`:104`) while `value =
+    lineCost(received, rate)` does not. So:
+    - the branch gains stock and `2150` for units the commissary never relieved;
+    - the excess value lands in `5175` as fake margin;
+    - no discrepancy row is raised.
+  - v1 at least flagged it (`|…|`).
+
+**S6a (un-gated; after S2).**
+- **BUILDER**, `packages/domain/src/trade/index.ts`: `receiveTradeOrder` refuses a negative received quantity
+  before any write.
+  - `throw refuse('receiveTradeOrder: line <id> received quantity <q> is negative', '<item name> — a received quantity cannot be negative. Enter 0 if none arrived.')`.
+  - The DB CHECK is R5b, in S2's migration and S2's BUILDER paths.
+- **TESTER:** new `packages/domain/tests/integration/t372-receipt-discrepancy.test.ts`.
+
+| Id | Target | Red today | Kills mutant |
+|---|---|---|---|
+| D1 | receive with `receivedQuantity:'-5'` on a 20-unit line: rejects with that exact sentence; nothing written (no journal entry, no `trade_discrepancies` row, `received_quantity` still null, status `dispatched`) | resolves; a discrepancy row with `quantity 25.000` and `value > dispatch_cost` | the refusal removed |
+| D2 | raw `update trade_order_lines set received_quantity = -1` rejects `/received_quantity_non_negative/` | succeeds | CHECK absent |
+| D3 | **positive.** `receivedQuantity:'0'`: resolves; one discrepancy row with `quantity` = dispatched and `value` = `dispatch_cost` exactly | green | refusal written as `<= 0` |
+| D4 | **positive (guard on T-174).** 18 of 20: row `quantity 2.000`, `value = dispatch_cost − proportionOfCost(dispatch_cost, 18, 20)`; the goods entry books 18 | green | — |
+
+**S6b (⛔ Q3; spec amended after the answer).**
+- Under Q3 (i) the build needs:
+  - an `over` direction on `trade_discrepancies`, i.e. a `direction` column and a CHECK, in the **next** migration
+    after S2's, plus `recount_dispatch`/`return` dispositions;
+  - `confirmReceipt` capping the booked quantity at dispatched and raising the `over` row.
+- Legs, to be finalised after Q3:
+  - receive 22 of 20: branch stock +20; `2150`/`1250` at 20 × rate; an `over` row with `quantity 2.000`;
+    `5175` only the real margin on 20;
+  - positive control: 20.004 of 20 (inside tolerance) books 20.004 as today, and no row is raised.
+- Paths: `commissary/transfer.ts`, `commissary/discrepancy.ts`, `packages/db/schema/trade-discrepancies.ts`,
+  the migration, and `POSTING-PATTERNS.md` (the "posts nothing" section gains `over`).
 
 ## Contract
 - `fulfilLine` / `proposeLine` at `ready` refuse with `READY_IS_FINAL_SENTENCE` and write nothing. At
@@ -362,17 +453,16 @@ classification.
 
 | Id | Target | Red today | Kills mutant |
 |---|---|---|---|
-| F1 | exactly one entry with `idempotency_key = 'trade_order:<id>:receipt-freight'`, `source_type='trade_order_receipt'`, `source_id=<id>`, `entry_date='2026-01-15'`; L(e) is exactly the four R9 legs at **1200.00** (Q1 (a): leg 4 = `6630`/C credit 1200.00), parties `store`/C on leg 2 and `store`/B on leg 3, and no other legs | no such entry | freight to `6900`; `delivery_fee` only (1000); party omitted |
+| F1 | exactly one entry with `idempotency_key = 'trade_order:<id>:receipt-freight'`, `source_type='trade_order_receipt'`, `source_id=<id>`, `entry_date='2026-01-15'`; L(e) is exactly the four R9 legs at **1200.00** (Ian's Q1 (a): leg 4 = `6630`/C credit 1200.00), parties `store`/C on leg 2 and `store`/B on leg 3, and no other legs | no such entry | freight to `6900`; `delivery_fee` only (1000); party omitted |
 | F2 | per store `sum(debit) = sum(credit)` for that entry: B 1200 = 1200, C 1200 = 1200 | (no entry) | leg 2 posted on C's store (balanced in total, not per store) |
 | F3 | the goods entry (`received.entryId`) is unchanged: `1250` Dr 18000, `2150` Cr 18000, no leg of 1000 / 200 / 1200 | green (guard) | freight folded into the goods entry |
 | F4 | `received.freightEntryId` equals F1's id; `received.entryId` differs | property absent | not returned |
 | F5 | **positive / negative control.** Same order with no fees: no `…:receipt-freight` entry, `freightEntryId === null`, and the journal count is +1 at receipt (as `trade.test.ts:817-830`) | green | a zero-value freight entry posted |
 | F6 | **negative control.** An EXTERNAL order with `deliveryFee:'1000'`, dispatched and received: no freight entry | green | the call placed before the internal/external branch |
-| F7 ⚠️ **PROVISIONAL until Q2** | every line received short to zero (`receivedQuantity:'0'`): the goods `entryId === null`, **and F1's entry still posts** | no entry | the call placed inside `if (receiptLines.length > 0)` or gated on `confirmed.entryId` |
+| F7 (Ian, Q2) | every line received short to zero (`receivedQuantity:'0'`): the goods `entryId === null`, **and F1's entry still posts** | no entry | the call placed inside `if (receiptLines.length > 0)` or gated on `confirmed.entryId` |
 | F8 | the branch's `6630` balance for the period = +1200; consolidated (both stores) `6630` from this entry = 0 | no entry | leg 4 at another account |
 | F9 | `postInternalFreight` called directly with `freight = -1.00` throws, and nothing posts | n/a (new) | the negative guard removed |
 
-⛔ If Ian answers Q1 with (b), F1, F8 and S4 take the new account code. Nothing else changes.
 
 ### S5: t372-open-order-block (guards: green today, and they must stay green)
 | Id | Target | Kills mutant |
@@ -418,25 +508,40 @@ classification.
 - The migration is proved on a scratch DB (README step 7).
 - Typecheck is clean, and the full integration suite passes before any push (RULES §2).
 - The smoketest screenshots are attached.
+- S6a's D1 to D4 are green.
 - DEF-511 and DEF-127 are marked FIXED in the register, citing T-372.
+- The orchestrator logs G1 and G2 as new section-E DEFs, cites T-372 S6, and marks G1 fixed by S6a.
+
+## Ian's rulings (2026-09-30), recorded here; the orchestrator adds them as bible §13 rows at wrap-up
+- **Q1 → (a).** The commissary credits its own `6630`, so leg 4 of R9 is `6630` at the commissary.
+  - Consolidated, the internal charge nets to zero.
+  - ⚠️ Accepted consequence: the commissary's `6630` can read negative when its real trucking cost sits in wages
+    (`6100`). That is visible, and not a defect.
+  - No new account.
+- **Q2 → YES.** The freight posts even when nothing arrives (every line short to zero, or all ledger-only),
+  because the truck made the trip. F7 pins this.
+- **"v1 has a way of recording how much was received and flagging the discrepancy — copy and harden it."** This
+  becomes S6.
 
 ## Questions only Ian can answer
-- **Q1 (gates S3/S4). What does the commissary's side of the freight credit?** The branch's side is settled:
-  `6630` debit, owed to the commissary on `2150`.
-  - **(a) Recommended: credit `6630` at the commissary.**
-    - This recovers its own haulage cost. Consolidated, the internal charge nets to zero, and the company's real
-      haulage is what the commissary actually spent.
-    - No new account, no migration.
-    - ⚠️ If the commissary's real trucking cost sits in wages (`6100`) rather than `6630`, the commissary's
-      `6630` can read **negative**. That is visible, but odd.
-  - **(b) A new contra account**, e.g. `6635 Haulage recharged to branches` (expense, credit-normal). It works
-    like `5175` does for the goods margin.
-    - The commissary's `6630` never goes negative.
-    - It costs a COA seed row, a second migration and a COA-ALIGNMENT entry.
-  - (c) Credit an income account. **Not recommended:** it grosses up both revenue and expense on consolidation
-    instead of eliminating.
-- **Q2 (F7 is provisional until answered).** Ian said the freight posts "at confirmReceipt". R8 posts it even when
-  `confirmReceipt` is skipped (every line ledger-only) or posts nothing (every line short to zero), on the
-  reasoning that the truck made the trip. Confirm that. Or say the freight follows the goods: then F7 flips to
-  "no freight entry", and the call moves inside `if (receiptLines.length > 0)` and is gated on
-  `confirmed.entryId`.
+- **Q3 (gates S6b). When the branch receives MORE than was dispatched, what happens?**
+  - **(i) Recommended: book up to what was dispatched, and flag the excess.** The excess becomes an `over`
+    discrepancy row that posts nothing. The commissary manager then resolves it:
+    - `recount_dispatch`: the commissary finds its dispatch count was wrong and posts a supplementary dispatch and
+      receipt for the excess, using the existing `dispatchOrder`/`confirmReceipt` legs;
+    - `return`: the branch sends it back, using the existing `customer.return-internal` pattern
+      (`POSTING-PATTERNS.md:589-608`).
+    - No new posting pattern is needed. ⚠️ Until it is resolved, the excess is physically at the branch but on
+      nobody's books, which is honest and blocks day-open like a shortage does.
+  - **(ii) Refuse the receipt** above the dispatched quantity plus the 0.005 tolerance, with a sentence telling
+    the branch to record what was dispatched and message the commissary. It is simpler, but the physical fact of
+    the excess is lost, which is weaker than v1.
+  - (iii) Post the excess as a normal transfer. **Not recommended:** the commissary's stock and `1340` were never
+    relieved for it, so this needs a new posting (commissary FIFO relief at receipt) that is not in
+    `POSTING-PATTERNS.md`.
+
+## Amendment A1 — Ian's Q3 (2026-09-30, orchestrator)
+**Q3 → (i).** A branch that receives MORE than was dispatched books only what was sent; the excess is an "over"
+discrepancy that blocks day-open until resolved — the commissary recounts and sends a top-up dispatch, or the branch
+returns the excess — both reusing existing postings. S6b is un-gated. Its direction column rides S2's migration if
+S6b is built in the same cycle, else the next free index at build. DEF-513.

@@ -86,3 +86,8 @@ Decided-unbuilt: 260. Privacy: 476. v1 requirements v2 already beats: 051, 059, 
 - **T-366 Q1 → no write-off**: a remittance shortage is ALWAYS charged to staff. `write_off` is retired (refused
   permanently, removed from the UI); existing `written_off` rows are reported, not silently re-posted.
 - **T-366 Q3 → manager confirms** an overage before it becomes income. **Q2 → (a)**: negative 2120/2130 = finding only; 2160 alone blocks close.
+- **T-372 Q1 → (a)** (Ian, 2026-09-30): the commissary credits its own 6630 for internal freight. **Q2 → yes**: freight
+  posts even when nothing arrives. Ian added: v1 records how much was received and flags the discrepancy — copy it
+  and harden it (T-372 S6 if v2 lacks or is weaker).
+- **T-372 Q3 → (i)** (Ian, 2026-09-30): over-receipt books only what was sent; the excess is an "over" discrepancy blocking day-open (top-up dispatch or return).
+- **T-370 Q1 → ok** (Ian, 2026-09-30): payroll recoveries clear an owner's oldest debt first; a voided pay run takes the freed cap back.
