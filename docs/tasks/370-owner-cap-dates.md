@@ -1,6 +1,6 @@
-# T-370: owner drawing cap after payroll, real calendar dates, and a semi-monthly pay cycle refused on save — DEF-108, DEF-494, DEF-409
+# T-370: owner drawing cap after payroll (and its concurrency, DEF-516), real calendar dates, and a semi-monthly pay cycle refused on save — DEF-108, DEF-494, DEF-409
 
-**Status:** APPROVED-PENDING (orchestrator review). Spec by the Opus planner, 2026-09-30. **Model:** Sonnet, tester then
+**Status:** APPROVED 2026-09-30 (orchestrator, after independent Opus review) — review changes 1–11 applied in place. Spec by the Opus planner, 2026-09-30. **Model:** Sonnet, tester then
 builder, per slice.
 **Census:** `docs/plans/money-defects-2026-09-30.md` (batch E). DEF-409 was added by Ian's ruling of 2026-09-30:
 *"refuse on save: semi-monthly needs exactly two pay days ≤16 days apart."*
@@ -97,13 +97,30 @@ builder, per slice.
   - A repo may not import `@shareat/domain` (ADR-004).
   - A single person's `1230` history is small.
   - The SQL stays in the repo (RULES §5).
+  - ⛔ **Integer centavos via `@shareat/core/money` (`toCentavos` / `fromCentavos`), never `Number`.** The existing
+    `Number(row.total).toFixed(2)` return is replaced by `fromCentavos`.
+  - `packages/domain/src/shared/allocate-oldest-first.ts` is not reused: it is keyed on a nullable DUE DATE for AP/AR
+    items and lives in domain (unreachable from a repo); this pool is keyed on posting order.
+- **R3a (DEF-516, folded in): the cap read is serialised.** `recordDrawing` reads `drawnInWindow` with no lock
+  (`owners/index.ts:289`, via `judgeDrawingLimit`), so two concurrent drawings both pass the cap.
+  - Before the cap read, lock the owner row with a new repo `lockOwnerForUpdate(tx, orgId, ownerId)`
+    (`select … from owners where … for update`).
+  - The app role keeps UPDATE on `owners`: the repo already updates it (`owners.ts:104`) and 0170 does not revoke it.
+    The tester asserts `has_table_privilege('shareat_app','owners','UPDATE')`, so a later revoke fails loudly.
+  - ⚠️ Two owner rows of one person lock separately. They draw against separate caps, so that is correct.
 - **R4 (DEF-108): `closeDrawingMonth` / `closeableMonth` / `owners/lib.ts:78` inherit the change deliberately.** A
   payroll recovery in month M lowers M's ledger amount, exactly as `repayFromOwner` in M already does. No other
   caller changes.
+  - Other `1230` credits join the pool too: final pay (`packages/domain/src/payroll/separation.ts:181`) and the
+    13th-month payout (`packages/domain/src/payroll/thirteenth-month.ts:198`).
+  - ⭐ **Orchestrator ruling (2026-09-30): ACCEPTED.** FIFO re-attribution can move an owner's DERIVED drawn figure
+    for an already-closed month, because a later credit re-orders which charge it consumed. It changes no posted
+    entry, and `assertMonthOpen` still guards every drawing into a closed month.
 - **R5 (DEF-494): fix core and delete the local copy.**
   - `parseBusinessDate` checks `d ≤ daysInMonth(y, m)` using **pure integer arithmetic**:
     - Month lengths come from a table.
     - Leap year = `(y%4===0 && y%100!==0) || y%400===0`.
+    - Refuse `y < 1`: Postgres has no year 0 (`'0000-01-01'::date` is 22008).
   - **Not** a `Date.UTC` round-trip: `Date.UTC` maps years 0–99 to 1900–1999, so a round-trip would reject
     `0004-02-29` and accept nothing new.
   - The error text stays `Invalid business date: <value>`.
@@ -119,12 +136,16 @@ builder, per slice.
 
     ```
     superseded_at IS NOT NULL OR payroll_period_type <> 'semi_monthly' OR payout_mode <> 'fixed_days'
-      OR (cardinality(payout_days) = 2 AND payout_days[1] <> payout_days[2])
+      OR (cardinality(payout_days) = 2 AND coalesce(payout_days[1] <> payout_days[2], false))
     ```
 
     - Name: `store_attendance_config_semi_monthly_two_days_check`.
     - Superseded rows are history. They governed real days and are never rewritten. The exemption also lets a
       violating live row be retired by the ordinary supersede UPDATE.
+    - `coalesce(…, false)` closes the NULL hole: with `ARRAY[10,NULL]` the `<>` is NULL, and a CHECK passes on NULL.
+      It also refuses an array whose lower bound is not 1 (`[1]` or `[2]` reads NULL there).
+    - **Migration: a plain, validated `ADD CONSTRAINT`, never `NOT VALID`.** Precheck A = 0 gates it and the table is
+      tiny, so the validating scan costs nothing. `NOT VALID` would leave violating rows for the next UPDATE to trip on.
     - `payout_mode <> 'fixed_days'`, not `= 'lag'`: a bogus mode must still trip only `payout_mode_check`
       (`constraint-message-lookup.test.ts:237` isolates it that way).
 - **R7 (DEF-409): the spacing rule applies to `lag` mode too.**
@@ -132,6 +153,9 @@ builder, per slice.
     (Jan 10 → Jan 31), and the detector already flags it.
   - In lag mode this admits only cutoff 15 or 16. The precheck (below) says whether any live store is affected
     before this ships.
+  - ⚠️ **A store already out of line is refused on ANY settings save**, even one that changes only an unrelated
+    field such as grace minutes, until its cadence is fixed. The rule is judged on the merged row. That is intended:
+    the screen shows the sentence, and the admin fixes the cadence in the same save. Leg S7.
   - `monthly` and `weekly` are **not** refused. That is outside the ruling, and the detector keeps reporting
     `monthly`.
 - **R8 (DEF-409): one gap function, two callers.**
@@ -152,11 +176,15 @@ builder, per slice.
   - The same `SEMI_MONTHLY_TWO_DAYS` text is mapped for the new CHECK in `constraint-messages.ts`.
 
 ## Slices — S1, S2 and S3 touch disjoint files and may run in parallel
+- **One lane database per slice.** S3's lane DB carries the migration.
+- No lane edits a shared test helper. Copy fixtures into each test file.
+- Register and bible edits are the orchestrator's, never a lane's.
 ### S1 — DEF-108 owner cap
 - **BUILDER:**
   - `packages/db/src/repo/owners.ts`: `drawnInWindow` per R2/R3, `fifoOwnerOutstanding`, and the comment block
     `:219-231` rewritten.
-  - `packages/domain/src/owners/index.ts`: JSDoc only, at `:357` and `:413-424`.
+  - `packages/domain/src/owners/index.ts`: JSDoc at `:357` and `:413-424`. `recordDrawing` calls
+    `lockOwnerForUpdate` before `judgeDrawingLimit` (R3a).
 - **TESTER:**
   - `packages/domain/tests/integration/t370-owner-cap-payroll-recovery.test.ts` (new).
   - `packages/db/tests/t370-fifo-owner-outstanding.test.ts` (new, unit, pure helper).
@@ -192,14 +220,19 @@ builder, per slice.
     now-legal spacing violation `payout_days = [10,20]`, cutoff 15. Its B1 leg asserts the measured 21. Case 5
     (pure) is unchanged.
   - `apps/erp/tests/integration/constraint-message-lookup.test.ts` (one new row).
+  - `apps/erp/tests/constraint-messages.test.ts:170` and
+    `apps/erp/tests/integration/constraint-message-lookup-mechanism.test.ts:130`: `CONSTRAINT_MESSAGES` goes from 26 to
+    27 keys, which widens the `/setup` `WRITTEN_FOR_A_PERSON` allowlist. **This is deliberate:** the new sentence is
+    written for a person and names no configuration. Record that in both tests' comments.
   - `apps/erp/tests/integration/t370-settings-attendance-web.test.ts` (new).
 - **Contract:** `maxPayoutGapDays(...)` returns an integer number of days, the largest gap between consecutive
   distinct payout dates across 12 months. `supersedeConfig` is unchanged in signature and throws a presentable
   refusal.
 
 ## Invariants
-1. A payroll recovery frees the cap exactly as `repayFromOwner` of the same amount on the same date would, for both
-   `monthly` and `total` windows (R2; `owners/index.ts:354-358`).
+1. When no older non-owner `1230` charge is outstanding, a payroll recovery frees the cap exactly as `repayFromOwner`
+   of the same amount on the same date would, for both `monthly` and `total` windows. With an older staff charge
+   outstanding, FIFO consumes that first (R1) (R2; `owners/index.ts:354-358`).
 2. A staff advance with no owner-origin charge never changes `drawnInWindow` (`owners.test.ts:279`, which stays
    green).
 3. `recoverFromPay` alone still frees nothing (`owners.test.ts:534`, which stays green; `owners/index.ts:419`).
@@ -213,7 +246,7 @@ builder, per slice.
 
 | Leg | Setup → assertion (target) | Today | Mutant that must turn it red |
 |---|---|---|---|
-| O1 | Owner with an active role and a monthly limit of 5000. A repayable ₱2000 charge on 2026-01-10. `recoverFromPay` ₱2000 on 01-20. `postPayRun` whose payslip recovers ₱2000, entry 2026-02-05. Assert `drawnInWindow` total = `0.00`, Jan = `2000.00`, Feb = `-2000.00` (the same three numbers a `repayFromOwner` on 02-05 gives, asserted side by side in a twin fixture) | total `2000.00` | restore the `source_id`-only scope |
+| O1 | Owner with an active role and a monthly limit of 5000. A repayable ₱2000 charge on 2026-01-10. `recoverFromPay` ₱2000 on 01-20. `postPayRun` whose payslip recovers ₱2000, entry 2026-02-05. Assert `drawnInWindow` total = `0.00`, Jan = `2000.00`, Feb = `-2000.00` (the same three numbers a `repayFromOwner` on 02-05 gives, asserted side by side in a twin fixture that does NOT call `recoverFromPay`: after a reclass `1260` is 0, and `assertWithinReceivable` refuses the repayment) | total `2000.00` | restore the `source_id`-only scope |
 | O2 | O1, then `voidPayRun`. Total back to `2000.00` | n/a | ignore `reversal_of_entry_id` (the void debit treated as a new staff charge ⇒ owner stays 0) |
 | O3 | Reclass ₱1000 on 01-10, staff shortage ₱600 on 01-15 (raw insert, `owners.test.ts:295-306` shape), payroll recovers ₱1000 on 02-05. Owner total `0.00` | `1000.00` | staff-first `min(ownerOrigin, balance)` ⇒ `600.00` |
 | O4 | Shortage ₱600 on 01-05, reclass ₱1000 on 01-10, recovery ₱1000. Owner total `600.00` | `1000.00` | owner-first ⇒ `0.00` |
@@ -222,21 +255,25 @@ builder, per slice.
 | O7 (control) | Staff shortage ₱600 only, then recovery ₱600. Owner `0.00` before and after | green | drop the owner-origin filter ⇒ `600.00` before |
 | O8 (control) | `recoverFromPay` with no payroll ⇒ still `2000.00` (not freed) | green | counting reclass entries as recoveries |
 | U1–U4 | `fifoOwnerOutstanding` unit cases mirroring O3–O6 with literal line arrays, plus a reversal of the reclass itself (credit with `reversalOf` = the reclass) ⇒ `0.00` without touching a staff charge | n/a | same mutants as above |
-| C1 | `parseBusinessDate('2026-02-30')`, `'2026-04-31'`, `'2026-02-29'`, `'2100-02-29'` each throw `Invalid business date: <v>` | returns | delete the day-of-month check |
-| C2 (control) | `'2024-02-29'`, `'2000-02-29'`, `'2026-02-28'`, `'2026-12-31'`, `'2026-01-31'` parse to themselves | green | leap rule without the `%400` clause (`2000-02-29` refused) or `Date.UTC` round-trip on `'0004-02-29'` (add it as a control) |
+| C1 | `parseBusinessDate('2026-02-30')`, `'2026-04-31'`, `'2026-02-29'`, `'2100-02-29'`, `'0000-01-01'` each throw `Invalid business date: <v>` | returns | delete the day-of-month check |
+| C2 (control) | `'2024-02-29'`, `'2000-02-29'`, `'0004-02-29'`, `'0001-01-01'`, `'2026-02-28'`, `'2026-12-31'`, `'2026-01-31'` parse to themselves | green | leap rule without the `%400` clause (`2000-02-29` refused) or `Date.UTC` round-trip on `'0004-02-29'` (add it as a control) |
 | C3 | T-360 D3 and D13 (`t360-attendance-shiftday-parse.test.ts:186,385`) stay green **after step 4 is deleted**. Run them before and after, and record both | green | delete step 3's catch |
-| P1 | `maxPayoutGapDays` literal table: semi 15 / fixed `[10,25]` ⇒ 16. Fixed `[10]` ⇒ 31. Fixed `[10,20]` ⇒ 21. Lag cutoff 15 ⇒ 16. Lag cutoff 10 ⇒ 21. Monthly lag ⇒ 31 | n/a | off-by-one in the month roll |
+| P1 | `maxPayoutGapDays` literal table: semi 15 / fixed `[10,25]` ⇒ 16. Fixed `[10]` ⇒ 31. Fixed `[10,20]` ⇒ 21. Lag cutoff 15 ⇒ 16. Lag cutoff 10 ⇒ 21. Monthly lag ⇒ 31. Fixed `[15,30]` cutoff 15 ⇒ 31 by hand-trace (Jan 16–31 and Feb 16–28 both pay Feb 28; Jan 15 → Feb 15 is 31); the tester records the measured value | n/a | off-by-one in the month roll |
 | P2 | T-332's `listFindings` legs stay green with the moved function (the B1 detail still carries the measured number) | green | the detector keeps a private copy |
 | S1 | `supersedeConfig` semi_monthly / fixed_days / `[10]` ⇒ `userMessage === SEMI_MONTHLY_TWO_DAYS`. Live row unchanged and no new row | saves | remove the count check (the gap check alone would fire with the gap sentence instead: assert the exact sentence) |
 | S2 | `[10,10]` passed directly (bypassing `parseIntList`) ⇒ the same sentence | saves | check `cardinality` only, not distinctness |
 | S3 | `[10,27]` ⇒ `semiMonthlyGap(17)` | saves | `<` instead of `≤` against 16 |
 | S4 | Lag mode, cutoff 10 ⇒ `semiMonthlyGap(21)` | saves | gate the gap check on `fixed_days` only |
 | S5 | Merged-row: live row fixed_days `[10,25]`, monthly. A change of only `payrollPeriodType: 'semi_monthly'` with `payoutDays: [10]` ⇒ refused. The check runs on the merged row | saves | validate `changes` instead of the merged row |
-| S6 (controls) | `[10,25]`, `[15,30]`, `[16,31]`, and lag cutoff 15 all save. `monthly` + `[10]` saves (out of the rule) | green | any over-refusal |
-| D1 | Raw insert of live semi_monthly / fixed_days / `[10]` ⇒ 23514 on `store_attendance_config_semi_monthly_two_days_check`. `errorMessage` ⇒ the mapped sentence | inserts | drop the CHECK |
+| S6 (controls) | `[10,25]`, `[5,20]`, `[16,31]`, and lag cutoff 15 all save. `monthly` + `[10]` saves (out of the rule) | green | any over-refusal |
+| D1 | Raw insert of live semi_monthly / fixed_days / `[10]`, and again with `ARRAY[10,NULL]`, each ⇒ 23514 on `store_attendance_config_semi_monthly_two_days_check`. `errorMessage` ⇒ the mapped sentence | inserts | drop the CHECK |
 | D2 (controls) | The same row with `superseded_at` set inserts. A bogus `payout_mode` still reports `payout_mode_check`. The existing `fixed_days_needed_check` row still isolates | green | `= 'lag'` form of the CHECK |
 | W1 | `updateAttendanceConfigAction` with `payoutDays = "10, 2 5"` redirects with `error` = `SEMI_MONTHLY_TWO_DAYS` | `ok` | action pre-filters |
 | W2 (control) | `"10,25"` ⇒ `ok` banner | green | none |
+| S7 | A live row made non-compliant by raw insert (lag, cutoff 10, which the CHECK allows). `supersedeConfig` changing only `lateGraceMinutes` ⇒ `semiMonthlyGap(21)`; nothing written | saves | judge only the changed fields |
+| S7c (control) | The same store and save, plus `semiMonthlyCutoffDay: 15` ⇒ saves | n/a | none |
+| X1 | DEF-516, two connections. Monthly cap 5000, ₱3000 already drawn. Both call `recordDrawing` for ₱1500 concurrently (a barrier holds A's transaction open after its cap read). Exactly one commits; the other is refused with the limit sentence; drawn = `4500.00` | both commit (`6000.00`) | remove `lockOwnerForUpdate` |
+| X1c (control) | The same, sequential: ₱1500 then ₱500 both commit. `has_table_privilege('shareat_app','owners','UPDATE')` is true | green | revoke UPDATE ⇒ 42501 |
 
 Record every "Today" column by running the leg red first on the unmodified tree.
 
@@ -249,7 +286,7 @@ BEGIN READ ONLY;
 select s.name, s.is_active, c.store_id, c.effective_from, c.semi_monthly_cutoff_day, c.payout_days
   from store_attendance_config c join stores s on s.id = c.store_id
  where c.superseded_at is null and c.payroll_period_type = 'semi_monthly' and c.payout_mode = 'fixed_days'
-   and not (cardinality(c.payout_days) = 2 and c.payout_days[1] <> c.payout_days[2]);
+   and not (cardinality(c.payout_days) = 2 and coalesce(c.payout_days[1] <> c.payout_days[2], false));
 -- B. Every live semi_monthly cadence, to run through maxPayoutGapDays offline (R7: lag stores with cutoff ≠ 15/16).
 select s.name, s.is_active, c.semi_monthly_cutoff_day, c.payout_mode, c.payout_lag_days, c.payout_days
   from store_attendance_config c join stores s on s.id = c.store_id
@@ -257,7 +294,7 @@ select s.name, s.is_active, c.semi_monthly_cutoff_day, c.payout_mode, c.payout_l
 -- C. Superseded rows that would have violated (information only: exempt by design).
 select count(*) from store_attendance_config
  where superseded_at is not null and payroll_period_type = 'semi_monthly' and payout_mode = 'fixed_days'
-   and not (cardinality(payout_days) = 2 and payout_days[1] <> payout_days[2]);
+   and not (cardinality(payout_days) = 2 and coalesce(payout_days[1] <> payout_days[2], false));
 ROLLBACK;
 ```
 
@@ -307,7 +344,8 @@ ROLLBACK;
   oldest debt repaid first, even if the oldest is an owner's reclassified drawing? The alternatives are owner-last
   or owner-first, and each leaks one way (R1).
 - **Q2 (blocks S3 deploy only if precheck A or B is non-empty).** For each listed store, which two payout days
-  should it use, and which cutoff for a lag-mode store? R7 refuses a semi-monthly lag cutoff other than 15 or 16.
+  should it use, and which cutoff for a lag-mode store? R7 refuses a semi-monthly lag cutoff other than 15 or 16,
+  and until a listed store is fixed, EVERY settings save for it is refused (R7, leg S7).
 
 ## Amendment A1 — Ian's Q1 (2026-09-30, orchestrator)
 **Q1 → ok.** Oldest-debt-first attribution across the person's 1230 ledger stands; a voided pay run restores the cap it freed.
