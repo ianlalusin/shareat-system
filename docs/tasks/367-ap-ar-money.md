@@ -1,6 +1,7 @@
 # T-367: AP/AR money — DEF-201, DEF-396, DEF-420, DEF-499, DEF-500, DEF-395, DEF-508, DEF-054
 
-**Status:** APPROVED-PENDING (orchestrator review). Spec by the Opus planner, 2026-09-30. Batch B of the money-defect
+**Status:** APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
+1–7 and the minors applied. Spec by the Opus planner, 2026-09-30. Batch B of the money-defect
 push (Ian, 2026-09-30: *"close all open money defects in v2"*), `docs/plans/money-defects-2026-09-30.md`.
 **Model:** Sonnet for each slice, tester first and then builder. One lane runs the slices in order.
 **Ordering:** builds only AFTER T-364 (edits `apps/erp/src/app/expenses/actions.ts`) and T-365 (edits
@@ -26,11 +27,11 @@ Every AP and AR figure stays equal to the ledger it summarises, under double-cli
   never reading `result.created`. `voidCharge` (`:141`) and `voidCollection` (`:471`) both guard with it.
   `ar_write_offs` has no unique index on `journal_entry_id` (`packages/db/schema/ar.ts:162`, migration 0049:159).
   ✎ The register's cite `:486-455` is garbled; the function is `:495-570`.
-  - ✎ **NEW (N1): no lock, so two DIFFERENT write-offs can clear more than is owed.** The outstanding check
+  - ✎ **DEF-517 (logged): no lock, so two DIFFERENT write-offs can clear more than is owed.** The outstanding check
     (`:518-526`) reads `openItems` with no row lock. Two admins (different keys, so different entries) each writing off
     ₱700 of a ₱1,000 charge both pass. `recordCollection` locks first (`:295`, `arRepo.lockChargesForAllocation`,
     `repo/ar.ts:336-341`); `writeOffCharge` does not. Fixed in S1.
-  - ✎ **NEW (N4):** `Number(input.amount)` at `:515` is NaN-blind (`NaN <= 0` and `NaN > x` are both false). Fixed in S1
+  - ✎ **DEF-520 (logged):** `Number(input.amount)` at `:515` is NaN-blind (`NaN <= 0` and `NaN > x` are both false). Fixed in S1
     because S1 rewrites these lines; T-371 loses this site.
 - **DEF-396. Confirmed, but the register's premise is out of date.** ✎ The "business question" it asks Ian was answered
   on 2026-08-31 (bible row 170, quoted in migration `0113:13-15`): *"when receipt is rejected voided the draft expense is
@@ -38,17 +39,17 @@ Every AP and AR figure stays equal to the ledger it summarises, under double-cli
   (`ap/index.ts:697-726`) already cascades. So the defect is narrower, and it is concurrency plus a missing second layer:
   - `openItems` (`packages/db/src/repo/ap.ts:608-663`) never joins `supplier_invoices.status`, so any posted expense on a
     voided invoice is settleable (`recordPayment`'s re-check at `ap/index.ts:883-925` reads the same function).
-  - ✎ **NEW (N2): the cascade races.** `voidInvoice` reads `liveExpensesForInvoice` with no lock and marks the invoice
+  - ✎ **The cascade races (part of DEF-396; the capacity half is DEF-518, logged).** `voidInvoice` reads `liveExpensesForInvoice` with no lock and marks the invoice
     voided last (`:711-722`). A concurrent `recordExpenseForInvoice`/`approveExpense` is not blocked: its FK insert takes
     `FOR KEY SHARE`, which does not conflict with the void's `UPDATE`, and the trigger
     `expenses_check_invoice_open_for_recording` (`0113:33-75`) reads the invoice with a plain `SELECT`. Result: a POSTED
     expense on a VOIDED invoice, which is exactly DEF-396's population. The same unlocked read lets two concurrent
     recordings each fit the invoice's capacity and together exceed it.
-  - ✎ **NEW (N3): voiding a PAID bill.** `voidExpense` (`packages/domain/src/expenses/void.ts:33-83`) never checks
+  - ✎ **DEF-519 (logged): voiding a PAID bill.** `voidExpense` (`packages/domain/src/expenses/void.ts:33-83`) never checks
     `ap_payment_allocations`. Voiding an invoice or expense that has been paid reverses the 2110 credit while the
     payment's 2110 debit and allocation row stand: the supplier's 2110 goes to a DEBIT balance, which
     `POSTING-PATTERNS.md` §supplier.return-credit forbids (*"⛔ Not a negative balance netted into 2110"*). Not in the
-    register. S2 ships a refusal default (Q4).
+    register until DEF-519. S2 ships a refusal default (Q4).
 - **DEF-420. Confirmed.** `ap/index.ts:397-398`: `Number(input.totalAmount)`, `if (amount <= 0)`. ✎ Register cites
   `:305-306` (stale). The float goods totals are at `:448-450` (`recordInvoice`) and `:515-517` (`setInvoiceLines`).
   `apps/erp/src/app/ap/actions.ts:173` passes the typed total raw. Migration 0155's finite CHECK is the only backstop,
@@ -92,13 +93,17 @@ Every AP and AR figure stays equal to the ledger it summarises, under double-cli
     a voucher held, or a suspense landing. Per the brief these are questions for Ian (Q1–Q3), not inventions.
 - **Glossary:** no term covers write-off, open item, due date, voucher or suspense (`grep -i` 2026-09-30). New names in
   this spec: `alreadyRecorded`, `lockInvoiceForRecording`, `platform_fee_carried_by_collection`.
-- **Not verified, reported per row 164:** AR `voidCharge` (`ar/index.ts:150-180`) shows no check for collections already
-  allocated to the charge; the same shape as N3 on the AR side. The orchestrator logs it as `reported`.
+- **DEF-521 (logged, not verified):** AR `voidCharge` (`ar/index.ts:150-180`) shows no check for collections already
+  allocated to the charge; DEF-519's shape on the AR side. Out of scope here.
 
 ## Rulings (planner)
-- **R1. A write-off retry returns the first write-off; it never writes twice.** When `postEntry` returns
-  `created: false`, `writeOffCharge` reads the existing `ar_write_offs` row by `journal_entry_id` and returns it with
-  `alreadyRecorded: true`. It does not refuse: a double-click must be harmless (bible §4.2 rule 10), and the action tells
+- **R1. A write-off retry returns the first write-off; it never writes twice, and it is recognised BEFORE the
+  outstanding cap.** After the lock, `writeOffCharge` builds the key (byte-equal to today's
+  `ar_write_off:${charge.id}:${amount.toFixed(2)}:${actor.personId}`, with `amount` the parsed value rendered to 2 dp)
+  and looks it up (`journalRepo.findEntryByIdempotencyKey`). If an entry exists, it reads the `ar_write_offs` row by
+  that `journal_entry_id` and returns it with `alreadyRecorded: true`, BEFORE `openItems`: otherwise a double-clicked
+  ₱700 of ₱1,000 meets *"only ₱300.00 is outstanding"* instead of a retry (bible §4.2 rule 10). `postEntry`'s own
+  `created: false` branch stays as the second layer (same read). It does not refuse: a double-click must be harmless (bible §4.2 rule 10), and the action tells
   the admin *"This write-off was already recorded"*. A deliberate same-amount tranche by the same admin collapses into
   the first; Q5 asks whether that is acceptable.
 - **R2. The DB is the backstop for DEF-201**: `CREATE UNIQUE INDEX ar_write_offs_journal_entry_unique ON ar_write_offs
@@ -120,14 +125,23 @@ Every AP and AR figure stays equal to the ledger it summarises, under double-cli
 - **R5. `openItems` excludes an expense whose invoice is voided** (`join supplier_invoices si … and si.status <>
   'voided'`). This is the second layer, not the fix. It is still the ONE definition of "open": the hand screen,
   `recordPayment`'s re-check and T-330's suggestion all read it, so they change together (the register's own condition).
-- **R6. Default for N3 (Q4): a paid expense cannot be voided.** `voidExpense` refuses when the expense has any
-  allocation on a `posted` AP payment: *"₱X has already been paid against this bill. Void that payment first, then void
+- **R6. Default for DEF-519 (Q4): a paid expense cannot be voided, and the check is locked.** `voidExpense` takes the
+  expense row `FOR UPDATE` right after `authorize`, via the existing `apRepo.lockExpensesForAllocation(tx, orgId,
+  [expenseId])` (`repo/ap.ts:799-815`, the same row lock `recordPayment` takes at `ap/index.ts:883`), BEFORE
+  `postedAllocatedFor`. A payment and a void on one expense therefore serialise, and whichever waits reads the other's
+  committed result. `voidInvoice`'s cascade locks ALL its live expenses in one call, in id order (the function's own
+  `order by id`, `:812`), after the invoice lock and before the first `voidExpense`, so two cascades or a cascade and a
+  multi-expense payment cannot deadlock. `voidExpense` then refuses when the expense has any allocation on a `posted`
+  AP payment: *"₱X has already been paid against this bill. Void that payment first, then void
   the bill."* Because `voidInvoice` cascades through `voidExpense`, the invoice void refuses too, and nothing is written.
   Reversible and it moves no money.
 - **R7. Store mismatch is "not found" (Ian, T-364 Q1 (a): one uniform refusal).** `createExpense` checks
   `invoice.storeId === input.storeId` IMMEDIATELY after the lookup, before `assertOpenForRecording` and every supplier
   check, and throws exactly `gone(…, 'supplier invoice')`, the not-found sentence. The action's pre-lookup applies the
-  same rule with its existing not-found text. The trigger raises on `NEW.store_id <> inv.store_id` for any non-voided row.
+  same rule, and its not-found text becomes that SAME id-free sentence (`goneSentence('supplier invoice')`). ⛔ Today's
+  action text, `Supplier invoice ${supplierInvoiceId} does not exist.` (`expenses/actions.ts:157` at HEAD), embeds the
+  typed id, so E15's `error(a) === error(b)` could never pass with two different ids. T-364 S1 is editing that file
+  now: the builder rebases on T-364's committed version and changes whichever not-found text it left. The trigger raises on `NEW.store_id <> inv.store_id` for any non-voided row.
 - **R8. Money input is parsed once, at the domain boundary**, with `parseMoneyInput` (`packages/domain/src/shared/
   money-input.ts:33`). The goods total is `subtract(subtract(total, deliveryFee), otherFees)` from `@shareat/core/money`.
   No new `Number(` in any function this task edits.
@@ -159,8 +173,11 @@ Every AP and AR figure stays equal to the ledger it summarises, under double-cli
 - Bible §7 rule 1 and T-364's rule: `authorize` first; a lock is taken only after it; a non-holder waits on nothing.
 - Bible §15.11: no layer is the only one for a risk. Domain refusal plus DB backstop for DEF-201, DEF-396, DEF-508.
 - Bible row 170: voiding a supplier invoice voids its expenses; the obligation dies with the document.
-- `POSTING-PATTERNS.md` is looked up, never extended by a builder. The only posting this task creates or changes is the
-  existing `ar_write_off` (Dr 6860 / Cr 1210 {customer}), whose lines are unchanged.
+- `POSTING-PATTERNS.md` is looked up, never extended by a builder. **This task creates no new posting and changes no
+  posted line.** ⚠️ Two postings it touches are NOT in `POSTING-PATTERNS.md` at all: the AR write-off (Dr 6860 bad debt
+  / Cr 1210 {customer}, `ar/index.ts:537-554`) and the expense void (a full reversal of the expense entry via
+  `reverseEntry`, `expenses/void.ts:59-63`). Both are pre-existing code whose lines stay byte-identical here (a test
+  asserts the W1 entry's two lines). The missing pattern rows are Q7 for Ian, not something a builder writes.
 - Bible §6 and RULES rule 6: money through `@shareat/core/money`; no new bare `Number()`.
 - Bible §13 row 214: every docstring a slice falsifies is rewritten in that slice (`writeOffCharge`'s key comment,
   `openItems`' header, `voidInvoice`'s T-196 block, `routing.ts:30-38,66-69`, `convert.ts:437-441`,
@@ -176,33 +193,44 @@ Amendment A1.
 1. **Production v2 first**, read-only (`begin transaction read only; … rollback;`), via the owner connection (the ETL
    tables are deny-all to `shareat_app`, DEF-289):
    `select count(*) from etl_source_documents where collection_path like '%expenses';`
-2. If that is 0, land a fresh copy into a SCRATCH local database (`shareat_scratch_t367`), never a shared one:
-   `npm run capture -- --collection expenses --fetch` and the same for `arCollections`. ⚠️ `capture --fetch` reads
-   LIVE production Firestore with the read-only service account (HANDOFF.md §"Commands"); it writes nothing there.
-   The orchestrator confirms Ian is content before running it, since it copies production PII onto this machine.
+2. If that is 0, land a fresh copy into a SCRATCH local database, never a shared one:
+   - create `shareat_scratch_t367` on 5435 and migrate it FIRST with `DATABASE_URL` set in the environment to
+     `…/shareat_scratch_t367` (dotenv does not override a variable already set; without it, `.env.local` points every
+     command at the shared `shareat_dev`), per ADR-012 §5.8;
+   - with the same `DATABASE_URL`, run capture once PER STORE (it takes `--store <id>`, HANDOFF.md:337):
+     `npm run capture -- --store <id> --collection expenses --fetch`, and again with `--collection arCollections`,
+     for each of the four operating stores (the ids are in `docs/reviews/v1-audit-2026-08-24.md` §1; skip the excluded
+     test stores);
+   - ⚠️ `capture --fetch` reads LIVE production Firestore with the read-only service account and writes nothing there.
+     The orchestrator confirms Ian is content before running it, since it copies production PII onto this machine.
+     Drop the scratch DB afterwards.
 3. Run, against the current version of each document:
 ```sql
 with cur as (select distinct on (doc_path) doc_path, collection_path, payload
              from etl_source_documents where collection_path like '%expenses'
              order by doc_path, captured_at desc),
-p as (select c.doc_path, c.payload, jsonb_array_elements(coalesce(c.payload->'payments','[]')) pay from cur c)
+p as (select c.doc_path, c.payload, jsonb_array_elements(c.payload->'payments') pay
+      from cur c where jsonb_typeof(c.payload->'payments') = 'array')
 select pay->>'method' method, coalesce(pay->>'otherType','-') other_type,
        (payload->>'supplierId' = 'SYSTEM' and payload->>'category' = 'Platform Fee') is_system_fee,
-       payload->>'status' status, count(*) legs, count(distinct doc_path) docs, sum((pay->>'amount')::numeric) amount
+       payload->>'status' status, count(*) legs, count(distinct doc_path) docs,
+       sum(case when pay->>'amount' ~ '^-?[0-9]+(\.[0-9]+)?$' then (pay->>'amount')::numeric end) amount,
+       count(*) filter (where pay->>'amount' !~ '^-?[0-9]+(\.[0-9]+)?$' or pay->>'amount' is null) unparseable_amounts
 from p where pay->>'method' in ('other','ar_collection') group by 1,2,3,4 order by 1,2,3,4;
 ```
+   Docs whose `payments` is not an array are counted separately (`jsonb_typeof(...) <> 'array'`) and reported.
    and the fee cross-check: every SYSTEM Platform Fee doc's `sourceId` must be a landed `arCollections` doc whose
    `platformFee` equals the fee doc's `totalAmount`. Report matched / unmatched / collection-missing counts.
 4. **Gate:** S5 proceeds if every `ar_collection` leg is a system fee doc with a matching collection. Unmatched docs are
    listed and stay quarantined. The `other` rows, grouped by `otherType`, go to Ian with Q1–Q3.
 - ⚠️ Planner's assessment, said once (RULES §4): the 2026-08-24 floor was ONE quarantined group in 6,226 expenses, and
-  no v2 form has offered `other` since 2026-09-11. If S0 confirms a handful of `other` rows, the recommendation is to
-  classify them by hand before cutover and NOT build a voucher-asset method until someone needs one. Ian ruled "yes";
+  no v2 form has offered `other` since 2026-09-11. If S0 confirms a handful of `other` rows, the recommendation is to land
+  them in suspense as ruled and NOT build a new voucher-asset method until someone needs one. Ian ruled "yes";
   this is only the utilisation number he should see before S6 is built.
 
 ---
 
-## S1: DEF-201 (+N1, N4) — one write-off, one row; never more than is owed
+## S1: DEF-201 (+DEF-517, DEF-520) — one write-off, one row; never more than is owed
 **BUILDER** (source):
 - `packages/db/migrations/<N>_t367_def201_write_off_once.sql` (new) and `packages/db/migrations/meta/_journal.json`.
 - `packages/db/schema/ar.ts`: `uniqueIndex('ar_write_offs_journal_entry_unique').on(t.journalEntryId)`.
@@ -220,8 +248,10 @@ RLS registries unchanged. Prove it on a scratch DB (ADR-012 §5.8). ⛔ Precheck
 
 **Contract.** `writeOffCharge(tx, actor, { chargeId, amount, reason })` → `{ writeOffId, entryId, alreadyRecorded }`:
 read charge → `authorize(write_off_receivable, {storeId})` → `lockChargesForAllocation([chargeId])` → re-read charge →
-author check → `status === 'posted'` → reason → `parseMoneyInput(amount)` → `compare(amount, ZERO) > 0` → `openItems`
-cap via `compare` → `postEntry` (lines and key unchanged) → `created ? insertWriteOff : getWriteOffByEntryId`.
+author check → `status === 'posted'` → reason → `parseMoneyInput(amount)` → `compare(amount, ZERO) > 0` → **key lookup
+(R1): existing → return `{…, alreadyRecorded: true}`** → `openItems` cap via `compare` → `postEntry` (lines and key
+unchanged) → `created ? insertWriteOff : getWriteOffByEntryId`. The status re-read happens before the key lookup; a
+retry on a charge that has since been voided is refused as not posted (nothing new to return is safer than a stale ok).
 
 **Tests.** Two-connection harness exactly as T-366 S1 (`docs/tasks/366-remittance-floats.md` §S1 "Harness"): A runs the
 call inside `asOrg(…, async tx => { await op(tx); await gate; })`; B starts; a third connection polls
@@ -234,7 +264,12 @@ lock"*. Fixture: a ₱1,000.00 posted charge dated 2027-02-03, recorded by admin
   - `1210 {customer}` balance **600.00** and `openItems` outstanding **600.00** (inv. 6).
   - Mutants: guard removed and index absent → rows 2, subledger 200.00 ≠ control 600.00, red (this is HEAD's measured
     shape from the register); guard removed and index present → B throws 23505, red on "B resolves".
-- **W2: two different write-offs, concurrently (N1).** A: Y writes off 700.00; B: Z writes off 600.00.
+- **W1b: the double-click that exceeds half (R1 order).** A and B both: Y writes off **700.00**, concurrently.
+  - B waits, then resolves with `alreadyRecorded: true` (NOT *"only ₱300.00 is outstanding"*); rows 1, entries 1,
+    1210 = 300.00 = outstanding.
+  - Mutant: key lookup moved after the cap → B refused with the cap sentence; red. The sequential form (700 then 700)
+    asserts the same.
+- **W2: two different write-offs, concurrently (DEF-517).** A: Y writes off 700.00; B: Z writes off 600.00.
   - Exactly one fulfils; the other is refused with *"only ₱300.00 is outstanding"* (or ₱400.00) and writes nothing.
   - `1210 {customer}` is **300.00** or **400.00**, never −300.00; rows == entries.
   - Mutant: lock removed → both fulfil, 1210 = −300.00, red. At HEAD B never waits → red.
@@ -256,7 +291,7 @@ again (browser back + resubmit). Screenshot the "already recorded" notice and th
 
 ---
 
-## S2: DEF-396 + DEF-508 (+N2, N3) — the supplier-invoice gate
+## S2: DEF-396 + DEF-508 (+DEF-518, DEF-519) — the supplier-invoice gate
 **BUILDER** (source):
 - `packages/db/migrations/<N+1>_t367_def396_def508_invoice_gate.sql` (new) and `meta/_journal.json`.
 - `packages/db/src/repo/ap.ts`: `lockInvoiceForUpdate`, `lockInvoiceForRecording`, `postedAllocatedFor(expenseId)`,
@@ -265,7 +300,12 @@ again (browser back + resubmit). Screenshot the "already recorded" notice and th
 - `packages/domain/src/expenses/create.ts`: R7 store check, then the R4 lock, then the existing checks.
 - `packages/domain/src/expenses/approve.ts`: R4 lock after `authorize` (`:55`), re-read the expense, then `:77`.
 - `packages/domain/src/expenses/void.ts`: R6 guard after `authorize`, before `reverseEntry`.
-- `apps/erp/src/app/expenses/actions.ts`: the pre-lookup treats `invoice.storeId !== storeId` as not found (R7).
+- `apps/erp/src/app/expenses/actions.ts` (rebased on T-364's committed version): the pre-lookup treats
+  `invoice.storeId !== storeId` as not found, with the id-free sentence (R7).
+- `packages/db/src/triggers/registry.ts`: the `expenses_require_verified_invoice` entry (`:361-366`) keeps `mode:
+  'origin'`, `kind: 'validator'`; its `reason` adds *"also locks the invoice row FOR NO KEY UPDATE (serialises
+  recording and voiding) and refuses an expense at a different store from its invoice (T-367, migration <N+1>)"*.
+- ⚠️ T-365 edits `repo/ap.ts:95-152` and `ap/index.ts`; rebase on its committed version before editing either.
 - `packages/db/schema/expenses.ts`: a `// NOTE: store match and row lock hand-added in migration <N+1>` beside the
   trigger comment.
 
@@ -282,16 +322,19 @@ blocked). ⛔ Prechecks P2–P4 first.
 
 **Contract.**
 - `voidInvoice`: read → authorize → `lockInvoiceForUpdate` → re-read status (refuse if already voided) → reason →
-  `liveExpensesForInvoice` → cascade (R6 may refuse inside it) → `markInvoiceVoided`.
+  `liveExpensesForInvoice` → `lockExpensesForAllocation(all live ids)` (id order) → cascade (R6 may refuse inside it)
+  → `markInvoiceVoided`.
 - `createExpense`: authorize → … → invoice lookup → `if (!invoice || invoice.storeId !== input.storeId) throw gone(…)`
   → `lockInvoiceForRecording` → `assertOpenForRecording` → supplier checks → insert.
-- `approveExpense`: read expense → authorize → `lockInvoiceForRecording(expense.supplierInvoiceId)` → re-read expense
-  (refuse unless still `draft`) → existing flow.
+- `approveExpense`: read expense → authorize → `lockInvoiceForRecording(expense.supplierInvoiceId)` → re-read expense →
+  the existing status branches unchanged: `posted` returns `{ journalEntryId, created: false }` (`approve.ts:57-62`, a
+  concurrent double-approve is a retry, not a refusal), `voided` refuses, `draft` proceeds.
+- `voidExpense`: read → authorize → `lockExpensesForAllocation([id])` → re-read → R6 check → existing flow.
 - `openItems`: unchanged signature and columns.
 
 **Tests** (two-connection harness as S1; waiting = `Lock` / `transactionid|tuple`). Fixture: store A and B, supplier S
 with terms 30, a verified ₱1,000.00 invoice I at A dated 2027-02-03, manager M_A at A.
-- **V1: void first, record second (N2).** A: `voidInvoice(I)` held. B: `recordExpenseForInvoice(I, ₱400 credit)`.
+- **V1: void first, record second (DEF-396 race).** A: `voidInvoice(I)` held. B: `recordExpenseForInvoice(I, ₱400 credit)`.
   - B waits, then is refused with *"…has been voided, so nothing more can be recorded against it."*
   - No expense on I is `posted`; `openItems(S, A)` is empty; `2110 {S}` is **0.00**.
   - Mutant: the trigger's `FOR NO KEY UPDATE` AND `voidInvoice`'s lock both removed (HEAD) → B never waits and posts;
@@ -310,14 +353,26 @@ with terms 30, a verified ₱1,000.00 invoice I at A dated 2027-02-03, manager M
 - **V4: capacity race.** A records ₱700 and B records ₱600 against I concurrently → exactly one succeeds, the other gets
   the capacity sentence (*"…has only ₱300.00 left of ₱1,000.00; ₱600.00 doesn't fit."*); recorded ≤ 1,000.00.
   Mutant: no lock → recorded 1,300.00; red. Positive control: two different invoices → both succeed, B never waits.
-- **V5: paid bill (N3, R6).** Record ₱400 on credit against I, pay it in full (`recordPayment`).
+- **V5: paid bill (DEF-519, R6).** Record ₱400 on credit against I, pay it in full (`recordPayment`).
   - `voidInvoice(I)` refused: *"₱400.00 has already been paid against this bill. Void that payment first, then void the
     bill."* I stays `verified`, the expense `posted`, `2110 {S}` **0.00**, no reversal entry.
   - `voidExpense` on the expense directly: same refusal.
   - Positive control: `voidPayment`, then `voidInvoice` succeeds; `2110 {S}` **0.00**, `1110` back to its opening.
   - Mutant: guard removed → `2110 {S}` = **−400.00** (a debit on a liability control); red.
+- **V6: payment vs void, concurrently (DEF-519's race).** A posted ₱400 credit expense on I, unpaid. A: `recordPayment`
+  allocating ₱400 to it, held after `lockExpensesForAllocation`. B: `voidExpense` on it (and, second case,
+  `voidInvoice(I)`).
+  - B is seen WAITING (`Lock` / `transactionid|tuple`), then after A commits is refused with R6's sentence; the expense
+    stays `posted`, `2110 {S}` **0.00**, exactly one AP payment and no reversal entry.
+  - Reverse order: B (void) held, A (payment) waits, then is refused as not an open item; nothing written.
+  - Mutant: `voidExpense`'s lock removed → B never waits, voids, A's payment commits against a voided expense,
+    `2110 {S}` = −400.00; red.
+- **V7: double approve, concurrently.** A draft ₱400 expense on I. A and B both `approveExpense` it.
+  - B waits on the invoice lock, re-reads, finds `posted`, and returns `created: false` with A's `journalEntryId`
+    (today's idempotent branch, `approve.ts:57-62`), NOT a refusal. Exactly one `expense` journal entry.
+  - Mutant: re-read removed → B posts a second entry or throws; red.
 - **X1: cross-store (DEF-508).** M_A calls `createExpense(storeId A, supplierInvoiceId = B's invoice J)`:
-  - refused with `gone('supplier invoice')`'s sentence, byte-equal to the refusal for a random uuid;
+  - refused with `gone('supplier invoice')`'s sentence (id-free), byte-equal to the refusal for a random uuid;
   - the message contains neither S's name, J's invoice number, nor any ₱ figure; nothing is written;
   - J at B is verified-and-full AND J voided: both still give the same not-found sentence (the store check runs first);
   - the same through `recordExpenseForInvoice`;
@@ -325,7 +380,11 @@ with terms 30, a verified ₱1,000.00 invoice I at A dated 2027-02-03, manager M
   - Mutant: store check moved after `assertOpenForRecording` → J-full leaks *"only ₱…"*; red.
 - **X2: trigger backstop.** As the owner, inserting a `draft` expense at A on J raises the store message; the same at B
   succeeds.
-- **E15** (T-364's file): `error(a) === error(b)` holds and neither names store B's supplier or invoice.
+- **E15** (T-364's file, `:463` is a bare `it.todo`): the tester writes the body from T-364's E15 row
+  (`docs/tasks/364-def-496-497-authorise-first.md:196`): otherManager, create at own store A, supplier blank, (a) store
+  B's real invoice id vs (b) a random uuid. Assert `error(a) === error(b)` byte for byte (both the id-free not-found
+  sentence), neither names B's supplier or invoice, and no expense row exists. Mutant: the action's old id-bearing
+  sentence → texts differ; red.
 - **Refusals** paired with controls: staff (✗ `void_supplier_invoice`) refused without waiting on a held lock;
   a second `voidInvoice` after the first refused as already voided.
 
@@ -400,7 +459,7 @@ T-371.
 - `packages/etl/src/convert.ts`: the R10 skip, keyed on all four markers; `packages/etl/src/convert.ts`'s own
   `ExpensePaymentMethod` KEEPS `ar_collection` (it reads v1).
 - `packages/domain/src/shared/money-lines.ts:58-62`: comment only.
-- `apps/erp/src/app/expenses/[id]/page.tsx:31`: the label stays (history display).
+- `apps/erp/src/app/expenses/[id]/page.tsx:25-32`: the `ar_collection` label stays (history display). Checked: `METHOD_LABEL` is `Record<string, string>`, so it still typechecks once `ar_collection` leaves the union; the builder confirms with typecheck.
 
 **TESTER:** `packages/etl/tests/unit/t367-s5-platform-fee-skip.test.ts` (new);
 `packages/domain/tests/integration/t367-s5-ar-collection-retired.test.ts` (new);
@@ -432,8 +491,7 @@ questions have something concrete to answer:
   lock and would drift from the first. What is missing is how a rebate ARISES (Q1).
 - **Voucher / points / gift certificate** needs a new party-carrying asset account and an arising posting (Q2), then a
   `voucher` method that credits it, guarded by its balance under a lock, the same shape as `checkDraw`.
-- **v1 `other` history** lands in a suspense account with a finding per row (Q3), or stays quarantined for hand
-  classification if S0 shows only a handful.
+- **v1 `other` history** lands in a suspense account with a finding per row (Ian's ruling); Q3 asks only which account.
 
 ---
 
@@ -448,7 +506,7 @@ Run before the slice that needs them; paste the output in the report. Never a bu
   si.status = 'voided' and e.status <> 'voided';` → live DEF-396 instances; R5 hides them from payment (Q6).
 - **P4 (S2):** `select apa.expense_id, apa.amount_applied from ap_payment_allocations apa join ap_payments p on
   p.id = apa.ap_payment_id join expenses e on e.id = apa.expense_id where p.status = 'posted' and e.status = 'voided';`
-  → live N3 damage (a 2110 debit per supplier); report the supplier totals.
+  → live DEF-519 damage (a 2110 debit per supplier); report the supplier totals.
 - **P5 (S5):** `select method, count(*) from expense_payments where method in ('other','ar_collection') group by 1;`
   (informational; the CHECK is NOT VALID either way).
 
@@ -468,8 +526,8 @@ Run before the slice that needs them; paste the output in the report. Never a bu
 - The S1, S2 and S3 smoke ran on 9008 with 2027-02 dates, with screenshots.
 - `npm run build` passes with the dev server stopped.
 - Register at wrap-up: DEF-201, DEF-396, DEF-420, DEF-499, DEF-500, DEF-508 fixed with hashes; DEF-395's overdraft leg
-  fixed at `33dbd3f`, rest → T-371; DEF-054 split (part 1 fixed, part 2 open on Q1–Q3); N1–N4 logged with this task as
-  the fix; DEF-396's stale "ask Ian" remedy corrected to row 170; the AR `voidCharge` report logged. T-364's E15 green.
+  fixed at `33dbd3f`, rest → T-371; DEF-054 split (part 1 fixed, part 2 open on Q1–Q3); DEF-517, 518, 519 and 520
+  fixed with hashes; DEF-396's stale "ask Ian" remedy corrected to row 170. T-364's E15 green.
 
 ## Questions only Ian can answer
 - **Q1 (blocks S6): when a supplier gives us a rebate or promo credit (not a return, not an overpayment), what does it
@@ -479,9 +537,12 @@ Run before the slice that needs them; paste the output in the report. Never a bu
 - **Q2 (blocks S6): vouchers, points and gift certificates the BUSINESS holds need a new asset account.** Approve an
   account such as "Vouchers and gift certificates held", tracked per issuer? And when we receive one free (a promo), is
   that other income, or a reduction of what we paid that issuer?
-- **Q3 (blocks S6): where do v1's old `other` payments go?** (a) A new suspense account, each row flagged for someone
-  to reclassify; (b) keep them out of the load and classify them by hand before cutover (practical if S0 shows only a
-  few). There is no suspense account today.
+- **Q3 (blocks S6): which suspense account do v1's old `other` payments land in?** You ruled they land in suspense,
+  flagged. There is no active suspense account today (2900 is reserved for void cash). Approve a new one, for example
+  "Suspense — unclassified v1 payments", and say who clears it.
+- **Q7 (no slice blocked): two everyday postings have no written pattern yet** — writing off a customer's bad debt
+  (Dr 6860 / Cr 1210) and voiding an expense (a full reversal). The code already does both, and this task does not change
+  either. Should the planner add them to the posting patterns for your sign-off?
 - **Q4 (default ships in S2): can a supplier bill that has already been paid be voided?** Default: no — void the payment
   first, then the bill. The alternative is that voiding a paid bill turns the paid amount into a credit with that
   supplier, which needs a posting that is not in our patterns yet.
