@@ -1,10 +1,12 @@
 import { config } from 'dotenv';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
 
 /**
  * Proves the 19 invariants of docs/tasks/103-journal-tables.md against a real PostgreSQL
@@ -856,25 +858,147 @@ describe('T-118 invariant 8 — the subledger query: GROUP BY party_id over 2110
   });
 });
 
-describe('T-118 invariant 9 — re-running the migration is a no-op', () => {
-  it('the migrator applies cleanly a second time with no error, and no duplicate trigger is created', async () => {
-    // Same tool the real "npm run db:migrate" uses (packages/db/migrate.ts), pointed at
-    // this file's own TEST_DATABASE_URL connection — proving the actual mechanism the
-    // task's Method step ("apply, re-run to prove the no-op") describes, not a
-    // hand-rolled substitute for it.
-    const migrationsFolder = join(
-      fileURLToPath(new URL('.', import.meta.url)),
-      '..',
-      '..',
-      'migrations',
+/**
+ * DEF-545: this used to call the real `migrate()` against `sql` — this file's own
+ * `TEST_DATABASE_URL` connection, which in a full suite run is the SHARED gate database, not a
+ * lane's own. That silently applied whatever migrations were still pending at the moment this
+ * file happened to run, mid-suite — which is exactly what made 13 tests in OTHER files (sorted to
+ * run before this one) fail on "column does not exist" (`remittance_allocations.source`, from
+ * migration 0172) on 2026-09-30/10-01. Reproduced: a DB with every migration but the newest one
+ * fails these 13 tests; freshly migrated, all green (docs/DEFECTS-REGISTER.md DEF-545).
+ *
+ * The fix is not to migrate less carefully — it's to never migrate a shared connection from
+ * inside a test at all. This asserts the invariant the old test was actually protecting
+ * (no drift between what the DB has applied and what the repo's migrations say should be
+ * applied) by reading, never writing: the repo's own `_journal.json` against
+ * `drizzle.__drizzle_migrations` on the CONNECTED database. A gate that migrates first (as
+ * `gates.mjs` and the wrap-up gate now do) makes this pass; one that does not, or that only ran
+ * some migrations, fails it loudly instead of the previous test silently doing the work.
+ */
+// Auditor follow-up (a): the ORIGINAL version of this only compared `created_at`/`when` — an
+// applied migration file edited AFTER it ran (RULES §1 rule 9: "never edited") would go
+// undetected, since the row count and timestamps stay the same. `hash` is drizzle's own sha256 of
+// the migration file's full text (`node_modules/drizzle-orm/migrator.js`'s `readMigrationFiles`:
+// `crypto.createHash('sha256').update(query).digest('hex')`), so comparing it catches exactly that.
+function assertMigrationsCurrent(
+  applied: readonly { created_at: string; hash: string }[],
+  journalEntries: readonly { when: number; tag: string; hashes: readonly string[] }[],
+): void {
+  if (applied.length !== journalEntries.length) {
+    throw new Error(
+      `migrations out of date: the connected database has applied ${applied.length}, but the ` +
+        `repo's migrations/meta/_journal.json lists ${journalEntries.length}. Migrate this ` +
+        'database before running the suite against it.',
     );
-    const db = drizzle(sql);
-    await expect(migrate(db, { migrationsFolder })).resolves.toBeUndefined();
-    await expect(migrate(db, { migrationsFolder })).resolves.toBeUndefined();
+  }
+  for (let i = 0; i < journalEntries.length; i++) {
+    if (String(applied[i]!.created_at) !== String(journalEntries[i]!.when)) {
+      throw new Error(
+        `migration #${i} ("${journalEntries[i]!.tag}") mismatch: the database recorded ` +
+          `${applied[i]!.created_at}, the journal expects ${journalEntries[i]!.when}.`,
+      );
+    }
+    if (!journalEntries[i]!.hashes.includes(applied[i]!.hash)) {
+      throw new Error(
+        `applied migration ${journalEntries[i]!.tag} has a DIFFERENT hash — edited after apply ` +
+          '(line endings already ruled out; RULES §1 rule 9: write a new migration instead).',
+      );
+    }
+  }
+}
+
+describe('T-118 invariant 9 — the connected database has every migration applied, none pending, none edited', () => {
+  const migrationsFolder = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', 'migrations');
+  const journalRaw = JSON.parse(readFileSync(join(migrationsFolder, 'meta', '_journal.json'), 'utf8')) as {
+    entries: { when: number; tag: string }[];
+  };
+  const journal = {
+    entries: journalRaw.entries.map((e) => ({
+      ...e,
+      // Mirror drizzle literally: hash the DECODED string, not the Buffer. Local DBs were migrated from
+      // whatever bytes the worktree had (CRLF on Windows) while git/CI/prod store LF, so accept the
+      // hash of the content as-is, with CRLF->LF, and with LF->CRLF.
+      hashes: (() => {
+        const text = readFileSync(join(migrationsFolder, `${e.tag}.sql`)).toString();
+        const lf = text.replace(/\r\n/g, '\n');
+        const crlf = lf.replace(/\n/g, '\r\n');
+        return [text, lf, crlf].map((t) => createHash('sha256').update(t).digest('hex'));
+      })(),
+    })),
+  };
+
+  it('drizzle.__drizzle_migrations matches the repo\'s own journal exactly, in order, byte-identical', async () => {
+    const applied = await sql<{ created_at: string; hash: string }[]>`
+      select created_at::text, hash from drizzle.__drizzle_migrations order by id
+    `;
+    expect(() => assertMigrationsCurrent(applied, journal.entries)).not.toThrow();
 
     const [countRow] = await sql<{ count: string }[]>`
       select count(*)::int as count from pg_trigger where tgname = 'journal_lines_party_requirement'
     `;
     expect(Number(countRow!.count)).toBe(1);
   });
+
+  // Positive controls: prove the assertion above can actually fail, rather than vacuously passing
+  // no matter what it is handed — pure array input, no database write.
+  it('positive control: the assertion fails on a database missing the newest migration', () => {
+    const missingNewest = journal.entries.slice(0, -1).map((e) => ({ created_at: String(e.when), hash: e.hashes[0]! }));
+    expect(() => assertMigrationsCurrent(missingNewest, journal.entries)).toThrow(/migrations out of date/);
+  });
+  it('positive control: the assertion fails when an APPLIED migration file was edited after the fact', () => {
+    const tampered = journal.entries.map((e) => ({ created_at: String(e.when), hash: e.hashes[0]! }));
+    tampered[0] = { ...tampered[0]!, hash: 'not-the-real-hash' };
+    expect(() => assertMigrationsCurrent(tampered, journal.entries)).toThrow(/DIFFERENT hash/);
+  });
+});
+
+// Auditor follow-up (b): "re-running migrate() is a no-op" is now pinned nowhere (DEF-545 removed
+// it from the SHARED connection above). Pin it here instead, on a disposable SCRATCH database —
+// same technique as t346-migrations.test.ts's own `createScratchDatabase`/`dropScratchDatabase` —
+// so it never touches whatever `TEST_DATABASE_URL` happens to point at in a full run.
+describe('T-118 invariant 9b — re-running the migrator on a scratch database is a no-op', () => {
+  const dbName = `shareat_scratch_migrate_twice_${Date.now()}_${randomUUID().slice(0, 8)}`;
+  const migrationsFolder = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', 'migrations');
+  let scratchSql: ReturnType<typeof postgres>;
+
+  function scratchUrl(): string {
+    const u = new URL(url!);
+    u.pathname = `/${dbName}`;
+    return u.toString();
+  }
+  async function withAdmin(fn: (admin: ReturnType<typeof postgres>) => Promise<void>): Promise<void> {
+    const adminUrl = new URL(url!);
+    adminUrl.pathname = '/postgres';
+    const admin = postgres(adminUrl.toString(), { max: 1 });
+    try {
+      await fn(admin);
+    } finally {
+      await admin.end();
+    }
+  }
+
+  beforeAll(async () => {
+    await withAdmin(async (admin) => {
+      await admin.unsafe(`DROP DATABASE IF EXISTS "${dbName}"`);
+      await admin.unsafe(`CREATE DATABASE "${dbName}"`);
+    });
+    scratchSql = postgres(scratchUrl(), { max: 1 });
+  });
+  afterAll(async () => {
+    await scratchSql?.end({ timeout: 5 });
+    await withAdmin(async (admin) => {
+      await admin.unsafe(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`);
+    });
+  }, 120_000);
+
+  it('the migrator applies cleanly a second time with no error, and no duplicate trigger is created', async () => {
+    const db = drizzle(scratchSql);
+    await expect(migrate(db, { migrationsFolder })).resolves.toBeUndefined();
+    await expect(migrate(db, { migrationsFolder })).resolves.toBeUndefined();
+
+    const [countRow] = await scratchSql<{ count: string }[]>`
+      select count(*)::int as count from pg_trigger where tgname = 'journal_lines_party_requirement'
+    `;
+    expect(Number(countRow!.count)).toBe(1);
+  }, 60_000);
 });
