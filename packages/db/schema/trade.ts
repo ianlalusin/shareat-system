@@ -87,6 +87,9 @@ export const tradeOrders = pgTable(
     requestedByStoreId: uuid('requested_by_store_id').references(() => stores.id, { onDelete: 'restrict' }),
     acceptedAt: timestamp('accepted_at', { withTimezone: true }),
     acceptedBy: uuid('accepted_by').references(() => persons.id, { onDelete: 'restrict' }),
+    // NOTE: trigger trade_orders_ready_is_final_trg hand-added in migration 0175 (T-372 / DEF-511)
+    // — once ready_at is set, neither column may be cleared or changed by any writer. ENABLE
+    // ALWAYS (history_guard); see the migration for the body.
     readyAt: timestamp('ready_at', { withTimezone: true }),
     readyBy: uuid('ready_by').references(() => persons.id, { onDelete: 'restrict' }),
     rejectedAt: timestamp('rejected_at', { withTimezone: true }),
@@ -299,6 +302,9 @@ export const tradeOrderLines = pgTable(
     check('trade_order_lines_requested_quantity_finite_check', sql`${t.requestedQuantity} > '-Infinity'::numeric and ${t.requestedQuantity} < 'Infinity'::numeric`),
     check('trade_order_lines_fulfilled_quantity_finite_check', sql`${t.fulfilledQuantity} > '-Infinity'::numeric and ${t.fulfilledQuantity} < 'Infinity'::numeric`),
     check('trade_order_lines_received_quantity_finite_check', sql`${t.receivedQuantity} > '-Infinity'::numeric and ${t.receivedQuantity} < 'Infinity'::numeric`),
+    // T-372 S2 / R5b (DEF-127, migration 0175): the sibling rule delivery_lines already has
+    // (0066_t166_deliveries.sql:93) — trade_order_lines never got it.
+    check('trade_order_lines_received_quantity_non_negative_check', sql`${t.receivedQuantity} is null or ${t.receivedQuantity} >= 0`),
     check('trade_order_lines_dispatch_cost_finite_check', sql`${t.dispatchCost} > '-Infinity'::numeric and ${t.dispatchCost} < 'Infinity'::numeric`),
     check('trade_order_lines_suggested_quantity_finite_check', sql`${t.suggestedQuantity} > '-Infinity'::numeric and ${t.suggestedQuantity} < 'Infinity'::numeric`),
   ],

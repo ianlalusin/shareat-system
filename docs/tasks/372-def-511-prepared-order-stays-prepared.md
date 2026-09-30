@@ -1,6 +1,6 @@
 # T-372: a prepared commissary order never goes back (DEF-511); internal freight posts at receipt (DEF-127)
 
-**Status:** **S1 DONE 2026-10-01 (domain refusal at ready + UI; audited; screen-tested); S2 next (migration 0175)** — APPROVED 2026-09-30 (orchestrator, Ian's Q1/Q2). Written 2026-09-30 by the Opus planner at HEAD `3ed900f`.
+**Status:** **S1 DONE 2026-10-01 (domain refusal at ready + UI; audited; screen-tested); S2 DONE 2026-10-01 (migration 0175; R5 dropped — already in 0056); S3 next** — APPROVED 2026-09-30 (orchestrator, Ian's Q1/Q2). Written 2026-09-30 by the Opus planner at HEAD `3ed900f`.
 **Lane:** commissary, one lane. **Model:** Sonnet (tester first, then builder, per slice).
 **Migration:** YES, one hand-authored migration (ADR-012 §5). T-366 holds 0172 and T-368 takes the next index, so
 use **0174** (after T-366's 0172 and T-368's 0173) unless the index is reassigned at build. It carries S2 and nothing else.
@@ -273,6 +273,8 @@ make either wording change the other.
 
 **S2 BUILDER paths:** the new migration, `packages/db/migrations/meta/_journal.json`,
 `packages/db/src/triggers/registry.ts`, `packages/db/schema/trade.ts`.
+
+- **Erratum (orchestrator, 2026-10-01, tester RED):** **drop R5 from the S2 migration.** `trade_orders_fees_non_negative_check` already exists, byte-identical, from `0056_t151_landed_cost_and_branch_price.sql:32-33` (verified in migration history and live via `pg_get_constraintdef`); `ADD CONSTRAINT` would fail 42710 and abort the migration. R5b is genuinely new and stays. T7/T8 remain as standing proof of the 0056 constraint, not as reds. Migration index for S2 = **0175**.
 
 ### S2: TESTER (disjoint)
 - **New:** `packages/db/tests/integration/t372-ready-at-trigger.test.ts`.

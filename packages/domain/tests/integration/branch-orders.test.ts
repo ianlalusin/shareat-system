@@ -495,12 +495,18 @@ describe('T-172 — ⭐ invariant 5: a proposed line counts for NOTHING until th
     expect((await order(f, orderId)).totalAmount).toBe('6200.00');
     // ⭐ Not ready.
     await expect(asOrg(f.orgId, (tx) => markReady(tx, f.comStaff, { orderId }))).rejects.toThrow(/still await the branch/);
-    // ⭐ And the database refuses the truck too, even if the domain were bypassed.
-    await sql`update trade_orders set ready_at = now(), ready_by = ${f.comStaff.personId} where id = ${orderId}`;
-    await expect(sql`update trade_orders set status = 'dispatched' where id = ${orderId}`).rejects.toThrow(
-      /awaiting the branch decision/,
-    );
-    await sql`update trade_orders set ready_at = null, ready_by = null where id = ${orderId}`;
+    // ⭐ And the database refuses the truck too, even if the domain were bypassed. Probed and
+    // discarded inside ONE transaction — T-372 R4's `trade_orders_ready_is_final_trg` refuses an
+    // erasure of an already-set `ready_at` (a raw `ready_at = null` reset here would itself be
+    // blocked once that trigger exists), so the rollback from the dispatch refusal below undoes
+    // the raw `ready_at` set instead of a second statement erasing it.
+    await expect(
+      sql.begin(async (t) => {
+        await t`update trade_orders set ready_at = now(), ready_by = ${f.comStaff.personId} where id = ${orderId}`;
+        await t`update trade_orders set status = 'dispatched' where id = ${orderId}`;
+      }),
+    ).rejects.toThrow(/awaiting the branch decision/);
+    expect((await order(f, orderId)).readyAt).toBeNull();
 
     await asOrg(f.orgId, (tx) => decideProposedLine(tx, f.branchStaff, { orderId, lineId, decision: 'approved' }));
     expect((await lines(f, orderId)).find((l) => l.id === lineId)!.approval).toBe('approved');

@@ -40,7 +40,7 @@ export interface TriggerEntry {
 
 export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
   // ---------------------------------------------------------------------------------------------
-  // ALWAYS (18) — history guards. R1's own table, in R1's own order.
+  // ALWAYS (19) — history guards. R1's own table, in R1's own order, plus later additions.
   // ---------------------------------------------------------------------------------------------
   journal_entries_posted_immutable: {
     table: 'journal_entries',
@@ -162,9 +162,15 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'The audit log is append-only (0167). Decides only from TG_OP. The auditor\'s own repro (DEF-487).',
   },
+  trade_orders_ready_is_final_trg: {
+    table: 'trade_orders',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A ready order\'s ready_at/ready_by are write-once (0175, DEF-511). Decides only from OLD/NEW on the same row.',
+  },
 
   // ---------------------------------------------------------------------------------------------
-  // origin (39) — deliberately NOT always. R2.
+  // origin (41) — deliberately NOT always. R2.
   // ---------------------------------------------------------------------------------------------
 
   // Derivation (11) — a replay or restore must not re-run these.

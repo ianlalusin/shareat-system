@@ -774,6 +774,24 @@ rollback;
 Query 1: rows block nothing at deploy, but the org cannot close its next month until the gap is filled
 (T-344's fill action). Query 2: rows are for Ian's review; the guard protects going forward regardless.
 
+## ⛔ Before the push that carries 0175 (T-372 S2) — one more count
+
+0175 adds `trade_order_lines_received_quantity_non_negative_check` (`received_quantity IS NULL OR >= 0`) **without NOT VALID**,
+so one negative row in prod aborts the migration. Read-only on **erp2**, with Ian:
+
+```sql
+begin transaction read only;
+select id, order_id, received_quantity from trade_order_lines where received_quantity < 0;
+rollback;
+```
+
+0 rows → fine. Any row: show Ian; do not push until it is ruled.
+
+### Support note — a mis-attributed "ready" cannot be corrected (by design, DEF-511)
+After 0175, `ready_at`/`ready_by` on a branch order can never change once set — not in the app, not by the app
+role, not by raw SQL under replica role. If the wrong person or time is recorded, the only remedy is to **reject
+the order and re-order**. That is Ian's ruling (ready is final), not a bug.
+
 ## ⚠️ Traps on the box — each has bitten once; recorded so it bites nobody twice
 
 | Trap | What it looks like | Rule |
