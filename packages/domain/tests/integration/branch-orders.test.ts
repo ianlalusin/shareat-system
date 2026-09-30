@@ -536,10 +536,10 @@ describe('T-172 — ⭐ invariant 5: a proposed line counts for NOTHING until th
     await asOrg(f.orgId, (tx) => proposeLine(tx, f.comStaff, { orderId, itemId: f.unmapped, quantity: '1' }));
   });
 
-  it('a substitution zero-fulfils the line it replaces, and any change after READY drops the order back to accepted', async () => {
+  // DEF-511 (T-372): ready is final — a change AFTER ready is refused; see t372-ready-is-final.test.ts.
+  it('a substitution zero-fulfils the line it replaces (proposed at ACCEPTED)', async () => {
     const f = await fixture();
     const orderId = await accepted(f);
-    await asOrg(f.orgId, (tx) => markReady(tx, f.comStaff, { orderId }));
     const [porkLine] = await lines(f, orderId);
 
     await asOrg(f.orgId, (tx) =>
@@ -547,7 +547,6 @@ describe('T-172 — ⭐ invariant 5: a proposed line counts for NOTHING until th
     );
     const o = await order(f, orderId);
     expect(branchOrderStage(o)).toBe('accepted');
-    expect(o.readyAt).toBeNull();
     const original = (await lines(f, orderId)).find((l) => l.id === porkLine!.id)!;
     expect(original.fulfilledQuantity).toBe('0.000');
     expect(original.requestedQuantity).toBe('20.000');
@@ -656,13 +655,24 @@ describe('T-172 — dispatch: the gate that fails CLOSED, and the posting to 134
     );
     expect(await onHand(f.pork, f.com.id)).toBe('18.000');
 
-    // Untracked: the sauce was never received anywhere at the commissary.
-    const [l] = await lines(f, orderId);
-    await asOrg(f.orgId, (tx) => fulfilLine(tx, f.comStaff, { orderId, lineId: l!.id, quantity: '10' }));
-    const { lineId } = await asOrg(f.orgId, (tx) => proposeLine(tx, f.comStaff, { orderId, itemId: f.sauce, quantity: '1' }));
-    await asOrg(f.orgId, (tx) => decideProposedLine(tx, f.branchStaff, { orderId, lineId, decision: 'approved' }));
-    await asOrg(f.orgId, (tx) => markReady(tx, f.comStaff, { orderId }));
-    await expect(asOrg(f.orgId, (tx) => dispatchBranchOrder(tx, f.comMgr, { orderId }))).rejects.toThrow(/no tracked balance/);
+    // Untracked: the sauce was never received anywhere at the commissary. A SEPARATE fixture (its
+    // own branch/commissary pair) — DEF-511 (T-372) makes ready final, so the order above cannot be
+    // edited again, and reusing `f`'s branch would also trip the one-open-order rule (index 0070):
+    // that branch's first order is still open (ready, undispatched after the over-ask refusal).
+    const f2 = await fixture();
+    const untrackedOrderId = await accepted(f2);
+    const [l] = await lines(f2, untrackedOrderId);
+    await asOrg(f2.orgId, (tx) => fulfilLine(tx, f2.comStaff, { orderId: untrackedOrderId, lineId: l!.id, quantity: '10' }));
+    const { lineId } = await asOrg(f2.orgId, (tx) =>
+      proposeLine(tx, f2.comStaff, { orderId: untrackedOrderId, itemId: f2.sauce, quantity: '1' }),
+    );
+    await asOrg(f2.orgId, (tx) =>
+      decideProposedLine(tx, f2.branchStaff, { orderId: untrackedOrderId, lineId, decision: 'approved' }),
+    );
+    await asOrg(f2.orgId, (tx) => markReady(tx, f2.comStaff, { orderId: untrackedOrderId }));
+    await expect(
+      asOrg(f2.orgId, (tx) => dispatchBranchOrder(tx, f2.comMgr, { orderId: untrackedOrderId })),
+    ).rejects.toThrow(/no tracked balance/);
   });
 
   it('⭐ test 8: dispatch moves stock off the shelf and posts Dr 1340 / Cr 1310 at FIFO cost — nothing crosses to the branch', async () => {

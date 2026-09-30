@@ -38,6 +38,7 @@ import {
   commissaryRepo,
   itemsRepo,
   lowStockRepo,
+  refuse,
   tradeRepo,
   transaction,
   type Tx,
@@ -104,6 +105,21 @@ export const OPEN_STAGES: ReadonlySet<BranchOrderStage> = new Set(['draft', 'sub
 // -----------------------------------------------------------------------------------------------
 // Shared helpers — used by fulfilment.ts too
 // -----------------------------------------------------------------------------------------------
+
+/** DEF-511: ready is final. Exported so the tests can assert the exact sentence. */
+export const READY_IS_FINAL_SENTENCE =
+  'This order is marked ready, so its packing list is final. It can now only be dispatched, or rejected so the branch can order again.';
+
+/**
+ * Shared by every commissary/branch write that must refuse once the order is ready (DEF-511).
+ * @internal — called by `fulfilLine`/`proposeLine` (`./fulfilment.ts`) and `decideProposedLine`
+ * (below); exported only because the barrel re-exports this module, not for `apps/` to call.
+ */
+export function refuseIfReady(stage: BranchOrderStage, order: { id: string }, verb: string): void {
+  if (stage === 'ready') {
+    throw refuse(`${verb}: order ${order.id} is ready — ready is final (DEF-511)`, READY_IS_FINAL_SENTENCE);
+  }
+}
 
 /** A branch order: one a BRANCH initiated. `createTradeOrder`'s commissary-initiated transfers are not. */
 export async function loadBranchOrder(
@@ -554,7 +570,10 @@ export async function decideProposedLine(
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'place_branch_order', { storeId: order.requestedByStoreId });
     const stage = branchOrderStage(order);
-    if (stage !== 'accepted' && stage !== 'ready') {
+    // T-372 S1 audit finding 1 (DEF-511): a pending line cannot exist once the order is ready
+    // (`markReady` refuses pending lines; `proposeLine` is refused at ready), so this refuses too.
+    refuseIfReady(stage, order, 'decideProposedLine');
+    if (stage !== 'accepted') {
       throw new Error(`decideProposedLine: the order is ${BRANCH_ORDER_STAGE_LABEL[stage].toLowerCase()} — there is nothing to decide.`);
     }
     if (input.decision !== 'approved' && input.decision !== 'rejected') {

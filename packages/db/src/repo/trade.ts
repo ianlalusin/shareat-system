@@ -383,18 +383,6 @@ export async function markReady(tx: Tx, orgId: string, id: string, readyBy: stri
 }
 
 /**
- * ⭐ "Ready" is the commissary's statement that the list is FINAL. A fulfilment edit or a new
- * proposal after it un-says that, so the order drops back to accepted and ready must be re-declared
- * — the same discipline as a re-count after a change.
- */
-export async function clearReady(tx: Tx, orgId: string, id: string): Promise<void> {
-  await tx
-    .update(tradeOrders)
-    .set({ readyBy: null, readyAt: null, updatedAt: sql`now()` })
-    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
-}
-
-/**
  * The commissary said no. ⚠️ `status` becomes `void` — 0070's decision: v1's separate `rejected`
  * and `cancelled` states change nothing about the books, so they are a reason on a void, not a
  * state. `rejected_at` is what distinguishes the two afterwards.

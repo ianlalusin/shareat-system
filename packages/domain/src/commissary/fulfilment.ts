@@ -16,8 +16,8 @@
  *   way to send none was to delete the branch's line, which the commissary may not do.
  * - **A proposal lands `pending` and counts toward nothing** (invariant 5) — not the total, not the
  *   dispatch, and it holds the order back from ready until the branch answers.
- * - **Ready is a statement that the list is final.** A fulfilment edit or a new proposal after it
- *   drops the order back to accepted; the commissary re-declares ready when it is.
+ * - **Ready is final (DEF-511, Ian 2026-09-30): after it the list cannot change; the order is
+ *   dispatched or rejected.**
  *
  * ## What posts, and where
  *
@@ -46,6 +46,7 @@ import {
   normaliseRate,
   noteOnThread,
   parseQuantity,
+  refuseIfReady,
   resolveBranchRate,
 } from './orders';
 
@@ -138,7 +139,8 @@ export async function fulfilLine(tx: Tx | null, actor: Actor, input: FulfilLineI
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'fulfil_branch_order', { storeId: order.storeId });
     const stage = branchOrderStage(order);
-    refuseUnless(stage, ['accepted', 'ready'], 'fulfilLine');
+    refuseIfReady(stage, order, 'fulfilLine');
+    refuseUnless(stage, ['accepted'], 'fulfilLine');
 
     const line = await tradeRepo.getLineById(trx, actor.orgId, input.lineId);
     if (!line || line.orderId !== order.id) throw new Error('fulfilLine: that line is not on this order.');
@@ -155,8 +157,6 @@ export async function fulfilLine(tx: Tx | null, actor: Actor, input: FulfilLineI
       lineTotal: isZeroQuantity(qty) ? '0.00' : lineCost(qty, rate),
       sourceLocationId,
     });
-    // ⭐ The list changed, so it is no longer "final".
-    if (stage === 'ready') await tradeRepo.clearReady(trx, actor.orgId, order.id);
     await lowStockRepo.refreshOrderTotal(trx, order.id);
   };
   if (tx) return run(tx);
@@ -184,7 +184,8 @@ export async function proposeLine(tx: Tx | null, actor: Actor, input: ProposeLin
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'fulfil_branch_order', { storeId: order.storeId });
     const stage = branchOrderStage(order);
-    refuseUnless(stage, ['accepted', 'ready'], 'proposeLine');
+    refuseIfReady(stage, order, 'proposeLine');
+    refuseUnless(stage, ['accepted'], 'proposeLine');
 
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw new Error('proposeLine: that item does not exist.');
@@ -242,7 +243,6 @@ export async function proposeLine(tx: Tx | null, actor: Actor, input: ProposeLin
       sourceLocationId,
     });
 
-    if (stage === 'ready') await tradeRepo.clearReady(trx, actor.orgId, order.id);
     await lowStockRepo.refreshOrderTotal(trx, order.id);
     await noteOnThread(
       trx, actor.orgId, order.id, actor.personId,

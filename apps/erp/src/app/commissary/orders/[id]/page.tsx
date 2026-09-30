@@ -233,7 +233,7 @@ export default async function BranchOrderPage({
         </section>
       )}
 
-      {packing && commissarySide && (
+      {stage === 'accepted' && commissarySide && (
         <section className={PANEL}>
           <h2 className="font-medium">Propose a substitution or an addition</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -294,7 +294,12 @@ export default async function BranchOrderPage({
               Propose
             </button>
           </form>
-          <div className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+        </section>
+      )}
+
+      {packing && commissarySide && (
+        <section className={PANEL}>
+          <div className="flex flex-wrap items-end gap-3">
             {stage === 'accepted' && (
               <form action={markReadyAction}>
                 <input type="hidden" name="orderId" value={order.id} />
@@ -313,7 +318,7 @@ export default async function BranchOrderPage({
             )}
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               {stage === 'accepted'
-                ? 'Ready means the list is final. Any change after it drops the order back here.'
+                ? 'Ready means the list is final — after it the order can only be dispatched or rejected.'
                 : 'Dispatch is the posting event: stock leaves into in-transit (1340) at real FIFO cost — manager or admin only. It is refused if the commissary holds less than a line says, or has never tracked the item at all.'}
             </span>
             <RejectForm orderId={order.id} />
@@ -458,7 +463,7 @@ function LineCard({
   const declined = l.approval === 'rejected';
   const pending = l.approval === 'pending';
   const editAsk = stage === 'draft' && branchSide;
-  const editPack = (stage === 'accepted' || stage === 'ready') && commissarySide && !declined;
+  const editPack = stage === 'accepted' && commissarySide && !declined;
 
   return (
     <div

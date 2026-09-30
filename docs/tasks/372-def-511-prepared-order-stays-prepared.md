@@ -1,6 +1,6 @@
 # T-372: a prepared commissary order never goes back (DEF-511); internal freight posts at receipt (DEF-127)
 
-**Status:** **S1 reds written (on `wip/2026-09-30-reds`); builder next** — APPROVED 2026-09-30 (orchestrator, Ian's Q1/Q2). Written 2026-09-30 by the Opus planner at HEAD `3ed900f`.
+**Status:** **S1 DONE 2026-10-01 (domain refusal at ready + UI; audited; screen-tested); S2 next (migration 0175)** — APPROVED 2026-09-30 (orchestrator, Ian's Q1/Q2). Written 2026-09-30 by the Opus planner at HEAD `3ed900f`.
 **Lane:** commissary, one lane. **Model:** Sonnet (tester first, then builder, per slice).
 **Migration:** YES, one hand-authored migration (ADR-012 §5). T-366 holds 0172 and T-368 takes the next index, so
 use **0174** (after T-366's 0172 and T-368's 0173) unless the index is reassigned at build. It carries S2 and nothing else.
@@ -238,9 +238,20 @@ S1 to S5 are un-gated: Ian answered Q1 and Q2 on 2026-09-30. ⛔ **Part b of S6 
      dispatched or rejected."*;
    - the `packing` panel keeps rendering at `ready` for Dispatch and Reject.
    - No other change. That includes the `:569` branch-side pending block, which is unreachable at `ready`.
+   - **Erratum (orchestrator, 2026-10-01, builder QUESTION):** `:236` guards ONE section holding both the propose form (`:238-296`) and the Mark-ready/Dispatch/Reject controls (`:297-320`). Split it: the propose form moves under `stage === 'accepted' && commissarySide`; the controls keep `packing && commissarySide`. Bullet 4 is the intent.
 
 **S1 BUILDER paths:** `packages/domain/src/commissary/fulfilment.ts`, `packages/db/src/repo/trade.ts`,
 `apps/erp/src/app/commissary/orders/[id]/page.tsx`.
+
+### S1 audit (auditor, read-only, 2026-10-01) — triage
+Matches R2/R3 and the :241 erratum. Findings: (1) `decideProposedLine` (`commissary/orders.ts:557`) still admits
+`ready` — dead only because `markReady` refuses while a proposal is pending → TESTER red R5 (state built by SQL),
+BUILDER adds `refuseIfReady` there (scope widened to `orders.ts` by the orchestrator). (2) `refusal()` helper must
+assert the raw `(DEF-511)` diagnostic → TESTER. (3) `clearReady`-absent leg needs a positive control → TESTER.
+(4) the split left the controls' `border-t` as the first child of its new panel (`page.tsx:299-301`) → BUILDER,
+tester screenshots before/after. (5) UI helper text vs `READY_IS_FINAL_SENTENCE` — **dismissed**: the UI sentence is
+spec-mandated copy for a different reader (the commissary before marking ready), not the refusal; tying them would
+make either wording change the other.
 
 ### S1: TESTER (disjoint)
 - **New:** `packages/domain/tests/integration/t372-ready-is-final.test.ts`. It uses the `branch-orders.test.ts`
