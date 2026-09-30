@@ -77,6 +77,16 @@ export async function chargeLiability(
     const liability = await liabilitiesRepo.getById(trx, actor.orgId, input.liabilityId);
     if (!liability) throw new Error(`chargeLiability: liability ${input.liabilityId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
+    // ⛔ T-366 S1b / DEF-529 — row-lock the liability before anything reads what it owes.
+    await liabilitiesRepo.lockForPayment(trx, actor.orgId, liability.id);
+    // Re-read under the lock: a retire that committed while we waited is now visible.
+    const locked = await liabilitiesRepo.getById(trx, actor.orgId, liability.id);
+    if (locked?.retiredAt) {
+      throw refuse(
+        'chargeLiability: this obligation is retired.',
+        'This obligation has been retired, so nothing more can be charged to it.',
+      );
+    }
 
     // ⚠️ S5.5v item 5 — deliberately NOT `parseMoneyInput`: a comma/imprecise amount falls through
     // to today's raw-string DB behaviour unchanged (measured; the followups file's O3 and comma
@@ -234,6 +244,8 @@ export async function reverseLiabilityEntry(
       throw new Error(`reverseLiabilityEntry: liability ${input.liabilityId} does not exist.`);
     }
     await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
+    // ⛔ T-366 S1b / DEF-529 — row-lock the liability before anything reads what it owes.
+    await liabilitiesRepo.lockForPayment(trx, actor.orgId, liability.id);
     const reason = input.reason.trim();
     if (!reason) throw new Error('reverseLiabilityEntry: say why this is being reversed.');
     const result = await reverseEntry(trx, {
@@ -261,6 +273,8 @@ export async function retireLiability(
     const liability = await liabilitiesRepo.getById(trx, actor.orgId, input.liabilityId);
     if (!liability) throw new Error(`retireLiability: liability ${input.liabilityId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
+    // ⛔ T-366 S1b / DEF-529 — row-lock the liability before anything reads what it owes.
+    await liabilitiesRepo.lockForPayment(trx, actor.orgId, liability.id);
 
     const position = await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id);
     if (Math.abs(Number(position.outstanding)) > 0.005) {
