@@ -11,7 +11,7 @@
  * account, plus a `LiabilityLedgerEntry` with its own running balance (DEF-074) — the fourth time
  * this exact shape has turned up. Every figure here is summed from `2500` by party.
  */
-import { liabilitiesRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { journalRepo, liabilitiesRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import type { LiabilityCategory } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
@@ -232,6 +232,9 @@ export async function payLiability(
   return transaction(run);
 }
 
+/** The only two source types `reverseLiabilityEntry` may target — T-366 S1c / DEF-534. */
+const LIABILITY_ENTRY_SOURCE_TYPES = new Set(['liability_charge', 'liability_payment']);
+
 /** ⚠️ Reversal, not deletion — the original and its mirror both stay on the ledger. */
 export async function reverseLiabilityEntry(
   tx: Tx | null,
@@ -246,6 +249,29 @@ export async function reverseLiabilityEntry(
     await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
     // ⛔ T-366 S1b / DEF-529 — row-lock the liability before anything reads what it owes.
     await liabilitiesRepo.lockForPayment(trx, actor.orgId, liability.id);
+    // Re-read under the lock: a retire that committed while we waited is now visible (DEF-535).
+    const locked = await liabilitiesRepo.getById(trx, actor.orgId, liability.id);
+
+    // ⛔ T-366 S1c / DEF-534 — `reverseEntry` looks the entry up by id ALONE (`repo/journal.ts:302`),
+    // so nothing before this stopped a holder at A's store from reversing B's payment, or ANY
+    // posted entry (an opening balance, another module's posting) through this liability. Bind it:
+    // the entry must be a liability_charge/liability_payment posting FOR THIS liability.
+    const entry = await journalRepo.findEntryById(trx, input.entryId);
+    if (!entry || !LIABILITY_ENTRY_SOURCE_TYPES.has(entry.sourceType) || entry.sourceId !== liability.id) {
+      throw refuse(
+        `reverseLiabilityEntry: entry ${input.entryId} is not a liability_charge/liability_payment posting for liability ${liability.id}.`,
+        'That entry does not belong to this obligation.',
+      );
+    }
+    // ⛔ T-366 S1c / DEF-535 — a retired liability is presented as settled and owing nothing;
+    // reversing a posting on one would make it owe money again while retirement still hides it.
+    if (locked?.retiredAt) {
+      throw refuse(
+        `reverseLiabilityEntry: liability ${liability.id} is retired.`,
+        'This obligation is retired and cannot be reversed.',
+      );
+    }
+
     const reason = input.reason.trim();
     if (!reason) throw new Error('reverseLiabilityEntry: say why this is being reversed.');
     const result = await reverseEntry(trx, {
