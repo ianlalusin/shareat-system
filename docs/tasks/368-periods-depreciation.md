@@ -1,6 +1,6 @@
 # T-368: Periods and depreciation — DEF-424, 426, 433, 434, 435, 441, 442, 436
 
-**Status:** **S1 reds written (on `wip/2026-09-30-reds`; 5 TS errors = expected red); S0 migration test written, not yet run** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; its eight CHANGES folded in). Written 2026-09-30 by the Opus planner for the money-defect push
+**Status:** **S1 reds written (on `wip/2026-09-30-reds`; 5 TS errors = expected red); S0 DONE 2026-10-01 (migration 0174; prod prechecks in docs/ops before the push)** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; its eight CHANGES folded in). Written 2026-09-30 by the Opus planner for the money-defect push
 (Ian, 2026-09-30: *"close all open money defects in v2"*). Census: `docs/plans/money-defects-2026-09-30.md`, batch C.
 **Model:** Sonnet for every slice, tester first, then builder. Any spec amendment is written in plan mode (Opus).
 **Line numbers** were checked at HEAD `3ed900f`.
@@ -94,6 +94,7 @@ one-day `when` grid, `migration-journal.test.ts`). No new table, so there is no 
 3. **DEF-435 — a reversed catch-up can be linked again.**
    - `DROP` the two unique indexes `missed_month_adjustments_org_{asset,prepaid}_period_unique` and recreate them as
      plain (non-unique) indexes on the same columns, because `findLink` reads by them.
+   - ✎ **Erratum (orchestrator, 2026-10-01, builder + auditor):** this is **check 7**, not 6 — 0161 already has a check 6 (Amendment R3.1, `earliest_period_start`), which the census missed. Read "check 6" below as check 7; checks 1-6 stay byte-identical.
    - Add **check 6** to `missed_month_adjustments_guard()` with `CREATE OR REPLACE`, keeping checks 1-5 byte-identical:
      refuse the insert if another link row for the same `(org_id, subject, belongs_to_period)` points at an entry
      whose `status = 'posted'`.
@@ -293,7 +294,7 @@ Red today means on `main` with the earlier T-368 slices applied.
 | M5 | **+control:** same org, fill 03 as a closed piece, then close 04 | succeeds | green | guard counting a hole that has been filled |
 | M6 | 2026 all closed except one missing month → `lockYearPeriods`-style multi-row `closed→locked` | raises | succeeds | guard firing only on `open→closed` |
 | M7 | link A (entry reversed) exists → insert link B for the same asset+P with a posted `#2` entry | succeeds | 23505 | unique index kept |
-| M8 | **⛔ +control for M7:** link A's entry still **posted** → insert link B | raises check 6 | 23505 (a different error: assert the message) | check 6 missing |
+| M8 | **⛔ +control for M7:** link A's entry still **posted** → insert link B | raises check 7 (erratum) | 23505 (a different error: assert the message) | check 7 missing |
 | M9 | asset with a posted depreciation entry: update `useful_life_months`; then `interval`; `salvage_value`; `cost` (4 legs) | each raises | each succeeds | guard's WHEN list missing a column |
 | M10 | **+control:** same asset, update `name`/`category`/`notes`; a second asset whose only entry is **reversed**, update life | all succeed | green | guard counting reversed entries |
 | M10b | post depreciation through `postEntry`, reverse it through the real `reverseEntry` (the reversal carries `source_type='depreciation'` and the same `source_id`), then update `useful_life_months` | succeeds | n/a (new guard) | the `reversal_of_entry_id IS NULL` filter dropped |

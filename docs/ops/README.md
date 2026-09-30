@@ -742,6 +742,38 @@ rollback;
 until he has ruled. The 0 counted on `shareat_dev` and a lane test DB (2026-10-01) does **not** count — it is
 production's rows that the index meets.
 
+## ⛔ Before the push that carries 0174 (T-368 S0) — existing damage the new guards won't sweep
+
+0174's triggers judge only FUTURE closes and asset edits. Damage already on prod outlives them. Run on
+**erp2**, read-only, **with Ian**, and show him every row before the push:
+
+```sql
+begin transaction read only;
+-- 1 · DEF-424: a gap behind already-closed/locked months (the next close/lock will be refused)
+with p as (
+  select org_id, starts_on, lag(ends_on) over (partition by org_id order by starts_on) as prev_end
+  from fiscal_periods)
+select p.org_id, p.prev_end + 1 as gap_starts, p.starts_on - 1 as gap_ends
+from p
+where p.prev_end is not null and p.starts_on > p.prev_end + 1
+  and exists (select 1 from fiscal_periods c
+              where c.org_id = p.org_id and c.status in ('closed','locked') and c.starts_on >= p.starts_on)
+order by 1, 2;
+-- 2 · DEF-436 CANDIDATES: assets edited after depreciation posted. fixed_assets keeps no field history,
+--     so updated_at (bumped by ANY edit) over-includes; each row is a manual compare, not a verdict.
+select fa.id, fa.org_id, fa.name, fa.updated_at, min(je.entry_date) as first_depreciation_entry_date
+from fixed_assets fa
+join journal_entries je
+  on je.source_type = 'depreciation' and je.source_id = fa.id::text and je.status = 'posted'
+group by fa.id, fa.org_id, fa.name, fa.updated_at
+having fa.updated_at > min(je.entry_date)
+order by fa.org_id, fa.id;
+rollback;
+```
+
+Query 1: rows block nothing at deploy, but the org cannot close its next month until the gap is filled
+(T-344's fill action). Query 2: rows are for Ian's review; the guard protects going forward regardless.
+
 ## ⚠️ Traps on the box — each has bitten once; recorded so it bites nobody twice
 
 | Trap | What it looks like | Rule |

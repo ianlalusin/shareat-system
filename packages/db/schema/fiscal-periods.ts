@@ -38,11 +38,18 @@ export const fiscalPeriods = pgTable(
   (t) => [
     check('fiscal_periods_status_check', sql`${t.status} in ('open', 'closed', 'locked')`),
     check('fiscal_periods_ends_on_check', sql`${t.endsOn} >= ${t.startsOn}`),
+    // T-368 S0 / DEF-426: an OPEN period is always one whole calendar month. Migration 0174.
+    check(
+      'fiscal_periods_open_whole_month_check',
+      sql`${t.status} <> 'open' or (${t.startsOn} = date_trunc('month', ${t.startsOn})::date and ${t.endsOn} = (date_trunc('month', ${t.startsOn}) + interval '1 month - 1 day')::date)`,
+    ),
     // NOTE: the no-overlap rule — EXCLUDE USING gist (org_id WITH =,
     // daterange(starts_on, ends_on, '[]') WITH &&) — is hand-added in the generated
     // migration; it requires btree_gist, also hand-added there (Contract §8).
     // NOTE: fiscal_periods_fill_shape_check (createdBy/fillReason shape) is hand-added in
     // migration 0160, along with fiscal_periods_fill_immutable and fiscal_periods_order_guard
     // (R1.2 — an open period may never start before a closed/locked one; see migration 0160).
+    // NOTE: fiscal_periods_gap_guard_trg (DEF-424 — no close or lock may leave a missing month
+    // behind it) is hand-added in migration 0174; see the migration for the body.
   ],
 );

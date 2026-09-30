@@ -159,6 +159,10 @@ export const fixedAssets = pgTable(
      *  ⚠️ Nullable ONLY for the `pending_valuation` shell state below; a CHECK forbids it
      *  otherwise. */
     acquiredOn: date('acquired_on'),
+    // NOTE: cost, salvage_value, useful_life_months (below) and interval (below) freeze once any
+    // depreciation entry posts for this asset — guarded by a hand-added trigger,
+    // fixed_assets_terms_freeze_trg, in migration 0174 (T-368 S0 / DEF-436). Drizzle cannot express
+    // the WHEN clause (it compares OLD vs NEW on four columns and reads journal_entries).
     cost: numeric('cost', { precision: 14, scale: 2 }),
     salvageValue: numeric('salvage_value', { precision: 14, scale: 2 }).default('0'),
     /** Copied from the category default AT CAPITALISATION, not looked up at depreciation time.
@@ -167,7 +171,8 @@ export const fixedAssets = pgTable(
      *
      *  ⭐ MONTHS, not years (bible row 140). v1 asked for months and divided by 12 to store, so a
      *  30-month life round-tripped through 2.5 years and carried a rounding nobody was shown.
-     *  Storing the unit the user types removes the conversion instead of refining it. */
+     *  Storing the unit the user types removes the conversion instead of refining it.
+     *  NOTE: freezes once depreciation posts — see the NOTE beside `cost` above (migration 0174). */
     usefulLifeMonths: integer('useful_life_months').notNull().default(24),
 
     /** ⭐ One method, and it is not laziness: **changing the depreciation method requires BIR
@@ -181,7 +186,8 @@ export const fixedAssets = pgTable(
     /** ⚠️ Kept in step with `DepreciationInterval` in packages/domain/src/fixed-assets/schedule.ts
      *  by `tests/unit/depreciation-intervals-parity.test.ts`, not by anyone remembering. The two
      *  lists live apart on purpose: the engine is pure and must not import drizzle to stay that
-     *  way, and this column is the database's own enum. `semiannual` added by bible row 140. */
+     *  way, and this column is the database's own enum. `semiannual` added by bible row 140.
+     *  NOTE: freezes once depreciation posts — see the NOTE beside `cost` above (migration 0174). */
     interval: text('interval', { enum: ['monthly', 'quarterly', 'semiannual', 'annually'] })
       .notNull()
       .default('monthly'),

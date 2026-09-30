@@ -1079,6 +1079,13 @@
       "when": 1801020707084,
       "tag": "0173_t367_def201_write_off_once",
       "breakpoints": true
+    },
+    {
+      "idx": 174,
+      "version": "7",
+      "when": 1801107107084,
+      "tag": "0174_t368_periods_depreciation_guards",
+      "breakpoints": true
     }
   ]
 }

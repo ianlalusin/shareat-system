@@ -237,7 +237,7 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     reason: 'Fills store_id from the position default it was granted from (0159). The restored row already carries it.',
   },
 
-  // Validators (28) — check new data against ANOTHER row's current state or the clock.
+  // Validators (30) — check new data against ANOTHER row's current state or the clock.
   accounts_postable_no_children: {
     table: 'accounts',
     mode: 'origin',
@@ -405,5 +405,17 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     mode: 'origin',
     kind: 'validator',
     reason: 'BEFORE INSERT (0161): the named month must genuinely be missed right now — reads the CURRENT schedule.',
+  },
+  fiscal_periods_gap_guard_trg: {
+    table: 'fiscal_periods',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'A month may not close or lock over a missing earlier month (0174, DEF-424) — reads the CURRENT period set.',
+  },
+  fixed_assets_terms_freeze_trg: {
+    table: 'fixed_assets',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'Useful life, interval, salvage value and cost freeze once depreciation posts (0174, DEF-436) — reads the CURRENT journal.',
   },
 } as const;

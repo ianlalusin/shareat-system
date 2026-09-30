@@ -15,14 +15,18 @@
  * amount and the domain tests pin it (A1, A6). This is the one gap in "the DB enforces the rules"
  * for this feature, stated here rather than left implicit.
  *
- * NOTE: three triggers hand-added in migration 0161 (drizzle cannot express any of them):
+ * NOTE: three triggers hand-added in migration 0161, `missed_month_adjustments_guard` amended in
+ * migration 0174 (drizzle cannot express any of them):
  *   1. `missed_month_adjustments_guard`, BEFORE INSERT — the linked entry is posted, same org,
  *      `source_type = schedule`, `source_id = the subject`; its idempotency key names this exact
  *      (subject, belongs_to_period); it is dated in a LATER month than `belongs_to_period`; no
  *      `open` fiscal period covers `belongs_to_period`'s calendar month; the entry has exactly two
  *      lines, on the pattern's accounts (6700/1590 or 6750/1400); `belongs_to_period` is not before
- *      the org's earliest fiscal period (Amendment R3.1 — an org with none refuses outright). See
- *      the migration for the body.
+ *      the org's earliest fiscal period (Amendment R3.1 — an org with none refuses outright); and
+ *      (T-368 S0 / DEF-435, check 7, migration 0174) a second link for the same subject and month
+ *      is refused while the FIRST link's entry is still posted — the two UNIQUE indexes below were
+ *      dropped to non-unique in the same migration, precisely so a re-link after a reversal is
+ *      legal again. See the migration for the body.
  *   2. `missed_month_adjustments_no_update`, BEFORE UPDATE — refuses every UPDATE unconditionally
  *      (rows are immutable once written).
  *   3. `missed_month_adjustments_no_direct_delete`, BEFORE DELETE — refuses a direct DELETE
@@ -34,7 +38,7 @@
  *      cascades to this row via the FK, and that cascade must not read as a "direct" DELETE.
  */
 import { sql } from 'drizzle-orm';
-import { check, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { fixedAssets } from './fixed-assets';
 import { journalEntries } from './journal';
 import { organizations } from './organizations';
@@ -75,10 +79,11 @@ export const missedMonthAdjustments = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    // One per subject per month. NULLs are distinct in a unique index, so each covers only its own
-    // kind — an asset row and a prepaid row can share a `belongs_to_period` freely.
-    uniqueIndex('missed_month_adjustments_org_asset_period_unique').on(t.orgId, t.fixedAssetId, t.belongsToPeriod),
-    uniqueIndex('missed_month_adjustments_org_prepaid_period_unique').on(t.orgId, t.prepaidItemId, t.belongsToPeriod),
+    // T-368 S0 / DEF-435 (migration 0174): PLAIN indexes, not unique — a reversed catch-up must be
+    // linkable again, and `findLink` still reads by these columns. Check 7 of the guard trigger
+    // below is what now stops a double catch-up while the first link's entry is still posted.
+    index('missed_month_adjustments_org_asset_period_idx').on(t.orgId, t.fixedAssetId, t.belongsToPeriod),
+    index('missed_month_adjustments_org_prepaid_period_idx').on(t.orgId, t.prepaidItemId, t.belongsToPeriod),
 
     check('missed_month_adjustments_schedule_check', sql`${t.schedule} in ('depreciation', 'amortisation')`),
     check(
