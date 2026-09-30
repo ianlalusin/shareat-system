@@ -53,6 +53,7 @@ the worst kind.
 ```
 npm run typecheck
 npm test          ← check ${PIPESTATUS[0]}, NEVER trust `| tail`
+node ~/.claude/skills/orchestrator/tools/make-test-dbs.mjs shareat_test   ← DEF-545: migrate the GATE DB first (db:migrate alone targets DATABASE_URL, the dev DB)
 npm run test:integration
 ```
 

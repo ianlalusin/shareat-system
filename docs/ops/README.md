@@ -725,6 +725,23 @@ not reach the box), a database permission error (the app role cannot do everythi
 `shareat-month-end.service` via `Unit=`. Step 3's glob enables it correctly; a loop that tries to
 `start` a matching `.service` for it must skip it.
 
+## ⛔ Before the push that carries 0173 (T-367 S1, DEF-201) — a gate, not a note
+
+A push to `main` deploys. 0173 creates `ar_write_offs_journal_entry_unique`; one live duplicate makes
+`CREATE UNIQUE INDEX` abort (23505). The migrate runs in one transaction and the symlink swaps only after
+it succeeds, so a failure leaves the old build serving — but the deploy is red and the fix is stuck.
+Run on **erp2 (159.223.46.224)**, read-only, **with Ian**, before that push:
+
+```sql
+begin transaction read only;
+select journal_entry_id, count(*) from ar_write_offs group by 1 having count(*) > 1;
+rollback;
+```
+
+**0 rows → push.** Any row is a live DEF-201 duplicate: stop, show Ian each one (his T-367 Q6), and do not push
+until he has ruled. The 0 counted on `shareat_dev` and a lane test DB (2026-10-01) does **not** count — it is
+production's rows that the index meets.
+
 ## ⚠️ Traps on the box — each has bitten once; recorded so it bites nobody twice
 
 | Trap | What it looks like | Rule |
