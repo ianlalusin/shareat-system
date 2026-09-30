@@ -11,10 +11,13 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 // ⛔ T-218 — Manila, never bare current_date (DEF-172).
 import { MANILA_TODAY } from './sql-time';
+// T-370 / DEF-108 — integer centavos for fifoOwnerOutstanding, never Number (bible §6).
+import { fromCentavos, money, toCentavos } from '@shareat/core/money';
 import type { Tx } from '../client';
 import { owners, type OwnerStatus, type PersonalExpenseTreatment } from '../../schema/owners';
 import { owner_drawing_closes } from '../../schema/owner-drawing-closes';
 import { recordGone } from './record-gone';
+import { refuse } from '../refusal';
 
 export const CAPITAL_CODE = '3100';
 export const DRAWINGS_CODE = '3200';
@@ -65,6 +68,29 @@ export async function getById(tx: Tx, orgId: string, id: string): Promise<OwnerR
     .where(and(eq(owners.id, id), eq(owners.orgId, orgId)))
     .limit(1);
   return row as OwnerRow | undefined;
+}
+
+/**
+ * ⛔ T-370 / DEF-516 (R3a) — row-lock the owner before `judgeDrawingLimit` reads `drawnInWindow`,
+ * so two concurrent drawings cannot both pass the same cap (`liabilities.ts:85`'s precedent). Held
+ * to COMMIT/ROLLBACK. Call AFTER `authorize` so a refused caller never queues on the row.
+ *
+ * ⚠️ `for update` over an empty set locks nothing and raises nothing (`employment.ts:188`'s same
+ * risk with `allocateStaffCode`'s store lock) — silently proceeding unlocked would let two
+ * concurrent callers both pass the cap, the exact bug this function exists to close. The caller
+ * already confirmed the owner exists moments earlier in this same transaction, so zero rows here
+ * is an unreachable invariant, not a normal refusal.
+ */
+export async function lockOwnerForUpdate(tx: Tx, orgId: string, ownerId: string): Promise<void> {
+  const [row] = (await tx.execute(
+    sql`select 1 as ok from owners where id = ${ownerId} and org_id = ${orgId} for update`,
+  )) as unknown as { ok: number }[];
+  if (!row) {
+    throw refuse(
+      `lockOwnerForUpdate: owner ${ownerId} not found in org ${orgId} — nothing was locked.`,
+      'Something went wrong checking this owner. Try again, or contact support if it keeps happening.',
+    );
+  }
 }
 
 export async function listOwners(
@@ -199,7 +225,32 @@ export async function positionsByOwner(
  * counted too. The limit tracks money that reached the owner and has not returned, whichever
  * receivable is currently holding it.
  *
- * `until` is exclusive; omit `since` for the `total` period.
+ * T-370 / DEF-108 — R2: `drawn(window) = [1260/3200 flows, unchanged below] +
+ * ownerOutstanding(until) − ownerOutstanding(since)`, where `ownerOutstanding(t)` is
+ * `fifoOwnerOutstanding` applied to the PERSON's whole `1230` history up to `t` (not scoped to this
+ * owner's own `source_id`). A payroll recovery credits `1230` with NO origin allocation, so it is
+ * attributed FIFO across every charge on the person's `1230` ledger, oldest first (R1) — a plain
+ * `source_id = owner.id` scope made every recovery invisible to this query, so the cap it should
+ * have freed never moved. One person can hold two owner rows (`owners_store_person_key`); each
+ * sees only the remainder of its OWN charges, so nothing is double-counted (R2.5).
+ *
+ * `until` is exclusive; omit `since` for the `total` period. Omit `until` for "all lines".
+ *
+ * T-370 amendment (2026-09-30, orchestrator ruling, default pending Ian) — a payroll recovery (or a
+ * cash repayment) frees the owner's TOTAL/lifetime figure for good (unfloored, below), but a
+ * MONTHLY window (`since` given) never reports below zero. It is its OWN running total, starting
+ * fresh at zero at `since`, floored at zero after every dated event in the window — never carrying
+ * a "deficit" one event created into offsetting a LATER one. A floor on the aggregate delta alone is
+ * NOT equivalent: it would let a recovery that lands before this window's own drawings quietly
+ * absorb part of them (verified by hand against the tester's O1/M-headroom legs — a 5000 recovery
+ * then a 10000 drawing in the same month must still read 10000, not 5000).
+ *
+ * ⚠️ **By design, the twelve MONTHLY figures in a year can sum to MORE than the TOTAL/lifetime
+ * figure.** Each month floors independently at its own zero; the total never floors at all (a
+ * recovery frees it for good, R2). A recovery that lands in month M2 against a charge from month M1
+ * floors M2's own figure at zero (never negative) instead of carrying the freed amount as a credit
+ * against M1 or anywhere else — that freed amount simply does not appear in any SINGLE month's
+ * total, only in the lifetime one. Pending Ian; the default per the orchestrator's 2026-09-30 ruling.
  */
 export async function drawnInWindow(
   tx: Tx,
@@ -207,36 +258,295 @@ export async function drawnInWindow(
   owner: { id: string; personId: string },
   window: { since?: string; until?: string } = {},
 ): Promise<string> {
-  const [row] = (await tx.execute(sql`
-    select coalesce(sum(jl.debit - jl.credit), 0)::text as total
+  // ⭐ R2/R3 — the person's WHOLE `1230` history up to `until`, one query (fed to the pure helper
+  // below); every snapshot or per-event delta below is the same rows filtered further, never a
+  // second query.
+  const lines = (await tx.execute(sql`
+    select je.id as "entryId", je.reversal_of_entry_id as "reversalOf", je.source_id as "sourceId",
+           jl.debit::text as debit, jl.credit::text as credit,
+           je.entry_date::text as "entryDate", je.created_at::text as "createdAt", jl.id as "lineId"
     from journal_lines jl
     join journal_entries je on je.id = jl.entry_id
     join accounts a on a.id = jl.account_id
     where je.org_id = ${orgId}
       and je.status <> 'draft'
-      and (
-        (jl.party_type = ${PARTY_TYPE} and jl.party_id = ${owner.id}
-         and a.code in (${DRAWINGS_CODE}, ${DUE_FROM_OWNER_CODE}))
-        -- ⭐ ...AND the same money after a recovery reclassified it. Otherwise "recover from pay"
-        -- would free the cap the instant it was clicked, long before payroll actually nets it — the
-        -- same bypass as marking everything repayable, one step further along.
-        --
-        -- SCOPED TO THIS OWNER'S OWN RECOVERIES (je.source_id = owner.id), and the scope is the
-        -- whole point. 1230 also holds ordinary staff advances — a float shortage, a salary advance
-        -- — and counting those would charge an operational debt against an OWNERSHIP cap. A browser
-        -- check caught exactly that: a ₱600 cash-request shortage, belonging to the same human in a
-        -- completely different role, silently consuming their drawing limit.
-        --
-        -- When payroll lands, the entry that nets one of these off must carry the same
-        -- source_id, or the recovered amount will keep consuming the cap forever.
-        or (jl.party_type = 'employee' and jl.party_id = ${owner.personId}
-            and a.code = ${EMPLOYEE_ADVANCE_CODE}
-            and je.source_id = ${owner.id})
-      )
-      ${window.since ? sql`and je.entry_date >= ${window.since}` : sql``}
+      and jl.party_type = 'employee' and jl.party_id = ${owner.personId}
+      and a.code = ${EMPLOYEE_ADVANCE_CODE}
       ${window.until ? sql`and je.entry_date < ${window.until}` : sql``}
-  `)) as unknown as Record<string, string>[];
-  return Number(row?.total ?? 0).toFixed(2);
+    order by je.entry_date, je.created_at, jl.id
+  `)) as unknown as FifoLine[];
+
+  if (window.since === undefined) {
+    const [row] = (await tx.execute(sql`
+      select coalesce(sum(jl.debit - jl.credit), 0)::text as total
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      where je.org_id = ${orgId}
+        and je.status <> 'draft'
+        and jl.party_type = ${PARTY_TYPE} and jl.party_id = ${owner.id}
+        and a.code in (${DRAWINGS_CODE}, ${DUE_FROM_OWNER_CODE})
+        ${window.until ? sql`and je.entry_date < ${window.until}` : sql``}
+    `)) as unknown as Record<string, string>[];
+    const flows = toCentavos(money(row?.total ?? '0'));
+    const untilOutstanding = toCentavos(money(fifoOwnerOutstanding(lines, owner.id)));
+    return fromCentavos(flows + untilOutstanding);
+  }
+
+  // ⭐ Monthly path — a chronological event simulation, floored at zero after every step (the
+  // ruling above). Each in-window `1230` line's event is ITS OWN marginal effect on this owner's
+  // FIFO remainder (computed by the pure, independently-testable `monthlyOwnerFifoDeltas` below);
+  // each direct `3200`/`1260` line is its own flat `debit − credit`.
+  const since = window.since;
+  const events = monthlyOwnerFifoDeltas(lines, owner.id, since);
+
+  const flowsLines = (await tx.execute(sql`
+    select jl.debit::text as debit, jl.credit::text as credit,
+           je.entry_date::text as "entryDate", je.created_at::text as "createdAt", jl.id as "lineId"
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and je.status <> 'draft'
+      and jl.party_type = ${PARTY_TYPE} and jl.party_id = ${owner.id}
+      and a.code in (${DRAWINGS_CODE}, ${DUE_FROM_OWNER_CODE})
+      and je.entry_date >= ${since}
+      ${window.until ? sql`and je.entry_date < ${window.until}` : sql``}
+  `)) as unknown as { debit: string; credit: string; entryDate: string; createdAt: string; lineId: string }[];
+  for (const l of flowsLines) {
+    events.push({
+      entryDate: l.entryDate,
+      createdAt: l.createdAt,
+      lineId: l.lineId,
+      delta: toCentavos(money(l.debit)) - toCentavos(money(l.credit)),
+    });
+  }
+
+  events.sort(byDateThenId);
+  let running = 0n;
+  for (const e of events) {
+    running += e.delta;
+    if (running < 0n) running = 0n;
+  }
+  return fromCentavos(running);
+}
+
+/** One line of a person's `1230` ledger, as `drawnInWindow` selects it for `fifoOwnerOutstanding`. */
+export interface FifoLine {
+  entryId: string;
+  reversalOf: string | null;
+  sourceId: string | null;
+  debit: string;
+  credit: string;
+  entryDate: string;
+  createdAt: string;
+  lineId: string;
+}
+
+/**
+ * ⭐ T-370 / DEF-108 — R1-R3: a person's whole `1230` history reduced to one owner's outstanding
+ * remainder. A pure function, no DB — a repo may not import `@shareat/domain` (ADR-004), and a
+ * single person's `1230` history is small, so the arithmetic lives here.
+ *
+ * R2's taxonomy, applied to `lines`:
+ * 1. A debit line with `reversalOf === null` is a **charge**. Owner-origin for owner O iff
+ *    `sourceId === O`.
+ * 2. A credit line with `reversalOf = X` (a REVERSAL CREDIT) reduces ONLY charge X's own
+ *    remainder. It never joins the pool.
+ * 3. A debit line with `reversalOf = X` (e.g. `voidPayRun` reversing a payslip credit) cancels
+ *    ONLY that pool credit X's own contribution. It is not a new charge.
+ * 4. A credit line with `reversalOf === null` joins the **pool** — one number, applied to charges
+ *    OLDEST FIRST (`entryDate`, `createdAt`, `lineId`), regardless of whose charge it is. Payroll
+ *    does not allocate a recovery to an origin, so FIFO is the convention (R1): oldest-debt-first
+ *    across the person's whole `1230` balance is Ian's ruling (2026-09-30) — one person, one pot of
+ *    money owed; a recovery pays whatever that person has owed longest, which can be an OWNER charge
+ *    even when the recovery itself arose from a STAFF advance (and vice versa). This is the rule, not
+ *    a bug: a staff-first or owner-first alternative would instead re-open the leak `source_id`
+ *    scoping was meant to close (a later shortage silently re-consuming an already-recovered cap).
+ * 5. The result is the unconsumed remainder of O's own owner-origin charges. Never negative.
+ *
+ * Integer centavos throughout (`@shareat/core/money`) — never `Number`, per bible §6.
+ */
+export function fifoOwnerOutstanding(lines: readonly FifoLine[], ownerId: string): string {
+  // ⭐ Effective status by walking the reversal chain: an entry is CANCELLED iff some entry that
+  // reverses it is itself live; live iff not cancelled. So 0 or 2 reversals = live, 1 or 3 = cancelled.
+  const reversersOf = new Map<string, Set<string>>();
+  for (const l of lines) {
+    if (l.reversalOf === null) continue;
+    const set = reversersOf.get(l.reversalOf) ?? new Set<string>();
+    set.add(l.entryId);
+    reversersOf.set(l.reversalOf, set);
+  }
+  const liveMemo = new Map<string, boolean>();
+  const visiting = new Set<string>();
+  const isLive = (entryId: string): boolean => {
+    const known = liveMemo.get(entryId);
+    if (known !== undefined) return known;
+    // ⚠️ Unreachable by construction, and therefore untested: `reversal_of_entry_id` always names a
+    // chronologically EARLIER entry (a reversal cannot reverse something that doesn't exist yet), so
+    // the graph it forms has no cycles to walk into. Kept as a guard, not a proof — the day something
+    // upstream lets a reversal reference a later or equal entry, this is what should fire instead of
+    // an infinite recursion.
+    if (visiting.has(entryId)) {
+      throw refuse(
+        `fifoOwnerOutstanding: reversal cycle through entry ${entryId}`,
+        'The owner ledger has a reversal that loops back on itself, so the drawing limit cannot be worked out. Contact support.',
+      );
+    }
+    visiting.add(entryId);
+    let cancelled = false;
+    for (const r of reversersOf.get(entryId) ?? []) {
+      if (isLive(r)) cancelled = true;
+    }
+    visiting.delete(entryId);
+    liveMemo.set(entryId, !cancelled);
+    return !cancelled;
+  };
+
+  // Only LIVE reversal entries act on their targets.
+  const reversalCreditsByTarget = new Map<string, bigint>();
+  const reversalDebitsByTarget = new Map<string, bigint>();
+  for (const l of lines) {
+    if (l.reversalOf === null || !isLive(l.entryId)) continue;
+    const debit = toCentavos(money(l.debit));
+    const credit = toCentavos(money(l.credit));
+    if (credit > 0n) {
+      reversalCreditsByTarget.set(l.reversalOf, (reversalCreditsByTarget.get(l.reversalOf) ?? 0n) + credit);
+    }
+    if (debit > 0n) {
+      reversalDebitsByTarget.set(l.reversalOf, (reversalDebitsByTarget.get(l.reversalOf) ?? 0n) + debit);
+    }
+  }
+
+  const charges = lines
+    .filter((l) => l.reversalOf === null && toCentavos(money(l.debit)) > 0n)
+    .map((l) => {
+      const reduced = reversalCreditsByTarget.get(l.entryId) ?? 0n;
+      const remaining = toCentavos(money(l.debit)) - reduced;
+      return {
+        sourceId: l.sourceId,
+        entryDate: l.entryDate,
+        createdAt: l.createdAt,
+        lineId: l.lineId,
+        remaining: remaining > 0n ? remaining : 0n,
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.entryDate.localeCompare(b.entryDate) ||
+        a.createdAt.localeCompare(b.createdAt) ||
+        a.lineId.localeCompare(b.lineId),
+    );
+
+  let pool = lines
+    .filter((l) => l.reversalOf === null && toCentavos(money(l.credit)) > 0n)
+    .reduce((sum, l) => {
+      const cancelled = reversalDebitsByTarget.get(l.entryId) ?? 0n;
+      const net = toCentavos(money(l.credit)) - cancelled;
+      return sum + (net > 0n ? net : 0n);
+    }, 0n);
+
+  let ownerTotal = 0n;
+  for (const c of charges) {
+    const consumed = c.remaining < pool ? c.remaining : pool;
+    pool -= consumed;
+    const outstanding = c.remaining - consumed;
+    if (c.sourceId === ownerId) ownerTotal += outstanding;
+  }
+  return fromCentavos(ownerTotal);
+}
+
+export interface DrawnEvent {
+  entryDate: string;
+  createdAt: string;
+  lineId: string;
+  delta: bigint;
+}
+
+const byDateThenId = (a: { entryDate: string; createdAt: string; lineId: string }, b: { entryDate: string; createdAt: string; lineId: string }): number =>
+  a.entryDate.localeCompare(b.entryDate) || a.createdAt.localeCompare(b.createdAt) || a.lineId.localeCompare(b.lineId);
+
+/**
+ * ⭐ T-370 / DEF-108 performance follow-up (auditor, 2026-09-30) — the monthly-window FIFO
+ * computation, extracted as its own PURE function so order-independence can be pinned by a
+ * shuffled-input unit test: `lines` is explicitly re-sorted here (twice — into `beforeSince` and
+ * the in-window set) regardless of the array's incoming order, since the caller's SQL query makes
+ * no ordering promise of its own (the `order by` on that query is belt-and-suspenders, not the only
+ * layer bible §15.11 asks for).
+ *
+ * Returns each in-window `1230` line's own marginal delta to `ownerId`'s FIFO outstanding, in
+ * chronological order. `drawnInWindow` merges these with the direct `3200`/`1260` flow deltas and
+ * runs the floor-at-zero-after-every-step simulation described on its own doc.
+ */
+export function monthlyOwnerFifoDeltas(lines: readonly FifoLine[], ownerId: string, since: string): DrawnEvent[] {
+  const beforeSince = lines.filter((l) => l.entryDate < since).sort(byDateThenId);
+  const withinWindow1230 = lines.filter((l) => l.entryDate >= since).sort(byDateThenId);
+  const events: DrawnEvent[] = [];
+
+  // Recomputing `fifoOwnerOutstanding` from scratch over a GROWING prefix at every in-window line
+  // was O(n·k) (measured 1.8s at n=5000, held inside the owner row lock). With no reversal anywhere
+  // in the person's `1230` history up to `until`, every charge's raw debit and every pool credit's
+  // raw amount IS already its final contribution (R2 items 2/3 never fire), so the running FIFO
+  // match can be built up incrementally in ONE pass — a two-queue match (oldest unpaid charge vs.
+  // idle pool) is exactly `fifoOwnerOutstanding`'s own rule, applied as lines arrive instead of
+  // re-derived from scratch each time. A reversal breaks that (an EARLIER charge or pool credit's
+  // raw contribution can change after later lines already consumed it), so that case falls back to
+  // the original, proven-correct per-line recompute. ⚠️ NOT rare: `voidPayRun` reverses every
+  // payslip it recovers from, so one voided pay run permanently switches that person's `1230`
+  // history onto the fallback path from then on (never exercised by a monthly window in THIS task's
+  // own tests, but expected to happen in real use). DEF-543 (logged) — a performance follow-up to
+  // extend the fast path to cover reversals too; correctness is unaffected either way.
+  const hasReversal = lines.some((l) => l.reversalOf !== null);
+  if (!hasReversal) {
+    const queue: { sourceId: string | null; remaining: bigint }[] = [];
+    let idlePool = 0n;
+    let ownerRunning = 0n;
+    const applyCharge = (sourceId: string | null, debit: bigint) => {
+      const consumed = debit < idlePool ? debit : idlePool;
+      idlePool -= consumed;
+      const remaining = debit - consumed;
+      if (remaining > 0n) queue.push({ sourceId, remaining });
+      if (sourceId === ownerId) ownerRunning += remaining;
+    };
+    const applyCredit = (credit: bigint) => {
+      let left = credit;
+      while (left > 0n && queue.length > 0) {
+        const front = queue[0]!;
+        const consumed = front.remaining < left ? front.remaining : left;
+        front.remaining -= consumed;
+        left -= consumed;
+        if (front.sourceId === ownerId) ownerRunning -= consumed;
+        if (front.remaining === 0n) queue.shift();
+      }
+      idlePool += left;
+    };
+
+    for (const l of beforeSince) {
+      const debit = toCentavos(money(l.debit));
+      const credit = toCentavos(money(l.credit));
+      if (debit > 0n) applyCharge(l.sourceId, debit);
+      else if (credit > 0n) applyCredit(credit);
+    }
+    let prevOutstanding = ownerRunning;
+    for (const line of withinWindow1230) {
+      const debit = toCentavos(money(line.debit));
+      const credit = toCentavos(money(line.credit));
+      if (debit > 0n) applyCharge(line.sourceId, debit);
+      else if (credit > 0n) applyCredit(credit);
+      events.push({ entryDate: line.entryDate, createdAt: line.createdAt, lineId: line.lineId, delta: ownerRunning - prevOutstanding });
+      prevOutstanding = ownerRunning;
+    }
+  } else {
+    let prefix: FifoLine[] = beforeSince;
+    let prevOutstanding = toCentavos(money(fifoOwnerOutstanding(prefix, ownerId)));
+    for (const line of withinWindow1230) {
+      prefix = [...prefix, line];
+      const next = toCentavos(money(fifoOwnerOutstanding(prefix, ownerId)));
+      events.push({ entryDate: line.entryDate, createdAt: line.createdAt, lineId: line.lineId, delta: next - prevOutstanding });
+      prevOutstanding = next;
+    }
+  }
+  return events;
 }
 
 /** What the owner still owes on `1260` — the ceiling on any settlement. */

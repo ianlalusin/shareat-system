@@ -16,6 +16,7 @@
 import { moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
 import type { DrawingLimitPeriod, PersonalExpenseTreatment } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
+import { add, compare, money, type Money } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
@@ -210,6 +211,10 @@ export interface DrawingLimitVerdict {
  *
  * ⚠️ v1's check reads `owner.totalDrawings`, one of three drifting stored figures — and a limit
  * computed from a drifting total fails in the direction of letting money out.
+ *
+ * ⛔ T-370 / DEF-541 — compared in INTEGER CENTAVOS (`@shareat/core/money`), never `Number`: a
+ * float sum like `1016.07 + 0.07` lands on `1016.1400000000001`, not `1016.14`, so a drawing that
+ * lands EXACTLY on the limit was wrongly refused.
  */
 export async function judgeDrawingLimit(
   tx: Tx,
@@ -220,27 +225,28 @@ export async function judgeDrawingLimit(
     drawingLimit: string | null;
     drawingLimitPeriod: DrawingLimitPeriod | null;
   },
-  amount: number,
+  amount: Money,
   on: string,
 ): Promise<DrawingLimitVerdict> {
   if (owner.drawingLimit === null || owner.drawingLimitPeriod === null) return { allowed: true };
 
-  const limit = Number(owner.drawingLimit);
+  const limit = money(owner.drawingLimit);
   const window =
     owner.drawingLimitPeriod === 'monthly'
       ? { since: monthOf(on), until: nextMonthOf(on) }
       : {};
-  const already = Number(await ownersRepo.drawnInWindow(tx, orgId, owner, window));
+  const already = money(await ownersRepo.drawnInWindow(tx, orgId, owner, window));
+  const wouldBe = add(already, amount);
 
-  if (already + amount <= limit) return { allowed: true };
+  if (compare(wouldBe, limit) <= 0) return { allowed: true };
 
   const scope =
     owner.drawingLimitPeriod === 'monthly' ? `in ${on.slice(0, 7)}` : 'in total';
   return {
     allowed: false,
     message:
-      `this would take ₱${(already + amount).toFixed(2)} ${scope}, over the ₱${limit.toFixed(2)} ` +
-      `${owner.drawingLimitPeriod} limit (₱${already.toFixed(2)} already). ` +
+      `this would take ₱${wouldBe} ${scope}, over the ₱${limit} ` +
+      `${owner.drawingLimitPeriod} limit (₱${already} already). ` +
       // ⚠️ Say WHY the figure may look higher than the drawings alone. Without this the number
       // reads as wrong, and a limit a reader thinks is broken is a limit they route around.
       `Unrepaid personal expenses count towards this — including any moved to a salary advance, ` +
@@ -277,6 +283,10 @@ export async function recordDrawing(
     if (!owner) throw new Error(`recordDrawing: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
 
+    // ⛔ T-370 / DEF-516 (R3a) — held to COMMIT/ROLLBACK, AFTER authorize so a refused caller never
+    // queues on the row: two concurrent drawings must not both read the cap before either posts.
+    await ownersRepo.lockOwnerForUpdate(trx, actor.orgId, owner.id);
+
     const parsed = parseMoneyInput(input.amount, 'recordDrawing: the amount', 'The drawing amount');
     const amount = Number(parsed);
     if (amount <= 0) throw refuse('recordDrawing: a drawing has to be greater than zero.', 'A drawing has to be greater than zero.');
@@ -286,7 +296,7 @@ export async function recordDrawing(
     // ⛔ BLOCKS, unlike the overdraft guard (row 154). There is no "unverified count" ambiguity in a
     // drawing limit: it is a decision the owners made about themselves, measured against an exact
     // figure.
-    const verdict = await judgeDrawingLimit(trx, actor.orgId, owner, amount, input.on);
+    const verdict = await judgeDrawingLimit(trx, actor.orgId, owner, parsed, input.on);
     if (!verdict.allowed) throw new Error(`recordDrawing: ${verdict.message}`);
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
@@ -353,8 +363,10 @@ async function assertWithinReceivable(
 /**
  * ⭐ **Settlement 1 — the owner hands cash back.** `DR the money account · CR 1260`.
  *
- * The receivable clears and the money is really in the till, so this is the only settlement that
- * frees the owner's drawing limit — see `drawnInWindow`.
+ * The receivable clears and the money is really in the till, so this frees the owner's drawing
+ * limit — see `drawnInWindow`. T-370 / DEF-108: a payroll recovery of a reclassified `1230`
+ * balance frees it too, FIFO across the person's whole `1230` history (R1/R2) — this is no longer
+ * the only way.
  */
 export async function repayFromOwner(
   tx: Tx | null,
@@ -417,10 +429,15 @@ export async function repayFromOwner(
  * owner on `1260`, the PERSON on `1230`, because `1230`'s party_type is `employee`.
  *
  * ⚠️ **This is a reclassification, not a recovery, and the distinction is deliberate.** No cash has
- * come back — payroll nets it when payroll runs, and v2 has no payroll module yet. So it does NOT
- * free the drawing limit: `drawnInWindow` counts `1230` for this person for exactly that reason.
- * Otherwise "recover from pay" would clear the cap the instant it was clicked, which is the same
- * bypass as marking every personal expense repayable, one step further along.
+ * come back yet — calling this alone still does NOT free the drawing limit: `drawnInWindow` counts
+ * `1230` for this person for exactly that reason (O8, a control). Otherwise "recover from pay"
+ * would clear the cap the instant it was clicked, which is the same bypass as marking every
+ * personal expense repayable, one step further along.
+ *
+ * T-370 / DEF-108 — when payroll actually runs and nets this reclassified balance off `1230`, THAT
+ * credit is what frees the cap: `drawnInWindow` attributes it FIFO across the person's whole `1230`
+ * ledger, oldest charge first (R1/R2), because payroll's recovery carries no origin allocation of
+ * its own.
  *
  * ⛔ Refused for an owner with no employment: recovering from a salary nobody is paid is a
  * receivable quietly parked where nothing will ever collect it.
