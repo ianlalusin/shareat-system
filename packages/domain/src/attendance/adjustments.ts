@@ -18,7 +18,7 @@ import { refuse } from '../shared/refusal';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { adjudicateDay } from './adjudicate';
 import { type DayAdjustments, type DayPolicy } from './compute-day';
-import { addShiftDays, parseShiftDay, shiftDayOffsetMsForHour, type RawShiftDay, type ShiftDay } from './shift-day';
+import { parseShiftDay, shiftDayOffsetMsForHour, type RawShiftDay, type ShiftDay } from './shift-day';
 
 export class AdjustmentError extends Error {
   constructor(message: string) {
@@ -83,11 +83,8 @@ const shiftDayMalformed = (v: string) =>
 
 /**
  * T-360 / DEF-488 — parses `RecordAdjustmentInput.shiftDay` so a malformed value gets a sentence
- * instead of reaching Postgres as `'abc'::date`. The calendar round-trip (step 4) exists because
- * `parseBusinessDate` accepts `2026-02-30` (it only checks `d <= 31`, `packages/core/src/
- * datetime.ts:48`); `addShiftDays(day, 0)` goes through `Date.UTC`, which normalises an
- * impossible date to a different one (`2026-02-30` -> `2026-03-02`), so a mismatch catches what the
- * format check alone would miss — a VALUE check, not a digit-run check (bible §13 row 234).
+ * instead of reaching Postgres as `'abc'::date`. Impossible calendar dates (`2026-02-30`) are refused
+ * by `parseShiftDay` itself (T-370 S2 / DEF-494: `parseBusinessDate` checks the month length).
  */
 function parseShiftDayInput(raw: string): ShiftDay {
   const t = String(raw).trim();
@@ -99,9 +96,6 @@ function parseShiftDayInput(raw: string): ShiftDay {
     day = parseShiftDay(t);
   } catch {
     throw refuse(`recordAdjustment: shiftDay ${JSON.stringify(t)} is not a YYYY-MM-DD shift day`, shiftDayMalformed(t));
-  }
-  if (addShiftDays(day, 0) !== day) {
-    throw refuse(`recordAdjustment: shiftDay ${JSON.stringify(t)} is not a real calendar date`, shiftDayMalformed(t));
   }
   return day;
 }

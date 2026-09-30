@@ -39,13 +39,26 @@ export function toBusinessDate(instant: Date = new Date()): BusinessDate {
   return ymdFormatter.format(instant) as BusinessDate;
 }
 
-/** Parse a `YYYY-MM-DD` string, rejecting anything malformed rather than coercing. */
+/** Days in a proleptic-Gregorian month. Plain integer arithmetic: a Date.UTC round-trip maps years 0-99 to the 1900s. */
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) {
+    const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+    return leap ? 29 : 28;
+  }
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
+}
+
+/**
+ * Parse a `YYYY-MM-DD` string, rejecting anything malformed rather than coercing.
+ * Years are limited to 1900-2999: the helpers are only correct in that range (ICU reads the
+ * Julian calendar before 1582, and 9999-12-31 rolls into year 10000 where toISOString goes expanded).
+ */
 export function parseBusinessDate(value: string): BusinessDate {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new Error(`Invalid business date: ${JSON.stringify(value)} (expected YYYY-MM-DD)`);
   }
   const [y, m, d] = value.split('-').map(Number) as [number, number, number];
-  if (m < 1 || m > 12 || d < 1 || d > 31) {
+  if (y < 1900 || y > 2999 || m < 1 || m > 12 || d < 1 || d > daysInMonth(y, m)) {
     throw new Error(`Invalid business date: ${value}`);
   }
   return value as BusinessDate;
@@ -61,9 +74,17 @@ export function businessDayRange(date: BusinessDate): { start: Date; end: Date }
   return { start, end: zonedMidnightToUtc(next) };
 }
 
+/** UTC instant for a calendar date/time. `Date.UTC` maps years 0-99 to 1900-1999; setUTCFullYear does not. */
+function utcDate(y: number, m: number, d: number, h: number, mi: number, s: number): Date {
+  const dt = new Date(0);
+  dt.setUTCFullYear(y, m - 1, d);
+  dt.setUTCHours(h, mi, s, 0);
+  return dt;
+}
+
 export function addDays(date: BusinessDate, days: number): BusinessDate {
   const [y, m, d] = date.split('-').map(Number) as [number, number, number];
-  const utc = new Date(Date.UTC(y, m - 1, d));
+  const utc = utcDate(y, m, d, 0, 0, 0);
   utc.setUTCDate(utc.getUTCDate() + days);
   return utc.toISOString().slice(0, 10) as BusinessDate;
 }
@@ -77,7 +98,7 @@ export function addDays(date: BusinessDate, days: number): BusinessDate {
  */
 function zonedMidnightToUtc(date: BusinessDate): Date {
   const [y, m, d] = date.split('-').map(Number) as [number, number, number];
-  const guess = Date.UTC(y, m - 1, d, 0, 0, 0);
+  const guess = utcDate(y, m, d, 0, 0, 0).getTime();
   const offsetMs = zoneOffsetMs(new Date(guess));
   return new Date(guess - offsetMs);
 }
@@ -95,14 +116,14 @@ function zoneOffsetMs(instant: Date): number {
   }).formatToParts(instant);
 
   const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
-  const asUtc = Date.UTC(
+  const asUtc = utcDate(
     get('year'),
-    get('month') - 1,
+    get('month'),
     get('day'),
     get('hour') % 24,
     get('minute'),
     get('second'),
-  );
+  ).getTime();
   return asUtc - instant.getTime();
 }
 

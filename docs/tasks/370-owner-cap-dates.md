@@ -349,3 +349,13 @@ ROLLBACK;
 
 ## Amendment A1 — Ian's Q1 (2026-09-30, orchestrator)
 **Q1 → ok.** Oldest-debt-first attribution across the person's 1230 ledger stands; a voided pay run restores the cap it freed.
+
+## Amendment A2 — business-date range (2026-09-30, orchestrator, after the S2 audit)
+The S2 audit measured that the date helpers are only correct inside a bounded range: below 1582 `zoneOffsetMs`
+reads ICU's Julian-calendar parts as proleptic Gregorian (`businessDayRange('0004-02-29').start` lands on the 29th
+at 15:56Z, day wrong), and `9999-12-31` rolls `addDays` into year 10000, where `toISOString()` switches to expanded
+years and `shiftDayRange` throws a raw `RangeError` with no sentence. **Ruling: `parseBusinessDate` accepts years
+1900–2999 only** (the refusal sentence is the existing semantic-branch one). C2's `0004-02-29` / `0001-01-01`
+controls become refusals; new controls `1900-01-01` and `2999-12-31` parse, `1899-12-31` and `3000-01-01` refuse.
+D2 asserts the full `.start` instant, not only its year. `reports/cash-flow.ts` also parses `toDate` (page.tsx:44 and
+export/route.ts:11 pass it raw today — same class as DEF-514).

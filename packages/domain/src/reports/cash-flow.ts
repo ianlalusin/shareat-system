@@ -107,11 +107,12 @@ export async function getCashFlow(ex: Executor, input: CashFlowInput): Promise<C
   const storeId = input.storeId ?? null;
   const includeYearClose = input.includeYearClose ?? false;
   const openingAsOf = addDays(parseBusinessDate(input.fromDate), -1);
+  const toDate = parseBusinessDate(input.toDate);
 
   const [openingRows, closingRows, incomeStatement] = await Promise.all([
     reportsRepo.getBalanceSheetLines(ex, { orgId: input.orgId, storeId, fromDate: INCEPTION, toDate: openingAsOf, includeYearClose }),
-    reportsRepo.getBalanceSheetLines(ex, { orgId: input.orgId, storeId, fromDate: INCEPTION, toDate: input.toDate, includeYearClose }),
-    getIncomeStatement(ex, { orgId: input.orgId, storeId, fromDate: input.fromDate, toDate: input.toDate, includeYearClose }),
+    reportsRepo.getBalanceSheetLines(ex, { orgId: input.orgId, storeId, fromDate: INCEPTION, toDate, includeYearClose }),
+    getIncomeStatement(ex, { orgId: input.orgId, storeId, fromDate: input.fromDate, toDate, includeYearClose }),
   ]);
 
   const opening = toSnapshotMap(openingRows);
