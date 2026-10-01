@@ -29,6 +29,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { internalFault } from '../shared/refusal-leaf';
 import { gone, refuse } from '../shared/refusal';
+import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { postStaffShortageCharge } from '../shared/staff-shortage-charge';
 import {
@@ -318,7 +319,11 @@ async function runCreate(
   const days: DayOwed[] = settleable.map((r) => ({
     salesDayId: r.businessDate, // ⚠️ keyed by DATE (row 157), not by sales-day id
     businessDate: r.businessDate,
-    owed: money(Number(r.owed).toFixed(2)),
+    // ⛔ Audit round (S6) — `r.owed` is already Postgres `numeric(14,2)` text; `money()` accepts 0,
+    // 1 or 2 decimals natively (its own regex), so the `Number(...).toFixed(2)` round-trip through
+    // a float was never load-bearing here, unlike check 2's own figure below (a different value,
+    // with its own measured exemption comment) — this one is a plain exact parse.
+    owed: money(r.owed),
   }));
 
   const result = allocateFifo(days, handedOver);
@@ -457,7 +462,8 @@ export async function reverseRemittance(
 }
 
 /**
- * Closes an open SHORTAGE by charging it to a named person — and posts the receivable.
+ * Closes an open variance — a SHORTAGE charged to a named person, or an OVERAGE recognised as
+ * other income (T-366 S3, DEF-386's overage half).
  *
  * ⛔ **A shortage cannot be charged to nobody.** v1's remittance builder throws rather than infer a
  * `chargeToStaffId`, and that refusal is ported here AND in a CHECK constraint, because inferring
@@ -476,9 +482,21 @@ export async function reverseRemittance(
  * (R4): if a later cash remittance has covered part of the shortage, nobody is charged for money
  * that has since arrived.
  *
+ * ## ⭐ What `recognise_income` does (T-366 S3, R1/R7)
+ *
+ * ```
+ * Dr  <the cashier account the handover came from>
+ *     Cr  7350  Cash over and short              (source_type 'remittance_variance')
+ * ```
+ * beside the handover's own transfer, never merged into it, so the two net to exactly
+ * `POSTING-PATTERNS` `remittance.overage`. Manager-confirmed, never automatic (Amendment A1, Q3):
+ * an overage often carries a day not yet verified, and verifying it later must never double-count
+ * the same cash as both sales and 7350 income. No settlement rows: the days were already fully
+ * allocated by the handover itself.
+ *
  * ⛔ **`write_off` is retired** (Amendment A1, Ian 2026-09-30: "a shortage is always charged to
  * staff"). The action stays in the type so a stale caller gets a plain sentence, not a crash.
- * Existing `written_off` rows are untouched. An OVERAGE is S3's `recognise_income`, not this.
+ * Existing `written_off` rows are untouched.
  */
 export async function resolveRemittanceVariance(
   tx: Tx | null,
@@ -488,6 +506,14 @@ export async function resolveRemittanceVariance(
         varianceId: string;
         action: 'charge';
         personId: string;
+        /** Required only when the remittance handed over from more than one account (R5). */
+        fromMoneyAccountId?: string | null;
+        reason?: string | null;
+        on?: string;
+      }
+    | {
+        varianceId: string;
+        action: 'recognise_income';
         /** Required only when the remittance handed over from more than one account (R5). */
         fromMoneyAccountId?: string | null;
         reason?: string | null;
@@ -504,51 +530,81 @@ export async function resolveRemittanceVariance(
     }
     await authorize(trx, actor, 'accept_remittance', { storeId: first.storeId });
 
-    if (input.action !== 'charge') {
+    if (input.action === 'write_off') {
       throw refuse(
         'resolveRemittanceVariance: write_off is retired — a shortage is always charged.',
         "A shortage can't be written off. Charge it to the person responsible.",
+      );
+    }
+    // ⛔ T-366 S3 audit — the only two actions the type still admits are 'charge' and
+    // 'recognise_income', but a caller that bypasses the type (a stale form field, a hand-crafted
+    // request) can send anything. Without this, an unknown action fell through to the sign check
+    // below by elimination (a shortage got the "only an overage can be recognised" wording, which
+    // is confusing but wrote nothing). On an OVERAGE it is worse in a different way: the sign check
+    // passed, but `input.action === 'recognise_income'` below is false for a garbage action, so it
+    // skipped that block too and fell into the charge tail with no `person` ever set — the `!person`
+    // guard there caught it, so nothing was written either way, but as an opaque internalFault
+    // instead of a clean, sayable refusal.
+    if (input.action !== 'charge' && input.action !== 'recognise_income') {
+      throw refuse(
+        `resolveRemittanceVariance: unknown action ${String((input as { action: unknown }).action)}.`,
+        'That action is not available.',
       );
     }
 
     // ⛔ T-366 S1 / DEF-374 — same per-store key as create and reverse.
     await advisoryLocksRepo.lockStoreCashCustody(trx, first.storeId);
 
-    // ⭐ Re-read after the lock: the first read is stale once we have waited — a concurrent charge
-    // or a reversal of this remittance may have committed while we queued.
+    // ⭐ Re-read after the lock: the first read is stale once we have waited — a concurrent charge,
+    // recognition or a reversal of this remittance may have committed while we queued.
     const variance = await remittanceRepo.getVarianceWithStore(trx, actor.orgId, input.varianceId);
     if (!variance || variance.status !== 'open') {
       throw refuse(
         `resolveRemittanceVariance: variance ${input.varianceId} is not open.`,
-        'That shortage has already been dealt with — reload the page to see where it stands.',
+        'That variance has already been dealt with — reload the page to see where it stands.',
       );
     }
-    if (compare(money(variance.amount), ZERO) >= 0) {
-      throw refuse(
-        'resolveRemittanceVariance: only a shortage (negative variance) can be charged.',
-        'Only a shortage can be charged to a person. An overage is recognised as other income instead.',
-      );
+
+    if (input.action === 'charge') {
+      if (compare(money(variance.amount), ZERO) >= 0) {
+        throw refuse(
+          'resolveRemittanceVariance: only a shortage (negative variance) can be charged.',
+          'Only a shortage can be charged to a person. An overage is recognised as other income instead.',
+        );
+      }
+    } else {
+      if (compare(money(variance.amount), ZERO) <= 0) {
+        throw refuse(
+          'resolveRemittanceVariance: only an overage (positive variance) can be recognised as income.',
+          'Only an overage can be recognised as other income. A shortage is charged to a person instead.',
+        );
+      }
     }
     if (variance.remittanceStatus !== 'posted') {
       throw refuse(
         'resolveRemittanceVariance: the remittance is reversed.',
-        'That handover was reversed, so there is nothing left to charge.',
+        input.action === 'charge'
+          ? 'That handover was reversed, so there is nothing left to charge.'
+          : 'That handover was reversed, so there is nothing left to recognise.',
       );
     }
 
-    if (!input.personId) {
-      throw refuse(
-        'resolveRemittanceVariance: charging a shortage needs a person.',
-        'Choose who is being charged. The date the shortage landed on says where the arithmetic ' +
-          'stopped, not who was holding the money.',
-      );
-    }
-    const person = await personsRepo.getPersonById(trx, actor.orgId, input.personId);
-    if (!person) {
-      throw refuse(
-        'resolveRemittanceVariance: the person does not exist in this organisation.',
-        'That person could not be found — choose someone from the list.',
-      );
+    let person: { displayName: string } | undefined;
+    if (input.action === 'charge') {
+      if (!input.personId) {
+        throw refuse(
+          'resolveRemittanceVariance: charging a shortage needs a person.',
+          'Choose who is being charged. The date the shortage landed on says where the arithmetic ' +
+            'stopped, not who was holding the money.',
+        );
+      }
+      person = await personsRepo.getPersonById(trx, actor.orgId, input.personId);
+      if (!person) {
+        throw refuse(
+          'resolveRemittanceVariance: the person does not exist in this organisation.',
+          'That person could not be found — choose someone from the list.',
+        );
+      }
     }
 
     // R6 — the entry date: today in MANILA unless given, never before the handover.
@@ -556,7 +612,9 @@ export async function resolveRemittanceVariance(
     if (on < variance.remittedOn) {
       throw refuse(
         `resolveRemittanceVariance: ${on} is before the remittance date ${variance.remittedOn}.`,
-        `A shortage cannot be charged on a date before the handover it came from (${variance.remittedOn}).`,
+        input.action === 'charge'
+          ? `A shortage cannot be charged on a date before the handover it came from (${variance.remittedOn}).`
+          : `An overage cannot be recognised on a date before the handover it came from (${variance.remittedOn}).`,
       );
     }
 
@@ -569,7 +627,7 @@ export async function resolveRemittanceVariance(
         throw refuse(
           'resolveRemittanceVariance: the remittance has several from-accounts; name one.',
           `This handover came from more than one account (${names}). Choose which account the ` +
-            'shortage comes out of.',
+            (input.action === 'charge' ? 'shortage comes out of.' : 'overage came into.'),
         );
       }
       account = fromAccounts.find((a) => a.id === input.fromMoneyAccountId);
@@ -587,6 +645,49 @@ export async function resolveRemittanceVariance(
     }
     if (!account) {
       throw internalFault(`resolveRemittanceVariance: remittance ${variance.remittanceId} has no lines.`);
+    }
+
+    if (input.action === 'recognise_income') {
+      // R7 — no cap, no FIFO settlement: the days were already fully allocated by the handover
+      // itself (an overage means more came in than was owed). One entry, Dr the cashier account /
+      // Cr 7350, and the variance closes to 'income'.
+      const amount = money(variance.amount);
+      const posted = await postEntry(trx, {
+        orgId: actor.orgId,
+        entryDate: on,
+        sourceType: 'remittance_variance',
+        sourceId: variance.id,
+        idempotencyKey: `remittance-variance:${variance.id}:income`,
+        memo: input.reason?.trim() || `Remittance overage ${variance.remittedOn} recognised as other income`,
+        postedBy: actor.personId,
+        lines: [
+          {
+            accountCode: account.glAccountCode,
+            storeId: variance.storeId,
+            debit: String(amount),
+            // A 1140 wallet requires a party naming itself — payLiability's own conditional.
+            ...(account.glAccountCode === '1140'
+              ? { partyType: 'money_account', partyId: account.id }
+              : {}),
+          },
+          {
+            // 7350 Cash over and short (row 216(4)) — other income, per R1.
+            accountCode: '7350',
+            storeId: variance.storeId,
+            credit: String(amount),
+          },
+        ],
+      });
+
+      await remittanceRepo.resolveVariance(trx, actor.orgId, variance.id, {
+        status: 'income',
+        chargedToPersonId: null,
+        reason: input.reason?.trim() || null,
+        resolvedBy: actor.personId,
+        resolvedOn: on,
+        journalEntryId: posted.entryId,
+      });
+      return;
     }
 
     // R4 — CAP at what is still owed. The days are the ones the handover could have settled:
@@ -621,6 +722,10 @@ export async function resolveRemittanceVariance(
       });
     }
 
+    // ⛔ Unreachable: `person` was looked up and null-checked above, in the same `action === 'charge'`
+    // branch this code always falls through from (`recognise_income` already returned). Guarded,
+    // not asserted, per RULES §13 row 206.
+    if (!person) throw internalFault('resolveRemittanceVariance: person missing after validation.');
     const posted = await postStaffShortageCharge(trx, {
       orgId: actor.orgId,
       storeId: variance.storeId,

@@ -203,37 +203,56 @@ export async function resolveVarianceAction(formData: FormData): Promise<void> {
   const storeId = str(formData, 'storeId');
   const varianceId = str(formData, 'varianceId');
   const action = str(formData, 'action');
+  let ok = '';
 
   try {
-    // T-366 A1 (Ian, 2026-09-30): no write-off — a shortage is always charged to a person. The
-    // screen no longer offers one, and the domain refuses it regardless of what a form posts.
-    if (action !== 'charge') {
-      throw new Error('A shortage is always charged to the person who was holding the money.');
-    }
-    const personId = str(formData, 'personId');
-    // ⛔ The refusal, surfaced early so the message is about the decision rather than a
-    // constraint violation. FIFO put the residual on that date; the date says nothing about
-    // who was holding the money.
-    if (!personId) {
-      throw new Error(
-        'Choose who is being charged. The date the shortage landed on says where the ' +
-          'arithmetic stopped, not who was holding the money.',
+    if (action === 'charge') {
+      const personId = str(formData, 'personId');
+      // ⛔ The refusal, surfaced early so the message is about the decision rather than a
+      // constraint violation. FIFO put the residual on that date; the date says nothing about
+      // who was holding the money.
+      if (!personId) {
+        throw new Error(
+          'Choose who is being charged. The date the shortage landed on says where the ' +
+            'arithmetic stopped, not who was holding the money.',
+        );
+      }
+      await withOrgPrincipal(actor.orgId, (tx) =>
+        resolveRemittanceVariance(tx, actor, {
+          varianceId,
+          action: 'charge',
+          personId,
+          // Present only when the handover came from more than one account (R5).
+          fromMoneyAccountId: str(formData, 'fromMoneyAccountId') || null,
+          reason: str(formData, 'reason') || null,
+        }),
       );
+      ok = 'Shortage charged. The person now owes it, and the day reads remitted.';
+    } else if (action === 'recognise_income') {
+      // T-366 S3 (Amendment A1, Q3): manager-confirmed, never automatic at handover.
+      await withOrgPrincipal(actor.orgId, (tx) =>
+        resolveRemittanceVariance(tx, actor, {
+          varianceId,
+          action: 'recognise_income',
+          // Present only when the handover came from more than one account (R5).
+          fromMoneyAccountId: str(formData, 'fromMoneyAccountId') || null,
+          reason: str(formData, 'reason') || null,
+        }),
+      );
+      ok = 'Overage recognised as other income (7350).';
+    } else if (action === 'write_off') {
+      // T-366 A1 (Ian, 2026-09-30): no write-off — a shortage is always charged to a person. The
+      // screen no longer offers one, and the domain refuses it regardless of what a form posts.
+      throw new Error('A shortage is always charged to the person who was holding the money.');
+    } else {
+      // T-366 S3 audit — any OTHER unrecognised action (a stale form field, a hand-crafted
+      // request) gets a neutral refusal, not write_off's sentence, which would be misleading here.
+      throw new Error('That action is not available.');
     }
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      resolveRemittanceVariance(tx, actor, {
-        varianceId,
-        action: 'charge',
-        personId,
-        // Present only when the handover came from more than one account (R5).
-        fromMoneyAccountId: str(formData, 'fromMoneyAccountId') || null,
-        reason: str(formData, 'reason') || null,
-      }),
-    );
   } catch (err) {
     back({ error: errorMessage(err), store: storeId });
   }
-  back({ ok: 'Shortage charged. The person now owes it, and the day reads remitted.', store: storeId });
+  back({ ok, store: storeId });
 }
 
 /**

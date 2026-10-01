@@ -9,6 +9,14 @@
  * oldest-first exhaustion over one date key, but that module trusts the caller to sort first.
  * This one sorts internally, because T-330's whole rule (§1) is the ordering itself, across two
  * callers (AP, AR) that must not each re-implement it.
+ *
+ * ⛔ **T-366 S6 / DEF-399: the two are NOT merged, on purpose.** `allocateFifo` has a single date
+ * key (a remittance's `business_date`) that one SQL query already expresses in order; this
+ * allocator's ordering key is `dueDate || documentDate` — two columns and a nullable fallback,
+ * resolved HERE because that resolution is itself the one thing a pure test can falsify (see
+ * `dueDate`'s own doc below). Forcing either caller into the other's shape would mean either
+ * inventing a fake due date for a remittance day or pre-resolving AP/AR's fallback outside the one
+ * place that can prove it — so each allocator keeps its own ruling.
  */
 import { type Money, fromCentavos, toCentavos } from '@shareat/core/money';
 

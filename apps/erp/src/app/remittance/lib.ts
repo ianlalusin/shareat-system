@@ -5,8 +5,10 @@
  * on each date — it does not sum document types, so a document type nobody has invented yet is
  * already counted.
  */
-import { moneyAccountsRepo, remittanceRepo, storesRepo, type EndDayReport } from '@shareat/db';
+import { eq } from 'drizzle-orm';
+import { moneyAccountsRepo, remittanceRepo, schema, storesRepo, type EndDayReport } from '@shareat/db';
 import { listFindings, remittanceStateOf } from '@shareat/domain';
+import { authorize, AuthorizationError, heldCapabilities, type Actor } from '@shareat/auth';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
@@ -15,6 +17,39 @@ export type { StoreOption } from '../expenses/lib';
 
 export interface DayRow extends EndDayReport {
   state: 'nothing_owed' | 'unremitted' | 'partially_remitted' | 'remitted';
+}
+
+/**
+ * T-366 S3 audit round 3 finding 4 — which store to land on when the URL names none.
+ * `listStores` (above) is every store in the ORG, unfiltered, ordered by name; picking its first
+ * entry put a manager scoped only to store B onto store A's empty screen. This picks, in order:
+ * the first candidate the viewer holds `accept_remittance` at (can act), else the first they are
+ * merely scoped to (is scoped — they should still land on their own store's read-only view), else
+ * `undefined` so the caller falls back to the org's first store (nothing better to prefer — an
+ * org-wide admin with no explicit scope row, or an org with no scope rows at all).
+ */
+export async function defaultStoreFor(actor: Actor, candidateStoreIds: string[]): Promise<string | undefined> {
+  if (candidateStoreIds.length === 0) return undefined;
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const held = await heldCapabilities(tx, actor);
+    if (held.has('accept_remittance')) {
+      for (const storeId of candidateStoreIds) {
+        try {
+          await authorize(tx, actor, 'accept_remittance', { storeId });
+          return storeId;
+        } catch (err) {
+          if (err instanceof AuthorizationError) continue;
+          throw err;
+        }
+      }
+    }
+    const scoped = await tx
+      .select({ storeId: schema.personStoreScope.storeId })
+      .from(schema.personStoreScope)
+      .where(eq(schema.personStoreScope.personId, actor.personId));
+    const scopedIds = new Set(scoped.map((r) => r.storeId));
+    return candidateStoreIds.find((id) => scopedIds.has(id));
+  });
 }
 
 export async function endDays(orgId: string, storeId: string, upTo: string): Promise<DayRow[]> {
@@ -52,11 +87,13 @@ export async function recentRemittances(orgId: string, storeId?: string) {
 }
 
 /** ⭐ The list that must not hide (Ian, bible row 147). */
-export async function openVariances(orgId: string) {
+export async function openVariances(orgId: string, storeId?: string) {
   return withOrgPrincipal(orgId, async (tx) => {
-    const rows = await remittanceRepo.listVariances(tx, orgId, 'open');
+    const rows = await remittanceRepo.listVariances(tx, orgId, 'open', storeId);
     // T-366 S2 / R5: a charge is credited to the cashier account the handover came from. With one
     // account nothing needs choosing; with several the screen asks, so each row carries its own.
+    // `storeId` comes from `listVariances`' own join now (T-366 S3 audit finding 5, round 2) — one
+    // query, not a getById per row.
     return Promise.all(
       rows.map(async (v) => ({
         ...v,
@@ -64,6 +101,12 @@ export async function openVariances(orgId: string) {
       })),
     );
   });
+}
+
+/** T-366 S3 audit round 3 finding 1 — the org-wide count, so the page can say how many more sit
+ *  at other stores without listing them (bible row 147). */
+export async function openVarianceCountForOrg(orgId: string): Promise<number> {
+  return withOrgPrincipal(orgId, (tx) => remittanceRepo.countOpenVariances(tx, orgId));
 }
 
 export const STATE_LABEL: Record<string, string> = {

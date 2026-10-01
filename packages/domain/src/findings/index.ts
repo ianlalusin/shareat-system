@@ -214,6 +214,9 @@ export async function listFindings(
     ...(await findingsRepo.unremittedCeilingBreached(tx, orgId)),
     ...(await findingsRepo.remittanceOverdue(tx, orgId)),
     ...(await findingsRepo.serviceChargeFloatAgeing(tx, orgId)),
+    // T-366 S5 / DEF-406 — a control account (2160, 2130, 2120) itself in an impossible state,
+    // beside the ageing guard above that asks a different question (was it discharged in time).
+    ...(await findingsRepo.controlAccountNegative(tx, orgId)),
     // T-153 — a till float not holding its configured amount.
     ...(await findingsRepo.tillFloatOffTarget(tx, orgId)),
     // T-346 S3 (DEF-428), §3.5 — a store's stated opening date contradicted by when it actually

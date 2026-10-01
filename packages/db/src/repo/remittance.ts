@@ -421,15 +421,57 @@ export async function markReversed(
   }
 }
 
-/** ⭐ Open variances — the list that must not hide (Ian, row 147). */
-export async function listVariances(tx: Tx, orgId: string, status?: VarianceStatus) {
-  const conditions = [eq(remittanceVariances.orgId, orgId)];
+/**
+ * ⭐ Open variances — the list that must not hide (Ian, row 147). Optionally scoped to one store
+ * (T-366 S3 audit finding 5 — the page follows its own store selector, like every other list on
+ * it), joined against `remittances` for `storeId` — the variance row itself carries none.
+ */
+export async function listVariances(tx: Tx, orgId: string, status?: VarianceStatus, storeId?: string) {
+  // T-366 S3 audit round 3 finding 2 — `remittances.orgId` too. RLS covers the app role, but a
+  // script or owner connection (which bypasses RLS) would otherwise join across orgs through a
+  // malformed or hand-inserted row.
+  const conditions = [eq(remittanceVariances.orgId, orgId), eq(remittances.orgId, orgId)];
   if (status) conditions.push(eq(remittanceVariances.status, status));
+  if (storeId) conditions.push(eq(remittances.storeId, storeId));
   return tx
-    .select()
+    .select({
+      id: remittanceVariances.id,
+      orgId: remittanceVariances.orgId,
+      remittanceId: remittanceVariances.remittanceId,
+      businessDate: remittanceVariances.businessDate,
+      salesDayId: remittanceVariances.salesDayId,
+      amount: remittanceVariances.amount,
+      status: remittanceVariances.status,
+      chargedToPersonId: remittanceVariances.chargedToPersonId,
+      reason: remittanceVariances.reason,
+      resolvedBy: remittanceVariances.resolvedBy,
+      resolvedOn: remittanceVariances.resolvedOn,
+      journalEntryId: remittanceVariances.journalEntryId,
+      createdAt: remittanceVariances.createdAt,
+      storeId: remittances.storeId,
+    })
     .from(remittanceVariances)
+    .innerJoin(remittances, eq(remittances.id, remittanceVariances.remittanceId))
     .where(and(...conditions))
     .orderBy(desc(remittanceVariances.businessDate));
+}
+
+/**
+ * The ORG-WIDE open-variance count, regardless of store. T-366 S3 audit round 3 finding 1 (bible
+ * row 147 — "flagged means COUNTED … visible without being seen"): `listVariances` above is
+ * store-scoped so the page's rows and controls stay honest about what the viewer can act on, but
+ * a variance at another store must still be COUNTED somewhere, or it is exactly the v1 hiding row
+ * 147 forbids. Cheap: one `count(*)`, no rows fetched.
+ */
+export async function countOpenVariances(tx: Tx, orgId: string): Promise<number> {
+  const [row] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(remittanceVariances)
+    .innerJoin(remittances, eq(remittances.id, remittanceVariances.remittanceId))
+    .where(
+      and(eq(remittanceVariances.orgId, orgId), eq(remittances.orgId, orgId), eq(remittanceVariances.status, 'open')),
+    );
+  return row?.n ?? 0;
 }
 
 /**
@@ -471,7 +513,14 @@ export async function getVarianceWithStore(
     })
     .from(remittanceVariances)
     .innerJoin(remittances, eq(remittances.id, remittanceVariances.remittanceId))
-    .where(and(eq(remittanceVariances.id, id), eq(remittanceVariances.orgId, orgId)))
+    .where(
+      and(
+        eq(remittanceVariances.id, id),
+        eq(remittanceVariances.orgId, orgId),
+        // T-366 S3 audit round 3 finding 2 — same reasoning as `listVariances` above.
+        eq(remittances.orgId, orgId),
+      ),
+    )
     .limit(1);
   return row;
 }

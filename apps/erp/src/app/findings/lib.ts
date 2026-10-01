@@ -92,6 +92,7 @@ export const KIND_LABEL: Record<string, string> = {
   unremittedCeilingBreached: 'Un-remitted cash over the ceiling',
   remittanceOverdue: 'Remittance overdue',
   serviceChargeFloatAgeing: 'Service-charge float ageing',
+  controlAccountNegative: 'Control account below zero',
   tillFloatOffTarget: 'Till float off its target',
   tillCountVarianceOpen: 'Counted variance on a closed shift',
   itemHasNoThreshold: 'Items with no reorder threshold',

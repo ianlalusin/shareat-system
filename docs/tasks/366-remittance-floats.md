@@ -1,6 +1,6 @@
 # T-366: Remittance and floats — DEF-386 (+DEF-105), DEF-374, DEF-398, DEF-399, DEF-406
 
-**Status:** **S1 DONE (`d0ceb2c`), S1b DONE (`891bc1e`), S1c DONE (`f1fa09c`); S2 DONE (`94f38e2`; live-charge smoke MET 2026-10-01, DEF-386 closed); S3/S5/S6 next** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; 7 review changes applied). Spec by the Opus planner, 2026-09-30. Part of the money-defect push
+**Status:** **S1 DONE (`d0ceb2c`), S1b DONE (`891bc1e`), S1c DONE (`f1fa09c`); S2 DONE (`94f38e2`; live-charge smoke MET 2026-10-01, DEF-386 closed); S3, S5, S6 DONE 2026-10-01 (overage → 7350 manager-confirmed; controlAccountNegative; allocator exact + last-owed day)** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; 7 review changes applied). Spec by the Opus planner, 2026-09-30. Part of the money-defect push
 (Ian, 2026-09-30: *"close all open money defects in v2"*), batch A of `docs/plans/money-defects-2026-09-30.md`.
 **Model:** Sonnet for each slice, tester first and then builder. One lane runs the slices in order.
 **Migration:** YES, exactly one: `0172_t366_def386_remittance_variance_posting.sql`, hand-authored per ADR-012 §5, in
@@ -419,6 +419,9 @@ dates):
 Cr 7350 ₱80. Screenshot the section: it shows no "Charge" control.
 
 ---
+
+### S3 review record (orchestrator, 2026-10-01)
+Contract-complete (auditor JOBs 8, 10, 11). Changes beyond the spec, all orchestrator rulings: (a) the Charge and Recognise controls render only where the viewer holds `accept_remittance` at that store (the T-367 rule: never show a control the caller cannot use); (b) the variance list follows the page's store picker; (c) **the unresolved COUNT stays org-wide** ("N here · M more at other stores") — bible row 147, a count must be visible, and (b) had scoped it away; (d) an unknown action gets a plain domain refusal. POSTING-PATTERNS `remittance.overage` rewritten as two entries. Open for Ian: may the manager who took the handover confirm its overage (Open Questions page)?
 
 ## S4: the `write_off` posting. ⛔ BLOCKED on Q1
 Until Q1 is answered, S2 ships the default: new `write_off` calls are REFUSED (reversible, moves no money; existing

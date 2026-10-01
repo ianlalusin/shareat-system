@@ -69,27 +69,27 @@
   - ` 952–966  ` wastage.order-charged — split 60/40 between two staff
 - ` 967–973  ` Remittance (remittance) — 10 legs
   - ` 974–982  ` remittance.exact — The conditional leg genuinely absent
-  - ` 983–992  ` remittance.overage — 7350 swings positive
-  - ` 993–1014 ` remittance.shortage — Charged to the responsible cashier, not P&L
-- `1015–1019 ` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
-  - `1020–1037 ` balanceadjustment.plug — Included so nobody ports it forward
-- `1038–1042 ` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
-  - `1043–1052 ` prepaidpurchase.cash — An asset, not an immediate expense
-  - `1053–1061 ` assetpurchase.cash — Fixed asset purchase, cash
-  - `1062–1072 ` assetpurchase.credit — Fixed asset purchase, on account
-- `1073–1077 ` Slicer/payroll payout (slicerpayment) — 4 legs
-  - `1078–1088 ` slicerpayment.park — Settling an already-parked liability
-- `1089–1094 ` Statutory remittance (liabilitypayment)
-  - `1095–1113` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
-- `1114–1122` Owner equity movements (capitalcontribution / drawing)
-  - `1123–1131` equity.capitalcontribution — Cash in, equity grows
-  - `1132–1148` equity.drawing — Reduces equity, on the books at last
-- `1149–1155` Year close (yearclose) — v2-only, ADR-006
-  - `1156–1175` yearclose.annual — One entry, into 3300, dated the following January 1st
-- `1176–1183` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
-  - `1184–1206` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
-  - `1207–1226` openingbalance.reconcile — Reconciling 3900 to exactly zero
-- `1227–1248` Reversal — the correction path (T-106)
+  - ` 983–1007 ` remittance.overage — 7350 swings positive
+  - `1008–1029 ` remittance.shortage — Charged to the responsible cashier, not P&L
+- `1030–1034 ` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
+  - `1035–1052 ` balanceadjustment.plug — Included so nobody ports it forward
+- `1053–1057 ` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
+  - `1058–1067 ` prepaidpurchase.cash — An asset, not an immediate expense
+  - `1068–1076 ` assetpurchase.cash — Fixed asset purchase, cash
+  - `1077–1087 ` assetpurchase.credit — Fixed asset purchase, on account
+- `1088–1092 ` Slicer/payroll payout (slicerpayment) — 4 legs
+  - `1093–1103` slicerpayment.park — Settling an already-parked liability
+- `1104–1109` Statutory remittance (liabilitypayment)
+  - `1110–1128` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
+- `1129–1137` Owner equity movements (capitalcontribution / drawing)
+  - `1138–1146` equity.capitalcontribution — Cash in, equity grows
+  - `1147–1163` equity.drawing — Reduces equity, on the books at last
+- `1164–1170` Year close (yearclose) — v2-only, ADR-006
+  - `1171–1190` yearclose.annual — One entry, into 3300, dated the following January 1st
+- `1191–1198` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
+  - `1199–1221` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
+  - `1222–1241` openingbalance.reconcile — Reconciling 3900 to exactly zero
+- `1242–1263` Reversal — the correction path (T-106)
 
 <!-- TOC:END -->
 
@@ -984,11 +984,26 @@ The cashier remits ₱12,000, and expected and counted match exactly. Two legs o
 
 Expected ₱10,000, actually counted ₱10,080 — ₱80 more than the books say should be there.
 
+⭐ **Two entries, not one (T-366 S3; Ian, 2026-09-30, A1 Q3: a manager confirms an overage before it
+becomes income).** Between the handover and the confirmation, 1110 carries the ₱80 as a credit and 7350
+is untouched — that state is expected, not an error.
+
+**1 · At handover** (the transfer; the overage is recorded as an open variance):
+
 | Account | Debit | Credit | Party |
 |---|---:|---:|---|
 | 1130 Cash on hand — office | 10,080.00 | | — |
-| 1110 Cash on hand — cashier | | 10,000.00 | — |
+| 1110 Cash on hand — cashier | | 10,080.00 | — |
+
+**2 · When a manager confirms** (`resolveRemittanceVariance`, action `recognise_income`; key
+`remittance-variance:<id>:income`, sourceType `remittance_variance`, excluded from the day's owed):
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier (or the R5 from-account; 1140 carries its party) | 80.00 | | — |
 | 7350 Cash over and short | | 80.00 | — |
+
+Net of both: Dr 1130 10,080 · Cr 1110 10,000 · Cr 7350 80. Reversing the handover reverses entry 2 too.
 
 ### `remittance.shortage` — Charged to the responsible cashier, not P&L
 

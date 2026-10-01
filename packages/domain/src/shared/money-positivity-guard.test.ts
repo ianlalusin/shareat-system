@@ -385,27 +385,6 @@ const CLASSIFIED_ENTRIES: {
     checkIdentifiers: ['expensed'],
   },
   {
-    file: 'remittance/allocate.ts',
-    comparison: 'Number(remaining) <= 0',
-    reason: 'derived ledger `owed`/`remaining` values, summed from journal_lines',
-    checkIdentifiers: ['remaining'],
-  },
-  {
-    file: 'remittance/allocate.ts',
-    // ⭐ revision 2: the source line carries a trailing `// already settled by an earlier batch —
-    // skip, silently` comment. It is display-only (still visible via `.raw` from the scanner) and
-    // is not part of the comparison this entry is keyed on.
-    comparison: 'Number(day.owed) <= 0',
-    reason: 'derived ledger `owed`/`remaining` values, summed from journal_lines',
-    checkIdentifiers: ['owed'],
-  },
-  {
-    file: 'remittance/allocate.ts',
-    comparison: 'Number(d.owed) > 0',
-    reason: 'derived ledger `owed`/`remaining` values, summed from journal_lines',
-    checkIdentifiers: ['owed'],
-  },
-  {
     file: 'remittance/index.ts',
     comparison: 'Number(r.owed) > 0',
     reason: 'derived ledger `owed` value',

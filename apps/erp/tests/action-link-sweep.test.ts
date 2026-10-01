@@ -306,7 +306,18 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // page.tsx:152` (`termsMode` `<select>`) and `:163` (`creditTermsDays` `<input>`). Verified by
     // filtering `runCensus()`'s own results to these two files and reading each new candidate's
     // line/px directly, not by arithmetic alone.
-    expect(results.length).toBe(1060);
+    // 1060 -> 1063, T-366 S3 (DEF-380/386), 2026-10-01. +3 PASS, FAIL/UNRESOLVED unmoved (both
+    // asserted above — confirmed unchanged at 151/58 before this re-pin). The overage branch of
+    // `/remittance`'s variance form, previously a plain sentence with no controls at all, gains
+    // three: `app/remittance/page.tsx:259` (`fromMoneyAccountId` `<select>`, "Came into" — R5,
+    // shown only when the handover came from more than one account, but a static AST census counts
+    // the source element regardless of the runtime condition), `:273` (the `reason` `<input>`,
+    // "Note (optional)") and `:275` (the `recognise_income` `<button>`, "Recognise as other
+    // income (7350)"). All three are styled through the same `INPUT` constant and amber-button
+    // classes the shortage branch's sibling controls already use (38px / 38px / 32px), so all
+    // three PASS. Verified by filtering `runCensus()`'s own results to `app/remittance/page.tsx`
+    // and reading each new candidate's line/px directly.
+    expect(results.length).toBe(1063);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

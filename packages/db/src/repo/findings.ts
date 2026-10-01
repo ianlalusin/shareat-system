@@ -97,6 +97,86 @@ export async function reciprocalDrift(tx: Tx, orgId: string): Promise<DetectedFi
 }
 
 /**
+ * ⭐ T-366 S5 / DEF-406 — three liability control accounts that can never carry a debit balance:
+ * `2160` service charge float (per STORE — Ian's T-187 Q5: the float is never negative, so `hard`),
+ * `2130` reimbursables owed to staff (per EMPLOYEE party, `soft` — Q2) and `2120` goods received,
+ * not yet invoiced (per STORE, `soft`). The `< 0` test is a SQL `having` clause over `numeric`,
+ * never a JS float read back and compared (DEF-272's own class of bug).
+ *
+ * ⛔ **A NEW finding, beside the three ageing guards above (R10) — none of them is edited.** Those
+ * ask "was the accrual DISCHARGED in time"; this asks "is the balance itself impossible right now."
+ * A store or employee can trip both at once, and each fires independently.
+ */
+export async function controlAccountNegative(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const findings: DetectedFinding[] = [];
+
+  // ⛔ Audit round — LEFT JOIN, not INNER: journal_lines.store_id is nullable, and an INNER JOIN
+  // silently DROPS a store-less 2160/2120 line from every group's sum rather than grouping it on
+  // its own. A line that should never exist without a store is still a line this detector must
+  // see — excluding it could leave a genuinely negative account unreported. A store-less group
+  // reports with `storeId: null` so it is still named, never merged into "no finding."
+  const byStore = (await tx.execute(sql`
+    select a.code                                    as code,
+           jl.store_id::text                          as store_id,
+           st.name                                    as store_name,
+           (sum(jl.credit) - sum(jl.debit))::text     as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a        on a.id = jl.account_id
+    left join stores st    on st.id = jl.store_id
+    where je.org_id = ${orgId} and je.status <> 'draft' and a.code in ('2160', '2120')
+    group by a.code, jl.store_id, st.name
+    having sum(jl.credit) - sum(jl.debit) < 0
+    order by a.code, jl.store_id
+  `)) as unknown as { code: string; store_id: string | null; store_name: string | null; balance: string }[];
+
+  for (const r of byStore) {
+    const label = r.code === '2160' ? 'Service charge float (2160)' : 'Goods received, not yet invoiced (2120)';
+    const where = r.store_id ? `at ${r.store_name}` : '(no store on the line — this should never happen)';
+    findings.push({
+      kind: 'controlAccountNegative',
+      key: `controlAccountNegative:${r.code}:${r.store_id ?? 'none'}`,
+      storeId: r.store_id,
+      severity: r.code === '2160' ? ('hard' as const) : ('soft' as const),
+      detail: `${label} ${where} reads ${peso(Math.abs(Number(r.balance)))} negative — a control account cannot go below zero.`,
+    });
+  }
+
+  // ⛔ Audit round — LEFT JOIN persons too: a dangling party_id (the person row is gone) must be
+  // NAMED by its id, not silently skipped by an INNER JOIN finding no match. `jl.party_id` is
+  // untouched (`p.id::text` carries the cast, not the indexed column), so
+  // `journal_lines_party_type_party_id_idx` (party_type, party_id) stays usable either way the
+  // equality is written. `'employee'` is the vocabulary `journal_lines_party_type_check` defines
+  // (schema/journal.ts:176) — no shared TS constant exists for it today.
+  const byEmployee = (await tx.execute(sql`
+    select jl.party_id::text                          as employee_id,
+           p.display_name                              as employee_name,
+           (sum(jl.credit) - sum(jl.debit))::text      as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a        on a.id = jl.account_id
+    left join persons p    on p.id::text = jl.party_id
+    where je.org_id = ${orgId} and je.status <> 'draft' and a.code = '2130' and jl.party_type = 'employee'
+    group by jl.party_id, p.display_name
+    having sum(jl.credit) - sum(jl.debit) < 0
+    order by jl.party_id
+  `)) as unknown as { employee_id: string; employee_name: string | null; balance: string }[];
+
+  for (const r of byEmployee) {
+    const who = r.employee_name ?? `person ${r.employee_id} (no longer on file)`;
+    findings.push({
+      kind: 'controlAccountNegative',
+      key: `controlAccountNegative:2130:${r.employee_id}`,
+      storeId: null,
+      severity: 'soft' as const,
+      detail: `Reimbursables owed to ${who} (2130) reads ${peso(Math.abs(Number(r.balance)))} negative — a control account cannot go below zero.`,
+    });
+  }
+
+  return findings;
+}
+
+/**
  * ⭐ Every control account's subledger must sum to its control balance.
  *
  * A `requires_party` account whose lines carry no party is money owed by nobody — the exact shape

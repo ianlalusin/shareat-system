@@ -1,3 +1,5 @@
+import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
+import { logger } from '@shareat/core/logger';
 import { requireSession } from '../../lib/session';
 import { listActingPersons } from '../expenses/lib';
 import {
@@ -11,14 +13,17 @@ import {
   STATE_LABEL,
   cashCustodyFindings,
   cashierAccounts,
+  defaultStoreFor,
   endDays,
   listStores,
   officeAccounts,
+  openVarianceCountForOrg,
   openVariances,
   peso,
   recentRemittances,
   storeCashPolicy,
   today,
+  withOrgPrincipal,
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -41,7 +46,8 @@ export default async function RemittancePage({
   const { actor } = await requireSession('/remittance');
 
   const stores = await listStores(actor.orgId);
-  const storeId = sp.store || stores[0]?.id;
+  const storeId =
+    sp.store || (await defaultStoreFor(actor, stores.map((s) => s.id))) || stores[0]?.id;
 
   if (!storeId) {
     return (
@@ -52,12 +58,13 @@ export default async function RemittancePage({
     );
   }
 
-  const [days, cashier, office, recent, variances, people, findings, policy] = await Promise.all([
+  const [days, cashier, office, recent, variances, orgVarianceCount, people, findings, policy] = await Promise.all([
     endDays(actor.orgId, storeId, today()),
     cashierAccounts(actor.orgId, storeId),
     officeAccounts(actor.orgId, storeId),
     recentRemittances(actor.orgId, storeId),
-    openVariances(actor.orgId),
+    openVariances(actor.orgId, storeId),
+    openVarianceCountForOrg(actor.orgId),
     listActingPersons(actor.orgId),
     cashCustodyFindings(actor.orgId, storeId),
     storeCashPolicy(actor.orgId, storeId),
@@ -73,6 +80,40 @@ export default async function RemittancePage({
   // has to speak to both signs, not just the short case it was written for.
   const varianceShortCount = variances.filter((v) => Number(v.amount) < 0).length;
   const varianceOverCount = variances.length - varianceShortCount;
+
+  // T-366 S3 audit finding 5 — both Charge and Recognise-as-income authorise the SAME capability
+  // (`resolveRemittanceVariance` gates on `accept_remittance` regardless of action), so ONE
+  // `authorize()` probe at the page's own `storeId` is the real narrowing — the same idiom
+  // `channel-settlements/page.tsx` and `customers/[customerId]/page.tsx` use, not a new auth
+  // helper. `authorize()` in the domain stays the real gate; this only decides what renders.
+  // ⚠️ This single boolean is valid ONLY because `variances` (from `openVariances` above) is
+  // itself scoped to this same `storeId` (Ian's ruling, round 2 — `listVariances` filters by
+  // store, so every row shown is guaranteed to be at it). It is NOT a per-row check — if that
+  // guarantee ever broke (a future caller passing an unscoped list, a join regression), a variance
+  // from a DIFFERENT store could silently get this store's answer. The invariant below catches
+  // that rather than trusting it silently.
+  const canResolveVariances = await withOrgPrincipal(actor.orgId, async (tx) => {
+    const held = await heldCapabilities(tx, actor);
+    if (!held.has('accept_remittance')) return false;
+    try {
+      await authorize(tx, actor, 'accept_remittance', { storeId });
+      return true;
+    } catch (err) {
+      if (err instanceof AuthorizationError) return false;
+      throw err;
+    }
+  });
+  // T-366 S3 audit round 3 finding 3 — cheap invariant backing the comment above: if any variance
+  // shown disagrees with the page's own store, `listVariances`' scoping did not hold, and this
+  // falls back to refusing every control rather than trusting a single-store answer for a
+  // multi-store list.
+  const variancesAreStoreScoped = variances.every((v) => v.storeId === storeId);
+  if (!variancesAreStoreScoped) {
+    logger.error(
+      { orgId: actor.orgId, storeId, otherStores: [...new Set(variances.map((v) => v.storeId))] },
+      'remittance page: openVariances returned a variance from another store — refusing every control',
+    );
+  }
 
   return (
     <Page density="table">
@@ -136,18 +177,26 @@ export default async function RemittancePage({
         hide from sight like v1 does." It does not block the next handover; it simply cannot be
         got past without being seen.
       */}
-      {variances.length > 0 && (
+      {/* T-366 S3 audit round 3 finding 1 (bible row 147) — the section renders whenever there is
+          ANYTHING unresolved in the org, even 0 at the CURRENT store, so a variance elsewhere is
+          counted and visible, never hidden by the store picker. Rows and controls stay
+          store-scoped either way (finding 5). */}
+      {(variances.length > 0 || orgVarianceCount > 0) && (
         <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
           <div className="text-sm text-amber-900 dark:text-amber-300">
             <strong className="font-medium">
               {variances.length} unresolved remittance{' '}
-              {variances.length === 1 ? 'variance' : 'variances'}.
+              {variances.length === 1 ? 'variance' : 'variances'} here
+              {orgVarianceCount > variances.length &&
+                ` · ${orgVarianceCount - variances.length} more at other stores`}
+              .
             </strong>{' '}
-            {varianceShortCount > 0 && varianceOverCount > 0
-              ? 'Money that was counted and signed for did not arrive, or arrived in excess of it.'
-              : varianceOverCount > 0
-                ? 'Money arrived in excess of what was counted and signed for.'
-                : 'Money that was counted and signed for did not arrive.'}{' '}
+            {variances.length > 0 &&
+              (varianceShortCount > 0 && varianceOverCount > 0
+                ? 'Money that was counted and signed for did not arrive, or arrived in excess of it.'
+                : varianceOverCount > 0
+                  ? 'Money arrived in excess of what was counted and signed for.'
+                  : 'Money that was counted and signed for did not arrive.')}{' '}
             ⚠️ This is a{' '}
             <strong>custody</strong> question, not a counting one — the daily counts already
             reconciled, so the date below is where the arithmetic left the residual, not who was
@@ -168,10 +217,20 @@ export default async function RemittancePage({
                 </span>
                 <span className="ml-2 text-xs">on {v.businessDate}</span>
               </div>
-              {/* T-366 S2: only a SHORTAGE can be charged, and there is no write-off (Amendment
-                  A1 — a shortage is always charged to a person). An overage carries no controls
-                  here; recognising it as other income is a manager action (S3). */}
-              {Number(v.amount) < 0 ? (
+              {/* T-366 S2/S3: a SHORTAGE is always charged to a person (Amendment A1 — there is
+                  no write-off); an OVERAGE shows only the manager-confirmed recognise-as-income
+                  action (S3, Q3 — never automatic at handover). T-366 S3 audit finding 5: neither
+                  control renders for a viewer who does not hold accept_remittance at the page's
+                  OWN store — resolveRemittanceVariance gates both actions on it, and showing the
+                  form to a non-holder only to have the server refuse it is the same gap the
+                  customer write-off/void section had. `canResolveVariances` is a single, page-level
+                  boolean (not per-row) — see its own comment above for why that is safe here, and
+                  `variancesAreStoreScoped` for the fallback if it ever were not. */}
+              {!canResolveVariances || !variancesAreStoreScoped ? (
+                <span className="text-xs text-amber-900 dark:text-amber-300">
+                  You don&rsquo;t have permission to resolve this variance.
+                </span>
+              ) : Number(v.amount) < 0 ? (
                 <>
                   <label className="flex flex-col gap-1">
                     <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
@@ -219,9 +278,38 @@ export default async function RemittancePage({
                   </button>
                 </>
               ) : (
-                <span className="text-xs text-amber-900 dark:text-amber-300">
-                  An overage is not charged to anyone.
-                </span>
+                <>
+                  {/* R5: shown only when the handover came from more than one account. */}
+                  {v.fromAccounts.length > 1 && (
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
+                        Came into
+                      </span>
+                      <select name="fromMoneyAccountId" defaultValue="" className={`${INPUT} w-44`}>
+                        <option value="">Choose an account…</option>
+                        {v.fromAccounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
+                      Note (optional)
+                    </span>
+                    <input name="reason" className={`${INPUT} w-48`} />
+                  </label>
+                  <button
+                    type="submit"
+                    name="action"
+                    value="recognise_income"
+                    className="rounded bg-amber-700 px-3 py-2 text-xs font-medium text-white hover:bg-amber-600"
+                  >
+                    Recognise as other income (7350)
+                  </button>
+                </>
               )}
             </form>
           ))}
