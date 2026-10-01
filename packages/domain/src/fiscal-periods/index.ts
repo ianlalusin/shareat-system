@@ -16,6 +16,8 @@
 import { fiscalPeriodsRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { closeReadiness, type Finding } from '../findings';
+import { refuse } from '../shared/refusal';
+import { classifyHoles } from './holes';
 
 export interface ClosePeriodInput {
   /** `'YYYY-MM'` — the same string `listFindings`/`closeReadiness`/`/findings`'s period selector
@@ -70,6 +72,38 @@ function pluralize(n: number, singular: string, plural: string): string {
 }
 
 /**
+ * T-368 S1 (DEF-424) — "periods close in order," shared by `closePeriod` and `closeYear` (same
+ * reasoning as `closeBlockers` above, R1.5: one gate, not two sentences that can drift). `fnName`
+ * only varies the raw diagnostic's prefix (each caller's own convention); `cannotCloseWhat` is the
+ * period string or the year, exactly as each caller's OWN existing sentences already name it.
+ *
+ * `firstCoverageGapBefore` finds the earliest uncovered range before `beforeDate`; the piece is
+ * then classified (`classifyHoles`, through the gap's own end) to decide which remedy to name —
+ * B/C (inside closed books) points at the admin fill action, A/D (open books) points at the monthly
+ * seed job, since neither remedy applies to the other's kind of hole.
+ */
+export async function refuseOnMissingEarlierPeriod(
+  tx: Tx,
+  orgId: string,
+  beforeDate: string,
+  fnName: string,
+  cannotCloseWhat: string,
+): Promise<void> {
+  const gap = await fiscalPeriodsRepo.firstCoverageGapBefore(tx, orgId, beforeDate);
+  if (!gap) return;
+  const { pieces } = await classifyHoles(tx, orgId, gap.endsOn);
+  const piece = pieces.find((p) => p.startsOn >= gap.startsOn && p.endsOn <= gap.endsOn);
+  const insideClosedBooks = piece ? piece.class === 'B' || piece.class === 'C' : false;
+  const trailer = insideClosedBooks
+    ? ' An administrator can create it with "Create the missing month" on the findings screen.'
+    : ' The monthly fiscal-period job creates missing months in open books.';
+  throw refuse(
+    `${fnName}: ${cannotCloseWhat} cannot close — ${gap.startsOn}..${gap.endsOn} has no fiscal period. Periods close in order.`,
+    `${gap.startsOn} to ${gap.endsOn} is missing from the books. Periods close in order, so ${cannotCloseWhat} cannot close until it exists.${trailer}`,
+  );
+}
+
+/**
  * Closes `input.period` for `actor.orgId`: `status` `open` -> `closed`, `closed_at`/`closed_by`
  * both written. Throws, never returns a false-ish result, on any gate failing — see this module's
  * header for why every gate lives here rather than in the caller.
@@ -80,6 +114,7 @@ function pluralize(n: number, singular: string, plural: string): string {
  *   3. `closeReadiness` — the SAME hard findings `/findings` already shows, re-run here so the
  *      screen's verdict is never trusted, only reproduced.
  *   4. No earlier period in the org still open — periods close in order.
+ *   5. T-368 S1 (DEF-424) — no missing month in the org's history before this one either.
  * Then, and only then, the write — one statement, `status`/`closed_at`/`closed_by` together, so
  * two admins racing to close the same period cannot produce two closes with different `closed_by`.
  */
@@ -117,6 +152,13 @@ export async function closePeriod(
       `closePeriod: an earlier period for this organisation is still open. Periods close in order.`,
     );
   }
+
+  // ⭐ T-368 S1 (DEF-424) — `earlierOpen` above only catches an EARLIER period that EXISTS and is
+  // still open; a month with NO period at all is invisible to that check. `closeBlockers` is not
+  // the place for this: `createMissingClosedPeriod` (`./holes.ts`) reuses `closeBlockers` to fill
+  // holes in ANY order, and folding this check in there would stop it filling a later hole while an
+  // earlier, unrelated one still exists (S1's own P5).
+  await refuseOnMissingEarlierPeriod(tx, actor.orgId, startsOn, 'closePeriod', input.period);
 
   const closed = await fiscalPeriodsRepo.closePeriod(tx, actor.orgId, input.period, actor.personId);
   if (!closed) {

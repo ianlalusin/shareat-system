@@ -1093,16 +1093,6 @@ async function runFiscalPeriodSeedForOrg(
       const through = monthEndFromLabel(addMonths(mLabel, 11));
       const { pieces } = await classifyHoles(tx, org.id, through);
 
-      // The ordinary 12-month forward window, always run — its own per-month `ON CONFLICT DO
-      // NOTHING` fills any class-A hole that happens to fall inside it (H9's shape) exactly as it
-      // always did; a fully-covered org simply skips all twelve.
-      const { periodsInserted: windowInserted, periodsSkipped: windowSkipped } =
-        await fiscalPeriodsRepo.seedCalendarMonths(tx, org.id, {
-          startYear: m.startYear,
-          startMonth: m.startMonth,
-          months: 12,
-        });
-
       interface ARun {
         startsOn: string;
         endsOn: string;
@@ -1127,6 +1117,31 @@ async function runFiscalPeriodSeedForOrg(
           aRuns.push(current);
         }
       }
+
+      // ⭐ T-368 S1 (DEF-433) — the 12-month forward window is no longer an unconditional
+      // `seedCalendarMonths(M, 12)`. THAT call is the defect: it opened every month M..M+11
+      // regardless of class, so a class-B/C piece anywhere in the window — missing, but BEHIND a
+      // later closed period further out — was inserted as `open` right alongside it, and 0160's
+      // order-guard trigger then raised on the whole multi-row INSERT, aborting the transaction
+      // before the B/C failure lines below were ever computed. Only the WHOLE class-A pieces of
+      // each run that fall AT OR AFTER M are opened here, grouped into contiguous runs exactly like
+      // the elapsed loop just below; a B/C/D piece is never written, only reported.
+      let windowInserted = 0;
+      for (const r of aRuns) {
+        const forward = r.pieces.filter((p) => p.yearMonth >= mLabel);
+        if (forward.length === 0) continue;
+        const [y, mo] = forward[0]!.yearMonth.split('-').map(Number) as [number, number];
+        const { periodsInserted } = await fiscalPeriodsRepo.seedCalendarMonths(tx, org.id, {
+          startYear: y,
+          startMonth: mo,
+          months: forward.length,
+        });
+        windowInserted += periodsInserted;
+      }
+      // ⭐ Arithmetic, not the repo's own skip count: "skipped" now covers BOTH a month that already
+      // existed and a month this run deliberately never attempted (B/C/D) — the window is always
+      // exactly 12 months, so whatever was not freshly opened was skipped, for either reason.
+      const windowSkipped = 12 - windowInserted;
 
       const failures: SchedulerFailure[] = [];
       let backfilled = 0;

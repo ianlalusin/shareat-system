@@ -1,6 +1,6 @@
 # T-368: Periods and depreciation — DEF-424, 426, 433, 434, 435, 441, 442, 436
 
-**Status:** **S1 reds written (on `wip/2026-09-30-reds`; 5 TS errors = expected red); S0 DONE 2026-10-01 (migration 0174; prod prechecks in docs/ops before the push)** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; its eight CHANGES folded in). Written 2026-09-30 by the Opus planner for the money-defect push
+**Status:** **S1 reds written (on `wip/2026-09-30-reds`; 5 TS errors = expected red); S1 DONE 2026-10-01 (domain: closePeriod/closeYear refuse a missing earlier month; seed job opens class-A only; screen test pending); S0 DONE 2026-10-01 (migration 0174; prod prechecks in docs/ops before the push)** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; its eight CHANGES folded in). Written 2026-09-30 by the Opus planner for the money-defect push
 (Ian, 2026-09-30: *"close all open money defects in v2"*). Census: `docs/plans/money-defects-2026-09-30.md`, batch C.
 **Model:** Sonnet for every slice, tester first, then builder. Any spec amendment is written in plan mode (Opus).
 **Line numbers** were checked at HEAD `3ed900f`.
@@ -124,6 +124,8 @@ one-day `when` grid, `migration-journal.test.ts`). No new table, so there is no 
 **TESTER:** `packages/db/tests/integration/t368-migration.test.ts`.
 
 ### S1 — periods in the domain (DEF-424, 433)
+- ✎ **Erratum (orchestrator, 2026-10-01, builder + auditor JOB 19):** `closeYear`'s gap check is scoped to the **latest CLOSED period it will lock** (`latestClosedPeriodStartsOnInYear`), not "against next January 1". `lockYearPeriods` locks only existing closed rows, so that row is the binding one — exactly 0174's per-row trigger predicate; "next January 1" would be stricter than the DB and breaks t344 H11/H11b/H13b (partial-year locks by design).
+- **Follow-ups (low, not blocking S1):** (a) the seed job's `windowSkipped` conflates "already present" with "not opened" (B/C/D) — split the count or rename; (b) `refuseOnMissingEarlierPeriod` picks the first piece's remedy, so a gap spanning the close frontier names one remedy where it needs both (admin fill + seed job) — name both when pieces disagree. Caveat: the selective window equals the old unconditional seed only while `seedCalendarMonths` inserts whole months.
 - **`repo/fiscal-periods.ts`:** add `firstCoverageGapBefore(tx, orgId, beforeDate): { startsOn, endsOn } | null`.
   It returns the earliest uncovered range between the org's first period and `beforeDate - 1`, and it reuses
   `coverageHoles`' walk. Holes before the first period are not holes.

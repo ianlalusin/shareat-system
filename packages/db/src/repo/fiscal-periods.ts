@@ -206,6 +206,36 @@ export async function hasEarlierOpenPeriodBefore(tx: Tx, orgId: string, beforeDa
 }
 
 /**
+ * T-368 S1 (DEF-424) — the latest `starts_on` among `year`'s currently-`closed` periods, or `null`
+ * if none. `closeYear`'s own gap check (`fiscal-periods/index.ts`) uses this as the `beforeDate` for
+ * `firstCoverageGapBefore`, mirroring `lockYearPeriods` right below: that function only ever
+ * transitions a `closed` period to `locked`, never a month that does not exist, so the gap check
+ * must be scoped the SAME way — against the latest row `lockYearPeriods` is actually about to touch,
+ * never against `year + 1`'s January 1 regardless of how much of the year is still missing. A year
+ * can be (and ordinarily is) closed before every one of its months physically exists as a row —
+ * H11's own fixture (`t344-fiscal-period-holes.test.ts`) locks Jan-May while Jun-Dec are still
+ * missing outright, and the missing months are reported as class B findings only AFTER the year's
+ * `closed` status makes them "inside closed books" (`classifyHoles`'s `yearClosed` branch) — they
+ * are never required to exist before the close itself.
+ */
+export async function latestClosedPeriodStartsOnInYear(tx: Tx, orgId: string, year: number): Promise<string | null> {
+  const [row] = await tx
+    .select({ startsOn: fiscalPeriods.startsOn })
+    .from(fiscalPeriods)
+    .where(
+      and(
+        eq(fiscalPeriods.orgId, orgId),
+        gte(fiscalPeriods.startsOn, `${year}-01-01`),
+        lte(fiscalPeriods.endsOn, `${year}-12-31`),
+        eq(fiscalPeriods.status, 'closed'),
+      ),
+    )
+    .orderBy(desc(fiscalPeriods.startsOn))
+    .limit(1);
+  return row?.startsOn ?? null;
+}
+
+/**
  * Flips every period of `year` (Jan 1 .. Dec 31) currently `closed` to `locked`, in one statement.
  * T-274, ADR-006 §7.5: *"`closed` -> `locked`. Automatic once the following year's close posts
  * successfully."* Called by `closeYear` in the SAME transaction that posts the closing entry, so a
@@ -301,6 +331,29 @@ export async function coverageHoles(tx: Tx, orgId: string, through: string): Pro
   }
 
   return { periods, holes, closeFrontierStartsOn };
+}
+
+/**
+ * T-368 S1 (DEF-424) — `closePeriod`/`closeYear`'s own gate: the earliest uncovered range between
+ * the org's first period and `beforeDate - 1`, inclusive. Reuses `coverageHoles`'s walk (same
+ * SELECT, same hole math) rather than a second query.
+ *
+ * ⚠️ `coverageHoles(tx, orgId, through)`'s INTERIOR holes are computed purely from the existing
+ * rows, with no `through` bound of their own — only its TAIL hole is clipped to `through`. A gap
+ * between two periods that both exist LATER than `beforeDate` would therefore still appear in its
+ * raw list; filtered out here (`h.endsOn <= through`), since a gap after the month being closed is
+ * not "a missing EARLIER month." Holes before the org's first period are never produced by
+ * `coverageHoles` itself — its walk only opens a hole once it has seen a first row — so nothing
+ * extra is needed for that half of the contract ("holes before the first period are not holes").
+ */
+export async function firstCoverageGapBefore(
+  tx: Tx,
+  orgId: string,
+  beforeDate: string,
+): Promise<CoverageHole | null> {
+  const through = subtractOneDay(beforeDate);
+  const { holes } = await coverageHoles(tx, orgId, through);
+  return holes.find((h) => h.endsOn <= through) ?? null;
 }
 
 /**

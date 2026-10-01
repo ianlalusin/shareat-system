@@ -22,6 +22,7 @@ import { fiscalPeriodsRepo, reportsRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { add, compare, money, negate, subtract, ZERO } from '@shareat/core';
 import { postEntry, type PostEntryLine } from '../ledger/post-entry';
+import { refuseOnMissingEarlierPeriod } from './index';
 
 export interface CloseYearInput {
   orgId: string;
@@ -61,6 +62,21 @@ export async function closeYear(
       `closeYear: an earlier period for this organisation is still open. ` +
         `Every month of ${input.year} must be closed before the year itself can close.`,
     );
+  }
+
+  // ⭐ T-368 S1 (DEF-424) — same reasoning as `closePeriod`'s identical check: `earlierOpen` above
+  // only catches an earlier period that EXISTS and is still open, never a month missing outright.
+  //
+  // ⚠️ Scoped to the LATEST `closed` period in the year, never to `${year + 1}-01-01` outright
+  // (see `latestClosedPeriodStartsOnInYear`'s own comment) — `lockYearPeriods` below only ever
+  // transitions a period that is ALREADY `closed`; a year routinely closes with months still
+  // missing at its tail (H11's fixture: Jan-May close while Jun-Dec do not exist yet), and those
+  // missing months become class-B findings only once the year's `closed` status makes them "inside
+  // closed books," never a precondition for closing it. `null` means nothing in the year is closed
+  // yet — nothing to check against, and `lines.length === 0` below refuses separately in that case.
+  const latestClosedStartsOn = await fiscalPeriodsRepo.latestClosedPeriodStartsOnInYear(tx, input.orgId, input.year);
+  if (latestClosedStartsOn) {
+    await refuseOnMissingEarlierPeriod(tx, input.orgId, latestClosedStartsOn, 'closeYear', `${input.year}`);
   }
 
   // ⛔ `includeYearClose: false` is LOAD-BEARING, not the default relied on — see the SPEC. A prior

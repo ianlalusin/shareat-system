@@ -370,11 +370,18 @@ describe('F8 — the action never fills class A (open books) or class D (part-mo
     const f = await rolesFixture('f8');
     await insertMonths(f.orgId, 2026, 1, 2026, 5);
     await insertMonths(f.orgId, 2026, 9, 2027, 7);
-    await insertPeriod(f.orgId, '2027-08-01', '2027-08-15');
-
     await expect(create(f.admin, { startsOn: '2026-07-01', endsOn: '2026-07-31', reason: 'x' })).rejects.toThrow(
       /not inside closed books/,
     );
+    // 0174: an open period must be a whole month, so the part-month piece is closed; closed-after-open
+    // is legacy state (R1.2), built under replica as the cutover ETL does. Only this raw insert.
+    await sql.begin(async (tx) => {
+      await tx`set local session_replication_role = 'replica'`;
+      await tx`
+        insert into fiscal_periods (org_id, starts_on, ends_on, status)
+        values (${f.orgId}, '2027-08-01', '2027-08-15', 'closed')`;
+    });
+
     await expect(create(f.admin, { startsOn: '2027-08-16', endsOn: '2027-08-31', reason: 'x' })).rejects.toThrow(
       /not inside closed books/,
     );

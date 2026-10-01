@@ -272,7 +272,14 @@ describe('H6 — a part-month hole in open books (class D) is reported, never fi
   it('2026-09..2027-07 open + 2027-08-01..15 open: 2027-08-16..08-31 is reported', async () => {
     const { orgId } = await bareOrg('h6');
     await insertMonths(orgId, 2026, 9, 2027, 7);
-    await insertPeriod(orgId, '2027-08-01', '2027-08-15');
+    // 0174: an open period must be a whole month, so the part-month piece is closed; closed-after-open
+    // is legacy state (R1.2), built under replica as the cutover ETL does. Only this raw insert.
+    await sql.begin(async (tx) => {
+      await tx`set local session_replication_role = 'replica'`;
+      await tx`
+        insert into fiscal_periods (org_id, starts_on, ends_on, status)
+        values (${orgId}, '2027-08-01', '2027-08-15', 'closed')`;
+    });
 
     await runFiscalPeriodSeed({ orgId, nowMs: NOW });
 
@@ -475,7 +482,7 @@ describe('H12 — R1.2: the order-guard trigger refuses an open row that starts 
 });
 
 describe('H13 — R1.2 race: a concurrent close is not raced past by the seed job', () => {
-  it("two connections: A closes 2026-07 and holds; B's June insert is refused once A commits", async () => {
+  it("0174 (DEF-424) made the original close-vs-seed race unreachable; this pins the seed job's response to a legacy hole behind closed books", async () => {
     const { orgId, personId } = await bareOrg('h13');
     const who = actor(orgId, personId);
     // Reshaped post-0160 (orchestrator CHANGES, 2026-09-25): Jan-May are closed FIRST, through the
@@ -503,6 +510,9 @@ describe('H13 — R1.2 race: a concurrent close is not raced past by the seed jo
     });
 
     const aPromise = sql.begin(async (tx) => {
+      // 0174's gap guard refuses closing July over the missing June; legacy state (a hole behind a
+      // closed month) is built under replica, as the cutover ETL does. Only this raw statement.
+      await tx`set local session_replication_role = 'replica'`;
       await tx`
         update fiscal_periods set status = 'closed', closed_at = now(), closed_by = ${personId}
         where org_id = ${orgId} and starts_on = '2026-07-01'`;
@@ -511,15 +521,17 @@ describe('H13 — R1.2 race: a concurrent close is not raced past by the seed jo
     });
 
     await withTimeout(ready, 5000, 'connection A to signal it has closed July and is holding');
-    const bPromise = runFiscalPeriodSeed({ orgId, nowMs: NOW });
-    // Give B's insert time to reach Postgres and start waiting on the advisory lock A holds.
-    await new Promise((r) => setTimeout(r, 200));
+    // Under replica A's close takes no advisory lock (0160's guard is silent), so B cannot be made to
+    // wait on it: A commits first, and B then meets the committed legacy state (July closed, June missing).
     releaseA();
     await aPromise;
-    await bPromise;
+    await runFiscalPeriodSeed({ orgId, nowMs: NOW });
 
     const run = await latestRun(orgId);
-    expect(run.error).toMatch(/an open period cannot start on 2026-06-01/);
+    // 0174 (DEF-424): the close-vs-seed race is gone; legacy hole behind closed July is reported, not filled.
+    expect(run.error).toBeNull();
+    expect(run.failures![0]!.reason).toMatch(/missing inside closed books/);
+    expect(run.failures![0]!.reason).toMatch(/2026-06/);
     const periods = await periodsFor(orgId);
     expect(periods.some((p) => p.starts_on === '2026-06-01')).toBe(false);
   });

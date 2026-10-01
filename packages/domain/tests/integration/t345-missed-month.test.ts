@@ -93,6 +93,15 @@ function monthEnd(year: number, month1based: number): string {
   return new Date(Date.UTC(year, month1based, 0)).toISOString().slice(0, 10);
 }
 
+// legacy state built under replica role, as the cutover ETL would (0174's gap guard is origin-mode)
+async function closeAsLegacy(orgId: string, adminId: string, starts: string[]): Promise<void> {
+  await sql.begin(async (tx) => {
+    await tx`set local session_replication_role = 'replica'`;
+    await tx`update fiscal_periods set status = 'closed', closed_at = now(), closed_by = ${adminId}
+      where org_id = ${orgId} and starts_on = any(${starts}::date[])`;
+  });
+}
+
 async function insertPeriod(
   orgId: string,
   startsOn: string,
@@ -188,9 +197,7 @@ async function buildHoleMonths(f: OrgFixture, posters: ((period: string) => Prom
   // 0160) refuses an OPEN period starting before a period that is about to become closed, and
   // April (still open at this point) sits chronologically before May.
   await sql`delete from fiscal_periods where org_id = ${f.orgId} and starts_on = '2026-04-01'`;
-  await sql`
-    update fiscal_periods set status = 'closed', closed_at = now(), closed_by = ${f.adminId}
-    where org_id = ${f.orgId} and starts_on in ('2026-01-01', '2026-02-01', '2026-03-01', '2026-05-01')`;
+  await closeAsLegacy(f.orgId, f.adminId, ['2026-01-01', '2026-02-01', '2026-03-01', '2026-05-01']);
   const today = await manilaTodayRaw();
   const end = addMonths(today.slice(0, 7), 1);
   await insertMonths(f.orgId, 2026, 6, end.year, end.month);
@@ -868,8 +875,7 @@ describe('A21 — a reversed middle month, caught up last, still finishes the it
 
     // Close Jan-Mar together — the order-guard trigger (R1.2) refuses an open period starting
     // before one that is closing, and Jan/Feb are chronologically before March.
-    await sql`update fiscal_periods set status = 'closed', closed_at = now(), closed_by = ${f.adminId}
-      where org_id = ${f.orgId} and starts_on in ('2026-01-01', '2026-02-01', '2026-03-01')`;
+    await closeAsLegacy(f.orgId, f.adminId, ['2026-01-01', '2026-02-01', '2026-03-01']);
 
     await book(f.admin, { schedule: 'amortisation', subjectId: itemId, belongsToPeriod: '2026-03', reason: 'catch up the reversed month' });
 
@@ -986,8 +992,7 @@ describe('D1 — missed_month_adjustments: shape, guard trigger, immutability', 
     // before one that is closing — closing March alone while Jan/Feb stayed open would trip it).
     // The entry above posted into March while it was still open (raw SQL bypasses postEntry's own
     // period-open check, but not migration 0003's own posting-time trigger).
-    await sql`update fiscal_periods set status = 'closed', closed_at = now(), closed_by = ${f.adminId}
-      where org_id = ${f.orgId} and starts_on in ('2026-01-01', '2026-02-01', '2026-03-01')`;
+    await closeAsLegacy(f.orgId, f.adminId, ['2026-01-01', '2026-02-01', '2026-03-01']);
     await expectGuardRefusal(
       sql`insert into missed_month_adjustments (org_id, schedule, fixed_asset_id, belongs_to_period, journal_entry_id, reason, booked_by)
           values (${f.orgId}, 'depreciation', ${assetId}, '2026-04', ${entryId}, 'fixture', ${f.adminId})`,
@@ -1138,7 +1143,7 @@ describe('D1 — missed_month_adjustments: shape, guard trigger, immutability', 
     ).rejects.toMatchObject({ code: '23514' });
   });
 
-  it('⛔ duplicate (asset, P) — 23505', async () => {
+  it('⛔ duplicate (asset, P) — refused by check 7 while the first link entry is posted', async () => {
     const { f, assetId } = await d1Fixture('d1-duplicate');
     const first = await postRawEntry({
       orgId: f.orgId,
@@ -1170,7 +1175,7 @@ describe('D1 — missed_month_adjustments: shape, guard trigger, immutability', 
     await expect(
       sql`insert into missed_month_adjustments (org_id, schedule, fixed_asset_id, belongs_to_period, journal_entry_id, reason, booked_by)
           values (${f.orgId}, 'depreciation', ${assetId}, '2026-04', ${second}, 'fixture', ${f.adminId})`,
-    ).rejects.toMatchObject({ code: '23505' });
+    ).rejects.toMatchObject({ code: 'P0001', message: expect.stringMatching(/already has a posted link for/) });
   });
 
   it('⛔ any UPDATE — "missed_month_adjustments: rows are immutable"', async () => {

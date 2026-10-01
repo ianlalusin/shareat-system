@@ -162,7 +162,7 @@ describe('T1 — runFiscalPeriodSeed', () => {
 
   it('case 3 — legacy wide period: every candidate month conflicts, detail names where coverage ends', async () => {
     const { orgId } = await bareOrg('c3');
-    await insertPeriod(orgId, '2020-01-01', '2035-12-31');
+    await insertPeriod(orgId, '2020-01-01', '2035-12-31', { status: 'closed' }); // 0174: an open period must be a whole month; the legacy wide period is closed
 
     await runFiscalPeriodSeed({ orgId, nowMs: NOW });
 
