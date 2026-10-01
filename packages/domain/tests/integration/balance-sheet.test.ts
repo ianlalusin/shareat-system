@@ -54,7 +54,8 @@ beforeAll(async () => {
   await seedChartOfAccounts(sql, orgId);
   await sql`
     insert into fiscal_periods (org_id, starts_on, ends_on, status)
-    values (${orgId}, '2026-01-01', '2026-12-31', 'open')
+    values (${orgId}, '2026-03-01', '2026-03-31', 'open'),
+           (${orgId}, '2026-04-01', '2026-04-30', 'open')
   `;
 });
 

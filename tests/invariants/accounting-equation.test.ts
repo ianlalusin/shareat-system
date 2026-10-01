@@ -110,7 +110,8 @@ async function freshOrg(): Promise<string> {
   await seedChartOfAccounts(sql, orgId);
   await sql`
     insert into fiscal_periods (org_id, starts_on, ends_on, status)
-    values (${orgId}, '2020-01-01', '2030-12-31', 'open')
+    select ${orgId}, m::date, (m + interval '1 month - 1 day')::date, 'open'
+    from generate_series('2020-01-01'::date, '2030-12-01'::date, interval '1 month') m
   `;
   return orgId;
 }

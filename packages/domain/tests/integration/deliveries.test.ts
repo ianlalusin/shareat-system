@@ -126,7 +126,7 @@ async function fixture(): Promise<Fixture> {
     returning id`;
 
   await seedChartOfAccounts(sql, orgId);
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2020-01-01', '2035-12-31', 'open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgId}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2020-01-01'::date, '2035-12-01'::date, interval '1 month') m`;
 
   const [staffEmployment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)

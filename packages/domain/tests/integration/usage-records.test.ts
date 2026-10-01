@@ -175,7 +175,7 @@ beforeEach(async () => {
   // that reversal on the REAL business date (`toBusinessDate()`, today), not the record's fixed
   // `usedOn`. A single-month window sized to match `usedOn` (as the engine's own fixture uses)
   // would pass or fail depending on which real month the suite happens to run in.
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgA},'2026-01-01','2026-12-31','open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgA}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') m`;
 });
 
 afterAll(async () => {

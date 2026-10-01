@@ -100,7 +100,7 @@ async function fixture(): Promise<Fixture> {
     insert into stored_files (org_id, storage_path, content_type, byte_size, checksum, purpose, uploaded_by)
     values (${orgId}, ${'orgs/' + orgId + '/p.jpg'}, 'image/jpeg', 10, 'x', 'receipt_photo', ${adminId}) returning id`;
 
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2020-01-01', '2035-12-31', 'open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgId}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2025-01-01'::date, '2026-12-01'::date, '1 month') d`;
   await seedChartOfAccounts(sql, orgId);
 
   return {

@@ -182,7 +182,7 @@ describe('T-327 test 3 — the cashier reads a sentence, on two different constr
   it("⛔ path 1 — postEntry, debit: 'NaN' → journal_lines.debit (a ledger primitive no FormData reaches)", async () => {
     const f = await fixture();
     await seedChartOfAccounts(sql, f.orgId);
-    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${f.orgId}, '2026-01-01', '2026-12-31', 'open')`;
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${f.orgId}, m::date, (m + interval '1 month - 1 day')::date, 'open' from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') m`;
 
     const err = await provoke(() =>
       asOrg(f.orgId, (tx) =>
@@ -249,7 +249,7 @@ describe('T-327 test 3 — the cashier reads a sentence, on two different constr
     );
     const list = await asOrg(f.orgId, (tx) => createPriceList(tx, f.admin, { name: `List ${uid('l')}` }));
     await seedChartOfAccounts(sql, f.orgId);
-    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${f.orgId}, '2026-01-01', '2026-12-31', 'open')`;
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${f.orgId}, m::date, (m + interval '1 month - 1 day')::date, 'open' from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') m`;
 
     const err1 = await provoke(() =>
       asOrg(f.orgId, (tx) =>

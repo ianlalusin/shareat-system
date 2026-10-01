@@ -120,7 +120,7 @@ async function fixture(): Promise<Fixture> {
 
   await seedChartOfAccounts(sql, orgId);
   await seedExpenseCategories(sql, orgId);
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2020-01-01', '2035-12-31', 'open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgId}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2025-01-01'::date, '2026-12-01'::date, '1 month') d`;
 
   const [money] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'cashier' and is_foundation limit 1`;
@@ -721,7 +721,7 @@ describe('T-231 / DEF-210 — a supplier return is stamped with the actor’s or
     await seedChartOfAccounts(sql, org!.id);
     await seedExpenseCategories(sql, org!.id);
     await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
-              values (${org!.id}, '2020-01-01', '2035-12-31', 'open')`;
+              select ${org!.id}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2025-01-01'::date, '2026-12-01'::date, '1 month') d`;
     return org!.id;
   }
 

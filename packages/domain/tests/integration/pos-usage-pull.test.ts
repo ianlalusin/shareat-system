@@ -156,7 +156,7 @@ beforeEach(async () => {
   await sql`insert into production_recipe_lines (recipe_id, item_id, quantity, unit) values (${recipeId}, ${itemCheese}, 0.2, 'g')`;
   await sql`insert into production_recipe_lines (recipe_id, item_id, quantity, unit) values (${recipeId}, ${itemSauce}, 1, 'box')`;
 
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgA},'2026-01-01','2026-12-31','open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgA}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') m`;
   await seedChartOfAccounts(sql, orgA);
 
   const [staffEmployment] = await sql<{ id: string }[]>`

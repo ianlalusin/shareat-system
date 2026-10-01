@@ -110,7 +110,8 @@ async function fixture(hint: string): Promise<Fixture> {
   await seedChartOfAccounts(sql, orgId);
   await sql`
     insert into fiscal_periods (org_id, starts_on, ends_on, status)
-    values (${orgId}, ${daysAgo(60)}, ${daysAgo(-60)}, 'open')`;
+    select ${orgId}, m::date, (m + interval '1 month - 1 day')::date, 'open'
+      from generate_series(date_trunc('month', ${daysAgo(60)}::date), date_trunc('month', ${daysAgo(-60)}::date), interval '1 month') m`;
   const [store] = await sql<{ id: string }[]>`
     insert into stores (org_id, code, name) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}) returning id`;
   const storeId = store!.id;

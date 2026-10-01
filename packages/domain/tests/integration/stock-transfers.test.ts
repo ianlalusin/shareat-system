@@ -111,7 +111,7 @@ async function fixture(): Promise<Fixture> {
     insert into items (org_id, code, name, kind, base_unit, created_by)
     values (${orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${staff!.id}) returning id`;
 
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2020-01-01', '2035-12-31', 'open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgId}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2020-01-01'::date, '2035-12-01'::date, interval '1 month') m`;
 
   const [staffEmployment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
@@ -445,7 +445,7 @@ describe('T-231 / DEF-210 — a stock transfer is stamped with the actor’s org
     const [victim] = await sql<{ id: string }[]>`
       insert into organizations (name, code) values (${'Victim ' + uid('v')}, ${uid('vic')}) returning id`;
     await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
-              values (${victim!.id}, '2020-01-01', '2035-12-31', 'open')`;
+              select ${victim!.id}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2020-01-01'::date, '2035-12-01'::date, interval '1 month') m`;
 
     const res = await systemTransaction((tx) =>
       transferNow(tx, {

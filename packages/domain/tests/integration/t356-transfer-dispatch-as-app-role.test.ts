@@ -88,7 +88,7 @@ async function fixture(): Promise<Fixture> {
     insert into items (org_id, code, name, kind, base_unit, created_by)
     values (${orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${staff!.id}) returning id`;
 
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2020-01-01', '2035-12-31', 'open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgId}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2025-01-01'::date, '2026-12-01'::date, '1 month') d`;
 
   const [staffEmployment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)

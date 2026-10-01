@@ -75,7 +75,8 @@ const postedEntryIdByFixtureId = new Map<string, string>();
 async function insertPeriod(startsOn: string, endsOn: string): Promise<void> {
   await sql`
     insert into fiscal_periods (org_id, starts_on, ends_on, status)
-    values (${orgId}, ${startsOn}, ${endsOn}, 'open')
+    select ${orgId}, m::date, (m + interval '1 month - 1 day')::date, 'open'
+    from generate_series(${startsOn}::date, ${endsOn}::date, interval '1 month') m
   `;
 }
 

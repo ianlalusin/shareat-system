@@ -87,7 +87,7 @@ describe('seedCalendarMonths — the partial-overlap trap the orchestrator prove
     // The exact shape several dev/test fixtures already carry (task report).
     await sql`
       insert into fiscal_periods (org_id, starts_on, ends_on, status)
-      values (${orgId}, '2020-01-01', '2035-12-31', 'open')`;
+      values (${orgId}, '2020-01-01', '2035-12-31', 'closed')`;
 
     const window = fiscalPeriodSeedWindow();
     const result = await asOrg(orgId, (tx) => fiscalPeriodsRepo.seedCalendarMonths(tx, orgId, window));
@@ -116,6 +116,7 @@ describe('latestPeriodEnd', () => {
 describe('fiscalPeriodRunwayLow — the runway warning, soft, never blocking a close', () => {
   const daysFromNow = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
   const PERIOD = new Date().toISOString().slice(0, 7);
+  const dayBefore = (d: string) => new Date(Date.parse(d) - 86_400_000).toISOString().slice(0, 10);
 
   it('⛔ fires SOFT when an org has zero fiscal periods at all', async () => {
     const orgId = await bareOrg('zero');
@@ -151,22 +152,31 @@ describe('fiscalPeriodRunwayLow — the runway warning, soft, never blocking a c
 
   it('⛔ fires SOFT when coverage runs out within the 60-day window', async () => {
     const orgId = await bareOrg('low');
+    // v1 fixture was one open period ending in 30 days; an open period must be a whole month, so
+    // the long history is 'closed' and the open one is the current calendar month.
+    const monthStart = PERIOD + '-01';
+    const monthEnd = new Date(Date.UTC(+PERIOD.slice(0, 4), +PERIOD.slice(5, 7), 0)).toISOString().slice(0, 10);
     await sql`
       insert into fiscal_periods (org_id, starts_on, ends_on, status)
-      values (${orgId}, ${daysFromNow(-400)}, ${daysFromNow(30)}, 'open')`;
+      values (${orgId}, ${daysFromNow(-400)}, ${dayBefore(monthStart)}, 'closed'),
+             (${orgId}, ${monthStart}, ${monthEnd}, 'open')`;
 
     const feed = await asOrg(orgId, (tx) => listFindings(tx, orgId, { period: PERIOD }));
     const finding = feed.findings.find((x) => x.kind === 'fiscalPeriodRunwayLow');
     expect(finding).toBeDefined();
     expect(finding!.severity).toBe('soft');
-    expect(finding!.detail).toMatch(daysFromNow(30));
+    expect(finding!.detail).toMatch(monthEnd);
   });
 
   it('stays quiet when coverage comfortably exceeds the 60-day window', async () => {
     const orgId = await bareOrg('healthy');
+    const farMonth = daysFromNow(400).slice(0, 7);
+    const farStart = farMonth + '-01';
+    const farEnd = new Date(Date.UTC(+farMonth.slice(0, 4), +farMonth.slice(5, 7), 0)).toISOString().slice(0, 10);
     await sql`
       insert into fiscal_periods (org_id, starts_on, ends_on, status)
-      values (${orgId}, ${daysFromNow(-400)}, ${daysFromNow(400)}, 'open')`;
+      values (${orgId}, ${daysFromNow(-400)}, ${dayBefore(farStart)}, 'closed'),
+             (${orgId}, ${farStart}, ${farEnd}, 'open')`;
 
     const feed = await asOrg(orgId, (tx) => listFindings(tx, orgId, { period: PERIOD }));
     expect(feed.findings.some((x) => x.kind === 'fiscalPeriodRunwayLow')).toBe(false);

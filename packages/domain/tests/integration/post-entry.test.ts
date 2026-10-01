@@ -541,7 +541,7 @@ describe('invariant 16 — an ETL-style historical post succeeds', () => {
     await seedChartOfAccounts(sql, orgId);
     // A wide-open historical period, and an entryDate near its start — the ETL replays
     // history into periods that were open at the time, not "today".
-    await insertPeriod(orgId, '2020-01-01', '2020-12-31', 'open');
+    await insertPeriod(orgId, '2020-03-01', '2020-03-31', 'open');
 
     const result = await postEntryAsOrg({
       orgId,
