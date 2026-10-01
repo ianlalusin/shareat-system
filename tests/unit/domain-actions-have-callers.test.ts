@@ -124,9 +124,6 @@ const EXEMPT: Record<string, string> = {
   findPostedSettlementForChannelDay:
     'UNWIRED — DEF-198. `/channel-settlements` previews and records; nothing re-reads a POSTED ' +
     'settlement, so a settled channel-day cannot be reopened for inspection.',
-  readFileUrl:
-    'UNWIRED — DEF-198. The ONLY way to view an uploaded receipt photo: a short-lived signed URL ' +
-    'minted per request. Nothing displays one, so evidence can be attached and never looked at.',
   capitalizeFromExpense:
     'UNWIRED — DEF-198. Superseded in practice by `capitalizeApprovedExpense`, which ' +
     '`approveExpense` calls. Either give it a caller or retire it; two entry points to one act is ' +

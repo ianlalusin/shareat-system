@@ -4,7 +4,7 @@
  * ⛔ **No public-URL column exists to read**, and none should. A read is brokered per request; see
  * `packages/domain/src/files`.
  */
-import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { storedFiles, type FilePurpose } from '../../schema/stored-files';
 import { recordGone } from './record-gone';
@@ -51,6 +51,16 @@ export async function getById(
     .where(and(eq(storedFiles.id, id), eq(storedFiles.orgId, orgId)))
     .limit(1);
   return row as StoredFileRow | undefined;
+}
+
+/** Several files of one org in a single read - for a screen that has to ask about each of a list's photos. */
+export async function getByIds(tx: Tx, orgId: string, ids: readonly string[]): Promise<StoredFileRow[]> {
+  if (ids.length === 0) return [];
+  const rows = await tx
+    .select()
+    .from(storedFiles)
+    .where(and(eq(storedFiles.orgId, orgId), inArray(storedFiles.id, [...ids])));
+  return rows as StoredFileRow[];
 }
 
 export async function linkFile(

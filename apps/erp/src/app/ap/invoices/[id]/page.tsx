@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { expensesRepo, apRepo } from '@shareat/db';
+import { canViewPhoto } from '../../../../lib/photo-link';
 import { peso } from '../../../../lib/format';
 import { requireSession } from '../../../../lib/session';
 import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction, voidPaymentAction } from '../../actions';
@@ -100,6 +101,8 @@ export default async function InvoiceDetailPage({
     }
     return ok;
   });
+  // The photo link is drawn only for someone who can actually open it (the same check the route makes).
+  const canViewReceipt = await canViewPhoto(actor, invoice.receiptFileId);
   const today = toBusinessDate();
   const billName = (b: { invoiceId: string; invoiceNo: string | null }) => b.invoiceNo ?? b.invoiceId.slice(0, 8);
 
@@ -158,7 +161,12 @@ return (
           <h2 className="mb-3 font-medium">Evidence</h2>
           {invoice.receiptFileId ? (
             <span className="text-green-700 dark:text-green-400">
-              photo attached &mdash; uploaded, not typed
+              photo attached &mdash; uploaded, not typed{' '}
+              {canViewReceipt && (
+                <a href={`/files/${invoice.receiptFileId}`} target="_blank" rel="noopener noreferrer" className={ACTION_LINK}>
+                  View photo
+                </a>
+              )}
             </span>
           ) : (
             <span className="text-amber-700 dark:text-amber-400">none &mdash; required to verify</span>

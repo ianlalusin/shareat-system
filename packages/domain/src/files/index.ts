@@ -17,9 +17,10 @@
  * **A rule you cannot get wrong beats a rule you have to get right.**
  */
 import { createHash } from 'node:crypto';
-import { authorize, type Actor } from '@shareat/auth';
-import { filesRepo, transaction, withSystemOrgPrincipal, type FilePurpose, type Tx } from '@shareat/db';
+import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { filesRepo, goneSentence, RefusalError, transaction, withSystemOrgPrincipal, type FilePurpose, type Tx } from '@shareat/db';
 import { stripImageMetadata } from '@shareat/core/exif';
+import { logger } from '@shareat/core/logger';
 import { resolveStorageDriver } from './driver';
 
 export * from './driver';
@@ -187,6 +188,69 @@ async function runUpload(tx: Tx, actor: Actor, input: UploadInput): Promise<Uplo
 }
 
 /**
+ * The ONE refusal that means "no such file for you". A class of its own so `/files/[fileId]` can turn
+ * exactly this - and nothing else - into its uniform 404: any other refusal is not "not available to
+ * you" and must not be disguised as it.
+ */
+export class FileNotFoundError extends RefusalError {
+  constructor(message: string) {
+    super(message, goneSentence('photo'));
+    this.name = 'FileNotFoundError';
+  }
+}
+
+/**
+ * THE capability check for opening a stored file: the capability that governs the file's PURPOSE, at the
+ * file's own store. One function, used by `readFileUrl` (which enforces it) and by `canReadFile` /
+ * `canReadFiles` (which only ask it, so a screen can hide a link that would 404) - a check copied into
+ * the second place is a check that drifts.
+ */
+async function assertCanRead(trx: Tx, actor: Actor, file: { purpose: FilePurpose; storeId: string | null }): Promise<void> {
+  await authorize(trx, actor, PURPOSE_CAPABILITY[file.purpose], { ...(file.storeId ? { storeId: file.storeId } : {}) });
+}
+
+/**
+ * Whether this actor may open this file, as a boolean, never minting a URL. The screens ask it before drawing
+ * a "View photo" link, so nobody is handed a control that can only 404. ⚠️ A presentation aid: `readFileUrl`
+ * is what enforces it. An UNEXPECTED fault hides the link (and logs its kind) rather than crashing the page.
+ */
+export async function canReadFile(tx: Tx, actor: Actor, fileId: string): Promise<boolean> {
+  return (await canReadFiles(tx, actor, [fileId])).has(fileId);
+}
+
+/**
+ * The subset of `fileIds` this actor may open - ONE read for the files, and one authorize per distinct
+ * (purpose capability, store) rather than per file. A fault (anything but "not allowed") hides the links
+ * and logs only its kind, never an id, path or URL.
+ */
+export async function canReadFiles(tx: Tx, actor: Actor, fileIds: readonly string[]): Promise<Set<string>> {
+  const allowed = new Set<string>();
+  try {
+    const files = await filesRepo.getByIds(tx, actor.orgId, [...new Set(fileIds)]);
+    const verdicts = new Map<string, boolean>();
+    for (const file of files) {
+      const key = `${PURPOSE_CAPABILITY[file.purpose]}|${file.storeId ?? ''}`;
+      let ok = verdicts.get(key);
+      if (ok === undefined) {
+        try {
+          await assertCanRead(tx, actor, file);
+          ok = true;
+        } catch (err) {
+          if (!(err instanceof AuthorizationError)) throw err;
+          ok = false;
+        }
+        verdicts.set(key, ok);
+      }
+      if (ok) allowed.add(file.id);
+    }
+  } catch (err) {
+    logger.error({ kind: 'fault', errorName: err instanceof Error ? err.name : typeof err }, 'files: could not check who may open a photo');
+    return new Set();
+  }
+  return allowed;
+}
+
+/**
  * A URL good for a few minutes, minted per request.
  *
  * ⛔ **Never stored and never logged.** A stored URL is a permanent unauthenticated grant, which is
@@ -202,11 +266,11 @@ export async function readFileUrl(
     // this row — reachable only under the actor's own org through RLS — is where it comes from.
     const file = await filesRepo.getById(trx, actor.orgId, input.fileId);
     if (!file) {
-      throw new Error(`readFileUrl: file ${input.fileId} does not exist in this org.`);
+      // A typed refusal, message unchanged: `/files/[fileId]` has to tell "no such file for you" (a 404)
+      // from an internal fault (a 500), and a bare Error cannot be told from either.
+      throw new FileNotFoundError(`readFileUrl: file ${input.fileId} does not exist in this org.`);
     }
-    await authorize(trx, actor, PURPOSE_CAPABILITY[file.purpose], {
-      ...(file.storeId ? { storeId: file.storeId } : {}),
-    });
+    await assertCanRead(trx, actor, file);
 
     const url = await resolveStorageDriver().signedUrl(
       file.storagePath,

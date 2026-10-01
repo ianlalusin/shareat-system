@@ -70,7 +70,6 @@ previewDrawingClose
 proxy
 purgeComplete
 rateFor
-readFileUrl
 realSourceTypesForSpecName
 recentRuns
 reconcileSupplier

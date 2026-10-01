@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
+import { canReadFiles } from '@shareat/domain';
 import { ACTION_LINK } from '@/components/action-link';
 import { requireSession } from '../../../lib/session';
 import {
@@ -107,6 +108,10 @@ export default async function CustomerDetailPage({
     storeId ? getPosition(orgId, customerId, storeId) : Promise.resolve('0.00'),
   ]);
 
+  // Photo links only for receipts this viewer can actually open (the same check the route makes).
+  const viewableReceipts = await withOrgPrincipal(orgId, (tx) =>
+    canReadFiles(tx, actor, collections.map((c) => c.receiptFileId).filter((x): x is string => !!x)),
+  );
   const now = today();
   const storeName = (id: string) => storeOptions.find((s) => s.storeId === id)?.storeName ?? '—';
 
@@ -433,6 +438,16 @@ export default async function CustomerDetailPage({
                     <td className="px-3 py-3 text-xs">
                       {c.moneyAccountName ?? '—'}
                       {c.referenceNo && <div className="text-neutral-400">{c.referenceNo}</div>}
+                      {c.receiptFileId && viewableReceipts.has(c.receiptFileId) && (
+                        <a
+                          href={`/files/${c.receiptFileId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`${ACTION_LINK} relative z-10`}
+                        >
+                          View photo
+                        </a>
+                      )}
                     </td>
                     {/* ⭐ WHAT it settled, not merely how much came in. A list of amounts cannot
                         answer the only question a disputed payment ever raises. */}

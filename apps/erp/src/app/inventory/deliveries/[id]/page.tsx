@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SHORTAGE_REASONS } from '@shareat/db/schema';
+import { canViewPhoto } from '../../../../lib/photo-link';
 import { requireSession } from '../../../../lib/session';
 import { peso } from '../../../../lib/format';
 import { receiveDeliveryAction } from '../actions';
 import { deliveryDetail } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Delivery — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -49,6 +51,7 @@ export default async function DeliveryPage({
   if (!detail) notFound();
   const { doc, locations } = detail;
 
+  const canViewProof = await canViewPhoto(actor, doc.proofFileId);
   const canReceive = doc.status === 'draft';
   const goods = doc.lines.reduce((n, l) => n + Number(l.orderedQuantity) * Number(l.unitCost), 0);
 
@@ -66,6 +69,11 @@ export default async function DeliveryPage({
           {doc.deliveredOn} · <strong>{STATUS_LABEL[doc.status] ?? doc.status}</strong>
           {doc.referenceNo && <> · ref {doc.referenceNo}</>}
         </PageDescription>
+        {doc.proofFileId && canViewProof && (
+          <a href={`/files/${doc.proofFileId}`} target="_blank" rel="noopener noreferrer" className={ACTION_LINK}>
+            View photo
+          </a>
+        )}
       </div>
 
       {sp.error && (
