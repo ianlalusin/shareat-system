@@ -66,7 +66,7 @@ vi.mock('@/components/money/MoneyLines', async () => {
 });
 
 import { randomUUID } from 'node:crypto';
-import { transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { transaction, APP_ROLE, goneSentence, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
   createSupplier,
@@ -432,7 +432,9 @@ describe('T-364 S1 — positive controls and order guards (green before and afte
     const e3 = await run('create', f.admin, await buildForm(f, { supplierId: f.termsSupplierId, invoiceId: termsInv, lines: [amountLine(f)] }));
     expect(e3.error).toMatch(/"1,5" is not a valid amount/);
     const e4 = await run('create', f.admin, await buildForm(f, { supplierId: '', invoiceId: randomUUID(), lines: [cashLine(f)] }));
-    expect(e4.error).toMatch(/does not exist/);
+    // R7 (DEF-508) retired the old `/does not exist/` text — the blank-supplier pre-lookup in
+    // actions.ts:168 now throws the same uniform goneSentence as the domain gate, id-free.
+    expect(e4.error).toBe(goneSentence('supplier invoice'));
   });
 
   it('E12 admin · record · float sentence, then a valid form posts and redirects to /expenses/<uuid>. Kills M4', async () => {
@@ -464,7 +466,27 @@ describe('T-364 S1 — positive controls and order guards (green before and afte
 
   // E15 — oracle pair for a holder at ANOTHER store. otherManager legitimately holds create_expense
   // at their own store, so the gate passes, and the invoice lookup (actions.ts) is org-scoped, not
-  // store-scoped: store B's invoice is reachable from store A. The gate of S1 does not close this;
-  // the fix belongs with DEF-508 (T-367). Marked todo per the spec so S1's gate stays honest.
-  it.todo('E15 otherManager · create at OWN store, supplier blank: real store-B invoice vs random uuid must be identical — DEF-508 (T-367)');
+  // store-scoped: store B's invoice is reachable from store A. T-364 S1's gate does not close this;
+  // the fix is T-367 S2's R7 (DEF-508), which does not exist yet — this asserts the TARGET (the
+  // oracle pair agrees) so the red names exactly what is still open, rather than a permanent todo.
+  it('E15 otherManager · create at OWN store, supplier blank: real store-B invoice vs random uuid must be identical — Mutant: no store check exists at all (HEAD), (a) actually saves against store B\'s invoice, red — DEF-508 (T-367)', async () => {
+    const { f, termsInv } = await world();
+    const before = await expenseCountForInvoice(termsInv);
+
+    const fdReal = await buildForm(f, { storeId: f.otherStoreId, namesStoreId: f.otherStoreId, supplierId: '', invoiceId: termsInv, lines: [{ method: 'cash', amount: '50.00', account: f.otherOfficeSafeId, request: '' }] });
+    const { error: errorReal } = await run('create', f.otherManager, fdReal);
+
+    const fdFake = await buildForm(f, { storeId: f.otherStoreId, namesStoreId: f.otherStoreId, supplierId: '', invoiceId: randomUUID(), lines: [{ method: 'cash', amount: '50.00', account: f.otherOfficeSafeId, request: '' }] });
+    const { error: errorFake } = await run('create', f.otherManager, fdFake);
+
+    expect(errorFake, 'the fake id must be refused as not-found').not.toBeNull();
+    expect(
+      errorReal,
+      `today: no store check exists (DEF-508) — the real store-B invoice id was NOT refused the same way as the fake one (got: ${errorReal ?? '(no error — it saved)'}, vs fake: ${errorFake})`,
+    ).toBe(errorFake);
+    expect(errorReal, 'must not name store B\'s terms supplier').not.toContain(f.termsSupplierName);
+
+    const after = await expenseCountForInvoice(termsInv);
+    expect(after, 'today: this DEF-508 gap actually writes an expense at store A against store B\'s invoice').toBe(before);
+  });
 });

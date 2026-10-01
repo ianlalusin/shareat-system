@@ -368,7 +368,10 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'expenses',
     mode: 'origin',
     kind: 'validator',
-    reason: 'A credit expense needs a verified supplier invoice (0043) — reads the invoice\'s CURRENT status.',
+    reason:
+      'A credit expense needs a verified supplier invoice (0043) — reads the invoice\'s CURRENT status. ' +
+      'Also locks the invoice row FOR NO KEY UPDATE (serialises recording and voiding) and refuses an ' +
+      'expense at a different store from its invoice (T-367, migration 0176).',
   },
   order_wastage_allocations_sum_100_trg: {
     table: 'order_wastage_allocations',

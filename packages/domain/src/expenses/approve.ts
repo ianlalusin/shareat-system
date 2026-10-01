@@ -47,12 +47,22 @@ export async function approveExpense(
 async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promise<ApproveExpenseResult> {
   // Org-scoped read before authorize() — see edit.ts's identical comment: the capability
   // is store-scoped and the store is a property of the resource itself.
-  const expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
+  let expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
   if (!expense) {
     throw gone(`approveExpense: expense ${expenseId} does not exist in org ${actor.orgId}`, 'expense');
   }
 
   await authorize(tx, actor, 'approve_expense', { storeId: expense.storeId });
+
+  // ⭐ T-367 S2 / R4 (DEF-396) — lock the invoice BEFORE re-reading the expense's own status. A
+  // concurrent voidInvoice (lockInvoiceForUpdate) or another approveExpense on the SAME invoice
+  // serialises here; the re-read right after is what makes a double-approve resolve as the
+  // existing `created: false` retry below rather than a second posting.
+  await apRepo.lockInvoiceForRecording(tx, actor.orgId, expense.supplierInvoiceId);
+  expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
+  if (!expense) {
+    throw internalFault(`approveExpense: expense ${expenseId} vanished between its first read and the lock`);
+  }
 
   if (expense.status === 'posted') {
     if (!expense.journalEntryId) {

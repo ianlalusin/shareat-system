@@ -737,14 +737,35 @@ export async function voidInvoice(
     if (!invoice) throw gone(`voidInvoice: supplier invoice ${input.invoiceId} does not exist.`, 'supplier invoice');
     await authorize(trx, actor, 'void_supplier_invoice', { storeId: invoice.storeId });
 
+    // ⛔ T-367 S2 / R4 (DEF-396) — lock BEFORE reading live expenses or flipping status: a
+    // concurrent `createExpense`/`approveExpense` on this SAME invoice (lockInvoiceForRecording)
+    // or another voidInvoice now serialises here instead of both racing past a stale read.
+    const locked = await apRepo.lockInvoiceForUpdate(trx, actor.orgId, input.invoiceId);
+    if (!locked) throw gone(`voidInvoice: supplier invoice ${input.invoiceId} does not exist.`, 'supplier invoice');
+    // ⭐ Re-read AFTER the lock: a concurrent void that committed while we queued makes this stale
+    // otherwise, and the cascade below must never run twice for the same invoice.
+    if (locked.status === 'voided') {
+      throw refuse(
+        `voidInvoice: supplier invoice ${input.invoiceId} is already voided.`,
+        'This invoice is already voided.',
+      );
+    }
+
     const reason = input.reason.trim();
     if (!reason) throw refuse('voidInvoice: say why this invoice is being voided.', 'Say why this invoice is being voided.');
 
     const live = await apRepo.liveExpensesForInvoice(trx, actor.orgId, input.invoiceId);
+    // ⛔ R4 — lock every live expense BEFORE the cascade, in id order (lockExpensesForAllocation's
+    // own ordering rule), so a concurrent recordPayment/voidExpense on one of these rows serialises
+    // instead of racing the cascade below.
+    await apRepo.lockExpensesForAllocation(trx, actor.orgId, live.map((e) => e.id));
     for (const e of live) {
       if (e.status === 'draft') {
         await deleteExpenseDraft(trx, actor, e.id);
       } else {
+        // ⛔ R6 (DEF-519) may refuse HERE, inside voidExpense, if this live expense has already
+        // been paid — the cascade stops, and nothing voided so far is undone because nothing
+        // commits until this whole transaction does.
         await voidExpense(trx, actor, e.id, `Invoice voided: ${reason}`);
       }
     }

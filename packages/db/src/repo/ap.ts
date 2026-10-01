@@ -604,6 +604,13 @@ export interface OpenItem {
 /**
  * v1's `ap_open` projection — as a live query, not a stored table. Cannot go stale the way
  * DEF-076 did: there is nothing to upsert and forget.
+ *
+ * ⭐ T-367 S2 / R5 (DEF-396) — joins `supplier_invoices` and excludes a voided one. This is the
+ * SECOND layer, not the fix: the trigger (migration <N+1>) and `lockInvoiceForRecording` stop a
+ * NEW posting against a voided invoice; this is what stops the hand screen, `recordPayment`'s own
+ * re-check and T-330's suggestion from OFFERING a posted expense whose invoice was voided out from
+ * under it afterward (a race this task also closes, or legacy/ETL data). It is still the ONE
+ * definition of "open" — every reader changes together.
  */
 export async function openItems(
   tx: Tx,
@@ -643,8 +650,9 @@ export async function openItems(
     from expenses e
     join credit c on c.expense_id = e.id
     left join allocated a on a.expense_id = e.id
+    join supplier_invoices si on si.id = e.supplier_invoice_id
     where e.org_id = ${orgId} and e.supplier_id = ${supplierId} and e.store_id = ${storeId}
-      and e.status = 'posted'
+      and e.status = 'posted' and si.status <> 'voided'
       and (c.credit_amount - coalesce(a.allocated_amount, 0)) > 0.005
     order by e.business_date asc
   `)) as unknown as Record<string, string>[];
@@ -812,6 +820,65 @@ export async function lockExpensesForAllocation(tx: Tx, orgId: string, expenseId
     order by id
     for update
   `);
+}
+
+/**
+ * ⛔ T-367 S2 / R4 (DEF-396) — take the invoice row lock BEFORE `voidInvoice` reads its live
+ * expenses or flips its status. `FOR UPDATE`: this writer changes the invoice's own row, so it
+ * takes the stronger lock (contrast `lockInvoiceForRecording` below, which only ever READS the
+ * invoice and can afford `FOR NO KEY UPDATE`). Returns `undefined` when the row does not exist, so
+ * the caller's own `gone()` keeps naming it the same way the pre-lock read already did.
+ */
+export async function lockInvoiceForUpdate(
+  tx: Tx,
+  orgId: string,
+  invoiceId: string,
+): Promise<{ id: string; status: SupplierInvoiceStatus } | undefined> {
+  const [row] = (await tx.execute(sql`
+    select id, status from supplier_invoices where id = ${invoiceId} and org_id = ${orgId} for update
+  `)) as unknown as { id: string; status: SupplierInvoiceStatus }[];
+  return row;
+}
+
+/**
+ * ⛔ T-367 S2 / R4 (DEF-396 + DEF-508) — take the invoice row lock BEFORE `createExpense` or
+ * `approveExpense` checks its capacity or posts. `FOR NO KEY UPDATE`, not `FOR UPDATE`: it
+ * serialises with `lockInvoiceForUpdate`'s void and with another recording on the SAME invoice,
+ * but does NOT conflict with the `FOR KEY SHARE` every expense row's FK insert takes against this
+ * invoice — an unrelated recording is never blocked by this lock alone. The trigger (migration
+ * <N+1>) takes the identical `FOR NO KEY UPDATE` when it reads the invoice, so every writer — raw
+ * SQL, the ETL, a future repo helper, not only these two domain functions — serialises the same
+ * way.
+ */
+export async function lockInvoiceForRecording(
+  tx: Tx,
+  orgId: string,
+  invoiceId: string,
+): Promise<{ id: string; status: SupplierInvoiceStatus; storeId: string } | undefined> {
+  const [row] = (await tx.execute(sql`
+    select id, status, store_id as "storeId" from supplier_invoices
+    where id = ${invoiceId} and org_id = ${orgId}
+    for no key update
+  `)) as unknown as { id: string; status: SupplierInvoiceStatus; storeId: string }[];
+  return row;
+}
+
+/**
+ * How much of this expense is allocated to a POSTED ap_payment — T-367 S2 / R6 (DEF-519). `'0.00'`
+ * means nothing has been paid against it yet, so it is free to void. A plain SELECT, no lock: the
+ * caller (`voidExpense`) already holds `lockExpensesForAllocation`'s row lock on this expense by
+ * the time it asks, and `ap_payments`/`ap_payment_allocations` are immutable once posted (a void
+ * there inserts a NEW reversal rather than rewriting the posted row), so nothing here can change
+ * under the caller mid-check.
+ */
+export async function postedAllocatedFor(tx: Tx, orgId: string, expenseId: string): Promise<string> {
+  const [row] = (await tx.execute(sql`
+    select coalesce(sum(apa.amount_applied), 0)::text as total
+    from ap_payment_allocations apa
+    join ap_payments ap on ap.id = apa.ap_payment_id
+    where apa.expense_id = ${expenseId} and ap.org_id = ${orgId} and ap.status = 'posted'
+  `)) as unknown as { total: string }[];
+  return Number(row?.total ?? 0).toFixed(2);
 }
 
 // -------------------------------------------------------------------------------------

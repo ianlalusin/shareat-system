@@ -138,12 +138,21 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
   // ⭐ T-196 — target 'draft': a PENDING invoice is fine here. Only 'posted' (approveExpense)
   // still requires 'verified'.
   const invoice = await apRepo.getSupplierInvoiceById(tx, actor.orgId, input.supplierInvoiceId);
-  if (!invoice) {
+  // ⭐ T-367 S2 / R7 (DEF-508) — a store mismatch reads as NOT FOUND (Ian, T-364 Q1 (a): one
+  // uniform refusal), checked IMMEDIATELY after the lookup, before assertOpenForRecording and
+  // every supplier check below. `gone()`'s userMessage is the same fixed sentence either way —
+  // never the invoice number, the other store's name, or any id — so a manager at store A probing
+  // store B's invoice id learns nothing beyond "does not exist".
+  if (!invoice || invoice.storeId !== input.storeId) {
     throw gone(
-      `createExpense: supplier invoice ${input.supplierInvoiceId} does not exist in org ${actor.orgId}`,
+      `createExpense: supplier invoice ${input.supplierInvoiceId} does not exist in org ${actor.orgId} at store ${input.storeId}`,
       'supplier invoice',
     );
   }
+  // ⭐ T-367 S2 / R4 (DEF-396) — lock the invoice row BEFORE checking capacity, so a concurrent
+  // voidInvoice (lockInvoiceForUpdate) or another recording on this SAME invoice serialises here
+  // instead of both racing a stale capacity read.
+  await apRepo.lockInvoiceForRecording(tx, actor.orgId, input.supplierInvoiceId);
   await apRepo.assertOpenForRecording(tx, actor.orgId, input.supplierInvoiceId, totalAmount, 'draft');
 
   // ⛔ The invoice names its supplier, so the caller's `supplierId` is a SECOND source of truth

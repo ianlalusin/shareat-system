@@ -145,6 +145,9 @@ export const expenses = pgTable(
      * Also carries receipt-date authority (`docs/tasks/130-accounts-payable.md` Invariant 3,
      * ported from v1's `expense.actions.ts:179-197`): `businessDate` above is always resolved
      * from `supplierInvoices.invoiceDate` server-side, never trusted from the client.
+     *
+     * NOTE: the invoice row lock (FOR NO KEY UPDATE) and the store-match check hand-added to
+     * `expenses_check_invoice_open_for_recording()` in migration 0176 (T-367 S2, DEF-396/DEF-508).
      */
     supplierInvoiceId: uuid('supplier_invoice_id')
       .notNull()

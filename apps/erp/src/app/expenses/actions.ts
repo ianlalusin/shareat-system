@@ -29,7 +29,7 @@ import {
   type ExpensePaymentMethod,
   type MoneyLine,
 } from '@shareat/domain';
-import { apRepo } from '@shareat/db';
+import { apRepo, goneSentence } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { requireActor } from '../../lib/session';
@@ -159,7 +159,14 @@ async function parseExpenseForm(
     const invoice = await withOrgPrincipal(actor.orgId, (tx) =>
       apRepo.getSupplierInvoiceById(tx, actor.orgId, supplierInvoiceId),
     );
-    if (!invoice) throw new Error(`Supplier invoice ${supplierInvoiceId} does not exist.`);
+    // ⭐ T-367 S2 / R7 (DEF-508) — a store mismatch reads as NOT FOUND, the same id-free sentence
+    // `createExpense`'s own check throws (Ian, T-364 Q1 (a): one uniform refusal). This lookup only
+    // runs when the form omitted `supplierId`; the domain layer's own check (create.ts) is the real
+    // gate either way, but a hand-posted payload that skips `supplierId` must not get a DIFFERENT,
+    // more informative error from this screen-local shortcut than it would from the domain gate.
+    if (!invoice || invoice.storeId !== storeId) {
+      throw new Error(goneSentence('supplier invoice'));
+    }
     supplierId = invoice.supplierId;
   }
 

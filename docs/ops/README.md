@@ -792,6 +792,27 @@ After 0175, `ready_at`/`ready_by` on a branch order can never change once set �
 role, not by raw SQL under replica role. If the wrong person or time is recorded, the only remedy is to **reject
 the order and re-order**. That is Ian's ruling (ready is final), not a bug.
 
+## ⛔ Before the push that carries 0176 (T-367 S2) — three counts
+
+0176 makes the supplier-invoice trigger compare stores and hides voided bills from payment. It judges
+future writes; existing rows are shown to Ian first (his T-367 Q6). Read-only on **erp2**, with Ian:
+
+```sql
+begin transaction read only;
+-- P2: expense at a different store from its supplier invoice (refused at its next edit/approval)
+select e.id, e.status, e.store_id, si.store_id from expenses e join supplier_invoices si on si.id = e.supplier_invoice_id
+ where e.store_id <> si.store_id and e.status <> 'voided';
+-- P3: live expense on a VOIDED invoice (DEF-396; now hidden from payment)
+select e.id, e.status from expenses e join supplier_invoices si on si.id = e.supplier_invoice_id
+ where si.status = 'voided' and e.status <> 'voided';
+-- P4: posted payment still allocated to a voided expense
+select apa.expense_id, apa.amount_applied from ap_payment_allocations apa join ap_payments p on p.id = apa.ap_payment_id
+ join expenses e on e.id = apa.expense_id where p.status = 'posted' and e.status = 'voided';
+rollback;
+```
+
+All expected 0. Any row: show Ian; nothing is changed without his ruling.
+
 ## ⚠️ Traps on the box — each has bitten once; recorded so it bites nobody twice
 
 | Trap | What it looks like | Rule |

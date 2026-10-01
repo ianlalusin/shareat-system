@@ -9,15 +9,29 @@
  * history.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { expensesRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
+import { compare, formatMoney, money, ZERO } from '@shareat/core/money';
+import { parseBusinessDate } from '@shareat/core/datetime';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { retireAssetFromVoidedExpense } from '../fixed-assets/capitalize';
-import { refuse, gone, internalFault } from '../shared/refusal';
+import { refuse, gone, internalFault, humanDate } from '../shared/refusal';
 
 export interface VoidExpenseResult {
   reversalEntryId: string;
   /** false means this expense was already voided — nothing new was written. */
   created: boolean;
+}
+
+/** ⭐ T-367 S2 / R6 audit fix — names the expense by its OWN content, never its id, so a
+ *  `voidInvoice` cascade over several expenses says which bill is already paid (`repo/ap.ts`'s
+ *  `invoicePhrase` is the same idea, one field over). Falls back to the bare particulars on an
+ *  unparseable date rather than throwing out of a refusal path. */
+function expensePhrase(expense: { particulars: string; businessDate: string }): string {
+  try {
+    return `${expense.particulars} (${humanDate(parseBusinessDate(expense.businessDate))})`;
+  } catch {
+    return expense.particulars;
+  }
 }
 
 export async function voidExpense(
@@ -31,12 +45,36 @@ export async function voidExpense(
 }
 
 async function runVoidExpense(tx: Tx, actor: Actor, expenseId: string, reason: string): Promise<VoidExpenseResult> {
-  const expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
+  let expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
   if (!expense) {
     throw gone(`voidExpense: expense ${expenseId} does not exist in org ${actor.orgId}`, 'expense');
   }
 
   await authorize(tx, actor, 'void_expense', { storeId: expense.storeId });
+
+  // ⭐ T-367 S2 / R6 (DEF-519) — the SAME row lock `recordPayment` takes (`ap/index.ts:883`) on this
+  // expense, so a payment allocating to it and a void of it serialise here; whichever waits re-reads
+  // the other's committed result. `voidInvoice`'s cascade already holds this lock on every live
+  // expense (in id order) before it calls `voidExpense`, so this is a no-op re-lock in that path, not
+  // a second, differently-ordered one.
+  await apRepo.lockExpensesForAllocation(tx, actor.orgId, [expenseId]);
+  expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
+  if (!expense) {
+    throw internalFault(`voidExpense: expense ${expenseId} vanished between its first read and the lock`);
+  }
+
+  // ⭐ T-367 S2 / R6 (DEF-519) — a bill already paid cannot be voided out from under its payment:
+  // voiding it would reverse the 2110 credit a `posted` ap_payment still allocates against, leaving
+  // the control account short by exactly what was paid (a debit on a liability control — V5's mutant).
+  // Checked with the lock already held above, so nothing can post a NEW allocation against this
+  // expense between this read and `reverseEntry` below.
+  const postedAllocated = money(await apRepo.postedAllocatedFor(tx, actor.orgId, expenseId));
+  if (compare(postedAllocated, ZERO) > 0) {
+    throw refuse(
+      `voidExpense: expense ${expenseId} has ${formatMoney(postedAllocated)} allocated to a posted AP payment — void the payment first`,
+      `${formatMoney(postedAllocated)} has already been paid against ${expensePhrase(expense)}. Void that payment first, then void the bill.`,
+    );
+  }
 
   if (expense.status === 'draft') {
     throw refuse(

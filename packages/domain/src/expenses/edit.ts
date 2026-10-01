@@ -88,6 +88,26 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
     await authorize(tx, actor, 'edit_any_expense', { storeId: expense.storeId });
   }
 
+  // ⭐ T-367 S2 / R4 (DEF-396) — lock BEFORE `updateExpenseDraft`'s own UPDATE, not after. The
+  // `expenses_check_invoice_open_for_recording` trigger is BEFORE UPDATE, so it fires AFTER
+  // Postgres has already taken the expense row's own tuple lock — without this, an edit locks
+  // expense-then-invoice (E→I) while `voidInvoice`/`createExpense`/`approveExpense` all lock
+  // invoice-then-expense (I→E), and the two orders deadlock under concurrent load. Locking the
+  // invoice HERE, before any write, makes `editExpense` I→E like every other writer.
+  //
+  // When the edit RE-POINTS the expense at a different invoice, BOTH are locked, in id order: two
+  // concurrent edits crossing the same pair of invoices in opposite directions would otherwise
+  // deadlock on whichever one each edit locks second.
+  const currentInvoiceId = expense.supplierInvoiceId;
+  const nextInvoiceId = input.supplierInvoiceId ?? currentInvoiceId;
+  if (nextInvoiceId === currentInvoiceId) {
+    await apRepo.lockInvoiceForRecording(tx, actor.orgId, currentInvoiceId);
+  } else {
+    for (const id of [currentInvoiceId, nextInvoiceId].sort()) {
+      await apRepo.lockInvoiceForRecording(tx, actor.orgId, id);
+    }
+  }
+
   const patch: Parameters<typeof expensesRepo.updateExpenseDraft>[3] = {};
   if (input.categoryId !== undefined) {
     const category = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
