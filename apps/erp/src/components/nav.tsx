@@ -59,6 +59,9 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/attendance/lane', label: 'Clock lane' },
       { href: '/payroll', label: 'Payroll' },
       { href: '/expenses', label: 'Expenses' },
+      // T-369 S1 (DEF-198): paying staff back what they spent out of pocket. Gated by
+      // `record_ap_payment` in ROUTE_CAPABILITY, so the link only shows to someone who can open it.
+      { href: '/expenses/reimbursements', label: 'Reimbursements' },
       // ⭐ T-215 — beside Expenses on purpose: a cap only ever changes a decision at the moment of
       // spending, and `/expenses/new` is where that moment is. This screen is where it gets set.
       { href: '/budgets', label: 'Budgets' },

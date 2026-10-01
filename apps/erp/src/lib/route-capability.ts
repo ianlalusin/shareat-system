@@ -63,6 +63,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, Capability>> = {
   // ⚠️ `/payroll` is the one people react to most strongly when it is visible on a counter
   //    tablet: it names colleagues' pay. It was reachable by any signed-in person until T-288.
   '/payroll': 'run_payroll',
+  // T-369 S1: names colleagues' money owed, like `/payroll`. The longer prefix wins over `/expenses`.
+  '/expenses/reimbursements': 'record_ap_payment',
   '/owners': 'view_financial_reports',
   '/loans': 'view_financial_reports',
   '/liabilities': 'view_financial_reports',

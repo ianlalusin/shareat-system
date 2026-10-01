@@ -34,6 +34,9 @@ export async function reimbursablePayableOf(
   tx: Tx,
   orgId: string,
   employeeId: string,
+  /** T-369 S1 (N2): when given, only the liability booked AT this store counts. Without it the
+   *  figure is the organisation-wide total, which is what every pre-T-369 caller expects. */
+  storeId?: string,
 ): Promise<{ outstanding: string }> {
   const [row] = (await tx.execute(sql`
     select coalesce(sum(jl.credit - jl.debit), 0)::text as outstanding
@@ -43,8 +46,47 @@ export async function reimbursablePayableOf(
     where je.org_id = ${orgId} and je.status <> 'draft'
       and a.code = ${REIMBURSABLE_TO_EMPLOYEES_CODE}
       and jl.party_type = 'employee' and jl.party_id = ${employeeId}
+      ${storeId !== undefined ? sql`and jl.store_id = ${storeId}` : sql``}
   `)) as unknown as { outstanding: string }[];
   return { outstanding: Number(row?.outstanding ?? 0).toFixed(2) };
+}
+
+export interface ReimbursablePayableRow {
+  employeeId: string;
+  displayName: string;
+  /** Owed to this person at this store, > 0, two decimals. */
+  outstanding: string;
+}
+
+/**
+ * T-369 S1 — who the store owes a reimbursement to, and how much. One row per person with an
+ * outstanding balance on `2130` AT that store, biggest first. Derived from the ledger on every
+ * call, never stored (the same rule as `reimbursablePayableOf`).
+ *
+ * ⚠️ `party_id` carries no foreign key (the ledger's counterparty column is text for every party
+ * kind), so the join to `persons` is on `id::text`; an id that no longer names a person in this
+ * org drops out of the list rather than showing a blank name next to real money.
+ */
+export async function reimbursablePayablesAtStore(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+): Promise<ReimbursablePayableRow[]> {
+  const rows = (await tx.execute(sql`
+    select p.id::text as "employeeId", p.display_name as "displayName",
+           round(sum(jl.credit - jl.debit), 2)::text as outstanding
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    join persons p on p.id::text = jl.party_id and p.org_id = ${orgId}
+    where je.org_id = ${orgId} and je.status <> 'draft'
+      and a.code = ${REIMBURSABLE_TO_EMPLOYEES_CODE}
+      and jl.party_type = 'employee' and jl.store_id = ${storeId}
+    group by p.id, p.display_name
+    having sum(jl.credit - jl.debit) > 0
+    order by sum(jl.credit - jl.debit) desc, p.display_name asc
+  `)) as unknown as ReimbursablePayableRow[];
+  return rows;
 }
 
 // -----------------------------------------------------------------------------------------

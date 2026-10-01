@@ -13,6 +13,8 @@
  *     (single bigint);
  *   - THIS file: the two-int4 form `pg_advisory_xact_lock(namespace, hashtext(storeId))`. It is a
  *     SEPARATE key space (`pg_locks.objsubid` 2 vs 1), so it never collides with the three above.
+ *     Namespaces taken here: 366001 (cash custody), 366002 (service-charge float), 369001
+ *     (reimbursement payee, keyed on the employee id rather than a store id).
  *   - A `hashtext(storeId)` collision only serialises two stores for a moment; it never gives a
  *     wrong answer (the same reasoning as `access.ts` `lockOrgAccess`).
  *
@@ -32,6 +34,18 @@ const SERVICE_CHARGE_FLOAT_LOCK_NAMESPACE = 366002;
 export async function lockStoreCashCustody(tx: Tx, storeId: string): Promise<void> {
   await tx.execute(
     sql`select pg_advisory_xact_lock(${CASH_CUSTODY_LOCK_NAMESPACE}::int4, hashtext(${storeId}))`,
+  );
+}
+
+/** Namespace (first int4) for the per-payee reimbursement-payout lock. T-369 S1 / N3. */
+const REIMBURSEMENT_PAYEE_LOCK_NAMESPACE = 369001;
+
+/** Serialises everything that reads or pays down one person's reimbursement liability (2130), so
+ *  two payouts in flight cannot both pass the cap. Keyed on the payee, not the store: one person's
+ *  liability can sit at several stores and the cap each payout reads is theirs. */
+export async function lockReimbursementPayee(tx: Tx, employeeId: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${REIMBURSEMENT_PAYEE_LOCK_NAMESPACE}::int4, hashtext(${employeeId}))`,
   );
 }
 

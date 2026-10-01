@@ -1,6 +1,6 @@
 # T-369: Unwired money screens — DEF-198, DEF-314, DEF-302, DEF-479, DEF-291
 
-**Status:** **Not started — Q1–Q4 answered 2026-09-30 (row 260; Q1 re-entry manager-only)** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q1–Q4 defaults ship). Review changes
+**Status:** **Not started — Q1–Q4 answered 2026-09-30 (row 260; Q1 re-entry manager-only); S0 added 2026-10-01 for DEF-550** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q1–Q4 defaults ship). Review changes
 1–7 and both minors applied (marked ✎R). Written 2026-09-30 by the Opus planner at HEAD `594f600`. Batch D of
 the money-defect push (Ian, 2026-09-30: *"close all open money defects in v2"*), `docs/plans/money-defects-2026-09-30.md`.
 DEF-302 is included under Ian's ruling **(a)** of 2026-09-30.
@@ -95,6 +95,7 @@ screen refuses in words a person can act on:
 ## Collisions and order
 | Slice | Collides with | Rule |
 |---|---|---|
+| S0 | `packages/domain/src/ap/index.ts` is a T-367 S3 BUILDER path (`recordInvoice`, `setInvoiceLines`); `advisory-locks.ts` is also S1's; `ap/invoices/[id]/page.tsx` is S2's and S6b's; T-371 runs last over `ap/index.ts` | **Not in parallel with T-367 S3, S1 or S2** — one lane at a time on those files; whichever commits second rebases. S0 takes lock namespace `369002`. May run now (T-366 S1 has committed `advisory-locks.ts`) |
 | S1, S2, S3, S4a, S6a | none among themselves (file-disjoint) | **May run in parallel**, one lane DB each (§3.4 row 94); ✎R S1 only once T-366 S1 has committed |
 | S1 + S2 | ✎R both TESTERs delete ADJACENT rows of `tests/unit/domain-actions-have-callers.test.ts` (`payReimbursement` `:123-125`, `readFileUrl` `:126-128`) | Use Edit on the exact row, never a whole-file write; the second to commit rebases |
 | S1 | ✎R `packages/db/src/repo/advisory-locks.ts` and `packages/db/src/index.ts` are T-366 S1's (uncommitted at HEAD) | **S1 waits for T-366 S1 to commit** |
@@ -130,6 +131,180 @@ screen refuses in words a person can act on:
   `refuse(raw, userSentence)` or an Outcome with `userReason`.
 - I8. Money arithmetic uses `@shareat/core/money`, never `Number` (bible §2.5). New code adds no `Number()`
   comparisons; the existing ones are T-371's.
+
+---
+
+## S0: DEF-550 — void a supplier payment from a screen (+S0·N1, N2, N3, N4)
+Added 2026-10-01 by the Opus planner at HEAD `5ac8435`. S0's N-numbers are its own (written `S0·N1`…) and never
+mean S1's N1–N3. Also closes DEF-262's `voidPaymentAction` leg (the orphaned export).
+
+**Why now.** Since T-367 S2 (Ian Q4), `voidExpense` refuses a paid bill with *"… Void that payment first, then void
+the bill."* (`packages/domain/src/expenses/void.ts:75`). No page renders `voidPaymentAction`
+(`apps/erp/src/app/ap/actions.ts:359`), and no page even LISTS an `ap_payment`: `repo/ap.ts` has no list read
+(`getApPaymentById :928`, `getAllocationsForPayment :995` only). A paid bill is therefore permanent.
+
+**v1 as requirements (§1.2d).** `ERP-rebuild/src/lib/actions/payment.actions.ts:793` `voidPaymentTransaction`: refuses
+an already-voided payment, checks the day lock (admin bypasses it silently), re-opens every allocated expense's
+balance, mirrors a commissary payment. The screen is a payment-detail page
+(`src/app/financial/payments/[supplierId]/[paymentId]/payment-details-client.tsx:224-246`) with a Void button behind an
+`AlertDialog`, **no reason**. GOAL: *a payment that should not stand (bounced cheque, wrong supplier, double entry) is
+taken back, and the bills it paid are owed again.* v2 bar: the same, from the bill where the refusal sends you, with a
+typed reason, a reversal (never a delete), a dated reversal for a closed month instead of a silent admin bypass, and a
+refusal instead of a negative supplier credit.
+
+**Capability:** `record_ap_payment` (store, manager+, staff ✗; CAPABILITY-MATRIX `:105`), which `voidPayment` already
+checks at the payment's store (`packages/domain/src/ap/index.ts:1137`). For a payment funded from another store's
+account, also `transfer_funds` on the account's store (S0·N4) — the same rule `recordPayment` applies when posting
+(`:978-981`). No new capability (I2).
+
+**Where the control lives.** The bill page `apps/erp/src/app/ap/invoices/[id]/page.tsx` — the refusal is shown there,
+and every payment names at least one open item (`recordPayment :906-912`), so every posted payment appears on at least
+one bill. A payment-detail route is NOT added.
+
+**Domain guards verified at source** (`packages/domain/src/ap/index.ts:1129-1170`, `ledger/reverse-entry.ts:84-217`):
+org-scoped read (`repo/ap.ts:928-935`) ✔ · `authorize(record_ap_payment, payment store)` ✔ · status must be `posted` ✔
+(sentence wrong for a repeat, see Contract) · posted-with-no-entry is an `internalFault` ✔ · blank reason refused ✔ ·
+reversal via `reverseEntry` (mirror lines, party kept, original flipped to `reversed`) ✔ · idempotent on
+`reverse:{entryId}` so a double submit posts one reversal and `markApPaymentVoided` runs once ✔ · allocations kept, so
+`openItems` / `postedAllocatedFor` (`repo/ap.ts:874-882`, both `ap.status = 'posted'`) re-open the bill ✔.
+**Gaps:**
+- **S0·N1 — a payment in a closed month cannot be voided, and the refusal is not a sentence.** `voidPayment` passes no
+  `reversalDate` (`ap/index.ts:1152-1156`); `reverseEntry` then throws a raw `Error`
+  (`ledger/reverse-entry.ts:149-152`, *"journal entry … fiscal period … is closed — supply reversalDate in an open
+  period"*), which `errorMessage` shows with `[hidden]` ids and a parameter name. Fix: optional `voidOn`; see Contract.
+- **S0·N2 — voiding an overpayment whose credit was already spent drives the supplier's `1240` negative.** An
+  overpayment debits `1240` (`ap/index.ts:1043-1056`); a later `recordPayment` may spend it (`creditApplied`,
+  `:1016-1025`, which checks the live balance). `voidPayment` reverses the `1240` debit with no check, leaving
+  `advancesPositionOf` (`repo/ap.ts:573-590`) below zero: a credit balance on an asset, i.e. the supplier "owes" money
+  that was already used up. Fix: refuse (Contract step 5).
+- **S0·N3 — the N2 check and the credit draw race.** `recordPayment`'s `creditApplied` check (`ap/index.ts:1016-1025`)
+  reads `advancesPositionOf` with no lock; two concurrent draws can already overspend one credit, and S0·N2's check
+  would race a draw the same way. Fix: one per-supplier advisory lock taken by both, before the read.
+- **S0·N4 — a cross-store-funded payment is voided without the cross-store capability.** `recordPayment` requires
+  `transfer_funds` on the money account's store when it differs (`ap/index.ts:978-981`); `voidPayment` checks only
+  `record_ap_payment` at the payment's store (`:1137`), so a manager can put money back into another store's account
+  that they could not have drawn from. Fix: the same `authorize` in `voidPayment`.
+No migration is needed: `ap_payments` already has `voided_by / voided_at / void_reason` and
+`ap_payments_void_shape_check` (`packages/db/schema/ap-payments.ts:96-101`).
+
+**BUILDER** (source):
+- `packages/db/src/repo/ap.ts`:
+  - `paymentsForInvoice(tx, orgId, invoiceId)` returns, for every `ap_payment` (posted AND voided) with an allocation
+    to an expense of that invoice: `{ paymentId, storeId, supplierId, businessDate, amount, appliedHere, referenceNo,
+    moneyAccountName, status, voidReason, voidedAt, periodOpen, otherBills: { invoiceId, invoiceNo }[] }`.
+    `appliedHere` = the sum of its allocations to this invoice's expenses; `otherBills` = the OTHER invoices its
+    allocations touch; `periodOpen` = the status of the fiscal period of its journal entry (`journal_entries.period_id`
+    → `fiscal_periods.status = 'open'`). Ordered by `businessDate` desc, then id. Org-scoped (`ap.org_id = orgId`).
+  - `unallocatedOf(tx, orgId, paymentId)`: `amount − sum(allocations)` as a money string (the overpayment that went
+    to `1240`).
+- `packages/db/src/repo/advisory-locks.ts`: `lockSupplierCredit(tx, supplierId)` — the two-int4 form,
+  `pg_advisory_xact_lock(SUPPLIER_CREDIT_LOCK_NAMESPACE, hashtext(supplierId))`, with
+  `SUPPLIER_CREDIT_LOCK_NAMESPACE = 369002` and the key added to the file's key-list comment. (S1's reimbursement lock
+  takes a different constant; whichever commits second rebases the comment.)
+- `packages/domain/src/ap/index.ts`:
+  - `voidPayment`, in this order: read (unchanged) → `authorize(record_ap_payment, payment.storeId)` (unchanged) →
+    S0·N4 cross-store `authorize` → status → reason → S0·N3 lock → S0·N2 check → S0·N1 date → `reverseEntry` →
+    `markApPaymentVoided` (unchanged). See Contract.
+  - `recordPayment`: when `creditApplied > 0`, `lockSupplierCredit(trx, input.supplierId)` immediately before
+    `advancesPositionOf` (`:1018`). Nothing else in `recordPayment` changes.
+- `apps/erp/src/app/ap/actions.ts` `voidPaymentAction`:
+  - reads `paymentId`, `reason`, `voidOn` (optional) and `invoiceId` (optional). The return path is
+    `/ap/invoices/{invoiceId}` when `invoiceId` is a UUID, else `/ap/suppliers/{supplierId}` when that is a UUID, else
+    `/ap`. Never a URL taken from the form.
+  - drops its own `if (!reason) throw new Error(...)` (`:364`) so the domain's `refuse` sentence is the only one (I1, I7).
+  - ok banner: *"Payment of ₱{amount} voided — reversed, not deleted. The bills it paid are owed again."* (amount via
+    `formatMoney`, I8).
+- `apps/erp/src/app/ap/invoices/[id]/page.tsx`:
+  - loads `paymentsForInvoice` and, for the payments' distinct stores, which ones the actor can void at — the
+    `heldCapabilities` pre-check plus a per-store `authorize` probe, exactly the pattern at
+    `customers/[customerId]/page.tsx:117-136` (bible row 262: money controls render only where usable).
+  - a **Payments against this bill** section, after *Expenses recorded against this invoice*, shown whenever there is
+    at least one payment: one row each — date · amount · applied here · from (money account) · reference · status. A
+    payment with `otherBills` says *"Also pays {invoiceNo, …}"* (links to those bills). A voided payment shows
+    *"Voided — {reason}"* and no control.
+  - for a posted payment the actor can void at: a native `<details>` (I6; the `channel-settlements/page.tsx:271`
+    pattern) summarised *"Void this payment"*. Inside: a required *Reason* input; when `periodOpen` is false, a
+    required *Reversal date* `type="date"` defaulting to today (`toBusinessDate()`, `@shareat/core/datetime`) with the
+    hint *"This payment is in a closed month. The reversal is dated in an open month."*; hidden `paymentId`,
+    `supplierId`, `invoiceId`; and a red-outlined submit *"Void payment"*. When `otherBills` is non-empty the panel says
+    *"This also re-opens {invoiceNo, …}."* No `alert()` / `confirm()`.
+  - the existing *Void reason* form for the bill is unchanged.
+
+**TESTER:** `packages/domain/tests/integration/t369-s0-void-supplier-payment.test.ts` (new) ·
+`apps/erp/tests/integration/t369-s0-void-payment-web.test.ts` (new). No change to
+`tests/unit/domain-actions-have-callers.test.ts` (`voidPayment` already has a caller; the defect is the action's).
+
+**Contract:**
+`voidPayment(tx, actor, { paymentId, reason, voidOn? }) → { entryId }` (shape unchanged; `voidOn` is new and optional).
+After the unchanged read and `authorize`:
+1. S0·N4: load the money account (`moneyAccountsRepo.getById`); if `account.storeId !== payment.storeId`,
+   `authorize(transfer_funds, { storeId: account.storeId })`.
+2. Status: `voided` → refuse *"This payment has already been voided."*; any other non-`posted` → the existing sentence.
+3. Reason: unchanged (*"Say why this payment is being voided."*).
+4. S0·N3: `lockSupplierCredit(trx, payment.supplierId)`.
+5. S0·N2: `u = unallocatedOf(payment)`; if `u > 0` and `advancesPositionOf(supplier) < u` (compare via
+   `@shareat/core/money`), refuse *"₱{short} of this payment's overpayment has already been used to pay later bills.
+   Void those payments first."* where `short = u − position` (never negative), `formatMoney`.
+6. S0·N1: read the original entry's period (`journalRepo.findEntryById` → `findPeriodById`).
+   - Open → `voidOn` is ignored and the reversal keeps today's behaviour (the original's own date, no prefix).
+   - Not open, `voidOn` absent → refuse *"This payment is in a closed month. Pick a date in an open month for the
+     reversal."*
+   - Not open, `voidOn` given → `journalRepo.findPeriodForDate(tx, orgId, voidOn)` must be `open`, else refuse
+     *"That date is not in an open month. Pick a date in an open month for the reversal."*; then pass
+     `reversalDate: voidOn` (the memo gets `reverseEntry`'s own `[prior period]` prefix). `voidOn` is parsed with
+     `parseBusinessDate`; a malformed date is refused *"Pick a valid date for the reversal."*
+7. `reverseEntry` and `markApPaymentVoided` exactly as today.
+Every refusal is `refuse(raw, sentence)` (I7) and writes nothing. Posting pattern: the T-106 reversal of
+`ap_payment.simple` / `.overpayment` (POSTING-PATTERNS `:455-480`, `:1242-1262`) — mirror lines, same party, same store.
+
+**Tests** (real Postgres; each red leg asserts the target and is shown red on HEAD or against its named mutant):
+- T1 (positive control for every refusal below): a ₱3,000 bill paid in full in an open month; the manager voids with
+  reason *"Bounced cheque"*. Exactly one reversal entry; per account the original + reversal net to 0.00 (2110 with
+  party = supplier, the cash account); the original entry is `reversed`; the payment is `voided` with `voided_by` =
+  the actor and the reason; `openItems` shows the bill owed ₱3,000 again; THEN `voidInvoice` on that bill succeeds
+  (DEF-550 end to end — on HEAD only reachable by calling the domain).
+- T2 (✗): a staff member at the store → `AuthorizationError`; nothing written. Mutant: delete the `authorize` at
+  `:1137` → posts → red.
+- T3: a blank / whitespace reason → refused with the domain sentence; nothing written. Mutant: remove the domain check
+  (the action's own check is gone after the build) → red.
+- T4: void twice → the second is refused *"This payment has already been voided."*; still exactly one reversal.
+  Red on HEAD (HEAD says *"This payment is voided, not posted."*).
+- T5 (S0·N1): a payment dated in a period that is then closed. (a) No `voidOn` → refused with the closed-month sentence;
+  the sentence has no UUID and no `reversalDate`; nothing written. Red on HEAD (raw `reverseEntry` text). (b) `voidOn`
+  in an open month → one reversal dated `voidOn`, memo starts `[prior period] `, payment `voided`. (c) `voidOn` in a
+  closed month → refused with the second sentence; nothing written. Mutant: drop `reversalDate: voidOn` → (b) red.
+- T6 (S0·N2): bill A ₱1,000 paid with ₱1,500 (₱500 to 1240); bill B ₱500 paid entirely with `creditApplied` 500.
+  Voiding the first payment → refused, *"₱500.00 of this payment's overpayment…"*; `advancesPositionOf` stays 0.00.
+  Red on HEAD (the void posts and the position is −500.00). Positive control: void the B payment first, then the A
+  payment → both succeed, position 0.00, both bills owed again. Mutant: remove the check → red.
+- T7 (S0·N3): two connections, the gated harness of `t366-s1-cash-custody-locks.test.ts`. 1240 holds ₱500 from
+  payment P. A voids P while B records a payment with `creditApplied` 500. Exactly one succeeds; the other gets its
+  refusal (N2's, or `recordPayment`'s *"holds only ₱0.00 of return credit"*); the position is never below 0.00; the
+  second is observed waiting on an `advisory` lock. Mutant: remove the lock from either function → red.
+- T7b (S0·N3, the existing race): two concurrent `recordPayment`s each drawing `creditApplied` 500 from one ₱500 credit
+  → exactly one posts. Red on HEAD (both post, position −500.00).
+- T8 (S0·N4): an admin pays a Lipa bill from Malvar's safe. A Lipa manager without `transfer_funds` at Malvar voids it
+  → `AuthorizationError`, nothing written. Positive control: the admin voids it → posts. Mutant: remove the
+  cross-store `authorize` → red.
+- T9 (web, render): on a paid bill, a manager at the bill's store sees *Payments against this bill* with one row and a
+  *Void this payment* `<details>`; a staff member and a manager of ANOTHER store see the row and no `<details>`; a
+  voided payment shows *"Voided — {reason}"* and no control; a payment that also pays bill C shows *"Also pays …"* and,
+  in the panel, *"This also re-opens …"*; a closed-month payment's panel has the required date input. Red on HEAD
+  (no section).
+- T10 (web, action): submitting the form returns to `/ap/invoices/{id}` with the ok banner; a refusal (T6's case)
+  returns there with the sentence and no UUID in the URL; a non-UUID `invoiceId` returns to `/ap/suppliers/{id}`. A
+  grep of the touched app files finds no `alert(` / `confirm(`.
+
+**Smoke (9008, `shareat_test_setup`; 2027-02 is open there, per T-366):**
+1. As a manager, record and verify a supplier bill dated 2027-02-05, record its credit expense, and pay it in full
+   from the store's cash on 2027-02-06.
+2. Try *Void* on the bill: the banner says *"… Void that payment first, then void the bill."*
+3. On the same bill, open *Payments against this bill → Void this payment*, type a reason, submit: the ok banner shows;
+   the row reads *Voided — {reason}*; *Recording capacity* is unchanged and the supplier's open items show the bill
+   owed again.
+4. Void the bill: it now succeeds.
+5. Sign in as staff: the payment row is visible with no *Void this payment* control.
+6. Repeat step 3's page at 375px wide and in dark mode (the `<details>` open). Screenshots at each step.
 
 ---
 
@@ -581,3 +756,7 @@ Screenshots.
     paying).
   - (b) No.
   - Default: not built in this task; logged as a new defect.
+
+## Ruling log
+- 2026-10-01, Ian (chat): S0 closed-month void → **(a)** the person picks the reversal date (pre-filled today, open month only). Recorded on the Open Questions page.
+- 2026-10-01, orchestrator: S0's SUPPLIER_CREDIT_LOCK_NAMESPACE is **369002** (S1 took 369001 for the reimbursement payee lock).

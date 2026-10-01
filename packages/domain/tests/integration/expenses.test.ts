@@ -1499,7 +1499,7 @@ describe('⛔ DEF-157 — payReimbursement settles 2130, which nothing previousl
 
     const paid = await asPerson(f.orgId, (tx) =>
       payReimbursement(tx, actor(f.orgId, f.managerId), {
-        storeId: f.storeId, employeeId: f.staffId, amount: '600.00',
+        storeId: f.storeId, employeeId: f.staffId, amount: '600.00', payoutId: crypto.randomUUID(),
         fromMoneyAccountId: f.cashDrawerId, on: '2026-01-16',
       }),
     );
@@ -1525,7 +1525,7 @@ describe('⛔ DEF-157 — payReimbursement settles 2130, which nothing previousl
     await expect(
       asPerson(f.orgId, (tx) =>
         payReimbursement(tx, actor(f.orgId, f.managerId), {
-          storeId: f.storeId, employeeId: f.staffId, amount: '5000.00',
+          storeId: f.storeId, employeeId: f.staffId, amount: '5000.00', payoutId: crypto.randomUUID(),
           fromMoneyAccountId: f.cashDrawerId, on: '2026-01-16',
         }),
       ),
@@ -1539,7 +1539,7 @@ describe('⛔ DEF-157 — payReimbursement settles 2130, which nothing previousl
     await expect(
       asPerson(f.orgId, (tx) =>
         payReimbursement(tx, actor(f.orgId, f.managerId), {
-          storeId: f.storeId, employeeId: f.staffId, amount: '100.00',
+          storeId: f.storeId, employeeId: f.staffId, amount: '100.00', payoutId: crypto.randomUUID(),
           fromMoneyAccountId: f.cashDrawerId, on: '2026-01-16',
         }),
       ),
@@ -1553,7 +1553,7 @@ describe('⛔ DEF-157 — payReimbursement settles 2130, which nothing previousl
     await expect(
       asPerson(f.orgId, (tx) =>
         payReimbursement(tx, actor(f.orgId, f.managerId), {
-          storeId: f.storeId, employeeId: f.staffId, amount: '0.004',
+          storeId: f.storeId, employeeId: f.staffId, amount: '0.004', payoutId: crypto.randomUUID(),
           fromMoneyAccountId: f.cashDrawerId, on: '2026-01-16',
         }),
       ),

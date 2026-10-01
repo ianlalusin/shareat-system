@@ -157,7 +157,7 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
       const content = readFileSync(file, 'utf8');
       count += (content.match(/<PageDescription[\s>]/g) ?? []).length;
     }
-    expect(count).toBe(102);
+    expect(count).toBe(103);
   });
 });
 

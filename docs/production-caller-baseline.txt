@@ -1,4 +1,3 @@
-Button
 GET
 __setPhase5AvailableForTests
 acknowledgementHistory
@@ -59,7 +58,6 @@ listWriteOffsForCharge
 markReviewed
 mintUniqueToken
 newCorrelationId
-payReimbursement
 pendingItemRequests
 periodForDate
 periodKeyOf

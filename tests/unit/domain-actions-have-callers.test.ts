@@ -120,9 +120,6 @@ const EXEMPT: Record<string, string> = {
   findPostedSettlementForChannelDay:
     'UNWIRED — DEF-198. `/channel-settlements` previews and records; nothing re-reads a POSTED ' +
     'settlement, so a settled channel-day cannot be reopened for inspection.',
-  payReimbursement:
-    'UNWIRED — DEF-198. T-208 built the clearing path for `2130 Reimbursements payable to ' +
-    'employees` and no screen calls it, so a staff reimbursement is booked and never paid off.',
   readFileUrl:
     'UNWIRED — DEF-198. The ONLY way to view an uploaded receipt photo: a short-lived signed URL ' +
     'minted per request. Nothing displays one, so evidence can be attached and never looked at.',

@@ -8,14 +8,22 @@
  * the ledger (`expensesRepo.reimbursablePayableOf`), never stored, and an overpayment is refused
  * rather than absorbed — there is no "employee advance" account for reimbursement to overflow
  * into, so paying more than is owed is simply a mistake to catch, not a case to model.
+ *
+ * T-369 S1 (DEF-198): the cap is what is owed AT `input.storeId` (N2), drawing on another store's
+ * account needs `transfer_funds` there (N1), and two payouts for one person are serialised by an
+ * advisory lock taken before the cap is read (N3). `payoutId` makes a replay return the entry it
+ * already posted instead of a second one — looked up before the cap, since the cap may now be 0.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { expensesRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, expensesRepo, journalRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { equals, money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { parseMoneyInput } from '../shared/money-input';
 import { EXPENSE_FUNDING_ACCOUNTS } from './routing';
 import { refuse, gone } from '../shared/refusal';
+
+const PAYOUT_ID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface PayReimbursementInput {
   storeId: string;
@@ -23,13 +31,18 @@ export interface PayReimbursementInput {
   amount: string;
   fromMoneyAccountId: string;
   on: string;
+  /** T-369 S1 (N3): one id per payout FORM, minted server-side when the page renders. The posting's
+   *  idempotency key is derived from it, so a double click or a replay posts once. */
+  payoutId: string;
   memo?: string;
 }
 
 export interface PayReimbursementResult {
   entryId: string;
-  /** Outstanding AFTER this payment, derived. */
+  /** Outstanding AFTER this payment, derived, AT `input.storeId`. */
   outstanding: string;
+  /** False when `payoutId` had already posted: this is that entry, returned again, nothing new. */
+  created: boolean;
   warning?: string;
 }
 
@@ -43,18 +56,79 @@ export async function payReimbursement(
     // liability, gated the same way every other outgoing payment in this codebase is.
     await authorize(trx, actor, 'record_ap_payment', { storeId: input.storeId });
 
+    // The payoutId becomes part of the idempotency key, so a blank or malformed one would make
+    // every such payout share a key (the second would "replay" the first). Refused here, not by
+    // the form: the domain cannot trust that a caller minted one.
+    if (typeof input.payoutId !== 'string' || !PAYOUT_ID_SHAPE.test(input.payoutId)) {
+      throw refuse(
+        'payReimbursement: payoutId is missing or is not a uuid.',
+        'This payment form is missing its reference. Reload the page and try again.',
+      );
+    }
+
     const amount = parseMoneyInput(input.amount, 'payReimbursement: the amount', 'The reimbursement amount');
     if (Number(amount) <= 0) {
       throw refuse('payReimbursement: the amount has to be greater than zero.', 'The amount has to be greater than zero.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
     if (!account) throw gone('payReimbursement: that money account does not exist.', 'money account');
+    // The domain refuses these itself — the picker not offering them is presentation only.
+    if (!account.isActive) {
+      throw refuse('payReimbursement: that money account is retired.', 'That money account is retired.');
+    }
+    if (account.custodian === 'staff') {
+      throw refuse(
+        'payReimbursement: a staff float cannot fund a reimbursement payout.',
+        'Pay from a store account, not a staff float.',
+      );
+    }
+    // N1: the credit lands on `account`, so drawing on another store's account needs the right to
+    // move money THERE — the same gate `approve.ts` and `ap/index.ts` apply to their cross-store draws.
+    if (account.storeId !== input.storeId) {
+      await authorize(trx, actor, 'transfer_funds', { storeId: account.storeId });
+    }
 
-    const position = await expensesRepo.reimbursablePayableOf(trx, actor.orgId, input.employeeId);
+    // N3: serialise per payee BEFORE the first cap read, so the second payout reads what the
+    // first committed.
+    await advisoryLocksRepo.lockReimbursementPayee(trx, input.employeeId);
+
+    // N3: the deterministic key makes a replay a no-op. It is looked up BEFORE the cap check:
+    // after a committed payout the balance can be 0, and a replay must return that entry rather
+    // than be refused as "nothing owed".
+    const idempotencyKey = `reimbursement:${input.employeeId}:payout:${input.payoutId}`;
+    const replayed = await journalRepo.findEntryByIdempotencyKey(trx, actor.orgId, idempotencyKey);
+    if (replayed) {
+      // The same payoutId must mean the same payout: a replay carrying other figures is not a
+      // double click, so it is refused rather than answered with the first entry as if it matched.
+      const lines = await journalRepo.findLinesForEntryWithAccountCodes(trx, replayed.id);
+      const debit = lines.find((l) => l.accountCode === EXPENSE_FUNDING_ACCOUNTS.REIMBURSABLE_TO_EMPLOYEES);
+      const credit = lines.find(
+        (l) =>
+          l.accountCode === account.glAccountCode &&
+          (account.glAccountCode !== '1140' || l.partyId === account.id),
+      );
+      const same =
+        !!debit &&
+        !!credit &&
+        debit.storeId === input.storeId &&
+        equals(money(debit.debit), amount) &&
+        equals(money(credit.credit), amount);
+      if (!same) {
+        throw refuse(
+          'payReimbursement: payoutId was already posted with a different amount, store or account.',
+          'This payment was already recorded with different figures. Reload the page and try again.',
+        );
+      }
+      const now = await expensesRepo.reimbursablePayableOf(trx, actor.orgId, input.employeeId, input.storeId);
+      return { entryId: replayed.id, outstanding: now.outstanding, created: false };
+    }
+
+    // N2: the cap is what is owed AT the store the debit lands on, not the organisation's total.
+    const position = await expensesRepo.reimbursablePayableOf(trx, actor.orgId, input.employeeId, input.storeId);
     if (Number(position.outstanding) <= 0) {
       throw refuse(
-        'payReimbursement: this employee has nothing outstanding on 2130.',
-        'This employee has no unpaid reimbursement.',
+        'payReimbursement: this employee has nothing outstanding on 2130 at this store.',
+        'This employee has no unpaid reimbursement at this store.',
       );
     }
     if (Number(amount) > Number(position.outstanding) + 0.005) {
@@ -73,13 +147,12 @@ export async function payReimbursement(
       'payReimbursement',
     );
 
-    const paymentId = crypto.randomUUID();
     const result = await postEntry(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'reimbursement_payout',
       sourceId: input.employeeId,
-      idempotencyKey: `reimbursement:${input.employeeId}:payout:${paymentId}`,
+      idempotencyKey,
       memo: input.memo ?? 'Reimbursement payout',
       postedBy: actor.personId,
       lines: [
@@ -101,11 +174,12 @@ export async function payReimbursement(
       ],
     });
 
-    const after = await expensesRepo.reimbursablePayableOf(trx, actor.orgId, input.employeeId);
+    const after = await expensesRepo.reimbursablePayableOf(trx, actor.orgId, input.employeeId, input.storeId);
 
     return {
       entryId: result.entryId,
       outstanding: after.outstanding,
+      created: true,
       ...(warning ? { warning } : {}),
     };
   };
