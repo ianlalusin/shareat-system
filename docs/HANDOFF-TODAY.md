@@ -1,14 +1,13 @@
 # Handoff — 2026-10-01 (orchestrator, money-defect push day 2)
 
-> ⛔ **CI CANNOT RUN — GitHub Actions billing.** Every CI job since 2026-09-30 was refused to start: *"recent account
-> payments have failed or your spending limit needs to be increased."* So **prod is still at migration 0165** and the
-> next green CI will deploy **0166–0176 together** (11 migrations). Only Ian can fix billing.
-> ✅ The read-only prod checks for 0173–0176 (and 0169's `pg_default_acl`) were run on erp2 with Ian on 2026-10-01:
-> **all zero rows**; prod holds 1 organisation. Pushed after that.
+> ✅ **DEPLOYED 2026-10-01 07:17 UTC.** CI was blocked by GitHub billing on 2026-09-30 (prod stuck at 0165); billing was
+> fixed, and the wrap-up push ran CI green (10m27s) and deployed **0166–0176** to erp2. Verified after: sign-in **HTTP 200**,
+> `shareat-erp` active, NRestarts 0, **157 migrations** applied (newest = 0176), `pg_default_acl` now `shareat_app=ar` (0169).
+> The read-only prod checks for 0173–0176 + 0169 ran with Ian before the push: all zero rows; prod holds 1 organisation.
 
 ## Where things stand
-Money-defect push (Ian: "close all open money defects in v2"). What's Left board **29 → 22 open money defects**
-today. All committed and **pushed** at wrap-up after the prod checks — but nothing deploys until GitHub billing is fixed. T-366 done (S4 not needed). T-367 S1+S2 done. T-368 S0+S1 done. T-372 S1–S3 done.
+Money-defect push (Ian: "close all open money defects in v2"). What's Left board **29 → 21 open money defects**
+today. All committed, pushed and **deployed** (see banner). T-366 done (S4 not needed). T-367 S1+S2 done. T-368 S0+S1 done. T-372 S1–S3 done.
 
 ## Gates at 5cabfc7 (fresh gate DB `shareat_test_gate`)
 typecheck **0** · integration **4193/4193** (231 files, full suite) · unit **3642/3650** in the full run — the 7 failures are
@@ -31,10 +30,10 @@ repo-scanning tests over their 5 s limit; all 6 files pass solo (69/69) · build
   `.gitattributes` pins `*.sql eol=lf`; `gates.mjs` migrates its DB first.
 
 ## Pick up here
-1. **Ian: fix GitHub Actions billing.** Then re-run CI on `main` (`gh run rerun` or an empty commit) and watch it: a
-   green CI deploys 0166–0176. Check `https://erp2.shareat.net/sign-in` → 200 and the service after the swap.
-2. **If prod data changes before that deploy**, re-run the prechecks in `docs/ops/README.md` first (they take a minute;
-   SSH root@159.223.46.224 works from this machine; use `SYSTEM_DATABASE_URL` — the app role is RLS-filtered).
+1. **Merge or delete `daily-review/2026-09-17`** (unmerged since 17 Sep), then T-369 starting with **DEF-550** (no screen can
+   void a supplier payment — a paid bill can never be voided, now live in prod).
+2. **Before any future migration push**, run its prechecks in `docs/ops/README.md` with Ian (SSH root@159.223.46.224 works
+   from this machine; use `SYSTEM_DATABASE_URL` — the app role is RLS-filtered and shows false zeros).
 3. **T-368 S1 §9.4 is UNMET** — the close screen offers completed months only; redo on/after 2026-11-01 (register
    DEF-424 row). Then the next slices: T-372 S4 (posting pattern + re-read stale commissary patterns), S5, S6;
    T-367 S3–S6; T-368 depreciation slices (435/436 domain, 426 follow-ups in its spec); T-369 (**DEF-550 first**);
@@ -65,7 +64,7 @@ You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-syst
 docs/plans/money-defects-2026-09-30.md. Read the Open Questions page (bible row 252) with ArtifactData
 before building anything gated on Ian. GREP the register and bible, never Read them whole. Goal (Ian):
 close all open money defects in v2; NOT launched. Queue: HANDOFF "Pick up here" 1→3.
-⛔ CI is blocked by GitHub billing (Ian's to fix); prod is at 0165 and the next green CI deploys 0166-0176.
+Prod is deployed through migration 0176 (2026-10-01). DEF-550 (no void-payment screen) is live and first in T-369.
 STANDING: commit slices locally; push ONLY at wrap-up; republish the What's Left board after every commit
 that closes a DEF; every wrap-up updates "what's left", ROADMAP.html and the board. Reds assert the target;
 every "not" gets a positive control. Each tester/helper gets its own _test DB. Gate any CHECK/trigger
