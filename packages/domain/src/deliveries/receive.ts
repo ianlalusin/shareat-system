@@ -27,6 +27,7 @@ import { add, toCentavos, ZERO, type Money } from '@shareat/core/money';
 import { stockLayersRepo, stockLedgerRepo, type Tx } from '@shareat/db';
 import { resolveReceivingLocation, type LocationLike } from '../stock-locations/rules';
 import { lineCost as costOf } from '../stock/layers';
+import { closedStockPeriodSentence } from '../stock/period-guard';
 import {
   INVENTORY_ACCOUNT_BY_ITEM_KIND,
   postReceiptValue,
@@ -81,6 +82,10 @@ export type ReceiveOutcome = ReceiveResult | { readonly ok: false; readonly reas
  * together, so it always joins a transaction the caller owns.
  */
 export async function receiveDelivery(tx: Tx, input: ReceiveDeliveryInput): Promise<ReceiveOutcome> {
+  // T-369 S4a (DEF-528): a closed month's stock stays as it was - said in words, before the first write.
+  const closed = await closedStockPeriodSentence(tx, input.orgId, input.deliveredOn, 'received');
+  if (closed) return { ok: false, reason: closed, userReason: closed };
+
   if (input.lines.length === 0) {
     return {
       ok: false,

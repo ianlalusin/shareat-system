@@ -188,6 +188,10 @@ async function draftAndPost(over: Record<string, unknown> = {}) {
   return { recordId: draft.recordId, posted };
 }
 
+/** T-369 S4: the refusal is the SENTENCE now (the domain asks the ledger before the first write); the trigger (migration 0145) stays the backstop (I3). */
+const closedSentenceRe = (month: string, doing: string) =>
+  new RegExp(`^${month} is closed\\. Stock can't be ${doing} on .+ — a closed month's stock stays as it was, and the closed-month override doesn't change that\\. Use a date in an open month\\.$`);
+
 describe('T-176 test 1 — the value identity, corrected numbers (spec-defect note above)', () => {
   it('one entry, output layered proportionally, and the value identity ties to the centavo', async () => {
     await stockUpSlab();
@@ -527,7 +531,26 @@ describe('T-176 test 13 — period lock and frozen location', () => {
       }),
     );
     if (!draft.ok) throw new Error(draft.reason);
-    await expect(asOrg(orgA, (tx) => postProduction(tx, managerActor, { recordId: draft.recordId }))).rejects.toThrow(/period|closed/i);
+    const count = async () => {
+      const [m] = await sql<{ c: string }[]>`select count(*)::text as c from stock_movements where org_id = ${orgA}`;
+      const [e] = await sql<{ c: string }[]>`select count(*)::text as c from journal_entries where org_id = ${orgA}`;
+      return { movements: m!.c, entries: e!.c };
+    };
+    const before = await count();
+    const posted = await asOrg(orgA, (tx) => postProduction(tx, managerActor, { recordId: draft.recordId }));
+    expect(posted.ok, 'a post into a closed month went through').toBe(false);
+    if (!posted.ok) expect(posted.reason).toMatch(closedSentenceRe('August 2026', 'produced'));
+    expect(await count(), 'a refused post left movements or entries behind').toEqual(before);
+    const [rec] = await sql<{ status: string }[]>`select status from production_records where id = ${draft.recordId}`;
+    expect(rec!.status).toBe('draft');
+  });
+
+  it('I3 (the backstop): a RAW stock movement dated in the closed period is still refused by the database trigger', async () => {
+    await sql`update fiscal_periods set status = 'closed' where org_id = ${orgA}`;
+    await expect(
+      sql`insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
+          values (${orgA}, ${storeA}, ${kitchen}, ${slabItem}, '2026-08-10T04:00:00Z', 1, 'receipt', 'delivery', ${crypto.randomUUID()}, ${staffId})`,
+    ).rejects.toThrow(/closed period/i);
   });
 });
 

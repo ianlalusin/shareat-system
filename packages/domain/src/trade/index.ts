@@ -80,6 +80,9 @@ async function authorizeEither(
   throw firstRefusal ?? new AuthorizationError('authorizeEither: nothing to try', attempts[0]!.capability);
 }
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
+import { closedStockPeriodSentence } from '../stock/period-guard';
+import { toBusinessDate } from '@shareat/core/datetime';
+import { refuse } from '../shared/refusal';
 import type { StockMovementKind } from '@shareat/db/schema';
 
 /** The account T-132 adds to the chart. Every 4xxx leaf before it was retail. */
@@ -430,6 +433,10 @@ export async function dispatchTradeOrder(
     if (order.status !== 'draft' && order.status !== 'confirmed') {
       throw new Error(`dispatchTradeOrder: order is ${order.status}, so it cannot be dispatched.`);
     }
+    // T-369 S4b: the dispatch moves stock dated by the ORDER's date, not the day it is pressed. A closed
+    // month's stock stays as it was - said in words, before the first write; the trigger stays the backstop.
+    const closedDispatch = await closedStockPeriodSentence(trx, actor.orgId, order.orderDate, 'dispatched');
+    if (closedDispatch) throw refuse(`dispatchTradeOrder: ${closedDispatch}`, closedDispatch);
     // ⭐ T-172. A branch order goes out READY or not at all — "ready" is the commissary's statement
     // that the list is final, after the branch has answered every proposal. The trigger (0121)
     // refuses this at the database too; this names the reason.
@@ -704,6 +711,13 @@ export async function voidTradeOrder(
     const reason = input.reason.trim();
     if (!reason) throw new Error('voidTradeOrder: say why this order is being voided.');
 
+    // T-369 S4: voiding a DISPATCHED order gives the goods back, dated by the order; a closed month's stock
+    // stays as it was - said in words, before the first write. (A draft or confirmed order moved no stock.)
+    if (order.status === 'dispatched' || order.status === 'received') {
+      const closedVoid = await closedStockPeriodSentence(trx, actor.orgId, order.orderDate, 'voided');
+      if (closedVoid) throw refuse(`voidTradeOrder: ${closedVoid}`, closedVoid);
+    }
+
     // ⭐ T-165. Voiding an already-RECEIVED internal transfer needs a real reverse-transfer —
     // BOTH stores' layers unwound, T-174's discrepancy rows accounted for — which is a
     // materially bigger problem than this task, reported rather than attempted blind. Voiding
@@ -828,7 +842,11 @@ export async function receiveTradeOrder(
 
     if (customersRepo.treatmentOf(customer) === 'internal') {
       const branchStoreId = customer.counterpartyStoreId!;
-      const receivedOn = input.receivedOn ?? new Date().toISOString().slice(0, 10);
+      const receivedOn = input.receivedOn ?? toBusinessDate();
+      // T-369 S4b: BEFORE the line loop - `setLineReceivedQuantity` writes inside it. A closed month's stock
+      // stays as it was, said in words; the trigger stays the backstop (I3).
+      const closedReceipt = await closedStockPeriodSentence(trx, actor.orgId, receivedOn, 'received');
+      if (closedReceipt) throw refuse(`receiveTradeOrder: ${closedReceipt}`, closedReceipt);
       const orderLines = await tradeRepo.linesFor(trx, actor.orgId, order.id);
       const overrides = new Map((input.lines ?? []).map((l) => [l.lineId, l]));
       const codes = await moneyTransfersRepo.storeCodes(trx, actor.orgId, [order.storeId, branchStoreId]);

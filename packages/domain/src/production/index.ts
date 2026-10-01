@@ -37,6 +37,7 @@ import { consume, reverseConsumption } from '../stock/consume';
 import { lineCost } from '../stock/layers';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { WASTAGE_ACCOUNT } from '../stock/consumption-posting';
+import { closedStockPeriodSentence } from '../stock/period-guard';
 import {
   addQuantity,
   compareQuantity,
@@ -605,6 +606,8 @@ export async function postProduction(tx: Tx, actor: Actor, input: { recordId: st
   const record = await productionRepo.getProductionRecord(tx, input.recordId);
   if (!record) return { ok: false, reason: `production record ${input.recordId} does not exist` };
   await authorize(tx, actor, 'post_production', { storeId: record.storeId, orgId: record.orgId });
+  const closedPost = await closedStockPeriodSentence(tx, record.orgId, record.producedOn, 'produced');
+  if (closedPost) return { ok: false, reason: closedPost };
 
   if (record.status !== 'draft') return { ok: false, reason: `production record ${input.recordId} is ${record.status}, not draft` };
 
@@ -666,6 +669,8 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
   const record = await productionRepo.getProductionRecord(tx, input.recordId);
   if (!record) return { ok: false, reason: `production record ${input.recordId} does not exist` };
   await authorize(tx, actor, 'edit_posted_production', { storeId: record.storeId, orgId: record.orgId });
+  const closedEdit = await closedStockPeriodSentence(tx, record.orgId, record.producedOn, 'changed');
+  if (closedEdit) return { ok: false, reason: closedEdit };
 
   if (record.status !== 'posted') return { ok: false, reason: `production record ${input.recordId} is ${record.status}, not posted` };
   if (record.kind === 'convert') {
@@ -804,6 +809,8 @@ export async function voidProduction(tx: Tx, actor: Actor, input: { recordId: st
   const record = await productionRepo.getProductionRecord(tx, input.recordId);
   if (!record) return { ok: false, reason: `production record ${input.recordId} does not exist` };
   await authorize(tx, actor, 'void_production', { storeId: record.storeId, orgId: record.orgId });
+  const closedVoid = await closedStockPeriodSentence(tx, record.orgId, record.producedOn, 'voided');
+  if (closedVoid) return { ok: false, reason: closedVoid };
 
   if (record.status !== 'posted') return { ok: false, reason: `production record ${input.recordId} is ${record.status}, not posted` };
   const reason = input.reason.trim();

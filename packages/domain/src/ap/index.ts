@@ -1186,7 +1186,7 @@ export async function voidPayment(
     const unallocated = money(await apRepo.unallocatedOf(trx, actor.orgId, input.paymentId));
     const entryLines = await journalRepo.findLinesForEntryWithAccountCodes(trx, payment.journalEntryId);
     const spentCredit = entryLines
-      .filter((l) => l.accountCode === '1240')
+      .filter((l) => l.accountCode === apRepo.ADVANCES_CODE)
       .reduce((sum, l) => add(sum, money(l.credit)), money('0'));
     const net = subtract(unallocated, spentCredit);
     if (compare(net, money('0')) > 0) {

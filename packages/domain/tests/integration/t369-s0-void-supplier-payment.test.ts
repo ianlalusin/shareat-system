@@ -819,3 +819,26 @@ describe('AUDIT E (domain half) — a void whose reversal date lands in a LOCKED
     expect((await paymentRow(paid.paymentId)).status).toBe('posted');
   });
 });
+
+describe('AUDIT (S4 queue) — a concurrent double-void of one supplier RETURN', () => {
+  it('A voids the return (holds); B submits the same void -> B waits, then reads the status AFTER the lock: "already void", not "already … spent" — Mutant: status read before the lock -> the spent-credit refusal, red', async () => {
+    const f = await fixture('aDV');
+    const returnId = await returnCredit(f, '50.0000'); // a ₱500 supplier credit, all of it this return's
+    expect(await position(f), 'fixture: ₱500 of return credit').toBe('500.00');
+
+    const { aResult, bResult, bWaited } = await runConcurrencyLeg(
+      f.orgId,
+      (tx) => voidReturn(tx, f.manager, returnId, 'Sent back by mistake'),
+      (tx) => voidReturn(tx, f.manager, returnId, 'Double click'),
+      ADVISORY,
+    );
+
+    expect(succeeded(aResult)).toBe(true);
+    expect(bWaited, 'B never waited: voidReturn takes no supplier-credit lock').toBe(true);
+    const said = bResult.status === 'fulfilled' ? String((bResult.value as { reason?: string }).reason ?? '') : String(((bResult as { reason: Error }).reason).message);
+    expect(succeeded(bResult), 'the second void must be refused').toBe(false);
+    expect(said).toMatch(/already void/);
+    expect(said, 'the second void was judged on a stale status').not.toMatch(/spent|partly or fully/);
+    expect(await position(f)).toBe('0.00');
+  });
+});

@@ -22,6 +22,7 @@ import { journalRepo, type Tx } from '@shareat/db';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { consume, reverseConsumption } from './consume';
 import { postConsumption, postWastage } from './consumption-posting';
+import { closedStockPeriodSentence } from './period-guard';
 import { isReservedUsageCategory, type WastageReason } from './wastage-reasons';
 import type { ConsumedLine } from './layers';
 import type { Quantity } from './quantity';
@@ -66,6 +67,9 @@ export type PostUsageOutcome = PostUsageResult | { readonly ok: false; readonly 
 const SALARY_ADVANCE_AVAILABLE = false;
 
 export async function postUsageRecord(tx: Tx, input: PostUsageInput): Promise<PostUsageOutcome> {
+  // T-369 S4a (DEF-528): a closed month's stock stays as it was - said in words, before the first write.
+  const closed = await closedStockPeriodSentence(tx, input.orgId, input.usedOn, input.kind === 'wastage' ? 'wasted' : 'used');
+  if (closed) return { ok: false, reason: closed };
   if (input.lines.length === 0) {
     return { ok: false, reason: 'a usage record with no lines posts nothing' };
   }
@@ -204,6 +208,9 @@ export async function voidUsageRecord(
   tx: Tx,
   input: VoidUsageInput,
 ): Promise<{ ok: true; movementIds: string[]; reversalEntryIds: string[] } | { ok: false; reason: string }> {
+  // T-369 S4a (DEF-528): the reversal moves stock on `voidedOn`; a closed month's stock stays as it was.
+  const closed = await closedStockPeriodSentence(tx, input.orgId, input.voidedOn, 'voided');
+  if (closed) return { ok: false, reason: closed };
   if (input.hasLiveStaffCharge && !SALARY_ADVANCE_AVAILABLE) {
     return {
       ok: false,

@@ -103,6 +103,8 @@ export interface SupplierReturnRow {
   readonly deliveryId: string | null;
   readonly status: SupplierReturnStatus;
   readonly journalEntryId: string;
+  /** The return's own date - the reversal of a void is dated by it, so a closed month has to refuse it. */
+  readonly returnedOn: string;
 }
 
 export async function getReturn(tx: Tx, id: string): Promise<SupplierReturnRow | undefined> {
@@ -115,6 +117,7 @@ export async function getReturn(tx: Tx, id: string): Promise<SupplierReturnRow |
       deliveryId: supplierReturns.deliveryId,
       status: supplierReturns.status,
       journalEntryId: supplierReturns.journalEntryId,
+      returnedOn: supplierReturns.returnedOn,
     })
     .from(supplierReturns)
     .where(eq(supplierReturns.id, id));

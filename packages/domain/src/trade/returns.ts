@@ -54,6 +54,7 @@ import type { ConsumedLine } from '../stock/layers';
 import { compareQuantity, isPositiveQuantity, quantity, subtractQuantity, type Quantity } from '../stock/quantity';
 import { recordCollection } from '../ar';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
+import { closedStockPeriodSentence } from '../stock/period-guard';
 
 export const RETURN_REVENUE_CODE = '4950';
 export const CUSTOMER_RETURN_UNSELLABLE_REASON = 'customer_return_unsellable' as const;
@@ -171,6 +172,8 @@ export async function recordCustomerReturn(
     const order = await tradeRepo.getOrderById(trx, input.orgId, input.tradeOrderId);
     if (!order) return { ok: false, reason: `trade order ${input.tradeOrderId} does not exist.` };
     await authorize(trx, input.actor, 'record_customer_return', { storeId: order.storeId });
+    const closed = await closedStockPeriodSentence(trx, input.orgId, input.returnedOn, 'returned');
+    if (closed) return { ok: false, reason: closed };
 
     const customer = await customersRepo.getById(trx, input.orgId, order.customerId);
     if (!customer) return { ok: false, reason: 'the order names a customer that no longer exists.' };
@@ -525,6 +528,10 @@ export async function voidCustomerReturn(
 
     const trimmed = reason.trim();
     if (!trimmed) return { ok: false, reason: 'say why this return is being voided.' };
+
+    // T-369 S4: the void reverses stock and the entry at the return's own date; a closed month's stock stays as it was.
+    const closedVoid = await closedStockPeriodSentence(trx, actor.orgId, ret.returnedOn, 'voided');
+    if (closedVoid) return { ok: false, reason: closedVoid };
 
     if (ret.settlement === 'store_credit' || ret.settlement === 'mixed') {
       const balance = Number(await arRepo.creditBalanceOf(trx, ret.orgId, ret.customerId));

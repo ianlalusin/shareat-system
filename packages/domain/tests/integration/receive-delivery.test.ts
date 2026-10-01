@@ -104,6 +104,10 @@ async function makeDelivery(kind = 'supplier', proof: string | null = fileA): Pr
   return d!.id;
 }
 
+/** T-369 S4: the refusal is the SENTENCE now (the domain asks the ledger before the first write); the trigger (migration 0145) stays the backstop (I3). */
+const closedSentenceRe = (month: string, doing: string) =>
+  new RegExp(`^${month} is closed\\. Stock can't be ${doing} on .+ — a closed month's stock stays as it was, and the closed-month override doesn't change that\\. Use a date in an open month\\.$`);
+
 describe('T-166 — the photo gate, refused by the database', () => {
   it('⭐ a PURCHASE with no proof cannot be stored at all', async () => {
     await expect(
@@ -277,19 +281,29 @@ describe('T-166 — ⭐ all three or none', () => {
   it('⭐ a closed period rolls back everything — the throw unwinds all three', async () => {
     await sql`update fiscal_periods set status = 'closed' where org_id = ${orgA}`;
     const deliveryId = await makeDelivery('purchase');
-    await expect(
-      withOrgPrincipal(orgA, (tx) =>
-        receiveDelivery(tx, {
-          orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
-          locations: locations(), receivedBy: personA,
-          lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', receivedQuantity: quantity('10'), conversionFactor: '1', unitCost: '100.0000', locationId: kitchen }],
-        }),
-      ),
-    ).rejects.toThrow(/period/i);
+    const res = await withOrgPrincipal(orgA, (tx) =>
+      receiveDelivery(tx, {
+        orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
+        locations: locations(), receivedBy: personA,
+        lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', receivedQuantity: quantity('10'), conversionFactor: '1', unitCost: '100.0000', locationId: kitchen }],
+      }),
+    );
+    expect(res.ok, 'a receipt into a closed month went through').toBe(false);
+    if (!res.ok) expect(res.reason).toMatch(closedSentenceRe('August 2026', 'received'));
 
+    // The rollback half is unchanged: nothing survives the refusal.
     const [m] = await sql<{ c: string }[]>`select count(*)::text as c from stock_movements`;
     const [l] = await sql<{ c: string }[]>`select count(*)::text as c from stock_layers`;
-    expect({ movements: m!.c, layers: l!.c }).toEqual({ movements: '0', layers: '0' });
+    const [j] = await sql<{ c: string }[]>`select count(*)::text as c from journal_entries`;
+    expect({ movements: m!.c, layers: l!.c, entries: j!.c }).toEqual({ movements: '0', layers: '0', entries: '0' });
+  });
+
+  it('I3 (the backstop): a RAW stock movement dated in the closed period is still refused by the database trigger', async () => {
+    await sql`update fiscal_periods set status = 'closed' where org_id = ${orgA}`;
+    await expect(
+      sql`insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
+          values (${orgA}, ${storeA}, ${kitchen}, ${itemA}, '2026-08-20T04:00:00Z', 1, 'receipt', 'delivery', ${crypto.randomUUID()}, ${personA})`,
+    ).rejects.toThrow(/closed period/i);
   });
 
   it('receiving twice is idempotent — the movement index refuses the second', async () => {

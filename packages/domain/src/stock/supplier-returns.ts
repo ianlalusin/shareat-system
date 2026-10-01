@@ -35,6 +35,7 @@ import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { GRNI_ACCOUNT, INVENTORY_ACCOUNT_BY_ITEM_KIND } from './receipt-posting';
 import { perBaseUnit } from '../deliveries/receive';
+import { closedStockPeriodSentence, closedStockPeriodSentenceToday } from './period-guard';
 import { compareQuantity, isPositiveQuantity, quantity, subtractQuantity, type Quantity } from './quantity';
 
 const ADVANCES_ACCOUNT = apRepo.ADVANCES_CODE;
@@ -79,6 +80,14 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
   // ⭐ The org comes from the session-resolved actor. `authorize` above has just proven the store
   // belongs to THIS org, so the two can no longer disagree (T-231/DEF-210).
   const orgId = input.actor.orgId;
+
+  // T-369 S4a (DEF-528): the stock moves at NOW but the entry posts at `returnedOn`, so BOTH months have to
+  // take it. Said in words, before the first write; the trigger stays the backstop.
+  const closedReturnedOn = await closedStockPeriodSentence(tx, orgId, input.returnedOn, 'returned');
+  if (closedReturnedOn) return { ok: false, reason: closedReturnedOn };
+  const now = new Date(); // ONE instant: tested here, and stamped on every movement below
+  const closedToday = await closedStockPeriodSentenceToday(tx, orgId, now, 'returned');
+  if (closedToday) return { ok: false, reason: closedToday };
 
   if (input.lines.length === 0) {
     return { ok: false, reason: 'a return with no lines returns nothing' };
@@ -137,7 +146,6 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
   }
 
   const returnId = await supplierReturnsRepo.nextReturnId(tx);
-  const now = new Date();
   const returnLines: {
     lineNo: string;
     itemId: string;
@@ -278,6 +286,20 @@ export async function voidReturn(
   if (ret.status === 'void') return { ok: false, reason: `return ${returnId} is already void` };
   if (!reason.trim()) return { ok: false, reason: 'a void needs a reason' };
 
+  // T-369 S4a (DEF-528): the reversal posts at the return's own date AND moves stock at NOW, so both months
+  // have to take it. Said in words, before the first write.
+  const now = new Date(); // ONE instant: tested here, and stamped on every reversal below
+  const closedToday = await closedStockPeriodSentenceToday(tx, actor.orgId, now, 'voided');
+  if (closedToday) return { ok: false, reason: closedToday };
+  const closedReturnedOn = await closedStockPeriodSentence(tx, actor.orgId, ret.returnedOn, 'voided');
+  if (closedReturnedOn) return { ok: false, reason: closedReturnedOn };
+
+  // Serialise on the supplier's credit, then read the status AGAIN with the lock ours: a double submit
+  // queued behind the first void must be told "already void" whether or not this return carried credit.
+  await advisoryLocksRepo.lockSupplierCredit(tx, ret.supplierId);
+  const fresh = await supplierReturnsRepo.getReturn(tx, returnId);
+  if (!fresh || fresh.status === 'void') return { ok: false, reason: `return ${returnId} is already void` };
+
   const lines = await supplierReturnsRepo.getReturnLines(tx, returnId);
 
   // ⭐ Invariant 9. The credit this return contributed to 1240 is not tracked per-return — it is
@@ -290,8 +312,6 @@ export async function voidReturn(
     .filter((l) => l.creditBasis === 'supplier_advance')
     .reduce((sum, l) => add(sum, money((Number(l.quantity) * Number(l.unitCost)).toFixed(2))), ZERO);
   if (compare(advanceContribution, ZERO) > 0) {
-    // T-369 S0·N3: the same per-supplier lock `recordPayment` / `voidPayment` take, before the balance read.
-    await advisoryLocksRepo.lockSupplierCredit(tx, ret.supplierId);
     const balance = money(await apRepo.advancesPositionOf(tx, actor.orgId, ret.supplierId));
     if (compare(balance, advanceContribution) < 0) {
       return {
@@ -303,7 +323,6 @@ export async function voidReturn(
     }
   }
 
-  const now = new Date();
   for (const line of lines) {
     const result = await reverseConsumption(tx, {
       orgId: ret.orgId,

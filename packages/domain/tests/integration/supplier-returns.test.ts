@@ -257,6 +257,10 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
+/** T-369 S4: the refusal is the SENTENCE now (the domain asks the ledger before the first write); the trigger (migration 0145) stays the backstop (I3). */
+const closedSentenceRe = (month: string, doing: string) =>
+  new RegExp(`^${month} is closed\\. Stock can't be ${doing} on .+ — a closed month's stock stays as it was, and the closed-month override doesn't change that\\. Use a date in an open month\\.$`);
+
 describe('T-170 — the uninvoiced case: no credit arises', () => {
   it('returning 10 of 30 posts Dr 2120 / Cr 1310 at the relieved FIFO cost, and creates NO 1240 balance', async () => {
     const f = await fixture();
@@ -612,16 +616,29 @@ describe('T-170 — the period lock and the exit gate', () => {
     const { deliveryId, deliveryLineId } = await receiveOne(f, '30.000', '100.0000', '2026-01-05');
     await sql`update fiscal_periods set status = 'closed' where org_id = ${f.orgId}`;
 
+    const counts = async () => {
+      const [m] = await sql<{ c: string }[]>`select count(*)::text as c from stock_movements where org_id = ${f.orgId}`;
+      const [e] = await sql<{ c: string }[]>`select count(*)::text as c from journal_entries where org_id = ${f.orgId}`;
+      return { movements: m!.c, entries: e!.c };
+    };
+    const before = await counts();
+    const res = await asOrg(f.orgId, (tx) =>
+      recordReturn(tx, {
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+        returnedOn: '2026-01-06', reason: 'closed period',
+        lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('5.000'), deliveryLineId }],
+        actor: f.staff,
+      }),
+    );
+    expect(res.ok, 'a return into a closed month was recorded').toBe(false);
+    if (!res.ok) expect(res.reason).toMatch(closedSentenceRe('January 2026', 'returned'));
+    expect(await counts(), 'a refused return left movements or entries behind').toEqual(before);
+
+    // I3 (the backstop): a RAW movement dated in the closed period is still refused by the database trigger.
     await expect(
-      asOrg(f.orgId, (tx) =>
-        recordReturn(tx, {
-          storeId: f.storeId, supplierId: f.supplierId, deliveryId,
-          returnedOn: '2026-01-06', reason: 'closed period',
-          lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('5.000'), deliveryLineId }],
-          actor: f.staff,
-        }),
-      ),
-    ).rejects.toThrow(/period|closed/i);
+      sql`insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
+          values (${f.orgId}, ${f.storeId}, ${f.locationId}, ${f.itemId}, '2026-01-06T04:00:00Z', -1, 'return_out', 'supplier_return', ${crypto.randomUUID()}, ${f.staff.personId})`,
+    ).rejects.toThrow(/closed period/i);
   });
 
   it('a return naming a different supplier than the linked delivery is refused', async () => {

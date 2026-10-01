@@ -106,6 +106,10 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
+/** T-369 S4: the refusal is the SENTENCE now (the domain asks the ledger before the first write); the trigger (migration 0145) stays the backstop (I3). */
+const closedSentenceRe = (month: string, doing: string) =>
+  new RegExp(`^${month} is closed\\. Stock can't be ${doing} on .+ — a closed month's stock stays as it was, and the closed-month override doesn't change that\\. Use a date in an open month\\.$`);
+
 describe('T-168 — ⭐ the loop closes', () => {
   it('receive, use, and COGS is what the stock actually cost', async () => {
     await stockUp();
@@ -371,8 +375,22 @@ describe('T-168 — the period lock and the ledger', () => {
   it('a post into a closed period is refused and nothing survives', async () => {
     await stockUp();
     await sql`update fiscal_periods set status='closed' where org_id = ${orgA}`;
-    await expect(withOrgPrincipal(orgA, (tx) => postUsageRecord(tx, usageInput()))).rejects.toThrow(/period|closed/i);
-    expect(await onHand()).toBe('18.000');
+    const [e0] = await sql<{ c: string }[]>`select count(*)::text as c from journal_entries where org_id = ${orgA}`;
+    const res = await withOrgPrincipal(orgA, (tx) => postUsageRecord(tx, usageInput()));
+    expect(res.ok, 'a usage post into a closed month went through').toBe(false);
+    if (!res.ok) expect(res.reason).toMatch(closedSentenceRe('August 2026', 'used'));
+    expect(await onHand(), 'a refused post consumed stock').toBe('18.000');
+    const [e1] = await sql<{ c: string }[]>`select count(*)::text as c from journal_entries where org_id = ${orgA}`;
+    expect(e1!.c, 'a refused post wrote a journal entry').toBe(e0!.c);
+  });
+
+  it('I3 (the backstop): a RAW stock movement dated in the closed period is still refused by the database trigger', async () => {
+    await stockUp();
+    await sql`update fiscal_periods set status = 'closed' where org_id = ${orgA}`;
+    await expect(
+      sql`insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
+          values (${orgA}, ${storeA}, ${kitchen}, ${itemA}, '2026-08-20T04:00:00Z', -1, 'consumption', 'usage_record', ${crypto.randomUUID()}, ${personA})`,
+    ).rejects.toThrow(/closed period/i);
   });
 
   it('⭐ the trial balance ties after receive + use', async () => {
