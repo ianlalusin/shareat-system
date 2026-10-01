@@ -65,35 +65,35 @@
 - `1203–1237` 10. Phase plan
 - `1238–1254` 11. Migration & ETL rules
 - `1255–1319` 12. Inherited landmines — do not repeat these
-- `1320–1587` 13. Decision log
-- `1588–1607` 14. Amendment protocol
-- `1608–1612` 15. Engineering standards — the industry practices this project follows
-  - `1613–1618` 15.1 Build order: walking skeleton first
-  - `1619–1630` 15.2 Golden-master testing — the most important practice here
-  - `1631–1639` 15.3 Strangler Fig, not big-bang cutover
-  - `1640–1644` 15.4 No dual-write
-  - `1645–1653` 15.5 Expand/contract migrations
-  - `1654–1662` 15.6 Observability from day zero, not later
-  - `1663–1667` 15.7 CI gates
-  - `1668–1672` 15.8 Backups and a tested restore
-  - `1673–1677` 15.9 Twelve-Factor config
-  - `1678–1685` 15.10 Append-only ledgers — but not event sourcing
-  - `1686–1690` 15.11 Defence in depth
-  - `1691–1719` 15.12 Skills are lenses, not assurance
-  - `1720–1726` 15.13 Reconciliation is a permanent feature
-- `1727–1731` 16. The accounting spine
-  - `1732–1763` 16.0 What we are actually fixing — the diagnosis
-  - `1764–1807` 16.1 The ten invariants — non-negotiable
-  - `1808–1822` 16.2 The oracle: how "correct" is tested
-  - `1823–1844` 16.3 The model — header + lines, not legs
-  - `1845–1864` 16.4 Deliberately simpler than ERPNext
-  - `1865–1931` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1932–1956` 16.6 What v1 already gets right — preserve the intent
-  - `1957–1978` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1979–1993` 16.8 What v1's accounting already gets right
-  - `1994–2037` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2038–2088` 16.10 Posting patterns — one canonical pattern per business event
-  - `2089–2120` 16.11 Inventory's accounting integration
+- `1320–1589` 13. Decision log
+- `1590–1609` 14. Amendment protocol
+- `1610–1614` 15. Engineering standards — the industry practices this project follows
+  - `1615–1620` 15.1 Build order: walking skeleton first
+  - `1621–1632` 15.2 Golden-master testing — the most important practice here
+  - `1633–1641` 15.3 Strangler Fig, not big-bang cutover
+  - `1642–1646` 15.4 No dual-write
+  - `1647–1655` 15.5 Expand/contract migrations
+  - `1656–1664` 15.6 Observability from day zero, not later
+  - `1665–1669` 15.7 CI gates
+  - `1670–1674` 15.8 Backups and a tested restore
+  - `1675–1679` 15.9 Twelve-Factor config
+  - `1680–1687` 15.10 Append-only ledgers — but not event sourcing
+  - `1688–1692` 15.11 Defence in depth
+  - `1693–1721` 15.12 Skills are lenses, not assurance
+  - `1722–1728` 15.13 Reconciliation is a permanent feature
+- `1729–1733` 16. The accounting spine
+  - `1734–1765` 16.0 What we are actually fixing — the diagnosis
+  - `1766–1809` 16.1 The ten invariants — non-negotiable
+  - `1810–1824` 16.2 The oracle: how "correct" is tested
+  - `1825–1846` 16.3 The model — header + lines, not legs
+  - `1847–1866` 16.4 Deliberately simpler than ERPNext
+  - `1867–1933` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1934–1958` 16.6 What v1 already gets right — preserve the intent
+  - `1959–1980` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1981–1995` 16.8 What v1's accounting already gets right
+  - `1996–2039` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2040–2090` 16.10 Posting patterns — one canonical pattern per business event
+  - `2091–2122` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1583,6 +1583,8 @@ just a patch.**
 | 258 | 2026-09-30 | **PAYMENT METHODS: `ar_collection` IS RETIRED AS AN EXPENSE METHOD; v1 `other` SPLITS INTO SUPPLIER CREDIT/REBATE AND VOUCHER/POINTS/GIFT CERTIFICATE (DEF-054).** The collection fee is a deduction line on the customer receipt; the ETL skips v1's auto fee-expense docs; v1 `other` rows land in suspense, flagged. Count from landed data before building. | Standard accounting; one method, one meaning | Yes — ETL mapping only until built |
 | 259 | 2026-09-30 | **AN EMPLOYMENT THE CALLER CANNOT SEE GETS ONE UNIFORM REFUSAL SENTENCE (T-364 Q1 (a)); SAME-ORG FOREIGN KEYS WAIT UNTIL BEFORE A SECOND ORGANISATION (DEF-491).** | A specific "not found" leaks existence | Yes |
 | 260 | 2026-09-30 | **IAN'S ANSWERS ON THE OPEN QUESTIONS PAGE, 2026-09-30 — T-367 Q1–Q7, T-369 Q1–Q4, T-371, DEF-443, DEF-476, T-315, T-316 (full list: `docs/plans/money-defects-2026-09-30.md`).** Headlines: a supplier rebate reduces the payable; a paid bill cannot be voided until its payment is; a duplicate write-off by the same person is the same write-off; a voided sales day frees its date but **only a manager may re-enter it, never staff**; an empty money box is refused only when the amount is required, never turned into zero; a cancelled order's thread is read-only; amounts leave page addresses before launch; existing staff get store access through a one-time admin-reviewed list; cashiers count before handing over. | Answers typed on the page are rulings (row 252) | Yes, each |
+| 261 | 2026-10-01 | **THE MANAGER WHO TOOK A HANDOVER MAY CONFIRM ITS OVERAGE AS INCOME.** T-366 S3 shipped `recognise_income` gated on `accept_remittance` (manager/admin, not staff — row 253's A1 Q3). It does not exclude the person who recorded the handover, unlike write-off's author check. | **Ian, 2026-10-01, Open Questions page**, recommended by the orchestrator: an overage is cash already in hand — confirming it moves nothing out of the business, so a second pair of eyes buys no protection. | Yes — add an author check in `resolveRemittanceVariance`'s income branch if a control is later wanted |
+| 262 | 2026-10-01 | **A SCREEN RENDERS A MONEY CONTROL ONLY WHERE THE VIEWER CAN USE IT; A COUNT OF WORK STAYS ORG-WIDE.** Write-off/void on the customer page and Charge/Recognise on the remittance page show only where the viewer holds the capability at that record's store (heldCapabilities + a per-store `authorize` probe — never the gate itself). The uniform "does not exist, or is not yours" refusal stays for hand-crafted requests. A list may follow the page's store picker, but the count of unresolved work it summarises stays org-wide ("N here · K more at other stores") — row 147, a count must be visible. | Orchestrator rulings during the T-367 S1 and T-366 S3 reviews (auditor findings): a control that refuses every click is a lie about what the viewer can do, and the uniform sentence then reads as a fault. Row 147 caught the first version of the remittance ruling, which had scoped the count away with the list. | Yes, per screen |
 
 
 ## 14. Amendment protocol
