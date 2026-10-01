@@ -267,9 +267,13 @@ export const salesDays = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
-    /** ⭐ ONE report per store per business date — and this is what makes the create-block
-     *  (bible row 126) meaningful. Without it, "an older day is unverified" is ambiguous. */
-    uniqueIndex('sales_days_org_id_store_id_business_date_unique').on(t.orgId, t.storeId, t.businessDate),
+    /** ⭐ ONE LIVE report per store per business date — and this is what makes the create-block
+     *  (bible row 126) meaningful. Without it, "an older day is unverified" is ambiguous.
+     *  T-369 S7 (Ian Q1): a VOIDED day no longer counts, so its date can be entered again (by a manager,
+     *  `createSalesDay`); a date may hold any number of voided days. Partial since migration 0177. */
+    uniqueIndex('sales_days_org_id_store_id_business_date_unique')
+      .on(t.orgId, t.storeId, t.businessDate)
+      .where(sql`${t.status} <> 'voided'`),
     index('sales_days_org_id_business_date_idx').on(t.orgId, t.businessDate),
     /** The create-block's own query: the oldest unverified day for this store before a date. */
     index('sales_days_org_id_store_id_status_business_date_idx').on(t.orgId, t.storeId, t.status, t.businessDate),

@@ -576,48 +576,68 @@ describe('AUDIT A — tenders: a retired wallet keeps its row; a non-positive am
     expect(await tenderRows(id)).toEqual({ [w1.id]: '300.00' });
   });
 
-  for (const bad of ['-5', '0', '0.00']) {
-    it(`a tender typed "${bad}" is refused by EDIT and by CREATE with a written sentence (no id); nothing changes — positive control: ₱50 posts`, async () => {
-      const f = await fixture(`auditA2-${bad}`);
+  // S3 RE-AUDIT (2026-10-01): a tender typed "0" / "0.00" is the same as an UNTOUCHED box — it writes no row and is not an
+  // error (the form submits every wallet; a person who leaves a 0 meant "nothing here"). Only a NEGATIVE amount is refused,
+  // and in plain words: no "tender row", no "Omit the row" (developer talk).
+  for (const blank of ['0', '0.00']) {
+    it(`a tender typed "${blank}" is treated as BLANK by EDIT and by CREATE: no row, no refusal, nothing else changes`, async () => {
+      const f = await fixture(`auditA2-blank-${blank}`);
       const { w1, w2 } = await wallets(f);
       const id = await mkOnlineDay(f, D1, [{ moneyAccountId: w1.id, amount: '300.00' }]);
-      const before = await tenderRows(id);
 
-      const editRefused = await rejection(edit(f, f.manager, id, { ...onlineDay(f, [{ moneyAccountId: w2.id, amount: bad }], '300.00') }), `an edit with a "${bad}" tender`);
-      expect(editRefused.userMessage ?? `NO userMessage — raw: ${editRefused.message}`).toMatch(/\S/);
-      expect(editRefused.userMessage, `raw text leaked: ${editRefused.message}`).toBeTruthy();
-      expect(editRefused.userMessage ?? '').not.toMatch(UUID);
-      expect(await tenderRows(id), 'the edit changed the tenders').toEqual(before);
+      await edit(f, f.manager, id, { ...onlineDay(f, [{ moneyAccountId: w2.id, amount: blank }], '300.00') });
+      expect(await tenderRows(id), `"${blank}" wrote a tender row or dropped the existing one`).toEqual({ [w1.id]: '300.00' });
 
-      const createRefused = await rejection(
-        asOrg(f.orgId, (tx) => D.createSalesDay(tx, f.staff, { storeId: f.storeId, businessDate: '2026-01-05', ...onlineDay(f, [{ moneyAccountId: w2.id, amount: bad }], '300.00') })),
-        `a create with a "${bad}" tender`,
+      const created = await asOrg(f.orgId, (tx) =>
+        D.createSalesDay(tx, f.staff, { storeId: f.storeId, businessDate: '2026-01-05', ...onlineDay(f, [{ moneyAccountId: w1.id, amount: '300.00' }, { moneyAccountId: w2.id, amount: blank }], '300.00') }),
       );
-      expect(createRefused.userMessage, `raw text leaked: ${createRefused.message}`).toBeTruthy();
-      expect(createRefused.userMessage ?? '').not.toMatch(UUID);
-      const [made] = await sql<{ n: string }[]>`select count(*)::text as n from sales_days where org_id = ${f.orgId} and business_date = '2026-01-05'`;
-      expect(Number(made!.n), 'the refused create left a day behind').toBe(0);
-
-      await edit(f, f.manager, id, { ...onlineDay(f, [{ moneyAccountId: w2.id, amount: '50.00' }], '350.00') });
-      expect((await tenderRows(id))[w2.id]).toBe('50.00');
+      expect(await tenderRows(created.id), `"${blank}" on create wrote a row`).toEqual({ [w1.id]: '300.00' });
     });
   }
+
+  it('a tender typed "-5" is refused by EDIT and by CREATE with a PLAIN sentence (no id, no "tender row", no "Omit the row"); nothing changes — positive control: ₱50 posts', async () => {
+    const f = await fixture('auditA2-neg');
+    const { w1, w2 } = await wallets(f);
+    const id = await mkOnlineDay(f, D1, [{ moneyAccountId: w1.id, amount: '300.00' }]);
+    const before = await tenderRows(id);
+
+    const editRefused = await rejection(edit(f, f.manager, id, { ...onlineDay(f, [{ moneyAccountId: w2.id, amount: '-5' }], '300.00') }), 'an edit with a "-5" tender');
+    expect(editRefused.userMessage, `raw text leaked: ${editRefused.message}`).toBeTruthy();
+    expect(editRefused.userMessage ?? '').not.toMatch(UUID);
+    expect(editRefused.userMessage ?? '', 'developer wording on screen').not.toMatch(/tender row|Omit the row/i);
+    expect(await tenderRows(id), 'the edit changed the tenders').toEqual(before);
+
+    const createRefused = await rejection(
+      asOrg(f.orgId, (tx) => D.createSalesDay(tx, f.staff, { storeId: f.storeId, businessDate: '2026-01-05', ...onlineDay(f, [{ moneyAccountId: w2.id, amount: '-5' }], '300.00') })),
+      'a create with a "-5" tender',
+    );
+    expect(createRefused.userMessage, `raw text leaked: ${createRefused.message}`).toBeTruthy();
+    expect(createRefused.userMessage ?? '').not.toMatch(UUID);
+    expect(createRefused.userMessage ?? '', 'developer wording on screen').not.toMatch(/tender row|Omit the row/i);
+    const [made] = await sql<{ n: string }[]>`select count(*)::text as n from sales_days where org_id = ${f.orgId} and business_date = '2026-01-05'`;
+    expect(Number(made!.n), 'the refused create left a day behind').toBe(0);
+
+    await edit(f, f.manager, id, { ...onlineDay(f, [{ moneyAccountId: w2.id, amount: '50.00' }], '350.00') });
+    expect((await tenderRows(id))[w2.id]).toBe('50.00');
+  });
 });
 
-describe('AUDIT B (domain) — a withdrawn day\'s date: re-creating it is refused, in words that do NOT say "edit that one"', () => {
-  it('after a withdraw, creating that date is refused with a sentence naming the withdrawn day — never "Edit that one instead"', async () => {
+describe('AUDIT B (domain, flipped by S7) — a withdrawn date: a MANAGER may enter it again; STAFF are told to ask one', () => {
+  it('after a withdraw, the manager creates the date again; staff are refused "{date} was withdrawn earlier. Only a manager can enter that date again — ask one to do it." (no id)', async () => {
     const f = await fixture('auditB');
     const id = await mkDay(f, D1, '500.00');
     await withdraw(f, f.manager, id, 'Typed wrong');
 
-    const refused = await rejection(
-      asOrg(f.orgId, (tx) => D.createSalesDay(tx, f.manager, { storeId: f.storeId, businessDate: D1, ...figures(f, '1000.00') })),
-      'creating a date whose day was withdrawn',
+    const staffRefused = await rejection(
+      asOrg(f.orgId, (tx) => D.createSalesDay(tx, f.staff, { storeId: f.storeId, businessDate: D1, ...figures(f, '1000.00') })),
+      'staff entering a withdrawn date',
     );
-    expect(refused.userMessage, `raw text leaked: ${refused.message}`).toBeTruthy();
-    expect(refused.userMessage, 'a voided day cannot be edited, so the old advice is wrong').not.toMatch(/Edit that one instead/);
-    expect(refused.userMessage).toMatch(/withdrawn|voided/i);
-    expect(refused.userMessage ?? '').not.toMatch(UUID);
+    expect(staffRefused.userMessage, `raw text leaked: ${staffRefused.message}`).toMatch(/was withdrawn earlier\. Only a manager can enter that date again — ask one to do it\.$/);
+    expect(staffRefused.userMessage ?? '').not.toMatch(UUID);
+    expect(staffRefused.userMessage ?? '', 'the old advice is wrong for a voided day').not.toMatch(/Edit that one instead/);
+
+    const { id: again } = await asOrg(f.orgId, (tx) => D.createSalesDay(tx, f.manager, { storeId: f.storeId, businessDate: D1, ...figures(f, '1000.00') }));
+    expect(again).not.toBe(id);
   });
 });
 
@@ -675,5 +695,33 @@ describe('AUDIT E — the gaps', () => {
     expect(said.userMessage, `raw text leaked: ${said.message}`).toBe("This sales day has been voided, so it can't be posted.");
     expect(said.userMessage).not.toMatch(/verifySalesDay:|createSalesDay:/);
     expect(await journalCount(f.orgId, id)).toBe(0);
+  });
+});
+
+describe('AUDIT D (re-audit) — what the edit audit records', () => {
+  const editRows = (id: string) =>
+    sql<{ before: Record<string, unknown> | null; after: Record<string, unknown> | null }[]>`
+      select before, after from audit_log where entity = 'sales_days' and entity_id = ${id} and action ilike '%edit%'`;
+
+  it('a NO-OP edit (the very same figures and channels) writes NO audit row — an audit trail of non-changes is noise; positive control: a real change writes one', async () => {
+    const f = await fixture('auditD-noop');
+    const id = await mkDay(f, D1, '500.00');
+
+    await edit(f, f.manager, id, figures(f, '500.00')); // identical to what mkDay wrote
+    expect(await editRows(id), 'a no-op edit wrote an audit row').toHaveLength(0);
+
+    await edit(f, f.manager, id, figures(f, '1000.00'));
+    expect(await editRows(id)).toHaveLength(1);
+  });
+
+  it('the audit snapshot carries posSourced (a figure that changes what the day means): before posSourced true -> after false', async () => {
+    const f = await fixture('auditD-pos');
+    const { id } = await asOrg(f.orgId, (tx) => D.createSalesDay(tx, f.staff, { storeId: f.storeId, businessDate: D1, posSourced: true, ...figures(f, '1000.00') }));
+    await edit(f, f.manager, id, { ...figures(f, '1000.00'), posSourced: false });
+
+    const rows = await editRows(id);
+    expect(rows, 'no audit row for the edit').toHaveLength(1);
+    expect(rows[0]!.before, 'the before snapshot has no posSourced').toHaveProperty('posSourced', true);
+    expect(rows[0]!.after, 'the after snapshot has no posSourced').toHaveProperty('posSourced', false);
   });
 });

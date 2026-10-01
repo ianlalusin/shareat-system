@@ -28,7 +28,7 @@
  */
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { moneyAccountsRepo, salesDaysRepo, tradeDiscrepanciesRepo, transaction, type Tx } from '@shareat/db';
-import { add, money, type Money } from '@shareat/core/money';
+import { add, compare, isZero, money, ZERO, type Money } from '@shareat/core/money';
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { parseMoneyInput } from '../shared/money-input';
 import { refuse, humanDate, RefusalError } from '../shared/refusal';
@@ -131,14 +131,6 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
   await authorize(tx, actor, 'submit_sales_day', { storeId: input.storeId });
 
   const existing = await salesDaysRepo.findByBusinessDate(tx, actor.orgId, input.storeId, input.businessDate);
-  if (existing && existing.status === 'voided') {
-    // A withdrawn day cannot be edited, so "edit that one instead" would send the person nowhere.
-    // The unique index still counts it, so the date is used until a later change frees it.
-    throw refuse(
-      `createSalesDay: the date ${input.businessDate} at store ${input.storeId} belongs to a sales day that was withdrawn (voided)`,
-      `${safeHumanDate(input.businessDate)} already belongs to a sales day that was withdrawn, so a new day can't be entered for that date.`,
-    );
-  }
   if (existing) {
     throw refuse(
       `createSalesDay: a sales day already exists for store ${input.storeId} on ${input.businessDate} ` +
@@ -146,6 +138,28 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
       `This store already has a sales day for ${safeHumanDate(input.businessDate)} ` +
         `(${existing.status}). Edit that one instead of starting a second.`,
     );
+  }
+
+  // T-369 S7 (Ian Q1): a VOIDED day frees its date, but only a manager may enter it again - never staff.
+  // The same capability that lets someone withdraw a day lets them re-enter its date. Asked only when a
+  // voided day really is on this date, so an ordinary create never pays for it.
+  if (await salesDaysRepo.hasVoidedOn(tx, actor.orgId, input.storeId, input.businessDate)) {
+    try {
+      await authorize(tx, actor, 'void_sales_day', { storeId: input.storeId });
+    } catch (err) {
+      if (!(err instanceof AuthorizationError)) throw err;
+      throw refuse(
+        `createSalesDay: ${input.businessDate} at store ${input.storeId} was voided and re-entering it needs void_sales_day`,
+        `${safeHumanDate(input.businessDate)} was withdrawn earlier. Only a manager can enter that date again — ask one to do it.`,
+      );
+    }
+    // Cash handed over and counted against this date has to be reversed before the date is entered again.
+    if (await salesDaysRepo.hasPostedHandoverOn(tx, actor.orgId, input.storeId, input.businessDate)) {
+      throw refuse(
+        `createSalesDay: ${input.businessDate} at store ${input.storeId} has a posted remittance allocation`,
+        'Cash handed over has been counted against this date. Reverse that handover first.',
+      );
+    }
   }
 
   // ── The create-block ────────────────────────────────────────────────────────────────
@@ -333,7 +347,8 @@ export async function writeTenders(
   const byId = new Map(available.map((m) => [m.id, m]));
 
   const seen = new Set<string>();
-  const rows = tenders.map((t) => {
+  const rows: { moneyAccountId: string; amount: string }[] = [];
+  for (const t of tenders) {
     const cfg = byId.get(t.moneyAccountId);
     if (!cfg) {
       throw refuse(
@@ -352,15 +367,17 @@ export async function writeTenders(
     // DEF-272: was a raw `money()` call — well-formed already, but its TypeError is a developer
     // message, not a written sentence. `parseMoneyInput` is the shared entry point that fixes that.
     const amount = parseMoneyInput(t.amount, `sales day tenders: "${cfg.name}"'s amount`, `The amount for "${cfg.name}"`);
-    if (Number(amount) <= 0) {
+    // A typed zero says "nothing landed here", which is exactly what a blank box says: no row (a row of
+    // zero would claim money moved). A negative is not a figure a wallet can receive.
+    if (isZero(amount)) continue;
+    if (compare(amount, ZERO) < 0) {
       throw refuse(
-        `sales day tenders: "${cfg.name}" carries ${amount} — a tender row of zero says money ` +
-          `moved and the amount was nothing, which is not a fact about anything. Omit the row`,
-        `"${cfg.name}" carries ${amount} — a tender row of zero says money moved and the amount was nothing, which is not a fact about anything. Omit the row.`,
+        `sales day tenders: "${cfg.name}" carries ${amount} — a tender cannot be negative`,
+        `The amount for "${cfg.name}" can't be negative. Leave it blank if no money landed there.`,
       );
     }
-    return { moneyAccountId: t.moneyAccountId, amount: String(amount) };
-  });
+    rows.push({ moneyAccountId: t.moneyAccountId, amount: String(amount) });
+  }
 
   await salesDaysRepo.replaceTenders(tx, salesDayId, rows);
 }

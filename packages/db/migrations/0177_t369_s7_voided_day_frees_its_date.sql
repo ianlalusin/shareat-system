@@ -1,0 +1,21 @@
+-- T-369 S7 (DEF-479; Ian Q1, ruling (a), bible row 260) - a VOIDED sales day frees its date.
+-- docs/tasks/369-unwired-money-screens.md, S7.
+--
+-- WHY. `sales_days_org_id_store_id_business_date_unique` (0016) counted EVERY row, voided ones
+-- included, so once a day was withdrawn or voided its date could never be entered again: a report typed
+-- wrong on 28 September meant that store's real sales for 28 September could never be recorded. v1 freed
+-- the date by archiving the old report. Ian's ruling: voiding frees the date, but only a manager may enter
+-- it again, never staff (that half is domain, `createSalesDay`; this migration is the database half).
+--
+-- WHAT. The same unique rule, counting only days that are NOT voided - so a date holds any number of
+-- voided days and at most ONE live (open / submitted / verified) one. Dropped and recreated as a partial
+-- unique index; there is nothing to backfill and no row can violate the narrower rule (every pair of rows
+-- the old index allowed is still allowed, and the old index allowed no voided duplicates at all).
+--
+-- ONE TRANSACTION, no CONCURRENTLY: the migrator runs this file inside a transaction, the table is small
+-- (one row per store per trading day), and there is no window in which two live days for one date could
+-- be inserted - the DROP and the CREATE commit together.
+--
+-- NOT TOUCHED: no new table (so no RLS / classification entry), no trigger, no grant.
+DROP INDEX "sales_days_org_id_store_id_business_date_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "sales_days_org_id_store_id_business_date_unique" ON "sales_days" USING btree ("org_id","store_id","business_date") WHERE "sales_days"."status" <> 'voided';

@@ -291,8 +291,8 @@ export default async function SalesDayDetailPage({
           <p className="text-neutral-600 dark:text-neutral-400">
             Nothing was posted for this day, so <strong>nothing is reversed</strong> — it is simply
             taken off the books. Anything else attached to it (a POS usage pull, recorded wastage, a
-            counted handover) has to be undone first. A reason is required.{' '}
-            <strong>The date stays used — a new day cannot be entered for {day.businessDate}.</strong>
+            counted handover) has to be undone first. A reason is required. A manager can enter this
+            date again afterwards.
           </p>
           <div className="flex gap-2">
             <input

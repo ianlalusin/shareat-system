@@ -98,7 +98,7 @@ export async function recordOrderWastageAction(fd: FormData): Promise<void> {
       salesDaysRepo.findByBusinessDate(tx, actor.orgId, storeId, businessDate),
     );
     if (!salesDay) {
-      backToList(storeId, `No sales day exists for ${businessDate} at this store yet — record one first.`);
+      backToList(storeId, `No sales day exists for ${businessDate} at this store yet — record one first. If that day was withdrawn, only a manager can enter the date again, so ask a manager.`);
     }
 
     const result = await withOrgPrincipal(actor.orgId, (tx) =>

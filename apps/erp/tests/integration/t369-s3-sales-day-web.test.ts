@@ -390,36 +390,57 @@ describe('AUDIT A (web) — tenders', () => {
     expect(html, 'an active wallet is still an input').toContain(`name="tender_${w2.id}"`);
   });
 
-  for (const bad of ['-5', '0']) {
-    it(`a tender typed "${bad}" is refused with a banner by BOTH editSalesDayAction and createSalesDayAction (not silently dropped); nothing changes — control: ₱50 saves`, async () => {
-      const f = await fixture(`auditA-act-${bad}`);
+  // S3 RE-AUDIT: "0" / "0.00" is a BLANK box (no row, no banner); only a negative amount is refused, in plain words.
+  for (const blank of ['0', '0.00']) {
+    it(`a tender typed "${blank}" is treated as BLANK by BOTH editSalesDayAction and createSalesDayAction: no refusal banner, no tender row`, async () => {
+      const f = await fixture(`auditA-blank-${blank}`);
       const { w1, w2 } = await ewallets(f);
       const id = await onlineDayWithTender(f, '2026-01-10', w1.id);
       const actions = await load(() => import('../../src/app/sales-days/actions'), 'sales-days/actions.ts');
       const { editSalesDayAction, createSalesDayAction } = actions as unknown as { editSalesDayAction: (fd: FormData) => Promise<void>; createSalesDayAction: (fd: FormData) => Promise<void> };
 
       ACTOR_HOLDER.actor = f.manager;
-      const edited = await expectRedirectTo(() => editSalesDayAction(dayForm(f, { id, online: '300.00', tenders: { [w2.id]: bad } })));
-      expect(param(edited, 'error'), `an edit with a "${bad}" tender was accepted/dropped silently`).toBeTruthy();
-      expect(param(edited, 'error')).not.toMatch(UUID);
-      expect(await tenderCount(id)).toBe(1);
+      const edited = await expectRedirectTo(() => editSalesDayAction(dayForm(f, { id, online: '300.00', tenders: { [w1.id]: '300.00', [w2.id]: blank } })));
+      expect(param(edited, 'error'), `a "${blank}" tender was refused instead of read as blank: ${param(edited, 'error')}`).toBeNull();
+      expect(await tenderCount(id), `"${blank}" wrote a tender row`).toBe(1);
 
-      const created = await expectRedirectTo(() => createSalesDayAction(dayForm(f, { date: '2026-01-05', online: '300.00', tenders: { [w2.id]: bad } })));
-      expect(param(created, 'error'), `a create with a "${bad}" tender was accepted/dropped silently`).toBeTruthy();
-      expect(await daysOn(f.orgId, '2026-01-05'), 'the refused create left a day behind').toBe(0);
-
-      const ok = await expectRedirectTo(() => editSalesDayAction(dayForm(f, { id, online: '350.00', tenders: { [w2.id]: '50.00' } })));
-      expect(param(ok, 'error'), `refused: ${param(ok, 'error')}`).toBeNull();
+      const created = await expectRedirectTo(() => createSalesDayAction(dayForm(f, { date: '2026-01-05', online: '300.00', tenders: { [w1.id]: '300.00', [w2.id]: blank } })));
+      expect(param(created, 'error'), `a create with a "${blank}" tender was refused: ${param(created, 'error')}`).toBeNull();
+      expect(await daysOn(f.orgId, '2026-01-05')).toBe(1);
     });
   }
+
+  it('a tender typed "-5" is refused with a PLAIN banner by BOTH actions (no id, no "tender row", no "Omit the row"); nothing changes — control: ₱50 saves', async () => {
+    const f = await fixture('auditA-act-neg');
+    const { w1, w2 } = await ewallets(f);
+    const id = await onlineDayWithTender(f, '2026-01-10', w1.id);
+    const actions = await load(() => import('../../src/app/sales-days/actions'), 'sales-days/actions.ts');
+    const { editSalesDayAction, createSalesDayAction } = actions as unknown as { editSalesDayAction: (fd: FormData) => Promise<void>; createSalesDayAction: (fd: FormData) => Promise<void> };
+
+    ACTOR_HOLDER.actor = f.manager;
+    const edited = await expectRedirectTo(() => editSalesDayAction(dayForm(f, { id, online: '300.00', tenders: { [w2.id]: '-5' } })));
+    expect(param(edited, 'error'), 'an edit with a "-5" tender was accepted/dropped silently').toBeTruthy();
+    expect(param(edited, 'error')).not.toMatch(UUID);
+    expect(param(edited, 'error') ?? '', 'developer wording on screen').not.toMatch(/tender row|Omit the row/i);
+    expect(await tenderCount(id)).toBe(1);
+
+    const created = await expectRedirectTo(() => createSalesDayAction(dayForm(f, { date: '2026-01-05', online: '300.00', tenders: { [w2.id]: '-5' } })));
+    expect(param(created, 'error'), 'a create with a "-5" tender was accepted/dropped silently').toBeTruthy();
+    expect(param(created, 'error') ?? '', 'developer wording on screen').not.toMatch(/tender row|Omit the row/i);
+    expect(await daysOn(f.orgId, '2026-01-05'), 'the refused create left a day behind').toBe(0);
+
+    const ok = await expectRedirectTo(() => editSalesDayAction(dayForm(f, { id, online: '350.00', tenders: { [w2.id]: '50.00' } })));
+    expect(param(ok, 'error'), `refused: ${param(ok, 'error')}`).toBeNull();
+  });
 });
 
-describe('AUDIT B (web) — the withdraw panel says the date stays used', () => {
-  it('a manager\'s withdraw panel on an open day reads "The date stays used — a new day cannot be entered for {date}."', async () => {
+describe('AUDIT B (web, flipped by S7) — the withdraw panel says a manager can enter the date again', () => {
+  it('a manager\'s withdraw panel on an open day reads "A manager can enter this date again afterwards." and no longer says the date stays used', async () => {
     const f = await fixture('auditB-page');
     const id = await mkDay(f, '2026-01-10', '500.00');
     const html = await detail(f.manager, id, { store: f.storeId });
-    expect(html).toMatch(/The date stays used — a new day cannot be entered for [^<]*(2026-01-10|Jan(uary)? 10, 2026)/);
+    expect(html).toContain('A manager can enter this date again afterwards.');
+    expect(html, 'the old, now-false sentence is still shown').not.toMatch(/The date stays used/);
   });
 });
 

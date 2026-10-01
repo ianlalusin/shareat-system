@@ -8,7 +8,7 @@
  * and is pooled across them (T-136, bible row 128); putting it on the day is exactly the v1 shape
  * that makes pooling impossible.
  */
-import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lt, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { refuse } from '../refusal';
 import { recordGone } from './record-gone';
@@ -345,6 +345,11 @@ export async function getByIdForUpdate(tx: Tx, orgId: string, id: string): Promi
   return row;
 }
 
+/**
+ * The LIVE day for this store and date - open, submitted or verified - never a voided one (T-369 S7:
+ * a voided day frees its date; migration 0177 narrowed the unique index to match). At most one row can
+ * qualify, which is what `limit(1)` was already assuming.
+ */
 export async function findByBusinessDate(
   tx: Tx,
   orgId: string,
@@ -359,10 +364,29 @@ export async function findByBusinessDate(
         eq(salesDays.orgId, orgId),
         eq(salesDays.storeId, storeId),
         eq(salesDays.businessDate, businessDate),
+        ne(salesDays.status, 'voided'),
       ),
     )
     .limit(1);
   return row;
+}
+
+/** Whether a day for this store and date was ever voided - the fact that makes re-entering the date a
+ *  manager's decision, not staff's (T-369 S7, Ian Q1). */
+export async function hasVoidedOn(tx: Tx, orgId: string, storeId: string, businessDate: string): Promise<boolean> {
+  const rows = await tx
+    .select({ id: salesDays.id })
+    .from(salesDays)
+    .where(
+      and(
+        eq(salesDays.orgId, orgId),
+        eq(salesDays.storeId, storeId),
+        eq(salesDays.businessDate, businessDate),
+        eq(salesDays.status, 'voided'),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 /**
@@ -547,6 +571,17 @@ export async function markUnverifiedVoided(
       'This sales day was verified or withdrawn by someone else a moment ago. Reload the page to see where it stands.',
     );
   }
+}
+
+/** Whether a POSTED remittance has an allocation on this store's business date - cash handed over and
+ *  counted against that date. Re-entering a withdrawn date while one stands would let a second day claim
+ *  money the first was already settled with (T-369 S7 audit). */
+export async function hasPostedHandoverOn(tx: Tx, orgId: string, storeId: string, businessDate: string): Promise<boolean> {
+  const rows = (await tx.execute(sql`
+    select 1 from remittance_allocations ra join remittances r on r.id = ra.remittance_id
+     where r.org_id = ${orgId} and r.store_id = ${storeId} and r.status = 'posted' and ra.business_date = ${businessDate}
+     limit 1`)) as unknown as unknown[];
+  return rows.length > 0;
 }
 
 export interface WithdrawBlockers {

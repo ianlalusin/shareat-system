@@ -166,8 +166,10 @@ describe('recordIfUnmappedConstraint', () => {
 // export (`LOCALLY_MAPPED_CONSTRAINT_NAMES`) and never touches this object literal, so if this
 // count ever changes, someone widened the security allowlist as a side effect of a counting change.
 describe('§B3 did not widen the /setup security allowlist', () => {
-  it('CONSTRAINT_MESSAGES still has exactly 26 keys — the count WRITTEN_FOR_A_PERSON is built from', () => {
-    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(26);
+  // T-369 S7: 26 -> 27, DELIBERATELY. The new key (sales_days_org_id_store_id_business_date_unique) maps to a sentence
+  // written for a person that names no record, so widening the /setup allowlist by one is intended.
+  it('CONSTRAINT_MESSAGES has exactly 27 keys — the count WRITTEN_FOR_A_PERSON is built from (26 plus the T-369 S7 sales-day unique sentence)', () => {
+    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(27);
   });
 
   it('none of the 8 locally-mapped names were promoted into CONSTRAINT_MESSAGES', () => {

@@ -18,6 +18,10 @@ import { logger } from '@shareat/core/logger';
 import { containsIdentifier, hasStringCode, isPresentable, looksLikeADump, UUID_SHAPE } from './error-shape';
 
 export const CONSTRAINT_MESSAGES: Record<string, string> = {
+  // T-369 S7: with a voided day freeing its date, two managers can race to re-enter it and the loser meets
+  // the unique index (now partial, migration 0177).
+  sales_days_org_id_store_id_business_date_unique:
+    'Someone else just entered a sales day for this date. Reload the page.',
   pay_runs_no_overlapping_posted_period:
     'A posted run already covers part of that period. ⛔ Periods may not overlap — the overlap ' +
     'would be paid twice. Void the existing run first, or choose dates outside it.',

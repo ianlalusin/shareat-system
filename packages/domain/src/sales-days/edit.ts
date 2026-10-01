@@ -18,7 +18,7 @@
  * it is the verifier's, so it needs `verify_sales_day` (segregation of duties, `verify.ts`).
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { auditLogRepo, moneyAccountsRepo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
 import { parseMoneyInput } from '../shared/money-input';
 import { writeChannels, writeTenders, type CreateSalesDayInput } from './create';
@@ -70,15 +70,16 @@ async function runEdit(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<
 
   if (input.channels) await writeChannels(tx, actor, day.storeId, day.id, input.channels);
   if (input.tenders) {
-    // A wallet retired since the day was entered is not offered on the form, so its tender row is not
-    // in `input.tenders` - and replace semantics would silently delete a recorded fact. Rows for
-    // wallets that are no longer active are kept as they are; blank active wallets still clear.
-    const active = new Set((await moneyAccountsRepo.listMoneyAccounts(tx, actor.orgId, { storeId: day.storeId })).map((a) => a.id));
-    const retired = (await salesDaysRepo.getTendersForDay(tx, day.id)).filter((t) => !active.has(t.moneyAccountId));
+    // Only the wallets the edit NAMES are changed: a positive amount sets that wallet's row, a typed zero
+    // clears it, and a wallet the edit does not mention keeps its row exactly as it was. The form offers
+    // only ACTIVE wallets, so a wallet retired since the day was entered is never in `input.tenders` -
+    // replace-everything semantics would silently delete a recorded fact.
+    const mentioned = new Set(input.tenders.map((t) => t.moneyAccountId));
+    const untouched = (await salesDaysRepo.getTendersForDay(tx, day.id)).filter((t) => !mentioned.has(t.moneyAccountId));
     await writeTenders(tx, actor, day.storeId, day.id, input.tenders);
-    if (retired.length > 0) {
+    if (untouched.length > 0) {
       const written = await salesDaysRepo.getTendersForDay(tx, day.id);
-      await salesDaysRepo.replaceTenders(tx, day.id, [...written, ...retired].map((t) => ({ moneyAccountId: t.moneyAccountId, amount: t.amount })));
+      await salesDaysRepo.replaceTenders(tx, day.id, [...written, ...untouched].map((t) => ({ moneyAccountId: t.moneyAccountId, amount: t.amount })));
     }
   }
 
@@ -91,7 +92,9 @@ async function runEdit(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<
 
   // Audited in the table that already exists, same transaction: this changes what the ledger will be
   // told at verify (the figures a verifier signs off), so who changed what, and from what, is kept.
-  const after = await snapshot(tx, { ...day, ...figures });
+  const after = await snapshot(tx, { ...day, ...figures, ...(input.posSourced === undefined ? {} : { posSourced: input.posSourced }) });
+  // An edit that changed nothing leaves nothing to audit: a trail of non-changes is noise that hides the real ones.
+  if (JSON.stringify(before) === JSON.stringify(after)) return { id: day.id };
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'edit_sales_day',
@@ -115,6 +118,7 @@ async function snapshot(
   const tenders = await salesDaysRepo.getTendersForDay(tx, day.id);
   return {
     status: day.status,
+    posSourced: day.posSourced,
     totalSales: day.totalSales,
     unliSales: day.unliSales,
     alaCarteSales: day.alaCarteSales,

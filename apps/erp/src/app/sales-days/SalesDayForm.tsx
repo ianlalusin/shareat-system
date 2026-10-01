@@ -220,7 +220,8 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
           <h2 className="font-medium">Wallets no longer in use</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Money this day already recorded against wallets that have since been retired. It stays as it
-            is and cannot be changed here.
+            is and cannot be changed here — and verifying still needs the wallets on this day, these
+            included, to add up to its online figure.
           </p>
           <ul className="text-sm">
             {retiredTenders.map((t) => (

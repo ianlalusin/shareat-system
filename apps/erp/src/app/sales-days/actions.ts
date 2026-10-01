@@ -52,10 +52,10 @@ function parseDayFigures(formData: FormData) {
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith('tender_') || typeof value !== 'string') continue;
     const amount = value.trim();
-    // Blank means "nothing landed here" and writes no row. Anything TYPED - zero and negatives
-    // included - is passed on so the domain refuses it in words, never dropped silently.
-    if (!amount) continue;
-    tenders.push({ moneyAccountId: key.slice('tender_'.length), amount });
+    // Every wallet the form offered is named. Blank reads as zero ("nothing landed here"): no row on a
+    // create, and on an edit it clears that wallet's row. A negative is passed on so the domain refuses
+    // it in words; nothing typed is dropped silently.
+    tenders.push({ moneyAccountId: key.slice('tender_'.length), amount: amount || '0' });
   }
 
   const channels: { channelId: string; amount: string; noSales: boolean }[] = [];

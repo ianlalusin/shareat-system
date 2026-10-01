@@ -334,11 +334,32 @@ describe('T-271 — sales_channels', () => {
     expect(row.constraintName).toBe('sales_channels_org_id_store_id_name_unique');
     expect(row.message).toBe(CONSTRAINT_MESSAGES.sales_channels_org_id_store_id_name_unique);
   });
+
+  // T-369 S7 audit C — with the voided-date rule, two concurrent MANAGER re-entries of one voided date both pass the
+  // existence check and the loser meets the unique index. That must read as a sentence, not as a raw 23505. The key is
+  // mapped in CONSTRAINT_MESSAGES the same way as the sibling unique indexes above (NOTE: it widens the /setup allowlist
+  // by one).
+  it('sales_days_org_id_store_id_business_date_unique', async () => {
+    const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Reader') returning id`;
+    await sql`
+      insert into sales_days (org_id, store_id, business_date, status, total_sales, unli_sales, ala_carte_sales, created_by)
+      values (${orgId}, ${storeId}, '2026-03-03', 'open', '1.00', '1.00', '0.00', ${person!.id})`;
+    const err = await provoke(
+      () => sql`
+        insert into sales_days (org_id, store_id, business_date, status, total_sales, unli_sales, ala_carte_sales, created_by)
+        values (${orgId}, ${storeId}, '2026-03-03', 'open', '1.00', '1.00', '0.00', ${person!.id})`,
+    );
+    const row = record('sales_days_org_id_store_id_business_date_unique', err);
+    expect(row.constraintName).toBe('sales_days_org_id_store_id_business_date_unique');
+    expect(row.message, `a raw driver error reached the person: ${row.message}`).toBe(CONSTRAINT_MESSAGES.sales_days_org_id_store_id_business_date_unique);
+    expect(row.message).toMatch(/sales day/i);
+  });
 });
 
 it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   const exercised = new Set(rows.map((r) => r.key));
   const missing = Object.keys(CONSTRAINT_MESSAGES).filter((k) => !exercised.has(k));
   expect(missing).toEqual([]);
-  expect(rows.length).toBe(26);
+  // 26 (T-271) + T-369 S7's sales-day unique key = 27 rows provoked above.
+  expect(rows.length).toBe(27);
 });
