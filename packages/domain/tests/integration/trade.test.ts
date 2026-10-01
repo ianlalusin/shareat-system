@@ -1036,7 +1036,7 @@ describe('two delivery fees, two different treatments', () => {
     ).rejects.toThrow(/cycle/);
   });
 
-  it('⭐ outbound freight is captured on the order — ⚠️ DEF-127: not yet posted anywhere under the perpetual shape', async () => {
+  it('⭐ outbound freight is captured on the order, and posts at receipt as its own entry (T-372/DEF-127)', async () => {
     const f = await fixture('outbound');
     const c = await asOrg(f.orgId, (tx) =>
       createCustomer(tx, f.admin, {
@@ -1056,23 +1056,40 @@ describe('two delivery fees, two different treatments', () => {
     // ⭐ The order still captures the fee, on top of the priced goods.
     expect(order.totalAmount).toBe('19000.00');
 
-    // ⛔ DEF-127. Neither dispatch nor receipt posts a leg for it — `dispatchOrder`/
-    // `confirmReceipt` (T-172/173) carry no fee field at all. The goods post correctly; the
-    // ₱1,000 simply has nowhere to land yet. Reported, not invented here.
     await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: order.orderId }));
     const received = await asOrg(f.orgId, (tx) => receiveTradeOrder(tx, f.manager, { orderId: order.orderId, receivedOn: '2026-01-15' }));
-    const legs = await sql<{ code: string; debit: string; credit: string }[]>`
+
+    // ⛔ The GOODS entry (received.entryId) moves the transfer value only, ₱18,000 — never ₱19,000.
+    // T-372/DEF-127: the freight is a SEPARATE entry beside it, never folded in — this scan is
+    // scoped to the goods entry specifically, so it stays a valid guard once that second entry
+    // exists too (it would not, if the freight leg were merged into this one instead).
+    const goodsLegs = await sql<{ code: string; debit: string; credit: string }[]>`
       select a.code, jl.debit::text, jl.credit::text
       from journal_lines jl join accounts a on a.id = jl.account_id
       where jl.entry_id = ${received.entryId}`;
-    // The reciprocal pair moves the goods' transfer value only (₱18,000) — never ₱19,000.
-    expect(Number(legs.find((l) => l.code === '1250')!.debit)).toBe(18000);
-    expect(Number(legs.find((l) => l.code === '2150')!.credit)).toBe(18000);
-    expect(legs.some((l) => Number(l.debit) === 1000 || Number(l.credit) === 1000)).toBe(false);
+    expect(Number(goodsLegs.find((l) => l.code === '1250')!.debit)).toBe(18000);
+    expect(Number(goodsLegs.find((l) => l.code === '2150')!.credit)).toBe(18000);
+    expect(goodsLegs.some((l) => Number(l.debit) === 1000 || Number(l.credit) === 1000)).toBe(false);
 
     // ⛔ And it did NOT touch the item's cost: the price history still says what the goods cost.
     const lines = await asOrg(f.orgId, (tx) => tradeRepo.linesFor(tx, f.orgId, order.orderId));
     expect(Number(lines[0]!.rate)).toBe(18000);
+
+    // T-372/DEF-127 (R9) — the positive twin of t372-internal-freight.test.ts's F1: the ₱1,000
+    // freight posts as its OWN entry at receipt, Dr 6630 / Cr 2150 on the branch (f.otherStoreId),
+    // Dr 1250 / Cr 6630 on the commissary (f.storeId) — never folded into the goods entry above.
+    // ⛔ TESTER, not BUILDER — `postInternalFreight` does not exist yet, so this is red today.
+    const [freightEntry] = await sql<{ id: string }[]>`
+      select id from journal_entries where org_id = ${f.orgId} and idempotency_key = ${`trade_order:${order.orderId}:receipt-freight`}`;
+    expect(freightEntry, 'today: postInternalFreight does not exist, so no such entry posts').toBeDefined();
+    const freightLegs = await sql<{ code: string; store_id: string; debit: string; credit: string }[]>`
+      select a.code, jl.store_id, jl.debit::text, jl.credit::text
+      from journal_lines jl join accounts a on a.id = jl.account_id
+      where jl.entry_id = ${freightEntry!.id}`;
+    expect(Number(freightLegs.find((l) => l.code === '6630' && l.store_id === f.otherStoreId)!.debit)).toBe(1000);
+    expect(Number(freightLegs.find((l) => l.code === '2150' && l.store_id === f.otherStoreId)!.credit)).toBe(1000);
+    expect(Number(freightLegs.find((l) => l.code === '1250' && l.store_id === f.storeId)!.debit)).toBe(1000);
+    expect(Number(freightLegs.find((l) => l.code === '6630' && l.store_id === f.storeId)!.credit)).toBe(1000);
   });
 
   it('an internal order with no stated rate takes the branch price as its default', async () => {

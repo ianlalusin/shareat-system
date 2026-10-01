@@ -1,6 +1,6 @@
 # T-372: a prepared commissary order never goes back (DEF-511); internal freight posts at receipt (DEF-127)
 
-**Status:** **S1 DONE 2026-10-01 (domain refusal at ready + UI; audited; screen-tested); S2 DONE 2026-10-01 (migration 0175; R5 dropped — already in 0056); S3 next** — APPROVED 2026-09-30 (orchestrator, Ian's Q1/Q2). Written 2026-09-30 by the Opus planner at HEAD `3ed900f`.
+**Status:** **S1 DONE 2026-10-01 (domain refusal at ready + UI; audited; screen-tested); S2 DONE 2026-10-01 (migration 0175; R5 dropped — already in 0056); S3 DONE 2026-10-01 (DEF-127 internal freight at receipt; screen-tested); S4 (posting pattern) next** — APPROVED 2026-09-30 (orchestrator, Ian's Q1/Q2). Written 2026-09-30 by the Opus planner at HEAD `3ed900f`.
 **Lane:** commissary, one lane. **Model:** Sonnet (tester first, then builder, per slice).
 **Migration:** YES, one hand-authored migration (ADR-012 §5). T-366 holds 0172 and T-368 takes the next index, so
 use **0174** (after T-366's 0172 and T-368's 0173) unless the index is reassigned at build. It carries S2 and nothing else.
@@ -310,6 +310,8 @@ make either wording change the other.
 
 **S4 TESTER:** none new. `tests/unit/posting-patterns-doc.test.ts` and `tests/integration/posting-patterns.test.ts`
 are the proof, and they run green.
+
+- **S4 note (orchestrator, 2026-10-01, auditor):** also re-read every existing commissary pattern in POSTING-PATTERNS that may still say the fee rides the goods posting (true until T-165, false since) — fix it in the same edit, the `remittance.overage` trap.
 
 ### S5: TESTER only
 - **New:** `packages/domain/tests/integration/t372-open-order-block.test.ts`.

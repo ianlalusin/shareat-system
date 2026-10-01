@@ -421,7 +421,7 @@ Cr 7350 ₱80. Screenshot the section: it shows no "Charge" control.
 ---
 
 ### S3 review record (orchestrator, 2026-10-01)
-Contract-complete (auditor JOBs 8, 10, 11). Changes beyond the spec, all orchestrator rulings: (a) the Charge and Recognise controls render only where the viewer holds `accept_remittance` at that store (the T-367 rule: never show a control the caller cannot use); (b) the variance list follows the page's store picker; (c) **the unresolved COUNT stays org-wide** ("N here · M more at other stores") — bible row 147, a count must be visible, and (b) had scoped it away; (d) an unknown action gets a plain domain refusal. POSTING-PATTERNS `remittance.overage` rewritten as two entries. Open for Ian: may the manager who took the handover confirm its overage (Open Questions page)?
+Contract-complete (auditor JOBs 8, 10, 11). Changes beyond the spec, all orchestrator rulings: (a) the Charge and Recognise controls render only where the viewer holds `accept_remittance` at that store (the T-367 rule: never show a control the caller cannot use); (b) the variance list follows the page's store picker; (c) **the unresolved COUNT stays org-wide** ("N here · M more at other stores") — bible row 147, a count must be visible, and (b) had scoped it away; (d) an unknown action gets a plain domain refusal. POSTING-PATTERNS `remittance.overage` rewritten as two entries. **Ian, 2026-10-01 (Open Questions page): the same manager who took the handover MAY confirm its overage** — as built; no change.
 
 ## S4: the `write_off` posting. ⛔ BLOCKED on Q1
 Until Q1 is answered, S2 ships the default: new `write_off` calls are REFUSED (reversible, moves no money; existing

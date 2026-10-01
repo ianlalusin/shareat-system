@@ -44,8 +44,8 @@ import { recordCharge, voidCharge } from '../ar';
 import { branchPriceFor } from '../items';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
-import type { Money } from '@shareat/core/money';
-import { confirmReceipt, dispatchOrder, type ReceiptLineInput } from '../commissary/transfer';
+import { add, money, type Money } from '@shareat/core/money';
+import { confirmReceipt, dispatchOrder, postInternalFreight, type ReceiptLineInput } from '../commissary/transfer';
 import { consume, reverseConsumption } from '../stock/consume';
 import { postConsumption } from '../stock/consumption-posting';
 import type { ConsumedLine } from '../stock/layers';
@@ -149,8 +149,11 @@ export interface CreateTradeOrderInput {
    * of that is the fee from Lipa to Malvar."*
    *
    * ON TOP of the priced goods, never into an item's cost: it is a haulage charge for one
-   * shipment, not a property of the item. It rides the posting, so it lands on the receiving
-   * store exactly like the goods do.
+   * shipment, not a property of the item.
+   *
+   * ⭐ T-372/DEF-127 — on an INTERNAL order this does NOT ride the goods posting (true until
+   * T-165, false since). `receiveTradeOrder` posts it as its own entry, via
+   * `commissary/transfer.ts`'s `postInternalFreight`, at RECEIPT, never at dispatch.
    */
   deliveryFee?: string | null;
   otherFees?: string | null;
@@ -780,6 +783,11 @@ export interface ReceiveTradeOrderResult {
   readonly receivedAt: Date;
   /** `null` for an EXTERNAL order (nothing posts here) or an all-ledger-only internal receipt. */
   readonly entryId: string | null;
+  /** ⭐ T-372/DEF-127. The OUTBOUND FREIGHT entry, distinct from `entryId` (the goods entry) — the
+   *  two can exist independently of each other (R7: a freight-only receipt has `entryId: null`; a
+   *  fee-free order has `freightEntryId: null`). `null` for an EXTERNAL order, a zero-fee order, or
+   *  when `confirmReceipt`/`postInternalFreight` is never reached at all. */
+  readonly freightEntryId: string | null;
 }
 
 /**
@@ -816,6 +824,7 @@ export async function receiveTradeOrder(
     if (!customer) throw new Error('receiveTradeOrder: the order names a customer that no longer exists.');
 
     let entryId: string | null = null;
+    let freightEntryId: string | null = null;
 
     if (customersRepo.treatmentOf(customer) === 'internal') {
       const branchStoreId = customer.counterpartyStoreId!;
@@ -908,10 +917,27 @@ export async function receiveTradeOrder(
         if (!confirmed.ok) throw new Error(`receiveTradeOrder: ${confirmed.reason}`);
         entryId = confirmed.entryId;
       }
+
+      // ⭐ T-372/DEF-127 (R8) — OUTSIDE the `receiptLines.length > 0` block, deliberately: the truck
+      // still ran even when every line was received short to zero (F7, Ian's Q2), so the freight is
+      // owed whether or not the goods entry above exists at all.
+      const freight = add(money(order.deliveryFee), money(order.otherFees));
+      const freightPosted = await postInternalFreight(trx, {
+        orgId: actor.orgId,
+        commissaryStoreId: order.storeId,
+        branchStoreId,
+        commissaryStoreCode,
+        branchStoreCode,
+        orderId: order.id,
+        receivedOn,
+        freight,
+        postedBy: actor.personId,
+      });
+      freightEntryId = freightPosted?.entryId ?? null;
     }
 
     const receivedAt = await tradeRepo.markReceived(trx, actor.orgId, order.id, actor.personId);
-    return { receivedAt, entryId };
+    return { receivedAt, entryId, freightEntryId };
   };
   if (tx) return run(tx);
   return transaction(run);

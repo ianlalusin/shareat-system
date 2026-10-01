@@ -61,8 +61,38 @@
  * ⚠️ `1340` exists for exactly this and has been seeded and unused since T-102. Without it, goods
  * are invisible between the two stores — the same gap T-167's in-transit reservation closes inside
  * one store.
+ *
+ * ## Outbound freight (T-372/DEF-127)
+ *
+ * `trade_orders.delivery_fee + other_fees`, on an INTERNAL order, is the cost of the truck that
+ * made the trip — never a sale. It posts at RECEIPT, same as the goods, but as its OWN entry
+ * (`postInternalFreight`), keyed `trade_order:<id>:receipt-freight`, never as extra legs on the
+ * goods entry above:
+ *
+ * ```
+ * FREIGHT   Dr 6630 Vehicle and transportation   (branch — bears the haulage in its own P&L)
+ *           Cr 2150 Due to related store         (branch, party: commissary)
+ *           Dr 1250 Due from related store       (commissary, party: branch)
+ *           Cr 6630 Vehicle and transportation   (commissary — recovers its own driver/fuel cost)
+ * ```
+ *
+ * ⭐ **The debit side is Ian's ruling (Q1 (a), 2026-09-30): the receiving branch bears the haulage,
+ * not the commissary.** The credit side is who owed and paid for it — the SAME `2150`/`1250`
+ * reciprocal pair the goods entry uses, because the branch now owes the commissary for the freight
+ * exactly as it owes for the goods. The commissary's own `6630` credit recovers what it already
+ * spent on the trip through its own expenses (fuel, driver payroll); consolidated, the two `6630`
+ * legs net to zero — the same elimination `5175` performs for the transfer margin above.
+ *
+ * ⛔ **A separate entry, not separate legs on the goods one, because the goods entry can be ABSENT
+ * when the freight is still owed:** `confirmReceipt` returns `entryId: null` when every line was
+ * short-received to zero, and `receiveTradeOrder` skips calling it at all when every line is
+ * ledger-only. The truck still ran either way.
+ *
+ * ⚠️ Called only on the `internal` customer-treatment branch (`receiveTradeOrder`'s existing
+ * internal/external split) — a franchise's freight would be revenue, not a recovery, and is out of
+ * this task's scope entirely.
  */
-import { add, compare, fromCentavos, subtract, toCentavos, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, fromCentavos, isZero, subtract, toCentavos, ZERO, type Money } from '@shareat/core/money';
 import { deliveriesRepo, stockLayersRepo, stockLedgerRepo, tradeDiscrepanciesRepo, type Tx } from '@shareat/db';
 import type { ShortageReason } from '@shareat/db/schema';
 import { consume } from '../stock/consume';
@@ -71,12 +101,17 @@ import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { lineCost } from '../stock/layers';
 import { postEntry, type PostEntryLine } from '../ledger/post-entry';
 import { quantity, subtractQuantity, toThousandths, type Quantity } from '../stock/quantity';
+import { internalFault } from '../shared/refusal';
 
 export const IN_TRANSIT_ACCOUNT = '1340';
 export const DUE_FROM_ACCOUNT = '1250';
 export const DUE_TO_ACCOUNT = '2150';
 /** ⭐ Where the transfer margin lands. Contra-COGS at the commissary; nets its processing to zero. */
 export const TRANSFER_OUT_ACCOUNT = '5175';
+/** ⭐ T-372/DEF-127. `6630 Vehicle and transportation` — the haulage account both legs of the
+ *  freight entry use (COA-ALIGNMENT §4.1; `packages/db/seed/chart-of-accounts.ts:392`). Not a
+ *  `requires_party` control account, so neither `6630` leg below carries a party. */
+export const HAULAGE_ACCOUNT = '6630';
 
 /**
  * ⚠️ A **measurement** tolerance, and it is v1's: `hasDiscrepancy` fires above 0.005 base units.
@@ -521,4 +556,72 @@ export async function confirmReceipt(
     // goods in a truck that never arrived are a real asset until a manager says otherwise (T-174).
     inTransitRemaining: subtract(dispatchedCost, receivedCost),
   };
+}
+
+export interface PostInternalFreightInput {
+  readonly orgId: string;
+  readonly commissaryStoreId: string;
+  readonly branchStoreId: string;
+  /** Store CODES, not uuids — same convention as `ConfirmReceiptInput` (DEF-040): `party_id` for a
+   *  store line is the OTHER store's code. */
+  readonly commissaryStoreCode: string;
+  readonly branchStoreCode: string;
+  readonly orderId: string;
+  readonly receivedOn: string;
+  /** `delivery_fee + other_fees` (R6) — ONE figure, already summed by the caller. */
+  readonly freight: Money;
+  readonly postedBy: string;
+}
+
+/**
+ * T-372/DEF-127 — the outbound-freight entry (see this file's header). Posts the four R9 legs as
+ * their own entry, in the SAME transaction as `confirmReceipt`, never folded into it.
+ *
+ * ⭐ Returns `null` for a zero freight — the common case (most internal orders carry no fee), and
+ * `journal_lines_exactly_one_side_check` would reject a zero-value leg outright regardless.
+ *
+ * ⛔ A negative `freight` is an `internalFault`, never a `refuse()` or a bare, unnamed exception:
+ * R5's `trade_orders_fees_non_negative_check` (migration 0175) plus `createTradeOrder`'s own refusal
+ * (`trade/index.ts:307`) make this unreachable through any live path — a negative figure arriving
+ * here means some OTHER writer bypassed both, which is this module's bug to report, not the
+ * caller's refusal to word.
+ */
+export async function postInternalFreight(
+  tx: Tx,
+  input: PostInternalFreightInput,
+): Promise<{ entryId: string } | null> {
+  if (compare(input.freight, ZERO) < 0) {
+    throw internalFault(
+      `postInternalFreight: freight ${input.freight} for order ${input.orderId} is negative — ` +
+        'unreachable through createTradeOrder (refuses a negative fee) or the fees CHECK (migration ' +
+        '0175); some other writer produced this value.',
+    );
+  }
+  if (isZero(input.freight)) return null;
+
+  const posted = await postEntry(tx, {
+    orgId: input.orgId,
+    entryDate: input.receivedOn,
+    // ⚠️ Same (sourceType, sourceId) as the goods entry above (R7) — the two are told apart by
+    // idempotency_key (`trade_order:<id>:receipt` vs `:receipt-freight`), never by source alone.
+    sourceType: 'trade_order_receipt',
+    sourceId: input.orderId,
+    idempotencyKey: `trade_order:${input.orderId}:receipt-freight`,
+    memo: 'Branch confirmed receipt — outbound freight charged to the branch',
+    postedBy: input.postedBy,
+    lines: [
+      { accountCode: HAULAGE_ACCOUNT, storeId: input.branchStoreId, debit: input.freight },
+      {
+        accountCode: DUE_TO_ACCOUNT, storeId: input.branchStoreId, credit: input.freight,
+        partyType: 'store', partyId: input.commissaryStoreCode,
+      },
+      {
+        accountCode: DUE_FROM_ACCOUNT, storeId: input.commissaryStoreId, debit: input.freight,
+        partyType: 'store', partyId: input.branchStoreCode,
+      },
+      { accountCode: HAULAGE_ACCOUNT, storeId: input.commissaryStoreId, credit: input.freight },
+    ],
+  });
+
+  return { entryId: posted.entryId };
 }
