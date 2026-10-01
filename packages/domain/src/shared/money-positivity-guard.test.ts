@@ -278,13 +278,6 @@ const CLASSIFIED_ENTRIES: {
     checkIdentifiers: ['defaultAmount'],
   },
   {
-    file: 'sales-days/create.ts',
-    comparison: 'Number(amount) <= 0',
-    reason: 'routed — writeTenders, `amount = parseMoneyInput(t.amount, ...)` above',
-    checkFunctions: ['writeTenders'],
-    checkIdentifiers: ['amount'],
-  },
-  {
     file: 'trade/index.ts',
     comparison: 'Number(lineTotal) <= 0',
     reason:

@@ -36,7 +36,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ fil
 
   try {
     const { url } = await withOrgPrincipal(actor.orgId, (tx) => readFileUrl(tx, actor, { fileId }));
-    return new Response(null, { status: 302, headers: { Location: url, 'Cache-Control': NO_STORE } });
+    return new Response('', { status: 302, headers: { Location: url, 'Cache-Control': NO_STORE } });
   } catch (err) {
     // ONLY "no such file for you" and "not allowed" are the uniform 404; any other refusal or fault is not
     // "not available to you" and is not disguised as it.
