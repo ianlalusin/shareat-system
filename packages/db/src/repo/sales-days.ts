@@ -10,6 +10,7 @@
  */
 import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
+import { refuse } from '../refusal';
 import { recordGone } from './record-gone';
 import {
   salesChannels,
@@ -328,6 +329,22 @@ export async function getById(tx: Tx, orgId: string, id: string): Promise<SalesD
   return row;
 }
 
+/**
+ * T-369 S3 / R5 - the day, read with `SELECT ... FOR UPDATE`. `editSalesDay`, `voidSalesDay` and
+ * `runVerify` each take this lock BEFORE any other read, so verify can never post figures an edit is
+ * half-way through changing, and an edit can never land on a day a verify just posted. A plain
+ * `getById` read under READ COMMITTED would let both pass their status check on the same snapshot.
+ */
+export async function getByIdForUpdate(tx: Tx, orgId: string, id: string): Promise<SalesDayRow | undefined> {
+  const [row] = await tx
+    .select(COLUMNS)
+    .from(salesDays)
+    .where(and(eq(salesDays.id, id), eq(salesDays.orgId, orgId)))
+    .limit(1)
+    .for('update');
+  return row;
+}
+
 export async function findByBusinessDate(
   tx: Tx,
   orgId: string,
@@ -503,6 +520,68 @@ export async function markVoided(
   if (updated.length === 0) {
     throw recordGone(`markVoided: sales day ${id} does not exist in org ${orgId}, or is not verified`, 'sales day', 'verified');
   }
+}
+
+/**
+ * T-369 S3 / R3 - withdraw an UNVERIFIED day: `voided`, with who and why, and no journal entry (an
+ * unverified day posted nothing). The status predicate is repeated in the WHERE, as `updateDraft`
+ * does, so a verify that committed between the caller's read and this write is a refusal, not a
+ * void of a day that has since posted.
+ */
+export async function markUnverifiedVoided(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  input: { voidedBy: string; voidReason: string },
+): Promise<void> {
+  const updated = await tx
+    .update(salesDays)
+    .set({ status: 'voided', voidedBy: input.voidedBy, voidedAt: sql`now()`, voidReason: input.voidReason, updatedAt: sql`now()` })
+    .where(and(eq(salesDays.id, id), eq(salesDays.orgId, orgId), inArray(salesDays.status, [...UNVERIFIED_STATUSES])))
+    .returning({ id: salesDays.id });
+  if (updated.length === 0) {
+    // The caller holds the row lock, so reaching here means the day moved between its read and this
+    // write - say so plainly rather than with the generic "does not exist" text.
+    throw refuse(
+      `markUnverifiedVoided: sales day ${id} does not exist in org ${orgId}, or is not open/submitted`,
+      'This sales day was verified or withdrawn by someone else a moment ago. Reload the page to see where it stands.',
+    );
+  }
+}
+
+export interface WithdrawBlockers {
+  /** A POS usage pull for this day that is not void. */
+  usagePull: boolean;
+  /** An `order_wastages` row recorded against this day. */
+  wastage: boolean;
+  /** A POSTED remittance with an allocation on this day (by id, or by this store's date). */
+  remittance: boolean;
+}
+
+/**
+ * T-369 S3 / R3 - what else hangs off this day, read-only, one query each. Withdrawing a day that
+ * still carries one of these would leave the dependent pointing at a voided day, so the domain
+ * refuses and names it; nothing is reversed automatically.
+ */
+export async function withdrawBlockers(
+  tx: Tx,
+  orgId: string,
+  day: { id: string; storeId: string; businessDate: string },
+): Promise<WithdrawBlockers> {
+  const exists = async (query: ReturnType<typeof sql>): Promise<boolean> => {
+    const rows = (await tx.execute(query)) as unknown as unknown[];
+    return rows.length > 0;
+  };
+  const usagePull = await exists(sql`
+    select 1 from pos_usage_pulls where org_id = ${orgId} and sales_day_id = ${day.id} and status <> 'void' limit 1`);
+  const wastage = await exists(sql`
+    select 1 from order_wastages where org_id = ${orgId} and sales_day_id = ${day.id} limit 1`);
+  const remittance = await exists(sql`
+    select 1 from remittance_allocations ra join remittances r on r.id = ra.remittance_id
+     where r.org_id = ${orgId} and r.status = 'posted'
+       and (ra.sales_day_id = ${day.id} or (r.store_id = ${day.storeId} and ra.business_date = ${day.businessDate}))
+     limit 1`);
+  return { usagePull, wastage, remittance };
 }
 
 // -------------------------------------------------------------------------------------

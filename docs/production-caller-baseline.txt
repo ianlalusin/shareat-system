@@ -100,7 +100,6 @@ unclosedShiftCount
 undeclareSupplierItem
 undepositedFunds
 undoWriteOff
-updateDraft
 updateMoneyAccount
 updateOwner
 upsertCategoryLife

@@ -151,13 +151,13 @@ describe('T-348 S2 — the two neutral-500 prose sites move too (SW3)', () => {
 });
 
 describe('T-348 S2 — the population lands exactly, nothing dropped or doubled (SW4)', () => {
-  it('SW4: exactly 102 <PageDescription> call sites exist under app/', () => {
+  it('SW4: exactly 105 <PageDescription> call sites exist under app/', () => {
     let count = 0;
     for (const file of walk(appRoot)) {
       const content = readFileSync(file, 'utf8');
       count += (content.match(/<PageDescription[\s>]/g) ?? []).length;
     }
-    expect(count).toBe(103);
+    expect(count).toBe(105);
   });
 });
 

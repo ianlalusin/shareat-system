@@ -71,7 +71,9 @@ describe('/sales-days/new does not let the POST form submit another store\'s ids
 
 describe('/sales-days/new does not offer another store\'s wallets either (DEF-148, other half)', () => {
   /**
-   * Today `listMoneyAccountsForPicker(orgId)` is called UNFILTERED — every wallet in the org
+   * (T-369 S3, DEF-291: the org-wide `listMoneyAccountsForPicker(orgId)` was replaced by the store-scoped
+   * `listStoreMoneyAccounts(orgId, storeId)`; these tests now pin the NEW call.)
+   * Historically the picker was called UNFILTERED — every wallet in the org
    * renders on every store's form, regardless of `?store=`. `create.ts:309`
    * (`sales-days-create.ts`'s tender resolver) refuses a tender against a wallet outside the
    * day's own store ("a day may only report money into its own store's wallets"), so today's
@@ -84,20 +86,20 @@ describe('/sales-days/new does not offer another store\'s wallets either (DEF-14
    * accepted; a THIRD identifier smuggled in under either form is not (the negative half below).
    */
   function walletsFilterIdentifier(src: string): string {
-    const callIdx = src.indexOf('listMoneyAccountsForPicker(');
-    if (callIdx === -1) throw new Error('listMoneyAccountsForPicker(...) call not found.');
+    const callIdx = src.indexOf('listStoreMoneyAccounts(');
+    if (callIdx === -1) throw new Error('listStoreMoneyAccounts(...) call not found.');
     // A window past the call site wide enough to catch a chained `.filter(...)` on the same or a
     // following statement, without reaching into unrelated code further down the page.
     const window = src.slice(callIdx, callIdx + 400);
 
-    const directArg = /listMoneyAccountsForPicker\(\s*orgId\s*,\s*(\w+)\s*\)/.exec(window);
+    const directArg = /listStoreMoneyAccounts\(\s*orgId\s*,\s*(\w+)\s*\)/.exec(window);
     if (directArg) return directArg[1]!;
 
     const chainedFilter = /\.filter\(\s*\(?\s*\w+\s*\)?\s*=>\s*\w+\.storeId\s*===\s*(\w+)\s*\)/.exec(window);
     if (chainedFilter) return chainedFilter[1]!;
 
     throw new Error(
-      'wallets are not filtered to a store: neither listMoneyAccountsForPicker(orgId, <id>) nor ' +
+      'wallets are not filtered to a store: neither listStoreMoneyAccounts(orgId, <id>) nor ' +
         'a chained .filter(w => w.storeId === <id>) was found near the call site.',
     );
   }

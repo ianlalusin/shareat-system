@@ -204,8 +204,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 151 FAIL / 58 UNRESOLVED', () => {
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 58 });
+  it('accepted-baseline totals: 151 FAIL / 57 UNRESOLVED', () => {
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 57 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -317,7 +317,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // classes the shortage branch's sibling controls already use (38px / 38px / 32px), so all
     // three PASS. Verified by filtering `runCensus()`'s own results to `app/remittance/page.tsx`
     // and reading each new candidate's line/px directly.
-    expect(results.length).toBe(1075);
+    expect(results.length).toBe(1079);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

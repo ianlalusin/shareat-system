@@ -67,7 +67,8 @@ export async function verifySalesDay(
 }
 
 async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<VerifySalesDayResult> {
-  const day = await salesDaysRepo.getById(tx, actor.orgId, salesDayId);
+  // T-369 S3 / R5: `FOR UPDATE`, so an edit in flight finishes first and verify posts ITS figures.
+  const day = await salesDaysRepo.getByIdForUpdate(tx, actor.orgId, salesDayId);
   if (!day) throw gone(`verifySalesDay: sales day ${salesDayId} does not exist in org ${actor.orgId}`, 'sales day');
 
   await authorize(tx, actor, 'verify_sales_day', { storeId: day.storeId });
@@ -167,7 +168,7 @@ export async function voidSalesDay(
   actor: Actor,
   salesDayId: string,
   reason: string,
-): Promise<{ reversalEntryId: string }> {
+): Promise<{ reversalEntryId: string | null }> {
   if (tx) return runVoid(tx, actor, salesDayId, reason);
   return transaction((trx) => runVoid(trx, actor, salesDayId, reason));
 }
@@ -177,32 +178,58 @@ async function runVoid(
   actor: Actor,
   salesDayId: string,
   reason: string,
-): Promise<{ reversalEntryId: string }> {
-  const day = await salesDaysRepo.getById(tx, actor.orgId, salesDayId);
+): Promise<{ reversalEntryId: string | null }> {
+  // T-369 S3 / R5: `FOR UPDATE`, so a withdraw and a verify (or an edit) of one day serialise.
+  const day = await salesDaysRepo.getByIdForUpdate(tx, actor.orgId, salesDayId);
   if (!day) throw gone(`voidSalesDay: sales day ${salesDayId} does not exist in org ${actor.orgId}`, 'sales day');
 
   await authorize(tx, actor, 'void_sales_day', { storeId: day.storeId });
 
-  // ⚠️ Status first, before any posting work: an unverified day has nothing to reverse, and a
-  // voided one has already been reversed.
-  if (day.status !== 'verified') {
-    throw refuse(
-      `voidSalesDay: sales day ${salesDayId} is ${day.status} — only a verified day has a posting to ` +
-        `reverse. An unverified day is edited or left alone; nothing has been recognised from it`,
-      `Only a verified sales day can be voided — this one is ${day.status}. An unverified day is edited instead.`,
-    );
-  }
-  if (!day.journalEntryId) {
-    throw internalFault(`voidSalesDay: sales day ${salesDayId} is verified but carries no journalEntryId — data inconsistency`);
+  if (day.status === 'voided') {
+    throw refuse(`voidSalesDay: sales day ${salesDayId} is already voided`, 'This sales day is already voided.');
   }
 
   const trimmed = (reason ?? '').trim();
-  if (!trimmed) {
-    throw refuse(
+  const needReason = () =>
+    refuse(
       'voidSalesDay: reason is required and cannot be empty or whitespace-only',
       'Reason is required and cannot be empty or whitespace-only.',
     );
+
+  // T-369 S3 / R3: an UNVERIFIED day posted nothing, so there is nothing to reverse - it is just
+  // withdrawn. Refused while something else still hangs off it; that is undone first, on its own screen.
+  if (day.status !== 'verified') {
+    if (!trimmed) throw needReason();
+    const blockers = await salesDaysRepo.withdrawBlockers(tx, actor.orgId, day);
+    if (blockers.usagePull) {
+      throw refuse(
+        `voidSalesDay: sales day ${salesDayId} has a live POS usage pull`,
+        'This day has a POS usage pull. Void the pull first.',
+      );
+    }
+    if (blockers.wastage) {
+      throw refuse(
+        `voidSalesDay: sales day ${salesDayId} has order wastage recorded against it`,
+        "Wastage is recorded against this day, so it can't be withdrawn — edit its figures instead.",
+      );
+    }
+    if (blockers.remittance) {
+      throw refuse(
+        `voidSalesDay: sales day ${salesDayId} has a posted remittance counted against it`,
+        'Cash handed over has been counted against this day. Reverse that handover first.',
+      );
+    }
+    await salesDaysRepo.markUnverifiedVoided(tx, actor.orgId, salesDayId, {
+      voidedBy: actor.personId,
+      voidReason: trimmed,
+    });
+    return { reversalEntryId: null };
   }
+
+  if (!day.journalEntryId) {
+    throw internalFault(`voidSalesDay: sales day ${salesDayId} is verified but carries no journalEntryId — data inconsistency`);
+  }
+  if (!trimmed) throw needReason();
 
   // The ORIGINAL entry stands. Both sides remain in the ledger (bible §4) — this is the same
   // treatment an expense void gets, and for the same reason: a void is a statement about what

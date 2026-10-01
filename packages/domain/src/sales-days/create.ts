@@ -31,7 +31,7 @@ import { moneyAccountsRepo, salesDaysRepo, tradeDiscrepanciesRepo, transaction, 
 import { add, money, type Money } from '@shareat/core/money';
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { parseMoneyInput } from '../shared/money-input';
-import { refuse, humanDate } from '../shared/refusal';
+import { refuse, humanDate, RefusalError } from '../shared/refusal';
 
 /**
  * A refusal message builder must never itself throw (code-review item 7, 2026-09-26):
@@ -103,14 +103,17 @@ export class TransitShortfallBlockedError extends Error {
 }
 
 /** Thrown when an older unverified day blocks this one. A named type, not a bare Error, because
- *  a caller has a genuinely useful thing to do with it: send the user to that day. */
-export class SalesDayBlockedError extends Error {
+ *  a caller has a genuinely useful thing to do with it: send the user to that day. It is a
+ *  `RefusalError`, so the screen shows `userMessage` (a plain sentence naming the date) and never the
+ *  developer text in `message`. */
+export class SalesDayBlockedError extends RefusalError {
   constructor(
     message: string,
+    userMessage: string,
     readonly blockingDayId: string,
     readonly blockingBusinessDate: string,
   ) {
-    super(message);
+    super(message, userMessage);
     this.name = 'SalesDayBlockedError';
   }
 }
@@ -128,6 +131,14 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
   await authorize(tx, actor, 'submit_sales_day', { storeId: input.storeId });
 
   const existing = await salesDaysRepo.findByBusinessDate(tx, actor.orgId, input.storeId, input.businessDate);
+  if (existing && existing.status === 'voided') {
+    // A withdrawn day cannot be edited, so "edit that one instead" would send the person nowhere.
+    // The unique index still counts it, so the date is used until a later change frees it.
+    throw refuse(
+      `createSalesDay: the date ${input.businessDate} at store ${input.storeId} belongs to a sales day that was withdrawn (voided)`,
+      `${safeHumanDate(input.businessDate)} already belongs to a sales day that was withdrawn, so a new day can't be entered for that date.`,
+    );
+  }
   if (existing) {
     throw refuse(
       `createSalesDay: a sales day already exists for store ${input.storeId} on ${input.businessDate} ` +
@@ -154,6 +165,7 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
         `createSalesDay: ${blocking.businessDate} is still ${blocking.status} and must be verified ` +
           `before a newer day can be created. You can still edit that day, or backfill an even ` +
           `older one`,
+        `${safeHumanDate(blocking.businessDate)} is still ${blocking.status} — verify or edit it before entering a newer day.`,
         blocking.id,
         blocking.businessDate,
       );
@@ -310,7 +322,7 @@ export function sumTender(input: {
  * here rather than reach the ledger — where the line would still post, because
  * `journal_lines.party_id` carries no FK by design (DEF-040).
  */
-async function writeTenders(
+export async function writeTenders(
   tx: Tx,
   actor: Actor,
   storeId: string,

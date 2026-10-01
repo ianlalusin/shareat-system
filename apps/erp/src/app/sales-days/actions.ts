@@ -13,10 +13,10 @@
  * could claim to be anyone. **The segregation only became real when this line changed.**
  */
 import { redirect } from 'next/navigation';
-import { createSalesDay, submitSalesDay, verifySalesDay, voidSalesDay, SalesDayBlockedError } from '@shareat/domain';
+import { createSalesDay, editSalesDay, submitSalesDay, verifySalesDay, voidSalesDay } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
-import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -30,15 +30,6 @@ function amount(fd: FormData, key: string): string {
   return raw === '' ? '0' : raw;
 }
 
-function errorMessage(err: unknown): string {
-  // A blocked create carries the day that blocks it — worth surfacing, since the user's next
-  // action is to go and verify that day.
-  if (err instanceof SalesDayBlockedError) {
-    return `${err.message} (blocking day: ${err.blockingBusinessDate})`;
-  }
-  return sharedErrorMessage(err);
-}
-
 /** Only the FILTER state travels in the URL now. The org and the person come from the session,
  *  and a store here names which store a day belongs to — not who is acting. */
 function carryQs(fd: FormData): string {
@@ -48,20 +39,22 @@ function carryQs(fd: FormData): string {
   return params.toString();
 }
 
-export async function createSalesDayAction(formData: FormData): Promise<void> {
-  const actor = await requireActor();
-  const storeId = str(formData, 'storeId');
-  const qs = carryQs(formData);
-
-  // Channel rows arrive as channel_<id> / nosales_<id> pairs — the id is in the field name, so
-  // no index bookkeeping is needed and a missing row is simply absent.
+/**
+ * The figures, channels and tenders a sales-day form carries, parsed ONCE for create and edit.
+ *
+ * Channel rows arrive as channel_<id> / nosales_<id> pairs and tenders as tender_<id> - the id is in
+ * the field name, so no index bookkeeping is needed and a missing row is simply absent.
+ */
+function parseDayFigures(formData: FormData) {
   // ⭐ DEF-068 — where the online money landed. Same field-name-carries-the-id trick the channel
   // rows use, so a missing wallet is simply absent rather than an index to keep in step.
   const tenders: { moneyAccountId: string; amount: string }[] = [];
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith('tender_') || typeof value !== 'string') continue;
     const amount = value.trim();
-    if (!amount || Number(amount) <= 0) continue;
+    // Blank means "nothing landed here" and writes no row. Anything TYPED - zero and negatives
+    // included - is passed on so the domain refuses it in words, never dropped silently.
+    if (!amount) continue;
     tenders.push({ moneyAccountId: key.slice('tender_'.length), amount });
   }
 
@@ -77,6 +70,30 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
     channels.push({ channelId, amount: noSales ? '0' : raw === '' ? '0' : raw, noSales });
   }
 
+  return {
+    posSourced: formData.get('posSourced') === 'on',
+    totalSales: amount(formData, 'totalSales'),
+    unliSales: amount(formData, 'unliSales'),
+    alaCarteSales: amount(formData, 'alaCarteSales'),
+    seniorDiscount: amount(formData, 'seniorDiscount'),
+    pwdDiscount: amount(formData, 'pwdDiscount'),
+    otherDiscount: amount(formData, 'otherDiscount'),
+    comps: amount(formData, 'comps'),
+    serviceCharge: amount(formData, 'serviceCharge'),
+    otherCharges: amount(formData, 'otherCharges'),
+    cashCollected: amount(formData, 'cashCollected'),
+    onlineCollected: amount(formData, 'onlineCollected'),
+    creditSales: amount(formData, 'creditSales'),
+    channels,
+    tenders,
+  };
+}
+
+export async function createSalesDayAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const storeId = str(formData, 'storeId');
+  const qs = carryQs(formData);
+
   let newId: string;
   try {
     if (!storeId) throw new Error('Choose a store.');
@@ -84,21 +101,7 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
       createSalesDay(tx, actor, {
         storeId,
         businessDate: str(formData, 'businessDate'),
-        posSourced: formData.get('posSourced') === 'on',
-        totalSales: amount(formData, 'totalSales'),
-        unliSales: amount(formData, 'unliSales'),
-        alaCarteSales: amount(formData, 'alaCarteSales'),
-        seniorDiscount: amount(formData, 'seniorDiscount'),
-        pwdDiscount: amount(formData, 'pwdDiscount'),
-        otherDiscount: amount(formData, 'otherDiscount'),
-        comps: amount(formData, 'comps'),
-        serviceCharge: amount(formData, 'serviceCharge'),
-        otherCharges: amount(formData, 'otherCharges'),
-        cashCollected: amount(formData, 'cashCollected'),
-        onlineCollected: amount(formData, 'onlineCollected'),
-        creditSales: amount(formData, 'creditSales'),
-        channels,
-        tenders,
+        ...parseDayFigures(formData),
       }),
     );
     newId = result.id;
@@ -106,6 +109,25 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
     redirect(`/sales-days/new?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }
   redirect(`/sales-days/${newId}?${qs}`);
+}
+
+/**
+ * T-369 S3 (DEF-479): fix an unverified day. Reads the same fields as create plus `salesDayId`; the
+ * store and the date are NOT read - the domain never edits them (R1). The domain re-checks who may
+ * edit which status, so a forged POST is refused there; every outcome returns to the day's own page.
+ */
+export async function editSalesDayAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const id = str(formData, 'salesDayId');
+  const qs = carryQs(formData);
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      editSalesDay(tx, actor, { salesDayId: id, ...parseDayFigures(formData) }),
+    );
+  } catch (err) {
+    redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+  }
+  redirect(`/sales-days/${id}?${qs}`);
 }
 
 export async function submitSalesDayAction(formData: FormData): Promise<void> {

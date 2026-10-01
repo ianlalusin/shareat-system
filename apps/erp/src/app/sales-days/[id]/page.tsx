@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { authorize, AuthorizationError } from '@shareat/auth';
 import { salesDaysRepo, journalRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
 import { listStores, listActingPersons } from '../lib';
@@ -52,6 +53,27 @@ export default async function SalesDayDetailPage({
         };
       })
     : { lines: [], reversalId: null, reversalLines: [] };
+
+  // T-369 S3 (DEF-479): what this viewer may DO to the day, probed with the real `authorize()` so a
+  // control renders only where it can be used (bible row 262). The domain re-checks on submit. An open
+  // day is edited under `submit_sales_day`, a submitted one under `verify_sales_day`; a void needs
+  // `void_sales_day`.
+  const can = await withOrgPrincipal(orgId, async (tx) => {
+    const probe = async (capability: 'submit_sales_day' | 'verify_sales_day' | 'void_sales_day') => {
+      try {
+        await authorize(tx, actor, capability, { storeId: day.storeId });
+        return true;
+      } catch (err) {
+        if (err instanceof AuthorizationError) return false;
+        throw err;
+      }
+    };
+    return {
+      edit: await probe(day.status === 'submitted' ? 'verify_sales_day' : 'submit_sales_day'),
+      void: await probe('void_sales_day'),
+    };
+  });
+  const unverified = day.status === 'open' || day.status === 'submitted';
 
   const personName = (pid: string | null) =>
     pid ? (persons.find((p) => p.id === pid)?.displayName ?? pid) : '—';
@@ -218,6 +240,17 @@ export default async function SalesDayDetailPage({
         </section>
       )}
 
+      {unverified && can.edit && (
+        <div>
+          <a
+            href={`/sales-days/${day.id}/edit?${carry.toString()}`}
+            className="inline-flex min-h-[44px] items-center rounded border border-neutral-300 px-4 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+          >
+            Edit this day
+          </a>
+        </div>
+      )}
+
       <section className="grid gap-4 md:grid-cols-2">
         {day.status === 'open' && (
           <form action={submitSalesDayAction} className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
@@ -251,10 +284,34 @@ export default async function SalesDayDetailPage({
         )}
       </section>
 
-      {day.status === 'verified' && (
+      {unverified && can.void && (
         <form action={voidSalesDayAction} className="space-y-3 rounded-lg border border-red-200 p-4 text-sm dark:border-red-900">
           {hiddenIds}
-          <h2 className="font-medium text-red-800 dark:text-red-300">Void</h2>
+          <h2 className="font-medium text-red-800 dark:text-red-300">Withdraw this unverified day</h2>
+          <p className="text-neutral-600 dark:text-neutral-400">
+            Nothing was posted for this day, so <strong>nothing is reversed</strong> — it is simply
+            taken off the books. Anything else attached to it (a POS usage pull, recorded wastage, a
+            counted handover) has to be undone first. A reason is required.{' '}
+            <strong>The date stays used — a new day cannot be entered for {day.businessDate}.</strong>
+          </p>
+          <div className="flex gap-2">
+            <input
+              name="reason"
+              required
+              placeholder="Why is this being withdrawn?"
+              className="flex-1 rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
+            />
+            <button type="submit" className="rounded border border-red-300 px-4 py-1.5 font-medium text-red-800 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950">
+              Withdraw day
+            </button>
+          </div>
+        </form>
+      )}
+
+      {day.status === 'verified' && can.void && (
+        <form action={voidSalesDayAction} className="space-y-3 rounded-lg border border-red-200 p-4 text-sm dark:border-red-900">
+          {hiddenIds}
+          <h2 className="font-medium text-red-800 dark:text-red-300">Void (reverses the posting)</h2>
           <p className="text-neutral-600 dark:text-neutral-400">
             A verified day is voided by <strong>reversing</strong> its entry — the original stays
             visible and both sides remain in the ledger. A reason is required.

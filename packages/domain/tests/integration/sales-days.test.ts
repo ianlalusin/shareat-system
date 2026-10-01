@@ -377,7 +377,8 @@ describe('invariant 4 — voiding reverses, and the original stands', () => {
     );
 
     const original = await linesFor(posted.journalEntryId);
-    const reversal = await linesFor(res.reversalEntryId);
+    expect(res.reversalEntryId, 'a VERIFIED day void writes a reversal').not.toBeNull();
+    const reversal = await linesFor(res.reversalEntryId!);
     expect(original.length).toBe(2);
     expect(reversal.length).toBe(2);
 
@@ -391,14 +392,22 @@ describe('invariant 4 — voiding reverses, and the original stands', () => {
     expect((await dayRow(id))!.status).toBe('voided');
   });
 
-  it('an UNVERIFIED day cannot be voided — there is nothing to reverse', async () => {
+  // T-369 S3 R3 (DEF-479) — this test used to pin "an UNVERIFIED day cannot be voided". That rule is
+  // reversed on purpose: an unverified day is WITHDRAWN (nothing was posted, so nothing is reversed),
+  // and a voided day cannot be voided again.
+  it('an UNVERIFIED day is WITHDRAWN: status voided, reason stored, no reversal (reversalEntryId null), no journal entry — and a second void is refused', async () => {
     const f = await setup('inv4b');
     const { id } = await asPerson(f.orgId, (tx) =>
       createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
     );
+    const res = await asPerson(f.orgId, (tx) => voidSalesDay(tx, actor(f.orgId, f.managerId), id, 'oops'));
+    expect(res.reversalEntryId, 'nothing was posted, so nothing is reversed').toBeNull();
+    expect((await dayRow(id))!.status).toBe('voided');
+    expect(await ledgerLineCount(f.orgId, id), 'a withdrawn day has no ledger lines').toBe(0);
+
     await expect(
-      asPerson(f.orgId, (tx) => voidSalesDay(tx, actor(f.orgId, f.managerId), id, 'oops')),
-    ).rejects.toThrow(/only a verified day has a posting to reverse/);
+      asPerson(f.orgId, (tx) => voidSalesDay(tx, actor(f.orgId, f.managerId), id, 'again')),
+    ).rejects.toThrow(/already voided/);
   });
 
   it('a void requires a reason', async () => {
@@ -808,27 +817,29 @@ describe('DEF-272 — a sub-centavo tender amount gets a written sentence, not m
 // =========================================================================================
 
 describe('T-343 S5.1 — sales-days refusals carry a human sentence', () => {
-  it('E1: voidSalesDay on an open day — userMessage is exactly verify.ts:179\'s sentence with "open"; no UUID', async () => {
+  // T-369 S3 R3: E1 used to pin the refusal of voiding an OPEN day. An open day is now withdrawn; the
+  // sentence that carries over is the one for a day that is ALREADY voided.
+  it('E1: voidSalesDay on an already-voided day — userMessage is exactly "This sales day is already voided."; no UUID; the raw diagnostic still names it', async () => {
     const f = await setup('t343-s51-e1');
     const { id } = await asPerson(f.orgId, (tx) =>
       createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
     );
+    await asPerson(f.orgId, (tx) => voidSalesDay(tx, actor(f.orgId, f.managerId), id, 'wrong day'));
 
     let caught: unknown;
     try {
-      await asPerson(f.orgId, (tx) => voidSalesDay(tx, actor(f.orgId, f.managerId), id, 'wrong day'));
+      await asPerson(f.orgId, (tx) => voidSalesDay(tx, actor(f.orgId, f.managerId), id, 'wrong day again'));
     } catch (err) {
       caught = err;
     }
     expect(caught).toBeInstanceOf(Error);
     const err = caught as Error & { userMessage?: string };
-    expect(err.userMessage).toBe(
-      'Only a verified sales day can be voided — this one is open. An unverified day is edited instead.',
-    );
+    expect(err.userMessage).toBe('This sales day is already voided.');
     expect(err.userMessage).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
 
-    // E5 (⛔ negative): the raw diagnostic still matches today's regex, unedited (Invariant 1).
-    expect(err.message).toMatch(/only a verified day has a posting/);
+    // E5 (⛔ negative): the raw diagnostic carries the id for the log, and is not the user's sentence (Invariant 1).
+    expect(err.message).toMatch(/is already voided/);
+    expect(err.message).not.toBe(err.userMessage);
   });
 
   it('E2: a duplicate createSalesDay names the date and status; no UUID', async () => {

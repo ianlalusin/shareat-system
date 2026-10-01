@@ -104,6 +104,10 @@ const EXEMPT: Record<string, string> = {
   writeChannels:
     'INTERNAL — `createSalesDay` calls it (`sales-days/create.ts:206`) to write the per-channel ' +
     'rows a sales day owns. Exported for its types, not as an entry point.',
+  writeTenders:
+    'INTERNAL — `createSalesDay` and `editSalesDay` call it (`sales-days/create.ts`, `sales-days/edit.ts`) ' +
+    'to write the per-wallet tender rows a sales day owns. Exported (T-369 S3) so the edit path shares the ' +
+    'same validation, not as an entry point.',
 
   // ---- 4. unwired: nothing calls it, and that is the gap -------------------------------------
   //
