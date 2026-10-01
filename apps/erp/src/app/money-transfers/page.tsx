@@ -3,7 +3,7 @@ import { requirePageAccess } from '../../lib/page-access';
 import type { PickerOption } from '../../components/two-way-picker';
 import { createMoneyTransferAction, voidMoneyTransferAction } from './actions';
 import { RecordTransferForm } from './RecordTransferForm';
-import { CUSTODIAN_LABEL, listRecentTransfers, listStores, listTransferableAccounts, peso } from './lib';
+import { CUSTODIAN_LABEL, listAccountBalances, listRecentTransfers, listStores, listTransferableAccounts, peso } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 
@@ -28,9 +28,11 @@ export default async function MoneyTransfersPage({
 
   const [stores, accounts, transfers] = await Promise.all([
     listStores(actor.orgId),
-    listTransferableAccounts(actor.orgId),
+    listAccountBalances(actor.orgId),
     listRecentTransfers(actor.orgId),
   ]);
+  // Balances are read once; the usable set is those at stores where the viewer may move money.
+  const usable = await listTransferableAccounts(actor, accounts);
   const storeById = new Map(stores.map((s) => [s.id, s]));
   const today = new Date().toISOString().slice(0, 10);
 
@@ -44,7 +46,7 @@ export default async function MoneyTransfersPage({
   const overdrawn = accounts.filter((a) => Number(a.balance) < 0);
 
   const byStore = stores
-    .map((s) => ({ store: s, accounts: accounts.filter((a) => a.storeId === s.id) }))
+    .map((s) => ({ store: s, accounts: usable.filter((a) => a.storeId === s.id) }))
     .filter((g) => g.accounts.length > 0);
 
   // ⭐ Built server-side, WITH `peso` already applied — a plain function cannot cross the
@@ -109,7 +111,13 @@ export default async function MoneyTransfersPage({
         </div>
       )}
 
-      {accounts.length < 2 && (
+      {usable.length === 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          You can&apos;t move money at any store.
+        </div>
+      )}
+
+      {usable.length > 0 && usable.length < 2 && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
           <strong className="font-medium">A transfer needs two accounts.</strong> Add them on{' '}
           <Link href="/money-accounts" className="underline underline-offset-2">
@@ -159,20 +167,22 @@ export default async function MoneyTransfersPage({
       )}
 
       {/* ── Record one ───────────────────────────────────────────────────────────────── */}
-      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <div>
-          <h2 className="font-medium">Record a transfer</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            A retired account cannot be either end, and{' '}
-            <strong>between stores money moves office to office only</strong> — a store remits to
-            its own office first, and only office money can fund another store. An office safe
-            cannot send more than it holds; a cashier drawer can, and says so, because the till
-            holds the day&apos;s takings before the ledger does.
-          </p>
-        </div>
+      {usable.length > 0 && (
+        <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <div>
+            <h2 className="font-medium">Record a transfer</h2>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              A retired account cannot be either end, and{' '}
+              <strong>between stores money moves office to office only</strong> — a store remits to
+              its own office first, and only office money can fund another store. An office safe
+              cannot send more than it holds; a cashier drawer can, and says so, because the till
+              holds the day&apos;s takings before the ledger does.
+            </p>
+          </div>
 
-        <RecordTransferForm action={createMoneyTransferAction} options={accountOptions} today={today} />
-      </section>
+          <RecordTransferForm action={createMoneyTransferAction} options={accountOptions} today={today} />
+        </section>
+      )}
 
       {/* ── History ──────────────────────────────────────────────────────────────────── */}
       {transfers.length > 0 && (
