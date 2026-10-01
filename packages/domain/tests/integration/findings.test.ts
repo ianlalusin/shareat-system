@@ -82,14 +82,20 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
  * T-264 / DEF-284 slice 1 — gives an org enough FORWARD fiscal-period runway that
  * `fiscalPeriodRunwayLow` (wired into every `listFindings` call from this task onward) stays
  * quiet, without touching the shared January 2026 period other fixtures and tests post into.
- * Disjoint from it on purpose — real "today" is long past January, so `daysAgo(5)..daysAhead(400)`
- * cannot overlap it, the same way `openRecentPeriod` near the T-152 tests below stays disjoint for
- * its own real-clock detectors.
+ * Disjoint from it on purpose — real "today" is long past January, so the far-future month this
+ * inserts cannot overlap it, the same way `openRecentPeriod` near the T-152 tests below stays
+ * disjoint for its own real-clock detectors.
+ *
+ * DEF-426 (0174's whole-month CHECK on 'open' periods): the detector only reads `max(ends_on)`
+ * across 'open' periods (`findings.ts:338`), so one whole-month 'open' period ~400 days out gives
+ * the same runway the old multi-month span did, without violating the new constraint.
  */
 async function openFarFutureCoverage(f: Fixture): Promise<void> {
-  const now = Date.now();
-  const starts = new Date(now - 5 * 86_400_000).toISOString().slice(0, 10);
-  const ends = new Date(now + 400 * 86_400_000).toISOString().slice(0, 10);
+  const future = new Date(Date.now() + 400 * 86_400_000);
+  const y = future.getUTCFullYear();
+  const m = future.getUTCMonth();
+  const starts = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+  const ends = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
   await sql`
     insert into fiscal_periods (org_id, starts_on, ends_on, status)
     values (${f.orgId}, ${starts}, ${ends}, 'open')`;
@@ -310,14 +316,26 @@ describe('each detector fires when its condition holds', () => {
     // relative to the detector's real wall-clock threshold — fixture()'s own period only covers
     // January 2026.
     const today = new Date();
-    const yyyy = today.getUTCFullYear();
-    const mm = String(today.getUTCMonth() + 1).padStart(2, '0');
-    const lastDay = new Date(Date.UTC(yyyy, today.getUTCMonth() + 1, 0)).getUTCDate();
-    await sql`
-      insert into fiscal_periods (org_id, starts_on, ends_on, status)
-      values (${f.orgId}, ${`${yyyy}-${mm}-01`}, ${`${yyyy}-${mm}-${lastDay}`}, 'open')
-      on conflict do nothing`;
     const recentDate = new Date(today.getTime() - 2 * 86_400_000).toISOString().slice(0, 10);
+    // DEF-426 follow-up: on the 1st/2nd of a month, `recentDate` falls in the PREVIOUS month —
+    // a period covering only today's month left this calendar-dependent. Cover every whole
+    // month from recentDate's month through today's.
+    {
+      const from = new Date(recentDate);
+      let y = from.getUTCFullYear();
+      let m = from.getUTCMonth();
+      const endY = today.getUTCFullYear();
+      const endM = today.getUTCMonth();
+      while (y < endY || (y === endY && m <= endM)) {
+        const starts = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+        const ends = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+        await sql`
+          insert into fiscal_periods (org_id, starts_on, ends_on, status)
+          values (${f.orgId}, ${starts}, ${ends}, 'open') on conflict do nothing`;
+        m += 1;
+        if (m > 11) { m = 0; y += 1; }
+      }
+    }
 
     const [till] = await sql<{ id: string }[]>`
       select id from money_accounts where store_id = ${f.storeId}
@@ -573,12 +591,18 @@ describe('T-220 — grniNotAtRest: a receipt whose invoice never arrived', () =>
     const [sup] = await sql<{ id: string }[]>`
       insert into suppliers (org_id, name, created_by)
       values (${f.orgId}, ${'Supplier ' + tag}, ${f.personId}) returning id`;
-    const on = await sql<{ d: string }[]>`
-      select (((now() at time zone 'Asia/Manila')::date - ${daysAgo}::int))::text as d`;
+    // DEF-426: 0174's whole-month CHECK forbids a single-day 'open' period, so the period
+    // covering `entryDate` is now the whole calendar month it falls in, not just that one day.
+    const on = await sql<{ d: string; starts: string; ends: string }[]>`
+      select
+        (((now() at time zone 'Asia/Manila')::date - ${daysAgo}::int))::text as d,
+        (date_trunc('month', (now() at time zone 'Asia/Manila')::date - ${daysAgo}::int))::date::text as starts,
+        (date_trunc('month', (now() at time zone 'Asia/Manila')::date - ${daysAgo}::int)
+          + interval '1 month - 1 day')::date::text as ends`;
     const entryDate = on[0]!.d;
     await sql`
       insert into fiscal_periods (org_id, starts_on, ends_on, status)
-      values (${f.orgId}, ${entryDate}, ${entryDate}, 'open') on conflict do nothing`;
+      values (${f.orgId}, ${on[0]!.starts}, ${on[0]!.ends}, 'open') on conflict do nothing`;
     const [period] = await sql<{ id: string }[]>`
       select id from fiscal_periods where org_id = ${f.orgId} and starts_on <= ${entryDate}
         and ends_on >= ${entryDate} limit 1`;
@@ -972,11 +996,29 @@ const daysAhead = (n: number) =>
  *
  * ⚠️ `postEntry` refuses a date no open fiscal period covers, so the window has to exist. It is
  * deliberately disjoint from the January period the fixture already creates.
+ *
+ * DEF-426: 0174's whole-month CHECK forbids a single 'open' row spanning `daysAgo(200)..
+ * daysAhead(5)` (several calendar months). The widest date this task's fixtures actually post at
+ * is `daysAgo(40)` (see the service-charge/takings helpers below); this inserts one whole-month
+ * 'open' period for every month from `daysAgo(45)` (padding) through `daysAhead(5)`, so every
+ * caller's posting date still lands inside an open period.
  */
 async function openRecentPeriod(f: Fixture) {
-  await sql`
-    insert into fiscal_periods (org_id, starts_on, ends_on, status)
-    values (${f.orgId}, ${daysAgo(200)}, ${daysAhead(5)}, 'open')`;
+  const from = new Date(Date.now() - 45 * 86_400_000);
+  const to = new Date(Date.now() + 5 * 86_400_000);
+  let y = from.getUTCFullYear();
+  let m = from.getUTCMonth();
+  const endY = to.getUTCFullYear();
+  const endM = to.getUTCMonth();
+  while (y < endY || (y === endY && m <= endM)) {
+    const starts = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+    const ends = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+    await sql`
+      insert into fiscal_periods (org_id, starts_on, ends_on, status)
+      values (${f.orgId}, ${starts}, ${ends}, 'open') on conflict do nothing`;
+    m += 1;
+    if (m > 11) { m = 0; y += 1; }
+  }
 }
 
 async function setPolicy(f: Fixture, cadence: string, ceiling: string | null) {
