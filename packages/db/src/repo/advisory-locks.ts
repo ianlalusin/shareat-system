@@ -14,7 +14,8 @@
  *   - THIS file: the two-int4 form `pg_advisory_xact_lock(namespace, hashtext(storeId))`. It is a
  *     SEPARATE key space (`pg_locks.objsubid` 2 vs 1), so it never collides with the three above.
  *     Namespaces taken here: 366001 (cash custody), 366002 (service-charge float), 369001
- *     (reimbursement payee, keyed on the employee id rather than a store id).
+ *     (reimbursement payee, keyed on the employee id rather than a store id), 369002 (supplier
+ *     return credit, keyed on the supplier id).
  *   - A `hashtext(storeId)` collision only serialises two stores for a moment; it never gives a
  *     wrong answer (the same reasoning as `access.ts` `lockOrgAccess`).
  *
@@ -53,5 +54,18 @@ export async function lockReimbursementPayee(tx: Tx, employeeId: string): Promis
 export async function lockServiceChargeFloat(tx: Tx, storeId: string): Promise<void> {
   await tx.execute(
     sql`select pg_advisory_xact_lock(${SERVICE_CHARGE_FLOAT_LOCK_NAMESPACE}::int4, hashtext(${storeId}))`,
+  );
+}
+
+/** Namespace (first int4) for the per-supplier credit lock. T-369 S0 / DEF-550. (369001 is
+ *  `REIMBURSEMENT_PAYEE_LOCK_NAMESPACE`.) */
+const SUPPLIER_CREDIT_LOCK_NAMESPACE = 369002;
+
+/** Serialises everything that reads or moves one supplier's return credit (`1240`): spending it in
+ *  `recordPayment`, and voiding a payment whose overpayment put it there. Without it the check and
+ *  the draw race, and the credit goes negative. Keyed on the supplier. */
+export async function lockSupplierCredit(tx: Tx, supplierId: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${SUPPLIER_CREDIT_LOCK_NAMESPACE}::int4, hashtext(${supplierId}))`,
   );
 }

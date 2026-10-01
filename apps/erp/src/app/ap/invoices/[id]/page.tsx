@@ -1,14 +1,17 @@
 import { notFound } from 'next/navigation';
+import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
+import { toBusinessDate } from '@shareat/core/datetime';
 import { expensesRepo, apRepo } from '@shareat/db';
 import { peso } from '../../../../lib/format';
 import { requireSession } from '../../../../lib/session';
-import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction } from '../../actions';
+import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction, voidPaymentAction } from '../../actions';
 import { recordExpenseForInvoiceAction } from '../../../expenses/actions';
 import { getInvoice, getSupplier, listCategoriesGrouped, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
 import { withOrgPrincipal } from '../../../expenses/lib';
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { MoneyLines } from '@/components/money/MoneyLines';
 import { Page } from '@/components/shell/Page';
+import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Supplier invoice — Shareat System' };
@@ -68,6 +71,37 @@ export default async function InvoiceDetailPage({
     .filter((e) => e.status === 'draft')
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   const categoryById = new Map(categories.map((c) => [c.id, c]));
+
+  // T-369 S0 (DEF-550) - the payments that paid this bill, and where the viewer may void them. The
+  // domain re-checks everything on submit; this only decides what is OFFERED (bible row 262: a
+  // money control renders only where it can be used). `heldCapabilities` is store-blind, so each
+  // store is probed with the real `authorize()`: `record_ap_payment` at the payment's store, and
+  // `transfer_funds` at the money account's store when that is a different one.
+  const payments = await withOrgPrincipal(orgId, (tx) => apRepo.paymentsForInvoice(tx, orgId, id));
+  const postedPayments = payments.filter((p) => p.status === 'posted');
+  const canVoid = await withOrgPrincipal(orgId, async (tx) => {
+    const ok = new Set<string>();
+    if (postedPayments.length === 0) return ok;
+    const held = await heldCapabilities(tx, actor);
+    if (!held.has('record_ap_payment')) return ok;
+    const probe = async (capability: 'record_ap_payment' | 'transfer_funds', storeId: string) => {
+      try {
+        await authorize(tx, actor, capability, { storeId });
+        return true;
+      } catch (err) {
+        if (err instanceof AuthorizationError) return false;
+        throw err;
+      }
+    };
+    for (const p of postedPayments) {
+      if (!(await probe('record_ap_payment', p.storeId))) continue;
+      if (p.moneyAccountStoreId !== p.storeId && !(await probe('transfer_funds', p.moneyAccountStoreId))) continue;
+      ok.add(p.paymentId);
+    }
+    return ok;
+  });
+  const today = toBusinessDate();
+  const billName = (b: { invoiceId: string; invoiceNo: string | null }) => b.invoiceNo ?? b.invoiceId.slice(0, 8);
 
   
   // ⭐ T-147: what this supplier has billed before comes first in the picker.
@@ -338,6 +372,78 @@ return (
                   {e.particulars}
                 </a>
                 <span className="font-mono tabular-nums">{peso(e.totalAmount)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {payments.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="font-medium">Payments against this bill</h2>
+          <ul className="space-y-3">
+            {payments.map((p) => (
+              <li key={p.paymentId} className="rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  <span className="font-medium">{p.businessDate}</span>
+                  <span className="font-mono tabular-nums">{peso(p.amount)}</span>
+                </div>
+                <dl className="mt-1 grid gap-x-4 gap-y-0.5 text-xs text-neutral-500 sm:grid-cols-2 dark:text-neutral-400">
+                  <div>Applied to this bill: <span className="font-mono tabular-nums">{peso(p.appliedHere)}</span></div>
+                  <div>From: {p.moneyAccountName}</div>
+                  {p.referenceNo && <div>Reference: {p.referenceNo}</div>}
+                  <div>
+                    {p.status === 'voided'
+                      ? `Voided — ${p.voidReason ?? 'no reason recorded'}`
+                      : p.status === 'posted'
+                        ? 'Posted'
+                        : p.status}
+                  </div>
+                </dl>
+                {p.otherBills.length > 0 && (
+                  <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                    Also pays{' '}
+                    {p.otherBills.map((b, i) => (
+                      <span key={b.invoiceId}>
+                        {i > 0 && ', '}
+                        <a href={`/ap/invoices/${b.invoiceId}`} className={ACTION_LINK}>{billName(b)}</a>
+                      </span>
+                    ))}
+                  </p>
+                )}
+                {p.status === 'posted' && canVoid.has(p.paymentId) && (
+                  <details className="mt-2">
+                    <summary className="inline-flex min-h-[44px] cursor-pointer items-center px-1 text-sm font-medium">
+                      Void this payment
+                    </summary>
+                    <form action={voidPaymentAction} className="mt-2 space-y-3">
+                      <input type="hidden" name="paymentId" value={p.paymentId} />
+                      <input type="hidden" name="supplierId" value={p.supplierId} />
+                      <input type="hidden" name="invoiceId" value={invoice.id} />
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                        The payment is reversed, not deleted, and the bills it paid are owed again.
+                        {p.otherBills.length > 0 && ` This also re-opens ${p.otherBills.map(billName).join(', ')}.`}
+                      </p>
+                      <Field label="Reason">
+                        <input name="reason" required className={INPUT} />
+                      </Field>
+                      {!p.periodOpen && (
+                        <Field
+                          label="Reversal date"
+                          hint="This payment is in a closed month. The reversal is dated in an open month."
+                        >
+                          <input name="voidOn" type="date" required defaultValue={today} className={INPUT} />
+                        </Field>
+                      )}
+                      <button
+                        type="submit"
+                        className="rounded border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+                      >
+                        Void payment
+                      </button>
+                    </form>
+                  </details>
+                )}
               </li>
             ))}
           </ul>

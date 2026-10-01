@@ -29,9 +29,11 @@
  * projection, and a CAPEX asset's live-depreciation guard. `voidInvoice` below does the same.
  */
 import {
+  advisoryLocksRepo,
   apRepo,
   auditLogRepo,
   itemsRepo,
+  journalRepo,
   expensesRepo,
   filesRepo,
   moneyAccountsRepo,
@@ -45,7 +47,7 @@ import type {
   SupplierVatStatus,
 } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
-import { money } from '@shareat/core/money';
+import { add, compare, formatMoney, money, subtract } from '@shareat/core/money';
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
@@ -1015,6 +1017,9 @@ export async function recordPayment(
       );
     }
     if (creditApplied > 0) {
+      // T-369 S0·N3: serialise with every other reader/mover of this supplier's credit (another draw,
+      // or `voidPayment` handing an overpayment back) BEFORE reading the balance it is about to spend.
+      await advisoryLocksRepo.lockSupplierCredit(trx, input.supplierId);
       const balance = Number(await apRepo.advancesPositionOf(trx, actor.orgId, input.supplierId));
       if (creditApplied > balance + 0.005) {
         throw refuse(
@@ -1129,13 +1134,38 @@ export async function recordPayment(
 export async function voidPayment(
   tx: Tx | null,
   actor: Actor,
-  input: { paymentId: string; reason: string },
+  input: {
+    paymentId: string;
+    reason: string;
+    /** T-369 S0·N1: the date the REVERSAL is posted on. Read only when the payment's own month is
+     *  no longer open — then it must name an open month. Ignored for a payment in an open month. */
+    voidOn?: string;
+  },
 ): Promise<{ entryId: string }> {
   const run = async (trx: Tx) => {
+    const first = await apRepo.getApPaymentById(trx, actor.orgId, input.paymentId);
+    if (!first) throw gone(`voidPayment: ap_payment ${input.paymentId} does not exist.`, 'payment');
+    await authorize(trx, actor, 'record_ap_payment', { storeId: first.storeId });
+
+    // S0·N4: voiding puts money back into the account the payment drew on, so another store's
+    // account needs the same right `recordPayment` required to draw on it.
+    const account = await moneyAccountsRepo.getById(trx, actor.orgId, first.moneyAccountId);
+    if (!account) throw gone(`voidPayment: money account ${first.moneyAccountId} does not exist.`, 'money account');
+    if (account.storeId !== first.storeId) {
+      await authorize(trx, actor, 'transfer_funds', { storeId: account.storeId });
+    }
+
+    // S0·N3: serialise on the supplier's credit, THEN read the payment's status again. A double
+    // submit queues here behind the first void; reading the status before the lock would hand it a
+    // stale `posted` and the overpayment check below would report the first void's own effect
+    // ("already used") instead of the truth ("already voided").
+    await advisoryLocksRepo.lockSupplierCredit(trx, first.supplierId);
     const payment = await apRepo.getApPaymentById(trx, actor.orgId, input.paymentId);
     if (!payment) throw gone(`voidPayment: ap_payment ${input.paymentId} does not exist.`, 'payment');
-    await authorize(trx, actor, 'record_ap_payment', { storeId: payment.storeId });
 
+    if (payment.status === 'voided') {
+      throw refuse(`voidPayment: ap_payment ${input.paymentId} is already voided.`, 'This payment has already been voided.');
+    }
     if (payment.status !== 'posted') {
       throw refuse(
         `voidPayment: ap_payment ${input.paymentId} is ${payment.status}, not posted.`,
@@ -1149,10 +1179,59 @@ export async function voidPayment(
     const reason = input.reason.trim();
     if (!reason) throw refuse('voidPayment: say why this payment is being voided.', 'Say why this payment is being voided.');
 
+    // S0·N2: what this payment left on 1240 is its overpayment (`unallocated`, debited) less any
+    // return credit it SPENT (`creditApplied`, credited back). Reversing it takes that NET out of the
+    // supplier's balance; if the pool no longer holds it, later bills have already used it and the
+    // void would leave the credit below zero. A payment whose net is zero never trips this.
+    const unallocated = money(await apRepo.unallocatedOf(trx, actor.orgId, input.paymentId));
+    const entryLines = await journalRepo.findLinesForEntryWithAccountCodes(trx, payment.journalEntryId);
+    const spentCredit = entryLines
+      .filter((l) => l.accountCode === '1240')
+      .reduce((sum, l) => add(sum, money(l.credit)), money('0'));
+    const net = subtract(unallocated, spentCredit);
+    if (compare(net, money('0')) > 0) {
+      const held = money(await apRepo.advancesPositionOf(trx, actor.orgId, payment.supplierId));
+      if (compare(held, net) < 0) {
+        const short = subtract(net, held);
+        throw refuse(
+          `voidPayment: ap_payment ${input.paymentId}'s overpayment has already been used to pay later bills (${held} of ${net} still held).`,
+          `${formatMoney(short)} of this payment's overpayment has already been used to pay later bills. Void those payments first.`,
+        );
+      }
+    }
+
+    // S0·N1: a payment in a month that has since closed can only be reversed on a date in an open one.
+    let reversalDate: string | undefined;
+    const original = await journalRepo.findEntryById(trx, payment.journalEntryId);
+    const originalPeriod = original ? await journalRepo.findPeriodById(trx, original.periodId) : undefined;
+    if (originalPeriod && originalPeriod.status !== 'open') {
+      if (!input.voidOn) {
+        throw refuse(
+          `voidPayment: ap_payment ${input.paymentId}'s period is ${originalPeriod.status} and no voidOn was given.`,
+          'This payment is in a closed month. Pick a date in an open month for the reversal.',
+        );
+      }
+      let voidOn: string;
+      try {
+        voidOn = parseBusinessDate(input.voidOn);
+      } catch {
+        throw refuse(`voidPayment: voidOn ${JSON.stringify(input.voidOn)} is not a valid date.`, 'Pick a valid date for the reversal.');
+      }
+      const target = await journalRepo.findPeriodForDate(trx, actor.orgId, voidOn);
+      if (!target || target.status !== 'open') {
+        throw refuse(
+          `voidPayment: voidOn ${voidOn} is not in an open fiscal period.`,
+          'That date is not in an open month. Pick a date in an open month for the reversal.',
+        );
+      }
+      reversalDate = voidOn;
+    }
+
     const result = await reverseEntry(trx, {
       entryId: payment.journalEntryId,
       reason,
       reversedBy: actor.personId,
+      ...(reversalDate ? { reversalDate } : {}),
     });
 
     if (result.created) {

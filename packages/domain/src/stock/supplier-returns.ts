@@ -27,7 +27,7 @@
  * fixed first and both the stock movements and the entry carry it from the start.
  */
 import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
-import { apRepo, deliveriesRepo, moneyAccountsRepo, stockLayersRepo, supplierReturnsRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, apRepo, deliveriesRepo, moneyAccountsRepo, stockLayersRepo, supplierReturnsRepo, type Tx } from '@shareat/db';
 import { parseMoneyInput } from '../shared/money-input';
 import { authorize, type Actor } from '@shareat/auth';
 import { consume, reverseConsumption } from './consume';
@@ -290,6 +290,8 @@ export async function voidReturn(
     .filter((l) => l.creditBasis === 'supplier_advance')
     .reduce((sum, l) => add(sum, money((Number(l.quantity) * Number(l.unitCost)).toFixed(2))), ZERO);
   if (compare(advanceContribution, ZERO) > 0) {
+    // T-369 S0·N3: the same per-supplier lock `recordPayment` / `voidPayment` take, before the balance read.
+    await advisoryLocksRepo.lockSupplierCredit(tx, ret.supplierId);
     const balance = money(await apRepo.advancesPositionOf(tx, actor.orgId, ret.supplierId));
     if (compare(balance, advanceContribution) < 0) {
       return {
@@ -370,6 +372,8 @@ export async function refundSupplierCredit(tx: Tx, input: RefundCreditInput): Pr
   if (compare(amount, ZERO) <= 0) {
     return { ok: false, reason: 'a refund must be for a positive amount' };
   }
+  // T-369 S0·N3: the same per-supplier lock `recordPayment` / `voidPayment` take, before the balance read.
+  await advisoryLocksRepo.lockSupplierCredit(tx, input.supplierId);
   const balance = money(await apRepo.advancesPositionOf(tx, orgId, input.supplierId));
   if (compare(amount, balance) > 0) {
     return { ok: false, reason: `only ${balance} of credit is available — ${amount} does not fit` };

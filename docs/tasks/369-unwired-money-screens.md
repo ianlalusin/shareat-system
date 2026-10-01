@@ -760,3 +760,5 @@ Screenshots.
 ## Ruling log
 - 2026-10-01, Ian (chat): S0 closed-month void → **(a)** the person picks the reversal date (pre-filled today, open month only). Recorded on the Open Questions page.
 - 2026-10-01, orchestrator: S0's SUPPLIER_CREDIT_LOCK_NAMESPACE is **369002** (S1 took 369001 for the reimbursement payee lock).
+- 2026-10-01, orchestrator (from S3 RED): Ian's Q1 manager-only re-entry belongs to **S7** — S7 tests must add "void → create the same date: manager succeeds, staff refused". S3 pins only that withdrawing an unverified day lifts the create-block.
+- 2026-10-01, orchestrator (S3 audit): wastage recorded against a day blocks WITHDRAW by design (the day is real; correct it by editing) — sentence "Wastage is recorded against this day, so it can't be withdrawn — edit its figures instead." Edits write an audit row (who, before→after). Until S7 the withdraw panel says the date stays used.

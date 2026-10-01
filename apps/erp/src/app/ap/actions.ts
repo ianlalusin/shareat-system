@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation';
 import { apRepo } from '@shareat/db';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 import { logger } from '@shareat/core/logger';
+import { formatMoney, money } from '@shareat/core/money';
 import {
   createSupplier,
   editSupplier,
@@ -356,16 +357,38 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
   back(`/ap/suppliers/${supplierId}`, { ok: message });
 }
 
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * T-369 S0 (DEF-550). The bill page's void panel posts here. ⛔ The reason is NOT checked here: the
+ * domain's own sentence is the only one (I1/I7). The return path is built from ids that pass a uuid
+ * shape check, never from a URL the form supplies.
+ */
 export async function voidPaymentAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const paymentId = str(formData, 'paymentId');
   const supplierId = str(formData, 'supplierId');
+  const invoiceId = str(formData, 'invoiceId');
+  const returnTo = UUID_SHAPE.test(invoiceId)
+    ? `/ap/invoices/${invoiceId}`
+    : UUID_SHAPE.test(supplierId)
+      ? `/ap/suppliers/${supplierId}`
+      : '/ap';
+  let message: string;
   try {
-    const reason = str(formData, 'reason');
-    if (!reason) throw new Error('Say why this payment is being voided.');
-    await withOrgPrincipal(actor.orgId, (tx) => voidPayment(tx, actor, { paymentId, reason }));
+    const voided = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // Read in the same transaction, before the void, only to word the banner.
+      const payment = await apRepo.getApPaymentById(tx, actor.orgId, paymentId);
+      await voidPayment(tx, actor, {
+        paymentId,
+        reason: str(formData, 'reason'),
+        ...(str(formData, 'voidOn') ? { voidOn: str(formData, 'voidOn') } : {}),
+      });
+      return payment?.amount;
+    });
+    message = `Payment${voided ? ` of ${formatMoney(money(voided))}` : ''} voided — reversed, not deleted. The bills it paid are owed again.`;
   } catch (err) {
-    back(`/ap/suppliers/${supplierId}`, { error: errorMessage(err) });
+    back(returnTo, { error: errorMessage(err) });
   }
-  back(`/ap/suppliers/${supplierId}`, { ok: 'Payment voided — reversed, not deleted.' });
+  back(returnTo, { ok: message });
 }

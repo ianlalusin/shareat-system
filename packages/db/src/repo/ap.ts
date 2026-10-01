@@ -999,3 +999,84 @@ export async function getAllocationsForPayment(tx: Tx, apPaymentId: string): Pro
     .where(eq(apPaymentAllocations.apPaymentId, apPaymentId));
   return rows as ApPaymentAllocationRow[];
 }
+
+// -------------------------------------------------------------------------------------
+// T-369 S0 (DEF-550) — listing the payments that paid a bill, so one can be voided from it.
+// -------------------------------------------------------------------------------------
+
+export interface PaymentOnInvoiceRow {
+  paymentId: string;
+  storeId: string;
+  supplierId: string;
+  businessDate: string;
+  amount: string;
+  /** What this payment applied to THIS invoice's expenses. */
+  appliedHere: string;
+  referenceNo: string | null;
+  moneyAccountName: string;
+  /** The store the money account belongs to - voiding a payment drawn on ANOTHER store's account
+   *  needs `transfer_funds` there, so the screen must know to offer the control only to a holder. */
+  moneyAccountStoreId: string;
+  status: ApPaymentStatus;
+  voidReason: string | null;
+  voidedAt: Date | null;
+  /** Whether the fiscal period of the payment's own journal entry is still `open`. A payment with
+   *  no entry (never posted) reads as open — there is no period to be closed. */
+  periodOpen: boolean;
+  /** The OTHER invoices this payment's allocations touch. */
+  otherBills: { invoiceId: string; invoiceNo: string | null }[];
+}
+
+/**
+ * Every `ap_payment` — posted AND voided — with an allocation to an expense of this invoice, newest
+ * first. Org-scoped explicitly (bible §7 rule 4); RLS is the backstop, not the filter.
+ */
+export async function paymentsForInvoice(tx: Tx, orgId: string, invoiceId: string): Promise<PaymentOnInvoiceRow[]> {
+  const rows = (await tx.execute(sql`
+    select ap.id as "paymentId", ap.store_id as "storeId", ap.supplier_id as "supplierId",
+           ap.business_date::text as "businessDate", ap.amount::text as amount,
+           (select coalesce(sum(a2.amount_applied), 0)::numeric(14,2)::text
+              from ap_payment_allocations a2 join expenses e2 on e2.id = a2.expense_id
+             where a2.ap_payment_id = ap.id and e2.supplier_invoice_id = ${invoiceId}) as "appliedHere",
+           ap.reference_no as "referenceNo", ma.name as "moneyAccountName", ma.store_id as "moneyAccountStoreId", ap.status as status,
+           ap.void_reason as "voidReason", ap.voided_at as "voidedAt",
+           coalesce(fp.status = 'open', true) as "periodOpen"
+    from ap_payments ap
+    join money_accounts ma on ma.id = ap.money_account_id
+    left join journal_entries je on je.id = ap.journal_entry_id
+    left join fiscal_periods fp on fp.id = je.period_id
+    where ap.org_id = ${orgId}
+      and exists (
+        select 1 from ap_payment_allocations a join expenses e on e.id = a.expense_id
+         where a.ap_payment_id = ap.id and e.supplier_invoice_id = ${invoiceId})
+    order by ap.business_date desc, ap.id
+  `)) as unknown as Omit<PaymentOnInvoiceRow, 'otherBills'>[];
+  if (rows.length === 0) return [];
+
+  const others = (await tx.execute(sql`
+    select distinct a.ap_payment_id as "paymentId", si.id as "invoiceId", si.invoice_no as "invoiceNo"
+    from ap_payment_allocations a
+    join expenses e on e.id = a.expense_id
+    join supplier_invoices si on si.id = e.supplier_invoice_id
+    where a.ap_payment_id in (${sql.join(rows.map((r) => sql`${r.paymentId}`), sql`, `)})
+      and e.supplier_invoice_id <> ${invoiceId}
+    order by si.invoice_no, si.id
+  `)) as unknown as { paymentId: string; invoiceId: string; invoiceNo: string | null }[];
+
+  return rows.map((r) => ({
+    ...r,
+    otherBills: others.filter((o) => o.paymentId === r.paymentId).map((o) => ({ invoiceId: o.invoiceId, invoiceNo: o.invoiceNo })),
+  }));
+}
+
+/** The part of a payment that was NOT allocated to a bill — what went to `1240` as an
+ *  overpayment: `amount − sum(allocations)`, two decimals. */
+export async function unallocatedOf(tx: Tx, orgId: string, paymentId: string): Promise<string> {
+  const [row] = (await tx.execute(sql`
+    select (ap.amount - coalesce((select sum(a.amount_applied) from ap_payment_allocations a
+                                   where a.ap_payment_id = ap.id), 0))::numeric(14,2)::text as unallocated
+    from ap_payments ap
+    where ap.id = ${paymentId} and ap.org_id = ${orgId}
+  `)) as unknown as { unallocated: string }[];
+  return row?.unallocated ?? '0.00';
+}
