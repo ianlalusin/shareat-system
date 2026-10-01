@@ -17,11 +17,17 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { advisoryLocksRepo, expensesRepo, journalRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { equals, money } from '@shareat/core/money';
+import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { parseMoneyInput } from '../shared/money-input';
 import { EXPENSE_FUNDING_ACCOUNTS } from './routing';
 import { refuse, gone } from '../shared/refusal';
+
+/** "January 2026" - the month a fiscal period covers, for a sentence a person reads. */
+function monthLabel(startsOn: string): string {
+  return new Date(`${startsOn}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
 
 const PAYOUT_ID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -35,6 +41,10 @@ export interface PayReimbursementInput {
    *  idempotency key is derived from it, so a double click or a replay posts once. */
   payoutId: string;
   memo?: string;
+  /** T-369 S5a (DEF-314): post this one payout into a CLOSED month. Carries a reason and a note and NO
+   *  actor - the person who answers for it is the function's own `actor` (I4), checked against
+   *  `override_period_lock` inside `postEntry`. Never reaches a `locked` month. */
+  periodOverride?: { reason: PeriodOverrideReason; note?: string | null };
 }
 
 export interface PayReimbursementResult {
@@ -123,6 +133,30 @@ export async function payReimbursement(
       return { entryId: replayed.id, outstanding: now.outstanding, created: false };
     }
 
+    // T-369 S5a: say, in words, when the payout's month will not take it - before the cap and before
+    // `postEntry`, whose own refusal is a developer sentence carrying ids. A closed month needs the
+    // override; a locked one cannot take it at all.
+    // The override is passed on to `postEntry` ONLY when this period is closed. For an open month it is
+    // ignored: `postEntry` would otherwise authorise `override_period_lock` and write an audit row for
+    // an override nobody needed - and refuse an ordinary manager who never needed one.
+    let periodOverride: typeof input.periodOverride;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(input.on)) {
+      const period = await journalRepo.findPeriodForDate(trx, actor.orgId, input.on);
+      if (period?.status === 'closed') periodOverride = input.periodOverride;
+      if (period?.status === 'locked') {
+        throw refuse(
+          `payReimbursement: the fiscal period covering ${input.on} is locked.`,
+          `${monthLabel(period.startsOn)} is locked. Nothing can be posted into it, not even with the closed-month override — pick a date in an open month.`,
+        );
+      }
+      if (period?.status === 'closed' && !input.periodOverride) {
+        throw refuse(
+          `payReimbursement: the fiscal period covering ${input.on} is closed and no periodOverride was given.`,
+          `${monthLabel(period.startsOn)} is closed. Pick a date in an open month, or ask an administrator to post this one entry into it.`,
+        );
+      }
+    }
+
     // N2: the cap is what is owed AT the store the debit lands on, not the organisation's total.
     const position = await expensesRepo.reimbursablePayableOf(trx, actor.orgId, input.employeeId, input.storeId);
     if (Number(position.outstanding) <= 0) {
@@ -155,6 +189,9 @@ export async function payReimbursement(
       idempotencyKey,
       memo: input.memo ?? 'Reimbursement payout',
       postedBy: actor.personId,
+      ...(periodOverride
+        ? { periodOverride: { actor, reason: periodOverride.reason, note: periodOverride.note ?? null } }
+        : {}),
       lines: [
         {
           accountCode: EXPENSE_FUNDING_ACCOUNTS.REIMBURSABLE_TO_EMPLOYEES,

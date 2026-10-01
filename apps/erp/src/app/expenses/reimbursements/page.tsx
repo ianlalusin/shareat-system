@@ -1,7 +1,9 @@
 import { toBusinessDate } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { payReimbursementAction } from './actions';
-import { listOwedAtStore, listPayFromAccounts, listPayableStores, peso } from './lib';
+import { canOverrideClosedMonth, listOwedAtStore, listPayFromAccounts, listPayableStores, peso } from './lib';
+import { closedMonths } from '../../../lib/period-override';
+import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
@@ -44,6 +46,9 @@ export default async function ReimbursementsPage({
     ? await Promise.all([listOwedAtStore(actor.orgId, store.id), listPayFromAccounts(actor.orgId, store.id)])
     : [[], []];
   const today = toBusinessDate();
+  // The override control is offered only to someone who holds `override_period_lock`, and only when
+  // some month is actually closed.
+  const closed = store && (await canOverrideClosedMonth(actor)) ? await closedMonths(actor.orgId) : [];
 
   return (
     <Page density="table">
@@ -146,6 +151,9 @@ export default async function ReimbursementsPage({
                           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Memo (optional)</span>
                           <Input name="memo" />
                         </label>
+                        {closed.length > 0 && (
+                          <ClosedMonthOverride closedMonths={closed} dateFieldName="on" initialDate={today} />
+                        )}
                         <div className="sm:col-span-2">
                           <Button type="submit" variant="primary">
                             Pay {row.displayName}

@@ -73,3 +73,17 @@ export async function displayNameOf(orgId: string, personId: string): Promise<st
   );
   return row?.name ?? '';
 }
+
+/** Whether the viewer may post into a closed month - `override_period_lock`, which is org-wide. The
+ *  control is only OFFERED to a holder; `postEntry` is what actually enforces it. */
+export async function canOverrideClosedMonth(actor: Actor): Promise<boolean> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    try {
+      await authorize(tx, actor, 'override_period_lock', { orgId: actor.orgId });
+      return true;
+    } catch (err) {
+      if (err instanceof AuthorizationError) return false;
+      throw err;
+    }
+  });
+}

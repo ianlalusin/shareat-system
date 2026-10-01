@@ -15,6 +15,7 @@ import { redirect } from 'next/navigation';
 import { payReimbursement } from '@shareat/domain';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 import { displayNameOf, peso, withOrgPrincipal } from './lib';
+import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '../../../lib/period-override';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 
@@ -38,14 +39,25 @@ export async function payReimbursementAction(formData: FormData): Promise<void> 
     const amount = str(formData, 'amount');
     if (!amount) throw new Error('Enter the amount to pay.');
 
+    // The override is forwarded only when the payout's date really is in a CLOSED month: otherwise an
+    // ordinary save would leave an audit row for an override nobody needed.
+    const on = str(formData, 'on');
+    const asked = readPeriodOverride(formData);
+    const inClosedMonth = !!closedMonthOf(await closedMonths(actor.orgId), on);
+    const periodOverride = asked && inClosedMonth ? asked : undefined;
+    // A ticked confirm box with the rest missing is an unfinished form: say what is missing.
+    const problem = inClosedMonth ? periodOverrideProblem(formData) : null;
+    if (problem) throw new Error(problem);
+
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       payReimbursement(tx, actor, {
         storeId,
         employeeId: str(formData, 'employeeId'),
         amount,
         fromMoneyAccountId: str(formData, 'fromMoneyAccountId'),
-        on: str(formData, 'on'),
+        on,
         payoutId: str(formData, 'payoutId'),
+        ...(periodOverride ? { periodOverride } : {}),
         memo: str(formData, 'memo') || undefined,
       }),
     );
