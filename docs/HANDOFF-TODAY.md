@@ -1,61 +1,96 @@
-# Handoff — 2026-10-01 (orchestrator, money-defect push day 2)
-
-> ✅ **DEPLOYED 2026-10-01 07:17 UTC.** CI was blocked by GitHub billing on 2026-09-30 (prod stuck at 0165); billing was
-> fixed, and the wrap-up push ran CI green (10m27s) and deployed **0166–0176** to erp2. Verified after: sign-in **HTTP 200**,
-> `shareat-erp` active, NRestarts 0, **157 migrations** applied (newest = 0176), `pg_default_acl` now `shareat_app=ar` (0169).
-> The read-only prod checks for 0173–0176 + 0169 ran with Ian before the push: all zero rows; prod holds 1 organisation.
+# Handoff — 2026-10-02 (orchestrator, money-defect push day 3)
 
 ## Where things stand
-Money-defect push (Ian: "close all open money defects in v2"). What's Left board **29 → 21 open money defects**
-today. All committed, pushed and **deployed** (see banner). T-366 done (S4 not needed). T-367 S1+S2 done. T-368 S0+S1 done. T-372 S1–S3 done.
+Goal (Ian): close every open money defect in v2; NOT launched. T-369 (unwired money screens) is mostly shipped: S0–S4,
+S5a, S6a and S7 are on `main` (8 commits, `ad08751`…`5b8aeb7`, plus today's gate fixes). Lane work in progress is
+**not on `main`**. It is saved on the pushed branch **`wip/2026-10-02`** (`809ca57`): T-368 S2+S3 built and green
+on the lane but NOT audited, plus red tests for eight more slices. The What's Left board shows **22 open money
+defects**. Closed today: DEF-550, 479, 302. New: DEF-551 (being fixed), 553, 555, 556, 557, 558, 559 (money), and
+552 and 554 (not money).
 
-## Gates at 5cabfc7 (fresh gate DB `shareat_test_gate`)
-typecheck **0** · integration **4193/4193** (231 files, full suite) · unit **3642/3650** in the full run — the 7 failures are
-repo-scanning tests over their 5 s limit; all 6 files pass solo (69/69) · build **skipped — dev server live on 9008**.
+## Gates at the wrap-up commit (`main`, after today's fixes)
+See the commit message of the wrap-up commit for the final numbers. As run: typecheck **0** · unit **3666/3674**
+in the full run; the 2 real reds were caused today and are fixed in the wrap-up commit (13/13 solo); the rest were
+load timeouts that pass solo (61/63 → 63/63) · integration: full suite on a FRESH `shareat_test_gate` (see the commit)
+· build **skipped — dev server live on 9008**.
 
-## What happened (themes; decisions and where recorded)
-- **Closed:** DEF-386 (live screen), 201/517/520 + 546 (T-367 S1, 0173), 511 (T-372 S1+S2, 0175), 398/399/406 + 380
-  posting half (T-366 S3/S5/S6), 396/508/518/519 (T-367 S2, 0176), 424 (T-368 S1; DB backstops 0174), 127 (T-372 S3),
-  545 (test suite migrated mid-run; tooling + `journal.test.ts` now asserts the DB is current, incl. hash).
-- **Logged:** DEF-547 (reversed handover leaves its variance open), 548 (app role can DELETE trade_orders), 549
-  (receipt entries have no reversal — reopen when a receipt void is specced), 550 (**no screen can void a supplier
-  payment**, so a paid bill can never be voided — T-369, priority).
-- **Ian's rulings today:** smoke DB Oct 2026–Jan 2027 opened (done); `FB_DEV_TERMINAL_*` = Firebase clock-terminal
-  account, `DEV_TERMINAL_*` = a separate local access account (Open Questions page); the same manager may confirm an
-  overage → **bible row 261**. Orchestrator rulings made standing → **row 262** (render a money control only where
-  usable; counts of work stay org-wide). Per-slice rulings are in each task's "review record" section.
-- **0174 broke ~22 test files** (whole-month open-period CHECK + gap trigger); all repaired in `73927d6` and
-  `3559128` (legacy holes built under `session_replication_role=replica`, as the cutover ETL would).
-- **Tooling:** local `.git/hooks/pre-commit` refuses CR bytes (not committed — reinstall on a new clone);
-  `.gitattributes` pins `*.sql eol=lf`; `gates.mjs` migrates its DB first.
+## What happened (themes; every ruling recorded)
+- **T-369 shipped:**
+  - S0: void a supplier payment from the bill page, DEF-550.
+  - S1: reimbursement payout screen, half of DEF-198.
+  - S2: "View photo" plus the /files route, the other DEF-198 half.
+  - S3: edit or withdraw an unverified sales day, DEF-479.
+  - S4: closed-month stock refused in words, DEF-302.
+  - S5a: admin late payout into a closed month, half of DEF-314.
+  - S6a: transfer pickers scoped, half of DEF-291.
+  - S7: a withdrawn day frees its date; manager-only re-entry; migration **0177**, applied to the smoke DB.
+- **Ian's rulings: bible §13 rows 263–268.**
+  - Supplier-payment void date is picked by the person.
+  - **15th/30th paydays supported**, T-370 A3/S3b; both defaults OK.
+  - **Cross-store draws allowed with 1250/2150 legs** (DEF-551, S8); the same for collections and loans (DEF-556, S8b).
+  - A **"settle between stores"** transfer (DEF-557, S9).
+  - **Commissary receipt mismatches** (T-372 S6 amendment 2):
+    - short → charge or loss;
+    - over → `extra_dispatch`;
+    - miscount → recount `return`, initiated by the manager of the store initiating the return.
+  - **The auditor stays Sonnet.** A GPT-6 trial is recorded in `docs/reviews/external-audit-t369-s4.md`.
+  - **Dev uses in-memory storage.** `FIREBASE_STORAGE_BUCKET` is commented out in `.env.local`, and the one test
+    photo in `shareat-hub-v2` is deleted.
+- **Specs written or amended today (Opus planner):**
+  - T-369 S0, S8, S8b, S9;
+  - T-370 Amendment A3 (S3b);
+  - T-372 S6 amendments 1 and 2 (migration **0178**, reserved).
+  - The next free migration index after 0178 is **0179**.
 
 ## Pick up here
-1. **Merge or delete `daily-review/2026-09-17`** (unmerged since 17 Sep), then T-369 starting with **DEF-550** (no screen can
-   void a supplier payment — a paid bill can never be voided, now live in prod).
-2. **Before any future migration push**, run its prechecks in `docs/ops/README.md` with Ian (SSH root@159.223.46.224 works
-   from this machine; use `SYSTEM_DATABASE_URL` — the app role is RLS-filtered and shows false zeros).
-3. **T-368 S1 §9.4 is UNMET** — the close screen offers completed months only; redo on/after 2026-11-01 (register
-   DEF-424 row). Then the next slices: T-372 S4 (posting pattern + re-read stale commissary patterns), S5, S6;
-   T-367 S3–S6; T-368 depreciation slices (435/436 domain, 426 follow-ups in its spec); T-369 (**DEF-550 first**);
-   T-370 S3 (DEF-409); T-371 last.
+1. **Restore and audit T-368 S2+S3.** Run `git checkout wip/2026-10-02 -- <paths>` (the builder's file list is in
+   the WIP commit). Two of its tests are tester defects to fix first:
+   - `t368-asset-terms-store` T9a expects 666.67, but the first month is 666.66;
+   - `t346-in-service-date` I8 needs `acquiredOn <= 2026-01-01`.
 
-## Do not decide these alone — they are Ian's (Open Questions page, row 252)
-DEF-539 charge scope (reco: only that person's handover days) · T-370 monthly floor (reco: never below zero) ·
-T-367 Q3b which suspense account (reco: new "Unclassified payments") · HR statutory data owner.
+   Then audit and commit.
+2. **Build queue, in order.** Every one has its red tests on the WIP branch:
+   1. T-369 S4 follow-up: the voidReturn sentence, and a single `now` for voidTradeOrder/voidCustomerReturn.
+   2. T-370 S3b, then S3: the constraint key brings the count to 28 with S7's.
+   3. T-367 S3/S4.
+   4. T-368 S4.
+   5. T-369 S8, then S8b and S9. The S8b and S9 test drafts were never run, so finish them first.
+   6. T-372 S6, migration 0178. Gate it on the FULL suite on a fresh gate DB.
+   7. T-372 S5: guard tests, green. Commit them.
+3. **Before any push that deploys 0177/0178,** run the prechecks in `docs/ops/README.md` with Ian. Use SSH to root@159.223.46.224
+   with `SYSTEM_DATABASE_URL`.
+
+## Do not decide these alone — they are Ian's
+- **HR statutory data:** SSS, PhilHealth, Pag-IBIG and TIN for 126 staff. Ian's to collect, due end of October.
+- Nothing else is open on the Open Questions page
+  (https://claude.ai/artifact/LMQCEXDZqHyAJz69FCy7FN). Read it at start anyway.
 
 ## Traps that bit today
-- **Gate a CHECK/trigger migration on the FULL suite on a FRESH gate DB.** Never let a gate DB see an uncommitted
-  migration (its hash sticks). Start long runs with PowerShell `Start-Process`; `TaskStop` leaves vitest alive.
-- **CRLF**: the Edit tool writes it; lanes' own checks missed it twice. The pre-commit hook now refuses it.
-- **Lanes must never** `git stash`, start a dev server, or plant a mutant in the shared tree (all happened once today).
-- Scripts in `~/.claude/skills/orchestrator/tools/` that import the whole `@shareat/domain` from outside the repo
-  hang at startup — drive screens through the UI instead.
-- The smoke DB `shareat_test_setup` now has Oct 2026–Jan 2027 open; 9008 points at it.
+- **Never share a lane's test DB.** Running regression on the tester's DB deadlocked it. Make your own
+  (`make-test-dbs.mjs <name>`).
+- **Shared count tests:** `constraint-messages` (key count) and `action-link-sweep` (census) are bumped by several
+  slices. When committing one slice, stage only that slice's delta. Build the blob with `git show HEAD:<f> | … |
+  git hash-object -w --path=<f> --stdin` (bytes, not Python text mode, which writes CRLF), then
+  `git update-index --cacheinfo`.
+- **Paths with `[id]` are globs** to git. Use `git --literal-pathspecs`. To snapshot WIP without touching `main`,
+  copy `.git/index` to a temp `GIT_INDEX_FILE`, add, run `write-tree` and `commit-tree -p HEAD`, then `update-ref`.
+- **Syntax errors hide type errors.** A tester file mid-edit made `tsc` stop early twice, and "typecheck clean" was
+  claimed falsely once.
+- **The machine runs low on memory** with three lanes, the dev server and a wide regression. Run regression in
+  small batches.
 
 ## Sessions — all three SAFE TO CLEAR (re-brief from this file)
-Tester `webapps-30` · Builder `system32-19` · Auditor `auto-assign-staff-role-on-hire` — frozen, no uncommitted work of
-their own, all work in the commits above. Lane DBs survive by name (`shareat_test_t36*_*`, `shareat_test_t372_*`,
-`shareat_test_sweep{a,b,c,d}`, `shareat_test_fix34{4,5}`, `shareat_test_def546`, `shareat_test_gate` — gate DB is fresh).
+Tester `webapps-a2` · Builder `webapps-02` · Auditor `system32-2f`. All are stopped. None holds uncommitted work
+of its own: everything is on `main` or on `wip/2026-10-02`. Lane DBs survive by name:
+- `shareat_test_t369_s{0..8,8b,9}`
+- `shareat_test_t368_s2`, `_s4`
+- `shareat_test_t370_s3`
+- `shareat_test_t367_s3`
+- `shareat_test_t372_s5`, `_s6`
+- `shareat_test_orch_reg`
+- `shareat_test_gate` (fresh)
+
+Smoke DB `shareat_test_setup` has migrations through 0177. Port 9008 runs on it with in-memory storage.
 
 ## The paste-ready prompt
 ```
@@ -63,12 +98,13 @@ You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-syst
 /orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all), docs/RULES.md, and
 docs/plans/money-defects-2026-09-30.md. Read the Open Questions page (bible row 252) with ArtifactData
 before building anything gated on Ian. GREP the register and bible, never Read them whole. Goal (Ian):
-close all open money defects in v2; NOT launched. Queue: HANDOFF "Pick up here" 1→3.
-Prod is deployed through migration 0176 (2026-10-01). DEF-550 (no void-payment screen) is live and first in T-369.
-STANDING: commit slices locally; push ONLY at wrap-up; republish the What's Left board after every commit
-that closes a DEF; every wrap-up updates "what's left", ROADMAP.html and the board. Reds assert the target;
-every "not" gets a positive control. Each tester/helper gets its own _test DB. Gate any CHECK/trigger
-migration on the FULL suite on a fresh gate DB. No git stash, no lane dev servers, no mutants in the shared
-tree. Freeze lanes during gates. Messages are short. Render before deciding. Ian runs this terminal on
-Opus 5.5 at medium effort; do not ask him to switch.
+close all open money defects in v2; NOT launched. Queue: HANDOFF "Pick up here" 1→3; lane WIP is on
+branch wip/2026-10-02 (restore with git checkout wip/2026-10-02 -- <paths>).
+STANDING: lanes run Sonnet (auditor too — Ian 2026-10-01); Opus only via subagents for specs and
+judgement. Commit slices locally; push ONLY at wrap-up; republish the What's Left board after every
+commit that closes a DEF; every wrap-up updates "what's left", ROADMAP.html and the board. Reds assert
+the target; every "not" gets a positive control. Each tester/helper gets its own _test DB — never run
+on a lane's DB. Gate any CHECK/trigger migration on the FULL suite on a fresh gate DB. No git stash, no
+lane dev servers, no mutants in the shared tree. Freeze lanes during gates. Messages are short. Render
+before deciding. Ian runs this terminal on Opus 5.5 at medium effort; do not ask him to switch.
 ```

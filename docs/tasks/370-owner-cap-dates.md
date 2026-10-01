@@ -1,6 +1,6 @@
 # T-370: owner drawing cap after payroll (and its concurrency, DEF-516), real calendar dates, and a semi-monthly pay cycle refused on save — DEF-108, DEF-494, DEF-409
 
-**Status:** **S1 DONE (`42da29b`), S2 DONE (`85eb34e`); S3 (DEF-409 migration) next; monthly-floor question open** — APPROVED 2026-09-30 (orchestrator, after independent Opus review) — review changes 1–11 applied in place. Spec by the Opus planner, 2026-09-30. **Model:** Sonnet, tester then
+**Status:** **S1 DONE (`42da29b`), S2 DONE (`85eb34e`); S3 (DEF-409 migration) next, preceded by S3b (A3: Ian's 15/30 ruling, DEF-553, no migration); monthly-floor question open** — APPROVED 2026-09-30 (orchestrator, after independent Opus review) — review changes 1–11 applied in place. Spec by the Opus planner, 2026-09-30. **Model:** Sonnet, tester then
 builder, per slice.
 **Census:** `docs/plans/money-defects-2026-09-30.md` (batch E). DEF-409 was added by Ian's ruling of 2026-09-30:
 *"refuse on save: semi-monthly needs exactly two pay days ≤16 days apart."*
@@ -359,3 +359,101 @@ years and `shiftDayRange` throws a raw `RangeError` with no sentence. **Ruling: 
 controls become refusals; new controls `1900-01-01` and `2999-12-31` parse, `1899-12-31` and `3000-01-01` refuse.
 D2 asserts the full `.start` instant, not only its year. `reports/cash-flow.ts` also parses `toDate` (page.tsx:44 and
 export/route.ts:11 pass it raw today — same class as DEF-514).
+
+## Amendment A3 — Ian's 15/30 ruling (2026-10-01)
+**Ruling (Ian, chat, Open Questions page):** SUPPORT a semi-monthly store paying on the 15th and the 30th. The second
+half (16th–end) is paid on the 30th — or the month's last day in February — even when the half ends on the 31st (the
+31st is paid with it). This closes the payout half of DEF-553 (`payoutDateFor`, `payroll/periods.ts:157-172`, "on or
+after the end", rolls a day-30 payday of a 31-day month to the NEXT month's 30th: Jan 16–31 and Feb 16–28 both pay
+Feb 28, Mar 16–31 and Apr 16–30 both pay Apr 30; the store goes 31 days between paydays).
+
+**Slice: S3b — its own slice and commit, landing BEFORE S3's builder commit, same lane.** Not folded into S3 because:
+it is a different defect (DEF-553, not DEF-409); it changes a shipped payday a person reads on `/payroll`, so it must
+be revertable on its own; and S3 carries a migration and a deploy precheck that S3b does not. It goes first so that
+S3's P1 table and S6 controls are written once against the final rule (see "S3 edits" below), not pinned to 31 and
+re-pinned.
+
+### R10 — the rule (the narrowest one that makes 15/30 pay inside its own month)
+In `fixed_days` mode only, after `wanted` is chosen (`periods.ts:159`), and before the two-candidate loop:
+
+> **If `wanted === 30`, the period ends on day 31, and the period starts on or before day 30, the payday is the 30th
+> of the period's own month.** Otherwise the existing "on or after the end" loop runs unchanged.
+
+- This is the ONLY case in which a payday falls before its period ends: same month, by exactly one day, and only the
+  31st is not yet worked on payday. The period itself does not change: `derivePeriods` is untouched, the half still
+  runs 16–31, and the 31st's attendance belongs to it (`tilesTheMonth` stays true).
+- February and 30-day months need no new code: 30 already clamps to the 28th/29th (`:168`) and that date equals the
+  period end, so the loop returns it in-month today. April 16–30 pays Apr 30 today and after.
+- The start guard exists because `derivePeriods` is pure and clamps a cutoff to `last − 1` (`:78`): a cutoff of 30
+  in a 31-day month gives a 31–31 period, and day 30 is BEFORE that period starts, so it keeps today's roll. The DB
+  holds the cutoff to 1–27 (`attendance-config.ts:316-320`), so this is reachable only from a pure caller.
+- **It is keyed on the day, not the period type**, because `payoutDateFor` has no period type and the old behaviour
+  is equally wrong elsewhere: monthly `[30]` pays January AND February on Feb 28 and then nothing until Apr 30
+  (61 days); a weekly store's last window 29–31 with day 30 rolls a month. Both now pay on the 30th. Ian ruled for
+  semi-monthly; see "Still Ian's" below.
+- **Does NOT change:** lag mode (any cutoff, any lag); `payoutDays` of 1–29 (a 29 in a 31-day month still rolls to
+  next month's 29th — not generalised to "within N days of the end"); day 31 (clamps to month end = period end,
+  already in-month); day 30 for any period ending on or before the 30th; first periods (they end at the cutoff,
+  never on the 31st); the cutoff's meaning; `derivePeriods`, `periodForDate`, `tilesTheMonth`; `[15,31]` (pays the
+  15th and the month's last day, as today).
+- Update the docblock table row (`:138`) to: *"the next occurrence of this period's day, on or after the end — except
+  day 30 for a period ending on the 31st, which pays on the 30th (Ian, 2026-10-01, A3)."*
+
+### Callers (all read-only consumers; none needs an edit for S3b)
+| Caller | Effect |
+|---|---|
+| `apps/erp/src/app/payroll/page.tsx:209` (`payable …` label, via `payroll/lib.ts:19`) | Shows 01-30 instead of 02-28 for a [15,30] store's Jan 16–31 run. Display only |
+| `packages/domain/src/findings/index.ts:128-129` (`payoutIntervalFindings`) | A [15,30] store's measured gap drops 31 → 16. S3 replaces this loop with `maxPayoutGapDays`; the window-edge half of DEF-553 (12-month window, 46 vs 31) stays S3's (13 months + in-window filter), unchanged by S3b |
+| `maxPayoutGapDays` (S3, R8) and `supersedeConfig`'s gap refusal (S3) | `[15,30]` measures 16 ⇒ ACCEPTED on save. Invariant 6 holds: it is also silent in the detector |
+| `apps/erp/src/app/attendance/lib.ts:66`, `payroll/lib.ts:88` | `derivePeriods` only — unaffected |
+| `postPayRun` (`payroll/index.ts:415`) | Not a caller: the entry is dated `input.entryDate ?? input.periodEnd`. No pay-run row stores a payout date, so no posted run pins the old behaviour and nothing is backfilled |
+
+### Posting impact — none
+`payoutDateFor` is on no posting path. `postPayRun` posts salaries expense / `1230` recovery / money account at
+`entryDate ?? periodEnd` (`payroll/index.ts:415,454-472`); `docs/POSTING-PATTERNS.md` has no pay-run pattern
+beyond `salary_advance.repayment` (`:310-324`), which this does not touch. Consequence to state, not to build: a
+16–31 run is still computed from attendance through the 31st and dated the 31st, so the cash a store hands over on
+the 30th lands in the ledger one day later, and a run posted ON the 30th would see no attendance for the 31st (no
+guard refuses posting before `periodEnd` today). That is operational, not S3b's — see "Still Ian's".
+
+### v1 (requirements only)
+v1's staff payroll has no fixed payday at all (lag is "v1's only model", `periods.ts:132-146`); its slicer payout
+refuses a payout date before the work period ends (`ERP-rebuild src/lib/inventory/slicer-payment.ts:269-276`).
+R10 is a deliberate, ruled departure from that "never before the end" requirement: one day, day 30 only.
+
+### BUILDER
+- `packages/domain/src/payroll/periods.ts` — R10 in `payoutDateFor` + the docblock row. Nothing else.
+
+### TESTER (red first on the unmodified tree; record "Today")
+New `packages/domain/tests/t370-s3b-payday-30.test.ts` (pure unit):
+
+| Leg | Setup → assertion (target) | Today | Mutant that must turn it red |
+|---|---|---|---|
+| B1 | `semi(15)`, `fixed([15,30])`, 2026: Jan ⇒ `[01-15, 01-30]`, Feb ⇒ `[02-15, 02-28]`, Mar ⇒ `[03-15, 03-30]`, Apr ⇒ `[04-15, 04-30]` | Jan/Mar second = 02-28 / 04-30 | restore "on or after the end" |
+| B2 | Same, 2028 (leap): Feb ⇒ `[02-15, 02-29]` | green | clamp to 28 regardless of leap |
+| B3 | Same config, 12 months from Jan 2026: 24 DISTINCT paydays (no two periods share a date), every gap ≤ 16, max exactly 16 | fewer distinct, max 31 | restore the old loop |
+| B4 | The 31st is in the 30th's run: the Jan second period is `01-16..01-31` and its payday is `01-30`; `tilesTheMonth` true for all 12 months | payday 02-28 | "fix" by ending the period on the 30th (moves the 31st to the next run) |
+| B5 (controls) | `[10,25]`: Aug second ⇒ `09-25` (✎ tester, 2026-10-01: index 1 is 25). Monthly `fixed([10])` Jan ⇒ `02-10`. `[15,31]` Jan ⇒ `01-31`, Feb ⇒ `02-28`. `[15,29]` Jan second ⇒ `02-28` (29 clamps to Feb's last day, rolled — unchanged). Apr `[15,30]` second ⇒ `04-30`. Lag 0 Jan second ⇒ `01-31` | green | widen to "wanted ≥ 29" or "≤ 2 days before the end" |
+| B6 | Pure `semi(30)` 2026-01 (periods 1–30, 31–31), `fixed([15,30])`: second payday ⇒ `02-28` (never before its period STARTS) | green | drop the start guard ⇒ `01-30` |
+| B7 | Monthly `fixed([30])`: Jan ⇒ `01-30`, Feb ⇒ `02-28`, Mar ⇒ `03-30`; 12 distinct paydays in 12 months | Jan ⇒ 02-28 (collision) | gate R10 on `semi_monthly` |
+| B8 | Weekly `fixed([5,5,5,5,30])`, Aug 2026 window 29–31 (index 4) ⇒ `08-30` | `09-30` | same as B7 |
+
+### S3 edits (S3's tester owns them; S3 is not built yet, so nothing green is reversed)
+- `packages/domain/tests/t370-max-payout-gap.test.ts:69-73` — the `[15,30]` row: `expected: 31` → **16**; drop the
+  "for Ian to rule" note (ruled). Its P1 sanity leg turns red until S3b lands (the reference loop calls the real
+  `payoutDateFor`) — expected; record it. Spec P1's "Fixed `[15,30]` cutoff 15 ⇒ 31" now reads ⇒ 16.
+- `packages/domain/tests/integration/t370-semi-monthly-refusal.test.ts` — S6 controls gain `[15,30]` (saves), and an
+  Invariant-6 leg: a live `[15,30]` store raises no `payoutIntervalTooLong` in `listFindings`.
+- No other test pins the old behaviour: `periods.test.ts:150-178` uses `[25,10]`, `[31]`, weekly `[5]` (all
+  unchanged); `t332-payday-compliance.test.ts` has no day-30 fixture; no findings test uses 30.
+
+**Migration: none.** No column, CHECK or stored value changes; payout dates are always derived, never stored.
+
+### Still Ian's (non-blocking; defaults stated)
+- **Monthly / weekly day 30.** Default: R10 applies to them too (B7/B8), because the old behaviour pays two periods on
+  one date. Say so if monthly `[30]` should keep rolling.
+- **The 31st on the 30th.** Default: the run is still posted after the 31st closes and dated the 31st (cash one day
+  later in the ledger than in hand). If the store must post ON the 30th, the 31st needs a rule (paid at schedule and
+  trued up next run, or moved to the next half) — a separate task.
+
+- 2026-10-01, Ian (chat): A3 defaults confirmed — monthly [30] also pays on the 30th; a run paid on the 30th is still posted after the 31st and dated the 31st.

@@ -65,35 +65,35 @@
 - `1203–1237` 10. Phase plan
 - `1238–1254` 11. Migration & ETL rules
 - `1255–1319` 12. Inherited landmines — do not repeat these
-- `1320–1589` 13. Decision log
-- `1590–1609` 14. Amendment protocol
-- `1610–1614` 15. Engineering standards — the industry practices this project follows
-  - `1615–1620` 15.1 Build order: walking skeleton first
-  - `1621–1632` 15.2 Golden-master testing — the most important practice here
-  - `1633–1641` 15.3 Strangler Fig, not big-bang cutover
-  - `1642–1646` 15.4 No dual-write
-  - `1647–1655` 15.5 Expand/contract migrations
-  - `1656–1664` 15.6 Observability from day zero, not later
-  - `1665–1669` 15.7 CI gates
-  - `1670–1674` 15.8 Backups and a tested restore
-  - `1675–1679` 15.9 Twelve-Factor config
-  - `1680–1687` 15.10 Append-only ledgers — but not event sourcing
-  - `1688–1692` 15.11 Defence in depth
-  - `1693–1721` 15.12 Skills are lenses, not assurance
-  - `1722–1728` 15.13 Reconciliation is a permanent feature
-- `1729–1733` 16. The accounting spine
-  - `1734–1765` 16.0 What we are actually fixing — the diagnosis
-  - `1766–1809` 16.1 The ten invariants — non-negotiable
-  - `1810–1824` 16.2 The oracle: how "correct" is tested
-  - `1825–1846` 16.3 The model — header + lines, not legs
-  - `1847–1866` 16.4 Deliberately simpler than ERPNext
-  - `1867–1933` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1934–1958` 16.6 What v1 already gets right — preserve the intent
-  - `1959–1980` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1981–1995` 16.8 What v1's accounting already gets right
-  - `1996–2039` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2040–2090` 16.10 Posting patterns — one canonical pattern per business event
-  - `2091–2122` 16.11 Inventory's accounting integration
+- `1320–1595` 13. Decision log
+- `1596–1615` 14. Amendment protocol
+- `1616–1620` 15. Engineering standards — the industry practices this project follows
+  - `1621–1626` 15.1 Build order: walking skeleton first
+  - `1627–1638` 15.2 Golden-master testing — the most important practice here
+  - `1639–1647` 15.3 Strangler Fig, not big-bang cutover
+  - `1648–1652` 15.4 No dual-write
+  - `1653–1661` 15.5 Expand/contract migrations
+  - `1662–1670` 15.6 Observability from day zero, not later
+  - `1671–1675` 15.7 CI gates
+  - `1676–1680` 15.8 Backups and a tested restore
+  - `1681–1685` 15.9 Twelve-Factor config
+  - `1686–1693` 15.10 Append-only ledgers — but not event sourcing
+  - `1694–1698` 15.11 Defence in depth
+  - `1699–1727` 15.12 Skills are lenses, not assurance
+  - `1728–1734` 15.13 Reconciliation is a permanent feature
+- `1735–1739` 16. The accounting spine
+  - `1740–1771` 16.0 What we are actually fixing — the diagnosis
+  - `1772–1815` 16.1 The ten invariants — non-negotiable
+  - `1816–1830` 16.2 The oracle: how "correct" is tested
+  - `1831–1852` 16.3 The model — header + lines, not legs
+  - `1853–1872` 16.4 Deliberately simpler than ERPNext
+  - `1873–1939` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1940–1964` 16.6 What v1 already gets right — preserve the intent
+  - `1965–1986` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1987–2001` 16.8 What v1's accounting already gets right
+  - `2002–2045` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2046–2096` 16.10 Posting patterns — one canonical pattern per business event
+  - `2097–2128` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1585,6 +1585,12 @@ just a patch.**
 | 260 | 2026-09-30 | **IAN'S ANSWERS ON THE OPEN QUESTIONS PAGE, 2026-09-30 — T-367 Q1–Q7, T-369 Q1–Q4, T-371, DEF-443, DEF-476, T-315, T-316 (full list: `docs/plans/money-defects-2026-09-30.md`).** Headlines: a supplier rebate reduces the payable; a paid bill cannot be voided until its payment is; a duplicate write-off by the same person is the same write-off; a voided sales day frees its date but **only a manager may re-enter it, never staff**; an empty money box is refused only when the amount is required, never turned into zero; a cancelled order's thread is read-only; amounts leave page addresses before launch; existing staff get store access through a one-time admin-reviewed list; cashiers count before handing over. | Answers typed on the page are rulings (row 252) | Yes, each |
 | 261 | 2026-10-01 | **THE MANAGER WHO TOOK A HANDOVER MAY CONFIRM ITS OVERAGE AS INCOME.** T-366 S3 shipped `recognise_income` gated on `accept_remittance` (manager/admin, not staff — row 253's A1 Q3). It does not exclude the person who recorded the handover, unlike write-off's author check. | **Ian, 2026-10-01, Open Questions page**, recommended by the orchestrator: an overage is cash already in hand — confirming it moves nothing out of the business, so a second pair of eyes buys no protection. | Yes — add an author check in `resolveRemittanceVariance`'s income branch if a control is later wanted |
 | 262 | 2026-10-01 | **A SCREEN RENDERS A MONEY CONTROL ONLY WHERE THE VIEWER CAN USE IT; A COUNT OF WORK STAYS ORG-WIDE.** Write-off/void on the customer page and Charge/Recognise on the remittance page show only where the viewer holds the capability at that record's store (heldCapabilities + a per-store `authorize` probe — never the gate itself). The uniform "does not exist, or is not yours" refusal stays for hand-crafted requests. A list may follow the page's store picker, but the count of unresolved work it summarises stays org-wide ("N here · K more at other stores") — row 147, a count must be visible. | Orchestrator rulings during the T-367 S1 and T-366 S3 reviews (auditor findings): a control that refuses every click is a lie about what the viewer can do, and the uniform sentence then reads as a fault. Row 147 caught the first version of the remittance ruling, which had scoped the count away with the list. | Yes, per screen |
+| 263 | 2026-10-01 | **VOIDING A SUPPLIER PAYMENT FROM A CLOSED MONTH: THE PERSON PICKS THE REVERSAL DATE** (pre-filled with today, must be in an open month). T-369 S0 / DEF-550. | Ian, 2026-10-01 (chat), recommended by the orchestrator: the reversal must land in an open month; letting the person choose keeps it on the right business day | Yes — a later rule could fix it to today, like fixed assets |
+| 264 | 2026-10-01 | **15TH-AND-30TH PAYDAYS ARE SUPPORTED: the second half is paid on the 30th (last day in February) even when the half ends on the 31st**; monthly-on-30 follows the same rule; a run paid on the 30th is still posted after the 31st and dated the 31st. T-370 A3 / S3b, DEF-553. | Ian, 2026-10-01 (chat + Open Questions): 15/30 is the common Philippine schedule; the old roll-over made staff wait ~a month and paid two periods on one date | Yes — payoutDateFor's R10 is one rule in periods.ts |
+| 265 | 2026-10-01 | **A STORE MAY PAY FROM ANOTHER STORE'S MONEY: the safe that paid goes down (credit at the ACCOUNT's store) and 1250 Due from / 2150 Due to (party = the other store's code) record what the owing store owes.** Applies to reimbursements, expense approval and AP payments (T-369 S8, DEF-551) and to AR collections and loan disbursement/repayment, gated on transfer_funds at the account's store (S8b, DEF-556). A collection may land in another store's cashier drawer with no extra drawer rule; opposite inter-store debts are not offset on paper (settled by moving cash). | Ian, 2026-10-01 (chat + Open Questions), recommended by the orchestrator: each store's books must show the cash it really holds | Yes — forbidding cross-store draws would be one authorize change per writer |
+| 266 | 2026-10-01 | **A 'SETTLE BETWEEN STORES' TRANSFER CLEARS WHAT ONE STORE OWES ANOTHER** (1250/2150 for the pair; transfer_funds at BOTH stores; partial allowed; capped at the net both books agree on). T-369 S9, DEF-557. | Ian, 2026-10-01 (Open Questions) — without it a repaying transfer grows both balances | Yes |
+| 267 | 2026-10-02 | **COMMISSARY RECEIPT MISMATCHES** (T-372 S6, amendment 2): SHORT (sent 10, received 9) → the floating unit is charged to a commissary staff member (charge) or absorbed as an expense for broken/spoiled-in-flight (loss); OVER (sent 10, received 11) → the branch books what was sent, the extra is an 'over' row blocking the commissary's day-open, settled by the commissary manager confirming it really sent more (extra_dispatch posts commissary −1 / branch +1 at layer cost); a branch MISCOUNT is closed as a recount `return` with a note, initiated only by the manager of the store initiating the return (the branch). | Ian, 2026-10-01/02 (Open Questions); refines rows' T-372 Q3 (i) | Yes — dispositions are CHECK values |
+| 268 | 2026-10-01 | **THE AUDITOR LANE STAYS SONNET; an external AI is at most an optional second pass, only when Ian asks.** A GPT-6 trial on T-369 S4 (docs/reviews/external-audit-t369-s4.md) found 1 real new issue, 2 known-deferred gaps and 1 false positive, and missed the 3 money findings Sonnet caught. Local dev uses the IN-MEMORY storage driver (FIREBASE_STORAGE_BUCKET commented out in .env.local) so tests never write to the private bucket; the one test photo that reached it was deleted. | Ian, 2026-10-01 (chat) | Yes |
 
 
 ## 14. Amendment protocol

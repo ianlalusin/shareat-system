@@ -1,6 +1,6 @@
 # T-369: Unwired money screens — DEF-198, DEF-314, DEF-302, DEF-479, DEF-291
 
-**Status:** **Not started — Q1–Q4 answered 2026-09-30 (row 260; Q1 re-entry manager-only); S0 added 2026-10-01 for DEF-550** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q1–Q4 defaults ship). Review changes
+**Status:** **S0, S1, S2, S3, S4, S5a, S6a, S7 DONE 2026-10-01/02 (c3c0458…5b8aeb7); S4 follow-up + S8 reds written; S8b, S9 specced (Ian ruled); S5b, S6b after T-367** — was: **Not started — Q1–Q4 answered 2026-09-30 (row 260; Q1 re-entry manager-only); S0 added 2026-10-01 for DEF-550** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q1–Q4 defaults ship). Review changes
 1–7 and both minors applied (marked ✎R). Written 2026-09-30 by the Opus planner at HEAD `594f600`. Batch D of
 the money-defect push (Ian, 2026-09-30: *"close all open money defects in v2"*), `docs/plans/money-defects-2026-09-30.md`.
 DEF-302 is included under Ian's ruling **(a)** of 2026-09-30.
@@ -107,6 +107,9 @@ screen refuses in words a person can act on:
 | S6b | `lib/money-lines/load.ts` callers include `expenses/actions.ts:169` and `ap/invoices/[id]/page.tsx:46` | After T-367; only if Q2 = (a) |
 | S3 | T-370 edits `sales-days/create.ts:44`. S3 imports from `create.ts` and never edits it | None |
 | S7 | S3's files plus a migration | After S3; only if Q1 = (a) |
+| S8 | `expenses/reimbursement.ts` (S1/S5a's), `expenses/approve.ts` (T-367 S2, S5b), `ap/index.ts` (S0, T-367 S3, T-371), `expenses/routing.ts`, `tests/worked-examples/fixtures.ts`, `docs/POSTING-PATTERNS.md` (+ TOC regen) | **After S5a, S0 and T-367 S2/S3 commit; before S5b or after it, same lane** (both edit `approve.ts`). One lane; no migration (0178 stays T-372 S6's) |
+| S8b | S8's `ledger/inter-store.ts` and `tests/unit/inter-store-legs.test.ts` (S8b flips S8·T7's debit leg); `ar/index.ts` (T-367 S1 committed; T-371 last); `loans/index.ts`; `fixtures.ts` and `POSTING-PATTERNS.md` (S8, S9) | **After S8 commits, same lane as S8.** No migration |
+| S9 | `money-transfers/index.ts` (the `prepareTransfer` move; T-371 later), `repo/money-transfers.ts`, `advisory-locks.ts` (S0/S1's, committed), `app/money-transfers/*`; `fixtures.ts` and `POSTING-PATTERNS.md` (S8, S8b) | Code-independent of S8/S8b: may build in its own lane and lane DB now, but **commits after S8b**, rebasing `fixtures.ts` / `POSTING-PATTERNS.md` and re-running `npm run toc`. Lock namespace `369003`. No migration (0179 not taken) |
 | All | T-368 edits `repo/fiscal-periods.ts` and `fiscal-periods/*`. Nothing here edits them (S5 reads `schema.fiscalPeriods` from the app) | None |
 | All | T-371 (NaN sweep) runs last and will touch these files | T-369 first |
 
@@ -693,6 +696,568 @@ Screenshots.
 - two live days for one date → unique violation;
 - mutant: the index without the predicate → red.
 
+## S8: DEF-551 — a cross-store draw credits the safe that paid, and records what one store owes the other
+Added 2026-10-01 by the Opus planner at HEAD `5b8aeb7`, on Ian's ruling (a) (Ruling log). S8's N-numbers are its own
+(`S8·N1`…).
+
+**The defect.** Three writers allow a store's debt to be paid from ANOTHER store's money account (each authorizes
+`transfer_funds` on the account's store) but post the credit leg at the OWING store:
+- `payReimbursement` — `packages/domain/src/expenses/reimbursement.ts:204-206` (`storeId: input.storeId`);
+- `approveExpense` — `packages/domain/src/expenses/approve.ts:225` (every routed line at `expense.storeId`,
+  including the money-account credits);
+- `recordPayment` (AP) — `packages/domain/src/ap/index.ts:1076-1079` (the `cashPortion` credit at `input.storeId`;
+  the cross-store `authorize` is `:997-999`).
+
+`balanceOf()` (`packages/db/src/repo/money-accounts.ts:281-310`) reads a non-1140 account as
+`journal_lines.store_id = account.storeId`. So a Lipa debt paid from Malvar's safe leaves Malvar's safe unchanged
+and drives Lipa's cash negative, and `checkDraw` (which reads the PAYING account) approves a draw that never shows.
+
+**Census of every other money-account writer, verified at source.** None needs a change in S8:
+- `createMoneyTransfer` (`money-transfers/index.ts:193-246`) is already right: each leg sits at its own account's
+  store, plus the 1250/2150 pair when `crossStore`.
+- These REFUSE another store's account, so no cross-store credit can arise: `releaseCashRequest`
+  (`cash-requests/index.ts:219`), `payLiability` (`liabilities/index.ts:190`), `recordContribution` /
+  `recordDrawing` / `repayFromOwner` (`owners/index.ts:154, 304, 385`), `postPayRun` (`payroll/index.ts:411`),
+  `postSeparation` (`payroll/separation.ts:145`), `post13thMonthRun` (`payroll/thirteenth-month.ts:158`), and the
+  channel destination (`channel-settlements/index.ts:696`).
+- `voidPayment` (`ap/index.ts:1148-1200`) uses `reverseEntry`, which mirrors every original line. After S8 it reverses
+  the 1250/2150 pair too, with no code change (S8·T6 proves it).
+- ⚠️ **S8·N1, a new DEF for the orchestrator.** `recordCollection` (`ar/index.ts:267`), `disburseLoan`
+  (`loans/index.ts:117`) and `recordLoanPayment` (`loans/index.ts:192`) have NO account-store check at all: no
+  refusal and no `transfer_funds`. Each posts the money leg at the document's store (`ar :371`, `loans :140, :252`).
+  They have the same shape as DEF-551 and they also lack the N1 gate. This is out of S8 (see Q5).
+
+**v1 as requirements (§1.2d).** v1 posts the due-from/due-to pair in one place only: the cross-store loan deduction
+(`ERP-rebuild/src/lib/financial/channel-settlement/cross-store-loan.legs.ts`), which v2 ports at
+`channel-settlements/index.ts:572-596`. v1's expense and supplier payments had no inter-store legs. The goal: the
+money that left a safe shows as leaving THAT safe, and the store it was spent for owes the store that paid. v2 beats
+v1 by putting both facts in the same single entry.
+
+**Reused convention, not a new one.** Ian's ruling has exactly the shape of the channel-settlement loan deduction
+(*"the PAYING store gave up cash that was not its debt → it is owed (DR 1250) … the OWNING store … now owes the paying
+store instead (CR 2150)"*, `channel-settlements/index.ts:572-576`). Both money-transfers and commissary use the same
+account pair: **1250 Due from related store / 2150 Due to related store**, both `requiresParty`
+(`seed/chart-of-accounts.ts:148, 228`), `partyType: 'store'`, and **`partyId` = the OTHER store's `code`**
+(POSTING-PATTERNS `:765-768`; code resolved with `moneyTransfersRepo.storeCodes`). Invariant 6's reciprocal finding
+`dueFromDueToNotReciprocal` (`repo/findings.ts:89`) already watches Σ1250 = Σ2150. No new account, party type or
+finding.
+
+**Capability:** unchanged. `record_ap_payment` / `approve_expense` at the owing store, and `transfer_funds` at the
+account's store when they differ (already enforced at `reimbursement.ts:97`, `approve.ts:137`, `ap/index.ts:997`).
+
+**Posting shape (the rule).** The money-account credit goes at the ACCOUNT's store. The owing store's liability (or
+expense) debit stays at the owing store. Then, for each paying store P ≠ owing store O, with X the total credited to
+P's accounts in this entry:
+- DR 1250 at P, party = O's code, for X;
+- CR 2150 at O, party = P's code, for X.
+
+Each store's own lines now net to zero, and the org total is unchanged.
+
+**The ₱650 example.** Ana is owed ₱650 at Lipa (2130, from `expense.reimbursable`). An admin pays her from Malvar's
+office safe (1130). One entry, `reimbursement_payout`:
+
+| Account | Store | Debit | Credit | Party |
+|---|---|---:|---:|---|
+| 2130 Reimbursements payable to employees | Lipa | 650.00 | | employee (Ana) |
+| 2150 Due to related store | Lipa | | 650.00 | store (Malvar's code) |
+| 1250 Due from related store | Malvar | 650.00 | | store (Lipa's code) |
+| 1130 Cash on hand — office | Malvar | | 650.00 | — |
+
+Lipa nets 0 (650 − 650) and so does Malvar. Malvar's safe is −650 and Lipa's cash is untouched. Lipa owes Malvar
+₱650 (2150 at Lipa, credit 650) and Malvar is owed ₱650 by Lipa (1250 at Malvar, debit 650): equal and opposite.
+
+**Per-store tie.** Today only the ORG trial balance is asserted (`commissary-transfer.test.ts:587-608`, `select
+sum(debit) - sum(credit) … where org_id`), and no trigger balances per store. S8's tests assert the per-store tie for
+the entries they post (`group by store_id` → every row 0.00); S8 adds no trigger.
+
+**Settlement.** No flow settles 1250/2150 today. A cross-store `createMoneyTransfer` from Lipa back to Malvar posts
+DR 1250 at Lipa and CR 2150 at Malvar. That GROSSES UP both stores' positions: economically it nets, but neither
+balance clears. Settlement is OUT of S8 — **S8·N2, a new DEF for the orchestrator**: "an inter-store balance has no
+settle flow; a repaying transfer grosses it up instead of clearing it". See Q6.
+
+**BUILDER** (source):
+- `packages/domain/src/ledger/inter-store.ts` (new), the single shared helper:
+  `withInterStoreLegs(tx, orgId, { owingStoreId, lines, memo }): Promise<PostEntryLine[]>`.
+  - It takes lines whose money credits already carry their own `storeId`.
+  - For each `storeId` ≠ `owingStoreId` whose lines net to a credit X (X > 0), it appends DR 1250 at that store
+    (party = the owing store's code) and CR 2150 at `owingStoreId` (party = that store's code), each X.
+  - It resolves codes once with `moneyTransfersRepo.storeCodes`, and throws `internalFault` if a code is missing.
+  - It returns `lines` unchanged when every line is at the owing store, so the same-store shape is byte-identical.
+  - It uses `@shareat/core/money` (I8), never `Number`.
+  - It refuses (`internalFault`) a non-owing store that nets to a DEBIT. No caller in S8 produces one, and a silent
+    reverse pair would mis-state both stores.
+  - Export it from `packages/domain/src/index.ts` beside `./ledger/post-entry` (`:10`).
+- `packages/domain/src/expenses/reimbursement.ts`:
+  - the credit leg's `storeId` becomes `account.storeId`;
+  - the `lines` pass through `withInterStoreLegs(…, { owingStoreId: input.storeId })` before `postEntry`;
+  - the replay check (`:113-125`) also requires `credit.storeId === account.storeId`. A pre-S8 cross-store payout
+    replayed after S8 is refused as "a different amount, store or account". That is correct: it is the defective
+    shape, and nothing deploys from `main`.
+- `packages/domain/src/expenses/routing.ts`: `RoutingPayment` gains optional `moneyAccountStoreId`. The cash/online
+  branch (`:142-173`) sets `line.storeId` ONLY when it is given, so the existing unit fixtures (which never pass it)
+  keep their `toEqual` shape. `RoutingLine` gains optional `storeId`.
+- `packages/domain/src/expenses/approve.ts`:
+  - `wallets` (`:118`) also keeps `acct.storeId`, and the routing input passes `moneyAccountStoreId`;
+  - `:225` becomes `storeId: l.storeId ?? expense.storeId`;
+  - the mapped lines pass through `withInterStoreLegs(…, { owingStoreId: expense.storeId })`;
+  - `drawnPerAccount` / `checkDraw` are unchanged: they already read the paying account.
+- `packages/domain/src/ap/index.ts` `recordPayment`: the `cashPortion` credit (`:1076-1083`) gets
+  `storeId: account.storeId`, and the lines pass through `withInterStoreLegs(…, { owingStoreId: input.storeId })`.
+  `ap_payments.store_id` stays `input.storeId`: the payment belongs to the owing store's AP.
+- `tests/worked-examples/fixtures.ts`: a new example `reimbursement.payout-cross-store`, with the four lines above.
+  Use `storeRef: 'branch1'` for the owing store (Lipa) and `storeRef: 'commissary'` for the paying store (Malvar). The
+  union's own doc says it means "two distinct stores", so the harness is not edited. Add a one-line comment saying so.
+- `docs/POSTING-PATTERNS.md`: a new `### \`reimbursement.payout-cross-store\` — Paid from another store's safe` directly
+  after `reimbursement.payout` (`:190-201`):
+  - the 4-line table above in the `Account | Store | Debit | Credit | Party` form of `customer.return-internal`;
+  - **Trap:** the credit at the owing store balances perfectly and is wrong: `balanceOf` reads the safe at the
+    safe's store, so the paying safe never moves and the owing store's cash goes negative (DEF-551). Name the same
+    shape for `expense_payment` and `ap_payment` in one sentence.
+  - Then `npm run toc` (never hand-edit the TOC).
+- **Migration: none.** 1250/2150, `party_type = 'store'` and the reciprocal finding all exist. 0178 stays reserved
+  for T-372 S6 and S8 takes no index.
+
+**TESTER:**
+- `packages/domain/tests/integration/t369-s8-cross-store-draw.test.ts` (new). Two stores, admin at both, a Lipa-only
+  manager. Reuse the fixture shape of `t369-s1-reimbursement-payout.test.ts:151-210`.
+- `packages/domain/tests/unit/inter-store-legs.test.ts` (new): the pure arithmetic of `withInterStoreLegs`, with
+  `storeCodes` stubbed.
+- `packages/domain/tests/integration/t369-s1-reimbursement-payout.test.ts`: T3's positive control (`:368-375`)
+  gains the store/balance asserts of S8·T1 (it posts the exact DEF-551 case and today asserts only count and
+  outstanding). No existing test pins the wrong `store_id`: a grep of every cross-store payout/approve/AP test
+  (`t369-s1`, `t369-s0` T8 `:593-615`, `t367-s2-invoice-gate`, `ap*.test.ts`) asserts counts, outstanding or the
+  refusal, never the credit's store. The builder re-greps for `storeId).toBe(` near a cross-store pay before
+  claiming that.
+- `tests/unit/posting-patterns-doc.test.ts` and `tests/integration/posting-patterns.test.ts` are unchanged and must
+  stay green with the new fixture (parity in both directions; the fixture is posted and reversed against real
+  Postgres).
+
+**Contract:** no signature changes. `payReimbursement`, `approveExpense` and `recordPayment` return what they do
+today. The posted shape is the rule above. `withInterStoreLegs` is the only place the pair is built for these three.
+
+**Tests** (real Postgres; each red leg asserts the target and is shown red on HEAD):
+- T1 (reimbursement, the ₱650 case): owed 650 at Lipa; the admin pays 650 from Malvar's safe.
+  - The entry has exactly the 4 lines of the table: account, store, side, amount, `party_type`/`party_id` (Lipa's
+    and Malvar's codes).
+  - `balanceOf(malvarSafe)` falls by exactly 650.00; `balanceOf(lipaCash)` and `balanceOf(lipaSafe)` are unchanged.
+  - 1250 at Malvar = +650.00 and 2150 at Lipa = −650.00 (debit − credit): equal and opposite.
+  - `group by store_id` over the entry's lines → every store nets 0.00.
+  - `dueFromDueToNotReciprocal` raises nothing.
+  - Red on HEAD: the credit is at Lipa, Malvar's safe is unchanged, and Lipa's cash is −650.
+- T2 (positive control, same store, unchanged): the manager pays 650 from Lipa's own safe. Exactly TWO lines (DR 2130 /
+  CR 1130, both at Lipa), no 1250/2150 line, and `lines` deep-equal to the pre-S8 shape. Green on HEAD and after.
+- T3 (expense approval): a Lipa expense of ₱1,000 split ₱600 Lipa cash + ₱400 Malvar safe, approved by the admin.
+  - Lipa cash −600 and Malvar safe −400.
+  - Exactly one 1250/2150 pair, for 400 (not 1,000).
+  - Each store nets 0.00.
+  - Red on HEAD: Malvar's credit is at Lipa.
+  - Positive control: the same split with both legs from Lipa → no pair.
+- T4 (AP payment): ₱12,000 owed to a supplier at Lipa, paid from Malvar's safe by the admin.
+  - Malvar safe −12,000; DR 2110 at Lipa; the 1250/2150 pair for 12,000; `ap_payments.store_id` = Lipa; Lipa's open
+    item cleared.
+  - With `creditApplied` 2,000: the pair is for the 10,000 cash portion only.
+  - Red on HEAD.
+- T5 (✗ unchanged): the Lipa-only manager drawing on Malvar's safe is still `AuthorizationError` in all three
+  writers, and nothing is posted (the N1 gates are untouched). Positive control: T1.
+- T6 (void mirrors): void T4's payment (`voidPayment`). Malvar's safe returns to its prior balance; 1250 at Malvar and
+  2150 at Lipa return to 0.00; the reversal carries the same `party_id`s (POSTING-PATTERNS `:1254`). No code change:
+  this guards `reverseEntry`'s mirror.
+- T7 (unit, `withInterStoreLegs`):
+  - two paying stores in one entry → two pairs;
+  - all lines at the owing store → returned `===` unchanged;
+  - a non-owing store netting to a debit → `internalFault`;
+  - centavo sums (0.10 + 0.20) exact.
+- Mutants (each turns a named test red):
+  - (i) keep the credit at the owing store → T1/T3/T4 red;
+  - (ii) drop the pair but keep the credit at the account's store → the per-store tie is red;
+  - (iii) swap the parties (each line names its OWN store) → T1's party asserts are red;
+  - (iv) append the pair unconditionally → T2 is red;
+  - (v) in approve, build the pair from the expense total instead of the drawn amount → T3 is red.
+
+**Smoke (9008, `shareat_test_setup`; 2027-02 open):** no screen offers another store's account until S6b (Q2), so
+the cross-store payout is posted by a domain call. Use a `tsx` script in the scratchpad, run as an admin, not a
+forged POST.
+1. Note `/money-transfers` balances for Malvar's office safe and Lipa's cash.
+2. Owe ₱650 at Lipa (S1 smoke step 1), then pay it from Malvar's safe via `payReimbursement`.
+3. `/money-transfers`: Malvar's safe is down ₱650 and Lipa's cash is unchanged.
+4. `/reports/trial-balance?store=<Lipa>` shows 2150 ₱650 credit and ties; `?store=<Malvar>` shows 1250 ₱650 debit
+   and ties; the org-wide view ties with 1250 and 2150 equal.
+5. `/expenses/reimbursements` at Lipa: Ana is no longer listed.
+
+Screenshots at steps 3–4.
+
+**Not in S8:**
+- settling an inter-store balance (S8·N2, Q6);
+- AR collections and loans (S8·N1, Q5);
+- any picker offering another store's account (S6b).
+
+**Questions S8 adds (for the orchestrator to put to Ian; defaults let S8 proceed):**
+- **Q5: Collections and loan payments.** Today the three writers in S8·N1 accept another store's account with no
+  permission check and the wrong store, which is DEF-551's bug plus a missing gate. Choose:
+  - (a) **apply the same ruling: gate `transfer_funds` and post the pair** (recommended; one call to the helper
+    each);
+  - (b) refuse another store's account there, like payroll and owners.
+  Default until answered: neither is built here, and it is logged as a new DEF.
+- **Q6: How should Lipa pay Malvar back?** Choose:
+  - (a) **a "Settle between stores" transfer that DR 2150 at Lipa / CR Lipa cash and DR Malvar safe / CR 1250 at
+    Malvar** (recommended; it clears both balances);
+  - (b) leave the balances to net at group level.
+  Default: (b), a follow-up DEF.
+
+---
+
+## S8b: DEF-556 — collections and loans across stores
+Added 2026-10-02 by the Opus planner, on Ian's ruling (a) for Q5 (Ruling log). **Depends on S8** (`withInterStoreLegs`
+does not exist until S8 commits). S8b's N-numbers are its own (`S8b·N1`…).
+
+**The defect (S8·N1, now DEF-556).** Three writers accept ANY money account in the org, with no store check and no
+`transfer_funds`, and post the money leg at the DOCUMENT's store:
+- `recordCollection` — `packages/domain/src/ar/index.ts:267` fetches the account; the debit is at `input.storeId`
+  (`:371`). Gate today: `record_ar_collection` at `input.storeId` (`:240`) only.
+- `disburseLoan` — `packages/domain/src/loans/index.ts:117`; the debit is at `loan.storeId` (`:140`). Gate:
+  `record_ap_payment` at `loan.storeId` (`:111`) only.
+- `recordLoanPayment` — `loans/index.ts:192`; the credit is at `loan.storeId` (`:253`). Gate: `record_ap_payment` at
+  `loan.storeId` (`:186`) only. `checkDraw` (`:230`) already reads the paying account.
+
+So a Lipa-only manager can drain Malvar's safe into a Lipa loan payment today, and the ledger shows Malvar's safe
+untouched while Lipa's cash goes negative.
+
+**The new half: money flowing IN.** S8's three writers only CREDIT another store's account (money leaves P). Here,
+`recordCollection` and `disburseLoan` DEBIT another store's account (money lands at P for O's document). Then P is
+holding O's money, so **P owes O**: the pair runs the other way. `recordLoanPayment` is S8's direction exactly.
+
+**Posting shape (the rule, both directions).** The money-account line goes at the ACCOUNT's store. Every other line
+(1210, 2140, 6400, 2400, 7200) stays at the document's store O. Then, for each store P ≠ O, with X the net of P's
+lines in this entry:
+- P nets to a CREDIT X (money left P; S8's case): DR 1250 at P, party = O's code / CR 2150 at O, party = P's code.
+- P nets to a DEBIT X (money landed at P; new): DR 1250 at O, party = P's code / CR 2150 at P, party = O's code.
+
+Each store's own lines net to zero; the org total is unchanged; Σ1250 = Σ2150 still holds.
+
+**The ₱2,000 example.** A ₱2,000 charge is open at Lipa. The customer pays it into Malvar's office safe (1130), and an
+admin records it. One entry, `ar_collection`:
+
+| Account | Store | Debit | Credit | Party |
+|---|---|---:|---:|---|
+| 1130 Cash on hand — office | Malvar | 2,000.00 | | — |
+| 2150 Due to related store | Malvar | | 2,000.00 | store (Lipa's code) |
+| 1250 Due from related store | Lipa | 2,000.00 | | store (Malvar's code) |
+| 1210 Accounts receivable | Lipa | | 2,000.00 | customer |
+
+Malvar's safe is up ₱2,000 and Malvar owes Lipa ₱2,000. Lipa's receivable is cleared and Lipa is owed ₱2,000.
+
+Loans, same rule: a ₱4,800 Lipa loan payment (₱4,500 principal + ₱300 interest) from Malvar's safe posts DR 2400 Lipa
+4,500 (party loan) · DR 7200 Lipa 300 · CR 1130 Malvar 4,800 · DR 1250 Malvar 4,800 (party Lipa) · CR 2150 Lipa 4,800
+(party Malvar). A ₱50,000 Lipa loan drawn into Malvar's safe posts DR 1130 Malvar · CR 2400 Lipa (party loan) · DR 1250
+Lipa (party Malvar) · CR 2150 Malvar (party Lipa), each 50,000.
+
+**Capability:** unchanged (I2). The document's own capability at the document's store (`record_ar_collection` /
+`record_ap_payment`), plus `transfer_funds` at the account's store when the stores differ. That is S8's rule (S1·N1:
+`reimbursement.ts:97`).
+
+**BUILDER** (source):
+- `packages/domain/src/ledger/inter-store.ts` (S8's helper): a non-owing store that nets to a DEBIT no longer throws
+  `internalFault`. It gets the mirrored pair above. One helper, both directions; each store's sign is handled on its
+  own. A store that nets to exactly 0.00 gets no pair. Lines all at the owing store are still returned `===`
+  unchanged. Update the helper's doc comment.
+- `packages/domain/src/ar/index.ts` `recordCollection`:
+  - after the account fetch (`:268`): `if (account.storeId !== input.storeId) await authorize(trx, actor,
+    'transfer_funds', { storeId: account.storeId })`, before the charge lock (`:318`);
+  - the money-account debit (`:371`) gets `storeId: account.storeId`;
+  - `lines` pass through `withInterStoreLegs(trx, actor.orgId, { owingStoreId: input.storeId, lines, memo })`
+    before `postEntry`. Only the cash portion moves: 2140, 6400, 1210 and the surplus 2140 stay at `input.storeId`;
+  - `ar_collections.store_id` stays `input.storeId`.
+- `packages/domain/src/loans/index.ts`:
+  - `disburseLoan`: the same gate after `:118` (`loan.storeId` is the owing store); the debit (`:140`) gets
+    `storeId: account.storeId`; the lines pass through the helper.
+  - `recordLoanPayment`: the same gate after `:193`, before `positionOf`; the credit (`:253`) gets
+    `storeId: account.storeId`; the lines pass through the helper. `checkDraw` is unchanged.
+  - `reverseLoanEntry` and `positionOf` are unchanged: both read 2400 by party, and 2400 never moves store.
+- `voidCollection` (`ar/index.ts:482`) and `reverseLoanEntry` (`loans/index.ts:302`) use `reverseEntry`, which mirrors
+  every line, pair included. No code change (T7 proves it).
+- `tests/worked-examples/fixtures.ts`: a new example `ar_collection.cross-store` with the 4 lines above, owing store
+  `storeRef: 'branch1'` (Lipa) and receiving store `storeRef: 'commissary'` (Malvar), with S8's one-line comment.
+- `docs/POSTING-PATTERNS.md`: a new `### \`ar_collection.cross-store\` — Paid into another store's safe` directly after
+  `ar_collection.no-fee`, in the `Account | Store | Debit | Credit | Party` form. **Trap:** money landing at another
+  store makes THAT store the debtor; the pair runs opposite to `reimbursement.payout-cross-store`. One sentence names
+  `loan_payment` (S8's direction) and `loan_disbursement` (this direction). Then `npm run toc`.
+- **Migration: none.**
+
+**TESTER:**
+- `packages/domain/tests/integration/t369-s8b-cross-store-collections-loans.test.ts` (new). Two stores, admin at both,
+  a Lipa-only manager holding `record_ar_collection`, `record_ap_payment` and `transfer_funds` at Lipa only. Reuse
+  S8's fixture shape.
+- `packages/domain/tests/unit/inter-store-legs.test.ts` (S8's): S8·T7's "debit → `internalFault`" leg is REPLACED by
+  T8 below. That is the one intended red-to-green flip of an S8 assertion.
+- A grep of `ar*.test.ts`, `loans*.test.ts` and `t367-*` for a collection or loan posted against another store's
+  account: if any pins the old `store_id` or a success that T4 now refuses, it changes with a comment naming DEF-556.
+  The builder re-greps before claiming none.
+
+**Contract:** no signature changes. The three writers return what they do today.
+
+**Tests** (real Postgres; each red leg asserts the target and is shown red on HEAD or on S8's commit):
+- T1 (collection, the ₱2,000 case), by the admin:
+  - exactly the 4 lines of the table (account, store, side, amount, party type and id);
+  - `balanceOf(malvarSafe)` +2,000.00; `balanceOf(lipaCash)` and `balanceOf(lipaSafe)` unchanged;
+  - 1250 at Lipa = +2,000.00 and 2150 at Malvar = −2,000.00 (debit − credit);
+  - `group by store_id` → every store nets 0.00; `dueFromDueToNotReciprocal` raises nothing;
+  - the charge's outstanding is 0.00;
+  - red on HEAD: the debit is at Lipa and Malvar's safe is unchanged.
+- T2 (collection, every optional leg): ₱5,000 collected into Malvar's safe with a ₱250 fee, ₱500 store credit applied
+  and a ₱300 surplus. The pair is for the cash portion only (₱4,250), and 6400 and both 2140 lines are at Lipa.
+- T3 (positive control, same store): the same collection into Lipa's own safe → no 1250/2150 line, and `lines`
+  deep-equal to the pre-S8b shape. The same for one loan payment and one disbursement.
+- T4 (✗, new gate): the Lipa-only manager naming Malvar's safe in each of the three writers → `AuthorizationError`
+  naming `transfer_funds`; no entry, no `ar_collections` row, and the loan position unchanged. Red on HEAD (today all
+  three succeed). Positive control: the admin, T1/T5/T6.
+- T5 (loan payment, ₱4,800 from Malvar's safe): Malvar's safe −4,800.00; 2400 at Lipa down 4,500.00; 7200 at Lipa
+  300.00; the pair DR 1250 Malvar / CR 2150 Lipa for 4,800.00; per-store tie. And `checkDraw` still refuses when
+  Malvar's office safe holds less than the payment (it reads the paying account).
+- T6 (loan disbursement, ₱50,000 into Malvar's safe): Malvar's safe +50,000.00; 2400 at Lipa; the pair DR 1250 Lipa /
+  CR 2150 Malvar; per-store tie.
+- T7 (voids mirror): `voidCollection` on T1 and `reverseLoanEntry` on T5. The safe returns to its prior balance; 1250
+  and 2150 for the pair return to 0.00; the reversal lines carry the same `party_id`s. The charge is open again, and
+  a `paid_off` loan re-opens as today. No code change: this guards `reverseEntry`'s mirror.
+- T8 (unit, the helper):
+  - one non-owing store netting to a debit → the mirrored pair (CR 2150 at it, DR 1250 at the owing store);
+  - one entry with a paying store AND a receiving store → two pairs, opposite directions;
+  - a non-owing store netting to 0.00 → no pair;
+  - centavo sums exact (I8).
+- Mutants (each turns a named test red):
+  - (i) keep the money line at the document's store → T1/T5/T6 red;
+  - (ii) keep S8's debit refusal in the helper → T1/T6 red;
+  - (iii) not mirroring the direction (DR 1250 at the receiving store) → T1's party/side asserts and the per-store
+    tie are red;
+  - (iv) drop the new `transfer_funds` gate → T4 red;
+  - (v) build the collection's pair from `amount` instead of the cash portion → T2 red.
+
+**Smoke (9008, `shareat_test_setup`; 2027-02 open):** no picker offers another store's account (S6b), so post through
+a `tsx` scratchpad script as the admin, never a forged POST. Collect ₱2,000 of a Lipa charge into Malvar's safe, then:
+`/money-transfers` shows Malvar's safe +₱2,000 and Lipa's cash unchanged; `/reports/trial-balance?store=<Malvar>` shows
+2150 ₱2,000 credit and ties; `?store=<Lipa>` shows 1250 ₱2,000 debit and ties; the customer page shows the charge
+paid. Screenshots of the two trial balances.
+
+**Not in S8b:** a picker offering another store's account on the customer or loan screens (S6b's pattern, not
+ruled); settling the balance (S9).
+
+---
+
+## S9: DEF-557 — settle between stores
+Added 2026-10-02 by the Opus planner, on Ian's ruling (a) for Q6 (Ruling log). S9's N-numbers are its own (`S9·N1`…).
+**S9 does not need S8's code:** inter-store balances exist today (cross-store money transfers, channel-settlement loan
+deductions, commissary). It shares only `fixtures.ts` and `POSTING-PATTERNS.md` with S8/S8b.
+
+**The defect.** Nothing clears 1250/2150. A Lipa → Malvar transfer meant to repay posts the ordinary cross-store pair
+(`money-transfers/index.ts:229-248`): DR 1250 at LIPA and CR 2150 at MALVAR. That adds a second, opposite debt beside
+the first instead of clearing it, so both stores' 1250 and 2150 grow forever.
+
+**v1 as requirements (§1.2d).** v1 has no settlement either; its pair appears only in the cross-store loan deduction
+(S8's v1 note). The goal: when one store hands another the money it owes, both stores' books show the debt gone. v2
+beats v1 by making the settlement the same single entry as the cash move, capped by what the ledger says is owed.
+
+**Where it lives.** `/money-transfers`, a new `<details>` panel **"Settle between stores"** (I6: the native
+disclosure, inline form, `back()` banners, no `alert()`/`confirm()`). It lists each ordered pair with a positive net
+balance where the person holds `transfer_funds` at BOTH stores, in words: "Lipa owes Malvar ₱650.00". Choosing a row
+fills the form:
+- **From:** the debtor's active office accounts. **To:** the creditor's active office accounts (bible row 152: office
+  to office only).
+- **Amount** (pre-filled with the full balance), **received** (defaults to the amount; less only for a bank fee),
+  **date**, **reference**, **notes**.
+- A hidden `settlementId` = `crypto.randomUUID()` generated when the page renders.
+
+It is a money transfer, so it is listed with the others, tagged "Settlement", and voided with the existing Void.
+When there is no pair to settle, the panel says "No store owes another." and offers no form. It is not a checkbox on
+the ordinary transfer form: a settlement has a cap and a direction an ordinary transfer does not.
+
+**Capability:** no new one (I2). `transfer_funds` at BOTH stores, exactly as a cross-store transfer
+(`money-transfers/index.ts:135, 151`; bible row 153).
+
+**Posting shape (the rule).** Debtor D pays creditor C. The cash legs are a normal transfer: DR C's account at C for
+`amountIn`, CR D's account at D for `amountOut`, and a fee (6870, at D) when `amountOut > amountIn`. Then the CLEARING
+pair, for `amountIn` (what C actually received; the fee is D's own cost, as in a transfer):
+- DR 2150 at D, party = C's code (D's debt to C goes down);
+- CR 1250 at C, party = D's code (C's claim on D goes down).
+
+**"Lipa repays Malvar ₱650"** (it clears S8's ₱650 example). From Lipa's office safe to Malvar's office safe, one entry,
+`transfer`:
+
+| Account | Store | Debit | Credit | Party |
+|---|---|---:|---:|---|
+| 1130 Cash on hand — office | Malvar | 650.00 | | — |
+| 1250 Due from related store | Malvar | | 650.00 | store (Lipa's code) |
+| 2150 Due to related store | Lipa | 650.00 | | store (Malvar's code) |
+| 1130 Cash on hand — office | Lipa | | 650.00 | — |
+
+Each store nets 0.00. Lipa's safe −650, Malvar's +650. 2150 at Lipa (party Malvar) and 1250 at Malvar (party Lipa)
+both return to 0.00. Σ1250 = Σ2150 still.
+
+**What is owed: the NET position of the pair, read from both stores' books.**
+- From D's books: Σ at D of 2150 party C (credit − debit), minus Σ at D of 1250 party C (debit − credit).
+- From C's books: Σ at C of 1250 party D (debit − credit), minus Σ at C of 2150 party D (credit − debit).
+- Non-draft entries only, like `reciprocalDrift` (`repo/findings.ts:77-84`). Computed in SQL `numeric` and returned
+  as strings, never a JS float compare (I8; DEF-272's class).
+- Every writer posts the pair together, so the two readings agree. If they ever differ, settling is refused (below)
+  rather than clearing against one side's number.
+- A pair whose debt was voided AFTER it was settled goes negative. That simply reads as the reverse debt (C now owes
+  D) and is settled the other way round. Nothing special is built for it.
+
+**Refusals** (I7: no ids, no column names; each a `refuse(raw, userSentence)`; nothing is written on any of them):
+- same store: "Both accounts belong to Lipa — there is nothing to settle between stores.";
+- either end not an office account, or retired: the existing transfer sentences (row 152);
+- nothing owed either way: "Lipa and Malvar owe each other nothing.";
+- wrong direction: "Malvar doesn't owe Lipa — Lipa owes Malvar ₱650.00. Swap the accounts.";
+- more than owed (`amountIn` > owed): "Lipa owes Malvar ₱650.00, so ₱700.00 is more than the debt. Send the
+  difference as an ordinary transfer.";
+- `amountIn > amountOut`: the existing income sentence;
+- the two books disagree: "The two stores' records of what is owed don't match, so this can't be settled yet. Ask
+  the accountant to check the stores' due-to and due-from balances." (a hard refusal, logged with both figures);
+- an office source that cannot cover it: `checkDraw`, unchanged;
+- a closed month: the period trigger's sentence, unchanged.
+
+**Partial settlement:** allowed. Any `amountIn` from ₱0.01 up to the owed balance. The remainder stays owed and the
+panel shows it.
+
+**Idempotency / double submit.** `settlementId` comes from the form, as `payoutId` does for S1·N3
+(`reimbursement.ts:103-130`):
+- the journal key is `transfer:${settlementId}:post`, and the `money_transfers` row's id IS `settlementId`;
+- before the cap read, `findEntryByIdempotencyKey`. A replay with the same accounts and amounts returns the first
+  result. The same id with other figures is refused: "This settlement was already recorded with different figures.
+  Reload the page and try again.";
+- the primary key is the database's own backstop against a racing double click.
+
+**Concurrency.** New `lockInterStorePair(tx, storeA, storeB)` in `packages/db/src/repo/advisory-locks.ts`, namespace
+**369003** (next after S0's 369002). It is keyed on the UNORDERED pair:
+`hashtext(least(a, b) || ':' || greatest(a, b))`, so D→C and C→D serialize together. It is taken after the two
+`authorize` calls and before the replay lookup and the owed read: the order S1 uses (`reimbursement.ts:101-104`).
+Only settlement takes it. Every other 1250/2150 writer can only RAISE a debt or (on void) restore one, and neither
+can make a settlement exceed what is owed. Update the namespace list in the file's header comment.
+
+**Void.** The existing `voidMoneyTransfer` reverses every line, so the debt comes back exactly. No cap applies to a
+reversal (row 152's rule: a correction must always be possible). One change: ⚠️ **S9·N1** — a cross-store transfer's
+void (settlement or ordinary) today authorizes only the SOURCE store (`money-transfers/index.ts:311`), though creating
+it needed both (row 153). S9 adds `transfer_funds` at the destination account's store when it differs. Both kinds
+need it, and the creation rule is the precedent.
+
+**Findings and reports.** `dueFromDueToNotReciprocal` is unchanged: the clearing pair is equal and opposite, so
+Σ1250 = Σ2150 holds. It is org-wide and cannot see a per-pair mismatch. S9 refuses on one instead of building a
+per-pair finding (⚠️ **S9·N2**, a new DEF for the orchestrator: "no finding watches 1250/2150 per store pair"). The
+trial balance and `balanceOf` need no change. `remittance.ts:42` excludes `source_type = 'transfer'` from custody
+movement, which is why the settlement keeps `sourceType: 'transfer'`. A new source type would leak settlements into
+the cashier's remittance figures.
+
+**BUILDER** (source):
+- `packages/domain/src/money-transfers/index.ts`:
+  - extract `runCreate`'s shared part (`:104-212`: load ends, office-only rule, both `authorize` calls, amount
+    parsing, `checkDraw`, fee and cash legs) into an internal `prepareTransfer(tx, actor, input)`. This is a pure
+    move: `createMoneyTransfer` keeps its exact output and the existing transfer tests are its guard;
+  - `runVoid` gains the destination-store `authorize` (S9·N1).
+- `packages/domain/src/money-transfers/settle.ts` (new):
+  `settleBetweenStores(tx, actor, { settlementId, fromMoneyAccountId, toMoneyAccountId, amountOut, amountIn,
+  transferDate, feeAccountCode?, reference?, notes? }): Promise<CreateMoneyTransferResult & { owedAfter: string }>`.
+  Order: `prepareTransfer` → same-store refusal → `lockInterStorePair` → replay → `interStorePosition` (both
+  readings) → direction, cap and agreement refusals → clearing pair → `postEntry` (`sourceType: 'transfer'`,
+  `sourceId: settlementId`, memo `Settlement — Lipa to Malvar`) → insert the row with `id: settlementId`.
+  Export it from `money-transfers/index.ts`.
+- `packages/db/src/repo/money-transfers.ts`:
+  - `InsertMoneyTransferInput` gains optional `id`;
+  - new `interStorePosition(tx, orgId, debtorStoreId, creditorStoreId): { owedPerDebtor: string; owedPerCreditor:
+    string }`;
+  - new `interStorePositions(tx, orgId, storeIds)`: every ordered pair with a positive net, for the panel;
+  - `listMoneyTransfers` gains a derived `settles: boolean` (an `exists` over the entry's 2150 DEBIT at the source
+    store). No column.
+- `packages/db/src/repo/advisory-locks.ts`: `lockInterStorePair` (369003).
+- `apps/erp/src/app/money-transfers/`:
+  - `SettleBetweenStoresForm.tsx` (new);
+  - `actions.ts` gains `settleBetweenStoresAction`;
+  - `lib.ts` loads the positions for the stores where the person holds `transfer_funds`;
+  - `page.tsx` renders the panel and the "Settlement" tag.
+- `tests/worked-examples/fixtures.ts`: `transfer.settle-between-stores`, the 4 lines above. Lipa is
+  `storeRef: 'branch1'` and Malvar `storeRef: 'commissary'`, with S8's comment.
+- `docs/POSTING-PATTERNS.md`: a new `### \`transfer.settle-between-stores\` — Paying back what one store owes another`
+  after `transfer.cash.with-fee`. **Trap:** an ordinary transfer back posts DR 1250 at the PAYER, which grosses both
+  debts up instead of clearing them (DEF-557). Only the settlement debits 2150 at the payer. Correct the Transfer
+  section's intro sentence "not inter-store (that is `commissary_dispatch`)": cross-store transfers carry the pair
+  since T-139. Then `npm run toc`.
+- **Migration: none.** No column: the row id carries the idempotency, the lines carry the "settles" tag, and
+  1250/2150 and `party_type 'store'` exist. 0179 is not needed.
+
+**TESTER:**
+- `packages/domain/tests/integration/t369-s9-settle-between-stores.test.ts` (new). Two stores with office safes, admin
+  at both, a Lipa-only and a Malvar-only manager. Seed the debt with an ordinary `createMoneyTransfer` Malvar → Lipa
+  ₱650: Lipa now owes Malvar ₱650, independent of S8. The concurrency harness is copied from
+  `t369-s1-reimbursement-payout.test.ts:56-144` (gated two connections, never a bare `Promise.all` race).
+- `apps/erp/tests/integration/t369-s9-settle-action.test.ts` (new): the action's ✗ and the refusal sentences reaching
+  `?error=`.
+- `domain-actions-have-callers` and `route-capability-coverage` must stay green: the new action is the caller.
+
+**Contract:** `createMoneyTransfer` and `voidMoneyTransfer` keep their signatures. `createMoneyTransfer`'s output is
+unchanged; `voidMoneyTransfer` refuses one more case (S9·N1). `settleBetweenStores` is the only writer of the
+clearing pair.
+
+**Tests** (real Postgres; each red leg asserts the target and is shown red on HEAD):
+- T1 (the ₱650 example):
+  - exactly the 4 lines of the table (account, store, side, amount, parties);
+  - Lipa's safe −650.00 and Malvar's +650.00;
+  - 2150 at Lipa (party Malvar) and 1250 at Malvar (party Lipa) both 0.00;
+  - both readings of `interStorePosition` are 0.00; per-store tie; `dueFromDueToNotReciprocal` raises nothing;
+  - red on HEAD, in contrast: the same repayment through `createMoneyTransfer` leaves 2150 at Lipa at 650 and ADDS
+    1250 at Lipa 650.
+- T2 (partial): settle 400 → 250 owed on both readings; settle 250 → 0; then 0.01 more → "owe each other nothing".
+- T3 (refusals; each asserts the sentence, no id in it, and that the entry, row and balance counts are unchanged):
+  more than owed (700); wrong direction (Malvar → Lipa); same store; a pair with no balance; a cashier account at
+  either end; `amountIn > amountOut`.
+- T4 (✗): the Lipa-only and the Malvar-only managers → `AuthorizationError`, nothing posted. Positive control: the
+  admin, T1.
+- T5 (idempotency): the same `settlementId` and figures twice → one entry, one row, the same ids returned, 0.00
+  owed. The same id with 300 instead of 650 → the replay refusal, and nothing changes.
+- T6 (concurrency): owed 650; A settles 400 and B settles 400 with different ids. B is observed waiting on
+  `advisory`; exactly one succeeds and the other gets the more-than-owed refusal with 250 in it. 250 stays owed and
+  never goes below 0. A Lipa↔Commissary settlement does not block a Lipa↔Malvar one.
+- T7 (void): `voidMoneyTransfer` on T1 → 650 owed again on both readings, and the reversal lines carry the same
+  parties. Settling again succeeds. ✗ (S9·N1): the Lipa-only manager cannot void it (red on HEAD), and the same holds
+  for an ordinary cross-store transfer.
+- T8 (fee): `amountOut` 660, `amountIn` 650 between two office bank accounts → 6870 10.00 at Lipa, and exactly 650
+  cleared.
+- T9 (books disagree): in-test, post a one-sided 2150 credit at Lipa (party Malvar) against 6870 → the readings differ
+  → the disagreement refusal, nothing posted.
+- T10 (panel source): `interStorePositions` lists "Lipa → Malvar 650.00" and omits the pairs that net to 0.
+- T11 (`settles` tag): `listMoneyTransfers` marks the settlement `true` and the seeding transfer `false`.
+- Mutants (each turns a named test red):
+  - (i) post the ordinary gross-up pair instead → T1 red;
+  - (ii) drop the cap → T3's more-than-owed red;
+  - (iii) drop the lock → T6 red;
+  - (iv) clear `amountOut` instead of `amountIn` → T8 red;
+  - (v) authorize only the source store → T4's Malvar-only leg red;
+  - (vi) read only the debtor's books → T9 red;
+  - (vii) look the replay up after the cap read → T5's second call is refused as "nothing owed" (red).
+
+**Smoke (9008, `shareat_test_setup`; 2027-02 open)**, as the admin:
+1. Make Lipa owe Malvar ₱650 (a Malvar → Lipa office transfer).
+2. `/money-transfers` → "Settle between stores" shows "Lipa owes Malvar ₱650.00".
+3. Settle ₱400. The banner confirms, the panel shows ₱250, and the list tags the row "Settlement".
+4. Try ₱300 → the refusal banner.
+5. Settle ₱250 → "No store owes another."
+6. `/reports/trial-balance?store=<Lipa>` and `?store=<Malvar>`: 2150/1250 are 0.00 and both tie.
+
+Screenshots at steps 2, 3, 4 and 6, plus the panel at 375px and in dark mode.
+
+**Not in S9:** offsetting two opposite debts without cash (Q8); a per-pair finding (S9·N2); settling the commissary's
+historical balances in bulk.
+
+**Questions S8b and S9 add (for the orchestrator to put to Ian; defaults let both proceed):**
+- **Q7: Can a cross-store collection or loan payment use another store's CASHIER drawer?** Cross-store transfers are
+  office to office only (row 152). S8, as ruled, does not add that rule to draws.
+  - (a) **Mirror S8: no custodian rule beyond `transfer_funds`** (recommended; Ian's ruling names only the gate).
+  - (b) Another store's account must be an office account.
+  - Default: (a).
+- **Q8: If Lipa owes Malvar ₱650 and Malvar owes Lipa ₱400 on separate records, may they be offset without moving
+  cash?** S9 settles the NET (₱250) with cash. The two gross balances stay on the books, netting to zero.
+  - (a) **Not now** (recommended; nothing reads the gross pair).
+  - (b) Add a no-cash "offset" settlement.
+  - Default: (a).
+
+---
+
 ## Out of scope
 - A void for a reimbursement payout (Q4; if (a), a follow-up slice after S5a).
 - Viewing capability per record rather than per upload purpose, and DEF-320's purposes.
@@ -762,3 +1327,9 @@ Screenshots.
 - 2026-10-01, orchestrator: S0's SUPPLIER_CREDIT_LOCK_NAMESPACE is **369002** (S1 took 369001 for the reimbursement payee lock).
 - 2026-10-01, orchestrator (from S3 RED): Ian's Q1 manager-only re-entry belongs to **S7** — S7 tests must add "void → create the same date: manager succeeds, staff refused". S3 pins only that withdrawing an unverified day lifts the create-block.
 - 2026-10-01, orchestrator (S3 audit): wastage recorded against a day blocks WITHDRAW by design (the day is real; correct it by editing) — sentence "Wastage is recorded against this day, so it can't be withdrawn — edit its figures instead." Edits write an audit row (who, before→after). Until S7 the withdraw panel says the date stays used.
+- 2026-10-01, Ian (chat; Open Questions page): DEF-551 → **(a) allow** a store's debt (reimbursement payout, expense/AP payment) to be paid from another store's money account. The safe that paid is credited at ITS store, and the 1250/2150 due-from/due-to pair (party = the other store's code, the channel-settlement loan-deduction convention) records what the owing store owes the paying store until settled. Specified as **S8**; settlement (Q6) and AR/loans (Q5) are follow-ups.
+- 2026-10-01, Ian (Open Questions page): DEF-556 (Q5) → **(a)**. Customer collections, loan disbursements and loan repayments may use another store's money account only with `transfer_funds` at that account's store, and they post S8's inter-store legs. Specified as **S8b** (after S8).
+- 2026-10-01, Ian (Open Questions page): DEF-557 (Q6) → **(a)**. Build a "settle between stores" transfer that clears 1250/2150. Specified as **S9**.
+- 2026-10-02, planner: `withInterStoreLegs` handles BOTH directions from S8b on. Money landing at another store makes that store the debtor (CR 2150 there / DR 1250 at the document's store); S8·T7's debit refusal is replaced.
+- 2026-10-02, planner: S9 takes lock namespace **369003** (`lockInterStorePair`, unordered pair). It keeps `sourceType: 'transfer'` because `remittance.ts:42` excludes that type from custody. The cap is the NET pair position read from both stores' books, and it clears `amountIn`. A cross-store void now needs `transfer_funds` at both stores (S9·N1). No migration.
+- 2026-10-02, Ian (Open Questions page): S8b/S9 defaults confirmed — a cross-store collection may land in another store's cashier drawer with transfer_funds there (no extra drawer rule); no paper offset of opposite inter-store debts now.
