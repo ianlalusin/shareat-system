@@ -16,9 +16,9 @@ import { redirect } from 'next/navigation';
 import {
   createAsset,
   disposeAsset,
-  refuse,
   runDepreciation,
   setAssetInService,
+  updateAssetTerms,
   type DepreciationInterval,
 } from '@shareat/domain';
 import { fixedAssetsRepo, type AssetCategory } from '@shareat/db';
@@ -95,30 +95,16 @@ export async function updateTermsAction(formData: FormData): Promise<void> {
   const qs = carryQs(formData);
 
   try {
-    await withOrgPrincipal(actor.orgId, async (tx) => {
-      // The capability check lives in the domain for every OTHER verb; this one writes through
-      // the repo directly, so it authorizes here. Same capability, same scope.
-      const { authorize } = await import('@shareat/auth');
-      await authorize(tx, actor, 'manage_fixed_assets', {});
-
-      const lifeRaw = str(formData, 'usefulLifeMonths');
-      const life = Number(lifeRaw);
-      if (lifeRaw === '' || !Number.isInteger(life) || life < 1) {
-        throw refuse(
-          `updateTermsAction: useful life must be a whole number of months greater than zero, got ${JSON.stringify(lifeRaw)}.`,
-          'The useful life must be a whole number of months, 1 or more.',
-        );
-      }
-
-      await fixedAssetsRepo.updateTerms(tx, actor.orgId, assetId, {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      updateAssetTerms(tx, actor, assetId, {
         name: str(formData, 'name'),
-        category: str(formData, 'category') as AssetCategory,
-        usefulLifeMonths: life,
-        interval: str(formData, 'interval') as fixedAssetsRepo.DepreciationIntervalValue,
+        category: str(formData, 'category'),
+        usefulLifeMonths: str(formData, 'usefulLifeMonths'),
+        interval: str(formData, 'interval'),
         salvageValue: str(formData, 'salvageValue') || null,
         notes: str(formData, 'notes') || null,
-      });
-    });
+      }),
+    );
   } catch (err) {
     redirect(`/fixed-assets/${assetId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }
@@ -129,8 +115,8 @@ export async function updateTermsAction(formData: FormData): Promise<void> {
 /**
  * Correct WHEN an asset went into service. T-346 S2 (DEF-427), §3.4/§3.6.
  *
- * ⭐ The confirm step is a second submit, not a client-side dialog — `confirmReversal` round-trips
- * through the URL's `pending=1` flag and a resubmitted hidden field, the same shape
+ * ⭐ The confirm step is a second submit, not a client-side dialog — the plan token (`planToken` on the
+ * refusal) round-trips through the URL's `plan` param and is resubmitted as the hidden `confirmedPlan`, the same shape
  * `disposeAssetAction`'s sibling screens use nowhere else in this app because nothing else needed
  * a "this reverses N entries" checkpoint before this task. `setAssetInService`'s OWN error message
  * (the one thing that names which entries and how much) is what the confirm banner shows verbatim.
@@ -140,7 +126,8 @@ export async function setAssetInServiceAction(formData: FormData): Promise<void>
   const assetId = str(formData, 'assetId');
   const qs = carryQs(formData);
   const mode = str(formData, 'mode') as 'acquired' | 'store_opening' | 'set';
-  const confirmReversal = str(formData, 'confirmReversal') === '1';
+  // The token of the plan the person confirmed (T-368 S2 / DEF-441), resubmitted from the confirm step.
+  const confirmedPlan = str(formData, 'confirmedPlan') || undefined;
 
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
@@ -148,7 +135,7 @@ export async function setAssetInServiceAction(formData: FormData): Promise<void>
         mode,
         inServiceOn: mode === 'set' ? str(formData, 'inServiceOn') : undefined,
         reason: str(formData, 'reason'),
-        confirmReversal,
+        confirmedPlan,
       }),
     );
   } catch (err) {
@@ -156,8 +143,9 @@ export async function setAssetInServiceAction(formData: FormData): Promise<void>
     // "confirm to proceed" is `setAssetInService`'s own refusal shape (in-service.ts) — the ONE
     // string this action recognises to show a confirm checkpoint instead of a plain error.
     if (message.endsWith('confirm to proceed')) {
+      const plan = (err as { planToken?: string }).planToken ?? '';
       redirect(
-        `/fixed-assets/${assetId}?${qs}&confirm=${encodeURIComponent(message)}&mode=${mode}` +
+        `/fixed-assets/${assetId}?${qs}&confirm=${encodeURIComponent(message)}&plan=${encodeURIComponent(plan)}&mode=${mode}` +
           `&inServiceOn=${encodeURIComponent(str(formData, 'inServiceOn'))}` +
           `&reason=${encodeURIComponent(str(formData, 'reason'))}`,
       );
@@ -209,6 +197,10 @@ export async function runDepreciationAction(formData: FormData): Promise<void> {
     const result = await recordingRefusalsFor(actor.orgId, () => runDepreciation(null, actor, { through }));
     const created = result.posted.filter((p) => p.created).length;
     summary = `${created} posted, ${result.posted.length - created} already done, ${result.skipped} not due`;
+    if (result.skippedClosed > 0) {
+      // Owed, not "not due": the month is closed, so it is booked from the missed-months list instead.
+      summary += ` — ${result.skippedClosed} month(s) fall in a closed month — book them from Findings (missed months).`;
+    }
     if (result.failed.length > 0) {
       // Surfaced, never swallowed — "a missed period surfaces as a finding, not silence".
       failedCount = result.failed.length;

@@ -184,7 +184,7 @@ export async function setStoreStockModelAction(fd: FormData): Promise<void> {
 /**
  * T-346 S1 (DEF-428) / S2 (DEF-427), §3.2 step 3 / R4.5. Moving the opening date can cascade a
  * reversal across every `'store_opening'`-sourced follower asset — `setStoreOpeningDate` itself
- * plans that and refuses once, naming every affected asset, unless `confirmReversal` is set. The
+ * plans that and refuses once, naming every affected asset, unless `confirmedPlan` carries the token of exactly that plan. The
  * refusal's OWN message (the one thing that names which assets, which months, and how much) is
  * what the in-page confirm step below shows verbatim — never a `window.confirm()`.
  */
@@ -192,21 +192,26 @@ export async function setStoreOpeningDateAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const storeId = str(fd, 'storeId');
   const openingDate = str(fd, 'openingDate') || null;
-  const confirmReversal = str(fd, 'confirmReversal') === '1';
+  // The token of the plan the person confirmed (T-368 S2 / DEF-441), resubmitted from the confirm step.
+  const confirmedPlan = str(fd, 'confirmedPlan') || undefined;
   // T-346 Amendment R3.1 — same helper as createStoreAction; no second copy of the check.
   if (openingDate !== null && !storesRepo.isValidDateString(openingDate)) {
     back(`/admin/stores/${storeId}`, { error: invalidDateMessage(openingDate) });
   }
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
-      setStoreOpeningDate(tx, actor, storeId, { openingDate, confirmReversal }),
+      setStoreOpeningDate(tx, actor, storeId, { openingDate, confirmedPlan }),
     );
   } catch (err) {
     const message = errorMessage(err);
     // "confirm to proceed" is `setStoreOpeningDate`'s own refusal shape (stores/service.ts) — the
     // ONE string this action recognises to show the in-page confirm step instead of a plain error.
     if (message.endsWith('confirm to proceed')) {
-      back(`/admin/stores/${storeId}`, { confirm: message, openingDate: openingDate ?? '' });
+      back(`/admin/stores/${storeId}`, {
+        confirm: message,
+        plan: (err as { planToken?: string }).planToken ?? '',
+        openingDate: openingDate ?? '',
+      });
     }
     back(`/admin/stores/${storeId}`, { error: message });
   }

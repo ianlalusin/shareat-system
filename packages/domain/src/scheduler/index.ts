@@ -160,16 +160,21 @@ export async function runJobForOrg(
         failures: result.failures,
       }),
     );
-    return { ...base, ...result, failed: result.failures.length };
+    return { ...base, ...result, failed: countFailures(result.failures) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
       ...base,
       ...result,
-      failed: result.failures.length,
+      failed: countFailures(result.failures),
       error: `could not close the scheduler run row — ${message}`,
     };
   }
+}
+
+/** Failures only: a `kind: 'notice'` entry is said, not failed (T-368), so it is never counted. */
+function countFailures(failures: SchedulerFailure[]): number {
+  return failures.filter((f) => f.kind !== 'notice').length;
 }
 
 /** Best-effort `failRun`; if it also fails, the row stays `finished_at IS NULL` — which
@@ -265,6 +270,16 @@ async function runDepreciationJob(
     // it twice and counting the ledger, which is the only way it shows.
     const created = result.posted.filter((p) => p.created).length;
     const alreadyThere = result.posted.length - created;
+    // T-368: owed months skipped because their fiscal period is closed are NOT "not due" and NOT failures -
+    // said once, as a notice, so a cron run is never silent about them (T-345's list is where they are booked).
+    if (result.skippedClosed > 0) {
+      failures.push({
+        subjectId: org.id,
+        subjectName: 'Depreciation',
+        reason: `${result.skippedClosed} month(s) owed in a closed month — book them from Findings (missed months).`,
+        kind: 'notice',
+      });
+    }
     return { posted: created, skipped: result.skipped + alreadyThere, failures };
   });
 }

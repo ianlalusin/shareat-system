@@ -48,7 +48,7 @@ import {
   type Tx,
 } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
-import { describeReversal, executeReversals, planInServiceReversal } from '../fixed-assets/in-service';
+import { describeReversal, executeReversals, planInServiceReversal, requireConfirmedPlan } from '../fixed-assets/in-service';
 // ⭐ The LEAF module, not `../organizations` — `organizations/index.ts` imports `createStore` from
 // this file, so importing its barrel back would close an import cycle. See `identifiers.ts`.
 import { normaliseBranchCode } from '../organizations/identifiers';
@@ -281,8 +281,8 @@ export async function updateStoreDetails(
  * its `in_service_on` from this store's date the moment it changes — migration 0163's
  * `stores_opening_date_propagate` trigger does that re-derivation automatically once the write
  * below lands. What this function adds on top is everything the trigger CANNOT do: plan which
- * followers' posted depreciation the new date would make illegal, refuse outright on a DEF-435
- * conflict, and reverse what needs reversing — all BEFORE the write, in the same transaction, so
+ * followers' posted depreciation the new date would make illegal, and reverse what needs
+ * reversing (a month owed at a different amount is reversed too, DEF-435) — all BEFORE the write, in the same transaction, so
  * the trigger's own guard (`fixed_assets_in_service_b_guard`) never has anything left to catch.
  * ONE confirm covers every affected asset — not one per asset — reusing `planInServiceReversal` /
  * `executeReversals` / `describeReversal` so this cascade and `setAssetInService`'s own single-asset
@@ -292,7 +292,7 @@ export async function setStoreOpeningDate(
   tx: Tx,
   actor: Actor,
   storeId: string,
-  input: { openingDate: string | null; confirmReversal?: boolean },
+  input: { openingDate: string | null; confirmedPlan?: string },
 ): Promise<void> {
   await authorize(tx, actor, CAPABILITY, {});
 
@@ -320,7 +320,7 @@ export async function setStoreOpeningDate(
   //
   // ⛔ Amendment R4.4 (1) — `status = 'active'` only. A disposed asset is no longer depreciating
   // anything and re-deriving its in_service_on would be a no-op with teeth: it can only ever
-  // surface a phantom DEF-435 conflict or reversal against history that no longer matters. The
+  // surface a phantom reversal against history that no longer matters. The
   // propagation trigger's own `WHERE` carries the identical `status = 'active'` condition, so a
   // disposed follower is frozen on BOTH sides, never just one.
   const followers = (await fixedAssetsRepo.listAssets(tx, actor.orgId, { storeId, status: 'active' })).filter(
@@ -342,22 +342,20 @@ export async function setStoreOpeningDate(
     }),
   );
 
-  const conflicted = plans.find(({ plan }) => plan.conflict);
-  if (conflicted) {
-    throw new Error(
-      `setStoreOpeningDate: ${conflicted.asset.name}: ${conflicted.plan.conflict!.period} would need ` +
-        `re-booking at ${conflicted.plan.conflict!.amount}, which this cannot do yet (DEF-435)`,
-    );
-  }
-
   const affected = plans.filter(({ plan }) => plan.toReverse.length > 0);
-  if (affected.length > 0 && !input.confirmReversal) {
+  if (affected.length > 0) {
     const perAsset = affected
       .map(({ asset, plan }) => `${asset.name} — ${describeReversal(plan.toReverse)}`)
       .join('; ');
-    throw new Error(
-      `setStoreOpeningDate: ${store.name} — moving the opening date reverses depreciation for ` +
-        `${affected.length} asset(s): ${perAsset}; confirm to proceed`,
+    const sentence =
+      `${store.name} — moving the opening date reverses depreciation for ` +
+      `${affected.length} asset(s): ${perAsset}; confirm to proceed`;
+    // ONE token over the entries of EVERY affected asset (T-368 S2 / DEF-441).
+    requireConfirmedPlan(
+      affected.flatMap(({ plan }) => plan.toReverse),
+      input.confirmedPlan,
+      `setStoreOpeningDate: ${sentence}`,
+      sentence,
     );
   }
 

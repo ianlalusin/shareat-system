@@ -270,7 +270,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // is exactly the 8-UNRESOLVED regression an earlier radio-based draft of this same UI produced
     // before the builder redesigned it; a `<select>` sizes from its own classes like this file's
     // other pickers. The confirm-reversal steps on both the asset page and
-    // `app/admin/stores/[id]/page.tsx` add only `type="hidden"` inputs (`confirmReversal`) and
+    // `app/admin/stores/[id]/page.tsx` add only `type="hidden"` inputs (`confirmedPlan`) and
     // reuse each form's EXISTING submit button (relabelled, not a new element) — the census does
     // not count hidden inputs, and an unchanged button contributes nothing to the delta.
     // 1054 -> 1058, T-350 (DEF-477). +4 PASS, FAIL/UNRESOLVED unmoved (both asserted above).

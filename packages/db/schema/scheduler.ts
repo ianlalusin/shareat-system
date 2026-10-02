@@ -107,12 +107,22 @@ export type SchedulerJob = (typeof SCHEDULER_JOBS)[number];
 export const SCHEDULER_OUTCOMES = ['ok', 'partial', 'failed'] as const;
 export type SchedulerOutcome = (typeof SCHEDULER_OUTCOMES)[number];
 
-/** One failure, kept verbatim so the reason survives to the screen. */
+/**
+ * One failure, kept verbatim so the reason survives to the screen.
+ *
+ * ⚠️ The jsonb column is named `failures` for history, and NOTICES ride along in it: an entry with
+ * `kind: 'notice'` is something a run wants said that is NOT a failure (T-368: owed months skipped
+ * because their fiscal period is closed). A notice is never counted in `failed_count`, never makes the
+ * outcome `partial`/`failed`, and is shown as a plain line, never as a failure. Anything that counts or
+ * lists failures must filter on `kind !== 'notice'`.
+ */
 export interface SchedulerFailure {
   /** The asset or prepaid item that failed. */
   subjectId: string;
   subjectName: string;
   reason: string;
+  /** Absent = a failure. `'notice'` = said, not failed. */
+  kind?: 'notice';
 }
 
 export const schedulerRuns = pgTable(

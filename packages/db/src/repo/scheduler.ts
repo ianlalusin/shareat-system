@@ -54,7 +54,9 @@ export async function finishRun(
   runId: string,
   result: { postedCount: number; skippedCount: number; failures: SchedulerFailure[] },
 ): Promise<void> {
-  const failedCount = result.failures.length;
+  // Notices (`kind: 'notice'`) are stored with the failures but are not failures: they neither count nor
+  // change the outcome.
+  const failedCount = result.failures.filter((f) => f.kind !== 'notice').length;
   // ⚠️ The outcome is DERIVED from the counts, never passed in — the CHECK constraint refuses a
   // row whose outcome and failure count disagree, and deriving it here means they cannot.
   const outcome =
@@ -67,7 +69,7 @@ export async function finishRun(
       postedCount: result.postedCount,
       skippedCount: result.skippedCount,
       failedCount,
-      failures: failedCount > 0 ? result.failures : null,
+      failures: result.failures.length > 0 ? result.failures : null,
       outcome,
     })
     .where(eq(schedulerRuns.id, runId));

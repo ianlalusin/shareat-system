@@ -219,6 +219,19 @@ export async function insertAsset(tx: Tx, input: InsertAssetInput): Promise<{ id
   return row!;
 }
 
+/** The asset, read `FOR UPDATE`. T-368 S3 (DEF-436): `updateAssetTerms` and the depreciation run both take
+ *  this lock as their FIRST read, so a terms change and a run on one asset serialise - whichever commits
+ *  second sees the other's result. */
+export async function getByIdForUpdate(tx: Tx, orgId: string, id: string): Promise<FixedAssetRow | undefined> {
+  const [row] = await tx
+    .select(COLUMNS)
+    .from(fixedAssets)
+    .where(and(eq(fixedAssets.id, id), eq(fixedAssets.orgId, orgId)))
+    .limit(1)
+    .for('update');
+  return row as FixedAssetRow | undefined;
+}
+
 export async function getById(
   tx: Tx,
   orgId: string,
@@ -567,27 +580,45 @@ export async function postedDepreciationEntries(
   return out.sort((a, b) => a.period.localeCompare(b.period));
 }
 
-/** Periods this asset has a REVERSED (not currently posted) depreciation entry for — `§3.4` step 3's
- *  "or already held by a reversed entry" half of the DEF-435 check: a month a previous correction
- *  already tried and failed to re-book stays refused, the same honesty T-345 gives it (DEF-435). */
-export async function reversedDepreciationPeriods(tx: Tx, orgId: string, assetId: string): Promise<Set<string>> {
+/**
+ * Every depreciation entry ever written for one (asset, period), reversed ones included, oldest first.
+ * T-368 S2 (DEF-435).
+ *
+ * ⭐ A period is a SERIES, not a single row - the same correction prepaid's `entriesForPeriod` forced.
+ * Reversing a month and running it again is the whole point of a correction, but `postEntry` keys off the
+ * idempotency key, so re-using the original key would make the re-post a silent no-op; the reversed
+ * attempt stays in the ledger, so the next attempt needs a key of its own (`depreciationRevisionKey`).
+ *
+ * ⚠️ The OR is parenthesised: `and(a, b or c)` without brackets reads as `(a and b) or c`, which would
+ * match another organisation's rows.
+ */
+export async function depreciationEntriesForPeriod(
+  tx: Tx,
+  orgId: string,
+  assetId: string,
+  period: string,
+): Promise<{ id: string; status: string; key: string }[]> {
+  const base = `asset:${assetId}:depreciation:${period}`;
   const rows = await tx
-    .select({ key: journalEntries.idempotencyKey })
+    .select({ id: journalEntries.id, status: journalEntries.status, key: journalEntries.idempotencyKey })
     .from(journalEntries)
     .where(
       and(
         eq(journalEntries.orgId, orgId),
         eq(journalEntries.sourceType, 'depreciation'),
         eq(journalEntries.sourceId, assetId),
-        eq(journalEntries.status, 'reversed'),
+        sql`(${journalEntries.idempotencyKey} = ${base} or ${journalEntries.idempotencyKey} like ${base + '#%'})`,
       ),
-    );
-  const periods = new Set<string>();
-  for (const r of rows) {
-    const m = /:depreciation:(\d{4}-\d{2})(?:#\d+)?$/.exec(r.key ?? '');
-    if (m) periods.add(m[1]!);
-  }
-  return periods;
+    )
+    .orderBy(asc(journalEntries.createdAt));
+  return rows.map((r) => ({ id: r.id, status: r.status, key: r.key ?? '' }));
+}
+
+/** The key the NEXT posting of this (asset, period) should use: the plain key the first time, then `#2`,
+ *  `#3`, ... after each reversal - idempotent per ATTEMPT while the period has one effective entry. */
+export function depreciationRevisionKey(assetId: string, period: string, existing: { status: string }[]): string {
+  const base = `asset:${assetId}:depreciation:${period}`;
+  return existing.length === 0 ? base : `${base}#${existing.length + 1}`;
 }
 
 /**

@@ -6,8 +6,8 @@
  * convention already exists (T-106, `POSTING-PATTERNS.md:1220-1241`): reverse the wrong months in
  * an open month, keep the right ones. There is nothing to RE-POST here — straight-line equal
  * instalments mean a month the new schedule still owes, at the SAME amount, needs no correction at
- * all, and a month it owes at a DIFFERENT amount is refused outright (DEF-435) rather than
- * re-booked, because nothing in this codebase may post over/instead of an existing key.
+ * all, and a month it owes at a DIFFERENT amount is reversed too: it re-posts on the next run under its
+ * revision key if its period is open, or is listed by T-345 if its period is closed (DEF-435, T-368 S2).
  *
  * ⚠️ **This file independently computes the same in-service value migration 0163's fill trigger
  * would derive**, so it can plan which posted months to reverse BEFORE writing anything — the
@@ -15,10 +15,12 @@
  * `setInServiceSource` is what actually writes the columns, and the migration's guard trigger is
  * the backstop that enforces the result stays legal (RULES §6.3) if this ever disagreed with it.
  */
+import { createHash } from 'node:crypto';
 import { authorize, type Actor } from '@shareat/auth';
 import { fixedAssetsRepo, journalRepo, manilaToday, storesRepo, type Tx } from '@shareat/db';
 import { add, formatMoney, money } from '@shareat/core/money';
 import { reverseEntry } from '../ledger/reverse-entry';
+import { refuse } from '../shared/refusal';
 import { buildSchedule, type ScheduleInput } from './schedule';
 
 export interface SetAssetInServiceInput {
@@ -26,8 +28,9 @@ export interface SetAssetInServiceInput {
   /** Required for `mode: 'set'`; ignored otherwise (the other two modes derive their own date). */
   inServiceOn?: string;
   reason: string;
-  /** Required once §3.4 step 4 finds anything to reverse — the confirm-then-proceed flow. */
-  confirmReversal?: boolean;
+  /** Required once §3.4 step 4 finds anything to reverse: the token the first refusal carried (`planToken`),
+   *  resubmitted. It pins the confirm to the EXACT entries that refusal listed - T-368 S2 (DEF-441). */
+  confirmedPlan?: string;
 }
 
 export interface SetAssetInServiceResult {
@@ -63,19 +66,17 @@ async function resolveMode(
   return { source: 'set', inServiceOn: input.inServiceOn };
 }
 
-interface ReversalConflict {
-  period: string;
-  amount: string;
-}
-
 interface ReversalPlan {
   /** R — sorted oldest first. */
   toReverse: fixedAssetsRepo.PostedDepreciationEntry[];
-  conflict: ReversalConflict | null;
 }
 
 /** §3.4 steps 2-3, shared by `setAssetInService` and `setStoreOpeningDate`'s own cascade (§3.2
- *  step 3) — one computation of "what would this in-service change reverse", never two. */
+ *  step 3) — one computation of "what would this in-service change reverse", never two.
+ *
+ *  T-368 S2 (DEF-435): a month the new schedule owes at a DIFFERENT amount is simply reversed - it re-posts
+ *  on the next run if its period is open, or is listed by T-345 if its period is closed. There is no
+ *  "cannot re-book" conflict any more: a reversed month can be booked again (`depreciationRevisionKey`). */
 export async function planInServiceReversal(
   tx: Tx,
   orgId: string,
@@ -83,7 +84,6 @@ export async function planInServiceReversal(
   newInServiceOn: string | null,
 ): Promise<ReversalPlan> {
   const posted = await fixedAssetsRepo.postedDepreciationEntries(tx, orgId, asset.id);
-  const reversedPeriods = await fixedAssetsRepo.reversedDepreciationPeriods(tx, orgId, asset.id);
 
   const owedByPeriod = new Map<string, string>();
   if (newInServiceOn !== null) {
@@ -107,18 +107,40 @@ export async function planInServiceReversal(
   const toReverse = posted
     .filter((e) => owedByPeriod.get(e.period) !== e.amount)
     .sort((a, b) => a.period.localeCompare(b.period));
-  const toReversePeriods = new Set(toReverse.map((e) => e.period));
-  const postedPeriods = new Set(posted.map((e) => e.period));
 
-  let conflict: ReversalConflict | null = null;
-  for (const [period, amount] of [...owedByPeriod.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    if (toReversePeriods.has(period) || (reversedPeriods.has(period) && !postedPeriods.has(period))) {
-      conflict = { period, amount };
-      break;
-    }
-  }
+  return { toReverse };
+}
 
-  return { toReverse, conflict };
+/**
+ * The token that pins a confirm to the entries it showed: the first 16 hex characters of sha-256 over the
+ * entry ids, sorted and joined by `,`. T-368 S2 (DEF-441). The store cascade passes the ids of EVERY
+ * affected asset, so one token covers the whole plan.
+ */
+export function planToken(entries: { entryId: string }[]): string {
+  const ids = entries.map((e) => e.entryId).sort();
+  return createHash('sha256').update(ids.join(',')).digest('hex').slice(0, 16);
+}
+
+/**
+ * Refuses unless `confirmedPlan` is the token of exactly these entries. Nothing is written by a refusal.
+ *  - no token: the refusal as always (ends "confirm to proceed") plus the `planToken` to resubmit;
+ *  - a token that does not match what is planned NOW: "What this would reverse has changed since you
+ *    confirmed." and the NEW list, with the new token - so a confirm can never reverse entries the person
+ *    did not see.
+ * An empty plan needs no confirmation.
+ */
+export function requireConfirmedPlan(
+  entries: { entryId: string }[],
+  confirmedPlan: string | undefined,
+  raw: string,
+  userMessage: string,
+): void {
+  if (entries.length === 0) return;
+  const token = planToken(entries);
+  if (confirmedPlan === token) return;
+  const stale = confirmedPlan !== undefined && confirmedPlan !== '';
+  const refusal = refuse(raw, stale ? `What this would reverse has changed since you confirmed. ${userMessage}` : userMessage);
+  throw Object.assign(refusal, { planToken: token });
 }
 
 /** Is the entry's own fiscal period still open right now? Decides whether `reverseEntry` gets an
@@ -180,22 +202,13 @@ async function applyInServiceChange(
   asset: fixedAssetsRepo.FixedAssetRow,
   target: { source: 'acquired' | 'store_opening' | 'set'; inServiceOn: string | null },
   reason: string,
-  confirmReversal: boolean | undefined,
+  confirmedPlan: string | undefined,
 ): Promise<SetAssetInServiceResult> {
   const plan = await planInServiceReversal(tx, actor.orgId, asset, target.inServiceOn);
 
-  if (plan.conflict) {
-    throw new Error(
-      `setAssetInService: ${asset.name}: ${plan.conflict.period} would need re-booking at ` +
-        `${plan.conflict.amount}, which this cannot do yet (DEF-435)`,
-    );
-  }
-
-  if (plan.toReverse.length > 0 && !confirmReversal) {
-    throw new Error(
-      `setAssetInService: ${asset.name} — moving the in-service date reverses ${describeReversal(plan.toReverse)}; ` +
-        'confirm to proceed',
-    );
+  if (plan.toReverse.length > 0) {
+    const sentence = `${asset.name} — moving the in-service date reverses ${describeReversal(plan.toReverse)}; confirm to proceed`;
+    requireConfirmedPlan(plan.toReverse, confirmedPlan, `setAssetInService: ${sentence}`, sentence);
   }
 
   const dateLabel = target.inServiceOn ?? 'held (no opening date yet)';
@@ -251,5 +264,5 @@ export async function setAssetInService(
   }
 
   const target = await resolveMode(tx, actor.orgId, asset, input);
-  return applyInServiceChange(tx, actor, asset, target, reason, input.confirmReversal);
+  return applyInServiceChange(tx, actor, asset, target, reason, input.confirmedPlan);
 }

@@ -28,6 +28,7 @@ import {
   expensesRepo,
   fixedAssetsRepo,
   journalRepo,
+  storesRepo,
   transaction,
   type AssetCategory,
   type Tx,
@@ -37,7 +38,7 @@ import type { DepreciationInterval } from './schedule';
 import { readPolicyOrRefuse, resolveUsefulLifeMonths } from './policy';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseMoneyInput } from '../shared/money-input';
-import { refuse } from '../shared/refusal';
+import { gone, refuse } from '../shared/refusal';
 
 export interface CreateAssetInput {
   storeId: string;
@@ -82,6 +83,18 @@ async function runCreateAsset(
   input: CreateAssetInput,
 ): Promise<{ id: string }> {
   await authorize(tx, actor, 'manage_fixed_assets', {});
+
+  // T-368 S3 (DEF-442): no asset at a store that is no longer active - the store has to exist, and be live.
+  // (`capitalizeFromExpense` is deliberately unchanged: refusing there would block an expense approval over a
+  // store flag, which is out of scope.)
+  const store = await storesRepo.getById(tx, actor.orgId, input.storeId);
+  if (!store) throw gone(`createAsset: store ${input.storeId} does not exist in org ${actor.orgId}`, 'store');
+  if (!store.isActive) {
+    throw refuse(
+      `createAsset: store ${store.code} is deactivated`,
+      `${store.name} is deactivated. An asset cannot be added at a store that is no longer active.`,
+    );
+  }
 
   const cost = parseMoneyInput(input.cost, 'createAsset: the cost', "The asset's cost");
   if (compare(cost, money('0')) <= 0) {

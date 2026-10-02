@@ -182,14 +182,41 @@ async function inServiceOf(assetId: string): Promise<{ source: string | null; on
 const setStoreOpening = (
   actorArg: Actor,
   storeId: string,
-  input: { openingDate: string | null; confirmReversal?: boolean },
-) => withOrgPrincipal(actorArg.orgId, (tx) => setStoreOpeningDate(tx, actorArg, storeId, input));
+  input: { openingDate: string | null; confirm?: boolean },
+) =>
+  withPlan(input.confirm, (confirmedPlan) =>
+    withOrgPrincipal(actorArg.orgId, (tx) =>
+      setStoreOpeningDate(tx, actorArg, storeId, { openingDate: input.openingDate, ...(confirmedPlan ? { confirmedPlan } : {}) } as never),
+    ),
+  );
 
 const setInService = (
   actorArg: Actor,
   assetId: string,
-  input: { mode: 'acquired' | 'store_opening' | 'set'; inServiceOn?: string; reason: string; confirmReversal?: boolean },
-) => withOrgPrincipal(actorArg.orgId, (tx) => setAssetInService(tx, actorArg, assetId, input));
+  input: { mode: 'acquired' | 'store_opening' | 'set'; inServiceOn?: string; reason: string; confirm?: boolean },
+) => {
+  const { confirm, ...rest } = input;
+  return withPlan(confirm, (confirmedPlan) =>
+    withOrgPrincipal(actorArg.orgId, (tx) => setAssetInService(tx, actorArg, assetId, { ...rest, ...(confirmedPlan ? { confirmedPlan } : {}) } as never)),
+  );
+};
+
+/**
+ * T-368 S2 (DEF-441): a reversal confirm is pinned to the exact entry set it showed. `confirm: true` here means the REAL
+ * two-step a person does: call without a token, take `planToken` off the refusal, call again with it as `confirmedPlan`.
+ * If the first call does not refuse with a token (nothing to reverse) its result is returned as is. Red until S2 lands:
+ * today the first call refuses with no `planToken` and the helper rethrows it.
+ */
+async function withPlan<T>(confirm: boolean | undefined, run: (confirmedPlan?: string) => Promise<T>): Promise<T> {
+  if (!confirm) return run();
+  try {
+    return await run();
+  } catch (err) {
+    const token = (err as { planToken?: string }).planToken;
+    if (!token) throw err;
+    return run(token);
+  }
+}
 
 async function runThrough(orgId: string, through: string) {
   return runDepreciationAsSystem(orgId, { through });
@@ -373,7 +400,7 @@ describe('I6 — setAssetInService moves an asset later: without confirm it list
       mode: 'set',
       inServiceOn: '2026-10-01',
       reason: 'correction',
-      confirmReversal: true,
+      confirm: true,
     });
 
     const today = await manilaTodayRaw();
@@ -433,32 +460,33 @@ describe('I7 — moving the store\'s opening date earlier re-opens the newly-owe
 // reversed
 // =================================================================================================
 
-describe('I8 — DEF-435: moving in-service earlier makes a still-owed month\'s amount disagree — refused', () => {
-  it('cost 1,000/3mo, set Feb, Feb-Apr posted (333.33/333.33/333.34); moving to Jan makes March owe 333.34 but it posted 333.33 — refused, nothing reversed', async () => {
+describe('I8 — DEF-435 lifted: moving in-service earlier makes a still-owed month\'s amount disagree — it is reversed and re-booked', () => {
+  it('cost 1,000/3mo, set Feb, Feb-Apr posted (333.33/333.33/333.34); moving to Jan makes March owe 333.34 but it posted 333.33 — March and April reversed, March re-books as #2 at 333.34', async () => {
     const f = await rolesFixture('i8');
     await insertMonths(f.orgId, 2026, 1, 2026, 4);
     const assetId = await makeAsset(f, {
       cost: '1000.00',
       usefulLifeMonths: 3,
-      acquiredOn: '2026-01-15',
+      acquiredOn: '2026-01-01',
       inServiceSource: 'set',
       inServiceOn: '2026-02-01',
     } as Record<string, unknown>);
     await runThrough(f.orgId, '2026-04');
 
-    await expect(
-      setInService(f.admin, assetId, {
-        mode: 'set',
-        inServiceOn: '2026-01-01',
-        reason: 'earlier',
-        confirmReversal: true,
-      }),
-    ).rejects.toThrow(/DEF-435/);
+    // T-368 S2 (DEF-435 lifted): was I8, a refusal. Moving to Jan makes March owe 333.34 (posted 333.33) and April owe nothing, so
+    // BOTH are simply reversed - through a real plan token - and the next run re-books what is owed in an open month.
+    const moved = await setInService(f.admin, assetId, { mode: 'set', inServiceOn: '2026-01-01', reason: 'earlier', confirm: true });
+    expect(moved.reversed, 'the disagreeing and the no-longer-owed months are reversed').toEqual(['2026-03', '2026-04']);
+    expect((await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-02`))?.status).toBe('posted');
+    expect((await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-03`))?.status).toBe('reversed');
+    expect((await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-04`))?.status).toBe('reversed');
+    const rerun = await runThrough(f.orgId, '2026-04');
+    const march = rerun.posted.find((x) => x.assetId === assetId && x.period === '2026-03');
+    expect(march?.created, 'March re-books after its reversal (DEF-435)').toBe(true);
+    const rebooked = await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-03#2`);
+    expect(rebooked?.status).toBe('posted');
+    expect((await linesFor(rebooked!.id)).find((l) => l.code === '6700')?.debit).toBe('333.34');
 
-    const mar = await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-03`);
-    expect(mar?.status).toBe('posted');
-    const lines = await linesFor(mar!.id);
-    expect(lines.find((l) => l.code === '6700')?.debit).toBe('333.33');
   });
 });
 
@@ -510,7 +538,7 @@ describe('I10 — a HELD asset and T-345\'s catch-up', () => {
       mode: 'set',
       inServiceOn: '2026-10-01',
       reason: 'correction',
-      confirmReversal: true,
+      confirm: true,
     });
 
     const entry = await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-04`);
@@ -597,7 +625,7 @@ describe('I13 — R1.5: moving in-service earlier shortens the schedule; DEF-435
       mode: 'set',
       inServiceOn: '2026-01-01',
       reason: 'earlier',
-      confirmReversal: true,
+      confirm: true,
     });
 
     expect((await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-04`))?.status).toBe('reversed');
@@ -608,7 +636,7 @@ describe('I13 — R1.5: moving in-service earlier shortens the schedule; DEF-435
     expect(result.posted.some((p) => p.assetId === assetId && p.period === '2026-01' && p.created)).toBe(true);
   });
 
-  it('the same shape at cost 1,000 (March owes 333.34, posted 333.33): DEF-435, nothing reversed', async () => {
+  it('the same shape at cost 1,000 (March owes 333.34, posted 333.33): reversed and re-booked, no DEF-435', async () => {
     const f = await rolesFixture('i13-def435');
     await insertMonths(f.orgId, 2026, 1, 2026, 4);
     const assetId = await makeAsset(f, {
@@ -622,15 +650,19 @@ describe('I13 — R1.5: moving in-service earlier shortens the schedule; DEF-435
     } as Record<string, unknown>);
     await runThrough(f.orgId, '2026-04');
 
-    await expect(
-      setInService(f.admin, assetId, {
-        mode: 'set',
-        inServiceOn: '2026-01-01',
-        reason: 'earlier',
-        confirmReversal: true,
-      }),
-    ).rejects.toThrow(/DEF-435/);
-    expect((await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-04`))?.status).toBe('posted');
+    // T-368 S2 (DEF-435 lifted): was I13b, a refusal. Moving to Jan makes March owe 333.34 (posted 333.33) and April owe nothing, so
+    // BOTH are simply reversed - through a real plan token - and the next run re-books what is owed in an open month.
+    const moved = await setInService(f.admin, assetId, { mode: 'set', inServiceOn: '2026-01-01', reason: 'earlier', confirm: true });
+    expect(moved.reversed, 'the disagreeing and the no-longer-owed months are reversed').toEqual(['2026-03', '2026-04']);
+    expect((await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-02`))?.status).toBe('posted');
+    expect((await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-03`))?.status).toBe('reversed');
+    expect((await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-04`))?.status).toBe('reversed');
+    const rerun = await runThrough(f.orgId, '2026-04');
+    const march = rerun.posted.find((x) => x.assetId === assetId && x.period === '2026-03');
+    expect(march?.created, 'March re-books after its reversal (DEF-435)').toBe(true);
+    const rebooked = await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-03#2`);
+    expect(rebooked?.status).toBe('posted');
+    expect((await linesFor(rebooked!.id)).find((l) => l.code === '6700')?.debit).toBe('333.34');
   });
 
   it('⛔ the raw UPDATE moving in_service_on past the new final period is refused by the DB guard directly', async () => {
@@ -684,7 +716,7 @@ describe('I14 — a disposed follower is untouched by opening-date propagation (
     );
     const disposedInServiceBefore = await inServiceOf(disposedId);
 
-    await setStoreOpening(f.admin, f.storeId, { openingDate: '2026-07-01', confirmReversal: true });
+    await setStoreOpening(f.admin, f.storeId, { openingDate: '2026-07-01', confirm: true });
 
     // The disposed asset: completely untouched — no reversal, no in-service move, no guard error
     // blocking the whole call.

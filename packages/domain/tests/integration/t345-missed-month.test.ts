@@ -378,6 +378,11 @@ async function linkRow(orgId: string, journalEntryId?: string) {
   }
   return undefined;
 }
+/** Posted entries whose idempotency key matches the LIKE pattern (a period and all its #n revisions). */
+async function effectivePosted(orgId: string, keyLike: string): Promise<number> {
+  const [row] = await sql<{ n: number }[]>`select count(*)::int as n from journal_entries where org_id = ${orgId} and idempotency_key like ${keyLike} and status = 'posted'`;
+  return row!.n;
+}
 async function linkCount(orgId: string): Promise<number> {
   const [row] = await sql<{ n: number }[]>`select count(*)::int as n from missed_month_adjustments where org_id = ${orgId}`;
   return row!.n;
@@ -731,32 +736,35 @@ describe('A15 — R1.8: an adminless-org manager is elevated; the same role in a
 });
 
 // =================================================================================================
-// A16 — R1.2: a reversed adjustment refuses re-booking honestly (DEF-435)
+// A16 — T-368 S2 (DEF-435 lifted): a reversed adjustment CAN be booked again, as a revision (#2)
 // =================================================================================================
 
-describe('A16 — book, reverse, book again', () => {
-  it('asset: /booked for 2026-04 on .* and reversed; this task cannot re-book it/; no raw 23505; link count 1', async () => {
+describe('A16 — book, reverse, book again (T-368 S2: re-booking now succeeds)', () => {
+  it('asset: the second booking succeeds under key ...:2026-04#2; two link rows, exactly one posted entry for the period', async () => {
     const { f, assetId } = await assetHoleFixture('a16-asset');
     await book(f.admin, { schedule: 'depreciation', subjectId: assetId, belongsToPeriod: '2026-04', reason: 'first' });
     const entry = await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-04`);
     await withOrgPrincipal(f.orgId, (tx) => reverseEntry(tx, { entryId: entry!.id, reason: 'correction', reversedBy: f.adminId }));
 
-    await expect(
-      book(f.admin, { schedule: 'depreciation', subjectId: assetId, belongsToPeriod: '2026-04', reason: 'retry' }),
-    ).rejects.toThrow(/booked for 2026-04 on .* and reversed; this task cannot re-book it/);
-    expect(await linkCount(f.orgId)).toBe(1);
+    await book(f.admin, { schedule: 'depreciation', subjectId: assetId, belongsToPeriod: '2026-04', reason: 'retry' });
+    const second = await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-04#2`);
+    expect(second?.status).toBe('posted');
+    expect((await entryRow(f.orgId, `asset:${assetId}:depreciation:2026-04`))?.status).toBe('reversed');
+    expect(await effectivePosted(f.orgId, `asset:${assetId}:depreciation:2026-04%`), 'exactly one effective (posted) entry for the period').toBe(1);
+    expect(await linkCount(f.orgId)).toBe(2);
   });
 
-  it('prepaid: same refusal', async () => {
+  it('prepaid: the same — booked again as a revision, two links, one posted entry', async () => {
     const { f, itemId } = await prepaidHoleFixture('a16-prepaid');
     await book(f.admin, { schedule: 'amortisation', subjectId: itemId, belongsToPeriod: '2026-04', reason: 'first' });
     const entry = await entryRow(f.orgId, `prepaid:${itemId}:amortisation:2026-04`);
     await withOrgPrincipal(f.orgId, (tx) => reverseEntry(tx, { entryId: entry!.id, reason: 'correction', reversedBy: f.adminId }));
 
-    await expect(
-      book(f.admin, { schedule: 'amortisation', subjectId: itemId, belongsToPeriod: '2026-04', reason: 'retry' }),
-    ).rejects.toThrow(/booked for 2026-04 on .* and reversed; this task cannot re-book it/);
-    expect(await linkCount(f.orgId)).toBe(1);
+    await book(f.admin, { schedule: 'amortisation', subjectId: itemId, belongsToPeriod: '2026-04', reason: 'retry' });
+    expect((await entryRow(f.orgId, `prepaid:${itemId}:amortisation:2026-04#2`))?.status, 'the retry is the #2 revision').toBe('posted');
+    expect((await entryRow(f.orgId, `prepaid:${itemId}:amortisation:2026-04`))?.status).toBe('reversed');
+    expect(await effectivePosted(f.orgId, `prepaid:${itemId}:amortisation:2026-04%`), 'exactly one effective (posted) entry for the period').toBe(1);
+    expect(await linkCount(f.orgId)).toBe(2);
   });
 });
 

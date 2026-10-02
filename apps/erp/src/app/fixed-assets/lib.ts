@@ -5,12 +5,29 @@
  * `withOrgPrincipal` and the store list are imported from the expenses screens rather than
  * duplicated — two copies of the RLS-principal wrapper is two places to get wrong.
  */
-import { fixedAssetsRepo, type AssetCategory } from '@shareat/db';
+import { and, asc, eq } from 'drizzle-orm';
+import { fixedAssetsRepo, schema, type AssetCategory } from '@shareat/db';
 import { money, subtract } from '@shareat/core/money';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export { listStores, withOrgPrincipal } from '../expenses/lib';
-export type { StoreOption } from '../expenses/lib';
+import type { StoreOption } from '../expenses/lib';
+export type { StoreOption };
+
+/**
+ * T-368 S3 (DEF-442): the stores an asset may be ADDED at - active ones only. The new-asset form uses this;
+ * the register and the asset page keep `listStores` because they must still NAME assets that sit at an
+ * inactive store.
+ */
+export async function listActiveStores(orgId: string): Promise<StoreOption[]> {
+  return withOrgPrincipal(orgId, (tx) =>
+    tx
+      .select({ id: schema.stores.id, name: schema.stores.name, code: schema.stores.code })
+      .from(schema.stores)
+      .where(and(eq(schema.stores.orgId, orgId), eq(schema.stores.isActive, true)))
+      .orderBy(asc(schema.stores.name)),
+  );
+}
 
 /** An asset as the register shows it — the row, plus the two figures that are DERIVED from the
  *  ledger and exist nowhere else. */

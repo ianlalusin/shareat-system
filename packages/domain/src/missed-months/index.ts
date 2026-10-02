@@ -35,20 +35,6 @@ const ACCUMULATED_DEPRECIATION_CODE = '1590';
 const AMORTISATION_EXPENSE_CODE = '6750';
 const PREPAID_ACCOUNT_CODE = '1400';
 
-/** Postgres unique-violation SQLSTATE — matched together with the constraint name, never bare
- *  (scan-value-collision.ts's own discipline: a bare code match would catch a violation on some
- *  OTHER constraint this table gains later and hand it the wrong message). */
-const UNIQUE_VIOLATION = '23505';
-const LINK_UNIQUE_CONSTRAINTS = new Set([
-  'missed_month_adjustments_org_asset_period_unique',
-  'missed_month_adjustments_org_prepaid_period_unique',
-]);
-function isLinkCollision(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false;
-  const { code, constraint_name: constraintName } = err as { code?: unknown; constraint_name?: unknown };
-  return code === UNIQUE_VIOLATION && typeof constraintName === 'string' && LINK_UNIQUE_CONSTRAINTS.has(constraintName);
-}
-
 export interface OrgPeriodContext {
   /** `[startsOn, endsOn]` for every OPEN period. */
   readonly openRanges: { startsOn: string; endsOn: string }[];
@@ -153,12 +139,8 @@ export async function bookMissedMonth(
     if (entry?.status === 'posted') {
       throw new Error(`bookMissedMonth: ${name} is already booked for ${belongsToPeriod}`);
     }
-    if (entry?.status === 'reversed') {
-      throw new Error(
-        `bookMissedMonth: ${name} was booked for ${belongsToPeriod} on ${entry.entryDate} and reversed; ` +
-          'this task cannot re-book it',
-      );
-    }
+    // A link whose entry was REVERSED no longer counts: the month can be booked again (T-368 S2 / DEF-435),
+    // under the next revision key below. `alreadyEffective` is the gate for what is still in force.
   }
   // No link row (or its entry landed in neither state above) — an effective entry for P may still
   // exist from the ordinary run itself.
@@ -198,7 +180,11 @@ export async function bookMissedMonth(
   const amount = String(charge.amount);
   const idempotencyKey =
     input.schedule === 'depreciation'
-      ? `asset:${input.subjectId}:depreciation:${belongsToPeriod}`
+      ? fixedAssetsRepo.depreciationRevisionKey(
+          input.subjectId,
+          belongsToPeriod,
+          await fixedAssetsRepo.depreciationEntriesForPeriod(tx, actor.orgId, input.subjectId, belongsToPeriod),
+        )
       : prepaidRepo.nextRevisionKey(
           input.subjectId,
           belongsToPeriod,
@@ -235,24 +221,16 @@ export async function bookMissedMonth(
   }
 
   // Step 8 — insert the link row. The migration's guard trigger is the backstop for steps 5-7.
-  try {
-    await missedMonthsRepo.insertLink(tx, {
-      orgId: actor.orgId,
-      schedule: input.schedule,
-      fixedAssetId: input.schedule === 'depreciation' ? input.subjectId : null,
-      prepaidItemId: input.schedule === 'amortisation' ? input.subjectId : null,
-      belongsToPeriod,
-      journalEntryId: result.entryId,
-      reason,
-      bookedBy: actor.personId,
-    });
-  } catch (err) {
-    // R1.6 — the loser of a race on the link's own UNIQUE never sees a raw 23505.
-    if (isLinkCollision(err)) {
-      throw new Error(`bookMissedMonth: ${name} is already booked for ${belongsToPeriod}`);
-    }
-    throw err;
-  }
+  await missedMonthsRepo.insertLink(tx, {
+    orgId: actor.orgId,
+    schedule: input.schedule,
+    fixedAssetId: input.schedule === 'depreciation' ? input.subjectId : null,
+    prepaidItemId: input.schedule === 'amortisation' ? input.subjectId : null,
+    belongsToPeriod,
+    journalEntryId: result.entryId,
+    reason,
+    bookedBy: actor.personId,
+  });
 
   // Step 9 — amortisation only: re-run the fully_amortised check, shared with the ordinary run.
   // ⚠️ Audit finding (2026-09-26): pass the SCHEDULE'S OWN LAST PERIOD, never `belongsToPeriod`.

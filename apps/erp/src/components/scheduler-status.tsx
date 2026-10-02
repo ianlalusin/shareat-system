@@ -83,6 +83,10 @@ export async function SchedulerStatus({
     );
   }
 
+  // T-368: a `kind: 'notice'` entry is said, not failed - it never renders as a failure.
+  const failureRows = (last.failures ?? []).filter((f) => f.kind !== 'notice');
+  const notices = (last.failures ?? []).filter((f) => f.kind === 'notice');
+
   if (last.outcome !== 'ok') {
     return (
       <Box tone="alarm">
@@ -94,15 +98,20 @@ export async function SchedulerStatus({
         {/* ⚠️ Verbatim WHEN id-free, on the page. The likeliest reason is mundane — "no fiscal
             period covers 2026-06-30" — and it is only actionable if somebody can read it; an
             id-bearing one is redacted above (`redactSubject`/`redactDetail`, T-343 S4b). */}
-        {last.failures && last.failures.length > 0 && (
+        {failureRows.length > 0 && (
           <ul className="mt-2 space-y-1">
-            {last.failures.map((f) => (
+            {failureRows.map((f) => (
               <li key={f.subjectId} className="text-xs">
                 ⛔ <strong>{redactSubject(f.subjectName)}</strong>: {redactDetail(f.reason)}
               </li>
             ))}
           </ul>
         )}
+        {notices.map((n) => (
+          <div key={n.subjectId} className="mt-2 text-xs">
+            {redactDetail(n.reason)}
+          </div>
+        ))}
         <div className="mt-2 text-xs">
           Nothing was rolled back — each item posts in its own transaction, so re-running picks up
           whatever is fixed.
@@ -123,10 +132,17 @@ export async function SchedulerStatus({
   }
 
   return (
-    <p className="text-xs text-neutral-400 dark:text-neutral-600">
-      {label} last ran <strong className="font-medium">{when}</strong> for {last.period} ·{' '}
-      {last.postedCount} posted, {last.skippedCount} already done, no failures · {last.trigger}
-    </p>
+    <>
+      <p className="text-xs text-neutral-400 dark:text-neutral-600">
+        {label} last ran <strong className="font-medium">{when}</strong> for {last.period} ·{' '}
+        {last.postedCount} posted, {last.skippedCount} already done, no failures · {last.trigger}
+      </p>
+      {notices.map((n) => (
+        <p key={n.subjectId} className="text-xs text-neutral-500 dark:text-neutral-400">
+          {redactDetail(n.reason)}
+        </p>
+      ))}
+    </>
   );
 }
 

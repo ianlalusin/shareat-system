@@ -29,7 +29,7 @@ export default async function StoreDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ ok?: string; error?: string; confirm?: string; openingDate?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; confirm?: string; plan?: string; openingDate?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -198,7 +198,7 @@ export default async function StoreDetailPage({
             * across every `'store_opening'`-sourced follower asset — `setStoreOpeningDate` plans
             * that and refuses once (naming every affected asset) unless confirmed. `sp.confirm`
             * is that refusal's OWN message, shown verbatim as an in-page step — never
-            * `window.confirm()` — with a resubmit that carries `confirmReversal=1`.
+            * `window.confirm()` — with a resubmit that carries the plan token as `confirmedPlan`.
             */}
           <form
             action={setStoreOpeningDateAction}
@@ -227,7 +227,7 @@ export default async function StoreDetailPage({
                     confirmation; a checkbox's native box is unresolvable-by-construction for the
                     touch-target sweep (Ian's ruling §6.1, T-262), and a second tick-then-click
                     gesture here would be redundant with the button itself. */}
-                <input type="hidden" name="confirmReversal" value="1" />
+                <input type="hidden" name="confirmedPlan" value={sp.plan ?? ''} />
               </>
             )}
             <button type="submit"

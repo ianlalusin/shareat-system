@@ -54,7 +54,9 @@ async function main(): Promise<number> {
     // "no fiscal period covers 2026-06-30" — and swallowing it here would rebuild the silence
     // this whole task exists to remove.
     for (const f of o.failures) {
-      console.error(`      ⛔ ${f.subjectName}: ${f.reason}`);
+      // T-368: a notice is said, not failed - plain line on stdout, no ⛔, and it never sets the exit code.
+      if (f.kind === 'notice') console.log(`      ${f.subjectName}: ${f.reason}`);
+      else console.error(`      ⛔ ${f.subjectName}: ${f.reason}`);
     }
   }
 

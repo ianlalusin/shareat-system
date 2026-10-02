@@ -29,7 +29,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 // ⭐ No `transaction` import, and that is the point of DEF-287: nothing in this file may open a
 // transaction without saying who it is acting as.
-import { fixedAssetsRepo, withOrgPrincipal, withSystemOrgPrincipal, type Tx } from '@shareat/db';
+import { fixedAssetsRepo, journalRepo, withOrgPrincipal, withSystemOrgPrincipal, type Tx } from '@shareat/db';
 import { money } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 import { periodsThrough, type ScheduleInput } from './schedule';
@@ -64,6 +64,9 @@ export interface RunDepreciationResult {
   failed: { assetId: string; assetName: string; error: string }[];
   /** Assets considered but owing nothing for any period through `through`. */
   skipped: number;
+  /** T-368 S2: owed months NOT posted because their fiscal period is no longer open. Not "not due" - they are
+   *  owed, and T-345's missed-month list is where they are booked - so they are counted apart from `skipped`. */
+  skippedClosed: number;
 }
 
 /**
@@ -121,22 +124,59 @@ async function runForAsset(
     return [];
   }
 
-  return postPeriodsFor(tx, actor, asset, input.through);
+  return (await postPeriodsFor(tx, actor, asset, input.through)).postings;
 }
 
 async function postPeriodsFor(
   tx: Tx,
   actor: Actor,
-  asset: fixedAssetsRepo.FixedAssetRow,
+  loaded: fixedAssetsRepo.FixedAssetRow,
   through: string,
-): Promise<DepreciationPosting[]> {
+): Promise<{ postings: DepreciationPosting[]; skippedClosed: number }> {
+  // T-368 S3 (DEF-436): the asset row, read FOR UPDATE, is this function's FIRST read. A terms change
+  // (`updateAssetTerms`) takes the same lock first, so the two serialise: whichever commits second sees the
+  // other's result, and a run can never post at terms that are being rewritten under it.
+  const asset = await fixedAssetsRepo.getByIdForUpdate(tx, actor.orgId, loaded.id);
+  if (!asset || asset.status !== 'active') return { postings: [], skippedClosed: 0 };
+
   const scheduleInput = scheduleInputFor(asset);
-  if (!scheduleInput) return [];
+  if (!scheduleInput) return { postings: [], skippedClosed: 0 };
 
   const owed = periodsThrough(scheduleInput, through);
+  // T-368 S2 (DEF-435): the periods already IN EFFECT are read once and skipped. Without the skip every run
+  // would post `#2`, `#3`, ... for a month that is already booked; with it, "run it again" stays a no-op.
+  const effective = new Map(
+    (await fixedAssetsRepo.postedDepreciationEntries(tx, actor.orgId, asset.id)).map((e) => [e.period, e]),
+  );
   const results: DepreciationPosting[] = [];
+  let skippedClosed = 0;
 
   for (const period of owed) {
+    const have = effective.get(period.period);
+    if (have) {
+      results.push({
+        assetId: asset.id,
+        period: period.period,
+        entryDate: period.entryDate,
+        amount: String(period.amount),
+        journalEntryId: have.entryId,
+        created: false,
+      });
+      continue;
+    }
+
+    // T-368 S2: an owed month whose fiscal period is no longer open is SKIPPED - not posted, not failed. A
+    // run must not throw on it (that would roll back this asset's later open months and file it under `failed`);
+    // T-345's missed-month list is where it is booked, with a reason, in an open month. A date no period covers
+    // is left to `postEntry`, which refuses it as it always has. Checked after the already-effective skip above.
+    const fiscal = await journalRepo.findPeriodForDate(tx, actor.orgId, period.entryDate);
+    if (fiscal && fiscal.status !== 'open') {
+      skippedClosed += 1;
+      continue;
+    }
+
+    // A month reversed earlier is re-booked under the next revision key.
+    const existing = await fixedAssetsRepo.depreciationEntriesForPeriod(tx, actor.orgId, asset.id, period.period);
     const result = await postEntry(tx, {
       orgId: actor.orgId,
       // The LAST day of the period, so a charge always lands inside the period it describes.
@@ -145,7 +185,7 @@ async function postPeriodsFor(
       // ⭐ The ASSET, not the category (bible row 140). This is what makes accumulated
       // depreciation derivable per asset, and with it the whole no-stored-column design.
       sourceId: asset.id,
-      idempotencyKey: `asset:${asset.id}:depreciation:${period.period}`,
+      idempotencyKey: fixedAssetsRepo.depreciationRevisionKey(asset.id, period.period, existing),
       memo: `Depreciation ${period.period} — ${asset.name}`,
       postedBy: actor.personId,
       lines: [
@@ -176,7 +216,7 @@ async function postPeriodsFor(
     });
   }
 
-  return results;
+  return { postings: results, skippedClosed };
 }
 
 /**
@@ -276,14 +316,17 @@ async function runDepreciationCore(
   const posted: DepreciationPosting[] = [];
   const failed: RunDepreciationResult['failed'] = [];
   let skipped = 0;
+  let skippedClosed = 0;
 
   for (const asset of assets) {
     try {
-      const results = tx
+      const run = tx
         ? await postPeriodsFor(tx, actor, asset, input.through)
         : await openTx((trx) => postPeriodsFor(trx, actor, asset, input.through));
-      if (results.length === 0) skipped += 1;
-      posted.push(...results);
+      // An asset whose only owed months sit in a closed period is NOT "owing nothing".
+      if (run.postings.length === 0 && run.skippedClosed === 0) skipped += 1;
+      skippedClosed += run.skippedClosed;
+      posted.push(...run.postings);
     } catch (err) {
       if (tx) throw err; // Atomic mode: the caller asked for all-or-nothing, so give it.
       failed.push({
@@ -294,7 +337,7 @@ async function runDepreciationCore(
     }
   }
 
-  return { posted, failed, skipped };
+  return { posted, failed, skipped, skippedClosed };
 }
 
 async function loadDepreciable(

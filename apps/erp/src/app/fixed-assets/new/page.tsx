@@ -3,7 +3,7 @@ import { formatMoney, money } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { createAssetAction } from '../actions';
-import { CATEGORY_LABEL, INTERVAL_LABEL, listStores, readPolicyForDisplay } from '../lib';
+import { CATEGORY_LABEL, INTERVAL_LABEL, listActiveStores, readPolicyForDisplay } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 
@@ -24,7 +24,7 @@ export default async function NewAssetPage({
   const { actor, refusal } = await requirePageAccess('/fixed-assets/new');
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
-  const stores = await listStores(actor.orgId);
+  const stores = await listActiveStores(actor.orgId);
   const policy = await readPolicyForDisplay(actor.orgId);
   const today = toBusinessDate();
 

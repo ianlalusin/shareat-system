@@ -787,6 +787,15 @@ describe('the capitalisation seam (spec §6)', () => {
     expect(await ledgerTotal(f.orgId, posted.assetId!, '1510')).toBe('0');
   });
 
+  it('T-368 S3 T8 (guard, green today): approving a CAPEX expense whose store has since been deactivated STILL capitalises it - the new "no asset at a deactivated store" refusal is on createAsset only', async () => {
+    // Refusing here would block an expense approval over a store flag (spec S3: capitalizeFromExpense is unchanged).
+    const f = await setup('seam-inactive');
+    const expenseId = await capexExpense(f, '45000.00');
+    await sql`update stores set is_active = false where id = ${f.storeId}`;
+    const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), expenseId));
+    expect(posted.assetId, 'the approval no longer capitalises at an inactive store').toBeTruthy();
+  });
+
   it('⛔ a MANAGER can still approve a CAPEX expense — capitalisation is a consequence, not a second permission', async () => {
     // The regression this pins: `manage_fixed_assets` is admin-only while `approve_expense` is a
     // manager's. Gating the seam on the former meant no manager could approve CAPEX at all.

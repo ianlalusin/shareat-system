@@ -18,6 +18,7 @@ interface SearchParams {
   ok?: string;
   /** Set by `setAssetInServiceAction` when a reversal needs confirming — its own refusal text. */
   confirm?: string;
+  plan?: string;
   mode?: string;
   inServiceOn?: string;
   reason?: string;
@@ -207,7 +208,7 @@ export default async function AssetDetailPage({
                   (same one-button shape as the dispose form below); a checkbox here would be a
                   second, redundant gesture, and its native box is unresolvable-by-construction for
                   the touch-target sweep the same way the radios above were. */}
-              {sp.confirm && <input type="hidden" name="confirmReversal" value="1" />}
+              {sp.confirm && <input type="hidden" name="confirmedPlan" value={sp.plan ?? ''} />}
               <button
                 type="submit"
                 className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"

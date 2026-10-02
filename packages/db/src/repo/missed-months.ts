@@ -6,7 +6,7 @@
  * `postEntry` (bible §4.3), never here — same discipline as `repo/fixed-assets.ts` and
  * `repo/prepaid.ts`, which read the ledger and never write it.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type { Tx } from '../client';
 import {
   missedMonthAdjustments,
@@ -39,6 +39,8 @@ export async function findLink(
         eq(missedMonthAdjustments.belongsToPeriod, belongsToPeriod),
       ),
     )
+    // The NEWEST link: a month can be reversed and booked again, and each booking has its own row (0174).
+    .orderBy(desc(missedMonthAdjustments.createdAt))
     .limit(1);
   return row;
 }
@@ -54,9 +56,8 @@ export interface InsertLinkInput {
   bookedBy: string;
 }
 
-/** ⚠️ Can throw a raw Postgres 23505 (the link's own UNIQUE, on a concurrent booker) or the
- *  migration's guard trigger's P0001 — the caller (`bookMissedMonth`) is what turns either into the
- *  honest "already booked" refusal (R1.6); this function does not catch anything itself. */
+/** ⚠️ Can throw the migration's guard trigger's P0001 (the backstop). `bookMissedMonth` checks for an
+ *  already-booked month BEFORE this insert, and nothing here is caught. */
 export async function insertLink(tx: Tx, input: InsertLinkInput): Promise<{ id: string }> {
   const [row] = await tx.insert(missedMonthAdjustments).values(input).returning({ id: missedMonthAdjustments.id });
   return row!;

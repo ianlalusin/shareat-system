@@ -158,8 +158,30 @@ async function ensureOpenPeriod(orgId: string, aroundDate: string): Promise<void
 const setOpening = (
   actorArg: Actor,
   storeId: string,
-  input: { openingDate: string | null; confirmReversal?: boolean },
-) => withOrgPrincipal(actorArg.orgId, (tx) => setStoreOpeningDate(tx, actorArg, storeId, input));
+  input: { openingDate: string | null; confirm?: boolean },
+) =>
+  withPlan(input.confirm, (confirmedPlan) =>
+    withOrgPrincipal(actorArg.orgId, (tx) =>
+      setStoreOpeningDate(tx, actorArg, storeId, { openingDate: input.openingDate, ...(confirmedPlan ? { confirmedPlan } : {}) } as never),
+    ),
+  );
+
+/**
+ * T-368 S2 (DEF-441): a reversal confirm is pinned to the exact entry set it showed. `confirm: true` here means the REAL
+ * two-step a person does: call without a token, take `planToken` off the refusal, call again with it as `confirmedPlan`.
+ * If the first call does not refuse with a token (nothing to reverse) its result is returned as is. Red until S2 lands:
+ * today the first call refuses with no `planToken` and the helper rethrows it.
+ */
+async function withPlan<T>(confirm: boolean | undefined, run: (confirmedPlan?: string) => Promise<T>): Promise<T> {
+  if (!confirm) return run();
+  try {
+    return await run();
+  } catch (err) {
+    const token = (err as { planToken?: string }).planToken;
+    if (!token) throw err;
+    return run(token);
+  }
+}
 
 // =================================================================================================
 // O1 — S1: createStore with and without openingDate

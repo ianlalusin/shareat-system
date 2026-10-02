@@ -234,6 +234,47 @@ describe('⛔ a failure is recorded, with its reason, and does not stop the run'
   });
 });
 
+describe('⛔ T-368 — the scheduled depreciation run names a month it skipped because its period is closed', () => {
+  /** Everything the run row holds, as text per column: whichever column carries the note is found here, and a column added later is covered. */
+  async function rowText(orgId: string): Promise<{ outcome: string; texts: Record<string, string> }> {
+    const [r] = await sql<{ j: Record<string, unknown> }[]>`
+      select to_jsonb(r) as j from scheduler_runs r where org_id = ${orgId} and job = 'depreciation' order by started_at desc limit 1`;
+    const j = r!.j;
+    const texts: Record<string, string> = {};
+    for (const [k, v] of Object.entries(j)) {
+      if (['id', 'org_id', 'started_at', 'finished_at'].includes(k) || v === null) continue;
+      texts[k] = typeof v === 'string' ? v : JSON.stringify(v);
+    }
+    return { outcome: String(j.outcome), texts };
+  }
+
+  it("January owed and its period CLOSED: the cron run is not 'failed', and its row says 'closed month' with the count 1 (a skip is not silent)", async () => {
+    const o = await orgWithAsset('closedskip', { withPeriod: false });
+    const [person] = await sql<{ id: string }[]>`select id from persons where org_id = ${o.orgId} limit 1`;
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status, closed_at, closed_by)
+              values (${o.orgId}, '2026-01-01', '2026-01-31', 'closed', now(), ${person!.id})`;
+
+    const result = await runMonthEnd({ period: '2026-01', orgId: o.orgId, trigger: 'cron' });
+    const dep = result.outcomes.find((x) => x.job === 'depreciation')!;
+    expect(dep.failed, 'a closed month was recorded as a failure').toBe(0);
+
+    const row = await rowText(o.orgId);
+    expect(row.outcome, 'a skip is not a failure').not.toBe('failed');
+    expect(row.texts.failed_count, 'a notice is not a failure: failed_count stays 0 when only a notice is present').toBe('0');
+    const holder = Object.entries(row.texts).find(([, t]) => /closed month/i.test(t));
+    expect(holder, `no column of the run row mentions a closed month: ${JSON.stringify(row.texts)}`).toBeDefined();
+    expect(holder![1]).toMatch(/\b1\b/);
+  });
+
+  it('control: a run with nothing skipped has no such text', async () => {
+    const o = await orgWithAsset('nothingskipped', { withPeriod: true });
+    await runMonthEnd({ period: '2026-01', orgId: o.orgId, trigger: 'cron' });
+    const row = await rowText(o.orgId);
+    expect(row.outcome).toBe('ok');
+    expect(Object.values(row.texts).some((t) => /closed month/i.test(t)), JSON.stringify(row.texts)).toBe(false);
+  });
+});
+
 describe('⭐ T-233 — DEF-219: startRun inside the per-org boundary', () => {
   it('T1 — one org\'s first write is refused; the next org still runs', async () => {
     const broken = await orgWithAsset('t233-t1-broken', { withPeriod: true });
