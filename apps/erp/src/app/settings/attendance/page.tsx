@@ -217,7 +217,7 @@ export default async function AttendanceSettingsPage({
               label="Payout days"
               name="payoutDays"
               defaultValue={cfg.payoutDays.join(',')}
-              hint="Comma-separated day-of-month, e.g. 10,25 — required when payout mode is fixed_days"
+              hint="Comma-separated day-of-month, required when payout mode is fixed_days. Semi-monthly: two different days, never more than 16 days from one payday to the next (the cutoff day changes this), e.g. 10,25 with cutoff 15."
             />
           </Group>
 

@@ -321,6 +321,16 @@ export const storeAttendanceConfig = pgTable(
     ),
     check('store_attendance_config_payout_lag_check', sql`${t.payoutLagDays} between 0 and 31`),
     check('store_attendance_config_payout_mode_check', sql`${t.payoutMode} in ('lag', 'fixed_days')`),
+    /** ⭐ T-370 S3 (DEF-409): a LIVE semi-monthly store on fixed days pays on exactly two DIFFERENT days. A single
+     *  day (or the same day twice) collapses both periods onto one payday, a month between pays. Superseded rows
+     *  are history and exempt. `coalesce(..., false)` closes the NULL hole (`ARRAY[10,NULL]` compares NULL, which a
+     *  CHECK passes) and refuses an array whose lower bound is not 1. The GAP rule (every gap <= 16) cannot live
+     *  here: it depends on month lengths and `derivePeriods`, so `supersedeConfig` and the T-332 detector own it.
+     *  // NOTE: array CHECK, hand-added in migration 0178 (Drizzle cannot express it). */
+    check(
+      'store_attendance_config_semi_monthly_two_days_check',
+      sql`${t.supersededAt} is not null or ${t.payrollPeriodType} <> 'semi_monthly' or ${t.payoutMode} <> 'fixed_days' or (cardinality(${t.payoutDays}) = 2 and coalesce(${t.payoutDays}[1] <> ${t.payoutDays}[2], false))`,
+    ),
     /** ⛔ A store that says it pays on fixed days must say WHICH, or payday would fall back to
      *  the period end without anybody noticing. */
     check(

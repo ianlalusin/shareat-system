@@ -236,6 +236,10 @@ describe('T-271 — store_attendance_config (18 checks)', () => {
     // non-empty — supply one valid day so only `payout_mode_check` itself is isolated.
     ['store_attendance_config_payout_mode_check', { payout_mode: 'bogus', payout_days: [15] }],
     ['store_attendance_config_fixed_days_needed_check', { payout_mode: 'fixed_days' }],
+    // T-370 S3 (DEF-409) — a LIVE semi_monthly + fixed_days row must carry exactly two DISTINCT payout days. The
+    // defaults (semi_monthly) supply the first half; one day is the violation. `payout_days` is non-empty, so
+    // `fixed_days_needed_check` stays satisfied and only the new check is isolated.
+    ['store_attendance_config_semi_monthly_two_days_check', { payout_mode: 'fixed_days', payout_days: [10] }],
     ['store_attendance_config_anchor_window_check', { anchor_window_minutes: 100 }],
     ['store_attendance_config_night_window_check', { night_diff_start_hour: 25 }],
     ['store_attendance_config_time_mode_check', { time_mode: 'bogus' }],
@@ -338,7 +342,7 @@ describe('T-271 — sales_channels', () => {
   // T-369 S7 audit C — with the voided-date rule, two concurrent MANAGER re-entries of one voided date both pass the
   // existence check and the loser meets the unique index. That must read as a sentence, not as a raw 23505. The key is
   // mapped in CONSTRAINT_MESSAGES the same way as the sibling unique indexes above (NOTE: it widens the /setup allowlist
-  // by one).
+  // by one, like T-370 S3's key — the two count legs (constraint-messages.test.ts, the mechanism test) go to 28 when both land).
   it('sales_days_org_id_store_id_business_date_unique', async () => {
     const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Reader') returning id`;
     await sql`
@@ -360,6 +364,6 @@ it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   const exercised = new Set(rows.map((r) => r.key));
   const missing = Object.keys(CONSTRAINT_MESSAGES).filter((k) => !exercised.has(k));
   expect(missing).toEqual([]);
-  // 26 (T-271) + T-369 S7's sales-day unique key = 27 rows provoked above.
-  expect(rows.length).toBe(27);
+  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key = 28 rows provoked above.
+  expect(rows.length).toBe(28);
 });

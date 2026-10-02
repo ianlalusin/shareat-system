@@ -51,6 +51,8 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
   store_attendance_config_fixed_ot_positive_check: 'The flat overtime rate has to be more than zero.',
   store_attendance_config_holiday_multipliers_check:
     'Holiday multipliers must all be 1 or higher — a premium below 1 would turn into a deduction.',
+  store_attendance_config_semi_monthly_two_days_check:
+    'A semi-monthly store pays on exactly two different days of the month. Enter two payout days, for example 10,25.',
   store_attendance_config_period_type_check:
     'Pay period type must be monthly, semi-monthly, or weekly.',
   store_attendance_config_cutoff_day_check:

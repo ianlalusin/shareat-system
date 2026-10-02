@@ -510,7 +510,7 @@ S6b above** (including its "20.004 books 20.004 as today" control, which was wro
   - v1's `discrepancyTotalAmount` is `Σ value` over the order's rows, split by `direction`. That is already
     queryable, so there is **no new column and no new read**; X16 asserts the derivation in SQL.
   - Showing it on the order page is out of scope.
-- **The migration: YES, one, `0178_t372_s6b_over_receipt.sql`, hand-authored (ADR-012 §5).** It is needed for the
+- **The migration: YES, one, `0179_t372_s6b_over_receipt.sql`, hand-authored (ADR-012 §5).** It is needed for the
   column, CHECK and trigger changes below.
   - `ADD COLUMN "direction" text NOT NULL DEFAULT 'short'`, plus `trade_discrepancies_direction_check CHECK
     (direction IN ('short','over'))`. Every existing row is a shortfall, so the default is the truth.
@@ -532,7 +532,7 @@ S6b above** (including its "20.004 books 20.004 as today" control, which was wro
       `discrepancy % is %: its direction is fixed when the receipt raises it`;
     - `ENABLE ALWAYS`;
     - registered in `triggers/registry.ts` as `mode: 'always', kind: 'history_guard'`.
-  - Mirror every change in `packages/db/schema/trade-discrepancies.ts`, with a `// NOTE: … migration 0178` comment.
+  - Mirror every change in `packages/db/schema/trade-discrepancies.ts`, with a `// NOTE: … migration 0179` comment.
     Also fix the `quantity` doc ("an over-receipt is not this") and the module header.
   - Precheck: none. The value rewrite only relaxes the rule, and every existing row is `short` with `value > 0`.
     The builder still runs `select count(*) from trade_discrepancies where value <= 0` on the lane DB and expects 0.
@@ -543,7 +543,7 @@ S6b above** (including its "20.004 books 20.004 as today" control, which was wro
   - `packages/db/src/repo/trade-discrepancies.ts`: the `resolve` union and `topUpOrderLineId`, plus
     `topUpCandidates(tx, orgId, discrepancyId)`, a read for the picker;
   - `packages/db/schema/trade-discrepancies.ts`;
-  - `packages/db/migrations/0178_t372_s6b_over_receipt.sql` (and meta, per ADR-012);
+  - `packages/db/migrations/0179_t372_s6b_over_receipt.sql` (and meta, per ADR-012);
   - `packages/db/src/triggers/registry.ts`;
   - `apps/erp/src/app/commissary/discrepancies/{page.tsx,actions.ts}`: dispositions offered by `row.direction`,
     and a `top_up` select fed by `topUpCandidates`;
@@ -601,7 +601,7 @@ manager"*. Verified at HEAD `5b8aeb7`.
 - §3 refusal sentences for over + `loss`/`charge`/`late_receipt`, short + `top_up`/`return`, and every `top_up`
   sentence: replaced by the sentences below.
 - §3 "Migration" bullets 2 and 5 (`top_up_order_line_id`, its unique index, `trade_discrepancies_top_up_shape_check`)
-  and the `top_up_order_line_id` addition to `trade_discrepancies_resolution_terminal()`: **dropped from 0178**.
+  and the `top_up_order_line_id` addition to `trade_discrepancies_resolution_terminal()`: **dropped from 0179**.
 - BUILDER paths: `topUpCandidates` is not written; `POSTING-PATTERNS.md` gains a pattern (below), not only a
   "posts nothing" line.
 - Tests X9–X12 and X14: deleted. X7, X8, X13(b): rewritten (table below).
@@ -690,7 +690,7 @@ manager"*. Verified at HEAD `5b8aeb7`.
 - the stock refusal above.
 - In `resolveDiscrepancy`, the `value <= 0` guard moves inside the `loss`/`charge` branch only (as amendment 1).
 
-**Migration `0178_t372_s6b_over_receipt.sql` — the delta vs amendment 1:**
+**Migration `0179_t372_s6b_over_receipt.sql` — the delta vs amendment 1:**
 - Keep: `direction` + `trade_discrepancies_direction_check`; the value CHECK swap; `trade_discrepancies_direction_fixed_trg`
   (ALWAYS, registered); the schema mirror.
 - Drop from the plan: `top_up_order_line_id`, `trade_discrepancies_top_up_line_key`,

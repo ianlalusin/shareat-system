@@ -1,6 +1,6 @@
 # T-370: owner drawing cap after payroll (and its concurrency, DEF-516), real calendar dates, and a semi-monthly pay cycle refused on save — DEF-108, DEF-494, DEF-409
 
-**Status:** **S1 DONE (`42da29b`), S2 DONE (`85eb34e`); S3b DONE 2026-10-02 (A3, DEF-553 payout half); S3 (DEF-409, migration 0178) next; monthly-floor question open** — APPROVED 2026-09-30 (orchestrator, after independent Opus review) — review changes 1–11 applied in place. Spec by the Opus planner, 2026-09-30. **Model:** Sonnet, tester then
+**Status:** **S1 DONE (`42da29b`), S2 DONE (`85eb34e`); S3b DONE 2026-10-02 (A3, DEF-553 payout half); S3 DONE 2026-10-02 (DEF-409, migration 0178, A4 canonical gap); S1 screen test (owner cap) still unmet: needs payroll seeding; monthly-floor question open** — APPROVED 2026-09-30 (orchestrator, after independent Opus review) — review changes 1–11 applied in place. Spec by the Opus planner, 2026-09-30. **Model:** Sonnet, tester then
 builder, per slice.
 **Census:** `docs/plans/money-defects-2026-09-30.md` (batch E). DEF-409 was added by Ian's ruling of 2026-09-30:
 *"refuse on save: semi-monthly needs exactly two pay days ≤16 days apart."*
@@ -457,3 +457,79 @@ New `packages/domain/tests/t370-s3b-payday-30.test.ts` (pure unit):
   trued up next run, or moved to the next half) — a separate task.
 
 - 2026-10-01, Ian (chat): A3 defaults confirmed — monthly [30] also pays on the 30th; a run paid on the 30th is still posted after the 31st and dated the 31st.
+
+## Amendment A4 — the gap measure is start-independent by construction (2026-10-02, orchestrator via Opus planner)
+**Defect (auditor; re-verified on the uncommitted tree with the real functions).** `maxPayoutGapDays(p, o, startYear,
+startMonth)` sweeps 12 months from `startMonth` with an in-window filter, so its answer moves with the start month.
+- **Left edge.** The month before the window pays its 2nd period INTO the window but is never generated. Cutoff 10 +
+  `[10,25]` (truth 16) measures **31** from 2026-10, 2027-01 and 2027-03. A legal store is refused and falsely flagged.
+- **Leap February.** A window whose only February is 2028 loses the Feb-28 collision. Cutoff 15 + `[13,29]` (truth 31)
+  measures **16** from 2027-03, so it is accepted on save and flagged later. Invariant 6 breaks in both directions.
+- Brute force (26,937 configs, starts 2026-01..2028-12): 4,842 semi-monthly configs vary by start, and 56 flip the
+  >16 verdict. P1's "reference loop" copies the production loop, so it shares the defect and proves nothing.
+
+### R11 — the rule (supersedes R8's start arguments, R8's two "calls it with … month" bullets, and S3's Contract)
+- **Signature:** `maxPayoutGapDays(periodCfg: PeriodConfig, payoutCfg: PayoutConfig): number`. It takes no date.
+- **Horizon:** it generates every period's payday for months **2027-11 through 2032-03**, distinct and sorted.
+  `periodIndex` resets per month, as today.
+- **Pairs:** the answer is the largest gap between consecutive distinct paydays `(a, b)` whose **EARLIER date `a`**
+  lies in **2028-01-01..2031-12-31**. `b` may fall in 2032.
+- **Why four years suffice.** A payday depends on the calendar only through month lengths. From 2001 to 2099 the
+  month-length sequence repeats every 48 months (1,461 days), so the payday sequence repeats with it. Taking one
+  repeat's worth of left endpoints sees every gap exactly once. Any one gap depends on at most four consecutive
+  months, and 2028-2031 contains every such run of months that occurs in a Gregorian year, 2100 included.
+- **Why the horizon is complete.** A payday never falls before its own month starts: fixed and lag paydays are on or
+  after the period end, and R10's is the end minus 1, which is the 30th. So every payday before 2032-04-01 is
+  generated. The successor of any `a` ≤ 2031-12-31 is ≤ 2032-03-02: January 2032 ends on the 31st, the lag is at
+  most 31 (`payout_lag_check`), and fixed days pay by the end of the next month. A payday on or after 2028-01-01
+  comes from 2027-11 or later, because October's last period end plus 31 days is 2027-12-01.
+- ⛔ **Rejected from the proposal: "BOTH ends in 2028-2031".**
+  - It drops the pair that straddles 2031-12 → 2032-01, and that pair's periodic copy, 2027 → 2028.
+  - The sweep matches today only because the Dec→Jan gap reappears as Jul→Aug. That is a coincidence of month
+    lengths, not a guarantee.
+  - Anchoring on `a` counts every gap once and needs no such argument.
+- **A store's actual history does not matter (ruled).** The rule judges the cadence: R9's sentence says *"can run N
+  days"*, not "did run".
+  - `effectiveFrom`, Manila today and past config rows are not inputs.
+  - A real span shorter than four years can only show a gap ≤ the canonical one.
+- **Verified** on all 26,937 configs: semi-monthly cutoffs 1-27, with `[d]`, every ordered distinct pair and lag
+  0-31, plus monthly and weekly. R11 equals an independent truth computed over 2026-2045. The maximum is 60
+  (monthly `[29]`).
+
+### Callers (BUILDER: these four files only)
+- `packages/domain/src/payroll/periods.ts`: R11, with the frame bounds as private named constants. Replace the
+  docblock: the "TWELVE months, do NOT fix back to thirteen" paragraph and the window-independence claim are both
+  false now.
+- `packages/domain/src/findings/index.ts`: `payoutIntervalFindings` calls `maxPayoutGapDays(periodConfig,
+  payoutConfig)`.
+  - Drop `manilaToday` from its `Promise.all` and drop the start parse.
+  - Rewrite the twelve-month and verdict paragraphs of the docblock (`~:66-87`) as one line pointing to R11.
+  - Keep the import only if another function in the file still uses it.
+- `packages/domain/src/attendance/config.ts`: drop the `effectiveFrom` start parse (`:125`) and call the
+  two-argument form. **Merge the duplicate `@shareat/db` import at `:10-11` into one.**
+- `apps/erp/src/app/settings/attendance/page.tsx:220`: the hint becomes exactly
+  *"Comma-separated day-of-month, required when payout mode is fixed_days. Semi-monthly: two different days, never
+  more than 16 days from one payday to the next (the cutoff day changes this), e.g. 10,25 with cutoff 15."*
+  - "15–16 days apart" was not the rule. `[13,29]` with cutoff 15 is 16 days apart, yet it runs 31.
+  - The real rule is a ceiling on every gap, and the cutoff moves those gaps.
+- **Unchanged:**
+  - `packages/db/src/repo/findings.ts` and `constraint-messages.ts`.
+  - Migration **0178** and its CHECK, which tests two distinct days only and never reads the gap function.
+  - `t332-payday-compliance.test.ts`, where only a comment names the function.
+  - Precheck B, which now runs through the two-argument form.
+
+### TESTER: `packages/domain/tests/t370-max-payout-gap.test.ts`, `packages/domain/tests/integration/t370-semi-monthly-refusal.test.ts`
+`t370-settings-attendance-web.test.ts` is untouched: no test asserts the hint, which is copy only (smoketest step 1
+screenshots it).
+
+| Leg | Setup → assertion (target) | Mutant that must turn it red |
+|---|---|---|
+| T0 | Delete `reference()` and both "every start month" loops. Add `truth(p, o)`, written in the test and NOT a copy of the production loop. It takes paydays for months 2025-11..2046-03 from `derivePeriods`/`payoutDateFor`, distinct and sorted, and returns the largest gap over pairs whose earlier date is in 2026-01-01..2045-12-31. That span holds five leap Februaries and is not phase-aligned to 2028. Sanity check: `truth` reproduces every P1 literal | n/a (it guards the oracle) |
+| G1 sweep | Configs: semi-monthly cutoffs 1-27 × every ordered pair `[a,b]` (a≠b, 1-31), and × lag 0-31. Also monthly and weekly, each with `[d]` and with lag 0-31. Assert `maxPayoutGapDays === truth` and name the first mismatch. Memoise `truth` per (cutoff, month, periodIndex, day). This is valid because only `wanted` is read, so `payoutDateFor(period, fixed([d]), 0)` stands for index i of `[a,b]`; say so in a comment. Use `{ timeout: 180_000 }` and record the runtime | (m1) generate from 2028-01, with no earlier months · (m2) restore the 12-month window from 2026-01 · (m4) frame 2029-01..2031-12, which has no leap February |
+| P1 | The existing literal table, called without a start, with each row also `=== truth`. Add three rows: cutoff 10 `[10,25]` ⇒ **16**; cutoff 15 `[13,29]` ⇒ **31**; cutoff 15 `[10,27]` ⇒ 17 | off-by-one month roll · m1 turns the cutoff-10 row red · m4 turns the `[13,29]` row red |
+| A1 | `expectTypeOf(maxPayoutGapDays).parameters.toEqualTypeOf<[PeriodConfig, PayoutConfig]>()` | keep the start parameters, even as defaulted ones (`.length` would not catch that) |
+| N1 | Integration. Cutoff 10 with `[10,25]` **saves** at effectiveFrom 2026-10-15, 2027-01-15 and 2027-03-15, the auditor's failing months. Use one store per month, or chain the saves in date order. A raw-inserted live row with the same config raises no `payoutIntervalTooLong` | m1 / m2 ⇒ refused with `semiMonthlyGap(31)` |
+| N2 | Integration. Cutoff 15 with `[13,29]` is refused with `semiMonthlyGap(31)` at effectiveFrom **`YYYY-MM-15` for every month from 2026-01 to 2028-12**: 36 saves on one store. The seed takes effect 2026-01-01, so the 15th is always after it. Afterwards the store's row count is unchanged. A raw-inserted live row with the same config raises `payoutIntervalTooLong` with 31 in its detail | m4 ⇒ the 2027-03-15 save succeeds |
+
+N1 is N2's positive control. Record "Today" for G1, N1 and N2 red on the uncommitted 4-argument tree before the
+builder lands. For that run only, call it with (2026, 10) and (2027, 3).

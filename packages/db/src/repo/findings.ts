@@ -2136,7 +2136,7 @@ export async function meatSlabStale(tx: Tx, orgId: string, thresholdDays = 14): 
  * on purpose — aliasing one to the other would let an edit to either statute silently move both,
  * with nothing testing that it should. `SERVICE_CHARGE_MAX_DAYS` carries this same note.
  */
-const PAY_INTERVAL_MAX_DAYS = 16;
+export const PAY_INTERVAL_MAX_DAYS = 16;
 
 interface LiveCadenceConfig {
   storeId: string;

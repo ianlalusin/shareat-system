@@ -1,0 +1,33 @@
+-- T-370 S3 (DEF-409) - a LIVE semi-monthly store on fixed days pays on exactly two DIFFERENT days.
+-- docs/tasks/370-owner-cap-dates.md, R6 (and R7-R9 for the domain half).
+--
+-- WHY. `store_attendance_config` let a semi_monthly store sit on `payout_mode = 'fixed_days'` with a single pay
+-- day (`{10}`) or the same day twice (`{10,10}`): both periods of every month then pay on the SAME day, a month
+-- between paydays, against Labor Code Art. 103's sixteen. The settings form reached that state by typo, not only
+-- on purpose (`parseIntList` silently drops a bad token and de-duplicates). `supersedeConfig` now refuses it in
+-- words (R9); this is the database half, so no layer is the only one (bible 15.11).
+--
+-- WHAT. One plain, VALIDATED CHECK - never NOT VALID, which would leave violating rows for the next UPDATE to trip
+-- on. Superseded rows are history (they governed real days) and are exempt, which also lets a violating live row
+-- be retired by the ordinary supersede UPDATE. `coalesce(..., false)` closes the NULL hole: with ARRAY[10,NULL] the
+-- `<>` is NULL, and a CHECK passes on NULL; it also refuses an array whose lower bound is not 1 (`[2]` reads NULL).
+-- `payout_mode <> 'fixed_days'`, not `= 'lag'`, so a bogus mode still trips only `payout_mode_check`.
+--
+-- NOT HERE: the gap rule (every gap between paydays <= 16 days, any payout mode). It depends on month lengths,
+-- clamping and `derivePeriods`; a SQL copy would be a second source of truth that drifts. `supersedeConfig` and the
+-- T-332 detector share ONE function (`maxPayoutGapDays`) instead.
+--
+-- DEPLOY GATE - run this READ-ONLY on the production database BEFORE this migration. It MUST return 0 rows, or the
+-- validating ADD CONSTRAINT below fails at deploy (production host 159.223.46.224, the `shareat-erp` database,
+-- never 159.223.78.207):
+--   BEGIN READ ONLY;
+--   select s.name, s.is_active, c.store_id, c.effective_from, c.semi_monthly_cutoff_day, c.payout_days
+--     from store_attendance_config c join stores s on s.id = c.store_id
+--    where c.superseded_at is null and c.payroll_period_type = 'semi_monthly' and c.payout_mode = 'fixed_days'
+--      and not (cardinality(c.payout_days) = 2 and coalesce(c.payout_days[1] <> c.payout_days[2], false));
+--   ROLLBACK;
+--
+-- ONE TRANSACTION: the migrator runs this file in a transaction; the table is tiny (one row per store per policy
+-- change), so the validating scan costs nothing. NOT TOUCHED: no new table (so no RLS / classification entry), no
+-- trigger, no grant.
+ALTER TABLE "store_attendance_config" ADD CONSTRAINT "store_attendance_config_semi_monthly_two_days_check" CHECK ("store_attendance_config"."superseded_at" IS NOT NULL OR "store_attendance_config"."payroll_period_type" <> 'semi_monthly' OR "store_attendance_config"."payout_mode" <> 'fixed_days' OR (cardinality("store_attendance_config"."payout_days") = 2 AND coalesce("store_attendance_config"."payout_days"[1] <> "store_attendance_config"."payout_days"[2], false)));

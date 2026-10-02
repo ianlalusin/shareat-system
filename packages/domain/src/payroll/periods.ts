@@ -179,3 +179,62 @@ export function payoutDateFor(
   }
   return period.end;
 }
+
+/** Whole days between two `YYYY-MM-DD` dates. UTC midnights, so no DST drift. Local: this file imports nothing. */
+function wholeDaysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+}
+
+/** The canonical calendar `maxPayoutGapDays` measures (T-370 A4, R11): paydays are generated for these months,
+ *  and a gap counts when its EARLIER payday lies inside the pair frame. Both are private, named once. */
+const GAP_HORIZON_FROM = { year: 2027, month: 11 } as const;
+const GAP_HORIZON_TO = { year: 2032, month: 3 } as const;
+const GAP_PAIR_FROM = '2028-01-01';
+const GAP_PAIR_TO = '2031-12-31';
+
+/**
+ * ⭐ T-370 S3 (DEF-409, R8) as amended by A4/R11. The largest gap, in whole days, between consecutive DISTINCT payout
+ * dates of a cadence - a property of the CONFIGURATION, never of a start date: it takes none. The ONE gap function:
+ * `supersedeConfig` calls it to refuse a cycle on save, and the T-332 detector (`payoutIntervalFindings`) calls it to
+ * report one, so what the first accepts the second can never flag (invariant 6).
+ *
+ * How: every period's payday for months 2027-11 through 2032-03 (`periodIndex` resets per month, as the detector
+ * always called it), distinct and sorted; the answer is the largest gap between consecutive paydays `(a, b)` whose
+ * EARLIER date `a` lies in 2028-01-01..2031-12-31 (`b` may fall in 2032).
+ *
+ * Why four years: a payday depends on the calendar only through month lengths, and from 2001 to 2099 the month-length
+ * sequence repeats every 48 months (1,461 days), so the payday sequence repeats with it - one repeat's worth of left
+ * endpoints sees every gap exactly once, and 2028-2031 holds every run of months a Gregorian year can produce
+ * (leap February included; 2100 too). Why the horizon is complete: a payday never falls before its own month starts
+ * (fixed and lag paydays are on or after the period end; R10's is the end minus one, the 30th), so every payday before
+ * 2032-04-01 is generated, and the successor of any `a` <= 2031-12-31 is <= 2032-03-02.
+ *
+ * ⛔ **Anchor on the EARLIER date; do not "simplify" to a start month, a 12-month window, or both ends in 2028-2031.**
+ * A start-dependent window loses the month before it (cutoff 10 + `[10,25]`, truth 16, measured 31 from three starts) and
+ * can lose a leap February (cutoff 15 + `[13,29]`, truth 31, measured 16). Requiring both ends inside the frame drops the
+ * 2031-12 -> 2032-01 pair and agrees with this only by a coincidence of month lengths.
+ */
+export function maxPayoutGapDays(periodCfg: PeriodConfig, payoutCfg: PayoutConfig): number {
+  const dates = new Set<string>();
+  let y: number = GAP_HORIZON_FROM.year;
+  let m: number = GAP_HORIZON_FROM.month;
+  while (y < GAP_HORIZON_TO.year || (y === GAP_HORIZON_TO.year && m <= GAP_HORIZON_TO.month)) {
+    derivePeriods(periodCfg, y, m).forEach((period, periodIndex) => {
+      dates.add(payoutDateFor(period, payoutCfg, periodIndex));
+    });
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  const sorted = [...dates].sort();
+  let max = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    const earlier = sorted[i - 1]!;
+    if (earlier > GAP_PAIR_TO) break;
+    if (earlier < GAP_PAIR_FROM) continue;
+    max = Math.max(max, wholeDaysBetween(earlier, sorted[i]!));
+  }
+  return max;
+}

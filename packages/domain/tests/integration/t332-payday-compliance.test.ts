@@ -114,11 +114,19 @@ async function insertConfigMonthly(orgId: string, storeId: string): Promise<void
     values (${orgId}, ${storeId}, '2026-01-01', 'monthly')`;
 }
 
-/** The DEF-409 shape: reads as semi_monthly, actually collapses via `fixed_days` + a single day. */
+/**
+ * The DEF-409 shape: reads as semi_monthly, but its paydays are too far apart.
+ *
+ * ⚠️ T-370 S3 changed this fixture (docs/tasks/370-owner-cap-dates.md, "TESTER"): it used to be a single pay day
+ * (`payout_days = [10]`), which is now REFUSED BY THE DATABASE (`store_attendance_config_semi_monthly_two_days_check`) and
+ * could no longer be inserted. The detector still has to catch a legal-but-too-far-apart cadence — and a raw insert is the
+ * only way to get one past the new domain refusal — so the shape is now the spacing violation `payout_days = [10,20]` with
+ * cutoff 15, which the CHECK allows (two distinct days) and which runs 21 days between paydays.
+ */
 async function insertConfigFixedDaysCollapse(orgId: string, storeId: string): Promise<void> {
   await sql`insert into store_attendance_config
     (org_id, store_id, effective_from, payroll_period_type, semi_monthly_cutoff_day, payout_mode, payout_days)
-    values (${orgId}, ${storeId}, '2026-01-01', 'semi_monthly', 15, 'fixed_days', ${sql.array([10])}::integer[])`;
+    values (${orgId}, ${storeId}, '2026-01-01', 'semi_monthly', 15, 'fixed_days', ${sql.array([10, 20])}::integer[])`;
 }
 
 const feed = (orgId: string) =>
@@ -149,7 +157,7 @@ describe('T-332 slice B — payoutIntervalTooLong / attendanceConfigMissing, thr
     expect(kinds).not.toContain('payoutIntervalTooLong');
   });
 
-  it('B1 fires — DEF-409: semi_monthly + fixed_days + payoutDays=[10] LOOKS compliant and is not', async () => {
+  it('B1 fires — DEF-409: semi_monthly + fixed_days + payoutDays=[10,20] (cutoff 15) LOOKS compliant and is not (T-370 S3: was [10], now refused by the DB)', async () => {
     const { orgId, storeId } = await makeOrgAndStore('b1-def409');
     await insertConfigFixedDaysCollapse(orgId, storeId);
 
@@ -201,20 +209,19 @@ describe('T-332 slice B — payoutIntervalTooLong / attendanceConfigMissing, thr
     expect(findings.some((f) => f.storeId === storeBId)).toBe(false);
   });
 
-  it("B1's detail carries the measured maximum — 31, the same number case 5 measures independently", async () => {
+  it("B1's detail carries the measured maximum — 21 for the [10,20] fixture (T-370 S3: it was 31 for [10]; case 5 stays on the pure [10] shape and still measures 31)", async () => {
     const { orgId, storeId } = await makeOrgAndStore('c7-number');
     await insertConfigFixedDaysCollapse(orgId, storeId);
 
     const finding = (await findingsFor(orgId, storeId)).find((f) => f.kind === 'payoutIntervalTooLong');
     expect(finding).toBeDefined();
-    // ⭐ Tied to case 5: case 5 independently measures this exact config's twelve-month set of
-    // distinct payout dates via the real derivePeriods/payoutDateFor and finds its maximum
-    // interval is 31 (Feb's 28 is the minimum, not the number a twelve-month window reports).
-    // This asserts the detector's OWN computed number agrees — two independent routes, one figure.
+    // ⭐ T-370 S3 (docs/tasks/370-owner-cap-dates.md, "TESTER"): this leg asserts the MEASURED number for the new fixture,
+    // [10,20] with cutoff 15 = 21 days (T-370 P1 pins the same number on `maxPayoutGapDays` directly). It is no longer
+    // "tied to case 5": case 5 is pure and keeps measuring the single-day [10] shape (31), which can no longer be INSERTED.
     // ⛔ Match the CLAUSE the number is built into, never a bare digit or an unanchored regex —
-    // an unanchored `/31/` would be satisfied by a date, an id, or any other stray "31" on the
+    // an unanchored `/21/` would be satisfied by a date, an id, or any other stray "21" on the
     // page; it proves a character appeared, not that a value was computed.
-    expect(finding!.detail).toContain('can run 31 days between paydays');
+    expect(finding!.detail).toContain('can run 21 days between paydays');
   });
 
   it('is_active filters both detectors — WITH an active control for EACH detector, in the same feed', async () => {

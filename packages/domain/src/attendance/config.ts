@@ -7,8 +7,10 @@
  * function here exists to keep that answer honest.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { attendanceConfigRepo, type AttendanceConfigRow, type Tx } from '@shareat/db';
+import { attendanceConfigRepo, findingsRepo, type AttendanceConfigRow, type Tx } from '@shareat/db';
 import { parseShiftDay, type RawShiftDay, type ShiftDay } from './shift-day';
+import { maxPayoutGapDays } from '../payroll/periods';
+import { refuse } from '../shared/refusal';
 import { parseConfigChanges, type ConfigChangesInput } from './config-input';
 
 export type { ConfigChangesInput } from './config-input';
@@ -19,6 +21,14 @@ export class AttendanceConfigError extends Error {
     this.name = 'AttendanceConfigError';
   }
 }
+
+/** T-370 S3 (DEF-409, R9). The same text is mapped for `store_attendance_config_semi_monthly_two_days_check` in
+ *  `apps/erp/src/lib/constraint-messages.ts` (a literal there; both are pinned by tests). */
+const SEMI_MONTHLY_TWO_DAYS =
+  'A semi-monthly store pays on exactly two different days of the month. Enter two payout days, for example 10,25.';
+const semiMonthlyGap = (days: number): string =>
+  `This semi-monthly pay cycle can run ${days} days between paydays. The Labor Code (Art. 103) allows at most 16. ` +
+  'Change the payout days or the cutoff day, for example payout days 10,25 with cutoff 15.';
 
 /** The policy in force right now. */
 export async function getLiveConfig(tx: Tx, input: { storeId: string }): Promise<AttendanceConfigRow> {
@@ -99,6 +109,25 @@ export async function supersedeConfig(
         'change from that date would silently restate what those days paid. Choose a later date, ' +
         'or void the affected days first and say why.',
     );
+  }
+
+  // T-370 S3 (DEF-409): a semi-monthly store pays on exactly two different days, and no gap between paydays may
+  // exceed Art. 103's sixteen. Judged on the MERGED row (`changes` over the live row), so a store already out of
+  // line is refused on ANY save until its cadence is fixed (R7), and in `lag` mode too. The DB CHECK backs the
+  // two-days half; the gap depends on month lengths and `derivePeriods`, so only this function and the T-332
+  // detector (the same `maxPayoutGapDays`) can judge it. Before `markSuperseded`: nothing is written on a refusal.
+  const merged = { ...live, ...changes };
+  if (merged.payrollPeriodType === 'semi_monthly') {
+    if (merged.payoutMode === 'fixed_days' && (merged.payoutDays.length !== 2 || merged.payoutDays[0] === merged.payoutDays[1])) {
+      throw refuse('supersedeConfig: a semi_monthly fixed_days store needs exactly two distinct payout days.', SEMI_MONTHLY_TWO_DAYS);
+    }
+    const gap = maxPayoutGapDays(
+      { payrollPeriodType: merged.payrollPeriodType, semiMonthlyCutoffDay: merged.semiMonthlyCutoffDay },
+      { payoutMode: merged.payoutMode, payoutLagDays: merged.payoutLagDays, payoutDays: merged.payoutDays },
+    );
+    if (gap > findingsRepo.PAY_INTERVAL_MAX_DAYS) {
+      throw refuse(`supersedeConfig: a semi_monthly cycle runs ${gap} days between paydays, over Art. 103's limit.`, semiMonthlyGap(gap));
+    }
   }
 
   // ⚠️ Retire the old row BEFORE inserting the new one. `store_attendance_config_live_unique` is a
