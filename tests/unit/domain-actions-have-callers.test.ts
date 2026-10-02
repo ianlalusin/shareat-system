@@ -104,6 +104,14 @@ const EXEMPT: Record<string, string> = {
   writeChannels:
     'INTERNAL — `createSalesDay` calls it (`sales-days/create.ts:206`) to write the per-channel ' +
     'rows a sales day owns. Exported for its types, not as an entry point.',
+  authorizeOtherStores:
+    'INTERNAL — `voidCollection` (`ar/index.ts`), `reverseLoanEntry` (`loans/index.ts`) and `runVoidExpense` ' +
+    '(`expenses/void.ts`) call it (T-369 S9 addendum A1, DEF-573) so undoing a cross-store posting needs ' +
+    '`transfer_funds` at every other store the original touched. A gate inside the void, not a human boundary of its own.',
+  prepareTransfer:
+    'INTERNAL — `createMoneyTransfer` (`money-transfers/index.ts`) and `settleBetweenStores` ' +
+    '(`money-transfers/settle.ts`) call it (T-369 S9, DEF-557): the shared half of a transfer (ends, office-only ' +
+    'rule, both authorizes, amounts, draw check, fee and cash legs). Not a screen entry point.',
   writeTenders:
     'INTERNAL — `createSalesDay` and `editSalesDay` call it (`sales-days/create.ts`, `sales-days/edit.ts`) ' +
     'to write the per-wallet tender rows a sales day owns. Exported (T-369 S3) so the edit path shares the ' +

@@ -1,6 +1,6 @@
 # T-369: Unwired money screens — DEF-198, DEF-314, DEF-302, DEF-479, DEF-291
 
-**Status:** **S0, S1, S2, S3, S4, S5a, S6a, S7 DONE 2026-10-01/02 (c3c0458…5b8aeb7); S4 follow-up DONE 2026-10-02 (void sentence, one `now` per void, DEF-560, refusals reach the returns pages); S8 DONE 2026-10-02 (DEF-551; plus DEF-571, the T-367 S3 recurring due-date regression); S8b DONE 2026-10-02 (DEF-556); S9 specced + DEF-573 (void gates at the account's store) folded in (Ian ruled); S5b, S6b after T-367** — was: **Not started — Q1–Q4 answered 2026-09-30 (row 260; Q1 re-entry manager-only); S0 added 2026-10-01 for DEF-550** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q1–Q4 defaults ship). Review changes
+**Status:** **S0, S1, S2, S3, S4, S5a, S6a, S7 DONE 2026-10-01/02 (c3c0458…5b8aeb7); S4 follow-up DONE 2026-10-02 (void sentence, one `now` per void, DEF-560, refusals reach the returns pages); S8 DONE 2026-10-02 (DEF-551; plus DEF-571, the T-367 S3 recurring due-date regression); S8b DONE 2026-10-02 (DEF-556); S9 DONE 2026-10-02 (DEF-557, 558, 573 — settle between stores, receiving-store void gate, void gates at every other store; addendum A1 by the Opus planner) (Ian ruled); S5b, S6b after T-367** — was: **Not started — Q1–Q4 answered 2026-09-30 (row 260; Q1 re-entry manager-only); S0 added 2026-10-01 for DEF-550** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q1–Q4 defaults ship). Review changes
 1–7 and both minors applied (marked ✎R). Written 2026-09-30 by the Opus planner at HEAD `594f600`. Batch D of
 the money-defect push (Ian, 2026-09-30: *"close all open money defects in v2"*), `docs/plans/money-defects-2026-09-30.md`.
 DEF-302 is included under Ian's ruling **(a)** of 2026-09-30.
@@ -1042,7 +1042,7 @@ ruled); settling the balance (S9).
 
 ---
 
-## S9: DEF-557 — settle between stores
+## S9: DEF-557 — settle between stores (+ DEF-558 as S9·N1, DEF-573 as addendum A1)
 Added 2026-10-02 by the Opus planner, on Ian's ruling (a) for Q6 (Ruling log). S9's N-numbers are its own (`S9·N1`…).
 **S9 does not need S8's code:** inter-store balances exist today (cross-store money transfers, channel-settlement loan
 deductions, commissary). It shares only `fixtures.ts` and `POSTING-PATTERNS.md` with S8/S8b.
@@ -1255,6 +1255,70 @@ historical balances in bulk.
   - (a) **Not now** (recommended; nothing reads the gross pair).
   - (b) Add a no-cash "offset" settlement.
   - Default: (a).
+
+### S9 addendum A1 — DEF-573: voids of a cross-store posting need the right at the account's store (orchestrator, 2026-10-02)
+**The rule** (Ian, 2026-10-02, bible §13 rows 263-268; S9·N1 is the same rule for transfers). Undoing a posting that
+moved another store's money moves it again, so the void needs `transfer_funds` at every OTHER store the original entry
+touched, on top of the document's own void capability at the document's store. Same-store voids are unchanged.
+
+**Writers** (every `reverseEntry` caller whose original can come from a `withInterStoreLegs` writer, `ap :1138`,
+`ar :435`, `expenses/approve.ts :216`, `expenses/reimbursement.ts :191`, `loans :140, :280`):
+- `voidCollection` (`ar/index.ts:499`; reverse at `:529`): gate missing. Reverses `recordCollection` (S8b).
+- `reverseLoanEntry` (`loans/index.ts:327`; reverse at `:354`): gate missing. Reverses `disburseLoan` and
+  `recordLoanPayment` (S8b), and any caller-named entry carrying this loan's 2400 line (DEF-156/DEF-145).
+- `voidExpense` (`expenses/void.ts:37`, `runVoidExpense`; reverse at `:97`; also reached from `voidInvoice`'s
+  cascade): gate missing. Reverses `approveExpense` paid from another store's account (S8).
+- `voidPayment` (`ap/index.ts:1188`): ✎ **already gated.** S0·N4 (`:1203-1210`) authorizes `transfer_funds` at the
+  payment's account store before the supplier lock. The register's mention is stale. No code change; a test leg pins it.
+- Not affected: the reimbursement payout has no void (Q4); `voidChannelSettlement` cannot be cross-store
+  (`channel-settlements/index.ts:695` refuses another store's destination); `voidCharge` posts no money line;
+  `voidMoneyTransfer` is S9·N1.
+
+**Detection: the original entry's LINES.** Every line with a non-null `store_id` that differs from the document's store
+names a store whose books the reversal touches. Chosen over "the 1250/2150 pair is present" because:
+- the line carries the store id itself. The pair names the other store only as a party code, needing a lookup;
+- `withInterStoreLegs` writes no pair for a store that nets to 0.00, but that store's money lines still move;
+- an expense can draw on several wallets at several stores: the lines name them all, while a single `moneyAccountId`
+  (S0·N4's method) cannot;
+- it covers `reverseLoanEntry`'s caller-named entries, which have no account column to read.
+Lines with `store_id` null belong to no store and are skipped.
+
+**Where the gate goes** (T-364 order: authorize first, before any lock or business refusal). The gate does not wrap
+the denial, so the `AuthorizationError` keeps `.capability === 'transfer_funds'`:
+- `voidCollection`: after the uniform-refusal `try/catch` (`:513-523`), before the status checks.
+- `reverseLoanEntry`: after the `belongsToThisLoan` check (`:347`), reusing its `lines`. Placed after that check so a
+  foreign entry id still gets the existing refusal and its stores are not probed. `reverseLoanEntry` takes no lock.
+- `runVoidExpense`: after `authorize('void_expense')` (`:53`), before `lockExpensesForAllocation` (`:60`). It reads
+  `expense.journalEntryId` from the first read. A draft (null id) skips the gate and still meets the draft refusal.
+
+**BUILDER:**
+- `packages/domain/src/ledger/inter-store.ts`: new `authorizeOtherStores(tx, actor, { lines, documentStoreId })`. It
+  takes the distinct non-null `storeId`s other than `documentStoreId`, sorted (a deterministic first refusal), and
+  calls `authorize(tx, actor, 'transfer_funds', { storeId })` for each. No query of its own: callers pass
+  `journalRepo.findLinesForEntryWithAccountCodes(tx, entryId)`.
+- `ar/index.ts` `voidCollection`, `loans/index.ts` `reverseLoanEntry`, `expenses/void.ts` `runVoidExpense`: one call
+  each, at the places above. `voidPayment`: unchanged.
+- **Migration: none.** No column and no capability (I2).
+
+**TESTER:** extend `packages/domain/tests/integration/t369-s8b-cross-store-collections-loans.test.ts` (collection,
+loans) and `t369-s8-cross-store-draw.test.ts` (expense, AP payment). Reuse their admin and Lipa-only manager (holds
+the void capabilities at Lipa only). The admin posts each cross-store original, drawing on or paying into Malvar's safe.
+- A1-T1 (✗, red on HEAD): the Lipa-only manager voids each of: the cross-store collection, loan disbursement, loan
+  payment, and expense. Each → `AuthorizationError` with `.capability === 'transfer_funds'`. Nothing is reversed: entry
+  count, document status, Malvar's safe, 1250/2150 per store, and the loan's `positionOf` are all unchanged. Today
+  each void succeeds.
+- A1-T2 (pin, green on HEAD): the same manager on the cross-store AP payment → `transfer_funds`, nothing reversed.
+- A1-T3 (positive control): the admin voids each one → reversed; Malvar's safe and 1250/2150 return to their prior
+  balances (extends S8·T6 / S8b·T7).
+- A1-T4 (positive control, no extra right): the Lipa-only manager voids a SAME-store collection, loan payment and
+  expense → succeeds; `transfer_funds` is never asked of another store.
+- A1-T5 (unit, `inter-store-legs.test.ts`): lines at {Lipa, Malvar, Malvar, null} with document store Lipa → exactly
+  one `authorize` call, for Malvar; all at Lipa → none.
+- Mutants: drop the gate in any one writer → that writer's A1-T1 leg red. Compare against the pair instead of lines →
+  A1-T5's zero-net leg red. Wrap the gate inside `voidCollection`'s uniform catch → A1-T1's `.capability` assertion red.
+
+**Invariants:** I2 (no new capability); I7 (the refusal is `authorize`'s own sentence); a reversal still mirrors every
+line (no cap, row 152). The rights needed to void a document are now the rights needed to post it.
 
 ---
 

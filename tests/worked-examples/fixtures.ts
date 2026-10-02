@@ -438,6 +438,27 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       'while still balancing (the entry balances either way; only the ACCOUNT is wrong).',
   },
 
+  // T-369 S9 (DEF-557). `storeRef` here means two distinct stores, as in reimbursement.payout-cross-store: 'branch1' is the
+  // DEBTOR (Lipa, repaying) and 'commissary' is the CREDITOR (Malvar, being repaid) - not a commissary relationship.
+  {
+    id: 'transfer.settle-between-stores',
+    sourceType: 'transfer',
+    title: 'Settle between stores — paying back what one store owes another clears both balances',
+    narrative: "Lipa repays the ₱650 it owes Malvar, from Lipa's office safe to Malvar's. The cash legs are a normal transfer; " +
+      "the clearing pair then takes the debt off BOTH stores' books in the same single entry: Lipa's 2150 goes down " +
+      "and Malvar's 1250 goes down. Each store nets to zero and neither balance grows.",
+    input: { fromStoreCode: 'STORE-BRANCH1', toStoreCode: 'STORE-COMMISSARY', amountOut: '650.00', amountIn: '650.00' },
+    expect: [
+      D('1130', '650.00', null, { storeRef: 'commissary', lineMemo: 'received into the creditor safe' }),
+      C('1250', '650.00', { type: 'store', id: 'STORE-BRANCH1' }, { storeRef: 'commissary', lineMemo: 'due from branch repaid' }),
+      D('2150', '650.00', { type: 'store', id: 'STORE-COMMISSARY' }, { storeRef: 'branch1', lineMemo: 'due to commissary repaid' }),
+      C('1130', '650.00', null, { storeRef: 'branch1', lineMemo: 'paid from the debtor safe' }),
+    ],
+    entryDate: '2026-01-22',
+    trap: 'an ordinary transfer back posts DR 1250 at the PAYER and CR 2150 at the payee, which grosses both debts up ' +
+      'instead of clearing them (DEF-557). Only a settlement debits 2150 at the payer and credits 1250 at the payee.',
+  },
+
   // =========================================================================================
   // depreciation — 362 legs. Always both legs, no conditionality (leg-mapping.ts: "always
   // both"). One of ADR-005's five capabilities that "cannot wait past January."

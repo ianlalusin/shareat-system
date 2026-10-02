@@ -116,7 +116,7 @@ import { censusKey, scanMoneyPositivitySites } from './money-positivity-census';
  *    ends of that rather than implying either extreme. A limit of the regex reach, not of the key.
  * 9. **TWO GUARDED COMPARISONS ON ONE LINE — ONLY THE FIRST IS CENSUSED.** The `seen` dedupe key is
  *    per LINE, not per match, so a line carrying two comparisons yields one `CensusSite`. Live site
- *    — `money-transfers/index.ts`'s `if (!(out > 0) || !(inn > 0)) {`: only `!(out > 0)` is found;
+ *    — `money-transfers/prepare.ts`'s `if (!(out > 0) || !(inn > 0)) {` (moved from `index.ts` by T-369 S9): only `!(out > 0)` is found;
  *    `!(inn > 0)` — the `amountIn` positivity guard on a money transfer — is invisible to this guard
  *    entirely. Measured across three mutations of the second comparison (removing its `!`, `>` to
  *    `>=`, `> 0` to `> 0.005`): the key set is unchanged every time. **`amountIn`'s guard can be
@@ -226,13 +226,13 @@ const CLASSIFIED_ENTRIES: {
     checkIdentifiers: ['principal'],
   },
   {
-    file: 'money-transfers/index.ts',
+    file: 'money-transfers/prepare.ts',
     comparison: '!(out > 0)',
     reason:
-      "routed — createMoneyTransfer, `amountOut`/`amountIn` parsed above (out/inn are their " +
-      'Number()); the check itself sits inside `runCreate`, the internal helper `createMoneyTransfer` ' +
-      'delegates to',
-    checkFunctions: ['createMoneyTransfer', 'runCreate'],
+      "routed — createMoneyTransfer and settleBetweenStores, `amountOut`/`amountIn` parsed above (out/inn are their " +
+      'Number()); the check itself sits inside `prepareTransfer`, the internal helper both delegate to ' +
+      '(T-369 S9 moved it out of index.ts)',
+    checkFunctions: ['prepareTransfer'],
   },
   {
     file: 'owners/index.ts',
@@ -360,7 +360,7 @@ const CLASSIFIED_ENTRIES: {
     reason: 'derived ledger position (`positionOf`)',
   },
   {
-    file: 'money-transfers/index.ts',
+    file: 'money-transfers/prepare.ts',
     comparison: 'Number(fee) > 0',
     reason: "`fee = (out - inn).toFixed(2)` — computed and already 2dp by construction",
     checkIdentifiers: ['fee'],

@@ -15,7 +15,8 @@
  *     SEPARATE key space (`pg_locks.objsubid` 2 vs 1), so it never collides with the three above.
  *     Namespaces taken here: 366001 (cash custody), 366002 (service-charge float), 369001
  *     (reimbursement payee, keyed on the employee id rather than a store id), 369002 (supplier
- *     return credit, keyed on the supplier id).
+ *     return credit, keyed on the supplier id), 369003 (inter-store pair settlement, keyed on the
+ *     UNORDERED pair of store ids).
  *   - A `hashtext(storeId)` collision only serialises two stores for a moment; it never gives a
  *     wrong answer (the same reasoning as `access.ts` `lockOrgAccess`).
  *
@@ -67,5 +68,20 @@ const SUPPLIER_CREDIT_LOCK_NAMESPACE = 369002;
 export async function lockSupplierCredit(tx: Tx, supplierId: string): Promise<void> {
   await tx.execute(
     sql`select pg_advisory_xact_lock(${SUPPLIER_CREDIT_LOCK_NAMESPACE}::int4, hashtext(${supplierId}))`,
+  );
+}
+
+/** Namespace (first int4) for the inter-store settlement lock. T-369 S9 / DEF-557. */
+const INTER_STORE_PAIR_LOCK_NAMESPACE = 369003;
+
+/** Serialises everything that reads or clears what ONE pair of stores owes each other (1250/2150), so two
+ *  settlements in flight cannot both pass the "no more than is owed" cap. Keyed on the UNORDERED pair
+ *  (`least:greatest`), so Lipa repaying Malvar and Malvar repaying Lipa serialise together while a different
+ *  pair does not wait. ⚠️ The guarantee is exactly that: settlements serialise AGAINST EACH OTHER. Only
+ *  settlement takes the lock; a cross-store void (which can lower a position) racing a settlement does not, and
+ *  can leave the position reversed - the same end state as a void after a settlement, which the spec accepts. */
+export async function lockInterStorePair(tx: Tx, storeA: string, storeB: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${INTER_STORE_PAIR_LOCK_NAMESPACE}::int4, hashtext(least(${storeA}::text, ${storeB}::text) || ':' || greatest(${storeA}::text, ${storeB}::text)))`,
   );
 }

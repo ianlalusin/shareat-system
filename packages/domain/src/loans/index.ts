@@ -17,7 +17,7 @@ import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { refuse } from '../shared/refusal';
 import { postEntry } from '../ledger/post-entry';
-import { withInterStoreLegs } from '../ledger/inter-store';
+import { authorizeOtherStores, withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { accruedInterest, splitPayment, type PaymentSplit } from './interest';
 
@@ -350,6 +350,10 @@ export async function reverseLoanEntry(
           `no ${LOAN_LIABILITY_CODE} line partied to this loan.`,
       );
     }
+    // T-369 S9 A1 (DEF-573): undoing a posting that moved another store's money moves it again - `transfer_funds`
+    // at every other store the entry's lines touch. After the ownership check, so a foreign entry id still gets the
+    // existing refusal and its stores are not probed.
+    await authorizeOtherStores(trx, actor, { lines, documentStoreId: loan.storeId });
 
     const reversal = await reverseEntry(trx, {
       entryId: input.entryId,

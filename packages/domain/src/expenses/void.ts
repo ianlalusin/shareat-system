@@ -9,12 +9,13 @@
  * history.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, expensesRepo, journalRepo, transaction, type Tx } from '@shareat/db';
 import { compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { retireAssetFromVoidedExpense } from '../fixed-assets/capitalize';
 import { refuse, gone, internalFault, humanDate } from '../shared/refusal';
+import { authorizeOtherStores } from '../ledger/inter-store';
 
 export interface VoidExpenseResult {
   reversalEntryId: string;
@@ -51,6 +52,17 @@ async function runVoidExpense(tx: Tx, actor: Actor, expenseId: string, reason: s
   }
 
   await authorize(tx, actor, 'void_expense', { storeId: expense.storeId });
+
+  // T-369 S9 A1 (DEF-573): an expense paid from another store's account moved that store's money; undoing it moves
+  // it again, so the void needs `transfer_funds` at every OTHER store the posted entry's lines touch (also reached
+  // from `voidInvoice`'s cascade). Authorize first, before any lock or business refusal (T-364). A draft has no
+  // entry yet, skips this, and still meets its own draft refusal below.
+  if (expense.journalEntryId) {
+    await authorizeOtherStores(tx, actor, {
+      lines: await journalRepo.findLinesForEntryWithAccountCodes(tx, expense.journalEntryId),
+      documentStoreId: expense.storeId,
+    });
+  }
 
   // ⭐ T-367 S2 / R6 (DEF-519) — the SAME row lock `recordPayment` takes (`ap/index.ts:883`) on this
   // expense, so a payment allocating to it and a void of it serialise here; whichever waits re-reads

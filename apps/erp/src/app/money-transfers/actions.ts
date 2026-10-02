@@ -11,7 +11,7 @@
  * ⭐ The actor comes from `requireActor()`, never the form (T-138, bible §7.1).
  */
 import { redirect } from 'next/navigation';
-import { createMoneyTransfer, voidMoneyTransfer } from '@shareat/domain';
+import { createMoneyTransfer, settleBetweenStores, voidMoneyTransfer } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -58,6 +58,46 @@ export async function createMoneyTransferAction(formData: FormData): Promise<voi
     warning
       ? `/money-transfers?ok=created&warning=${encodeURIComponent(warning)}`
       : '/money-transfers?ok=created',
+  );
+}
+
+/**
+ * ⭐ T-369 S9 (DEF-557): "Settle between stores". A money transfer that also clears what one store owes the other,
+ * capped by what the ledger says is owed. Thin adapter like the others - `settleBetweenStores` authorizes `transfer_funds`
+ * at BOTH stores itself, and every refusal it writes reaches `?error=` as its own sentence. `settlementId` is
+ * generated when the page renders, so a double click is a replay and not a second settlement.
+ */
+export async function settleBetweenStoresAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  let warning = '';
+
+  try {
+    const amountOut = str(formData, 'amountOut');
+    if (!amountOut) throw new Error('Enter the amount that left the paying store.');
+    // Blank "amount that arrived" = the settlement cost nothing (the usual case), as on the ordinary transfer form.
+    const amountIn = str(formData, 'amountIn') || amountOut;
+
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      settleBetweenStores(tx, actor, {
+        settlementId: str(formData, 'settlementId'),
+        fromMoneyAccountId: str(formData, 'fromMoneyAccountId'),
+        toMoneyAccountId: str(formData, 'toMoneyAccountId'),
+        amountOut,
+        amountIn,
+        transferDate: str(formData, 'transferDate'),
+        reference: str(formData, 'reference') || null,
+        notes: str(formData, 'notes') || null,
+      }),
+    );
+    if (result.warning) warning = result.warning;
+  } catch (err) {
+    redirect(`/money-transfers?error=${encodeURIComponent(errorMessage(err))}`);
+  }
+
+  redirect(
+    warning
+      ? `/money-transfers?ok=settled&warning=${encodeURIComponent(warning)}`
+      : '/money-transfers?ok=settled',
   );
 }
 

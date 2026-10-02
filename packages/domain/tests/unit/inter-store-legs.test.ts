@@ -19,6 +19,11 @@ const CODES = new Map<string, string>([
   ['store-batangas', 'BTG'],
 ]);
 const storeCodes = vi.fn(async (_tx: unknown, _orgId: string, ids: string[]) => new Map(ids.filter((i) => CODES.has(i)).map((i) => [i, CODES.get(i)!])));
+const authorizeSpy = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => undefined));
+vi.mock('@shareat/auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@shareat/auth')>();
+  return { ...actual, authorize: (...a: unknown[]) => authorizeSpy(...a) };
+});
 vi.mock('@shareat/db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@shareat/db')>();
   return { ...actual, moneyTransfersRepo: { ...actual.moneyTransfersRepo, storeCodes: (...a: Parameters<typeof storeCodes>) => storeCodes(...a) } };
@@ -170,5 +175,61 @@ describe('T7 — withInterStoreLegs', () => {
       { accountCode: '1110', storeId: MALVAR, debit: '40.00' },
     ];
     expect(await withLegs(null, ORG, { owingStoreId: LIPA, lines, memo: 'm' })).toEqual(lines);
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// A1-T5 (DEF-573) — `authorizeOtherStores(tx, actor, { lines, documentStoreId })`: transfer_funds at every OTHER store the lines touch
+// -----------------------------------------------------------------------------------------------
+
+type AuthorizeOtherStores = (tx: unknown, actor: { personId: string; orgId: string }, input: { lines: { storeId?: string | null }[]; documentStoreId: string }) => Promise<void>;
+async function loadAuthorizeOtherStores(): Promise<AuthorizeOtherStores> {
+  try {
+    const mod = (await import('../../src/ledger/inter-store')) as unknown as { authorizeOtherStores?: AuthorizeOtherStores };
+    if (typeof mod.authorizeOtherStores !== 'function') throw new Error('authorizeOtherStores is not exported');
+    return mod.authorizeOtherStores;
+  } catch (err) {
+    throw new Error(`packages/domain/src/ledger/inter-store.ts lacks authorizeOtherStores: ${String((err as Error).message).split('\n')[0]}`);
+  }
+}
+const ACTOR = { personId: 'p1', orgId: ORG };
+
+describe('A1-T5 — authorizeOtherStores', () => {
+  it('lines at {Lipa, Malvar, Malvar, null} with the document at Lipa -> exactly ONE authorize call, transfer_funds at Malvar', async () => {
+    const authorizeOtherStores = await loadAuthorizeOtherStores();
+    authorizeSpy.mockClear();
+    await authorizeOtherStores(null, ACTOR, { documentStoreId: LIPA, lines: [{ storeId: LIPA }, { storeId: MALVAR }, { storeId: MALVAR }, { storeId: null }] });
+    expect(authorizeSpy).toHaveBeenCalledTimes(1);
+    expect(authorizeSpy).toHaveBeenCalledWith(null, ACTOR, 'transfer_funds', { storeId: MALVAR });
+  });
+
+  it('all lines at the document store (or no store) -> no authorize call', async () => {
+    const authorizeOtherStores = await loadAuthorizeOtherStores();
+    authorizeSpy.mockClear();
+    await authorizeOtherStores(null, ACTOR, { documentStoreId: LIPA, lines: [{ storeId: LIPA }, { storeId: LIPA }, { storeId: null }] });
+    expect(authorizeSpy).not.toHaveBeenCalled();
+  });
+
+  it('a store whose lines NET TO ZERO is still authorized (the gate reads lines, not the 1250/2150 pair): Malvar debit 40 + credit 40 -> one call for Malvar', async () => {
+    const authorizeOtherStores = await loadAuthorizeOtherStores();
+    authorizeSpy.mockClear();
+    await authorizeOtherStores(null, ACTOR, { documentStoreId: LIPA, lines: [{ storeId: LIPA }, { storeId: MALVAR, debit: '40.00' } as never, { storeId: MALVAR, credit: '40.00' } as never] });
+    expect(authorizeSpy).toHaveBeenCalledTimes(1);
+    expect(authorizeSpy).toHaveBeenCalledWith(null, ACTOR, 'transfer_funds', { storeId: MALVAR });
+  });
+
+  it('two other stores -> one call each, in a deterministic (sorted) order', async () => {
+    const authorizeOtherStores = await loadAuthorizeOtherStores();
+    authorizeSpy.mockClear();
+    await authorizeOtherStores(null, ACTOR, { documentStoreId: LIPA, lines: [{ storeId: MALVAR }, { storeId: BATANGAS }, { storeId: LIPA }] });
+    expect(authorizeSpy.mock.calls.map((c) => (c[3] as { storeId: string }).storeId)).toEqual([BATANGAS, MALVAR].sort());
+  });
+
+  it("the gate does not wrap the denial: authorize's own error comes out unchanged (capability kept)", async () => {
+    const authorizeOtherStores = await loadAuthorizeOtherStores();
+    const denial = Object.assign(new Error('denied'), { capability: 'transfer_funds' });
+    authorizeSpy.mockClear();
+    authorizeSpy.mockRejectedValueOnce(denial);
+    await expect(authorizeOtherStores(null, ACTOR, { documentStoreId: LIPA, lines: [{ storeId: MALVAR }] })).rejects.toBe(denial);
   });
 });

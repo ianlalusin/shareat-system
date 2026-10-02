@@ -631,3 +631,108 @@ describe("T11 — a Lipa collection paid INTO a Malvar e-wallet (1140)", () => {
     for (const l of lines) expect(l.store_id).toBe(f.lipaId);
   });
 });
+
+// -----------------------------------------------------------------------------------------------
+// A1 (DEF-573) — voiding a cross-store posting needs transfer_funds at every OTHER store the original's lines touch
+// -----------------------------------------------------------------------------------------------
+
+describe("A1 — the Lipa-only manager cannot void what the admin posted against MALVAR's safe", () => {
+  const entryStatus = async (entryId: string) => (await sql<{ status: string }[]>`select status from journal_entries where id = ${entryId}`)[0]!.status;
+  const reversals = async (orgId: string) => Number((await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where org_id = ${orgId} and reversal_of_entry_id is not null`)[0]!.n);
+  const expectGate = (err: unknown) => {
+    expect(err).toBeInstanceOf(AuthorizationError);
+    expect((err as AuthorizationError).capability, 'the refusal must keep authorize()\'s own capability').toBe('transfer_funds');
+  };
+
+  it("A1-T1 voidCollection of a collection into Malvar's safe: AuthorizationError(transfer_funds); nothing reversed, the safe and the pair unchanged — A1-T3 control: the admin voids it and everything returns", async () => {
+    const f = await fixture('a1c');
+    const customerId = await customerOf(f);
+    const ch = await charge(f, customerId, '2000.00');
+    const before = await snapshot(f);
+    const r = await collect(f, f.admin, customerId, f.malvarSafe, '2000.00', [{ chargeId: ch.chargeId, amountApplied: '2000.00' }]);
+    const posted = await snapshot(f);
+    const reversalsBefore = await reversals(f.orgId);
+
+    const refused = await rejection(asOrg(f.orgId, (tx) => voidCollection(tx, f.manager, { collectionId: r.collectionId, reason: 'Bounced' })), "a Lipa-only manager voiding a collection into Malvar's safe");
+
+    expectGate(refused.err);
+    expect(await reversals(f.orgId), 'a refused void wrote a reversal').toBe(reversalsBefore);
+    expect(await entryStatus(r.entryId), 'a refused void changed the original').toBe('posted');
+    expect(await snapshot(f)).toEqual(posted);
+    expect(await interStoreNet(f.orgId, f.lipaId, '1250')).toBe('2000.00');
+    expect(await interStoreNet(f.orgId, f.malvarId, '2150')).toBe('-2000.00');
+    expect(await controlBalance(f, customerId), 'the charge reopened on a refused void').toBe('0.00');
+
+    await asOrg(f.orgId, (tx) => voidCollection(tx, f.admin, { collectionId: r.collectionId, reason: 'Bounced' }));
+    expect(await snapshot(f), 'control: the admin void restores every balance').toEqual(before);
+    expect(await interStoreNet(f.orgId, f.lipaId, '1250')).toBe('0.00');
+    expect(await interStoreNet(f.orgId, f.malvarId, '2150')).toBe('0.00');
+  });
+
+  it("A1-T1 reverseLoanEntry of a disbursement into Malvar's safe: AuthorizationError(transfer_funds); nothing reversed, the loan position unchanged — control: the admin reverses it", async () => {
+    const f = await fixture('a1d');
+    const loanId = await newLoan(f);
+    const before = await snapshot(f);
+    const d = await disburse(f, f.admin, loanId, f.malvarSafe);
+    const posted = await snapshot(f);
+    const outstanding = await loanOutstanding(f, loanId);
+    const reversalsBefore = await reversals(f.orgId);
+
+    const refused = await rejection(asOrg(f.orgId, (tx) => reverseLoanEntry(tx, f.manager, { loanId, entryId: d.entryId, reason: 'Wrong account' })), "a Lipa-only manager reversing a disbursement into Malvar's safe");
+
+    expectGate(refused.err);
+    expect(await reversals(f.orgId)).toBe(reversalsBefore);
+    expect(await entryStatus(d.entryId)).toBe('posted');
+    expect(await snapshot(f)).toEqual(posted);
+    expect(await loanOutstanding(f, loanId)).toBe(outstanding);
+    expect(await interStoreNet(f.orgId, f.lipaId, '1250')).toBe('50000.00');
+
+    await asOrg(f.orgId, (tx) => reverseLoanEntry(tx, f.admin, { loanId, entryId: d.entryId, reason: 'Wrong account' }));
+    expect(await snapshot(f), 'control: the admin reversal restores every balance').toEqual(before);
+    expect(await interStoreNet(f.orgId, f.lipaId, '1250')).toBe('0.00');
+    expect(await interStoreNet(f.orgId, f.malvarId, '2150')).toBe('0.00');
+  });
+
+  it("A1-T1 reverseLoanEntry of a payment out of Malvar's safe: AuthorizationError(transfer_funds); nothing reversed, the loan position unchanged — control: the admin reverses it", async () => {
+    const f = await fixture('a1p');
+    const loanId = await newLoan(f);
+    await disburse(f, f.admin, loanId, f.lipaSafe, '200000.00');
+    const before = await snapshot(f);
+    const outstandingBefore = await loanOutstanding(f, loanId);
+    const p = await loanPay(f, f.admin, loanId, f.malvarSafe);
+    const posted = await snapshot(f);
+    const outstanding = await loanOutstanding(f, loanId);
+    const reversalsBefore = await reversals(f.orgId);
+
+    const refused = await rejection(asOrg(f.orgId, (tx) => reverseLoanEntry(tx, f.manager, { loanId, entryId: p.entryId, reason: 'Wrong account' })), "a Lipa-only manager reversing a payment out of Malvar's safe");
+
+    expectGate(refused.err);
+    expect(await reversals(f.orgId)).toBe(reversalsBefore);
+    expect(await entryStatus(p.entryId)).toBe('posted');
+    expect(await snapshot(f)).toEqual(posted);
+    expect(await loanOutstanding(f, loanId)).toBe(outstanding);
+    expect(await interStoreNet(f.orgId, f.malvarId, '1250')).toBe('4800.00');
+
+    await asOrg(f.orgId, (tx) => reverseLoanEntry(tx, f.admin, { loanId, entryId: p.entryId, reason: 'Wrong account' }));
+    expect(await snapshot(f), 'control: the admin reversal restores every balance').toEqual(before);
+    expect(await loanOutstanding(f, loanId)).toBe(outstandingBefore);
+    expect(await interStoreNet(f.orgId, f.malvarId, '1250')).toBe('0.00');
+    expect(await interStoreNet(f.orgId, f.lipaId, '2150')).toBe('0.00');
+  });
+
+  it("A1-T4 (positive control, no extra right): the Lipa-only manager voids a SAME-store collection and reverses a SAME-store loan payment — both succeed", async () => {
+    const f = await fixture('a1s');
+    const customerId = await customerOf(f);
+    const ch = await charge(f, customerId, '2000.00');
+    const c = await collect(f, f.admin, customerId, f.lipaSafe, '2000.00', [{ chargeId: ch.chargeId, amountApplied: '2000.00' }]);
+    await asOrg(f.orgId, (tx) => voidCollection(tx, f.manager, { collectionId: c.collectionId, reason: 'Wrong day' }));
+    expect(await entryStatus(c.entryId)).toBe('reversed');
+    expect(await controlBalance(f, customerId), 'the charge reopened').toBe('2000.00');
+
+    const loanId = await newLoan(f);
+    await disburse(f, f.admin, loanId, f.lipaSafe, '200000.00');
+    const p = await loanPay(f, f.admin, loanId, f.lipaSafe);
+    await asOrg(f.orgId, (tx) => reverseLoanEntry(tx, f.manager, { loanId, entryId: p.entryId, reason: 'Wrong day' }));
+    expect(await entryStatus(p.entryId)).toBe('reversed');
+  });
+});

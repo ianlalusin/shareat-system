@@ -12,6 +12,7 @@
  *
  * ⚠️ `partyId` on both lines is the OTHER store's CODE, never its database id (`moneyTransfersRepo.storeCodes`).
  */
+import { authorize, type Actor } from '@shareat/auth';
 import { fromCentavos, money, toCentavos } from '@shareat/core/money';
 import { moneyTransfersRepo, type Tx } from '@shareat/db';
 import { internalFault } from '../shared/refusal-leaf';
@@ -97,4 +98,35 @@ export async function withInterStoreLegs(
     );
   }
   return [...lines, ...pairs];
+}
+
+/**
+ * ⭐ T-369 S9 addendum A1 (DEF-573) — undoing a posting that moved ANOTHER store's money moves it again, so the
+ * void needs `transfer_funds` at every OTHER store the original entry's lines touch, on top of the document's own
+ * void capability at the document's store. Same-store voids are unchanged: nothing else is asked.
+ *
+ * Detection is the original entry's LINES (every non-null `storeId` that is not the document's), not the 1250/2150
+ * pair: the line names the store itself, a store that netted to zero got no pair but its money lines still move, an
+ * expense can draw on several stores' wallets, and a caller-named loan entry has no account column to read. Lines
+ * with no `storeId` belong to no store and are skipped. Stores are asked in sorted order so the first refusal is
+ * deterministic, and `authorize`'s own error comes out unchanged (the capability is kept — nothing wraps it).
+ *
+ * No query of its own: callers pass `journalRepo.findLinesForEntryWithAccountCodes(tx, entryId)`. The first
+ * parameter list is the honest `(tx, actor, …)` of a function that authorizes.
+ */
+export async function authorizeOtherStores(
+  tx: Tx,
+  actor: Actor,
+  input: { lines: readonly { storeId?: string | null }[]; documentStoreId: string },
+): Promise<void> {
+  const others = [
+    ...new Set(
+      input.lines
+        .map((l) => l.storeId ?? null)
+        .filter((id): id is string => id !== null && id !== input.documentStoreId),
+    ),
+  ].sort();
+  for (const storeId of others) {
+    await authorize(tx, actor, 'transfer_funds', { storeId });
+  }
 }

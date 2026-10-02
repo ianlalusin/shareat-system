@@ -123,8 +123,8 @@ export interface RoutingLine {
   partyType?: 'supplier' | 'employee' | 'money_account' | 'owner' | 'cash_request';
   partyId?: string | null;
   lineMemo?: string | null;
-  /** T-369 S8: set ONLY on a cash/online credit whose account sits at another store; absent means "the
-   *  expense's own store". */
+  /** T-369 S8: the money account's store, set on a cash/online credit whenever the caller passed
+   *  `moneyAccountStoreId` (even when it is the expense's own store); absent means "the expense's own store". */
   storeId?: string;
 }
 

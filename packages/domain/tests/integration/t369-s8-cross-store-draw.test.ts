@@ -46,6 +46,8 @@ import {
   recordInvoice,
   recordPayment,
   verifyInvoice,
+  voidExpense,
+  voidInvoice,
   voidPayment,
 } from '@shareat/domain';
 import { postEntry } from '../../src/ledger/post-entry';
@@ -574,5 +576,104 @@ describe("T10 — a Lipa expense paid from MALVAR's e-wallet (1140)", () => {
     const lines = await linesFor(r.journalEntryId);
     expect(lines.filter((l) => l.code === '1250' || l.code === '2150'), 'a same-store wallet payment grew a pair').toEqual([]);
     for (const l of lines) expect(l.store_id).toBe(f.lipaId);
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// A1 (DEF-573) — voiding a cross-store posting needs transfer_funds at every OTHER store the original's lines touch
+// -----------------------------------------------------------------------------------------------
+
+describe("A1 — the Lipa-only manager cannot void what the admin posted against MALVAR's safe", () => {
+  const entryStatus = async (entryId: string) => (await sql<{ status: string }[]>`select status from journal_entries where id = ${entryId}`)[0]!.status;
+  const reversals = async (orgId: string) => Number((await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where org_id = ${orgId} and reversal_of_entry_id is not null`)[0]!.n);
+  const expenseStatus = async (id: string) => (await sql<{ status: string }[]>`select status from expenses where id = ${id}`)[0]!.status;
+  const expectGate = (err: unknown) => {
+    expect(err).toBeInstanceOf(AuthorizationError);
+    expect((err as AuthorizationError).capability, "the refusal must keep authorize()'s own capability").toBe('transfer_funds');
+  };
+
+  it("A1-T1 voidExpense of an expense funded ₱400 from Malvar's safe: AuthorizationError(transfer_funds); nothing reversed, the expense stays posted, the safes and the pair unchanged — A1-T3 control: the admin voids it and every balance returns", async () => {
+    const f = await fixture('a1e');
+    const expenseId = await splitExpense(f, f.malvarSafe);
+    const before = await snapshot(f);
+    const approved = await asOrg(f.orgId, (tx) => approveExpense(tx, f.admin, expenseId));
+    const posted = await snapshot(f);
+    const reversalsBefore = await reversals(f.orgId);
+
+    const refused = await rejection(asOrg(f.orgId, (tx) => voidExpense(tx, f.manager, expenseId, 'Entered twice')), "a Lipa-only manager voiding an expense funded from Malvar's safe");
+
+    expectGate(refused.err);
+    expect(await reversals(f.orgId), 'a refused void wrote a reversal').toBe(reversalsBefore);
+    expect(await expenseStatus(expenseId), 'a refused void changed the expense').toBe('posted');
+    expect(await entryStatus(approved.journalEntryId)).toBe('posted');
+    expect(await snapshot(f)).toEqual(posted);
+    expect(await interStoreNet(f.orgId, f.lipaId, '2150')).toBe('-400.00');
+
+    await asOrg(f.orgId, (tx) => voidExpense(tx, f.admin, expenseId, 'Entered twice'));
+    expect(await snapshot(f), 'control: the admin void restores every balance').toEqual(before);
+    expect(await interStoreNet(f.orgId, f.lipaId, '2150')).toBe('0.00');
+    expect(await interStoreNet(f.orgId, f.malvarId, '1250')).toBe('0.00');
+  });
+
+  it("A1-T2 (pin, green on HEAD) voidPayment of an AP payment paid from Malvar's safe: AuthorizationError(transfer_funds) already (S0·N4); nothing reversed — control: the admin voids it", async () => {
+    const f = await fixture('a1a');
+    const expenseId = await bill(f, '12000.00');
+    const before = await snapshot(f);
+    const r = await apPay(f, f.admin, expenseId, f.malvarSafe, { amount: '12000.00' });
+    const posted = await snapshot(f);
+    const reversalsBefore = await reversals(f.orgId);
+
+    const refused = await rejection(asOrg(f.orgId, (tx) => voidPayment(tx, f.manager, { paymentId: r.paymentId, reason: 'Bounced' } as never)), "a Lipa-only manager voiding an AP payment from Malvar's safe");
+
+    expectGate(refused.err);
+    expect(await reversals(f.orgId)).toBe(reversalsBefore);
+    expect(await entryStatus(r.entryId)).toBe('posted');
+    expect(await snapshot(f)).toEqual(posted);
+
+    await asOrg(f.orgId, (tx) => voidPayment(tx, f.admin, { paymentId: r.paymentId, reason: 'Bounced' } as never));
+    expect(await snapshot(f), 'control: the admin void restores every balance').toEqual(before);
+  });
+
+  it("A1-cascade voidInvoice of an AP invoice whose posted expense drew ₱400 on Malvar's safe, by the Lipa-only manager: AuthorizationError(transfer_funds) read as a sentence, and the WHOLE void rolls back (invoice and expense still posted, no reversal, safes unchanged) — control: the admin voids it and every balance returns", async () => {
+    const f = await fixture('a1i');
+    const expenseId = await splitExpense(f, f.malvarSafe);
+    const before = await snapshot(f);
+    const approved = await asOrg(f.orgId, (tx) => approveExpense(tx, f.admin, expenseId));
+    const [expenseRow] = await sql<{ supplier_invoice_id: string | null }[]>`select supplier_invoice_id from expenses where id = ${expenseId}`;
+    const invoiceId = expenseRow?.supplier_invoice_id;
+    if (!invoiceId) throw new Error('fixture: the expense has no supplier invoice');
+    const invoiceStatus = async () => (await sql<{ status: string }[]>`select status from supplier_invoices where id = ${invoiceId}`)[0]!.status;
+    const invoiceBefore = await invoiceStatus();
+    const posted = await snapshot(f);
+    const reversalsBefore = await reversals(f.orgId);
+
+    const refused = await rejection(asOrg(f.orgId, (tx) => voidInvoice(tx, f.manager, { invoiceId, reason: 'Entered twice' })), "a Lipa-only manager voiding an invoice whose expense drew on Malvar's safe");
+
+    expectGate(refused.err);
+    const sentence = (refused.err as AuthorizationError).userMessage;
+    expect(sentence, 'the refusal has no written sentence').toBeTruthy();
+    expect(sentence).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    expect(sentence).not.toMatch(/authorize:|digest|undefined/);
+    expect(await invoiceStatus(), 'the invoice changed although the cascade was refused').toBe(invoiceBefore);
+    expect(await expenseStatus(expenseId), 'the expense changed although the cascade was refused').toBe('posted');
+    expect(await entryStatus(approved.journalEntryId)).toBe('posted');
+    expect(await reversals(f.orgId), 'a partial void left a reversal').toBe(reversalsBefore);
+    expect(await snapshot(f)).toEqual(posted);
+
+    await asOrg(f.orgId, (tx) => voidInvoice(tx, f.admin, { invoiceId, reason: 'Entered twice' }));
+    expect(await invoiceStatus(), 'control: the admin voided the invoice').not.toBe(invoiceBefore);
+    expect(await expenseStatus(expenseId)).toBe('voided');
+    expect(await snapshot(f), 'control: every balance returns').toEqual(before);
+    expect(await interStoreNet(f.orgId, f.lipaId, '2150')).toBe('0.00');
+    expect(await interStoreNet(f.orgId, f.malvarId, '1250')).toBe('0.00');
+  });
+
+  it("A1-T4 (positive control, no extra right): the Lipa-only manager voids a SAME-store funded expense — it succeeds, and transfer_funds is never asked of Malvar", async () => {
+    const f = await fixture('a1s');
+    const expenseId = await splitExpense(f, f.lipaSafe);
+    await asOrg(f.orgId, (tx) => approveExpense(tx, f.admin, expenseId));
+    await asOrg(f.orgId, (tx) => voidExpense(tx, f.manager, expenseId, 'Entered twice'));
+    expect(await expenseStatus(expenseId)).toBe('voided');
+    expect(await interStoreNet(f.orgId, f.malvarId, '1250')).toBe('0.00');
   });
 });

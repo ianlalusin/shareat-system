@@ -13,7 +13,7 @@ import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
-import { withInterStoreLegs } from '../ledger/inter-store';
+import { authorizeOtherStores, withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
@@ -520,6 +520,15 @@ export async function voidCollection(
         throw uniform;
       }
       throw err;
+    }
+    // T-369 S9 A1 (DEF-573): reversing a collection that landed in ANOTHER store's account moves that store's money
+    // again, so the void needs `transfer_funds` there too. After the uniform-refusal block above (its own refusal
+    // keeps its one sentence; this gate must not be wrapped by it) and before any status refusal.
+    if (collection.journalEntryId) {
+      await authorizeOtherStores(trx, actor, {
+        lines: await journalRepo.findLinesForEntryWithAccountCodes(trx, collection.journalEntryId),
+        documentStoreId: collection.storeId,
+      });
     }
     if (collection.status !== 'posted') throw new Error(`voidCollection: it is ${collection.status}, not posted.`);
     if (!collection.journalEntryId) throw new Error('voidCollection: posted collection carries no journal entry.');

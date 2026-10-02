@@ -82,6 +82,40 @@ async function balancesOf(
   );
 }
 
+export interface SettlementPair {
+  debtorStoreId: string;
+  creditorStoreId: string;
+  /** What the debtor owes the creditor, per the debtor's books - a 2dp string. */
+  owed: string;
+  /** The debtor's active OFFICE accounts the person may move money out of (bible row 152: office to office). */
+  fromAccounts: AccountOption[];
+  /** The creditor's active OFFICE accounts the person may move money into. */
+  toAccounts: AccountOption[];
+}
+
+/**
+ * T-369 S9 (DEF-557): the pairs of stores where one owes the other, for the "Settle between stores" panel - only
+ * those where this person holds `transfer_funds` at BOTH stores (`usable` is already narrowed to such stores) and
+ * each side has an office account to use. The domain re-checks everything on submit; this decides what is OFFERED.
+ */
+export async function listSettlementPairs(actor: Actor, usable: readonly AccountOption[]): Promise<SettlementPair[]> {
+  const storeIds = [...new Set(usable.map((a) => a.storeId))];
+  if (storeIds.length < 2) return [];
+  const rows = await withOrgPrincipal(actor.orgId, (tx) =>
+    moneyTransfersRepo.interStorePositions(tx, actor.orgId, storeIds),
+  );
+  const officeAt = (storeId: string) => usable.filter((a) => a.storeId === storeId && a.custodian === 'office');
+  return rows
+    .map((r) => ({
+      debtorStoreId: r.debtorStoreId,
+      creditorStoreId: r.creditorStoreId,
+      owed: r.owed,
+      fromAccounts: officeAt(r.debtorStoreId),
+      toAccounts: officeAt(r.creditorStoreId),
+    }))
+    .filter((p) => p.fromAccounts.length > 0 && p.toAccounts.length > 0);
+}
+
 export async function listRecentTransfers(orgId: string): Promise<MoneyTransferListRow[]> {
   return withOrgPrincipal(orgId, (tx) =>
     moneyTransfersRepo.listMoneyTransfers(tx, orgId, { limit: 50 }),

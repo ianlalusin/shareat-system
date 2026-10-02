@@ -10,6 +10,7 @@ import type { Tx } from '../client';
 import { moneyAccounts } from '../../schema/money-accounts';
 import { stores } from '../../schema/stores';
 import { moneyTransfers, type MoneyTransferStatus } from '../../schema/money-transfers';
+import { refuse } from '../refusal';
 import { recordGone } from './record-gone';
 
 export interface MoneyTransferRow {
@@ -39,6 +40,9 @@ export interface MoneyTransferListRow extends MoneyTransferRow {
   toName: string;
   /** ⭐ DERIVED, never stored: what the movement cost. */
   fee: string;
+  /** ⭐ T-369 S9 (DEF-557), DERIVED: this movement cleared what the source store owed the destination store - its
+   *  entry DEBITS 2150 at the source. An ordinary cross-store transfer credits 2150 at the destination instead. */
+  settles: boolean;
 }
 
 const COLUMNS = {
@@ -74,6 +78,8 @@ export interface InsertMoneyTransferInput {
   notes: string | null;
   journalEntryId: string;
   createdBy: string;
+  /** T-369 S9: a settlement's row id IS its `settlementId`, so the primary key backstops a racing double click. */
+  id?: string;
 }
 
 export async function insertMoneyTransfer(
@@ -125,6 +131,12 @@ export async function listMoneyTransfers(
       toName: sql<string>`${toAcct}.name`,
       // ⭐ The fee, computed in the query rather than kept in a column.
       fee: sql<string>`(${moneyTransfers.amountOut} - ${moneyTransfers.amountIn})::text`,
+      // ⭐ T-369 S9: derived from the entry's own lines, no column.
+      settles: sql<boolean>`exists (
+        select 1 from journal_lines jl join accounts a on a.id = jl.account_id
+        where jl.entry_id = ${moneyTransfers.journalEntryId} and a.code = '2150'
+          and jl.debit > 0 and jl.store_id = ${moneyTransfers.storeId}
+      )`,
     })
     .from(moneyTransfers)
     .innerJoin(
@@ -189,4 +201,72 @@ export async function storeCodes(
     .from(stores)
     .where(and(eq(stores.orgId, orgId), inArray(stores.id, storeIds)));
   return new Map(rows.map((r) => [r.id, r.code]));
+}
+
+/**
+ * ⭐ T-369 S9 (DEF-557) — what `debtor` owes `creditor`, read from BOTH stores' books. Non-draft entries only, like
+ * `reciprocalDrift` (`repo/findings.ts`). Computed in SQL `numeric` and returned as strings, never a float compare.
+ *
+ *   per the DEBTOR's books:   Σ at D of 2150 party C (credit − debit)  −  Σ at D of 1250 party C (debit − credit)
+ *   per the CREDITOR's books: Σ at C of 1250 party D (debit − credit)  −  Σ at C of 2150 party D (credit − debit)
+ *
+ * which fold to one signed sum each. Every writer posts the pair together, so the two readings agree; a caller that
+ * sees them differ must refuse rather than clear against one side's number. A NEGATIVE figure reads as the reverse
+ * debt (the creditor owes the debtor).
+ */
+export async function interStorePosition(
+  tx: Tx,
+  orgId: string,
+  debtorStoreId: string,
+  creditorStoreId: string,
+): Promise<{ owedPerDebtor: string; owedPerCreditor: string }> {
+  const codes = await storeCodes(tx, orgId, [debtorStoreId, creditorStoreId]);
+  const debtorCode = codes.get(debtorStoreId);
+  const creditorCode = codes.get(creditorStoreId);
+  // A store with no code cannot be matched to the party column, so "nothing owed" would be a lie: refuse loudly.
+  if (!debtorCode || !creditorCode) {
+    throw refuse(
+      `interStorePosition: store ${debtorCode ? creditorStoreId : debtorStoreId} has no code in org ${orgId}.`,
+      "A store has no code, so what the stores owe each other can't be worked out. Ask the accountant to check the store setup.",
+    );
+  }
+  const [row] = (await tx.execute(sql`
+    select
+      coalesce(sum(case when jl.store_id = ${debtorStoreId} and jl.party_id = ${creditorCode} then jl.credit - jl.debit end), 0)::numeric(14,2)::text as per_debtor,
+      coalesce(sum(case when jl.store_id = ${creditorStoreId} and jl.party_id = ${debtorCode} then jl.debit - jl.credit end), 0)::numeric(14,2)::text as per_creditor
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId} and je.status <> 'draft'
+      and a.code in ('1250', '2150') and jl.party_type = 'store'
+  `)) as unknown as { per_debtor: string; per_creditor: string }[];
+  return { owedPerDebtor: row?.per_debtor ?? '0.00', owedPerCreditor: row?.per_creditor ?? '0.00' };
+}
+
+/**
+ * ⭐ T-369 S9 — every ORDERED pair among `storeIds` where the first owes the second a positive net, per the debtor's
+ * books, for the "Settle between stores" panel. A pair that nets to zero (or the reverse) is absent.
+ */
+export async function interStorePositions(
+  tx: Tx,
+  orgId: string,
+  storeIds: string[],
+): Promise<{ debtorStoreId: string; creditorStoreId: string; owed: string }[]> {
+  if (storeIds.length < 2) return [];
+  const ids = sql.join(storeIds.map((id) => sql`${id}`), sql`, `);
+  const rows = (await tx.execute(sql`
+    select jl.store_id as debtor_store_id, cs.id as creditor_store_id,
+           sum(jl.credit - jl.debit)::numeric(14,2)::text as owed
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    join stores cs on cs.org_id = je.org_id and cs.code = jl.party_id
+    where je.org_id = ${orgId} and je.status <> 'draft'
+      and a.code in ('1250', '2150') and jl.party_type = 'store'
+      and jl.store_id in (${ids}) and cs.id in (${ids}) and cs.id <> jl.store_id
+    group by jl.store_id, cs.id
+    having sum(jl.credit - jl.debit) > 0
+    order by sum(jl.credit - jl.debit) desc, jl.store_id, cs.id
+  `)) as unknown as { debtor_store_id: string; creditor_store_id: string; owed: string }[];
+  return rows.map((r) => ({ debtorStoreId: r.debtor_store_id, creditorStoreId: r.creditor_store_id, owed: r.owed }));
 }

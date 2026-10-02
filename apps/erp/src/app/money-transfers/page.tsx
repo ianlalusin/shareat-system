@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { requirePageAccess } from '../../lib/page-access';
 import type { PickerOption } from '../../components/two-way-picker';
-import { createMoneyTransferAction, voidMoneyTransferAction } from './actions';
+import { createMoneyTransferAction, settleBetweenStoresAction, voidMoneyTransferAction } from './actions';
 import { RecordTransferForm } from './RecordTransferForm';
-import { CUSTODIAN_LABEL, listAccountBalances, listRecentTransfers, listStores, listTransferableAccounts, peso } from './lib';
+import { SettleBetweenStoresForm, type SettlePairOption } from './SettleBetweenStoresForm';
+import { CUSTODIAN_LABEL, listAccountBalances, listRecentTransfers, listSettlementPairs, listStores, listTransferableAccounts, peso } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 
@@ -33,6 +34,8 @@ export default async function MoneyTransfersPage({
   ]);
   // Balances are read once; the usable set is those at stores where the viewer may move money.
   const usable = await listTransferableAccounts(actor, accounts);
+  // T-369 S9: the pairs of stores where one owes the other, only where this person holds `transfer_funds` at both.
+  const settlementPairs = await listSettlementPairs(actor, usable);
   const storeById = new Map(stores.map((s) => [s.id, s]));
   const today = new Date().toISOString().slice(0, 10);
 
@@ -60,6 +63,20 @@ export default async function MoneyTransfersPage({
     })),
   );
 
+  // ⭐ Finished labels, server-side (a plain function cannot cross to the client form). "Lipa owes Malvar ₱650.00".
+  const storeName = (id: string) => storeById.get(id)?.name ?? '—';
+  const settleOptions: SettlePairOption[] = settlementPairs.map((p) => {
+    const accountOption = (a: (typeof usable)[number]) => ({ id: a.id, label: `${a.name} — ${peso(a.balance)}` });
+    return {
+      label: `${storeName(p.debtorStoreId)} owes ${storeName(p.creditorStoreId)} ${peso(p.owed)}`,
+      owed: p.owed,
+      from: p.fromAccounts.map(accountOption),
+      to: p.toAccounts.map(accountOption),
+    };
+  });
+  // Generated per render: the form submits it back, so a double click is a replay of ONE settlement.
+  const settlementId = crypto.randomUUID();
+
   return (
     <Page density="table">
       <div>
@@ -82,7 +99,7 @@ export default async function MoneyTransfersPage({
       )}
       {sp.ok && (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok === 'created' ? 'Transfer recorded.' : 'Transfer reversed.'}
+          {sp.ok === 'created' ? 'Transfer recorded.' : sp.ok === 'settled' ? 'Settlement recorded.' : 'Transfer reversed.'}
         </div>
       )}
       {/* ⚠️ A warning is NOT an error — the transfer posted. Shown in amber beside the green
@@ -184,6 +201,30 @@ export default async function MoneyTransfersPage({
         </section>
       )}
 
+      {/* ── Settle between stores ────────────────────────────────────────────────────── */}
+      {usable.length > 0 && (
+        <details className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <summary className="inline-flex min-h-[44px] cursor-pointer items-center text-sm font-medium">Settle between stores</summary>
+          <div className="mt-3 space-y-3">
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              When one store has paid for another, the two stores carry a balance. Paying it back here moves the cash
+              <strong> and</strong> clears the balance in one entry — an ordinary transfer back would grow both balances
+              instead. Money moves office to office, and no more than what is owed.
+            </p>
+            {settleOptions.length === 0 ? (
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">No store owes another.</p>
+            ) : (
+              <SettleBetweenStoresForm
+                action={settleBetweenStoresAction}
+                pairs={settleOptions}
+                settlementId={settlementId}
+                today={today}
+              />
+            )}
+          </div>
+        </details>
+      )}
+
       {/* ── History ──────────────────────────────────────────────────────────────────── */}
       {transfers.length > 0 && (
         <section className="space-y-2">
@@ -213,6 +254,11 @@ export default async function MoneyTransfersPage({
                     <td className="px-3 py-2">{t.fromName}</td>
                     <td className="px-3 py-2">
                       {t.toName}
+                      {t.settles && (
+                        <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                          Settlement
+                        </span>
+                      )}
                       {t.status === 'voided' && (
                         <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-xs font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
                           Reversed

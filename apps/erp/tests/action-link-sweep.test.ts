@@ -317,7 +317,16 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // classes the shortage branch's sibling controls already use (38px / 38px / 32px), so all
     // three PASS. Verified by filtering `runCensus()`'s own results to `app/remittance/page.tsx`
     // and reading each new candidate's line/px directly.
-    expect(results.length).toBe(1086);
+    // 1086 -> 1096, T-369 S9 (DEF-557), 2026-10-02. +10 PASS, FAIL/UNRESOLVED unmoved (both asserted
+    // above — the baseline test ran green at 151/58 with the new total measured). `/money-transfers`
+    // gains the "Settle between stores" panel: `app/money-transfers/page.tsx:207` (the `<summary>`
+    // disclosure) plus the nine visible controls of `SettleBetweenStoresForm.tsx` — three `<select>`s
+    // (the pair picker, `fromMoneyAccountId`, `toMoneyAccountId`), five `<input>`s (`amountOut`,
+    // `amountIn`, `transferDate`, `reference`, `notes`) and one `<button>` (the submit). The hidden
+    // `settlementId` input is not a control and is not counted. FAIL and UNRESOLVED did not move, so
+    // all ten are PASS (by partition, not per-control pixel reading). Verified by running the census
+    // (1096) and by counting the form's elements in source (3 selects + 6 inputs − 1 hidden + 1 button).
+    expect(results.length).toBe(1096);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
