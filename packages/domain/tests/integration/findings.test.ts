@@ -27,6 +27,7 @@ import {
   createCashRequest,
   createEmployment,
   decideCashRequest,
+  depreciateAsset,
   listFindings,
   releaseCashRequest,
   seedAttendanceConfig,
@@ -229,15 +230,14 @@ describe('each detector fires when its condition holds', () => {
     expect(finding!.detail).toMatch(/DEF-044/);
   });
 
-  it('⚠️ and it stays quiet once the run is recorded — a no-op run still counts as having run', async () => {
+  it("⚠️ and it stays quiet once the run POSTED the entry — 'booked' means an effective entry exists, not that a run row does (T-368 S4 / DEF-434)", async () => {
     const f = await fixture('deprok');
-    await sql`
+    const [asset] = await sql<{ id: string }[]>`
       insert into fixed_assets (org_id, store_id, name, category, acquired_on, cost,
                                 useful_life_months, salvage_value, status, created_by)
-      values (${f.orgId}, ${f.storeId}, 'Chiller', 'equipment', '2026-01-01', 50000, 60, 0, 'active', ${f.personId})`;
-    await sql`
-      insert into scheduler_runs (org_id, job, period, trigger, outcome)
-      values (${f.orgId}, 'depreciation', ${PERIOD}, 'cron', 'ok')`;
+      values (${f.orgId}, ${f.storeId}, 'Chiller', 'equipment', '2026-01-01', 50000, 60, 0, 'active', ${f.personId}) returning id`;
+    expect(await kinds(f), 'control: owing the entry, the finding fires').toContain('depreciationNotBooked');
+    await asOrg(f.orgId, (tx) => depreciateAsset(tx, f.admin, { assetId: asset!.id, through: PERIOD }));
     expect(await kinds(f)).not.toContain('depreciationNotBooked');
   });
 

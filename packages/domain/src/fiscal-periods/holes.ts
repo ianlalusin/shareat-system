@@ -213,9 +213,10 @@ export async function createMissingClosedPeriod(
   }
   if (blockers.drafts.length > 0 || blockers.blocking.length > 0) {
     // T-345 §3.5 — a depreciation or amortisation finding gains a pointer at the remedy that
-    // actually clears it: booking activity in the current month does NOT satisfy
-    // `periodicPostingsMissed` (it asks about a RUN, not an entry), so the plain Q3 sentence below
-    // would send an admin to book something that leaves this exact refusal in place next time.
+    // actually clears it. `periodicPostingsMissed` only NOMINATES the finding; the domain judge
+    // (`periodicPostingsStillMissing`) asks whether a POSTED entry exists for that period (T-368 S4), so
+    // booking activity in the current month does NOT satisfy it — only the entry for THIS period does, and the
+    // plain Q3 sentence below would send an admin to book something that leaves this exact refusal in place.
     const lines = [
       ...blockers.drafts.map(draftLabel),
       ...blockers.blocking.map((f) =>

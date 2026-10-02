@@ -125,7 +125,7 @@ async function periodicPostingsStillMissing(
       ...f,
       detail:
         schedule === 'depreciation'
-          ? `${owing.size} asset(s) are still depreciating and nothing ran for ${period}. ` +
+          ? `${owing.size} asset(s) are still depreciating and have no posted entry for ${period}. ` +
             'DEF-044: this stopped for two months in v1 and only a capture found it.'
           : `${owing.size} prepaid item(s) owe ${period} with no entry.`,
     });

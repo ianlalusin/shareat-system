@@ -1,6 +1,6 @@
 # T-368: Periods and depreciation — DEF-424, 426, 433, 434, 435, 441, 442, 436
 
-**Status:** **S2+S3 DONE 2026-10-02 (DEF-435, 436, 441, 442; plus audit fixes: a closed owed month is skipped and reported on the run, the action and the scheduler status; asset terms validate interval, category and salvage); S4 reds written;** **S1 reds written (on `wip/2026-09-30-reds`; 5 TS errors = expected red); S1 DONE 2026-10-01 (domain: closePeriod/closeYear refuse a missing earlier month; seed job opens class-A only; screen test pending); S0 DONE 2026-10-01 (migration 0174; prod prechecks in docs/ops before the push)** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; its eight CHANGES folded in). Written 2026-09-30 by the Opus planner for the money-defect push
+**Status:** **S4 DONE 2026-10-02 (DEF-434: a failed or partial run no longer counts as booked; the ledger decides); S2+S3 DONE 2026-10-02 (DEF-435, 436, 441, 442; plus audit fixes: a closed owed month is skipped and reported on the run, the action and the scheduler status; asset terms validate interval, category and salvage); ** **S1 reds written (on `wip/2026-09-30-reds`; 5 TS errors = expected red); S1 DONE 2026-10-01 (domain: closePeriod/closeYear refuse a missing earlier month; seed job opens class-A only; screen test pending); S0 DONE 2026-10-01 (migration 0174; prod prechecks in docs/ops before the push)** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; its eight CHANGES folded in). Written 2026-09-30 by the Opus planner for the money-defect push
 (Ian, 2026-09-30: *"close all open money defects in v2"*). Census: `docs/plans/money-defects-2026-09-30.md`, batch C.
 **Model:** Sonnet for every slice, tester first, then builder. Any spec amendment is written in plan mode (Opus).
 **Line numbers** were checked at HEAD `3ed900f`.
@@ -254,6 +254,8 @@ refusal is the interim behaviour.
 - Update the function's header comment: "the ledger, not the run log".
 
 **BUILDER:** `packages/db/src/repo/findings.ts` (`periodicPostingsMissed` only).
+**S4 review record (orchestrator, 2026-10-02):** spec defect — `scheduler_runs.outcome` is `ok|partial|failed` (no `error`), and the DB refuses `ok` with `failed_count > 0`; F1 uses `failed`, F2 a `partial` 1/1 run. Override: the user-facing depreciation detail now reads "…have no posted entry for P." (was "…nothing ran for P", false in the case this slice fixes); the provisional repo strings stay (never shown — auditor traced every path). Audit: 0 HIGH/MED; LOW comment fixes applied; perf follow-up DEF-570. Smoke 9008: a failed run row for 2026-08 → the finding shows with the new sentence; the booked-month control is covered by F3 only (smoke DB has no period before 2026-10).
+
 **TESTER:** `packages/domain/tests/integration/t368-findings-failed-run.test.ts`, and a rewrite of
 `findings.test.ts:226-235` ("a no-op run counts") into "a run that posted the entry clears it".
 

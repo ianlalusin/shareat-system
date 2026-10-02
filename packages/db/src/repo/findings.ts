@@ -258,6 +258,14 @@ export async function clearingNotAtRest(tx: Tx, orgId: string): Promise<Detected
  * actual lesson: a schedule that simply FINISHED and a schedule that DIED look identical if you
  * only ask "was there activity last month". Only Ian could tell those apart, so the check asks
  * whether there is anything left to post instead.
+ *
+ * ⭐ **T-368 S4 (DEF-434): the ledger, not the run log.** This used to stay silent whenever ANY
+ * `scheduler_runs` row existed for the period, so a run that failed (`outcome` `failed`), or finished
+ * `partial`, hid exactly the months nothing was posted for. The run log says a job was TRIED, not that an
+ * entry exists. It is not consulted here at all: this emits the provisional finding whenever something is
+ * depreciable / has a prepaid balance, and `domain/findings/index.ts`'s `periodicPostingsStillMissing` — the
+ * only judge — drops it when no subject owes P without an effective entry. "Booked" therefore means
+ * "an effective entry exists", whatever `scheduler_runs` says.
  */
 export async function periodicPostingsMissed(
   tx: Tx,
@@ -278,23 +286,15 @@ export async function periodicPostingsMissed(
             and fa.in_service_on is not null and fa.in_service_on <= ${periodEndsOn}) as depreciable,
         (select count(*) from prepaid_items pi
           where pi.org_id = ${orgId} and pi.status = 'active') as prepaid
-    ),
-    ran as (
-      select job, count(*)::int as n
-      from scheduler_runs sr
-      where sr.org_id = ${orgId} and sr.period = ${period}
-      group by job
     )
     select
       (select depreciable from work)::text as depreciable,
-      (select prepaid from work)::text as prepaid,
-      coalesce((select n from ran where job = 'depreciation'), 0)::text as depreciation_runs,
-      coalesce((select n from ran where job = 'amortisation'), 0)::text as amortisation_runs
+      (select prepaid from work)::text as prepaid
   `)) as unknown as Record<string, string>[];
   const r = rows[0];
   if (!r) return [];
   const out: DetectedFinding[] = [];
-  if (Number(r.depreciable) > 0 && Number(r.depreciation_runs) === 0) {
+  if (Number(r.depreciable) > 0) {
     out.push({
       kind: 'depreciationNotBooked',
       key: `depreciationNotBooked:${period}`,
@@ -308,7 +308,7 @@ export async function periodicPostingsMissed(
         'DEF-044: this stopped for two months in v1 and only a capture found it.',
     });
   }
-  if (Number(r.prepaid) > 0 && Number(r.amortisation_runs) === 0) {
+  if (Number(r.prepaid) > 0) {
     out.push({
       kind: 'amortisationNotBooked',
       key: `amortisationNotBooked:${period}`,

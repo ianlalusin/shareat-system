@@ -20,9 +20,9 @@ import { sql as dsql } from 'drizzle-orm';
  *     P has an EFFECTIVE ENTRY keyed for P. That entry may be P's own run posting or an adjustment
  *     naming P" — so a raw-SQL-posted journal entry with the right idempotency key is sufficient to
  *     simulate "already caught up" without needing the migration or the domain function to exist.
- *     Today's `periodicPostingsMissed` (repo/findings.ts) only asks `scheduler_runs` whether the RUN
- *     happened for period P, never whether any entry exists, so these fail with the finding still
- *     present regardless of the raw entry — `expected [...] to be empty`.
+ *     `periodicPostingsMissed` (repo/findings.ts) only NOMINATES the candidate periods; the domain judge
+ *     (`periodicPostingsStillMissing`) is the one that asks for a posted entry — so the raw entry,
+ *     not any `scheduler_runs` row, is what clears the finding (T-368 S4 / DEF-434).
  *
  * A2b is a GUARD, not a feature test: it pins §1.3's PRE-EXISTING behaviour (one asset's failure in
  * a closed month rolls back every later month in the same run) and is expected GREEN today.
