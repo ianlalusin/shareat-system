@@ -1,6 +1,6 @@
 # T-367: AP/AR money — DEF-201, DEF-396, DEF-420, DEF-499, DEF-500, DEF-395, DEF-508, DEF-054
 
-**Status:** **S2 DONE 2026-10-01 (DEF-396, 508, 518, 519; migration 0176; ⛔ prod P2-P4 with Ian before the push; DEF-550 = no void-payment screen); S1 DONE 2026-10-01 (DEF-201, 517, 520 + DEF-546; migration 0173 — ⛔ prod duplicate count with Ian before the push, docs/ops)** — ⭐ allocation 2026-10-01 (orchestrator): T-367 S1 = 0173, T-368 S0 = 0174, T-372 S2 = 0175; supersedes the order on line 11 — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
+**Status:** **S4 DONE 2026-10-02 (pin tests only, DEF-395 overdraftLimit leg); S3 BUILT 2026-10-02 on `wip/2026-10-03`, NOT audited, 2 test conflicts for the tester (see HANDOFF); S2 DONE 2026-10-01 (DEF-396, 508, 518, 519; migration 0176; ⛔ prod P2-P4 with Ian before the push; DEF-550 = no void-payment screen); S1 DONE 2026-10-01 (DEF-201, 517, 520 + DEF-546; migration 0173 — ⛔ prod duplicate count with Ian before the push, docs/ops)** — ⭐ allocation 2026-10-01 (orchestrator): T-367 S1 = 0173, T-368 S0 = 0174, T-372 S2 = 0175; supersedes the order on line 11 — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
 1–7 and the minors applied. Spec by the Opus planner, 2026-09-30. Batch B of the money-defect
 push (Ian, 2026-09-30: *"close all open money defects in v2"*), `docs/plans/money-defects-2026-09-30.md`.
 **Model:** Sonnet for each slice, tester first and then builder. One lane runs the slices in order.
