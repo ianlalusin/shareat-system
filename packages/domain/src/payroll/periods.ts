@@ -135,7 +135,7 @@ export interface PayoutConfig {
  * | mode | payday |
  * |---|---|
  * | `lag` | the period end plus N days — v1's only model |
- * | `fixed_days` | the next occurrence of this period's configured day-of-month, on or after the end |
+ * | `fixed_days` | the next occurrence of this period's day, on or after the end — except day 30 for a period ending on the 31st, which pays on the 30th (Ian, 2026-10-01, A3) |
  *
  * ⚠️ **A lag cannot express a fixed payday.** Paid on the 10th and the 25th means a different
  * number of days after each period end, every month — which is why this is a mode and not a
@@ -157,6 +157,13 @@ export function payoutDateFor(
 
   // ⚠️ Fewer entries than periods is legal: the LAST one applies to the rest.
   const wanted = cfg.payoutDays[Math.min(periodIndex, cfg.payoutDays.length - 1)]!;
+
+  // T-370 S3b (DEF-553, R10; Ian, 2026-10-01): the ONE case a payday falls before its period ends. A day-30
+  // payday for a period ending on the 31st is the 30th of the period's OWN month (the 31st is paid with it) -
+  // "on or after the end" would roll it to NEXT month's 30th, 31 days on. The start guard keeps a pure caller's
+  // 31-31 period (a cutoff clamped to `last - 1`) on the old roll, since day 30 is before it starts.
+  const ownMonth = period.end.slice(0, 8);
+  if (wanted === 30 && period.end.slice(8) === '31' && period.start <= `${ownMonth}30`) return `${ownMonth}30`;
 
   const end = new Date(`${period.end}T00:00:00Z`);
   // Try this month, then the next — the payday is either still ahead in the period's own month or

@@ -1,10 +1,10 @@
 # T-370: owner drawing cap after payroll (and its concurrency, DEF-516), real calendar dates, and a semi-monthly pay cycle refused on save — DEF-108, DEF-494, DEF-409
 
-**Status:** **S1 DONE (`42da29b`), S2 DONE (`85eb34e`); S3 (DEF-409 migration) next, preceded by S3b (A3: Ian's 15/30 ruling, DEF-553, no migration); monthly-floor question open** — APPROVED 2026-09-30 (orchestrator, after independent Opus review) — review changes 1–11 applied in place. Spec by the Opus planner, 2026-09-30. **Model:** Sonnet, tester then
+**Status:** **S1 DONE (`42da29b`), S2 DONE (`85eb34e`); S3b DONE 2026-10-02 (A3, DEF-553 payout half); S3 (DEF-409, migration 0178) next; monthly-floor question open** — APPROVED 2026-09-30 (orchestrator, after independent Opus review) — review changes 1–11 applied in place. Spec by the Opus planner, 2026-09-30. **Model:** Sonnet, tester then
 builder, per slice.
 **Census:** `docs/plans/money-defects-2026-09-30.md` (batch E). DEF-409 was added by Ian's ruling of 2026-09-30:
 *"refuse on save: semi-monthly needs exactly two pay days ≤16 days apart."*
-**Migration:** one, in S3 only. Take the **next free index at build** (0172–0174 are taken). Follow ADR-012 §5.
+**Migration:** one, in S3 only: **0178** (orchestrator, 2026-10-02 — S3 lands before T-372 S6, which moves to 0179). Follow ADR-012 §5.
 **Line numbers** were checked at HEAD `72a6102`. None of the BUILDER paths is dirty at that HEAD.
 
 ## Goal
