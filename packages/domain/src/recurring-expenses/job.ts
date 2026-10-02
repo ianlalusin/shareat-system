@@ -166,6 +166,9 @@ export async function runRecurringExpenses(
                 // ⭐ The due date, and it is what carries onto the expense: `createExpense` forces
                 // `businessDate` from the invoice, so the draft lands on the day it was due.
                 invoiceDate: dueDate,
+                // T-367 S3 (DEF-499): a blank due date now means invoice date + the supplier's terms, which would
+                // push this bill's due date out by the terms. The template's date IS the due date, so say so.
+                dueDate,
                 totalAmount: template.defaultAmount,
                 invoiceNo: `RECUR-${template.id}-${dueDate}`,
                 notes: `Recurring: ${template.name}. Drafted by the recurring-expense job; the real bill replaces this.`,

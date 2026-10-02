@@ -20,6 +20,7 @@ import { equals, money } from '@shareat/core/money';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
+import { withInterStoreLegs } from '../ledger/inter-store';
 import { parseMoneyInput } from '../shared/money-input';
 import { EXPENSE_FUNDING_ACCOUNTS } from './routing';
 import { refuse, gone } from '../shared/refusal';
@@ -121,6 +122,9 @@ export async function payReimbursement(
         !!debit &&
         !!credit &&
         debit.storeId === input.storeId &&
+        // T-369 S8: the credit sits at the ACCOUNT's store. A pre-S8 cross-store payout (credit at the owing
+        // store) replayed now is the defective shape and is refused here, not answered as a match.
+        credit.storeId === account.storeId &&
         equals(money(debit.debit), amount) &&
         equals(money(credit.credit), amount);
       if (!same) {
@@ -181,17 +185,12 @@ export async function payReimbursement(
       'payReimbursement',
     );
 
-    const result = await postEntry(trx, {
-      orgId: actor.orgId,
-      entryDate: input.on,
-      sourceType: 'reimbursement_payout',
-      sourceId: input.employeeId,
-      idempotencyKey,
-      memo: input.memo ?? 'Reimbursement payout',
-      postedBy: actor.personId,
-      ...(periodOverride
-        ? { periodOverride: { actor, reason: periodOverride.reason, note: periodOverride.note ?? null } }
-        : {}),
+    // T-369 S8 (DEF-551): the money-account credit goes at the ACCOUNT's store (`balanceOf` reads a safe there);
+    // the debt stays at the owing store, and a cross-store draw gains the 1250/2150 pair between them.
+    const memo = input.memo ?? 'Reimbursement payout';
+    const lines = await withInterStoreLegs(trx, actor.orgId, {
+      owingStoreId: input.storeId,
+      memo,
       lines: [
         {
           accountCode: EXPENSE_FUNDING_ACCOUNTS.REIMBURSABLE_TO_EMPLOYEES,
@@ -202,13 +201,27 @@ export async function payReimbursement(
         },
         {
           accountCode: account.glAccountCode,
-          storeId: input.storeId,
+          storeId: account.storeId,
           credit: amount,
           ...(account.glAccountCode === '1140'
             ? { partyType: 'money_account' as const, partyId: account.id }
             : {}),
         },
       ],
+    });
+
+    const result = await postEntry(trx, {
+      orgId: actor.orgId,
+      entryDate: input.on,
+      sourceType: 'reimbursement_payout',
+      sourceId: input.employeeId,
+      idempotencyKey,
+      memo,
+      postedBy: actor.personId,
+      ...(periodOverride
+        ? { periodOverride: { actor, reason: periodOverride.reason, note: periodOverride.note ?? null } }
+        : {}),
+      lines,
     });
 
     const after = await expensesRepo.reimbursablePayableOf(trx, actor.orgId, input.employeeId, input.storeId);

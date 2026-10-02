@@ -226,6 +226,28 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     entryDate: '2026-01-20',
   },
 
+  // T-369 S8 (DEF-551). `storeRef` here means two distinct stores, exactly as commissary_dispatch.transfer uses it:
+  // 'branch1' is the OWING store (Lipa) and 'commissary' is the PAYING store (Malvar) — not a commissary relationship.
+  {
+    id: 'reimbursement.payout-cross-store',
+    sourceType: 'reimbursement_payout',
+    title: "Reimbursement payout from another store's safe — each store's own lines net to zero",
+    narrative: "The ₱650 owed to the staff member at Lipa is paid out of MALVAR's office safe. The safe's credit sits at " +
+      "the safe's store, so Malvar's safe is the one that falls; Lipa's liability is discharged with Malvar's money, " +
+      'so Lipa now owes Malvar and Malvar is owed by Lipa, in the same single entry.',
+    input: { staffId: 'STAFF-0128', amount: '650.00', method: 'cash', owingStoreCode: 'STORE-BRANCH1', payingStoreCode: 'STORE-COMMISSARY' },
+    expect: [
+      D('2130', '650.00', { type: 'employee', id: 'employee:STAFF-0128' }, { storeRef: 'branch1', lineMemo: 'reimbursement payout' }),
+      C('2150', '650.00', { type: 'store', id: 'STORE-COMMISSARY' }, { storeRef: 'branch1', lineMemo: 'due to commissary' }),
+      D('1250', '650.00', { type: 'store', id: 'STORE-BRANCH1' }, { storeRef: 'commissary', lineMemo: 'due from branch' }),
+      C('1130', '650.00', null, { storeRef: 'commissary', lineMemo: 'cash payout from the safe' }),
+    ],
+    entryDate: '2026-01-20',
+    trap: "the credit at the OWING store balances perfectly and is wrong: `balanceOf` reads a safe at the safe's own store, " +
+      "so the paying safe never moves and the owing store's cash goes negative (DEF-551). `expense_payment` and " +
+      '`ap_payment` have exactly the same shape when the money account belongs to another store.',
+  },
+
   // =========================================================================================
   // sale — 2,945 legs. v1's OWN builder (sale.builder.ts) posts ONLY the cash/online legs —
   // zero revenue, zero discount, zero comp lines, ever (confirmed by reading it directly,

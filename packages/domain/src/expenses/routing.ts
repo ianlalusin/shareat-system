@@ -90,6 +90,10 @@ export interface RoutingPayment {
   /** That account's GL code, resolved by the caller — this module is pure and cannot look it up.
    *  `1110`/`1120`/`1130` for cash by custodian, `1140` for every wallet and bank account. */
   moneyAccountGlCode?: string | null;
+  /** ⭐ T-369 S8 (DEF-551): that account's STORE. When given, the credit line is placed THERE (`balanceOf` reads
+   *  a safe at its own store), not at the expense's. Optional so a caller that never passes it keeps the old
+   *  line shape exactly. */
+  moneyAccountStoreId?: string | null;
 }
 
 export type RoutingLineSide = 'debit' | 'credit';
@@ -119,6 +123,9 @@ export interface RoutingLine {
   partyType?: 'supplier' | 'employee' | 'money_account' | 'owner' | 'cash_request';
   partyId?: string | null;
   lineMemo?: string | null;
+  /** T-369 S8: set ONLY on a cash/online credit whose account sits at another store; absent means "the
+   *  expense's own store". */
+  storeId?: string;
 }
 
 export type RoutingResult = { ok: true; lines: RoutingLine[] } | { ok: false; reason: string };
@@ -152,6 +159,7 @@ function fundingLine(
         amount: payment.amount,
         lineMemo: `${payment.method} payment #${index}`,
       };
+      if (payment.moneyAccountStoreId) line.storeId = payment.moneyAccountStoreId;
 
       // ⭐ TWO of these four accounts are CONTROL accounts and need a party; two ARE the location
       // and refuse one. T-266 §7.1 — the parallel is exact:

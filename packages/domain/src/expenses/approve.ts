@@ -17,6 +17,7 @@ import { apRepo, expensesRepo, moneyAccountsRepo, ownersRepo, transaction, type 
 import { money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
+import { withInterStoreLegs } from '../ledger/inter-store';
 import { routeExpense } from './routing';
 import { capitalizeApprovedExpense } from '../fixed-assets/capitalize';
 import { refuse, gone, internalFault } from '../shared/refusal';
@@ -115,7 +116,7 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
   // look one up, and the account is what decides both where the credit lands and who owned it
   // (DEF-058). A named account that does not exist blocks the posting rather than defaulting.
   const walletIds = [...new Set(payments.map((p) => p.moneyAccountId).filter(Boolean))] as string[];
-  const wallets = new Map<string, string>();
+  const wallets = new Map<string, { glCode: string; storeId: string }>();
   for (const id of walletIds) {
     const acct = await moneyAccountsRepo.getById(tx, actor.orgId, id);
     if (!acct) {
@@ -124,7 +125,7 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
         'A money account on this expense no longer exists. Edit the payment, then approve it.',
       );
     }
-    wallets.set(id, acct.glAccountCode);
+    wallets.set(id, { glCode: acct.glAccountCode, storeId: acct.storeId });
 
     // ⭐ FUNDING AN EXPENSE FROM ANOTHER STORE'S ACCOUNT IS CROSS-STORE MONEY MOVEMENT
     // (Ian, 2026-08-26; bible row 153) — *"cross store money movement will only be possible for
@@ -195,7 +196,9 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
       staffId: p.staffId,
       cashRequestId: p.cashRequestId,
       moneyAccountId: p.moneyAccountId,
-      moneyAccountGlCode: p.moneyAccountId ? wallets.get(p.moneyAccountId) : null,
+      moneyAccountGlCode: p.moneyAccountId ? wallets.get(p.moneyAccountId)?.glCode : null,
+      // T-369 S8 (DEF-551): the credit is posted at the ACCOUNT's store.
+      moneyAccountStoreId: p.moneyAccountId ? wallets.get(p.moneyAccountId)?.storeId : null,
     })),
   });
 
@@ -207,6 +210,22 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
       `This expense can't be posted yet: ${routed.reason}.`,
     );
   }
+
+  // T-369 S8 (DEF-551): every routed line sits at the expense's store EXCEPT a money-account credit, which sits at
+  // the account's store; a cross-store draw then gains the 1250/2150 pair for what that store paid (not the total).
+  const lines = await withInterStoreLegs(tx, actor.orgId, {
+    owingStoreId: expense.storeId,
+    memo: expense.particulars,
+    lines: routed.lines.map((l) => ({
+      accountCode: l.accountCode,
+      storeId: l.storeId ?? expense.storeId,
+      partyType: l.partyType ?? null,
+      partyId: l.partyId ?? null,
+      debit: l.side === 'debit' ? l.amount : '0',
+      credit: l.side === 'credit' ? l.amount : '0',
+      lineMemo: l.lineMemo ?? null,
+    })),
+  });
 
   const result = await postEntry(tx, {
     orgId: actor.orgId,
@@ -220,15 +239,7 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
     idempotencyKey: `expense:${expenseId}:post`,
     memo: expense.particulars,
     postedBy: actor.personId,
-    lines: routed.lines.map((l) => ({
-      accountCode: l.accountCode,
-      storeId: expense.storeId,
-      partyType: l.partyType ?? null,
-      partyId: l.partyId ?? null,
-      debit: l.side === 'debit' ? l.amount : '0',
-      credit: l.side === 'credit' ? l.amount : '0',
-      lineMemo: l.lineMemo ?? null,
-    })),
+    lines,
   });
 
   if (result.created) {

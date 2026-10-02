@@ -51,6 +51,7 @@ import { add, compare, formatMoney, money, subtract } from '@shareat/core/money'
 import { addDays, parseBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
+import { withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
@@ -1083,7 +1084,7 @@ export async function recordPayment(
     const unallocated = Math.max(0, amount - allocatedTotal);
     const allocated = allocatedTotal;
 
-    const lines = [
+    const paymentLines = [
       {
         accountCode: AP_CONTROL_CODE,
         storeId: input.storeId,
@@ -1120,7 +1121,8 @@ export async function recordPayment(
         ? [
             {
               accountCode: account.glAccountCode,
-              storeId: input.storeId,
+              // T-369 S8 (DEF-551): the cash credit sits at the ACCOUNT's store - `balanceOf` reads a safe there.
+              storeId: account.storeId,
               credit: cashPortion.toFixed(2),
               ...(account.glAccountCode === '1140'
                 ? { partyType: 'money_account' as const, partyId: account.id }
@@ -1130,6 +1132,14 @@ export async function recordPayment(
           ]
         : []),
     ];
+    // A cross-store draw gains the 1250/2150 pair for the cash that left that store's account (not the credit
+    // applied, which never touched it). `ap_payments.store_id` stays `input.storeId`: the payment belongs to the
+    // owing store's AP.
+    const lines = await withInterStoreLegs(trx, actor.orgId, {
+      owingStoreId: input.storeId,
+      memo: `Payment to ${supplier.name}`,
+      lines: paymentLines,
+    });
 
     const { id: paymentId } = await apRepo.insertApPayment(trx, {
       orgId: actor.orgId,

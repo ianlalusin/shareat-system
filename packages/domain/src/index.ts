@@ -8,6 +8,7 @@ export * from './shared/constraint-refusals';
 export * from './shared/money-lines';
 export * from './shared/refusal'; // T-343 S5.0
 export * from './ledger/post-entry';
+export * from './ledger/inter-store';
 export * from './ledger/reverse-entry';
 export * from './reports/trial-balance';
 export * from './reports/income-statement';

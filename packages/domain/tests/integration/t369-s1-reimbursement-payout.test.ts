@@ -372,6 +372,22 @@ describe("T3 (N1) — a Lipa manager cannot pay out of Malvar's safe", () => {
     const result = await asOrg(f.orgId, pay(f, f.admin, { storeId: f.lipaId, employeeId: f.anaId, amount: '650.00', from: f.malvarSafe.id }));
     expect(await payoutEntryCount(f.orgId, f.anaId)).toBe(1);
     expect(result.outstanding).toBe('0.00');
+    // T-369 S8 (DEF-551): this is the exact cross-store case; the credit belongs to the safe that PAID, at ITS store, and the
+    // two stores record what one owes the other. (Detail and mutants: t369-s8-cross-store-draw.test.ts T1.)
+    const net = async (code: string, storeId: string) =>
+      (await sql<{ n: string }[]>`
+        select coalesce(sum(jl.debit - jl.credit), 0)::numeric(14,2)::text as n
+        from journal_lines jl join journal_entries je on je.id = jl.entry_id join accounts a on a.id = jl.account_id
+        where je.org_id = ${f.orgId} and je.status <> 'draft' and a.code = ${code} and jl.store_id = ${storeId}`)[0]!.n;
+    const lines = await linesFor(result.entryId);
+    const credit = lines.find((l) => l.code === '1130');
+    expect(credit?.store_id, "the safe's credit sits at MALVAR (the safe's store), not at Lipa (DEF-551)").toBe(f.malvarId);
+    expect(await net('1130', f.malvarId), "Malvar's safe: 100,000 funded − 650").toBe('99350.00');
+    expect(await net('1110', f.lipaId), "Lipa's cash is untouched").toBe('100000.00');
+    expect(await net('1250', f.malvarId), 'Malvar is owed 650 by Lipa').toBe('650.00');
+    expect(await net('2150', f.lipaId), 'Lipa owes Malvar 650').toBe('-650.00');
+    const ties = await sql<{ net: string }[]>`select (sum(debit) - sum(credit))::numeric(14,2)::text as net from journal_lines where entry_id = ${result.entryId} group by store_id`;
+    for (const t of ties) expect(t.net, 'each store nets 0.00 within the entry').toBe('0.00');
   });
 
   it('same-store control: the manager paying from Lipa\'s own safe still posts (the new gate is only for another store\'s account)', async () => {

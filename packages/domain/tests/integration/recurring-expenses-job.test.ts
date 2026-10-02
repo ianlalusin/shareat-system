@@ -527,3 +527,23 @@ describe('the run records itself, and the payment it derives', () => {
     ).rejects.toThrow(/scheduler_runs_job_check/);
   });
 });
+
+// -----------------------------------------------------------------------------------------------
+// T-367 S3 (DEF-499) regression — a drafted recurring bill is DUE on its template's due date, not date + the supplier's terms
+// -----------------------------------------------------------------------------------------------
+
+describe('a recurring bill keeps the template due date, whatever the supplier\'s terms', () => {
+  it('supplier on 30-day terms, template due 2026-09-05: the drafted bill is invoiced AND due 2026-09-05 (not 2026-10-05, which is date + 30)', async () => {
+    const f = await fixture('s3due'); // the fixture's Landlord has credit_terms_days = 30
+    await dueTemplate(f);
+
+    const result = await run(f);
+
+    expect(result.hadFailures).toBe(false);
+    const rows = await sql<{ invoice_date: string; due_date: string | null }[]>`
+      select invoice_date::text, due_date::text from supplier_invoices where org_id = ${f.orgId}`;
+    expect(rows, 'control: the job drafted exactly one bill').toHaveLength(1);
+    expect(rows[0]!.invoice_date).toBe('2026-09-05');
+    expect(rows[0]!.due_date, "the supplier's 30-day terms overrode the template's due date (T-367 S3 regression)").toBe('2026-09-05');
+  });
+});
