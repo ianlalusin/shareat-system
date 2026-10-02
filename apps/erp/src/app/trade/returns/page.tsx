@@ -15,6 +15,8 @@ export const dynamic = 'force-dynamic';
 
 interface SearchParams {
   store?: string;
+  error?: string;
+  ok?: string;
 }
 
 export default async function CustomerReturnsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -122,6 +124,17 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
         (branch → commissary) return is not a credit at all — T-173 backwards, derived, never a
         choice.
       </PageDescription>
+
+      {sp.error && (
+        <div className="mt-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          {sp.error}
+        </div>
+      )}
+      {sp.ok && (
+        <div className="mt-4 rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+          {sp.ok}
+        </div>
+      )}
 
       <FilterRow className="mt-6">
         <label className="text-sm">
@@ -248,6 +261,7 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
                   {r.status === 'posted' && (
                     <form action={voidReturnAction} className="flex items-center gap-1">
                       <input type="hidden" name="returnId" value={r.id} />
+                      <input type="hidden" name="store" value={storeId} />
                       <input
                         name="reason"
                         placeholder="void reason"

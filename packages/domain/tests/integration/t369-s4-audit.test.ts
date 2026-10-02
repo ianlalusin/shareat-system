@@ -418,7 +418,7 @@ describe('AUDIT F — voidReturn with NO advance credit: a double submit says "a
     const b = await second;
     expect(a.ok, 'the first void must succeed').toBe(true);
     expect(b.r.ok, 'the second void succeeded too').toBe(false);
-    expect(String(b.r.reason), 'the loser did not get the "already void" answer').toMatch(/already void/i);
+    expect(String(b.r.reason), 'the loser did not get the "already void" answer').toMatch(/already been voided/i);
     const [m] = await sql<{ n: string }[]>`select count(*)::text as n from stock_movements where org_id = ${f.orgId} and source_type = 'supplier_return_void' and source_id = ${recorded.returnId}`;
     expect(Number(m!.n), 'the return was reversed twice').toBe(1);
   });

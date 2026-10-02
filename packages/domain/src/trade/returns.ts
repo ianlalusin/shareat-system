@@ -54,7 +54,7 @@ import type { ConsumedLine } from '../stock/layers';
 import { compareQuantity, isPositiveQuantity, quantity, subtractQuantity, type Quantity } from '../stock/quantity';
 import { recordCollection } from '../ar';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
-import { closedStockPeriodSentence } from '../stock/period-guard';
+import { closedStockPeriodSentence, closedStockPeriodSentenceToday } from '../stock/period-guard';
 
 export const RETURN_REVENUE_CODE = '4950';
 export const CUSTOMER_RETURN_UNSELLABLE_REASON = 'customer_return_unsellable' as const;
@@ -530,6 +530,10 @@ export async function voidCustomerReturn(
     if (!trimmed) return { ok: false, reason: 'say why this return is being voided.' };
 
     // T-369 S4: the void reverses stock and the entry at the return's own date; a closed month's stock stays as it was.
+    // The stock gives back at NOW too, so today's month has to take it (the trigger sees the UTC date).
+    const now = new Date(); // ONE instant: tested here, and stamped on every reversal and on the void below
+    const closedToday = await closedStockPeriodSentenceToday(trx, actor.orgId, now, 'voided');
+    if (closedToday) return { ok: false, reason: closedToday };
     const closedVoid = await closedStockPeriodSentence(trx, actor.orgId, ret.returnedOn, 'voided');
     if (closedVoid) return { ok: false, reason: closedVoid };
 
@@ -568,7 +572,7 @@ export async function voidCustomerReturn(
       if (outstanding.length > 0) {
         const reversed = await reverseConsumption(trx, {
           orgId: ret.orgId, storeId: m.storeId, locationId: m.locationId, itemId: m.itemId,
-          originalMovementId: m.id, quantity: absQty(original.quantity), movedAt: new Date(),
+          originalMovementId: m.id, quantity: absQty(original.quantity), movedAt: now,
           kind: original.kind as StockMovementKind,
           sourceType: 'customer_return_void', sourceId: returnId, createdBy: actor.personId,
         });
@@ -576,7 +580,7 @@ export async function voidCustomerReturn(
       } else {
         const consumedBack = await consume(trx, {
           orgId: ret.orgId, storeId: m.storeId, locationId: m.locationId, itemId: m.itemId,
-          quantity: absQty(original.quantity), movedAt: new Date(), kind: original.kind as StockMovementKind,
+          quantity: absQty(original.quantity), movedAt: now, kind: original.kind as StockMovementKind,
           sourceType: 'customer_return_void', sourceId: returnId, createdBy: actor.personId,
         });
         if (!consumedBack.ok) throw new Error(`voidCustomerReturn: ${consumedBack.reason}`);
@@ -604,7 +608,7 @@ export async function voidCustomerReturn(
       if (entry) await reverseEntry(trx, { entryId: entry.id, reason: trimmed, reversedBy: actor.personId });
     }
 
-    await customerReturnsRepo.markVoid(trx, returnId, actor.personId, trimmed, new Date());
+    await customerReturnsRepo.markVoid(trx, returnId, actor.personId, trimmed, now);
     return { ok: true };
   };
   if (tx) return run(tx);

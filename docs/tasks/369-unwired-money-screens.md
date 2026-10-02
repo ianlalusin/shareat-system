@@ -1,6 +1,6 @@
 # T-369: Unwired money screens — DEF-198, DEF-314, DEF-302, DEF-479, DEF-291
 
-**Status:** **S0, S1, S2, S3, S4, S5a, S6a, S7 DONE 2026-10-01/02 (c3c0458…5b8aeb7); S4 follow-up + S8 reds written; S8b, S9 specced (Ian ruled); S5b, S6b after T-367** — was: **Not started — Q1–Q4 answered 2026-09-30 (row 260; Q1 re-entry manager-only); S0 added 2026-10-01 for DEF-550** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q1–Q4 defaults ship). Review changes
+**Status:** **S0, S1, S2, S3, S4, S5a, S6a, S7 DONE 2026-10-01/02 (c3c0458…5b8aeb7); S4 follow-up DONE 2026-10-02 (void sentence, one `now` per void, DEF-560, refusals reach the returns pages); S8 reds written; S8b, S9 specced (Ian ruled); S5b, S6b after T-367** — was: **Not started — Q1–Q4 answered 2026-09-30 (row 260; Q1 re-entry manager-only); S0 added 2026-10-01 for DEF-550** — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q1–Q4 defaults ship). Review changes
 1–7 and both minors applied (marked ✎R). Written 2026-09-30 by the Opus planner at HEAD `594f600`. Batch D of
 the money-defect push (Ian, 2026-09-30: *"close all open money defects in v2"*), `docs/plans/money-defects-2026-09-30.md`.
 DEF-302 is included under Ian's ruling **(a)** of 2026-09-30.

@@ -837,7 +837,7 @@ describe('AUDIT (S4 queue) — a concurrent double-void of one supplier RETURN',
     expect(bWaited, 'B never waited: voidReturn takes no supplier-credit lock').toBe(true);
     const said = bResult.status === 'fulfilled' ? String((bResult.value as { reason?: string }).reason ?? '') : String(((bResult as { reason: Error }).reason).message);
     expect(succeeded(bResult), 'the second void must be refused').toBe(false);
-    expect(said).toMatch(/already void/);
+    expect(said).toMatch(/already been voided/i);
     expect(said, 'the second void was judged on a stale status').not.toMatch(/spent|partly or fully/);
     expect(await position(f)).toBe('0.00');
   });

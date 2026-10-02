@@ -29,6 +29,7 @@
 import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
 import { advisoryLocksRepo, apRepo, deliveriesRepo, moneyAccountsRepo, stockLayersRepo, supplierReturnsRepo, type Tx } from '@shareat/db';
 import { parseMoneyInput } from '../shared/money-input';
+import { refuse } from '../shared/refusal';
 import { authorize, type Actor } from '@shareat/auth';
 import { consume, reverseConsumption } from './consume';
 import { postEntry } from '../ledger/post-entry';
@@ -273,6 +274,9 @@ export interface VoidReturnOutcome {
   readonly reason?: string;
 }
 
+/** What the loser of a double void reads — no id (I7); said above the lock and again below it. */
+const ALREADY_VOIDED = 'This return has already been voided.';
+
 export async function voidReturn(
   tx: Tx,
   actor: Actor,
@@ -283,22 +287,25 @@ export async function voidReturn(
   if (!ret) return { ok: false, reason: `return ${returnId} does not exist` };
   await authorize(tx, actor, 'void_supplier_return', { storeId: ret.storeId });
 
-  if (ret.status === 'void') return { ok: false, reason: `return ${returnId} is already void` };
+  if (ret.status === 'void') return { ok: false, reason: ALREADY_VOIDED };
   if (!reason.trim()) return { ok: false, reason: 'a void needs a reason' };
 
   // T-369 S4a (DEF-528): the reversal posts at the return's own date AND moves stock at NOW, so both months
-  // have to take it. Said in words, before the first write.
-  const now = new Date(); // ONE instant: tested here, and stamped on every reversal below
-  const closedToday = await closedStockPeriodSentenceToday(tx, actor.orgId, now, 'voided');
-  if (closedToday) return { ok: false, reason: closedToday };
-  const closedReturnedOn = await closedStockPeriodSentence(tx, actor.orgId, ret.returnedOn, 'voided');
-  if (closedReturnedOn) return { ok: false, reason: closedReturnedOn };
+  // have to take it. Said in words, before the first write. (Both are tested below, once the lock is ours.)
 
   // Serialise on the supplier's credit, then read the status AGAIN with the lock ours: a double submit
   // queued behind the first void must be told "already void" whether or not this return carried credit.
   await advisoryLocksRepo.lockSupplierCredit(tx, ret.supplierId);
   const fresh = await supplierReturnsRepo.getReturn(tx, returnId);
-  if (!fresh || fresh.status === 'void') return { ok: false, reason: `return ${returnId} is already void` };
+  if (!fresh || fresh.status === 'void') return { ok: false, reason: ALREADY_VOIDED };
+
+  // ONE instant, taken only now the lock is ours: a void that queued behind another must not be stamped with
+  // the moment it started waiting. Tested here, and stamped on every reversal and on the void below.
+  const now = new Date();
+  const closedToday = await closedStockPeriodSentenceToday(tx, actor.orgId, now, 'voided');
+  if (closedToday) return { ok: false, reason: closedToday };
+  const closedReturnedOn = await closedStockPeriodSentence(tx, actor.orgId, ret.returnedOn, 'voided');
+  if (closedReturnedOn) return { ok: false, reason: closedReturnedOn };
 
   const lines = await supplierReturnsRepo.getReturnLines(tx, returnId);
 
@@ -337,7 +344,10 @@ export async function voidReturn(
       sourceId: returnId,
       createdBy: actor.personId,
     });
-    if (!result.ok) return result;
+    // DEF-560: THROWN, not returned. By now earlier lines have already written their reversal movements in this
+    // transaction, and a returned `{ok:false}` would let the caller commit them with the return still active.
+    // The throw rolls the whole void back; the person reads the same sentence.
+    if (!result.ok) throw refuse(`voidReturn: ${result.reason}`, result.reason);
   }
 
   await reverseEntry(tx, { entryId: ret.journalEntryId, reason: reason.trim(), reversedBy: actor.personId });

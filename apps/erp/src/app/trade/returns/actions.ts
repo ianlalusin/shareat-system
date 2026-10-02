@@ -7,14 +7,20 @@
  * session, never the form (T-138) — authorization itself is `recordCustomerReturn`/
  * `voidCustomerReturn`'s own first statement, not repeated here.
  */
+import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { applyCredit, recordCustomerReturn, voidCustomerReturn } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
+}
+
+function back(params: Record<string, string>): never {
+  redirect(`/trade/returns?${new URLSearchParams(params).toString()}`);
 }
 
 export async function recordReturnAction(fd: FormData): Promise<void> {
@@ -48,10 +54,21 @@ export async function voidReturnAction(fd: FormData): Promise<void> {
   const returnId = str(fd, 'returnId');
   const reason = str(fd, 'reason');
 
-  const result = await withOrgPrincipal(actor.orgId, (tx) => voidCustomerReturn(tx, actor, returnId, reason));
-  if (!result.ok) throw new Error(result.reason ?? 'void refused');
+  // The refusal reaches the person as a banner, never a thrown error (a production build shows a thrown
+  // server-action error as a digest): `{ok:false}` and a thrown RefusalError both end up in `?error=`.
+  const store = str(fd, 'store');
+  const keep: Record<string, string> = store ? { store } : {};
+  let result: Awaited<ReturnType<typeof voidCustomerReturn>>;
+  try {
+    result = await withOrgPrincipal(actor.orgId, (tx) => voidCustomerReturn(tx, actor, returnId, reason));
+  } catch (err) {
+    back({ ...keep, error: errorMessage(err) });
+  }
+  // The same redaction as the thrown path (an id inside a reason never reaches the page).
+  if (!result!.ok) back({ ...keep, error: errorMessage(new Error(result!.reason ?? 'The return could not be voided.')) });
 
   revalidatePath('/trade/returns');
+  back({ ...keep, ok: 'Return voided. The stock and the posting it made are reversed.' });
 }
 
 export async function applyCreditAction(fd: FormData): Promise<void> {

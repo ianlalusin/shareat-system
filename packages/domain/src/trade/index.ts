@@ -80,7 +80,7 @@ async function authorizeEither(
   throw firstRefusal ?? new AuthorizationError('authorizeEither: nothing to try', attempts[0]!.capability);
 }
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
-import { closedStockPeriodSentence } from '../stock/period-guard';
+import { closedStockPeriodSentence, closedStockPeriodSentenceToday } from '../stock/period-guard';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { refuse } from '../shared/refusal';
 import type { StockMovementKind } from '@shareat/db/schema';
@@ -645,6 +645,7 @@ async function reverseDispatchStock(
   actor: Actor,
   order: { id: string },
   reason: string,
+  now: Date,
 ): Promise<void> {
   const movements = await stockLedgerRepo.movementsBySource(tx, 'trade_order_dispatch', order.id);
   const cogsAccounts = new Set<string>();
@@ -655,7 +656,7 @@ async function reverseDispatchStock(
 
     const reversed = await reverseConsumption(tx, {
       orgId: actor.orgId, storeId: m.storeId, locationId: m.locationId, itemId: m.itemId,
-      originalMovementId: m.id, quantity: absQuantity(original.quantity), movedAt: new Date(),
+      originalMovementId: m.id, quantity: absQuantity(original.quantity), movedAt: now,
       kind: original.kind as StockMovementKind,
       sourceType: 'trade_order_dispatch_void', sourceId: order.id, createdBy: actor.personId,
     });
@@ -713,7 +714,11 @@ export async function voidTradeOrder(
 
     // T-369 S4: voiding a DISPATCHED order gives the goods back, dated by the order; a closed month's stock
     // stays as it was - said in words, before the first write. (A draft or confirmed order moved no stock.)
+    // The reversal moves stock at NOW, so today's month has to take it too (the trigger sees the UTC date).
+    const now = new Date(); // ONE instant: tested here, and stamped on every reversal below
     if (order.status === 'dispatched' || order.status === 'received') {
+      const closedToday = await closedStockPeriodSentenceToday(trx, actor.orgId, now, 'voided');
+      if (closedToday) throw refuse(`voidTradeOrder: ${closedToday}`, closedToday);
       const closedVoid = await closedStockPeriodSentence(trx, actor.orgId, order.orderDate, 'voided');
       if (closedVoid) throw refuse(`voidTradeOrder: ${closedVoid}`, closedVoid);
     }
@@ -740,7 +745,7 @@ export async function voidTradeOrder(
 
         // ⭐ T-165/DEF-125. `voidCharge` only unwinds the revenue/AR leg — give the goods and the
         // COGS entry back too, or a voided sale permanently loses the stock it never delivered.
-        await reverseDispatchStock(trx, actor, order, reason);
+        await reverseDispatchStock(trx, actor, order, reason, now);
       } else {
         // ⭐ T-165. The internal dispatch's `1340`/inventory entry, reversed directly — ⚠️
         // reverseEntry, never a delete: the ledger keeps both halves, and the reciprocal pair
@@ -754,7 +759,7 @@ export async function voidTradeOrder(
           reversedBy: actor.personId,
         });
         reversedEntryId = reversal.reversalEntryId;
-        await reverseDispatchStock(trx, actor, order, reason);
+        await reverseDispatchStock(trx, actor, order, reason, now);
       }
     }
 
