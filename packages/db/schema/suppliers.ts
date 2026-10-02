@@ -174,6 +174,13 @@ export const suppliers = pgTable(
 
     check('suppliers_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
     check('suppliers_status_check', sql`${t.status} in ('active','inactive')`),
+    /** T-367 S3 (DEF-500): NULL = cash on delivery, else 0..365 days. In the database since migration 0141; declared
+     *  here so the schema and the database agree (a regenerated schema would otherwise drop it). The name is
+     *  byte-equal to the migration's. */
+    check(
+      'suppliers_credit_terms_days_check',
+      sql`${t.creditTermsDays} is null or (${t.creditTermsDays} >= 0 and ${t.creditTermsDays} <= 365)`,
+    ),
     check(
       'suppliers_vat_status_check',
       sql`${t.vatStatus} is null or ${t.vatStatus} in ('vat_registered','non_vat')`,

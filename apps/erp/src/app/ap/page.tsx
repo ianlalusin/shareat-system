@@ -162,7 +162,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               <Field label="Invoice date">
                 <input type="date" name="invoiceDate" required defaultValue={today()} className={INPUT} />
               </Field>
-              <Field label="Due date" hint="Optional.">
+              <Field label="Due date" hint="Leave blank to use the supplier's terms.">
                 <input type="date" name="dueDate" className={INPUT} />
               </Field>
             </div>

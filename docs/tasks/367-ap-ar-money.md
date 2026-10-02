@@ -1,6 +1,6 @@
 # T-367: AP/AR money — DEF-201, DEF-396, DEF-420, DEF-499, DEF-500, DEF-395, DEF-508, DEF-054
 
-**Status:** **S4 DONE 2026-10-02 (pin tests only, DEF-395 overdraftLimit leg); S3 BUILT 2026-10-02 on `wip/2026-10-03`, NOT audited, 2 test conflicts for the tester (see HANDOFF); S2 DONE 2026-10-01 (DEF-396, 508, 518, 519; migration 0176; ⛔ prod P2-P4 with Ian before the push; DEF-550 = no void-payment screen); S1 DONE 2026-10-01 (DEF-201, 517, 520 + DEF-546; migration 0173 — ⛔ prod duplicate count with Ian before the push, docs/ops)** — ⭐ allocation 2026-10-01 (orchestrator): T-367 S1 = 0173, T-368 S0 = 0174, T-372 S2 = 0175; supersedes the order on line 11 — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
+**Status:** **S3 DONE 2026-10-02 (DEF-420, 499, 500; audited twice; smoke on 9008); S4 DONE 2026-10-02 (pin tests only, DEF-395 overdraftLimit leg); S2 DONE 2026-10-01 (DEF-396, 508, 518, 519; migration 0176; ⛔ prod P2-P4 with Ian before the push; DEF-550 = no void-payment screen); S1 DONE 2026-10-01 (DEF-201, 517, 520 + DEF-546; migration 0173 — ⛔ prod duplicate count with Ian before the push, docs/ops)** — ⭐ allocation 2026-10-01 (orchestrator): T-367 S1 = 0173, T-368 S0 = 0174, T-372 S2 = 0175; supersedes the order on line 11 — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
 1–7 and the minors applied. Spec by the Opus planner, 2026-09-30. Batch B of the money-defect
 push (Ian, 2026-09-30: *"close all open money defects in v2"*), `docs/plans/money-defects-2026-09-30.md`.
 **Model:** Sonnet for each slice, tester first and then builder. One lane runs the slices in order.
@@ -453,6 +453,15 @@ PARSED values (`toFixed`-free strings from `Money`).
 
 **Smoke:** record a bill on 2027-02-03 for a supplier with 30-day terms, due date blank → the list shows due 2027-03-05;
 type `abc` as the total → the plain sentence. Screenshots.
+
+### S3 review record (orchestrator, 2026-10-02)
+- **Ruling (builder question):** root fix, not a wrapper — `validateInvoiceLines` compares in integer centavos (line = qty × price, half-up once, BigInt; invoice = Σ lines exactly). `assertLinesMatchGoods` deleted. The form computes its line total with the same exported `lineTotalFromParts` (audit HIGH: 1 × ₱1.2550 was 1.25 in the form, 1.26 in the domain).
+- **Ruling (fees):** a fee is ≥ 0, blank = 0; `abc` / `-50` refused with a plain sentence.
+- **Dismissed (auditor LOW 6 — per-line exactness refuses a supplier line that rounds differently):** the unit price takes 4 dp, so a manager can always enter a price that reproduces the supplier's line; the invoice total stays exact. Not escalated to Ian.
+- **Dismissed (re-audit LOW 2 — the "Leave blank to use the supplier's terms" hint for a COD supplier):** for COD the supplier's terms are "no due date", so the hint is true.
+- **Accepted:** `lineTotalFromParts` never throws (it runs before `authorize`; T-364 order), pinned by tests.
+- **Red evidence:** the builder's items change landed before the new cases ran; the old behaviour was measured by the auditor (`-50` accepted, `abc` bare Error, the 1.2550 disagreement).
+- **Smoke (9008, prod build, `shareat_test_t368_smoke`):** due 2027-03-05 from 30-day terms; `abc` total → the parser sentence, no digest; 1 × ₱1.2550 saves as ₱1.26; a mismatch → the plain sentence. Fee `-50` has no screen field (DEF-569). Cosmetic: DEF-568.
 
 ---
 

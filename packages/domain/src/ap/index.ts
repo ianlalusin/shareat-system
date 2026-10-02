@@ -48,7 +48,7 @@ import type {
 } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { add, compare, formatMoney, money, subtract } from '@shareat/core/money';
-import { parseBusinessDate } from '@shareat/core/datetime';
+import { addDays, parseBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -429,8 +429,53 @@ export async function recordInvoice(
       );
     }
 
-    const amount = Number(input.totalAmount);
-    if (amount <= 0) throw refuse('recordInvoice: an invoice total has to be greater than zero.', 'An invoice total has to be greater than zero.');
+    // T-367 S3 (DEF-420, R8): every money input is parsed ONCE, here, and the row is written from the PARSED
+    // values - a typed `abc` or `NaN` used to reach the database (22P02 / 23514) and a non-numeric fee became NaN.
+    const total = parseMoneyInput(input.totalAmount, 'recordInvoice: the invoice total', 'The invoice total');
+    if (compare(total, money('0')) <= 0) throw refuse('recordInvoice: an invoice total has to be greater than zero.', 'An invoice total has to be greater than zero.');
+    // A fee is blank (= 0) or a non-negative amount: `abc` is the parser's sentence, `-50` is refused here.
+    const feeOf = (raw: string | null | undefined, rawLabel: string, humanLabel: string) => {
+      if (raw == null || raw.trim() === '') return money('0');
+      const fee = parseMoneyInput(raw, rawLabel, humanLabel);
+      if (compare(fee, money('0')) < 0) throw refuse(`${rawLabel} is negative.`, `${humanLabel} can't be less than zero.`);
+      return fee;
+    };
+    const deliveryFee = feeOf(input.deliveryFee, 'recordInvoice: the delivery fee', 'The delivery fee');
+    const otherFees = feeOf(input.otherFees, 'recordInvoice: the other fees', 'The other fees');
+    // T-151: the fees are part of the invoice total but are NOT lines, so the lines are checked against the goods.
+    // Two fees can together leave the `numeric(14,2)` range, which `subtract` reports as a RangeError - a refusal here.
+    const feesTooBig = () =>
+      refuse('recordInvoice: the delivery and other fees exceed the invoice total.', "The delivery and other fees can't be more than the invoice total.");
+    let goodsTotal: ReturnType<typeof money>;
+    try {
+      goodsTotal = subtract(subtract(total, deliveryFee), otherFees);
+    } catch {
+      throw feesTooBig();
+    }
+    if (compare(goodsTotal, money('0')) < 0) throw feesTooBig();
+
+    // T-367 S3 (DEF-499, R9): the due date. A malformed date is a sentence, not a raw throw (DEF-566: a raw throw
+    // is a digest page in production). A blank due date takes the supplier's terms, COPIED at recording time (never
+    // read through - changing the terms later must not rewrite an existing bill); cash on delivery (null terms)
+    // stays null and T-330's ordering falls back to the invoice date.
+    let invoiceDate: BusinessDate;
+    try {
+      invoiceDate = parseBusinessDate(input.invoiceDate.trim());
+    } catch {
+      throw refuse('recordInvoice: the invoice date is not a real date.', "The invoice date isn't a real date.");
+    }
+    const dueRaw = input.dueDate?.trim() || null;
+    let dueDate: BusinessDate | null = null;
+    if (dueRaw) {
+      try {
+        dueDate = parseBusinessDate(dueRaw);
+      } catch {
+        throw refuse('recordInvoice: the due date is not a real date.', "The due date isn't a real date.");
+      }
+      if (dueDate < invoiceDate) throw refuse('recordInvoice: the due date is before the invoice date.', "A due date can't be before the invoice date.");
+    } else if (supplier.creditTermsDays != null) {
+      dueDate = addDays(invoiceDate, supplier.creditTermsDays);
+    }
 
     let duplicateWarning: string | undefined;
     const invoiceNo = input.invoiceNo?.trim() || null;
@@ -452,11 +497,11 @@ export async function recordInvoice(
       storeId: input.storeId,
       supplierId: input.supplierId,
       invoiceNo,
-      invoiceDate: input.invoiceDate,
-      dueDate: input.dueDate ?? null,
-      totalAmount: input.totalAmount,
-      deliveryFee: input.deliveryFee ?? '0',
-      otherFees: input.otherFees ?? '0',
+      invoiceDate,
+      dueDate,
+      totalAmount: String(total),
+      deliveryFee: String(deliveryFee),
+      otherFees: String(otherFees),
       notes: input.notes?.trim() || null,
       receiptFileId: input.receiptFileId ?? null,
       vatType: input.vatType ?? null,
@@ -478,12 +523,9 @@ export async function recordInvoice(
     // ⭐ Lines are validated against THIS invoice's own total, then written in the same
     // transaction — an invoice can never exist with lines that do not add up to it.
     // T-151: the fees are part of the invoice total but are NOT lines, so the lines are checked
-    // against the goods portion. Ian, 2026-08-28: inbound freight is added to the item's price,
+    // against the goods portion (`goodsTotal`, above). Ian, 2026-08-28: inbound freight is added to the item's price,
     // which happens in the landed-cost derivation, not by inventing a line for it here.
-    const goodsTotal = (
-      Number(input.totalAmount) - Number(input.deliveryFee ?? 0) - Number(input.otherFees ?? 0)
-    ).toFixed(2);
-    const lines = await validateInvoiceLines(trx, actor.orgId, input.lines ?? [], goodsTotal, input.storeId);
+    const lines = await validateInvoiceLines(trx, actor.orgId, input.lines ?? [], String(goodsTotal), input.storeId);
     if (lines.length > 0) await itemsRepo.insertInvoiceLines(trx, created.id, lines);
 
     return { id: created.id, ...(duplicateWarning ? { duplicateWarning } : {}) };
@@ -547,10 +589,12 @@ export async function setInvoiceLines(
         `This invoice is ${invoice.status}. Lines can only be changed while it is still pending — after verification they are what somebody attested to.`,
       );
     }
-    const goodsTotal = (
-      Number(invoice.totalAmount) - Number(invoice.deliveryFee ?? 0) - Number(invoice.otherFees ?? 0)
-    ).toFixed(2);
-    const validated = await validateInvoiceLines(trx, actor.orgId, lines, goodsTotal, invoice.storeId);
+    // T-367 S3 (R8): the goods total in `Money`, never `Number` - the same figure `recordInvoice` checked its lines against.
+    const goodsTotal = subtract(
+      subtract(money(invoice.totalAmount), money(invoice.deliveryFee ?? '0')),
+      money(invoice.otherFees ?? '0'),
+    );
+    const validated = await validateInvoiceLines(trx, actor.orgId, lines, String(goodsTotal), invoice.storeId);
     await itemsRepo.deleteInvoiceLines(trx, invoiceId);
     if (validated.length > 0) await itemsRepo.insertInvoiceLines(trx, invoiceId, validated);
     return { count: validated.length };

@@ -17,6 +17,7 @@ import {
   setInvoiceLines,
   uploadFile,
   type InvoiceLineDraft,
+  lineTotalFromParts,
   type UnrecognisedTermsMode,
   verifyInvoice,
   voidInvoice,
@@ -223,7 +224,7 @@ export async function setInvoiceLinesAction(formData: FormData): Promise<void> {
         unitPrice,
         // ⚠️ Computed, never typed. quantity x unit price IS the line total by definition, and a
         // third typed number is a third thing that can disagree with the other two.
-        lineTotal: (Number(quantity) * Number(unitPrice)).toFixed(2),
+        lineTotal: lineTotalFromParts(quantity, unitPrice),
       });
     }
     await withOrgPrincipal(actor.orgId, (tx) => setInvoiceLines(tx, actor, invoiceId, lines));

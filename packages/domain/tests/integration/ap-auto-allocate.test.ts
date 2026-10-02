@@ -141,7 +141,7 @@ async function verifiedInvoice(f: Fixture, totalAmount: string, over: Record<str
     recordInvoice(tx, f.logger, {
       storeId: f.storeId,
       supplierId: f.supplierId,
-      invoiceDate: '2026-01-10',
+      invoiceDate: '2026-01-01',
       totalAmount,
       receiptFileId: fileId,
       ...over,
@@ -281,7 +281,14 @@ describe('T-330 — suggestPaymentAllocation', () => {
     // being the most overdue thing outstanding — this is the case that reversed the ruling.
     // dueDate: null is passed through RAW here — the fallback to invoice_date happens inside
     // suggestPaymentAllocation / the pure module, not in this fixture or the keys lookup.
+    // The fixture supplier has 30-day terms, which would now FILL a blank due date (DEF-499) and skip the null leg.
+    // A cash-on-delivery supplier (no terms) keeps due_date really null, so the invoice-date fallback is what runs.
+    await sql`update suppliers set credit_terms_days = null where id = ${f.supplierId}`;
     const invJan = await verifiedInvoice(f, '50000.00', { invoiceDate: '2026-01-15', dueDate: null, invoiceNo: 'JAN-1' });
+    const [janRow] = await sql<{ due_date: string | null }[]>`select due_date::text from supplier_invoices where id = ${invJan}`;
+    expect(janRow!.due_date, 'the undated bill must really have a null due_date').toBeNull();
+    // Credit expenses need terms (T-361 / DEF-492), so the supplier gets its terms back AFTER the bill is on file.
+    await sql`update suppliers set credit_terms_days = 30 where id = ${f.supplierId}`;
     const invSep = await verifiedInvoice(f, '10000.00', { invoiceDate: '2026-01-20', dueDate: '2026-09-25', invoiceNo: 'SEP-1' });
     const jan = await creditExpense(f, invJan, '50000.00', 'Undated — must fall back to invoice_date and go FIRST');
     await creditExpense(f, invSep, '10000.00', 'Due 09-25 — must go SECOND despite having a real due date');

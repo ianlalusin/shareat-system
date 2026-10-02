@@ -21,8 +21,10 @@ import {
 import type { BaseUnit, ItemKind, PurchaseUnit } from '@shareat/db/schema';
 import { computeBranchPrice, type BranchPrice } from './branch-price';
 import { authorize, type Actor } from '@shareat/auth';
-import { assertFiguresReconcile } from '../shared/reconcile';
+import { toCentavos } from '@shareat/core/money';
+import { parseMoneyInput } from '../shared/money-input';
 import { parseQuantityInput } from '../shared/quantity-input';
+import { toThousandths, type Quantity } from '../stock/quantity';
 import { parseFourDecimalCost } from '../commissary/catalogue';
 import { refuse } from '../shared/refusal';
 
@@ -127,8 +129,52 @@ export interface InvoiceLineDraft {
   lineTotal: string;
 }
 
-/** ₱0.01 — a line's own arithmetic, and the sum against the header. Decimal noise only. */
-const LINE_EPSILON = 0.01;
+/**
+ * T-367 S3 (DEF-420) — `quantity × unit price`, in whole centavos, rounded HALF-UP once. Both inputs are
+ * exact decimal strings (quantity ≤ 3 dp from `parseQuantityInput`, price ≤ 4 dp from
+ * `parseFourDecimalCost`), so the product is an integer in 10⁻⁷ peso and the only rounding is the final
+ * ÷10⁵ — no float anywhere (bible §2.5). Half-up is on the absolute value (away from zero), the same
+ * convention as `multiply` in `@shareat/core/money`.
+ */
+function lineCentavos(quantity: string, unitPrice: string): bigint {
+  const [whole = '', frac = ''] = unitPrice.split('.');
+  const tenThousandths = BigInt(whole || '0') * 10000n + BigInt(frac.padEnd(4, '0'));
+  const product = toThousandths(quantity as Quantity) * tenThousandths;
+  const abs = product < 0n ? -product : product;
+  const rounded = (abs + 50000n) / 100000n;
+  return product < 0n ? -rounded : rounded;
+}
+
+/** ₱ text for a centavo count that may sit outside `numeric(14,2)` — a mismatch sentence must still be
+ *  readable then, which `fromCentavos` (it throws past the column's range) would not allow. */
+function pesos(centavos: bigint): string {
+  const abs = centavos < 0n ? -centavos : centavos;
+  return `${centavos < 0n ? '-' : ''}${abs / 100n}.${(abs % 100n).toString().padStart(2, '0')}`;
+}
+
+/**
+ * ⭐ T-367 S3 (DEF-420) — a line's total from its parts, as the `Money` string `validateInvoiceLines` demands:
+ * the SAME half-up centavo rounding it compares against, so a form that computes the total for the person
+ * (`setInvoiceLinesAction`) can never hand the domain a figure the domain then disagrees with. ⛔ There is
+ * no second rounding anywhere — a float `(q * p).toFixed(2)` gave 1.25 for 1 × 1.2550 where this gives 1.26.
+ *
+ * Total on purpose: parts that do not parse return `''`, and a product past `numeric(14,2)` is returned as the
+ * digits it is. The caller runs BEFORE `authorize` and the item checks, so a refusal here would reorder them
+ * (T-364's authorize-first rule); `validateInvoiceLines` parses the same parts first and says what is wrong
+ * with its own written sentence, and refuses an out-of-range total with the parser's "too large".
+ */
+export function lineTotalFromParts(quantity: string, unitPrice: string): string {
+  let centavos: bigint;
+  try {
+    centavos = lineCentavos(
+      parseQuantityInput(quantity, 'lineTotalFromParts: quantity', 'The quantity'),
+      parseFourDecimalCost(unitPrice, 'lineTotalFromParts: unit price', 'The unit price'),
+    );
+  } catch {
+    return '';
+  }
+  return pesos(centavos);
+}
 
 /**
  * ⭐ Validates a set of lines against the invoice they belong to, and returns them numbered.
@@ -142,9 +188,14 @@ const LINE_EPSILON = 0.01;
  *    `pack→pack` and 1 with `box→box` at a factor ≠ 1**, which is meaningless: a conversion
  *    between identical units is either 1 or a data error. Industry guidance says flag impossible
  *    conversions; this refuses them instead.
- * 3. **Lines, when present, sum to the header** within ₱0.01. Lines are OPTIONAL — a utility bill
- *    has none — but a partial set that silently disagreed with the total would be worse than
+ * 3. **Lines, when present, sum to the header** to the centavo, exactly. Lines are OPTIONAL — a
+ *    utility bill has none — but a partial set that silently disagreed with the total would be worse than
  *    none, because it looks like detail.
+ *
+ * ⭐ T-367 S3 (DEF-420): rules 1 and 3 compare integer CENTAVOS, never floats and never a tolerance. A
+ * line is `quantity × unit price` rounded half-up to the centavo once and must EQUAL its stated total;
+ * the stated totals are summed in centavos and must EQUAL the invoice total. Before this a ₱0.01 epsilon
+ * on `Number`s let a set that was a whole centavo off (900.01 against 900.00) through.
  */
 export async function validateInvoiceLines(
   trx: Tx,
@@ -157,7 +208,12 @@ export async function validateInvoiceLines(
 ): Promise<InvoiceLineInput[]> {
   if (lines.length === 0) return [];
 
-  let sum = 0;
+  // T-367 S3 (DEF-420): the invoice total is parsed FIRST, so a bad one is the parser's sentence and the exact
+  // centavo comparison at the end can never see a non-number.
+  const invoiceCentavos = toCentavos(
+    parseMoneyInput(invoiceTotal, 'validateInvoiceLines: the invoice total', 'The invoice total'),
+  );
+  let sumCentavos = 0n;
   const out: InvoiceLineInput[] = [];
 
   for (const [i, l] of lines.entries()) {
@@ -181,11 +237,13 @@ export async function validateInvoiceLines(
 
     // S5.5w item 3 — routes the quantity through the shared parser first, so a comma/malformed
     // string names itself instead of failing the plain `!(qty > 0)` guard below as a bare NaN.
-    const qty = Number(
-      parseQuantityInput(l.quantity, `validateInvoiceLines: line ${i + 1}'s quantity`, `Line ${i + 1}'s quantity`),
+    const quantityText = parseQuantityInput(
+      l.quantity,
+      `validateInvoiceLines: line ${i + 1}'s quantity`,
+      `Line ${i + 1}'s quantity`,
     );
+    const qty = Number(quantityText);
     const price = Number(l.unitPrice);
-    const total = Number(l.lineTotal);
     const factor = Number(l.conversionFactor);
 
     if (!(qty > 0)) throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) needs a quantity above zero.`);
@@ -248,30 +306,34 @@ export async function validateInvoiceLines(
       `validateInvoiceLines: line ${i + 1} (${item.name})'s unit price`,
       `Line ${i + 1} (${item.name})'s unit price`,
     );
-    if (!Number.isFinite(total)) {
-      throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) — the line total "${l.lineTotal}" is not a number.`);
-    }
-    // T-340 — delegates the finiteness-then-tolerance check to the shared guard (trade's own
-    // :329-337 pattern): re-throw a finiteness refusal unchanged (Invariant 6 — never flattened
-    // into the mismatch sentence below), otherwise keep this call site's own figure-quoting
-    // message, byte-identical to before this task. `price`/`total` already passed the checks
-    // above, so only the COMPUTED `qty * price` can still be non-finite here (an overflow, e.g.
-    // `1e300 × 1e10`), which is why this delegate call still needs its own finiteness branch.
-    try {
-      assertFiguresReconcile(`validateInvoiceLines: line ${i + 1} (${item.name})`, total, qty * price, LINE_EPSILON);
-    } catch (err) {
-      if (!Number.isFinite(total) || !Number.isFinite(qty * price)) throw err;
-      throw new Error(
-        `validateInvoiceLines: line ${i + 1} (${item.name}) does not add up — ${l.quantity} × ` +
-          `₱${l.unitPrice} is ₱${(qty * price).toFixed(2)}, not ₱${l.lineTotal}.`,
+    // T-367 S3 (DEF-420): the stated line total is parsed as money, exactly. Not a plain decimal at all keeps
+    // the sentence it always had (now a written refusal, not a bare Error); a decimal the column cannot hold
+    // (3 places, too large) gets the parser's own.
+    if (!/^-?(\d+(\.\d*)?|\.\d+)$/.test(l.lineTotal.trim())) {
+      throw refuse(
+        `validateInvoiceLines: line ${i + 1} (${item.name}) — the line total "${l.lineTotal}" is not a number.`,
+        `Line ${i + 1} (${item.name}) — the line total "${l.lineTotal}" is not a number.`,
       );
     }
-    sum += total;
+    const lineTotal = parseMoneyInput(l.lineTotal, `validateInvoiceLines: line ${i + 1}'s total`, `Line ${i + 1}'s total`);
+    // The arithmetic itself, exactly, in centavos.
+    const totalCentavos = toCentavos(lineTotal);
+    const computedCentavos = lineCentavos(quantityText, unitPrice);
+    if (totalCentavos !== computedCentavos) {
+      throw refuse(
+        `validateInvoiceLines: line ${i + 1} (${item.name}) does not add up — ${l.quantity} × ` +
+          `₱${l.unitPrice} is ₱${pesos(computedCentavos)}, not ₱${l.lineTotal}.`,
+        `Line ${i + 1} (${item.name}) does not add up — ${l.quantity} × ` +
+          `₱${l.unitPrice} is ₱${pesos(computedCentavos)}, not ₱${l.lineTotal}.`,
+      );
+    }
+    sumCentavos += totalCentavos;
     out.push({
       lineNo: i + 1,
       itemId: l.itemId,
       description: l.description?.trim() || null,
-      quantity: l.quantity,
+      // T-367 S3 — the NORMALISED figures (the parsed quantity text, the `Money` string), not the box text.
+      quantity: quantityText,
       purchaseUnit: l.purchaseUnit,
       // S5.5w Amendment A1 item 3 — store the TRIMMED factor, not the raw box text (`' 2 '` saves
       // `2.000000`, not a value with stray whitespace reaching the column).
@@ -279,20 +341,18 @@ export async function validateInvoiceLines(
       // T-351 / DEF-480 — the PARSED, trimmed string (`parseFourDecimalCost`'s return), not the raw
       // box text: `quantity × price` downstream (`ap/actions.ts`) then uses the exact string stored.
       unitPrice,
-      lineTotal: l.lineTotal,
+      lineTotal,
     });
   }
 
-  // T-340 — same delegate-and-re-throw shape as the line check above; label pinned per Amendment
-  // R1 so a re-thrown finiteness refusal reads as the invoice total, not a specific line.
-  try {
-    assertFiguresReconcile('validateInvoiceLines: the invoice total', Number(invoiceTotal), sum, LINE_EPSILON);
-  } catch (err) {
-    if (!Number.isFinite(Number(invoiceTotal)) || !Number.isFinite(sum)) throw err;
-    throw new Error(
-      `validateInvoiceLines: the lines total ₱${sum.toFixed(2)}, but the invoice says ` +
+  // T-367 S3 (DEF-420) — exact, in centavos: no epsilon, no float.
+  if (sumCentavos !== invoiceCentavos) {
+    throw refuse(
+      `validateInvoiceLines: the lines total ₱${pesos(sumCentavos)}, but the invoice says ` +
         `₱${invoiceTotal}. Either the lines are incomplete or the total is wrong — both are worth ` +
         'fixing before this becomes a price everyone trusts.',
+      `The lines total ₱${pesos(sumCentavos)}, but the invoice says ₱${invoiceTotal}. Either the lines are incomplete or ` +
+        'the total is wrong — both are worth fixing before this becomes a price everyone trusts.',
     );
   }
 
