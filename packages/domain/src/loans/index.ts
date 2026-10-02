@@ -17,6 +17,7 @@ import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { refuse } from '../shared/refusal';
 import { postEntry } from '../ledger/post-entry';
+import { withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { accruedInterest, splitPayment, type PaymentSplit } from './interest';
 
@@ -116,6 +117,11 @@ export async function disburseLoan(
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
     if (!account) throw new Error('disburseLoan: that money account does not exist in this org.');
+    // T-369 S8b (DEF-556): drawing a loan INTO another store's account moves money there - the owing store's
+    // document needs the right to move money at that store too.
+    if (account.storeId !== loan.storeId) {
+      await authorize(trx, actor, 'transfer_funds', { storeId: account.storeId });
+    }
 
     const position = await loansRepo.positionOf(trx, actor.orgId, loan.id);
     // ⛔ A draw beyond the agreement is not a bigger loan — it is a second agreement, and it needs
@@ -128,16 +134,14 @@ export async function disburseLoan(
       );
     }
 
-    const result = await postEntry(trx, {
-      orgId: actor.orgId,
-      entryDate: input.on,
-      sourceType: 'loan_disbursement',
-      sourceId: loan.id,
-      idempotencyKey: `loan:${loan.id}:disbursement:${input.on}:${amount}`,
-      memo: input.memo ?? `Loan disbursement — ${loan.name} (${loan.lenderName})`,
-      postedBy: actor.personId,
+    const memo = input.memo ?? `Loan disbursement — ${loan.name} (${loan.lenderName})`;
+    // The money-account debit sits at the ACCOUNT's store; a cross-store draw gains the 1250/2150 pair (money
+    // landed at that store, so it owes the loan's store).
+    const lines = await withInterStoreLegs(trx, actor.orgId, {
+      owingStoreId: loan.storeId,
+      memo,
       lines: [
-        { accountCode: account.glAccountCode, storeId: loan.storeId, debit: amount,
+        { accountCode: account.glAccountCode, storeId: account.storeId, debit: amount,
           ...(account.glAccountCode === '1140'
             ? { partyType: 'money_account' as const, partyId: account.id }
             : {}) },
@@ -146,6 +150,16 @@ export async function disburseLoan(
         { accountCode: LOAN_LIABILITY_CODE, storeId: loan.storeId, credit: amount,
           partyType: 'loan' as const, partyId: loan.id },
       ],
+    });
+    const result = await postEntry(trx, {
+      orgId: actor.orgId,
+      entryDate: input.on,
+      sourceType: 'loan_disbursement',
+      sourceId: loan.id,
+      idempotencyKey: `loan:${loan.id}:disbursement:${input.on}:${amount}`,
+      memo,
+      postedBy: actor.personId,
+      lines,
     });
     return { entryId: result.entryId };
   };
@@ -191,6 +205,11 @@ export async function recordLoanPayment(
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
     if (!account) throw new Error('recordLoanPayment: that money account does not exist.');
+    // T-369 S8b (DEF-556): paying from another store's account draws on money THERE; the loan's store alone
+    // holding `record_ap_payment` is not enough. Before `positionOf`, so a non-holder reads nothing.
+    if (account.storeId !== loan.storeId) {
+      await authorize(trx, actor, 'transfer_funds', { storeId: account.storeId });
+    }
 
     const position = await loansRepo.positionOf(trx, actor.orgId, loan.id);
     if (Number(position.outstanding) <= 0) {
@@ -235,7 +254,7 @@ export async function recordLoanPayment(
       'recordLoanPayment',
     );
 
-    const lines = [
+    const paymentLines = [
       ...(Number(split.principal) > 0
         ? [{
             accountCode: LOAN_LIABILITY_CODE,
@@ -250,13 +269,19 @@ export async function recordLoanPayment(
         : []),
       {
         accountCode: account.glAccountCode,
-        storeId: loan.storeId,
+        // T-369 S8b: the credit sits at the ACCOUNT's store - `balanceOf` reads a safe there.
+        storeId: account.storeId,
         credit: amount,
         ...(account.glAccountCode === '1140'
           ? { partyType: 'money_account' as const, partyId: account.id }
           : {}),
       },
     ];
+    const lines = await withInterStoreLegs(trx, actor.orgId, {
+      owingStoreId: loan.storeId,
+      memo: input.memo ?? `Loan payment — ${loan.name}`,
+      lines: paymentLines,
+    });
 
     const paymentId = crypto.randomUUID();
     const result = await postEntry(trx, {

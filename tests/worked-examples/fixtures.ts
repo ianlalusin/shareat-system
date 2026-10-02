@@ -555,6 +555,29 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     entryDate: '2026-02-11',
   },
 
+  // T-369 S8b (DEF-556). `storeRef` here means two distinct stores, as in reimbursement.payout-cross-store:
+  // 'branch1' is the OWING store (Lipa, whose receivable it is) and 'commissary' is the RECEIVING store (Malvar).
+  {
+    id: 'ar_collection.cross-store',
+    sourceType: 'ar_collection',
+    title: "AR collection paid into another store's safe — the receiving store owes the owing store",
+    narrative: "A ₱2,000 receivable at Lipa is paid into MALVAR's office safe. The cash debit sits at the safe's store, " +
+      "so Malvar's safe is the one that rises; Malvar is now holding Lipa's money, so Malvar owes Lipa and Lipa is " +
+      'owed by Malvar, in the same single entry. The pair runs the opposite way to reimbursement.payout-cross-store.',
+    input: { customerId: 'CUST-ACME', grossApplied: '2000.00', actualReceived: '2000.00', platformFee: '0.00', owingStoreCode: 'STORE-BRANCH1', receivingStoreCode: 'STORE-COMMISSARY' },
+    expect: [
+      D('1130', '2000.00', null, { storeRef: 'commissary', lineMemo: 'cash received into the safe' }),
+      C('2150', '2000.00', { type: 'store', id: 'STORE-BRANCH1' }, { storeRef: 'commissary', lineMemo: 'due to branch' }),
+      D('1250', '2000.00', { type: 'store', id: 'STORE-COMMISSARY' }, { storeRef: 'branch1', lineMemo: 'due from commissary' }),
+      C('1210', '2000.00', { type: 'customer', id: 'customer:CUST-ACME' }, { storeRef: 'branch1', lineMemo: 'gross receivable cleared' }),
+    ],
+    entryDate: '2026-02-11',
+    trap: 'money landing at another store makes THAT store the debtor: the debit at the owing store balances perfectly ' +
+      "and is wrong, because `balanceOf` reads a safe at the safe's own store, so the receiving safe never rises and the " +
+      "owing store's cash goes up with money it does not hold (DEF-556). The pair runs opposite to " +
+      'reimbursement.payout-cross-store. `loan_payment` has the payout direction and `loan_disbursement` this one.',
+  },
+
   // =========================================================================================
   // ap_payment — 93 legs. "Source cash/online OUT + ap__ OUT (allocated) + optional
   // supplier_advance__ IN (overpayment)." bible §16.10's own rule: overpayment goes to a

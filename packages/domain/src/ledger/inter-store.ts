@@ -1,6 +1,6 @@
 /**
- * ⭐ T-369 S8 (DEF-551) — what one store owes another when a store's debt is paid out of ANOTHER store's money
- * account. `docs/tasks/369-unwired-money-screens.md` §S8.
+ * ⭐ T-369 S8 (DEF-551) and S8b (DEF-556) — what one store owes another when a store's document moves money
+ * through ANOTHER store's money account, in either direction. `docs/tasks/369-unwired-money-screens.md` §S8/§S8b.
  *
  * `balanceOf()` reads a non-1140 money account as `journal_lines.store_id = account.storeId`, so the credit to a
  * safe has to sit at the SAFE's store. Then each store's own lines no longer net to zero: the paying store gave
@@ -31,17 +31,22 @@ export interface InterStoreInput {
 }
 
 /**
- * For each store other than `owingStoreId` whose lines net to a credit X, append
- *   DR 1250 at that store (party = the owing store's code) for X, and
- *   CR 2150 at the owing store (party = that store's code) for X,
- * so every store's own lines net to zero again and the org total is untouched.
+ * For each store P other than `owingStoreId`, by what P's own lines net to (debit − credit):
  *
- * Returns `lines` ITSELF (`===`) when nothing sits at another store, so the same-store shape is byte-identical
- * and costs no query. Lines with no `storeId` belong to no store and are left alone. Money is summed in integer
- * centavos (bible §2.5), never `Number`.
+ *   a CREDIT X — money LEFT P for the owing store's document (a payout, an AP or loan payment, an expense):
+ *     DR 1250 at P (party = the owing store's code) and CR 2150 at the owing store (party = P's code), each X —
+ *     P is owed by the owing store;
+ *   a DEBIT X — money LANDED at P for the owing store's document (a collection, a loan drawn into P's safe):
+ *     DR 1250 at the owing store (party = P's code) and CR 2150 at P (party = the owing store's code), each X —
+ *     P is holding the owing store's money, so P owes it (T-369 S8b, DEF-556);
+ *   exactly zero — no pair.
  *
- * ⛔ A non-owing store that nets to a DEBIT is an `internalFault`: no caller produces one, and a silent reverse
- * pair would mis-state both stores.
+ * Either way every store's own lines net to zero again and the org total (and Σ1250 = Σ2150) is untouched. Each
+ * store's sign is decided on its own, so one entry can carry a paying store and a receiving store.
+ *
+ * Returns `lines` ITSELF (`===`) when no store needs a pair, so the same-store shape is byte-identical and costs
+ * no query. Lines with no `storeId` belong to no store and are left alone. Money is summed in integer centavos
+ * (bible §2.5), never `Number`.
  */
 export async function withInterStoreLegs(
   tx: Tx,
@@ -59,43 +64,35 @@ export async function withInterStoreLegs(
     net.set(storeId, (net.get(storeId) ?? 0n) + delta);
   }
 
-  const paying: { storeId: string; credited: bigint }[] = [];
-  for (const [storeId, delta] of net) {
-    if (delta > 0n) {
-      throw internalFault(
-        `withInterStoreLegs: store ${storeId} nets to a debit of ${fromCentavos(delta)} in an entry owed by ${owingStoreId}; ` +
-          'an inter-store pair is only built for a store that paid.',
-      );
-    }
-    if (delta < 0n) paying.push({ storeId, credited: -delta });
-  }
-  if (paying.length === 0) return lines;
+  const others = [...net].filter(([, delta]) => delta !== 0n);
+  if (others.length === 0) return lines;
 
-  const codes = await moneyTransfersRepo.storeCodes(tx, orgId, [owingStoreId, ...paying.map((p) => p.storeId)]);
+  const codes = await moneyTransfersRepo.storeCodes(tx, orgId, [owingStoreId, ...others.map(([storeId]) => storeId)]);
   const owingCode = codes.get(owingStoreId);
-  if (!owingCode) throw internalFault(`withInterStoreLegs: store ${owingStoreId} has no code to name on the due-to line`);
+  if (!owingCode) throw internalFault(`withInterStoreLegs: store ${owingStoreId} has no code to name on an inter-store line`);
 
   const pairs: PostEntryLine[] = [];
-  for (const { storeId, credited } of paying) {
-    const payingCode = codes.get(storeId);
-    if (!payingCode) throw internalFault(`withInterStoreLegs: store ${storeId} has no code to name on the due-from line`);
-    const amount = fromCentavos(credited);
+  for (const [storeId, delta] of others) {
+    const otherCode = codes.get(storeId);
+    if (!otherCode) throw internalFault(`withInterStoreLegs: store ${storeId} has no code to name on an inter-store line`);
+    const left = delta < 0n; // money left this store
+    const amount = fromCentavos(left ? -delta : delta);
     pairs.push(
       {
         accountCode: DUE_FROM_STORE,
-        storeId,
+        storeId: left ? storeId : owingStoreId,
         debit: amount,
         partyType: 'store',
-        partyId: owingCode,
-        lineMemo: `Due from ${owingCode} — ${memo}`,
+        partyId: left ? owingCode : otherCode,
+        lineMemo: `Due from ${left ? owingCode : otherCode} — ${memo}`,
       },
       {
         accountCode: DUE_TO_STORE,
-        storeId: owingStoreId,
+        storeId: left ? owingStoreId : storeId,
         credit: amount,
         partyType: 'store',
-        partyId: payingCode,
-        lineMemo: `Due to ${payingCode} — ${memo}`,
+        partyId: left ? otherCode : owingCode,
+        lineMemo: `Due to ${left ? otherCode : owingCode} — ${memo}`,
       },
     );
   }

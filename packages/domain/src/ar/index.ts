@@ -13,6 +13,7 @@ import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
+import { withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
@@ -266,7 +267,6 @@ export async function recordCollection(
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
     if (!account) throw new Error('recordCollection: that money account does not exist.');
-
     const creditApplied = Number(
       parseMoneyInput(input.creditApplied ?? '0', 'recordCollection: creditApplied', 'The store credit applied'),
     );
@@ -275,6 +275,14 @@ export async function recordCollection(
     // a negative credit for real now, so this needed a presentable sentence too. Raw byte-identical.
     if (creditApplied < 0) {
       throw refuse('recordCollection: creditApplied cannot be negative.', 'The store credit applied cannot be negative.');
+    }
+    // T-369 S8b (DEF-556): collecting INTO another store's account moves money there, so it needs the right to
+    // move money THERE - the same gate `payReimbursement`, `approveExpense` and `recordPayment` apply. ONLY when cash
+    // actually lands in the account: a fully credit-funded collection (`trade/returns.ts` applyCredit) touches no
+    // account, and the cash portion is `amount - fee - creditApplied`, already known here from the parsed input.
+    // Before the credit-balance read and the charge lock, so a non-holder reads and waits on nothing.
+    if (account.storeId !== input.storeId && creditApplied < amount - fee - 0.005) {
+      await authorize(trx, actor, 'transfer_funds', { storeId: account.storeId });
     }
     if (creditApplied > 0) {
       const balance = Number(await arRepo.creditBalanceOf(trx, actor.orgId, input.customerId));
@@ -363,12 +371,13 @@ export async function recordCollection(
      *   Cr 1210            allocated      party = customer
      *   Cr 2140            surplus        party = customer, only when there is one
      */
-    const lines = [
+    const collectionLines = [
       ...(cashPortion > 0
         ? [
             {
               accountCode: account.glAccountCode,
-              storeId: input.storeId,
+              // T-369 S8b: the cash debit sits at the ACCOUNT's store - `balanceOf` reads a safe there.
+              storeId: account.storeId,
               debit: cashPortion.toFixed(2),
               ...(account.glAccountCode === '1140'
                 ? { partyType: 'money_account' as const, partyId: account.id }
@@ -420,6 +429,14 @@ export async function recordCollection(
           ]
         : []),
     ];
+    // A collection into another store's account gains the 1250/2150 pair for the CASH portion only (the credit
+    // applied, the fee and the receivable never touched that account). `ar_collections.store_id` stays
+    // `input.storeId`: the collection belongs to the owing store's receivables.
+    const lines = await withInterStoreLegs(trx, actor.orgId, {
+      owingStoreId: input.storeId,
+      memo: `Collection from ${customer.name}`,
+      lines: collectionLines,
+    });
 
     const { id: collectionId } = await arRepo.insertCollection(trx, {
       orgId: actor.orgId,

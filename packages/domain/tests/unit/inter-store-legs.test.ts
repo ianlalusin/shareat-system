@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  *
  *   for each store ≠ the owing store whose lines net to a CREDIT X (X > 0): append DR 1250 at THAT store (party = the OWING
  *   store's code) and CR 2150 at the owing store (party = THAT store's code), each X. Lines all at the owing store come back
- *   `===` unchanged. A non-owing store netting to a DEBIT is an internal fault. Sums are exact to the centavo (I8).
+ *   `===` unchanged. A non-owing store netting to a DEBIT (money landed there, S8b) gets the MIRRORED pair. Sums are exact to the centavo (I8).
  *
  * ⛔ TESTER. RED TODAY BECAUSE THE MODULE DOES NOT EXIST: every leg loads it through `load()` so each fails on its own
  * assertion ("ledger/inter-store.ts does not exist yet") rather than the whole file failing at import. `storeCodes` is
@@ -93,14 +93,51 @@ describe('T7 — withInterStoreLegs', () => {
     expect(await withLegs(null, ORG, { owingStoreId: LIPA, lines, memo: 'm' })).toBe(lines);
   });
 
-  it('a non-owing store that nets to a DEBIT is an internal fault, never a silent reverse pair', async () => {
+  // T-369 S8b (DEF-556) — REPLACES S8's "a non-owing store that nets to a DEBIT is an internal fault". Money that LANDS at another
+  // store (a collection or a loan drawn into its safe) makes THAT store the debtor, so the pair runs the other way.
+  it('T8 — a non-owing store netting to a DEBIT (money landed there) gets the MIRRORED pair: CR 2150 at it (party = the OWING store code), DR 1250 at the owing store (party = its code); no throw', async () => {
     const withLegs = await load();
     const lines: L[] = [
-      { accountCode: '6200', storeId: LIPA, debit: '100.00' },
-      { accountCode: '1130', storeId: LIPA, credit: '100.00' },
-      { accountCode: '1130', storeId: MALVAR, debit: '50.00' },
+      { accountCode: '1210', storeId: LIPA, credit: '2000.00', partyType: 'customer', partyId: 'resto' },
+      { accountCode: '1130', storeId: MALVAR, debit: '2000.00' },
     ];
-    await expect(withLegs(null, ORG, { owingStoreId: LIPA, lines, memo: 'm' })).rejects.toThrow();
+    const out = await withLegs(null, ORG, { owingStoreId: LIPA, lines, memo: 'm' });
+    const extra = added(lines, out);
+    expect(extra).toHaveLength(2);
+    expect(extra.find((l) => l.accountCode === '2150')).toMatchObject({ storeId: MALVAR, credit: '2000.00', partyType: 'store', partyId: 'LIPA' });
+    expect(extra.find((l) => l.accountCode === '1250')).toMatchObject({ storeId: LIPA, debit: '2000.00', partyType: 'store', partyId: 'MLV' });
+    expect(out.slice(0, lines.length), 'the original lines are kept, in order').toEqual(lines);
+  });
+
+  it('T8 — one entry with a PAYING store and a RECEIVING store -> two pairs, in opposite directions', async () => {
+    const withLegs = await load();
+    const lines: L[] = [
+      { accountCode: '6200', storeId: LIPA, debit: '300.00' },
+      { accountCode: '1130', storeId: MALVAR, credit: '300.00' },
+      { accountCode: '1210', storeId: LIPA, credit: '500.00' },
+      { accountCode: '1130', storeId: BATANGAS, debit: '500.00' },
+    ];
+    const extra = added(lines, await withLegs(null, ORG, { owingStoreId: LIPA, lines, memo: 'm' }));
+    expect(extra).toHaveLength(4);
+    // Malvar PAID 300: DR 1250 at Malvar (party LIPA) / CR 2150 at Lipa (party MLV)
+    expect(extra.find((l) => l.accountCode === '1250' && l.storeId === MALVAR)).toMatchObject({ debit: '300.00', partyId: 'LIPA' });
+    expect(extra.find((l) => l.accountCode === '2150' && l.storeId === LIPA)).toMatchObject({ credit: '300.00', partyId: 'MLV' });
+    // Batangas RECEIVED 500: CR 2150 at Batangas (party LIPA) / DR 1250 at Lipa (party BTG)
+    expect(extra.find((l) => l.accountCode === '2150' && l.storeId === BATANGAS)).toMatchObject({ credit: '500.00', partyId: 'LIPA' });
+    expect(extra.find((l) => l.accountCode === '1250' && l.storeId === LIPA)).toMatchObject({ debit: '500.00', partyId: 'BTG' });
+  });
+
+  it('T8 — centavo sums stay exact for the receiving direction: debits of 0.10 and 0.20 at one receiving store give a mirrored pair of exactly 0.30', async () => {
+    const withLegs = await load();
+    const lines: L[] = [
+      { accountCode: '1210', storeId: LIPA, credit: '0.30' },
+      { accountCode: '1130', storeId: MALVAR, debit: '0.10' },
+      { accountCode: '1110', storeId: MALVAR, debit: '0.20' },
+    ];
+    const extra = added(lines, await withLegs(null, ORG, { owingStoreId: LIPA, lines, memo: 'm' }));
+    expect(extra).toHaveLength(2);
+    expect(cents(extra.find((l) => l.accountCode === '2150')?.credit)).toBe(30);
+    expect(cents(extra.find((l) => l.accountCode === '1250')?.debit)).toBe(30);
   });
 
   it('a store code that cannot be resolved is an internal fault (the pair would carry no party)', async () => {
