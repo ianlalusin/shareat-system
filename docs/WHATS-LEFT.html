@@ -1,0 +1,301 @@
+<title>What's Left</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<!--
+  docs/WHATS-LEFT.html — the source of Ian's "What's Left" board
+  (https://claude.ai/artifact/7uvWzSMRGikq4P7PRmCQTf). Rewritten whole on 2026-10-04.
+  Rule: this page states only what is still open, plus one compact record of what the current push
+  closed. When a defect closes, delete its row from "Open money defects" and add its id to the
+  "Closed" table; do not append history notes. Republish after every commit that closes a DEF.
+-->
+<style>
+  /* Layout: masthead with counts, dates, the order of work, then each open list, closed record last. */
+  :root {
+    --ground: #f7f8f7; --surface: #ffffff; --surface-2: #eef1ef;
+    --ink: #1a2421; --ink-2: #3d4a45; --muted: #5f6b66; --faint: #8b9792;
+    --rule: #dbe1de; --rule-strong: #c3ccc8;
+    --done: #14594a; --done-soft: #e2efea;
+    --money: #a32e2e; --money-soft: #f8e6e4;
+    --struct: #9a5b12; --struct-soft: #f9edda;
+    --qual: #5f6b66; --qual-soft: #eceeed;
+    --you: #2f4f8f; --you-soft: #e6ecf7;
+    --shadow: 0 1px 2px rgba(26,36,33,.05), 0 8px 24px -12px rgba(26,36,33,.12);
+    --f-display: "Barlow Condensed", "IBM Plex Sans", sans-serif;
+    --f-body: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --f-mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { color-scheme: dark;
+      --ground: #101614; --surface: #182220; --surface-2: #1f2b28;
+      --ink: #e8edea; --ink-2: #c3cec9; --muted: #8a9a94; --faint: #6c7d77;
+      --rule: #2a3835; --rule-strong: #3a4a46;
+      --done: #5fbfa5; --done-soft: #13302a;
+      --money: #e8827c; --money-soft: #3a1f1e;
+      --struct: #d9a04f; --struct-soft: #332612;
+      --qual: #8a9a94; --qual-soft: #222e2b;
+      --you: #8fa9e0; --you-soft: #1d2740;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] { color-scheme: dark;
+    --ground: #101614; --surface: #182220; --surface-2: #1f2b28;
+    --ink: #e8edea; --ink-2: #c3cec9; --muted: #8a9a94; --faint: #6c7d77;
+    --rule: #2a3835; --rule-strong: #3a4a46;
+    --done: #5fbfa5; --done-soft: #13302a;
+    --money: #e8827c; --money-soft: #3a1f1e;
+    --struct: #d9a04f; --struct-soft: #332612;
+    --qual: #8a9a94; --qual-soft: #222e2b;
+    --you: #8fa9e0; --you-soft: #1d2740;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--f-body);
+    font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding-block: 32px 80px; padding-inline: clamp(16px, 3vw, 24px);
+    display: flex; flex-direction: column; gap: 40px; }
+  h1, h2, h3 { font-family: var(--f-display); font-weight: 700; text-wrap: balance; margin: 0; }
+  code { font-family: var(--f-mono); font-size: .86em; }
+
+  .mast { border-bottom: 2px solid var(--ink); padding-bottom: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .kicker { font-family: var(--f-mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  h1 { font-size: clamp(40px, 7vw, 66px); line-height: .95; text-transform: uppercase; }
+  .answer { margin: 0; font-size: 18px; max-width: 64ch; }
+  .answer b { font-weight: 600; }
+
+  .counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  .count { background: var(--surface); padding: 14px 16px; }
+  .count .n { font-family: var(--f-display); font-weight: 700; font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; }
+  .count .l { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .count.money .n { color: var(--money); } .count.struct .n { color: var(--struct); }
+  .count.you .n { color: var(--you); } .count.done .n { color: var(--done); }
+  .src { font-size: 11.5px; color: var(--muted); margin: 6px 0 0; font-family: var(--f-mono); }
+
+  .dates { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+  .date { border: 1px solid var(--rule); background: var(--surface); padding: 10px 12px; border-radius: 3px; }
+  .date .d { font-family: var(--f-mono); font-size: 14px; font-weight: 500; }
+  .date .w { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; }
+  .date.hot { border-color: var(--money); background: var(--money-soft); }
+  .date.hot .d { color: var(--money); }
+
+  section { display: flex; flex-direction: column; gap: 12px; }
+  h2 { font-size: 27px; text-transform: uppercase; }
+  .lede { margin: 0; color: var(--ink-2); max-width: 70ch; }
+  .lede b { color: var(--ink); font-weight: 600; }
+
+  .order { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+  .step { background: var(--surface); border: 1px solid var(--rule); border-top: 3px solid var(--rule-strong); padding: 12px 14px; min-width: 0; }
+  .step.now { border-top-color: var(--struct); box-shadow: var(--shadow); }
+  .step .k { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .step.now .k { color: var(--struct); }
+  .step h3 { font-size: 19px; margin: 3px 0 6px; }
+  .step ol, .step ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--ink-2); display: flex; flex-direction: column; gap: 3px; }
+
+  .items { border: 1px solid var(--rule); background: var(--surface); box-shadow: var(--shadow); }
+  .item { display: grid; grid-template-columns: 96px 1fr; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--rule); align-items: start; }
+  .item:last-child { border-bottom: 0; }
+  .item .id { font-family: var(--f-mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+  .item .meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .item b { font-weight: 600; }
+  .item.m { border-left: 3px solid var(--money); } .item.m .id { color: var(--money); font-weight: 500; }
+  .item.s { border-left: 3px solid var(--struct); } .item.s .id { color: var(--struct); font-weight: 500; }
+  .item.y { border-left: 3px solid var(--you); } .item.y .id { color: var(--you); font-weight: 500; }
+
+  .pill { display: inline-block; font-family: var(--f-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+    padding: 2px 6px; border-radius: 2px; background: var(--qual-soft); color: var(--qual); border: 1px solid var(--rule); vertical-align: middle; white-space: nowrap; }
+  .pill.s { background: var(--struct-soft); color: var(--struct); border-color: transparent; }
+  .pill.d { background: var(--done-soft); color: var(--done); border-color: transparent; }
+  .pill.y { background: var(--you-soft); color: var(--you); border-color: transparent; }
+  .pill.r { background: var(--money-soft); color: var(--money); border-color: transparent; }
+
+  .tblwrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 600px; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-family: var(--f-display); font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; background: var(--surface-2); }
+  td.n { font-variant-numeric: tabular-nums; font-family: var(--f-mono); font-size: 12.5px; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  tr.def td { color: var(--muted); }
+
+  .note { border: 1px solid var(--rule); border-left: 3px solid var(--struct); background: var(--surface); padding: 14px 17px; }
+  .note h3 { font-size: 17px; margin: 0 0 6px; text-transform: uppercase; }
+  .note p { margin: 0; color: var(--ink-2); }
+  .note b { color: var(--ink); font-weight: 600; }
+
+  footer { padding-top: 16px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 12px; }
+  footer code { font-family: var(--f-mono); }
+  @media (max-width: 640px) { .item { grid-template-columns: 1fr; gap: 3px; } }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 4 October 2026 &middot; not launched</p>
+    <h1>What's Left</h1>
+    <p class="answer">
+      <b>Ten money defects stand between v2 and a clean ledger</b>, and the work closing them is under way.
+      After that come the remaining admin screens, the last two payroll tasks once the statutory data arrives,
+      and the cutover itself. <b>The finish line is 1 January 2027.</b>
+    </p>
+    <div class="counts">
+      <div class="count money"><div class="n">10</div><div class="l">open money defects, each owned by a task</div></div>
+      <div class="count struct"><div class="n">22</div><div class="l">roadmap items still to build</div></div>
+      <div class="count"><div class="n">8</div><div class="l">roadmap items in progress or partly done</div></div>
+      <div class="count you"><div class="n">3</div><div class="l">things only you can do</div></div>
+      <div class="count done"><div class="n">239</div><div class="l">roadmap tasks done</div></div>
+    </div>
+    <p class="src">main at 2438d05 &middot; production at migration 0176, main through 0179 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+  </header>
+
+  <div class="dates">
+    <div class="date"><div class="d">Now</div><div class="w">Pilot. Production up at erp2.shareat.net, one organisation, no staff on it yet.</div></div>
+    <div class="date"><div class="d">31 Oct 2026</div><div class="w">HR statutory data due for 126 staff.</div></div>
+    <div class="date hot"><div class="d">15 Nov 2026</div><div class="w"><b>Go / no-go</b> for January, plus the purge rehearsal.</div></div>
+    <div class="date"><div class="d">31 Dec 2026</div><div class="w">Stock count, asset walk, final v1 depreciation run.</div></div>
+    <div class="date hot"><div class="d">1 Jan 2027</div><div class="w"><b>Cutover.</b> v2 becomes the system of record.</div></div>
+  </div>
+
+  <section>
+    <h2>Order of work</h2>
+    <p class="lede">One lane set works the money push top to bottom. Nothing below the money push starts until it is closed.</p>
+    <div class="order">
+      <div class="step now">
+        <div class="k">Now</div>
+        <h3>T-371 &middot; NaN sweep</h3>
+        <ol>
+          <li>Restore branch <code>wip/2026-10-03b</code></li>
+          <li>Re-run 3 writer groups (till-fiscal, statutory-discounts, ledger)</li>
+          <li>S4: 10 callers, exact helpers, stray <code>?? ZERO</code></li>
+          <li>Audit, full suite, smoke, one green commit set</li>
+        </ol>
+      </div>
+      <div class="step">
+        <div class="k">Next</div>
+        <h3>T-373 &middot; money follow-ups</h3>
+        <ul>
+          <li>Four parallel slices: DEF-547, 552, 555, 559</li>
+          <li>S3 is migration 0180, gated on the full suite</li>
+        </ul>
+      </div>
+      <div class="step">
+        <div class="k">Then</div>
+        <h3>Last money rows</h3>
+        <ul>
+          <li>T-367 S5/S6 (DEF-054) after the production count with you</li>
+          <li>T-369 S5b/S6b (DEF-198, 291, 314)</li>
+          <li>Follow-ups DEF-574, 577, 578</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Open money defects</h2>
+    <p class="lede">Every one is assigned. A row is deleted from here the moment its fix is committed.</p>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>Defect</th><th>What is wrong</th><th>Fixed by</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td class="n">DEF-382</td><td>A <code>NaN</code> amount passes every comparison guard; the database is the only backstop</td><td class="n">T-371</td><td><span class="pill s">in progress</span></td></tr>
+          <tr><td class="n">DEF-395</td><td>Some typed values reach a guarded money column with nothing parsing them first</td><td class="n">T-371</td><td><span class="pill s">in progress</span></td></tr>
+          <tr><td class="n">DEF-547</td><td>Reversing a remittance leaves its uncharged variance open with no way to resolve it</td><td class="n">T-373</td><td><span class="pill">next</span></td></tr>
+          <tr><td class="n">DEF-552</td><td>Usage pulls and wastage can attach to a sales day that is being withdrawn or voided</td><td class="n">T-373</td><td><span class="pill">next</span></td></tr>
+          <tr><td class="n">DEF-555</td><td>The closed-month stock check uses the UTC day, so stock moved before 8 a.m. on the 1st is judged against last month</td><td class="n">T-373 S3</td><td><span class="pill">next &middot; migration 0180</span></td></tr>
+          <tr><td class="n">DEF-559</td><td>Nothing watches what each store pair owes the other; opposite imbalances cancel and stay silent</td><td class="n">T-373</td><td><span class="pill">next</span></td></tr>
+          <tr><td class="n">DEF-054</td><td>The old &ldquo;other&rdquo; and &ldquo;AR collection&rdquo; payment methods have no correct posting yet</td><td class="n">T-367 S5/S6</td><td><span class="pill y">needs production count</span></td></tr>
+          <tr><td class="n">DEF-198</td><td>Part left: some money functions still have no screen caller</td><td class="n">T-369 S5b</td><td><span class="pill">after T-367</span></td></tr>
+          <tr><td class="n">DEF-291</td><td>Part left: the expense screen cannot yet offer another branch&rsquo;s accounts in the folded group you approved</td><td class="n">T-369 S6b</td><td><span class="pill">after T-367</span></td></tr>
+          <tr><td class="n">DEF-314</td><td>Part left: the closed-month override has no control on the expense and reimbursement screens</td><td class="n">T-369 S5b</td><td><span class="pill">after T-367</span></td></tr>
+          <tr class="def"><td class="n">DEF-491, 421</td><td>Same-organisation link checks (about 360) and transactions opened without an organisation</td><td class="n">&mdash;</td><td><span class="pill">deferred: before a 2nd org</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Other open follow-ups</h2>
+    <p class="lede">Found while fixing money. None posts a wrong amount today; each is small.</p>
+    <div class="items">
+      <div class="item s"><div class="id">DEF-578</div><div><b>&ldquo;Void the pull first&rdquo; is a dead end:</b> nothing can void a POS usage pull, so a draft sales day with a pull cannot be withdrawn.</div></div>
+      <div class="item s"><div class="id">DEF-577</div><div><b>19 &ldquo;today&rdquo; defaults use the UTC date,</b> so a form opened before 8 a.m. Manila pre-fills yesterday.</div></div>
+      <div class="item s"><div class="id">DEF-574</div><div><b>A branch manager cannot reach the recount return</b> on an over-receipt; the list is keyed by the dispatching store.</div></div>
+      <div class="item"><div class="id">DEF-575</div><div>Resolving a discrepancy into a closed month shows a raw error page instead of a sentence.</div></div>
+      <div class="item"><div class="id">DEF-576</div><div>Order wastage accepts a date different from its sales day&rsquo;s date.</div></div>
+      <div class="item"><div class="id">DEF-476</div><div>Typed amounts and reasons travel in page addresses. <span class="pill y">you said fix before launch</span></div></div>
+      <div class="item"><div class="id">DEF-373</div><div>The deploy gate checks that keys exist, not that they are the production keys.</div></div>
+      <div class="item"><div class="id">DEF-548</div><div>The app role can still delete branch orders (an unused grant).</div></div>
+      <div class="item"><div class="id">DEF-549</div><div>Commissary receipt entries have no reversal path (latent).</div></div>
+      <div class="item"><div class="id">DEF-568&ndash;572</div><div>Smaller items: peso formatting in invoice refusals, no fee fields on the AP screens, findings scan cost, a trial-balance store picker scope.</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Still to build after the money push</h2>
+    <p class="lede">None of these posts to the ledger; v1 covers each until it ships.</p>
+    <div class="items">
+      <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
+      <div class="item"><div class="id">T-338</div><div>Store readiness warns when a store has no manager.</div></div>
+      <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
+      <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). Needs the 1115 balance from production.</div></div>
+      <div class="item"><div class="id">T-320</div><div>Access that does not come from a position. Number reserved.</div></div>
+      <div class="item"><div class="id">T-334</div><div>Inputs, buttons and one shared dropdown across the remaining screens; brand red and a dark-mode toggle.</div></div>
+      <div class="item"><div class="id">Phase 7</div><div>Activity-log viewer &middot; memos, performance, checklists, infractions &middot; onboarding as one gated track &middot; cookbook &middot; remaining settings screens &middot; tutorials (count first).</div></div>
+      <div class="item"><div class="id">T-136, T-141</div><div>Cash custody &sect;2 (revolving fund) and the rest of the upload UI.</div></div>
+      <div class="item"><div class="id">T-190, T-193</div><div>Statutory contributions and their remittance. <span class="pill y">blocked on HR data</span></div></div>
+      <div class="item"><div class="id">T-314</div><div>Fingerprint capture, slice A built. <span class="pill y">needs a tablet and the reader model</span></div></div>
+      <div class="item"><div class="id">T-308</div><div>Alert when production runs an older build; slice A live. <span class="pill y">slice B needs your token</span></div></div>
+      <div class="item"><div class="id">Later</div><div>T-363 doubtful-expense flag (after launch) &middot; T-309 own Firebase project (after cutover).</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Waiting on you</h2>
+    <p class="lede">Each holds work still. Everything else on the Open Questions page is answered.</p>
+    <div class="items">
+      <div class="item y"><div class="id">HR data</div><div><b>SSS, PhilHealth, Pag-IBIG and TIN for 126 staff.</b> None on file. <span class="pill y">due 31 Oct</span></div></div>
+      <div class="item y"><div class="id">Question</div><div><b>On an edit screen, does a blank box keep the stored figure?</b> T-371 builds the recommended answer (blank keeps it; type 0 to zero it) unless you say otherwise.</div></div>
+      <div class="item y"><div class="id">erp2 session</div><div><b>One sitting on production, with the orchestrator:</b> the 0178 and 0179 prechecks before the next deploy, the T-367 count of old &ldquo;other&rdquo; payments, the 1115 balance for T-316, and confirming the fiscal-period timer is armed. Host <code>159.223.46.224</code> only.</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The cutover</h2>
+    <div class="items">
+      <div class="item"><div class="id">Nov</div><div><b>A reconciled dual run you sign off:</b> v1 and v2 on the same real days until the trial balance ties.</div></div>
+      <div class="item"><div class="id">Nov</div><div><b>Purge rehearsal</b> on a restored copy, before the 15 November gate.</div></div>
+      <div class="item"><div class="id">31 Dec</div><div><b>Count day:</b> valued stock count, asset walk, final v1 depreciation run.</div></div>
+      <div class="item"><div class="id">1 Jan</div><div><b>The opening balance-sheet entry</b> of counted facts; v2 starts from zero.</div></div>
+    </div>
+    <div class="note">
+      <h3>The one thing nothing can compress</h3>
+      <p>The dual run is measured in real trading days, not in work. Every week the money push runs long is a week less of side-by-side running before 15 November.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Closed in the money push</h2>
+    <p class="lede">Since your 30 September instruction: 34 open at the census, more found while fixing, 10 left.</p>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>Task</th><th>What it fixed</th><th>Defects closed</th></tr></thead>
+        <tbody>
+          <tr><td class="n">T-364</td><td>Forms check permission before reading anything</td><td class="n">496, 497</td></tr>
+          <tr><td class="n">T-365</td><td>Supplier bank changes audited; the form no longer wipes hidden fields</td><td class="n">498, 506</td></tr>
+          <tr><td class="n">T-366</td><td>Shortages post to the person&rsquo;s receivable; handover caps under a lock; negative floats flagged</td><td class="n">105, 374, 386, 398, 399, 406, 529, 534, 535</td></tr>
+          <tr><td class="n">T-367 S1&ndash;S4</td><td>One write-off per entry; voided bills unsettleable; invoice totals to the centavo; due dates from terms</td><td class="n">201, 396, 420, 499, 500, 508</td></tr>
+          <tr><td class="n">T-368</td><td>No close over a missing month; failed runs stay flagged; asset terms correctable</td><td class="n">424, 426, 433, 434, 435, 436, 441, 442</td></tr>
+          <tr><td class="n">T-369 S0&ndash;S9</td><td>Money functions get screens; cross-store money with inter-store balances and settlement</td><td class="n">302, 479, 550, 551, 556, 557, 558, 560, 573</td></tr>
+          <tr><td class="n">T-370</td><td>Owner drawing cap; 15th/30th paydays; two pay days for twice-monthly stores</td><td class="n">108, 409, 494, 516, 541, 553</td></tr>
+          <tr><td class="n">T-372</td><td>Prepared orders stay prepared; internal freight at receipt; over- and under-receipts</td><td class="n">127, 511, 512, 513</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Counted 4 October 2026 from <code>docs/DEFECTS-REGISTER.md</code> (recounted against git on 3 October), the task status lines,
+    <code>docs/ROADMAP.html</code> and the Open Questions page. A defect counts as closed only when its register row says fixed.
+  </footer>
+
+</div>
