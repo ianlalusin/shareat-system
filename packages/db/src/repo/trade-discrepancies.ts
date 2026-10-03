@@ -7,11 +7,13 @@
  * refuses to open the day. One source, two consumers.
  */
 import { and, asc, eq, isNull, lte, ne, or, sql } from 'drizzle-orm';
-import { tradeDiscrepancies } from '../../schema/trade-discrepancies';
+import { tradeDiscrepancies, type DiscrepancyDirection } from '../../schema/trade-discrepancies';
 import type { Tx } from '../client';
 
 export interface TradeDiscrepancyRow {
   readonly id: string;
+  /** T-372 S6b: `short` (fewer arrived than were sent) or `over` (the branch counted more). Fixed at creation. */
+  readonly direction: DiscrepancyDirection;
   readonly orderId: string;
   readonly orderLineId: string;
   readonly quantity: string;
@@ -23,6 +25,8 @@ export interface TradeDiscrepancyRow {
 }
 
 export interface CreateDiscrepancyInput {
+  /** T-372 S6b. Defaults to `short`, which is every row there was before an over-receipt could be raised. */
+  readonly direction?: DiscrepancyDirection;
   readonly orgId: string;
   readonly storeId: string;
   readonly orderId: string;
@@ -34,6 +38,7 @@ export interface CreateDiscrepancyInput {
 
 const COLUMNS = {
   id: tradeDiscrepancies.id,
+  direction: tradeDiscrepancies.direction,
   orderId: tradeDiscrepancies.orderId,
   orderLineId: tradeDiscrepancies.orderLineId,
   quantity: tradeDiscrepancies.quantity,
@@ -48,6 +53,7 @@ export async function create(tx: Tx, input: CreateDiscrepancyInput): Promise<{ i
   const [row] = await tx
     .insert(tradeDiscrepancies)
     .values({
+      direction: input.direction ?? 'short',
       orgId: input.orgId,
       storeId: input.storeId,
       orderId: input.orderId,
@@ -116,7 +122,7 @@ export async function blocking(
 
 export interface ResolveInput {
   readonly id: string;
-  readonly disposition: 'audit' | 'loss' | 'charge' | 'late_receipt';
+  readonly disposition: 'audit' | 'loss' | 'charge' | 'late_receipt' | 'extra_dispatch' | 'return';
   readonly chargePersonId?: string | null;
   readonly note?: string | null;
   readonly journalEntryId?: string | null;

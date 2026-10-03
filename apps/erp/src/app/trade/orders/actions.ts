@@ -129,6 +129,10 @@ export async function receiveOrderAction(fd: FormData): Promise<void> {
     message = result.entryId
       ? 'Receipt confirmed. Both stores’ books moved on what was actually signed for; any shortfall is an open transit discrepancy.'
       : 'Receipt recorded — who signed, and when. Nothing further posts for a sale: the value moved at dispatch.';
+    // ⭐ T-372 S6b: an over-count is booked at what was sent, and said so — never silent.
+    for (const o of result.overCounts) {
+      message += ` ${o.itemName}: ${o.counted} counted, ${o.booked} booked — the extra ${o.excess} is waiting for the commissary to resolve.`;
+    }
   } catch (err) {
     back(`/trade/orders/${orderId}`, { error: errorMessage(err) });
   }

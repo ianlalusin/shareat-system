@@ -43,6 +43,9 @@ describe('L1 — label maps match the S6a contract exactly, exhaustive over thei
       loss: 'Loss',
       charge: 'Charged to a person',
       late_receipt: 'Late receipt',
+      // T-372 S6 (DEF-513): the over-receipt dispositions.
+      extra_dispatch: 'Commissary sent more — book the extra',
+      return: 'Returned to commissary / branch recount',
     });
     expect(Object.keys(DISCREPANCY_DISPOSITION_LABEL).sort()).toEqual([...DISCREPANCY_DISPOSITIONS].sort());
   });

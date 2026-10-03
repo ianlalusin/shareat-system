@@ -898,6 +898,31 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       "DEF-082's service-charge float. The charge is still offered rather than blocked, because " +
       'refusing it would force a recoverable shortfall to be written off as a loss instead.',
   },
+  // T-372 S6b (DEF-513). `storeRef` here means two distinct stores, as in reimbursement.payout-cross-store: 'branch1' is the
+  // receiving BRANCH and 'commissary' the dispatching commissary (the commissary relationship is the point here).
+  {
+    id: 'commissary.discrepancy-extra-dispatch',
+    sourceType: 'trade_discrepancy',
+    title: 'Over-receipt resolved as "Commissary sent more" — dispatch and receipt collapse into one entry, no 1340',
+    narrative:
+      'The branch counted 1 more than the commissary dispatched, the receipt booked only what was sent, and the extra ' +
+      'is an over discrepancy. The commissary manager confirms it really did send it: one unit at the \u20b1500 transfer ' +
+      'rate that cost \u20b1300 from its own layer. Both stores book it in one transaction.',
+    input: { discrepancyId: 'DISC-0003', disposition: 'extra_dispatch', quantity: '1.000', rate: '500.00', layerCost: '300.00' },
+    expect: [
+      D('1310', '500.00', null, { storeRef: 'branch1', lineMemo: 'extra received at the transfer rate' }),
+      C('2150', '500.00', { type: 'store', id: 'STORE-COMMISSARY' }, { storeRef: 'branch1', lineMemo: 'due to commissary' }),
+      D('1250', '500.00', { type: 'store', id: 'STORE-BRANCH1' }, { storeRef: 'commissary', lineMemo: 'due from branch' }),
+      C('1310', '300.00', null, { storeRef: 'commissary', lineMemo: 'inventory relieved at layer cost' }),
+      C('5175', '200.00', null, { storeRef: 'commissary', lineMemo: 'transfer margin' }),
+    ],
+    entryDate: '2026-02-23',
+    trap: 'there is NO 1340 leg: these goods were never put into transit on the books, so dispatch and receipt collapse ' +
+      'into one event and a 1340 debit and credit would net to zero and only add noise. The commissary credit is what ' +
+      '`consume()` relieved (layer cost), not the line rate \u2014 dispatch itself relieves at layer cost, so any other ' +
+      "figure makes the commissary's stock ledger and 1310 disagree; the margin goes to 5175 (a debit when the rate is " +
+      'below cost).',
+  },
 
   // =========================================================================================
   // channel_settlement — T-150. The document that finally clears 1220, which nothing ever did.

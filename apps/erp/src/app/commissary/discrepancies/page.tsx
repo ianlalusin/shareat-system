@@ -10,7 +10,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 
-export const metadata = { title: 'Transit shortfalls — Shareat System' };
+export const metadata = { title: 'Transit discrepancies — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
@@ -35,7 +35,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
   if (!storeId) {
     return (
       <Page density="table" className="">
-        <h1 className="text-2xl font-semibold">Transit shortfalls</h1>
+        <h1 className="text-2xl font-semibold">Transit discrepancies</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
       </Page>
     );
@@ -62,10 +62,11 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
 
   return (
     <Page density="table" className="">
-      <h1 className="text-2xl font-semibold">Transit shortfalls</h1>
+      <h1 className="text-2xl font-semibold">Transit discrepancies</h1>
       <PageDescription className="mt-1">
-        Goods that left this store and did not arrive. They sit in <strong>1340</strong> at cost —
-        a real asset — until somebody says what happened to them.
+        Goods that left this store and did not arrive sit in <strong>1340</strong> at cost — a real
+        asset — until somebody says what happened to them. A branch that counted <em>more</em> than was
+        sent is listed here too: the extra is on nobody&apos;s books until you decide.
       </PageDescription>
 
       {sp.error && (
@@ -103,7 +104,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
       {blocking > 0 && (
         <div className="mt-6 rounded-lg border border-amber-400 bg-amber-50 p-4 text-sm dark:border-amber-700 dark:bg-amber-950">
           <strong>
-            ⚠️ {blocking} unresolved shortfall{blocking === 1 ? '' : 's'} — this store cannot open a
+            ⚠️ {blocking} unresolved discrepanc{blocking === 1 ? 'y' : 'ies'} — this store cannot open a
             new sales day
           </strong>
           <p className="mt-1 text-neutral-700 dark:text-neutral-300">
@@ -139,6 +140,12 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                   {row.deferredTo ? ` until ${row.deferredTo}` : ''}
                 </span>
               </div>
+              {row.direction === 'over' && (
+                <p className="mt-1 text-sm font-medium text-amber-700 dark:text-amber-400">
+                  Counted over — the branch counted more than was sent. The extra is on nobody&apos;s books until you
+                  decide.
+                </p>
+              )}
               <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
                 To {row.branchName ?? 'a branch'} · order {row.orderDate} ·{' '}
                 <Link href={`/commissary/orders/${row.orderId}`} className="underline underline-offset-4">
@@ -159,28 +166,44 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="resolvedOn" value={today} />
                     <div className="flex flex-wrap items-center gap-2">
-                      <select
-                        name="disposition"
-                        defaultValue="loss"
-                        className="rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
-                      >
-                        <option value="loss">Loss — Dr 5300</option>
-                        <option value="charge">Charge a person — Dr 1230</option>
-                        <option value="audit">Audit only — posts nothing</option>
-                        <option value="late_receipt">Late receipt — the rest turned up</option>
-                      </select>
-                      <select
-                        name="chargePersonId"
-                        defaultValue=""
-                        className="rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
-                      >
-                        <option value="">(person, for a charge)</option>
-                        {people.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
+                      {row.direction === 'over' ? (
+                        // ⭐ T-372 S6b: an over-receipt is never a loss or a charge — the goods were never on either
+                        // store's books. The domain refuses those too; this only decides what is OFFERED.
+                        <select
+                          name="disposition"
+                          defaultValue="extra_dispatch"
+                          className="rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
+                        >
+                          <option value="extra_dispatch">{discrepancyDispositionLabel('extra_dispatch')}</option>
+                          <option value="return">{discrepancyDispositionLabel('return')} — note required</option>
+                          <option value="audit">Audit only — posts nothing</option>
+                        </select>
+                      ) : (
+                        <>
+                          <select
+                            name="disposition"
+                            defaultValue="loss"
+                            className="rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
+                          >
+                            <option value="loss">Loss — Dr 5300</option>
+                            <option value="charge">Charge a person — Dr 1230</option>
+                            <option value="audit">Audit only — posts nothing</option>
+                            <option value="late_receipt">Late receipt — the rest turned up</option>
+                          </select>
+                          <select
+                            name="chargePersonId"
+                            defaultValue=""
+                            className="rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
+                          >
+                            <option value="">(person, for a charge)</option>
+                            {people.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )}
                     </div>
                     <input
                       name="note"

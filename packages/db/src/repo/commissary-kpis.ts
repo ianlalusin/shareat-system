@@ -230,7 +230,10 @@ export async function openDisputes(
     select
       count(*)::int as count,
       (count(*) filter (where d.status = 'deferred'))::int as deferred_count,
-      round(coalesce(sum(d.value), 0), 2)::text as total_value,
+      -- ⭐ T-372 S6b: ONLY a shortfall's value is stranded in 1340. An over row's value is informational (it posts
+      -- nothing), so summing it would overstate what is at risk. Count and age stay over ALL rows: that is the day-open
+      -- predicate, character for character.
+      round(coalesce(sum(d.value) filter (where d.direction = 'short'), 0), 2)::text as total_value,
       coalesce(max(${age}), 0)::int as oldest_age_days,
       (count(*) filter (where ${age} < ${AGEING_FROM_DAYS}))::int as fresh,
       (count(*) filter (where ${age} >= ${AGEING_FROM_DAYS} and ${age} <= ${OVERDUE_FROM_DAYS}))::int as ageing,

@@ -13,6 +13,20 @@
 
 ---
 
+## ⛔ Deploy gate — read-only prechecks for migrations not yet on production (added 2026-10-03)
+
+Production (`159.223.46.224`, never `.78.207`) is deployed through **0176**. Before any push that deploys
+**0177–0179**, run each check READ-ONLY (`BEGIN READ ONLY; … ROLLBACK;`) with Ian. A non-zero result stops the
+deploy: Ian decides each row, through the screens where one exists; no migration does data surgery.
+
+| Migration | Check (exact SQL is in the migration's header) | Must be |
+|---|---|---|
+| 0177 (T-369 S7) | no precheck in its header | — |
+| 0178 (T-370 S3, DEF-409) | live semi-monthly `fixed_days` configs without two different pay days | 0 rows — else Ian picks each store's two days in `/settings/attendance` |
+| 0179 (T-372 S6, DEF-513) | `trade_discrepancies` with `value <= 0`; with a disposition outside `audit, loss, charge, late_receipt` | 0 and 0 |
+
+---
+
 ## ⛔ Status as of 2026-09-12 — PRODUCTION NOW CONNECTS AS A NON-BYPASSING ROLE. READ THIS BEFORE RUNNING A MIGRATION ON THE BOX.
 
 Done on the host by Ian with `system32-85`, verified at each step, **not inferred**.

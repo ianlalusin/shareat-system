@@ -22,6 +22,14 @@
  * There is no "raise a discrepancy" action. `confirmReceipt` writes one for every line where
  * received fell short, in the same transaction as the posting — so a shortfall cannot exist in
  * `1340` without a row naming it, and the blocking list below can never disagree with the ledger.
+ *
+ * ## ⭐ Both directions, one table (T-372 S6b / DEF-513)
+ *
+ * A branch can also COUNT MORE than was dispatched. `confirmReceipt` books only what was sent (the cap) and raises a
+ * row with `direction = 'over'` for the excess, so the same day-open block and the same manager decision cover it.
+ * An over row posts nothing at receipt; its dispositions are `audit`, `extra_dispatch` (the commissary confirms it
+ * really sent more: the extra is booked at both stores in one entry) and `return` (it went back, or the branch
+ * recounted: posts nothing). Short rows keep `audit | loss | charge | late_receipt`.
  */
 import { sql } from 'drizzle-orm';
 import { check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
@@ -34,7 +42,10 @@ import { tradeOrderLines, tradeOrders } from './trade';
 export const DISCREPANCY_STATUSES = ['open', 'deferred', 'resolved'] as const;
 export type DiscrepancyStatus = (typeof DISCREPANCY_STATUSES)[number];
 
-export const DISCREPANCY_DISPOSITIONS = ['audit', 'loss', 'charge', 'late_receipt'] as const;
+export const DISCREPANCY_DIRECTIONS = ['short', 'over'] as const;
+export type DiscrepancyDirection = (typeof DISCREPANCY_DIRECTIONS)[number];
+
+export const DISCREPANCY_DISPOSITIONS = ['audit', 'loss', 'charge', 'late_receipt', 'extra_dispatch', 'return'] as const;
 export type DiscrepancyDisposition = (typeof DISCREPANCY_DISPOSITIONS)[number];
 
 /** T-343 S6a — presentation label, exhaustive over `DISCREPANCY_DISPOSITIONS`. */
@@ -43,6 +54,8 @@ export const DISCREPANCY_DISPOSITION_LABEL: Readonly<Record<DiscrepancyDispositi
   loss: 'Loss',
   charge: 'Charged to a person',
   late_receipt: 'Late receipt',
+  extra_dispatch: 'Commissary sent more — book the extra',
+  return: 'Returned to commissary / branch recount',
 };
 
 function humanise(value: string): string {
@@ -70,7 +83,14 @@ export const tradeDiscrepancies = pgTable(
     storeId: uuid('store_id').notNull().references(() => stores.id, { onDelete: 'restrict' }),
     orderId: uuid('order_id').notNull().references(() => tradeOrders.id, { onDelete: 'restrict' }),
     orderLineId: uuid('order_line_id').notNull().references(() => tradeOrderLines.id, { onDelete: 'restrict' }),
-    /** Dispatched minus received, in base units. Always positive — an over-receipt is not this. */
+    /**
+     * ⭐ T-372 S6b: the DIRECTION, fixed when the receipt raises the row (`trade_discrepancies_direction_fixed_trg`,
+     * migration 0179). `short` — fewer arrived than were sent (every row before 0179). `over` — the branch counted
+     * more than was sent. Every disposition rule hangs off it (`trade_discrepancies_disposition_direction_check`).
+     */
+    direction: text('direction', { enum: DISCREPANCY_DIRECTIONS }).notNull().default('short'),
+    /** The difference between dispatched and counted, in base units, always positive: dispatched − received for a
+     *  `short` row, counted − dispatched for an `over` row. */
     quantity: numeric('quantity', { precision: 14, scale: 3 }).notNull(),
     /**
      * ⭐ **AT COST — the un-received share of the line's `dispatch_cost`. NOT quantity × the
@@ -107,7 +127,17 @@ export const tradeDiscrepancies = pgTable(
     /** ⭐ One per order line. A second confirm of the same line cannot raise a second dispute. */
     uniqueIndex('trade_discrepancies_line_key').on(t.orderLineId),
     check('trade_discrepancies_quantity_positive_check', sql`${t.quantity} > 0`),
-    check('trade_discrepancies_value_positive_check', sql`${t.value} > 0`),
+    // NOTE: 0179 replaced `trade_discrepancies_value_positive_check` (value > 0) with this one: an over row's value is
+    // informational and may be 0 (a line whose dispatch cost is 0); a short row's never is.
+    check('trade_discrepancies_value_check', sql`${t.value} > 0 or (${t.direction} = 'over' and ${t.value} >= 0)`),
+    check('trade_discrepancies_direction_check', sql`${t.direction} in ('short','over')`),
+    // NOTE: the `disposition` enum CHECK itself is `trade_discrepancies_disposition_check` (0071, re-added by 0179 with
+    // 'extra_dispatch','return'); this one pairs a disposition with its direction (0179).
+    check(
+      'trade_discrepancies_disposition_direction_check',
+      sql`${t.disposition} is null or ${t.disposition} = 'audit' or (${t.direction} = 'short' and ${t.disposition} in ('loss','charge','late_receipt')) or (${t.direction} = 'over' and ${t.disposition} in ('extra_dispatch','return'))`,
+    ),
+    // NOTE: `trade_discrepancies_direction_fixed_trg` (BEFORE UPDATE OF direction, ENABLE ALWAYS) is hand-added in migration 0179.
     check(
       'trade_discrepancies_charge_person_check',
       sql`${t.disposition} <> 'charge' or ${t.chargePersonId} is not null`,

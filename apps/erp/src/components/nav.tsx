@@ -93,7 +93,7 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // ⭐ DEF-129 — `commissary_item_map` had no writer anywhere until 2026-09-03, so every real
       // internal receipt threw. Links, offerings and the map live here.
       { href: '/commissary/catalogue', label: 'Commissary catalogue' },
-      { href: '/commissary/discrepancies', label: 'Transit shortfalls' },
+      { href: '/commissary/discrepancies', label: 'Transit discrepancies' },
       { href: '/items', label: 'Items' },
     ],
   },

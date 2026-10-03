@@ -29,7 +29,7 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-/** R1's 18 ALWAYS tables + 0175's ready-is-final guard (19), in the spec's table order (docs/tasks/354-…md, "ALWAYS (18)"). */
+/** R1's 18 ALWAYS tables + 0175's ready-is-final guard (19), + 0179's direction-fixed guard (20), in the spec's table order (docs/tasks/354-…md, "ALWAYS (18)"). */
 const ALWAYS_TRIGGERS = [
   { table: 'journal_entries', trigger: 'journal_entries_posted_immutable' },
   { table: 'journal_lines', trigger: 'journal_lines_posted_immutable' },
@@ -39,6 +39,8 @@ const ALWAYS_TRIGGERS = [
   { table: 'count_sessions', trigger: 'count_sessions_commit_once_trg' },
   { table: 'trade_discrepancies', trigger: 'trade_discrepancies_defer_once_trg' },
   { table: 'trade_discrepancies', trigger: 'trade_discrepancies_resolution_terminal_trg' },
+  // T-372 S6 (migration 0179): the over/short direction is fixed when the receipt raises the row.
+  { table: 'trade_discrepancies', trigger: 'trade_discrepancies_direction_fixed_trg' },
   { table: 'trade_order_messages', trigger: 'trade_order_messages_append_only_trg' },
   { table: 'store_attendance_config', trigger: 'store_attendance_config_immutable' },
   { table: 'attendance_punches', trigger: 'attendance_punches_append_only' },
@@ -88,14 +90,14 @@ async function livePgTriggers(): Promise<{ tgname: string; table: string; tgenab
 }
 
 describe('T1 — registry floor', () => {
-  it('TRIGGER_REGISTRY has >=57 entries, exactly 19 with mode:\'always\', and those 19 names equal R1\'s table — was red today: the import fails, triggers/registry.ts does not exist', async () => {
+  it('TRIGGER_REGISTRY has >=57 entries, exactly 20 with mode:\'always\', and those 20 names equal R1\'s table — was red today: the import fails, triggers/registry.ts does not exist', async () => {
     const mod = await loadRegistry();
     expect(mod, 'triggers/registry.ts does not exist yet').toBeDefined();
     const reg = mod!.TRIGGER_REGISTRY;
     expect(Object.keys(reg).length, 'expected >=57 non-internal triggers classified').toBeGreaterThanOrEqual(57);
 
     const always = Object.entries(reg).filter(([, e]) => e.mode === 'always');
-    expect(always.length, 'expected exactly 19 ALWAYS triggers (R1 + 0175)').toBe(19);
+    expect(always.length, 'expected exactly 20 ALWAYS triggers (R1 + 0175 + 0179)').toBe(20);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {

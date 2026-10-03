@@ -92,6 +92,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'A resolved discrepancy is terminal (0071). Decides only from OLD.status.',
   },
+  trade_discrepancies_direction_fixed_trg: {
+    table: 'trade_discrepancies',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: "A discrepancy's direction (short/over) is fixed once the receipt raises it (0179, T-372 S6b). Decides only from OLD/NEW on the same row.",
+  },
   trade_order_messages_append_only_trg: {
     table: 'trade_order_messages',
     mode: 'always',

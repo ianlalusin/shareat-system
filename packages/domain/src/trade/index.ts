@@ -45,11 +45,11 @@ import { branchPriceFor } from '../items';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { add, money, type Money } from '@shareat/core/money';
-import { confirmReceipt, dispatchOrder, postInternalFreight, type ReceiptLineInput } from '../commissary/transfer';
+import { bookedReceiptQuantity, confirmReceipt, dispatchOrder, postInternalFreight, type ReceiptLineInput } from '../commissary/transfer';
 import { consume, reverseConsumption } from '../stock/consume';
 import { postConsumption } from '../stock/consumption-posting';
 import type { ConsumedLine } from '../stock/layers';
-import { isPositiveQuantity, quantity, type Quantity } from '../stock/quantity';
+import { isPositiveQuantity, quantity, toThousandths, type Quantity } from '../stock/quantity';
 
 /**
  * ⭐ T-172. A BRANCH order has two legitimate actors from two stores — the branch that asked and
@@ -807,6 +807,10 @@ export interface ReceiveTradeOrderResult {
    *  fee-free order has `freightEntryId: null`). `null` for an EXTERNAL order, a zero-fee order, or
    *  when `confirmReceipt`/`postInternalFreight` is never reached at all. */
   readonly freightEntryId: string | null;
+  /** ⭐ T-372 S6b. Lines the branch COUNTED over what was dispatched: the receipt booked `booked` and the `excess`
+   *  waits as an `over` discrepancy for the commissary to resolve. Empty for an external order or when nothing was
+   *  over. For the screens' confirmation banners, so an over-count is never silent. */
+  readonly overCounts: readonly { lineId: string; itemName: string; counted: string; booked: string; excess: string }[];
 }
 
 /**
@@ -844,6 +848,7 @@ export async function receiveTradeOrder(
 
     let entryId: string | null = null;
     let freightEntryId: string | null = null;
+    const overCounts: { lineId: string; itemName: string; counted: string; booked: string; excess: string }[] = [];
 
     if (customersRepo.treatmentOf(customer) === 'internal') {
       const branchStoreId = customer.counterpartyStoreId!;
@@ -863,6 +868,7 @@ export async function receiveTradeOrder(
       const branchLocation = await stockLocationsRepo.defaultLocationFor(trx, branchStoreId);
 
       const receiptLines: ReceiptLineInput[] = [];
+      const itemNameByLineId = new Map<string, string>();
       const orderLineIdByLineId: Record<string, string> = {};
       for (const line of orderLines) {
         // ⭐ T-172. A declined proposal never arrives, and a line fulfilled at zero was never packed
@@ -905,6 +911,14 @@ export async function receiveTradeOrder(
         const override = overrides.get(line.id);
         const receivedQuantity =
           override?.receivedQuantity != null ? quantity(override.receivedQuantity) : dispatchedQuantity;
+        // ⭐ T-372 S6a (DEF-513 G1): a negative count is refused HERE, before anything is written — v1 clamps at 0, and
+        // the CHECK on `trade_order_lines.received_quantity` (0175) would only say so with its raw constraint name.
+        if (toThousandths(receivedQuantity) < 0n) {
+          throw refuse(
+            `receiveTradeOrder: line ${line.id} received quantity ${override?.receivedQuantity ?? receivedQuantity} is negative`,
+            `${item.name} — a received quantity cannot be negative. Enter 0 if none arrived.`,
+          );
+        }
 
         receiptLines.push({
           lineId: line.id,
@@ -921,7 +935,11 @@ export async function receiveTradeOrder(
           shortageReason: override?.shortageReason ?? null,
         });
         orderLineIdByLineId[line.id] = line.id;
-        await tradeRepo.setLineReceivedQuantity(trx, line.id, receivedQuantity);
+        itemNameByLineId.set(line.id, item.name);
+        // ⚠️ The BOOKED figure (the count capped at what was dispatched), never the raw count: three readers treat
+        // `trade_order_lines.received_quantity` as what entered the branch's books (`commissary-kpis.ts`
+        // goods_received, `returns.ts`' returnable cap, `findings.ts` signed_for). Counted = booked + the `over` row.
+        await tradeRepo.setLineReceivedQuantity(trx, line.id, bookedReceiptQuantity(dispatchedQuantity, receivedQuantity));
       }
 
       if (receiptLines.length > 0) {
@@ -939,6 +957,17 @@ export async function receiveTradeOrder(
         });
         if (!confirmed.ok) throw new Error(`receiveTradeOrder: ${confirmed.reason}`);
         entryId = confirmed.entryId;
+        for (const d of confirmed.discrepancies) {
+          if (d.direction !== 'over') continue;
+          const rl = receiptLines.find((l) => l.lineId === d.lineId)!;
+          overCounts.push({
+            lineId: d.lineId,
+            itemName: itemNameByLineId.get(d.lineId) ?? 'An item',
+            counted: rl.receivedQuantity,
+            booked: bookedReceiptQuantity(rl.dispatchedQuantity, rl.receivedQuantity),
+            excess: d.shortfall,
+          });
+        }
       }
 
       // ⭐ T-372/DEF-127 (R8) — OUTSIDE the `receiptLines.length > 0` block, deliberately: the truck
@@ -960,7 +989,7 @@ export async function receiveTradeOrder(
     }
 
     const receivedAt = await tradeRepo.markReceived(trx, actor.orgId, order.id, actor.personId);
-    return { receivedAt, entryId, freightEntryId };
+    return { receivedAt, entryId, freightEntryId, overCounts };
   };
   if (tx) return run(tx);
   return transaction(run);

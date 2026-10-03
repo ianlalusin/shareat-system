@@ -1695,7 +1695,11 @@ export async function receivingDisputeOverdue(
 ): Promise<DetectedFinding[]> {
   const rows = (await tx.execute(sql`
     select d.store_id::text as store_id, s.name as store_name, count(*)::int as n,
-           coalesce(sum(d.value), 0)::text as amount,
+           -- ⭐ T-372 S6b: only a SHORT row's value is stranded in 1340 (an over row's is informational), so the peso
+           -- figure sums short rows only; the count and the age stay over every row (the day-open predicate).
+           coalesce(sum(d.value) filter (where d.direction = 'short'), 0)::text as amount,
+           (count(*) filter (where d.direction = 'short'))::int as short_n,
+           (count(*) filter (where d.direction = 'over'))::int as over_n,
            max(${MANILA_TODAY} - d.created_at::date)::int as oldest_age_days,
            (count(*) filter (where d.status = 'deferred'))::int as deferred_n
     from trade_discrepancies d
@@ -1709,7 +1713,7 @@ export async function receivingDisputeOverdue(
       and (${MANILA_TODAY} - d.created_at::date) > ${thresholdDays}
     group by d.store_id, s.name
   `)) as unknown as {
-    store_id: string; store_name: string; n: number; amount: string;
+    store_id: string; store_name: string; n: number; amount: string; short_n: number; over_n: number;
     oldest_age_days: number; deferred_n: number;
   }[];
 
@@ -1718,14 +1722,25 @@ export async function receivingDisputeOverdue(
     key: `receivingDisputeOverdue:${r.store_id}`,
     storeId: r.store_id,
     severity: 'soft' as const,
+    // ⭐ T-372 S6b: the sentence fits the rows it is about. A shortfall is stranded in 1340 and is disposed of as audit,
+    // loss, charge or late receipt (the wording below is unchanged for a shortfall-only store); an over-receipt is on
+    // nobody's books and is resolved as a commissary extra dispatch, a return/recount, or audit.
     detail:
       `${r.store_name} has ${r.n} receiving dispute${r.n === 1 ? '' : 's'} unresolved past ` +
-      `${thresholdDays} days, worth ${peso(Number(r.amount))} at cost still stranded in 1340 ` +
-      `Inventory in transit — the oldest ${r.oldest_age_days} days old` +
+      `${thresholdDays} days` +
+      (r.short_n > 0
+        ? `, worth ${peso(Number(r.amount))} at cost still stranded in 1340 Inventory in transit`
+        : '') +
+      ` — the oldest ${r.oldest_age_days} days old` +
       (r.deferred_n > 0
         ? `, ${r.deferred_n} of them deferred (a deferral is a promise to decide, not an exemption)`
         : '') +
-      '. Dispose of each as audit, loss, charge or late receipt.',
+      (r.over_n === 0
+        ? '. Dispose of each as audit, loss, charge or late receipt.'
+        : r.short_n === 0
+          ? '. Resolve each over-receipt as a commissary extra dispatch, a return or recount, or audit.'
+          : '. Dispose of each shortfall as audit, loss, charge or late receipt, and each over-receipt as a ' +
+            'commissary extra dispatch, a return or recount, or audit.'),
   }));
 }
 

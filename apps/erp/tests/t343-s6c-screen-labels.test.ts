@@ -543,6 +543,7 @@ describe('D1 — a resolved late_receipt row shows "Late receipt" in the status 
         // status line is :137's null arm — no " · …" suffix.
         {
           id: 'disc-2',
+          direction: 'short',
           status: 'open',
           disposition: null,
           quantity: '2',
@@ -552,6 +553,22 @@ describe('D1 — a resolved late_receipt row shows "Late receipt" in the status 
           unit: 'kg',
           orderId: 'order-2',
           orderDate: '2026-01-02',
+          branchName: 'SmokeStore Two',
+          note: null,
+        },
+        // T-372 S6 — an OPEN, undecided OVER row: the screen offers it its own set (direction filter).
+        {
+          id: 'disc-3',
+          direction: 'over',
+          status: 'open',
+          disposition: null,
+          quantity: '2',
+          value: '40.00',
+          deferredTo: null,
+          itemName: 'Pork belly',
+          unit: 'kg',
+          orderId: 'order-3',
+          orderDate: '2026-01-03',
           branchName: 'SmokeStore Two',
           note: null,
         },
@@ -579,10 +596,18 @@ describe('D1 — a resolved late_receipt row shows "Late receipt" in the status 
     // The select now renders (disc-2 is open) — its option set is exactly DISCREPANCY_DISPOSITIONS,
     // as a SET: the screen orders them by frequency of use (loss, charge, audit, late_receipt),
     // not the const's own declaration order, and this pins membership, not that ordering.
-    const selectBlock = /<select\s+name="disposition"[^>]*>([\s\S]*?)<\/select>/.exec(html)?.[1];
-    expect(selectBlock, 'expected the disposition <select> now that disc-2 is open').toBeTruthy();
-    const optionValues = [...selectBlock!.matchAll(/<option[^>]*value="([^"]*)"/g)].map((m) => m[1]!);
-    expect(new Set(optionValues)).toEqual(new Set(DISCREPANCY_DISPOSITIONS));
+    // T-372 S6 — the set is now PER DIRECTION (the screen filters by `row.direction`): a SHORT row offers
+    // audit/loss/charge/late_receipt only, an OVER row offers extra_dispatch/return/audit only. Both are
+    // asserted, so the filter is pinned and cannot be loosened to "every disposition" without a red.
+    const selectBlocks = [...html.matchAll(/<select\s+name="disposition"[^>]*>([\s\S]*?)<\/select>/g)].map((m) => m[1]!);
+    expect(selectBlocks, 'expected one disposition <select> per open row (disc-2 short, disc-3 over)').toHaveLength(2);
+    const optionsOf = (block: string) => [...block.matchAll(/<option[^>]*value="([^"]*)"/g)].map((m) => m[1]!).filter((v) => v !== '');
+    expect(new Set(optionsOf(selectBlocks[0]!)), 'a SHORT row').toEqual(new Set(['audit', 'loss', 'charge', 'late_receipt']));
+    expect(new Set(optionsOf(selectBlocks[1]!)), 'an OVER row').toEqual(new Set(['extra_dispatch', 'return', 'audit']));
+    // every offered value is a real disposition
+    for (const v of [...optionsOf(selectBlocks[0]!), ...optionsOf(selectBlocks[1]!)]) {
+      expect(DISCREPANCY_DISPOSITIONS as readonly string[]).toContain(v);
+    }
   });
 });
 

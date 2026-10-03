@@ -326,7 +326,13 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // `settlementId` input is not a control and is not counted. FAIL and UNRESOLVED did not move, so
     // all ten are PASS (by partition, not per-control pixel reading). Verified by running the census
     // (1096) and by counting the form's elements in source (3 selects + 6 inputs − 1 hidden + 1 button).
-    expect(results.length).toBe(1096);
+    // 1096 -> 1097, T-372 S6 (DEF-513), 2026-10-03. +1 PASS, FAIL/UNRESOLVED unmoved (both asserted above —
+    // the baseline test ran green at 151/58 with the new total measured). `/commissary/discrepancies` now
+    // offers an OVER row its own disposition `<select>` (`app/commissary/discrepancies/page.tsx:171`: extra
+    // dispatch / return / audit) beside the short row's existing one; a static census counts the source
+    // element regardless of which branch renders. FAIL and UNRESOLVED did not move, so it is PASS by
+    // partition, not per-control pixel reading. Verified by running the census (1097).
+    expect(results.length).toBe(1097);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

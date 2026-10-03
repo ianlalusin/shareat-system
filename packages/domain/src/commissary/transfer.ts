@@ -136,10 +136,31 @@ export function proportionOfCost(dispatchCost: Money, received: Quantity, dispat
   if (d === 0n) return ZERO;
   const r = toThousandths(received);
   if (r >= d) return dispatchCost;
+  return costOfQuantity(dispatchCost, received, dispatched);
+}
+
+/**
+ * ⭐ T-372 S6b — `q` units valued at the line's per-unit dispatch cost (`dispatchCost / dispatched`): the same exact
+ * half-up centavo arithmetic as `proportionOfCost`, WITHOUT its `received >= dispatched → dispatchCost` cap.
+ * `proportionOfCost` would understate 30 of 20 at the full dispatch cost; the over-receipt's informational `value` is
+ * the excess at cost, so it must not be capped. Informational only: nothing posts it.
+ */
+export function costOfQuantity(dispatchCost: Money, q: Quantity, dispatched: Quantity): Money {
+  const d = toThousandths(dispatched);
+  if (d === 0n) return ZERO;
   const total = toCentavos(dispatchCost);
-  const scaled = total * r * 2n;
-  const rounded = (scaled + d) / (d * 2n);
-  return fromCentavos(rounded);
+  const scaled = total * toThousandths(q) * 2n;
+  return fromCentavos((scaled + d) / (d * 2n));
+}
+
+/**
+ * ⭐ T-372 S6b — the ONE place the cap lives. A receipt books what was SENT, never more: a branch that counted more than
+ * the commissary dispatched books the dispatched quantity, and the excess is an `over` discrepancy row for a manager to
+ * decide. There is no tolerance exception: a booked quantity above dispatched would relieve `1340` and `5175` against
+ * goods the commissary never released. (The tolerance only decides whether an over ROW is raised.)
+ */
+export function bookedReceiptQuantity(dispatched: Quantity, counted: Quantity): Quantity {
+  return toThousandths(counted) > toThousandths(dispatched) ? dispatched : counted;
 }
 
 export interface DispatchLineInput {
@@ -270,6 +291,8 @@ export interface ReceiptLineInput {
   readonly branchItemId: string;
   readonly branchLocationId: string;
   readonly dispatchedQuantity: Quantity;
+  /** ⭐ What the branch COUNTED. `confirmReceipt` books `bookedReceiptQuantity(dispatched, counted)`; any excess
+   *  above dispatched is an `over` discrepancy row (T-372 S6b). */
   readonly receivedQuantity: Quantity;
   /** ⚠️ The branch's own base unit, when known. A mismatch flags and skips the balance. */
   readonly branchBaseUnit: string | null;
@@ -331,7 +354,8 @@ export interface ConfirmReceiptResult {
    */
   readonly entryId: string | null;
   readonly branchMovements: readonly { lineId: string; movementId: string }[];
-  readonly discrepancies: readonly { lineId: string; shortfall: Quantity; id: string | null }[];
+  /** `shortfall` is the DIFFERENCE (dispatched − counted for `short`, counted − dispatched for `over`). */
+  readonly discrepancies: readonly { lineId: string; shortfall: Quantity; id: string | null; direction: 'short' | 'over' }[];
   readonly unitMismatches: readonly string[];
   readonly value: Money;
   readonly inTransitRemaining: Money;
@@ -351,7 +375,7 @@ export async function confirmReceipt(
   if (input.lines.length === 0) return { ok: false, reason: 'a receipt with no lines posts nothing' };
 
   const branchMovements: { lineId: string; movementId: string }[] = [];
-  const discrepancies: { lineId: string; shortfall: Quantity; id: string | null }[] = [];
+  const discrepancies: { lineId: string; shortfall: Quantity; id: string | null; direction: 'short' | 'over' }[] = [];
   const unitMismatches: string[] = [];
   let receivedValue: Money = ZERO;
   let receivedCost: Money = ZERO;
@@ -360,7 +384,9 @@ export async function confirmReceipt(
   // ---- Pass 1: decide everything, write nothing. ---------------------------------------------
   // ⭐ The T-166 lesson again: a refusal discovered on line 2 must not leave line 1's stock moved.
   const accepted: { line: ReceiptLineInput; account: string; value: Money; cost: Money }[] = [];
-  const shortfalls: { line: ReceiptLineInput; shortfall: Quantity }[] = [];
+  const shortfalls: { line: ReceiptLineInput; shortfall: Quantity; direction: 'short' | 'over' }[] = [];
+  /** ⭐ T-372 S6b: what each line BOOKS — the counted quantity capped at what was dispatched. */
+  const bookedByLineId = new Map<string, Quantity>();
 
   for (const line of input.lines) {
     const account = INVENTORY_ACCOUNT_BY_ITEM_KIND[line.branchItemKind];
@@ -373,12 +399,19 @@ export async function confirmReceipt(
 
     dispatchedCost = add(dispatchedCost, line.dispatchCost);
 
+    // ⭐ T-372 S6b: the DISCREPANCY tests read what the branch COUNTED; everything that is booked reads `booked`.
+    const booked = bookedReceiptQuantity(line.dispatchedQuantity, line.receivedQuantity);
+    bookedByLineId.set(line.lineId, booked);
     const shortfall = subtractQuantity(line.dispatchedQuantity, line.receivedQuantity);
     if (toThousandths(shortfall) > toThousandths(RECEIPT_DISCREPANCY_TOLERANCE)) {
-      shortfalls.push({ line, shortfall });
+      shortfalls.push({ line, shortfall, direction: 'short' });
+    }
+    const excess = subtractQuantity(line.receivedQuantity, line.dispatchedQuantity);
+    if (toThousandths(excess) > toThousandths(RECEIPT_DISCREPANCY_TOLERANCE)) {
+      shortfalls.push({ line, shortfall: excess, direction: 'over' });
     }
 
-    if (toThousandths(line.receivedQuantity) === 0n) continue;
+    if (toThousandths(booked) === 0n) continue;
 
     // ⭐ UNIT-MISMATCH GUARD, and v1's two load-bearing details are kept:
     //   1. enforced only when the branch's unit is KNOWN — the guard refuses to act on an
@@ -399,9 +432,9 @@ export async function confirmReceipt(
       continue;
     }
 
-    const value = lineCost(line.receivedQuantity, line.rate);
+    const value = lineCost(booked, line.rate);
     if (compare(value, ZERO) <= 0) continue;
-    const cost = proportionOfCost(line.dispatchCost, line.receivedQuantity, line.dispatchedQuantity);
+    const cost = proportionOfCost(line.dispatchCost, booked, line.dispatchedQuantity);
     accepted.push({ line, account, value, cost });
     receivedValue = add(receivedValue, value);
     receivedCost = add(receivedCost, cost);
@@ -420,7 +453,7 @@ export async function confirmReceipt(
     const movement = await stockLedgerRepo.insertMovement(tx, {
       orgId: input.orgId, storeId: input.branchStoreId, locationId: line.branchLocationId,
       itemId: line.branchItemId, movedAt: new Date(`${input.receivedOn}T00:00:00Z`),
-      quantity: line.receivedQuantity, kind: 'transfer_in',
+      quantity: bookedByLineId.get(line.lineId)!, kind: 'transfer_in',
       sourceType: 'trade_order_receipt',
       sourceId: input.orderLineIdByLineId?.[line.lineId] ?? input.orderId,
       createdBy: input.receivedBy,
@@ -433,7 +466,7 @@ export async function confirmReceipt(
     await stockLayersRepo.createLayer(tx, {
       orgId: input.orgId, storeId: input.branchStoreId, itemId: line.branchItemId,
       receivedAt: new Date(`${input.receivedOn}T00:00:00Z`),
-      quantity: line.receivedQuantity, unitCost: line.rate,
+      quantity: bookedByLineId.get(line.lineId)!, unitCost: line.rate,
       source: 'transfer_in', sourceId: input.orderId, movementId: movement.id,
     });
   }
@@ -441,13 +474,14 @@ export async function confirmReceipt(
   // ⭐ T-174: one row per short line, in THIS transaction. ⛔ There is no "raise a discrepancy"
   // action anywhere — if the shortfall and the row could be created separately, the day-open block
   // would be guarding a list that a failed second step can leave empty.
-  for (const { line, shortfall } of shortfalls) {
+  for (const { line, shortfall, direction } of shortfalls) {
     const orderLineId = input.orderLineIdByLineId?.[line.lineId];
     if (!orderLineId) {
-      discrepancies.push({ lineId: line.lineId, shortfall, id: null });
+      discrepancies.push({ lineId: line.lineId, shortfall, id: null, direction });
       continue;
     }
     const created = await tradeDiscrepanciesRepo.create(tx, {
+      direction,
       orgId: input.orgId,
       // ⚠️ The COMMISSARY's store. The stranded value is on ITS books, and it is its manager
       // who decides what happened — invariant 11.
@@ -458,12 +492,18 @@ export async function confirmReceipt(
       // ⭐ AT COST, because that is what is actually stranded in `1340`. ⚠️ Valuing the dispute at
       // the transfer rate would make every disposal relieve `1340` by more than the goods put
       // into it — the same ₱-per-shipment hole in a second place.
-      value: subtract(
-        line.dispatchCost,
-        proportionOfCost(line.dispatchCost, line.receivedQuantity, line.dispatchedQuantity),
-      ),
+      //
+      // ⭐ T-372 S6b: an `over` row's value is the EXCESS at the line's dispatch unit cost (uncapped), informational
+      // only — it posts nothing and can be 0 when the dispatch cost is 0.
+      value:
+        direction === 'over'
+          ? costOfQuantity(line.dispatchCost, shortfall, line.dispatchedQuantity)
+          : subtract(
+              line.dispatchCost,
+              proportionOfCost(line.dispatchCost, line.receivedQuantity, line.dispatchedQuantity),
+            ),
     });
-    discrepancies.push({ lineId: line.lineId, shortfall, id: created.id });
+    discrepancies.push({ lineId: line.lineId, shortfall, id: created.id, direction });
   }
 
   // ⚠️ Written from EVERY line, not just the accepted ones — a shipment whose units were wrong
@@ -478,12 +518,15 @@ export async function confirmReceipt(
       lineNo: line.lineId,
       itemId: line.branchItemId,
       orderedQuantity: line.dispatchedQuantity,
-      receivedQuantity: line.receivedQuantity,
+      // ⭐ T-372 S6b: the BOOKED quantity, so the branch's `deliveries` row never records more than was sent
+      // (the T-166 over-receipt trigger would refuse it, and `over_receipt_allowed` must not be set from code —
+      // that flag means a manager approved it). The excess lives on the `over` discrepancy row.
+      receivedQuantity: bookedByLineId.get(line.lineId)!,
       unit: line.branchBaseUnit ?? line.commissaryBaseUnit,
       unitCost: line.rate,
       locationId: line.branchLocationId,
       shortageReason:
-        toThousandths(line.receivedQuantity) < toThousandths(line.dispatchedQuantity)
+        toThousandths(bookedByLineId.get(line.lineId)!) < toThousandths(line.dispatchedQuantity)
           ? (line.shortageReason ?? 'other')
           : null,
     })),

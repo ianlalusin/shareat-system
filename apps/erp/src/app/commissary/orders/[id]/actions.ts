@@ -220,9 +220,16 @@ export async function receiveOrderAction(fd: FormData): Promise<void> {
       receivedOn: str(fd, 'receivedOn') || undefined,
       lines: lines.length > 0 ? lines : undefined,
     });
-    return result.entryId
+    const base = result.entryId
       ? 'Receipt confirmed. Both stores\' books moved on what was actually signed for; any shortfall is an open transit discrepancy for the commissary to dispose of.'
       : 'Receipt recorded. Nothing was accepted into stock — every line was short to zero or blocked — so the value stays in transit.';
+    // ⭐ T-372 S6b: an over-count is booked at what was sent, and said so — never silent.
+    return (
+      base +
+      result.overCounts
+        .map((o) => ` ${o.itemName}: ${o.counted} counted, ${o.booked} booked — the extra ${o.excess} is waiting for the commissary to resolve.`)
+        .join('')
+    );
   });
 }
 

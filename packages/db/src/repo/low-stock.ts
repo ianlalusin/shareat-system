@@ -432,6 +432,8 @@ export interface DiscrepancyListRow {
   readonly orderDate: string;
   readonly branchName: string | null;
   readonly note: string | null;
+  /** T-372 S6b: `short` or `over` — decides which dispositions the screen offers. */
+  readonly direction: 'short' | 'over';
 }
 
 export async function discrepancyList(
@@ -441,7 +443,7 @@ export async function discrepancyList(
   includeResolved: boolean,
 ): Promise<DiscrepancyListRow[]> {
   const rows = (await tx.execute(sql`
-    select d.id, d.status, d.disposition, d.quantity::text, d.value::text,
+    select d.id, d.direction, d.status, d.disposition, d.quantity::text, d.value::text,
            d.deferred_to::text as "deferredTo", d.note,
            i.name as "itemName", l.unit,
            d.order_id as "orderId", o.order_date::text as "orderDate",
