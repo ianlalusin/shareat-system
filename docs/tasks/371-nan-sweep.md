@@ -1,6 +1,6 @@
 # T-371: NaN sweep, by the column and not by the spelling (DEF-382, DEF-395)
 
-**Status:** **Not started (last) — empty-box ruling "field decides" 2026-09-30** — APPROVED 2026-09-30 (orchestrator, after independent Opus review). Spec by the Opus planner, 2026-09-30.
+**Status:** **IN PROGRESS 2026-10-03, on branch `wip/2026-10-03b` (not on `main`, per ✎R9): S0 + S1 + S3 done and audited; S2 28/31 groups (till-fiscal, statutory-discounts, ledger failed on an expired API token — re-run); S4 next. Ian opted in to running S3/S2 as a multi-agent Workflow ("use a workflow for T-371", 2026-10-03). Census as measured (approved): 160 columns / 65 tables; 159 Drizzle writers + 9 raw; 315 relational comparisons scanned (74 EXEMPT); 16 forgeries → 0 after S3.** — empty-box ruling "field decides" 2026-09-30 — APPROVED 2026-09-30 (orchestrator, after independent Opus review). Spec by the Opus planner, 2026-09-30.
 The review asked for 14 changes; all are applied (marked ✎R1 to ✎R14). This is the last task of Ian's money-defect
 push (*"close all open money defects in v2"*), batch F of `docs/plans/money-defects-2026-09-30.md`.
 
