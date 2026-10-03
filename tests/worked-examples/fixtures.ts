@@ -923,6 +923,34 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       "figure makes the commissary's stock ledger and 1310 disagree; the margin goes to 5175 (a debit when the rate is " +
       'below cost).',
   },
+  // T-372 S3/S4 (DEF-127, R10). `storeRef` here means two distinct stores, as in commissary.discrepancy-extra-dispatch:
+  // 'branch1' is the receiving BRANCH and 'commissary' the dispatching commissary. These are `postInternalFreight`'s four legs.
+  {
+    id: 'commissary.receipt-freight',
+    sourceType: 'trade_order_receipt',
+    title: 'Outbound freight on an internal order — the branch bears the haulage, the commissary recovers its own',
+    narrative:
+      'An internal order from the commissary to a branch carries a \u20b11,000 delivery fee and \u20b1200 of other fees: \u20b11,200 ' +
+      'is what the truck cost. At RECEIPT, as its own entry beside the goods entry, the branch (which bears the haulage, ' +
+      "Ian's ruling Q1 (a)) books it as its cost and owes the commissary for it, and the commissary books what the branch " +
+      'owes and credits its own haulage account for the trip it already paid for. Consolidated, the two 6630 legs net to ' +
+      'zero, the same elimination 5175 performs for the goods margin.',
+    input: { orderId: 'ORD-0001', deliveryFee: '1000.00', otherFees: '200.00', freight: '1200.00', receivedOn: '2026-01-15' },
+    expect: [
+      D('6630', '1200.00', null, { storeRef: 'branch1', lineMemo: 'outbound freight borne by the branch' }),
+      C('2150', '1200.00', { type: 'store', id: 'STORE-COMMISSARY' }, { storeRef: 'branch1', lineMemo: 'due to commissary for the freight' }),
+      D('1250', '1200.00', { type: 'store', id: 'STORE-BRANCH1' }, { storeRef: 'commissary', lineMemo: 'due from branch for the freight' }),
+      C('6630', '1200.00', null, { storeRef: 'commissary', lineMemo: 'commissary recovers its own haulage' }),
+    ],
+    entryDate: '2026-01-15',
+    trap: 'the freight is its OWN entry, never extra legs on the goods entry: the goods entry can be absent while the ' +
+      'freight is still owed (every line received short to zero still ran the truck), and folding it in would put a ' +
+      '1000/200/1200 figure into the goods legs and break the 1250/2150 = goods value rule. It shares source_type ' +
+      "'trade_order_receipt' and source_id with the goods entry, so a reader tells the two apart by idempotency_key " +
+      "('...:receipt' against '...:receipt-freight'), never by source alone. Internal orders only: a franchise's freight " +
+      "would be revenue, not a recovery (bible row 111). The commissary's 6630 can read negative when its real trucking " +
+      'cost sits in wages; that is visible, accepted, and not a defect.',
+  },
 
   // =========================================================================================
   // channel_settlement — T-150. The document that finally clears 1220, which nothing ever did.
