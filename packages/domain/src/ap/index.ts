@@ -742,7 +742,7 @@ export async function verifyInvoice(
     const drafts = live.filter((e) => e.status === 'draft');
     for (const d of drafts) {
       try {
-        await approveExpense(trx, actor, d.id);
+        await approveExpense(trx, actor, d.id, { noPeriodOverride: true });
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         const innerUserMessage = err instanceof Error ? (err as { userMessage?: unknown }).userMessage : undefined;
@@ -884,7 +884,7 @@ export async function recordExpenseForInvoice(
       particulars: input.particulars,
       payments: input.payments,
     });
-    const approved = await approveExpense(trx, actor, expenseId);
+    const approved = await approveExpense(trx, actor, expenseId, { noPeriodOverride: true });
     return { expenseId, ...approved };
   };
   if (tx) return run(tx);

@@ -5,6 +5,9 @@ import { listStores, listActingPersons, listCategoriesGrouped } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { approveExpenseAction, voidExpenseAction, updateDraftAction, deleteDraftAction } from '../actions';
 import { withOrgPrincipal } from '../lib';
+import { canOverrideClosedMonth } from '../reimbursements/lib';
+import { closedMonthOf, closedMonths } from '../../../lib/period-override';
+import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 
@@ -88,6 +91,13 @@ export default async function ExpenseDetailPage({
   const qs = new URLSearchParams();
   if (sp.store) qs.set('store', sp.store);
   const carry = qs.toString();
+
+  // T-369 S5b: the closed-month control is offered only to a holder of `override_period_lock`, and only for a draft
+  // whose own date is in a closed month.
+  const closedMonth =
+    expense.status === 'draft' && (await canOverrideClosedMonth(actor))
+      ? closedMonthOf(await closedMonths(orgId), expense.businessDate)
+      : undefined;
 
   const isDraft = expense.status === 'draft';
   const isPosted = expense.status === 'posted';
@@ -249,6 +259,12 @@ export default async function ExpenseDetailPage({
                 which reverses rather than deletes.
               </p>
             </div>
+            {closedMonth && (
+              <>
+                <input type="hidden" name="expenseDate" value={expense.businessDate} />
+                <ClosedMonthOverride closedMonths={[closedMonth]} dateFieldName="expenseDate" initialDate={expense.businessDate} />
+              </>
+            )}
             <button
               type="submit"
               className="rounded bg-neutral-900 px-4 py-1.5 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"

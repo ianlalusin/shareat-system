@@ -357,3 +357,175 @@ describe('AUDIT C — a LOCKED month with a full override is refused with the lo
     expect(await overrideRows(f.orgId)).toHaveLength(0);
   });
 });
+
+// -----------------------------------------------------------------------------------------------
+// S5b — T7 on the screen: the approve form on `/expenses/[id]` (docs/tasks/369-unwired-money-screens.md §S5
+// "BUILDER S5b": `approveExpenseAction` and `expenses/[id]/page.tsx` mounting the control).
+//
+// Same field names as S5a: periodOverrideConfirm · periodOverrideReason · periodOverrideNote, and the marker
+// `data-closed-month-override`. The approve form carries `expenseId` (+ `storeId`); the DATE the action judges is
+// the EXPENSE's own business date, read server-side (an expense's date is its invoice's — the form has no date field).
+// The action forwards the override only when that date's month is `closed` (else it is dropped: no audit noise).
+// -----------------------------------------------------------------------------------------------
+
+/** Lipa; admin + manager; one DRAFT expense dated 10 Jan (January then CLOSED) and one dated 10 Feb (open). */
+async function expenseFixture(hint: string) {
+  const { seedExpenseCategories } = await import('../../../../packages/db/seed/expense-categories');
+  const { createExpense } = await import('@shareat/domain');
+  const code = uid(`t369s5bw-${hint}`);
+  const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
+  const orgId = org!.id;
+  await seedChartOfAccounts(sql, orgId);
+  await seedExpenseCategories(sql, orgId);
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2026-01-01', '2026-01-31', 'open'), (${orgId}, '2026-02-01', '2026-02-28', 'open')`;
+  const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('lipa')}, 'Lipa') returning id`;
+  const storeId = store!.id;
+  const adminId = await person(orgId, 'Admin', 'admin', storeId);
+  const managerId = await person(orgId, 'Manager', 'manager', storeId);
+  const [cash] = await sql<{ id: string; gl_account_code: string }[]>`
+    select id, gl_account_code from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'cashier' and is_foundation`;
+  await asOrg(orgId, (tx) =>
+    postEntry(tx, {
+      orgId, entryDate: '2026-01-02', sourceType: 'manual_journal', sourceId: uid('fund'), idempotencyKey: uid('fund'), memo: 'fixture funding', postedBy: adminId,
+      lines: [{ accountCode: cash!.gl_account_code, storeId, debit: '100000.00' }, { accountCode: '3900', storeId, credit: '100000.00' }],
+    }),
+  );
+  const [supplier] = await sql<{ id: string }[]>`insert into suppliers (org_id, name, created_by) values (${orgId}, 'Pork Co', ${adminId}) returning id`;
+  const [file] = await sql<{ id: string }[]>`
+    insert into stored_files (org_id, store_id, purpose, storage_path, content_type, byte_size, checksum, uploaded_by)
+    values (${orgId}, ${storeId}, 'receipt_photo', ${`orgs/${orgId}/stores/${storeId}/receipt_photo/${uid('r')}.jpg`}, 'image/jpeg', 1024, ${uid('sum')}, ${adminId})
+    returning id`;
+  const [cat] = await sql<{ id: string }[]>`select id from expense_categories where org_id = ${orgId} and category = 'Cost of Goods Sold — General'`;
+  const admin = actor(orgId, adminId);
+  const draft = async (on: string) => {
+    const [inv] = await sql<{ id: string }[]>`
+      insert into supplier_invoices (org_id, store_id, supplier_id, invoice_date, total_amount, status, receipt_file_id, verified_by, verified_at, created_by,
+                                     attested_supplier, attested_invoice, attested_items, attested_price)
+      values (${orgId}, ${storeId}, ${supplier!.id}, ${on}, '99999999.00', 'verified', ${file!.id}, ${managerId}, now(), ${adminId}, true, true, true, true)
+      returning id`;
+    const made = await asOrg(orgId, (tx) =>
+      createExpense(tx, admin, {
+        storeId, supplierId: supplier!.id, supplierInvoiceId: inv!.id, businessDate: on, categoryId: cat!.id,
+        particulars: `Pork, cash (${on})`, payments: [{ method: 'cash', amount: '1200.00', moneyAccountId: cash!.id }],
+      }),
+    );
+    return made.id;
+  };
+  const closedExpenseId = await draft('2026-01-10');
+  const openExpenseId = await draft('2026-02-10');
+  await sql`update fiscal_periods set status = 'closed' where org_id = ${orgId} and starts_on = '2026-01-01'`;
+  return { orgId, storeId, adminId, managerId, admin, manager: actor(orgId, managerId), closedExpenseId, openExpenseId };
+}
+type ExpenseFixture = Awaited<ReturnType<typeof expenseFixture>>;
+
+const expenseEntries = async (orgId: string) =>
+  Number((await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where org_id = ${orgId} and source_type = 'expense_payment'`)[0]!.n);
+const statusOf = async (id: string) => (await sql<{ status: string }[]>`select status from expenses where id = ${id}`)[0]!.status;
+
+function approveForm(f: ExpenseFixture, expenseId: string, o: { confirm?: boolean; reason?: string; note?: string } = {}): FormData {
+  const fd = new FormData();
+  fd.set('storeId', f.storeId);
+  fd.set('expenseId', expenseId);
+  if (o.confirm) fd.set('periodOverrideConfirm', 'on');
+  if (o.reason !== undefined) fd.set('periodOverrideReason', o.reason);
+  if (o.note !== undefined) fd.set('periodOverrideNote', o.note);
+  return fd;
+}
+async function approveOnScreen(who: Actor, fd: FormData): Promise<string> {
+  ACTOR_HOLDER.actor = who;
+  const { approveExpenseAction } = await import('../../src/app/expenses/actions');
+  return expectRedirectTo(() => approveExpenseAction(fd));
+}
+async function renderExpensePage(who: Actor, f: ExpenseFixture, expenseId: string): Promise<string> {
+  ACTOR_HOLDER.actor = who;
+  const { default: Page } = await import('../../src/app/expenses/[id]/page');
+  return renderToStaticMarkup((await Page({ params: Promise.resolve({ id: expenseId }), searchParams: Promise.resolve({ store: f.storeId }) } as never)) as never);
+}
+
+describe('T7 (S5b, web) — approveExpenseAction and the closed-month override', () => {
+  it('the admin, an expense dated in the closed January, confirm + reason + note -> no error banner; the expense is posted; one override row for the admin — red on HEAD: the fields are ignored and the closed period refuses', async () => {
+    const f = await expenseFixture('w-ok');
+    const to = await approveOnScreen(f.admin, approveForm(f, f.closedExpenseId, { confirm: true, reason: 'data_entry_error', note: 'Receipt found late' }));
+    expect(param(to, 'error'), `refused: ${param(to, 'error')}`).toBeNull();
+    expect(await statusOf(f.closedExpenseId)).toBe('posted');
+    const rows = await overrideRows(f.orgId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ actor_person_id: f.adminId, reason: 'data_entry_error', note: 'Receipt found late', period_status_at_post: 'closed' });
+  });
+
+  it('no override fields on a closed-month expense -> a refusal banner for the admin AND the manager; stays a draft; no entry, no row — positive control: the previous test', async () => {
+    const f = await expenseFixture('w-none');
+    for (const who of [f.admin, f.manager]) {
+      const to = await approveOnScreen(who, approveForm(f, f.closedExpenseId));
+      expect(param(to, 'error'), 'a refusal banner').toBeTruthy();
+    }
+    expect(await statusOf(f.closedExpenseId)).toBe('draft');
+    expect(await expenseEntries(f.orgId)).toBe(0);
+    expect(await overrideRows(f.orgId)).toHaveLength(0);
+
+    const ok = await approveOnScreen(f.admin, approveForm(f, f.closedExpenseId, { confirm: true, reason: 'data_entry_error', note: 'x' }));
+    expect(param(ok, 'error'), `the control approval was refused: ${param(ok, 'error')}`).toBeNull();
+  });
+
+  it('a manager who submits the override fields anyway is refused (no override_period_lock); stays a draft; no row — positive control: the admin posts the same expense with the same fields', async () => {
+    const f = await expenseFixture('w-mgr');
+    const fields = { confirm: true, reason: 'data_entry_error', note: 'Receipt found late' };
+    const to = await approveOnScreen(f.manager, approveForm(f, f.closedExpenseId, fields));
+    expect(param(to, 'error'), 'a refusal banner').toBeTruthy();
+    expect(await statusOf(f.closedExpenseId)).toBe('draft');
+    expect(await overrideRows(f.orgId)).toHaveLength(0);
+
+    const ok = await approveOnScreen(f.admin, approveForm(f, f.closedExpenseId, fields));
+    expect(param(ok, 'error'), `the admin was refused: ${param(ok, 'error')}`).toBeNull();
+    expect(await overrideRows(f.orgId)).toHaveLength(1);
+  });
+
+  it('an OPEN-month expense WITH override fields posts, but the action DROPS the override — no period_overrides row — Mutant: forward unconditionally -> a row with period_status_at_post "open", red', async () => {
+    const f = await expenseFixture('w-open');
+    const to = await approveOnScreen(f.admin, approveForm(f, f.openExpenseId, { confirm: true, reason: 'data_entry_error', note: 'Not needed here' }));
+    expect(param(to, 'error'), `refused: ${param(to, 'error')}`).toBeNull();
+    expect(await statusOf(f.openExpenseId)).toBe('posted');
+    expect(await overrideRows(f.orgId), 'an override audit row was written for an OPEN month').toHaveLength(0);
+  });
+
+  it('a FORGED invalid reason, or no confirm box, drops the override -> refused, stays a draft, no row', async () => {
+    const f = await expenseFixture('w-forged');
+    for (const o of [{ confirm: true, reason: 'because I said so', note: 'x' }, { confirm: false, reason: 'data_entry_error', note: 'x' }]) {
+      const to = await approveOnScreen(f.admin, approveForm(f, f.closedExpenseId, o));
+      expect(param(to, 'error'), 'a refusal banner').toBeTruthy();
+    }
+    expect(await statusOf(f.closedExpenseId)).toBe('draft');
+    expect(await overrideRows(f.orgId)).toHaveLength(0);
+  });
+});
+
+describe('T7 (S5b, render) — the expense page offers the override control only to holders of override_period_lock', () => {
+  it("the admin's HTML for the closed-month draft carries the marker, the three field names and the plain-word reason labels; the manager's carries none of them (positive control: it renders the draft's particulars and its Approve button)", async () => {
+    const f = await expenseFixture('w-render');
+
+    const admin = await renderExpensePage(f.admin, f, f.closedExpenseId);
+    expect(admin, 'no data-closed-month-override marker for the admin').toContain('data-closed-month-override');
+    for (const name of ['periodOverrideConfirm', 'periodOverrideReason', 'periodOverrideNote']) expect(admin, `missing ${name}`).toContain(`name="${name}"`);
+    for (const label of ['Late supplier bill', 'Correction required by BIR/regulator', 'Fixing a mistake', 'Other']) expect(admin, `missing label ${label}`).toContain(label);
+    expect(admin, 'no browser dialogs').not.toMatch(/\b(alert|confirm)\(/);
+
+    const manager = await renderExpensePage(f.manager, f, f.closedExpenseId);
+    expect(manager).toContain('Pork, cash (2026-01-10)');
+    expect(manager).toMatch(/Approve &amp; post/);
+    expect(manager, 'a manager must not be handed the override control').not.toContain('data-closed-month-override');
+    for (const name of ['periodOverrideConfirm', 'periodOverrideReason', 'periodOverrideNote']) expect(manager).not.toContain(name);
+  });
+});
+
+describe('T7 (S5b, web, T-364 order) — nothing about the expense is said before approve_expense is proven', () => {
+  it('a staff member (no approve_expense) approving a closed-month expense gets the generic authorization refusal, not the closed-month sentence, even with a ticked, half-filled override form', async () => {
+    const f = await expenseFixture('w-order');
+    const staffId = await person(f.orgId, 'Cashier', 'staff', f.storeId);
+    const to = await approveOnScreen(actor(f.orgId, staffId), approveForm(f, f.closedExpenseId, { confirm: true }));
+    const err = param(to, 'error');
+    expect(err, 'a refusal banner').toBeTruthy();
+    expect(err).not.toMatch(/closed|Choose a reason|January/i);
+    expect(await statusOf(f.closedExpenseId)).toBe('draft');
+    expect(await overrideRows(f.orgId)).toHaveLength(0);
+  });
+});

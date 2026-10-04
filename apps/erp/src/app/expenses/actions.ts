@@ -29,8 +29,9 @@ import {
   type ExpensePaymentMethod,
   type MoneyLine,
 } from '@shareat/domain';
-import { apRepo, goneSentence } from '@shareat/db';
+import { apRepo, expensesRepo, goneSentence } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
+import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '../../lib/period-override';
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
@@ -178,7 +179,9 @@ async function parseExpenseForm(
   // ⛔ Re-run server-side regardless of what the browser did (RULES rule 7 — no client-side-only
   // authorization). The sources are re-fetched here rather than trusted from the form, so a
   // hand-posted payload naming an account at another store, or a drained float, is refused.
-  const { sources } = await loadMoneyLines(actor.orgId, storeId);
+  // T-369 S6b: the list the page offered, including another branch's accounts where the actor may move that money.
+  const loaded = await loadMoneyLines(actor.orgId, storeId, actor);
+  const sources = [...loaded.sources, ...loaded.otherStoreSources];
   const supplier = await withOrgPrincipal(actor.orgId, (tx) =>
     apRepo.getSupplierById(tx, actor.orgId, supplierId),
   );
@@ -293,7 +296,23 @@ export async function approveExpenseAction(formData: FormData): Promise<void> {
   const qs = carryQs(formData);
 
   try {
-    await withOrgPrincipal(actor.orgId, (tx) => approveExpense(tx, actor, expenseId));
+    // T-369 S5b (DEF-314): the closed-month override is forwarded only when the EXPENSE's own date (read here,
+    // never from the form) falls in a CLOSED month - otherwise an ordinary approval would leave an audit row.
+    // T-364 order: nothing derived from the expense (its month, a sentence about it) is said until the actor has
+    // proven `approve_expense` at the expense's store. A refusal here is the generic authorization one.
+    const expense = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const found = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
+      if (found) await authorize(tx, actor, 'approve_expense', { storeId: found.storeId });
+      return found;
+    });
+    const asked = readPeriodOverride(formData);
+    const inClosedMonth = !!expense && !!closedMonthOf(await closedMonths(actor.orgId), expense.businessDate);
+    const periodOverride = asked && inClosedMonth ? asked : undefined;
+    const problem = inClosedMonth ? periodOverrideProblem(formData) : null;
+    if (problem) throw new Error(problem);
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      approveExpense(tx, actor, expenseId, periodOverride ? { periodOverride } : undefined),
+    );
   } catch (err) {
     redirect(`/expenses/${expenseId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }

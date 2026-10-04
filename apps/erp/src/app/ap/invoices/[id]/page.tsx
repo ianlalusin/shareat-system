@@ -47,7 +47,7 @@ export default async function InvoiceDetailPage({
       return all.filter((e) => e.supplierInvoiceId === id);
     }),
     listCategoriesGrouped(orgId),
-    loadMoneyLines(orgId, invoice.storeId),
+    loadMoneyLines(orgId, invoice.storeId, actor),
   ]);
 
   // ⚠️ `remaining >= 1` is load-bearing for C1 below, not just a display gate: a fully paid
@@ -500,6 +500,8 @@ return (
               <MoneyLines
                 direction="out"
                 sources={moneyLines.sources}
+                otherStoreSources={moneyLines.otherStoreSources}
+                storeNames={moneyLines.storeNames}
                 staff={moneyLines.staff}
                 supplierId={invoice.supplierId}
                 supplierName={supplier?.name ?? null}

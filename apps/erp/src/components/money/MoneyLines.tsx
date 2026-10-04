@@ -58,6 +58,10 @@ const peso = (v: string | number) =>
 export interface MoneyLinesProps {
   direction: MoneyDirection;
   sources: SourceOption[];
+  /** T-369 S6b: accounts at another branch the person may move money from (folded group, T-266 §6.4). */
+  otherStoreSources?: SourceOption[];
+  /** Store id -> name, so another branch's account reads "Office safe — Malvar". */
+  storeNames?: Record<string, string>;
   staff: { id: string; displayName: string }[];
   /** Field-name prefix, so two instances can live on one form. */
   name?: string;
@@ -70,11 +74,15 @@ export interface MoneyLinesProps {
   initialLines?: MoneyLine[];
 }
 
+const NO_SOURCES: SourceOption[] = [];
+const NO_NAMES: Record<string, string> = {};
 const blankLine = (): MoneyLine => ({ method: 'cash', amount: '', moneyAccountId: null });
 
 export function MoneyLines({
   direction,
-  sources,
+  sources: ownSources,
+  otherStoreSources = NO_SOURCES,
+  storeNames = NO_NAMES,
   staff,
   name = 'line',
   supplierId = null,
@@ -83,6 +91,8 @@ export function MoneyLines({
   mustTotal = null,
   initialLines,
 }: MoneyLinesProps) {
+  // Validation, verdicts and the draw preview judge ONE list; only the picker shows the two apart.
+  const sources = useMemo(() => [...ownSources, ...otherStoreSources], [ownSources, otherStoreSources]);
   const [lines, setLines] = useState<MoneyLine[]>(
     initialLines?.length ? initialLines : [blankLine()],
   );
@@ -286,7 +296,7 @@ export function MoneyLines({
                     onBlur={() => markTouched(i, ['moneyAccountId', 'cashRequestId'])}
                   >
                     <option value="">— choose —</option>
-                    {groupSourcesByCoverage(sources, needed, new Map(
+                    {groupSourcesByCoverage(ownSources, needed, new Map(
                       [...drawn].map(([k, v]) => [k, alreadyElsewhere(k)]),
                     )).map((group) => (
                       <optgroup
@@ -307,6 +317,21 @@ export function MoneyLines({
                         ))}
                       </optgroup>
                     ))}
+                    {otherStoreSources.length > 0 && (
+                      <optgroup label="Another branch — needs permission to move that branch's money">
+                        {groupSourcesByCoverage(otherStoreSources, needed, new Map(
+                          [...drawn].map(([k, v]) => [k, alreadyElsewhere(k)]),
+                        )).flatMap((g) => g.sources).map((s) => (
+                          <option key={keyOfSource(s)} value={keyOfSource(s)}>
+                            {labelOf(s)}
+                            {s.kind !== 'float' && storeNames[s.storeId] ? ` — ${storeNames[s.storeId]}` : ''}
+                            {s.kind === 'float' ? ' · float' : ` · ${s.custodian}`}
+                            {'  '}
+                            {peso(availableOf(s))}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </label>
               ) : line.method === 'reimbursable' ? (

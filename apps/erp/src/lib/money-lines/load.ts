@@ -13,6 +13,7 @@
  * the server action cannot disagree. This only fetches.
  */
 import { asc, and, eq, inArray } from 'drizzle-orm';
+import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import {
   cashRequestsRepo,
   moneyAccountsRepo,
@@ -34,6 +35,14 @@ export interface MoneyLinesData {
   sources: SourceOption[];
   /** Who money can be handed to, for a `reimbursable` line. */
   staff: { id: string; displayName: string }[];
+  /**
+   * T-369 S6b (DEF-291): accounts at OTHER stores where the actor holds `transfer_funds` (a draw on another
+   * branch's money is cross-store movement, `approve.ts`). Accounts only - never another branch's staff floats.
+   * `[]` when no actor is named: nobody is named, so nothing at another branch is offered.
+   */
+  otherStoreSources: SourceOption[];
+  /** Store id -> name for the stores in `otherStoreSources`, so the picker can say which branch an account is at. */
+  storeNames: Record<string, string>;
 }
 
 /**
@@ -92,8 +101,8 @@ async function openFloatsFor(tx: Tx, orgId: string, storeId: string): Promise<Fl
  * `approve.ts:111-121`, and `approve_expense` is manager-and-above), but it offered a staff member
  * at Lipa the Malvar safe with no hint and let them find out only when approval was refused.
  */
-export async function loadMoneyLines(orgId: string, storeId: string): Promise<MoneyLinesData> {
-  if (!storeId) return { sources: [], staff: [] };
+export async function loadMoneyLines(orgId: string, storeId: string, actor?: Actor): Promise<MoneyLinesData> {
+  if (!storeId) return { sources: [], staff: [], otherStoreSources: [], storeNames: {} };
 
   return withOrgPrincipal(orgId, async (tx) => {
     const [accounts, balances, floats, staff] = await Promise.all([
@@ -107,7 +116,7 @@ export async function loadMoneyLines(orgId: string, storeId: string): Promise<Mo
         .orderBy(asc(schema.persons.displayName)),
     ]);
 
-    const accountSources = accounts
+    const asSources = (rows: typeof accounts, bal: ReadonlyMap<string, string>) => rows
       // ⛔ The aggregate staff-float row is NOT offered (§7.3). Its balance is every open float at
       // the store summed together — Ana's ₱1,240 plus Ben's ₱380 — which belongs to nobody and is
       // not spendable by anyone. The individual floats above are the real choices; this row only
@@ -120,15 +129,41 @@ export async function loadMoneyLines(orgId: string, storeId: string): Promise<Mo
         custodian: a.custodian,
         instrument: a.instrument,
         glAccountCode: a.glAccountCode,
-        balance: balances.get(a.id) ?? '0.00',
+        balance: bal.get(a.id) ?? '0.00',
         overdraftLimit: a.overdraftLimit,
         floatTarget: a.floatTarget,
       }))
       .map(accountAsSource);
+    const accountSources = asSources(accounts, balances);
+
+    // T-369 S6b: every OTHER store where this actor may move money, judged by the per-store authorize loop.
+    const otherStoreSources: SourceOption[] = [];
+    const storeNames: Record<string, string> = {};
+    if (actor) {
+      const stores = await tx.select({ id: schema.stores.id, name: schema.stores.name }).from(schema.stores).where(eq(schema.stores.orgId, orgId));
+      for (const st of stores) {
+        if (st.id === storeId) continue;
+        try {
+          await authorize(tx, actor, 'transfer_funds', { storeId: st.id });
+        } catch (err) {
+          if (err instanceof AuthorizationError) continue;
+          throw err;
+        }
+        const [theirs, theirBalances] = await Promise.all([
+          moneyAccountsRepo.listMoneyAccounts(tx, orgId, { storeId: st.id }),
+          moneyAccountsRepo.balancesFor(tx, orgId, st.id),
+        ]);
+        const rows = asSources(theirs, theirBalances);
+        if (rows.length > 0) storeNames[st.id] = st.name;
+        otherStoreSources.push(...rows);
+      }
+    }
 
     return {
       sources: [...accountSources, ...floats.map(floatAsSource)],
       staff,
+      otherStoreSources,
+      storeNames,
     };
   });
 }

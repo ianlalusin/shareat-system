@@ -261,3 +261,220 @@ describe('S6a retired and staff accounts — what is OFFERED at an allowed store
     expect(await renderPage(f.manager)).toContain(floatAcct!.id);
   });
 });
+
+// -----------------------------------------------------------------------------------------------
+// S6b — T4 (Q2 = (a), Ian): another branch's money, offered in a folded group, only to people who may move it.
+// docs/tasks/369-unwired-money-screens.md §S6 "BUILDER S6b".
+//
+// ## The shapes pinned here (the spec says only "the signature gains `actor`" and "`otherStoreSources`")
+//   loadMoneyLines(orgId, storeId, actor)  ->  { sources, staff, otherStoreSources }
+// `actor` is a THIRD, trailing argument so the existing callers' `loadMoneyLines(orgId, storeId)` in
+// t358-ap-invoice-expense-form / t361-cod-credit-web-parity keep compiling and running; WITHOUT an actor
+// `otherStoreSources` is `[]` (nobody is named, so nothing at another branch is offered). A different signature
+// is a QUESTION to the tester, not a test edit.
+//   `otherStoreSources` is a SourceOption[] of the accounts (same filter as `sources`: no aggregate staff-float row)
+//   at every OTHER store where the actor holds `transfer_funds`; `sources` is unchanged (own store only, DEF-291).
+//   The page copy is "Another branch — needs permission to move that branch's money" (T-266 §6.4).
+//   `createExpenseAction` / `recordExpenseForInvoiceAction` re-fetch the sources server-side (`loadMoneyLines(…, actor)`),
+//   so a hand-posted payload naming another branch's account is judged against the SAME list the page offered.
+// -----------------------------------------------------------------------------------------------
+
+/** s6 `fixture` + Naga (a third store the managers are NOT scoped to), a Lipa+Malvar manager, a funded Malvar safe,
+ *  a verified Lipa supplier invoice dated 10 Jan (January open) and a COGS category. */
+async function s6bFixture(hint: string) {
+  const { seedExpenseCategories } = await import('../../../../packages/db/seed/expense-categories');
+  const f = await fixture(hint);
+  const [naga] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${f.orgId}, ${uid('Naga')}, 'Naga') returning id`;
+  const nagaAccounts = (await sql<{ id: string }[]>`select id from money_accounts where store_id = ${naga!.id}`).map((r) => r.id);
+  const [two] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Lipa+Malvar Manager') returning id`;
+  await sql`insert into person_roles (person_id, org_id, role) values (${two!.id}, ${f.orgId}, 'manager')`;
+  for (const s of [f.lipaId, f.malvarId]) await sql`insert into person_store_scope (person_id, store_id) values (${two!.id}, ${s})`;
+  await seedExpenseCategories(sql, f.orgId);
+  await asOrg(f.orgId, (tx) =>
+    postEntry(tx, {
+      orgId: f.orgId, entryDate: '2026-01-02', sourceType: 'manual_journal', sourceId: uid('fundm'), idempotencyKey: uid('fundm'), memo: 'fixture Malvar funding', postedBy: f.admin.personId,
+      lines: [{ accountCode: '1130', storeId: f.malvarId, debit: '50000.00' }, { accountCode: '3900', storeId: f.malvarId, credit: '50000.00' }],
+    }),
+  );
+  const [supplier] = await sql<{ id: string }[]>`insert into suppliers (org_id, name, created_by) values (${f.orgId}, 'Pork Co', ${f.admin.personId}) returning id`;
+  const [file] = await sql<{ id: string }[]>`
+    insert into stored_files (org_id, store_id, purpose, storage_path, content_type, byte_size, checksum, uploaded_by)
+    values (${f.orgId}, ${f.lipaId}, 'receipt_photo', ${`orgs/${f.orgId}/stores/${f.lipaId}/receipt_photo/${uid('r')}.jpg`}, 'image/jpeg', 1024, ${uid('sum')}, ${f.admin.personId})
+    returning id`;
+  const [inv] = await sql<{ id: string }[]>`
+    insert into supplier_invoices (org_id, store_id, supplier_id, invoice_date, total_amount, status, receipt_file_id, verified_by, verified_at, created_by,
+                                   attested_supplier, attested_invoice, attested_items, attested_price)
+    values (${f.orgId}, ${f.lipaId}, ${supplier!.id}, '2026-01-10', '99999999.00', 'verified', ${file!.id}, ${f.manager.personId}, now(), ${f.admin.personId}, true, true, true, true)
+    returning id`;
+  const [cat] = await sql<{ id: string }[]>`select id from expense_categories where org_id = ${f.orgId} and category = 'Cost of Goods Sold — General'`;
+  // the aggregate staff-float row is never a source (MoneyLines §7.3) - the accounts that ARE offered:
+  const offerable = async (storeId: string) => (await sql<{ id: string }[]>`select id from money_accounts where store_id = ${storeId} and custodian <> 'staff'`).map((r) => r.id);
+  return {
+    ...f, nagaId: naga!.id, nagaAccounts, twoStore: actor(f.orgId, two!.id), supplierId: supplier!.id, invoiceId: inv!.id, categoryId: cat!.id,
+    lipaOffered: await offerable(f.lipaId), malvarOffered: await offerable(f.malvarId),
+  };
+}
+type S6bFixture = Awaited<ReturnType<typeof s6bFixture>>;
+
+type OtherLoader = (orgId: string, storeId: string, who?: Actor) => Promise<{ sources: { id?: string; storeId?: string; kind: string }[]; otherStoreSources?: { id?: string; storeId?: string; kind: string }[] }>;
+const moneyLinesLoader = async () =>
+  (await load(() => import('../../src/lib/money-lines/load'), 'lib/money-lines/load.ts')).loadMoneyLines as unknown as OtherLoader;
+const idsOf = (rows: { id?: string }[] | undefined) => (rows ?? []).map((r) => r.id);
+
+describe('S6b T4 — the loader: the other-branch group holds only stores where the actor holds transfer_funds', () => {
+  it("a Lipa+Malvar manager at Lipa: otherStoreSources = Malvar's accounts and nothing of Lipa's or Naga's; `sources` is still Lipa's own only (control) — red on HEAD: no `otherStoreSources`", async () => {
+    const f = await s6bFixture('s6b-two');
+    const loadMoneyLines = await moneyLinesLoader();
+    const r = await loadMoneyLines(f.orgId, f.lipaId, f.twoStore);
+
+    expect(Array.isArray(r.otherStoreSources), 'the loader returned no otherStoreSources').toBe(true);
+    const other = idsOf(r.otherStoreSources);
+    for (const id of f.malvarOffered) expect(other, "Malvar's account is missing from the other-branch group").toContain(id);
+    for (const id of [...f.lipaAccounts, ...f.nagaAccounts]) expect(other, 'an account that does not belong in the group is in it').not.toContain(id);
+    for (const s of r.otherStoreSources!) expect(s.storeId).toBe(f.malvarId);
+
+    const own = idsOf(r.sources);
+    for (const id of f.lipaOffered) expect(own, "positive control: Lipa's own account is still in `sources`").toContain(id);
+    for (const id of [...f.malvarAccounts, ...f.nagaAccounts]) expect(own, "another branch's account leaked into `sources`").not.toContain(id);
+  });
+
+  it('a Lipa-ONLY manager (✗: no transfer_funds at Malvar): otherStoreSources is empty — positive control: `sources` still lists Lipa\'s own accounts', async () => {
+    const f = await s6bFixture('s6b-one');
+    const loadMoneyLines = await moneyLinesLoader();
+    const r = await loadMoneyLines(f.orgId, f.lipaId, f.manager);
+
+    expect(r.otherStoreSources, 'the loader returned no otherStoreSources (an empty list is the answer, not undefined)').toEqual([]);
+    for (const id of f.lipaOffered) expect(idsOf(r.sources)).toContain(id);
+    for (const id of f.malvarAccounts) expect(idsOf(r.sources)).not.toContain(id);
+  });
+
+  it("the admin (Lipa + Malvar, not Naga): Malvar's accounts yes, Naga's no (✗: a store without the grant is absent)", async () => {
+    const f = await s6bFixture('s6b-admin');
+    const loadMoneyLines = await moneyLinesLoader();
+    const other = idsOf((await loadMoneyLines(f.orgId, f.lipaId, f.admin)).otherStoreSources);
+    for (const id of f.malvarOffered) expect(other).toContain(id);
+    for (const id of f.nagaAccounts) expect(other, "Naga's account is offered to someone with no transfer_funds there").not.toContain(id);
+  });
+
+  it('no actor passed: the existing two-argument call still works and offers no other-branch accounts', async () => {
+    const f = await s6bFixture('s6b-noactor');
+    const loadMoneyLines = await moneyLinesLoader();
+    const r = await loadMoneyLines(f.orgId, f.lipaId);
+    for (const id of f.lipaOffered) expect(idsOf(r.sources)).toContain(id);
+    expect(r.otherStoreSources ?? [], 'accounts at another branch were offered to nobody in particular').toEqual([]);
+  });
+});
+
+const expenseTables = async (orgId: string) => ({
+  expenses: Number((await sql<{ n: string }[]>`select count(*)::text as n from expenses where org_id = ${orgId}`)[0]!.n),
+  entries: Number((await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where org_id = ${orgId} and source_type = 'expense_payment'`)[0]!.n),
+});
+function recordForm(f: S6bFixture, accountId: string): FormData {
+  const fd = new FormData();
+  fd.set('storeId', f.lipaId);
+  fd.set('supplierInvoiceId', f.invoiceId);
+  fd.set('categoryId', f.categoryId);
+  fd.set('particulars', 'Pork, paid from the other branch');
+  fd.set('lineCount', '1');
+  fd.set('lineMethod_0', 'cash');
+  fd.set('lineAmount_0', '1200.00');
+  fd.set('lineAccount_0', accountId);
+  return fd;
+}
+
+describe("S6b T4 — an approval drawing from another branch's account posts, with transfer_funds checked at that branch", () => {
+  it("the Lipa+Malvar manager records a Lipa expense paid from Malvar's office safe -> no error banner; the expense is posted; the safe is credited AT MALVAR — red on HEAD: the server-side sources list refuses the account", async () => {
+    const f = await s6bFixture('s6b-post');
+    const { recordExpenseForInvoiceAction } = await load(() => import('../../src/app/expenses/actions'), 'expenses/actions.ts');
+
+    ACTOR_HOLDER.actor = f.twoStore;
+    const to = await expectRedirectTo(() => recordExpenseForInvoiceAction(recordForm(f, f.malvarSafeId)));
+    expect(param(to, 'error'), `refused: ${param(to, 'error')}`).toBeNull();
+    expect(await expenseTables(f.orgId)).toEqual({ expenses: 1, entries: 1 });
+    const credits = await sql<{ store_id: string; credit: string }[]>`
+      select jl.store_id, jl.credit::text from journal_lines jl join journal_entries je on je.id = jl.entry_id join accounts a on a.id = jl.account_id
+      where je.org_id = ${f.orgId} and je.source_type = 'expense_payment' and a.code = '1130' and jl.credit > 0`;
+    expect(credits, "Malvar's safe was not credited").toEqual([{ store_id: f.malvarId, credit: '1200.00' }]);
+  });
+
+  it("✗ the Lipa-ONLY manager names Malvar's safe in the same form -> refused with a banner (no id); no expense, no entry — positive control: the Lipa+Malvar manager posts the same form (previous test); the Lipa-only manager's OWN safe posts", async () => {
+    const f = await s6bFixture('s6b-deny');
+    const { recordExpenseForInvoiceAction } = await load(() => import('../../src/app/expenses/actions'), 'expenses/actions.ts');
+
+    ACTOR_HOLDER.actor = f.manager;
+    const refused = await expectRedirectTo(() => recordExpenseForInvoiceAction(recordForm(f, f.malvarSafeId)));
+    expect(param(refused, 'error'), 'a refusal banner').toBeTruthy();
+    expect(param(refused, 'error')).not.toMatch(UUID);
+    expect(await expenseTables(f.orgId)).toEqual({ expenses: 0, entries: 0 });
+
+    const own = await expectRedirectTo(() => recordExpenseForInvoiceAction(recordForm(f, f.lipaSafeId)));
+    expect(param(own, 'error'), `the own-branch control was refused: ${param(own, 'error')}`).toBeNull();
+    expect(await expenseTables(f.orgId)).toEqual({ expenses: 1, entries: 1 });
+  });
+
+  it('the draft path judges the same list: createExpenseAction by the Lipa+Malvar manager with a Malvar account makes a draft; by the Lipa-only manager it is refused — red on HEAD (first half)', async () => {
+    const f = await s6bFixture('s6b-draft');
+    const { createExpenseAction } = await load(() => import('../../src/app/expenses/actions'), 'expenses/actions.ts');
+
+    ACTOR_HOLDER.actor = f.manager;
+    const refused = await expectRedirectTo(() => createExpenseAction(recordForm(f, f.malvarSafeId)));
+    expect(param(refused, 'error'), 'a refusal banner').toBeTruthy();
+    expect((await expenseTables(f.orgId)).expenses).toBe(0);
+
+    ACTOR_HOLDER.actor = f.twoStore;
+    const ok = await expectRedirectTo(() => createExpenseAction(recordForm(f, f.malvarSafeId)));
+    expect(param(ok, 'error'), `refused: ${param(ok, 'error')}`).toBeNull();
+    expect((await expenseTables(f.orgId)).expenses).toBe(1);
+  });
+});
+
+describe('S6b T4 (render) — the folded "Another branch" group on the two screens that mount <MoneyLines>', () => {
+  const NEED = "needs permission to move that branch's money";
+  async function newExpenseHtml(who: Actor, f: S6bFixture): Promise<string> {
+    ACTOR_HOLDER.actor = who;
+    const { default: Page } = await load(() => import('../../src/app/expenses/new/page'), 'expenses/new/page.tsx');
+    return renderToStaticMarkup((await Page({ searchParams: Promise.resolve({ store: f.lipaId }) } as never)) as never);
+  }
+  async function invoiceHtml(who: Actor, f: S6bFixture): Promise<string> {
+    ACTOR_HOLDER.actor = who;
+    const { default: Page } = await load(() => import('../../src/app/ap/invoices/[id]/page'), 'ap/invoices/[id]/page.tsx');
+    return renderToStaticMarkup((await Page({ params: Promise.resolve({ id: f.invoiceId }), searchParams: Promise.resolve({}) } as never)) as never);
+  }
+
+  for (const [name, render] of [['/expenses/new', newExpenseHtml], ['/ap/invoices/[id]', invoiceHtml]] as const) {
+    it(`${name}: the Lipa+Malvar manager's page carries the group and Malvar's account ids; the Lipa-only manager's carries neither — positive control: both pages carry Lipa's own account ids`, async () => {
+      const f = await s6bFixture(`s6b-render-${name.length}`);
+
+      const two = decodeEntities(await render(f.twoStore, f));
+      expect(two, 'no "Another branch" group').toContain('Another branch');
+      expect(two, 'the group does not say why it is folded').toContain(NEED);
+      for (const id of f.malvarOffered) expect(two, `Malvar's account ${id} is not offered`).toContain(id);
+      for (const id of f.nagaAccounts) expect(two, "Naga's account is offered with no grant there").not.toContain(id);
+      for (const id of f.lipaOffered) expect(two, 'positive control: own-branch account missing').toContain(id);
+
+      const one = decodeEntities(await render(f.manager, f));
+      for (const id of f.lipaOffered) expect(one, 'positive control: own-branch account missing').toContain(id);
+      expect(one, 'a Lipa-only manager is shown the group').not.toContain('Another branch');
+      expect(one).not.toContain(NEED);
+      for (const id of f.malvarAccounts) expect(one, `Malvar's account ${id} is offered to a Lipa-only manager`).not.toContain(id);
+    });
+  }
+});
+
+describe("S6b audit — another branch's options say which branch they are at", () => {
+  it('two branches each with an account named "Office safe": the options differ by store name ("Office safe — Malvar" for the other branch; the own branch\'s is unsuffixed)', async () => {
+    const f = await s6bFixture('s6b-names');
+    await sql`update money_accounts set name = 'Office safe' where id in (${f.malvarSafeId}, ${f.lipaSafeId})`;
+    ACTOR_HOLDER.actor = f.twoStore;
+    const { default: Page } = await load(() => import('../../src/app/expenses/new/page'), 'expenses/new/page.tsx');
+    const html = decodeEntities(renderToStaticMarkup((await Page({ searchParams: Promise.resolve({ store: f.lipaId }) } as never)) as never));
+    const option = (id: string) => (html.match(new RegExp(`<option[^>]*value="account:${id}"[^>]*>([^<]*)</option>`)) ?? [])[1];
+    const other = option(f.malvarSafeId);
+    const own = option(f.lipaSafeId);
+    expect(other, "Malvar's option is missing").toBeTruthy();
+    expect(own, "Lipa's option is missing").toBeTruthy();
+    expect(other).toContain('Office safe — Malvar');
+    expect(own).not.toContain('Malvar');
+    expect(other).not.toEqual(own);
+  });
+});

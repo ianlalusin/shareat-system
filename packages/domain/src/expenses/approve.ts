@@ -13,7 +13,8 @@
  * checked first" philosophy.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, expensesRepo, moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, expensesRepo, journalRepo, moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
+import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { add, money, ZERO, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
@@ -36,16 +37,37 @@ export interface ApproveExpenseResult {
   warnings?: string[];
 }
 
+/** T-369 S5b (DEF-314): post this one approval into a CLOSED month. Authorised inside `postEntry` against `actor`. */
+interface ApproveExpenseOptions {
+  periodOverride?: { reason: PeriodOverrideReason; note?: string | null };
+  /**
+   * The caller is a path that CANNOT carry an override (verifying a bill posts its draft expenses). A closed or
+   * locked month is then refused with a sentence that names only what that person can actually do.
+   */
+  noPeriodOverride?: boolean;
+}
+
+/** "January 2026" - the month a fiscal period covers, for a sentence a person reads. */
+function monthLabel(startsOn: string): string {
+  return new Date(`${startsOn}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
 export async function approveExpense(
   tx: Tx | null,
   actor: Actor,
   expenseId: string,
+  options?: ApproveExpenseOptions,
 ): Promise<ApproveExpenseResult> {
-  if (tx) return runApproveExpense(tx, actor, expenseId);
-  return transaction((trx) => runApproveExpense(trx, actor, expenseId));
+  if (tx) return runApproveExpense(tx, actor, expenseId, options);
+  return transaction((trx) => runApproveExpense(trx, actor, expenseId, options));
 }
 
-async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promise<ApproveExpenseResult> {
+async function runApproveExpense(
+  tx: Tx,
+  actor: Actor,
+  expenseId: string,
+  options?: ApproveExpenseOptions,
+): Promise<ApproveExpenseResult> {
   // Org-scoped read before authorize() — see edit.ts's identical comment: the capability
   // is store-scoped and the store is a property of the resource itself.
   let expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
@@ -225,6 +247,31 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
     })),
   });
 
+  // T-369 S5b: say, in words, when the expense's month will not take the posting - `postEntry`'s own refusal is a
+  // developer sentence carrying ids. The override is passed on ONLY when the month is closed: for an open month it
+  // is ignored, so an ordinary approval leaves no audit row and never asks for `override_period_lock`.
+  let periodOverride: ApproveExpenseOptions['periodOverride'];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(expense.businessDate)) {
+    const period = await journalRepo.findPeriodForDate(tx, actor.orgId, expense.businessDate);
+    if (period?.status === 'closed') periodOverride = options?.periodOverride;
+    if (period?.status === 'locked') {
+      throw refuse(
+        `approveExpense: the fiscal period covering ${expense.businessDate} is locked.`,
+        options?.noPeriodOverride
+          ? `${monthLabel(period.startsOn)} is locked, so this bill's expense can't be posted into it. Nothing was saved.`
+          : `${monthLabel(period.startsOn)} is locked. Nothing can be posted into it, not even with the closed-month override.`,
+      );
+    }
+    if (period?.status === 'closed' && !options?.periodOverride) {
+      throw refuse(
+        `approveExpense: the fiscal period covering ${expense.businessDate} is closed and no periodOverride was given.`,
+        options?.noPeriodOverride
+          ? `${monthLabel(period.startsOn)} is closed, and a bill's expense can't be posted into a closed month from the bills screen yet. Nothing was saved.`
+          : `${monthLabel(period.startsOn)} is closed. Ask an administrator to post this one entry into it.`,
+      );
+    }
+  }
+
   const result = await postEntry(tx, {
     orgId: actor.orgId,
     entryDate: expense.businessDate,
@@ -237,6 +284,9 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
     idempotencyKey: `expense:${expenseId}:post`,
     memo: expense.particulars,
     postedBy: actor.personId,
+    ...(periodOverride
+      ? { periodOverride: { actor, reason: periodOverride.reason, note: periodOverride.note ?? null } }
+      : {}),
     lines,
   });
 

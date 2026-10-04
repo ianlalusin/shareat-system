@@ -35,7 +35,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
   // ⭐ T-266 — accounts with their LEDGER balances plus every open float at this store, flattened
   // into one list. Scoped to the store (DEF-291); the picker used to offer every account in the
   // org to everyone.
-  const moneyLines = await loadMoneyLines(orgId, storeId);
+  const moneyLines = await loadMoneyLines(orgId, storeId, actor);
 
   // T-215 §5 — the caps for THIS store and THIS period, so the person spending sees what is left
   // before they commit. ⚠️ Read only: `manage_expense_budgets` is needed to SET a cap and must not
@@ -174,6 +174,8 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
             <MoneyLines
               direction="out"
               sources={moneyLines.sources}
+              otherStoreSources={moneyLines.otherStoreSources}
+              storeNames={moneyLines.storeNames}
               staff={moneyLines.staff}
               supplierId={null}
               supplierCreditTermsDays={null}

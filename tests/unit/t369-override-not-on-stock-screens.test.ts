@@ -55,6 +55,10 @@ describe('T8 (I5) — the override control is on an allowlist of exactly two pag
     expect(importers).toContain('app/expenses/reimbursements/page.tsx');
   });
 
+  it('the expense page IMPORTS it too (S5b - the second allowlisted page)', () => {
+    expect(importers).toContain('app/expenses/[id]/page.tsx');
+  });
+
   it('nothing outside the allowlist imports it', () => {
     const strangers = importers.filter((f) => !ALLOWED_IMPORTERS.has(f));
     expect(strangers, `files importing ClosedMonthOverride outside the allowlist: ${strangers.join(', ')}`).toEqual([]);
