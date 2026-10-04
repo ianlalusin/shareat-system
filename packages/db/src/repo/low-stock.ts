@@ -466,3 +466,42 @@ export async function discrepancyList(
   `)) as unknown as DiscrepancyListRow[];
   return rows;
 }
+
+// ---- the branch's own recount list (T-374 S6 / DEF-574) -----------------------------------------
+
+export interface BranchRecountRow {
+  readonly id: string;
+  readonly direction: 'over';
+  readonly quantity: string;
+  readonly itemName: string;
+  readonly unit: string;
+  readonly orderId: string;
+  readonly orderDate: string;
+  /** The dispatching store's name (`d.store_id`) — where the extra came from. */
+  readonly fromStoreName: string;
+}
+
+/**
+ * Open over-receipts a BRANCH may recount and return (R6). Keyed on the domain's own definition of "the branch"
+ * (`resolveDiscrepancy`'s gate): the order's CUSTOMER has `counterparty_store_id` = the store, never
+ * `requested_by_store_id` and never `d.store_id` (that is the dispatching store, which `discrepancyList` serves).
+ * Two definitions of "which store" exist on a discrepancy; this list uses the gate's so a branch is only ever
+ * offered a row the gate will let it return.
+ */
+export async function branchRecountList(tx: Tx, orgId: string, branchStoreId: string): Promise<BranchRecountRow[]> {
+  return (await tx.execute(sql`
+    select d.id, d.direction, d.quantity::text, i.name as "itemName", l.unit,
+           d.order_id as "orderId", o.order_date::text as "orderDate",
+           ds.name as "fromStoreName"
+    from trade_discrepancies d
+    join trade_order_lines l on l.id = d.order_line_id
+    join items i on i.id = l.item_id
+    join trade_orders o on o.id = d.order_id
+    join customers c on c.id = o.customer_id
+    join stores ds on ds.id = d.store_id
+    where d.org_id = ${orgId} and d.direction = 'over' and d.status <> 'resolved'
+      and c.counterparty_store_id = ${branchStoreId}
+    order by d.created_at desc
+    limit 200
+  `)) as unknown as BranchRecountRow[];
+}

@@ -9,6 +9,7 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Transit discrepancies — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -41,16 +42,17 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
     );
   }
 
-  const { rows, people } = await withOrgPrincipal(actor.orgId, async (tx) => {
-    const [list, persons] = await Promise.all([
+  const { rows, people, recount = [] } = await withOrgPrincipal(actor.orgId, async (tx) => {
+    const [list, persons, recountRows] = await Promise.all([
       lowStockRepo.discrepancyList(tx, actor.orgId, storeId, includeResolved),
       tx
         .select({ id: schema.persons.id, name: schema.persons.displayName })
         .from(schema.persons)
         .where(eq(schema.persons.orgId, actor.orgId))
         .orderBy(asc(schema.persons.displayName)),
+      lowStockRepo.branchRecountList(tx, actor.orgId, storeId),
     ]);
-    return { rows: list, people: persons };
+    return { rows: list, people: persons, recount: recountRows };
   });
 
   const blocking = rows.filter((r) => r.status !== 'resolved').length;
@@ -66,7 +68,8 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
       <PageDescription className="mt-1">
         Goods that left this store and did not arrive sit in <strong>1340</strong> at cost — a real
         asset — until somebody says what happened to them. A branch that counted <em>more</em> than was
-        sent is listed here too: the extra is on nobody&apos;s books until you decide.
+        sent is listed here too: the extra is on nobody&apos;s books until you decide. If you are the branch
+        that counted over, the section below lists it for you to recount and return.
       </PageDescription>
 
       {sp.error && (
@@ -77,7 +80,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
 
       <FilterRow className="mt-6">
         <label className="text-sm">
-          <span className="block text-neutral-600 dark:text-neutral-400">Dispatching store</span>
+          <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select
             name="store"
             defaultValue={storeId}
@@ -249,6 +252,50 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
             </article>
           ))}
         </div>
+      )}
+
+      {recount.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold">
+            Counted over at {stores.find((s) => s.id === storeId)?.name ?? 'this store'} — recount and return
+          </h2>
+          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+            You counted more than was sent. Recount; if the extra goes back, say who carried it and when.
+          </p>
+          <div className="mt-4 space-y-4">
+            {recount.map((r) => (
+              <article key={r.id} className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+                <h3 className="font-medium">
+                  {r.quantity} {r.unit} of {r.itemName}
+                </h3>
+                <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                  From {r.fromStoreName} · order {r.orderDate} ·{' '}
+                  <Link href={`/commissary/orders/${r.orderId}`} className={ACTION_LINK}>
+                    view order
+                  </Link>
+                </p>
+                <form action={resolveDiscrepancyAction} className="mt-3 space-y-2 text-sm">
+                  <input type="hidden" name="id" value={r.id} />
+                  <input type="hidden" name="storeId" value={storeId} />
+                  <input type="hidden" name="resolvedOn" value={today} />
+                  <input type="hidden" name="disposition" value="return" />
+                  <input
+                    name="note"
+                    required
+                    placeholder="Who carried it back and when, or that you recounted"
+                    className="w-full rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-md border border-neutral-300 px-3 py-1 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                  >
+                    Return
+                  </button>
+                </form>
+              </article>
+            ))}
+          </div>
+        </section>
       )}
     </Page>
   );
