@@ -101,6 +101,8 @@ export * from './pos/sales-pull';
 // T-375 S1 - the POS v1 day feed: the bridge fetchers and the store link.
 export * from './pos/v1-feed';
 export * from './pos/store-link';
+export * from './pos/tenders';
+export { normalizePosV1Alias, resolvePosV1Methods, type ResolvedMethods, type ResolverTender } from './pos/v1-methods';
 // T-178 — order/channel wastage disposition.
 export * from './wastage/orders';
 export * from './wastage/settlement-match';

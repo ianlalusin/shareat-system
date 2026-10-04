@@ -342,7 +342,11 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1103 -> 1110, T-375 S1, 2026-10-04. +7 PASS, FAIL/UNRESOLVED unmoved (the 'no control is undersized or unresolved
     // outside the accepted baseline' test stays green). New page `/settings/pos-link` (link form controls); a static
     // census counts the source elements regardless of branch. Verified by running the census (1110).
-    expect(results.length).toBe(1110);
+    // 1110 -> 1120, T-375 S2, 2026-10-05. +10 PASS, FAIL/UNRESOLVED unmoved (the 151/58 totals test and the 'no control is
+    // undersized or unresolved outside the accepted baseline' test both stay green). The Tenders section of
+    // `/settings/pos-link` (`app/settings/pos-link/page.tsx`); a static census counts the source elements regardless of
+    // branch. Verified by running the census (1120).
+    expect(results.length).toBe(1120);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

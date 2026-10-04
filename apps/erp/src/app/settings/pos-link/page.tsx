@@ -1,7 +1,7 @@
 import { requirePageAccess } from '../../../lib/page-access';
 import { listStores } from '../../expenses/lib';
-import { linkStoreToPosAction } from './actions';
-import { posLinkRows, posStoreOptions, type PosLinkStoreRow } from './lib';
+import { createTenderAction, linkStoreToPosAction, setTenderActiveAction, updateTenderAction } from './actions';
+import { posLinkRows, posStoreOptions, storeTenders, type PosLinkStoreRow, type StoreTenders } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
@@ -62,14 +62,24 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
         <p className="text-sm text-neutral-500 dark:text-neutral-400">This organisation has no stores yet. Create one under Stores first.</p>
       )}
 
-      {rows.map((r) => (
-        <StoreCard key={r.storeId} row={r} options={options} />
-      ))}
+      {await Promise.all(
+        rows.map(async (r) => (
+          <StoreCard key={r.storeId} row={r} options={options} tenders={await storeTenders(actor, r.storeId, r.link?.posStoreId ?? null)} />
+        )),
+      )}
     </Page>
   );
 }
 
-function StoreCard({ row, options }: { row: PosLinkStoreRow; options: { id: string; name: string }[] | null }) {
+function StoreCard({
+  row,
+  options,
+  tenders,
+}: {
+  row: PosLinkStoreRow;
+  options: { id: string; name: string }[] | null;
+  tenders: StoreTenders;
+}) {
   const link = row.link;
   return (
     <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -150,7 +160,104 @@ function StoreCard({ row, options }: { row: PosLinkStoreRow; options: { id: stri
           {link ? 'Save link' : 'Link store'}
         </button>
       </form>
+
+      <TendersSection storeId={row.storeId} linked={!!link} t={tenders} />
     </section>
+  );
+}
+
+function TendersSection({ storeId, linked, t }: { storeId: string; linked: boolean; t: StoreTenders }) {
+  const label = 'block text-xs text-neutral-600 dark:text-neutral-400';
+  return (
+    <div className="space-y-3 border-t border-neutral-200 pt-3 text-sm dark:border-neutral-800">
+      <h3 className="font-medium">Tenders</h3>
+      {linked && t.unmapped === null && (
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          POS&apos;s payment methods can&apos;t be listed right now (POS isn&apos;t connected), so unmapped methods aren&apos;t shown.
+        </p>
+      )}
+      {linked && t.unmapped && t.unmapped.length > 0 && (
+        <div className="rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          POS methods not mapped yet: {t.unmapped.map((m) => `"${m}"`).join(', ')}. A day that used one of them cannot be
+          imported until a tender answers to it.
+        </div>
+      )}
+      {t.tenders.length === 0 && <p className="text-xs text-neutral-500 dark:text-neutral-400">No tenders yet.</p>}
+      {t.tenders.map((x) => (
+        <div key={x.id} className={`flex flex-wrap items-end gap-2 ${x.isActive ? '' : 'opacity-60'}`}>
+          <form action={updateTenderAction} className="flex flex-wrap items-end gap-2">
+            <input type="hidden" name="storeId" value={storeId} />
+            <input type="hidden" name="tenderId" value={x.id} />
+            <label className="block">
+              <span className={label}>Name ({x.kind})</span>
+              <input name="name" required defaultValue={x.name} className={`${FIELD} mt-1 w-40`} />
+            </label>
+            <label className="block">
+              <span className={label}>POS name</span>
+              <input name="posV1Alias" defaultValue={x.posV1Alias ?? ''} className={`${FIELD} mt-1 w-40`} />
+            </label>
+            {x.kind === 'wallet' && (
+              <label className="block">
+                <span className={label}>Money account</span>
+                <select name="moneyAccountId" defaultValue={x.moneyAccountId ?? ''} className={`${FIELD} mt-1`}>
+                  {x.moneyAccountId && !t.accounts.some((a) => a.id === x.moneyAccountId) && (
+                    <option value={x.moneyAccountId}>{x.moneyAccountName ?? 'Retired account'}</option>
+                  )}
+                  {t.accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <button type="submit" className={BTN}>
+              Save
+            </button>
+          </form>
+          <form action={setTenderActiveAction}>
+            <input type="hidden" name="storeId" value={storeId} />
+            <input type="hidden" name="tenderId" value={x.id} />
+            <input type="hidden" name="isActive" value={x.isActive ? 'false' : 'true'} />
+            <button type="submit" className={BTN}>
+              {x.isActive ? 'Retire' : 'Restore'}
+            </button>
+          </form>
+        </div>
+      ))}
+      <form action={createTenderAction} className="flex flex-wrap items-end gap-2">
+        <input type="hidden" name="storeId" value={storeId} />
+        <label className="block">
+          <span className={label}>New tender</span>
+          <input name="name" required placeholder="e.g. GCash" className={`${FIELD} mt-1 w-40`} />
+        </label>
+        <label className="block">
+          <span className={label}>Kind</span>
+          <select name="kind" defaultValue="cash" className={`${FIELD} mt-1`}>
+            <option value="cash">Cash</option>
+            <option value="wallet">Wallet</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className={label}>Money account (wallet)</span>
+          <select name="moneyAccountId" defaultValue="" className={`${FIELD} mt-1`}>
+            <option value="">None</option>
+            {t.accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className={label}>POS name</span>
+          <input name="posV1Alias" className={`${FIELD} mt-1 w-40`} />
+        </label>
+        <button type="submit" className={BTN}>
+          Add tender
+        </button>
+      </form>
+    </div>
   );
 }
 

@@ -10,7 +10,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { authorize } from '@shareat/auth';
-import { linkStoreToPos } from '@shareat/domain';
+import { createTender, linkStoreToPos, setTenderActive, updateTender } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { posStoreOptions, withOrgPrincipal } from './lib';
@@ -63,4 +63,62 @@ export async function linkStoreToPosAction(fd: FormData): Promise<void> {
   }
   revalidatePath('/settings/pos-link');
   back({ ok: `${storeName || 'The store'} is linked to POS.`, store: storeId });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tenders (T-375 S2). Same rule: createTender, updateTender and setTenderActive each call
+// authorize(tx, actor, 'manage_chart_of_accounts', ...) first and own every sentence.
+// ---------------------------------------------------------------------------------------------
+export async function createTenderAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/settings/pos-link');
+  const storeId = str(fd, 'storeId');
+  try {
+    const kind = str(fd, 'kind');
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      createTender(tx, actor, {
+        storeId,
+        name: str(fd, 'name'),
+        kind: kind === 'wallet' ? 'wallet' : 'cash',
+        moneyAccountId: str(fd, 'moneyAccountId') || null,
+        posV1Alias: str(fd, 'posV1Alias') || null,
+      }),
+    );
+  } catch (err) {
+    back({ error: errorMessage(err), store: storeId });
+  }
+  revalidatePath('/settings/pos-link');
+  back({ ok: 'Tender added.', store: storeId });
+}
+
+export async function updateTenderAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/settings/pos-link');
+  const storeId = str(fd, 'storeId');
+  try {
+    const accountId = str(fd, 'moneyAccountId');
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      updateTender(tx, actor, {
+        tenderId: str(fd, 'tenderId'),
+        name: str(fd, 'name'),
+        posV1Alias: str(fd, 'posV1Alias') || null,
+        ...(accountId ? { moneyAccountId: accountId } : {}),
+      }),
+    );
+  } catch (err) {
+    back({ error: errorMessage(err), store: storeId });
+  }
+  revalidatePath('/settings/pos-link');
+  back({ ok: 'Tender saved.', store: storeId });
+}
+
+export async function setTenderActiveAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/settings/pos-link');
+  const storeId = str(fd, 'storeId');
+  const isActive = str(fd, 'isActive') === 'true';
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => setTenderActive(tx, actor, { tenderId: str(fd, 'tenderId'), isActive }));
+  } catch (err) {
+    back({ error: errorMessage(err), store: storeId });
+  }
+  revalidatePath('/settings/pos-link');
+  back({ ok: isActive ? 'Tender restored.' : 'Tender retired.', store: storeId });
 }

@@ -10,7 +10,15 @@
 import { createHash } from 'node:crypto';
 import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
-import { posV1DayFeeds, posV1StoreLinks, type PosV1FeedKind, type PosV1FeedPurpose, type PosV1TaxType } from '../../schema/pos-v1';
+import {
+  posV1DayFeeds,
+  posV1StoreLinks,
+  tenders,
+  type PosV1FeedKind,
+  type PosV1FeedPurpose,
+  type PosV1TaxType,
+  type TenderKind,
+} from '../../schema/pos-v1';
 import { salesChannels, salesDays } from '../../schema/sales-days';
 import { stores } from '../../schema/stores';
 
@@ -297,4 +305,108 @@ export async function basisFor(tx: Tx, orgId: string, salesDayId: string): Promi
     .limit(1);
   if (!day?.feedId) return undefined;
   return getFeedById(tx, orgId, day.feedId);
+}
+
+// ---------------------------------------------------------------------------------------------
+// tenders (T-375 S2)
+// ---------------------------------------------------------------------------------------------
+export interface TenderRow {
+  readonly id: string;
+  readonly orgId: string;
+  readonly storeId: string;
+  readonly name: string;
+  readonly kind: TenderKind;
+  readonly moneyAccountId: string | null;
+  readonly posV1Alias: string | null;
+  readonly isActive: boolean;
+}
+
+const tenderColumns = {
+  id: tenders.id,
+  orgId: tenders.orgId,
+  storeId: tenders.storeId,
+  name: tenders.name,
+  kind: tenders.kind,
+  moneyAccountId: tenders.moneyAccountId,
+  posV1Alias: tenders.posV1Alias,
+  isActive: tenders.isActive,
+};
+
+export async function getTenderById(tx: Tx, orgId: string, id: string): Promise<TenderRow | undefined> {
+  const [row] = await tx
+    .select(tenderColumns)
+    .from(tenders)
+    .where(and(eq(tenders.orgId, orgId), eq(tenders.id, id)))
+    .limit(1);
+  return row;
+}
+
+/** The tender row under `FOR UPDATE` (an edit reads the row it is about to change). */
+export async function getTenderByIdForUpdate(tx: Tx, orgId: string, id: string): Promise<TenderRow | undefined> {
+  const [row] = await tx
+    .select(tenderColumns)
+    .from(tenders)
+    .where(and(eq(tenders.orgId, orgId), eq(tenders.id, id)))
+    .limit(1)
+    .for('update');
+  return row;
+}
+
+/** Every tender of one store, active or not, by name. */
+export async function listTendersByStore(tx: Tx, orgId: string, storeId: string): Promise<TenderRow[]> {
+  return tx
+    .select(tenderColumns)
+    .from(tenders)
+    .where(and(eq(tenders.orgId, orgId), eq(tenders.storeId, storeId)))
+    .orderBy(asc(tenders.name));
+}
+
+/**
+ * The store's ACTIVE tender whose alias normalizes (lowercase, a-z0-9 only) to `normalizedAlias`, other than
+ * `exceptId`. The same normalization as the `tenders_store_alias_active_unique` index (R3).
+ */
+export async function findActiveTenderByAlias(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  normalizedAlias: string,
+  exceptId?: string,
+): Promise<TenderRow | undefined> {
+  const conds = [
+    eq(tenders.orgId, orgId),
+    eq(tenders.storeId, storeId),
+    eq(tenders.isActive, true),
+    sql`regexp_replace(lower(${tenders.posV1Alias}), '[^a-z0-9]', '', 'g') = ${normalizedAlias}`,
+  ];
+  if (exceptId) conds.push(ne(tenders.id, exceptId));
+  const [row] = await tx.select(tenderColumns).from(tenders).where(and(...conds)).limit(1);
+  return row;
+}
+
+export interface InsertTenderInput {
+  readonly orgId: string;
+  readonly storeId: string;
+  readonly name: string;
+  readonly kind: TenderKind;
+  readonly moneyAccountId: string | null;
+  readonly posV1Alias: string | null;
+}
+
+export async function insertTender(tx: Tx, input: InsertTenderInput): Promise<{ id: string }> {
+  const [row] = await tx.insert(tenders).values(input).returning({ id: tenders.id });
+  return row!;
+}
+
+export interface UpdateTenderPatch {
+  readonly name?: string;
+  readonly posV1Alias?: string | null;
+  readonly moneyAccountId?: string | null;
+  readonly isActive?: boolean;
+}
+
+export async function updateTenderRow(tx: Tx, orgId: string, id: string, patch: UpdateTenderPatch): Promise<void> {
+  await tx
+    .update(tenders)
+    .set({ ...patch, updatedAt: sql`now()` })
+    .where(and(eq(tenders.orgId, orgId), eq(tenders.id, id)));
 }

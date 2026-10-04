@@ -5,8 +5,8 @@
  * write gate is `linkStoreToPos`'s own `authorize()`. Plain reads here carry no second gate, the house rule of
  * `/settings/sales-channels/lib.ts`.
  */
-import { posV1Repo } from '@shareat/db';
-import { fetchPosV1Stores, type PosV1StoreOption } from '@shareat/domain';
+import { moneyAccountsRepo, posV1Repo } from '@shareat/db';
+import { fetchPosV1PaymentMethods, fetchPosV1Stores, normalizePosV1Alias, type PosV1StoreOption } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { channelsForStore, type SalesChannelAdminRow } from '../sales-channels/lib';
@@ -55,4 +55,57 @@ export async function posStoreOptions(): Promise<PosV1StoreOption[] | null> {
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tenders (T-375 S2)
+// ---------------------------------------------------------------------------------------------
+export interface TenderAdminRow {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: 'cash' | 'wallet';
+  readonly moneyAccountId: string | null;
+  readonly moneyAccountName: string | null;
+  readonly posV1Alias: string | null;
+  readonly isActive: boolean;
+}
+
+export interface StoreTenders {
+  readonly tenders: readonly TenderAdminRow[];
+  /** The store's ACTIVE money accounts: the only kind a wallet tender may point at. */
+  readonly accounts: readonly { id: string; name: string }[];
+  /** POS methods with no active alias here, or null when POS is not configured / not answering. */
+  readonly unmapped: readonly string[] | null;
+}
+
+/** One store's tenders, its wallets' accounts, and POS's methods nothing answers to yet. Never throws on POS. */
+export async function storeTenders(actor: Actor, storeId: string, posStoreId: string | null): Promise<StoreTenders> {
+  const { rows, accounts } = await withOrgPrincipal(actor.orgId, async (tx) => ({
+    rows: await posV1Repo.listTendersByStore(tx, actor.orgId, storeId),
+    accounts: await moneyAccountsRepo.listMoneyAccounts(tx, actor.orgId, { storeId }),
+  }));
+  const names = new Map(accounts.map((a) => [a.id, a.name]));
+  let unmapped: string[] | null = null;
+  if (posStoreId) {
+    try {
+      const methods = await fetchPosV1PaymentMethods(posStoreId);
+      const active = new Set(rows.filter((t) => t.isActive && t.posV1Alias).map((t) => normalizePosV1Alias(t.posV1Alias ?? '')));
+      unmapped = methods.filter((m) => !active.has(normalizePosV1Alias(m)));
+    } catch {
+      unmapped = null;
+    }
+  }
+  return {
+    tenders: rows.map((t) => ({
+      id: t.id,
+      name: t.name,
+      kind: t.kind,
+      moneyAccountId: t.moneyAccountId,
+      moneyAccountName: t.moneyAccountId ? (names.get(t.moneyAccountId) ?? null) : null,
+      posV1Alias: t.posV1Alias,
+      isActive: t.isActive,
+    })),
+    accounts: accounts.map((a) => ({ id: a.id, name: a.name })),
+    unmapped,
+  };
 }
