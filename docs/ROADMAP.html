@@ -172,12 +172,12 @@
       payroll once the statutory data arrives, the remaining admin screens, and then the cutover itself.
     </p>
     <div class="facts">
-      <div class="fact done"><span class="n">240</span><span class="l">tasks done</span></div>
-      <div class="fact active"><span class="n">8</span><span class="l">in progress or partly done</span></div>
+      <div class="fact done"><span class="n">241</span><span class="l">tasks done</span></div>
+      <div class="fact active"><span class="n">7</span><span class="l">in progress or partly done</span></div>
       <div class="fact"><span class="n">21</span><span class="l">still to build</span></div>
-      <div class="fact crit"><span class="n">8</span><span class="l">open money defects (plus 2 deferred by your ruling)</span></div>
+      <div class="fact crit"><span class="n">4</span><span class="l">open money defects (plus 2 deferred by your ruling)</span></div>
     </div>
-    <div class="asat">As at <b>4 October 2026</b> &middot; <code>main</code> at <b>3558e52</b> &middot; production at migration <b>0176</b>, code on <code>main</code> through <b>0179</b> &middot; next free migration <b>0180</b></div>
+    <div class="asat">As at <b>4 October 2026</b> &middot; <code>main</code> at <b>79043f8</b> &middot; production at migration <b>0176</b>, code on <code>main</code> through <b>0180</b> &middot; next free migration <b>0181</b></div>
   </header>
 
   <section>
@@ -222,21 +222,18 @@
     <div class="track">
       <div class="step now">
         <span class="step-k">Now</span>
-        <h3>T-373 &middot; money follow-ups</h3>
+        <h3>Last money rows</h3>
         <ol>
-          <li>DEF-547 open variances after a reversal</li>
-          <li>DEF-552 sales-day lock for usage and wastage</li>
-          <li>DEF-555 stock day boundary (migration 0180)</li>
-          <li>DEF-559 inter-store balance watch</li>
+          <li>T-369 S5b/S6b: DEF-198, 291, 314</li>
+          <li>T-367 S5/S6: DEF-054, after the production count with you</li>
         </ol>
       </div>
       <div class="step next">
         <span class="step-k">Next</span>
-        <h3>Last money rows</h3>
+        <h3>Follow-ups</h3>
         <ul>
-          <li>T-369 S5b/S6b: DEF-198, 291, 314</li>
-          <li>T-367 S5/S6: DEF-054, after the production count with you</li>
-          <li>DEF-574, 577, 578 follow-ups</li>
+          <li>DEF-574, 577, 578, 579, 580</li>
+          <li>Production session: prechecks 0177&ndash;0180, then deploy</li>
         </ul>
       </div>
       <div class="step">
@@ -403,7 +400,7 @@
       </div>
     </div>
     <div class="wave">
-      <div class="wave-head"><h3>The 30 September census</h3><span class="chip c-active">in progress</span><span class="why">34 open money defects at the census; 8 remain.</span></div>
+      <div class="wave-head"><h3>The 30 September census</h3><span class="chip c-active">in progress</span><span class="why">34 open money defects at the census; 4 remain, all in T-367 and T-369.</span></div>
       <div class="tasks">
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-364</div><div class="task-what">Money and staff records are authorised before anything is read or judged (DEF-496, 497)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-365</div><div class="task-what">Supplier bank changes are audited; the edit form never wipes fields it did not send (DEF-498, 506)</div></div>
@@ -414,7 +411,7 @@
         <div class="task t-active"><div class="task-id"><span class="dot"></span>T-367</div><div class="task-what">AP / AR money: one write-off per entry, voided bills unsettleable, due dates from terms</div><div class="task-note">S5, S6 left (DEF-054, needs the production count)</div></div>
         <div class="task t-active"><div class="task-id"><span class="dot"></span>T-369</div><div class="task-what">Money functions get screens: reimbursement payout, closed-month override, draft sales day, cross-store money</div><div class="task-note">S5b, S6b left (DEF-198, 291, 314)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-371</div><div class="task-what">NaN sweep: every money comparison parses its input first</div><div class="task-note">Shipped 4 Oct (3558e52): DEF-382 and DEF-395 fixed</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-373</div><div class="task-what">Money follow-ups: open variances after a reversal, sales-day locks, stock day boundary, inter-store watch</div><div class="task-note">In progress: four parallel slices, S3 is migration 0180</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-373</div><div class="task-what">Money follow-ups: open variances after a reversal, sales-day locks, stock day boundary, inter-store watch</div><div class="task-note">Shipped 4 Oct: DEF-547, 552, 555, 559 fixed (migration 0180)</div></div>
       </div>
     </div>
   </section>

@@ -1,6 +1,6 @@
 # T-373: money follow-ups — DEF-547, DEF-552, DEF-555, DEF-559
 
-**Status:** APPROVED 2026-10-03 (orchestrator, after an independent Opus review whose 10 CHANGES are folded in). Ian answered Q1 → (a) on the Open Questions page (2026-10-03); built as (a) with R7. Not started — the lanes are on T-371. Drafted 2026-10-03 by the Opus planner.
+**Status:** ✅ **SHIPPED 2026-10-04** — S1 `5e676c1` (DEF-552), S2 `c03851b` (DEF-559), S3 `79043f8` (DEF-555, migration 0180), S4 `d00d0c9` (DEF-547). Tester-first per slice, audited twice. Gates: typecheck 0; unit 4021/4022; FULL integration on fresh `shareat_test_orch_t373gate2` 283 files 4792/4792; build 0. Audit changes: R7 keys on a finalized section, not on status (a planned-only pull no longer blocks the date); a reversed bad 1250/2150 line and its reversal cancel; the pair sentence states who owes whom. Follow-up DEF-580 (reversal of a reversal). S2's production precheck is in `docs/ops/README.md`. Screen smoke: pending.
 Written at HEAD `9830f85`; every line number below was read there. Dirty at that HEAD and NOT touched here:
 `docs/POSTING-PATTERNS.md`, `tests/worked-examples/fixtures.ts` (another lane's). Uncommitted T-371 work touches
 `packages/db/src/index.ts`, `packages/core/src/money.ts`, `packages/domain/src/stock/quantity.ts` and
