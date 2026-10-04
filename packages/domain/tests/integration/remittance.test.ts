@@ -738,13 +738,14 @@ describe('T-153 — the till float pot', () => {
   const potFor = async (f: Fixture, target: string) =>
     asOrg(f.orgId, (tx) => setTillFloat(tx, f.admin, { storeId: f.storeId, target }));
 
-  it('⭐ setting a target creates the pot — and it starts EMPTY, which the finding says at once', async () => {
+  it('⭐ T-316 S1: setting a target puts it on the existing Cashier cash (1110) account — it creates nothing, and the drawer starts under target, which the finding says at once', async () => {
     const f = await fixture('float-new');
     const { moneyAccountId } = await potFor(f, '20000.00');
     const acct = await asOrg(f.orgId, (tx) =>
       moneyAccountsRepo.getById(tx, f.orgId, moneyAccountId),
     );
-    expect(acct!.glAccountCode).toBe('1115');
+    expect(acct!.glAccountCode).toBe('1110'); // T-316 S1 (was '1115')
+    expect(acct!.isFoundation).toBe(true); // the existing Cashier cash, not a new pot
     expect(acct!.custodian).toBe('cashier');
     expect(Number(acct!.floatTarget)).toBe(20000);
 
@@ -772,10 +773,15 @@ describe('T-153 — the till float pot', () => {
     expect(await asOrg(f.orgId, (tx) => findingsRepo.tillFloatOffTarget(tx, f.orgId))).toEqual([]);
   });
 
-  it('⛔ a float is NEVER remitted — the custodian check alone would not catch it', async () => {
+  it('⭐ T-316 S2: the float-carrying drawer IS remitted — what the verified days owe goes, the float stays (the T-153 separate-pot refusal is gone)', async () => {
+    // T-153 premise (gone, 0184): the float was a side pocket that a remittance must never touch.
+    // The float is now a target on the cashier's own takings drawer — the remittance source — so
+    // the old refusal ("a float is never remitted") would refuse EVERY cash remittance at a float
+    // store. What stays true: the handover carries only what the verified days owe (T-S2 file).
     const f = await fixture('float-noremit');
     await officeOpening(f, '2026-01-01', '50000.00');
     const { moneyAccountId } = await potFor(f, '20000.00');
+    expect(moneyAccountId).toBe(f.till); // the float sits on the drawer itself
     await asOrg(f.orgId, (tx) =>
       createMoneyTransfer(tx, f.admin, {
         fromMoneyAccountId: f.safe,
@@ -788,17 +794,22 @@ describe('T-153 — the till float pot', () => {
     await verifiedDay(f, '2026-01-02');
     await tillMovement(f, '2026-01-02', '5000.00');
 
-    // ⚠️ The pot IS custodian 'cashier', so `from.custodian !== 'cashier'` passes it happily.
-    // Without T-153's explicit refusal it would sit in the picker one click from the office.
-    await expect(
-      asOrg(f.orgId, (tx) =>
-        createRemittance(tx, f.admin, {
-          storeId: f.storeId,
-          remittedOn: '2026-01-03',
-          lines: [{ fromMoneyAccountId: moneyAccountId, toMoneyAccountId: f.safe, amount: '5000.00' }],
-        }),
-      ),
-    ).rejects.toThrow(/never remitted/);
+    const r = await asOrg(f.orgId, (tx) =>
+      createRemittance(tx, f.admin, {
+        storeId: f.storeId,
+        remittedOn: '2026-01-03',
+        lines: [{ fromMoneyAccountId: moneyAccountId, toMoneyAccountId: f.safe, amount: '5000.00' }],
+      }),
+    );
+    expect(r.settled).toEqual([{ businessDate: '2026-01-02', amount: '5000.00' }]);
+    expect(r.variance).toBeNull();
+
+    // ⭐ The float stayed in the drawer: 20,000 + 5,000 − 5,000.
+    const balance = await asOrg(f.orgId, async (tx) => {
+      const acct = await moneyAccountsRepo.getById(tx, f.orgId, moneyAccountId);
+      return moneyAccountsRepo.balanceOf(tx, f.orgId, acct!);
+    });
+    expect(Number(balance)).toBeCloseTo(20000, 2);
   });
 
   it('⛔ STAFF and MANAGER may not set a float — it is a risk figure, like the ceiling', async () => {
@@ -814,7 +825,7 @@ describe('T-153 — the till float pot', () => {
     }
   });
 
-  it('⛔ one pot per store — the database refuses a second', async () => {
+  it('⛔ one target per store — the database refuses a second (T-316 S1: both rows are 1110 cashier cash)', async () => {
     const f = await fixture('float-one');
     await potFor(f, '20000.00');
     // ⭐ Not tidiness: `balanceOf` scopes a non-1140 account by (gl code, store), so two pots would
@@ -827,7 +838,7 @@ describe('T-153 — the till float pot', () => {
           name: 'Second float',
           instrument: 'cash',
           custodian: 'cashier',
-          glAccountCode: '1115',
+          glAccountCode: '1110', // T-316 S1 (was '1115'): the shape check now admits only 1110
           floatTarget: money('5000.00'),
         }),
       ),

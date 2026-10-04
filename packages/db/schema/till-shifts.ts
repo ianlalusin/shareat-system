@@ -147,9 +147,9 @@ export const tillCustodyShifts = pgTable(
 /**
  * What was physically counted, per money account, per moment.
  *
- * ⭐ **Lines, not two fixed cash columns.** The float (`1115`) and the takings drawer (`1110`) are
- * different accounts that reconcile against different things, and a store that ever grows a second
- * drawer gets a second money account — not a schema change.
+ * ⭐ **Lines, not two fixed cash columns.** Since T-316 the float is a target on the cashier's
+ * cash drawer (`1110`), so a store counts one cash line there; a store that ever grows a second
+ * drawer (or a wallet) gets a second money account — not a schema change.
  */
 export const tillCountLines = pgTable(
   'till_count_lines',

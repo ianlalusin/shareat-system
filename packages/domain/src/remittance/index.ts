@@ -158,22 +158,6 @@ async function runCreate(
           `"${from.name}" (${from.custodian}) → "${to.name}" (${to.custodian}) does not.`,
       );
     }
-    // ⛔ T-153 — A TILL FLOAT IS NEVER REMITTED, and the custodian check above cannot catch it:
-    // a float pot IS custodian 'cashier', so without this it would sit in the remittance picker
-    // one click from being handed to the office.
-    //
-    // > **Ian, 2026-08-29:** *"extra cash float that is NOT remitted to the manager or admin — it
-    // > sits on till forever… separated from the money being remitted."*
-    //
-    // ⚠️ A service-layer rule rather than a database one on purpose: the money may legitimately
-    // leave this account (an expense paid from the float, a transfer resizing it). What is refused
-    // is this DOCUMENT moving it — which is a question about the document, not about the value.
-    if (from.floatTarget !== null) {
-      throw new Error(
-        `createRemittance: "${from.name}" is a till float, and a float is never remitted — it ` +
-          'sits in the till and is counted against its target. Remit the takings drawer instead.',
-      );
-    }
   }
 
   const handedOver: Money = input.lines.reduce((sum, l) => add(sum, amountOf(l)), money('0'));
@@ -208,6 +192,33 @@ async function runCreate(
     throw new Error(
       `createRemittance: every verified day at or before ${input.remittedOn} already owes ` +
         'nothing — there is nothing to settle.',
+    );
+  }
+
+  // `owed` is Postgres numeric(14,2) text; `.toFixed(2)` normalises its form for `money()` (see the
+  // measured note at T-324 check 2 below).
+  const totalOwed = settleable.reduce((sum, r) => add(sum, money(Number(r.owed).toFixed(2))), money('0'));
+
+  // ⛔⛔ T-316 ✎S-1 — AT A FLOAT-CARRYING STORE A HANDOVER CARRIES WHAT THE VERIFIED DAYS OWE AND
+  // NOTHING MORE. The float is a target on the cashier's drawer (1110), so the drawer is the
+  // remittance source and the float must stay in it. Placed BEFORE T-324's two checks (so a float store is never advised to declare an overage that would then be refused) and BEFORE
+  // `insertRemittance` and the transfer loop, so nothing is written when it fires. Strictly `>`:
+  // handing over exactly `totalOwed` is the ordinary close. Reads NO `floatPosition`,
+  // `cash_collected` or variance: a figure `recognise_income` can raise must not unlock a handover.
+  // Stores without a float keep T-324 exactly as it is. No branch on the POS link (A5).
+  const floatAccount = (
+    await moneyAccountsRepo.listMoneyAccounts(tx, actor.orgId, { storeId: input.storeId })
+  ).find((a) => a.floatTarget !== null);
+  if (floatAccount && floatAccount.floatTarget !== null && compare(handedOver, totalOwed) > 0) {
+    const store = await storesRepo.getById(tx, actor.orgId, input.storeId);
+    const storeName = store?.name ?? 'This store';
+    throw refuse(
+      `createRemittance: ${formatMoney(handedOver)} handed over exceeds the ${formatMoney(totalOwed)} the ` +
+        `verified days owe at float store ${input.storeId} (float ${floatAccount.floatTarget})`,
+      `This hands over ${formatMoney(handedOver)}, but the verified days owe ${formatMoney(totalOwed)}. ` +
+        `${storeName}'s till keeps a ${formatMoney(money(floatAccount.floatTarget))} float, so only what ` +
+        "the verified days owe can be handed over. Cash from a day that isn't verified yet is handed " +
+        'over after that day is verified. Extra float goes back to the office as a transfer.',
     );
   }
 
@@ -306,7 +317,6 @@ async function runCreate(
   // 0.00–2,999.99, 200k near 10^9, plus its maximum 999999999999.99 — with ZERO lossy results.
   // This is a normalisation of a database `::text` value, not a comparison against a raw human
   // input, so DEF-272's guard does not apply to it.
-  const totalOwed = settleable.reduce((sum, r) => add(sum, money(Number(r.owed).toFixed(2))), money('0'));
   const totalDeclared = linesWithOverage.reduce((sum, l) => add(sum, l.declaredForCompare), money('0'));
   if (compare(handedOver, add(totalOwed, totalDeclared)) > 0) {
     // ⭐ Unlike check 1's account-scoped figure, this total DOES clear the handover: check 1 has

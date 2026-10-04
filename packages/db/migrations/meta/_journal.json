@@ -1149,6 +1149,13 @@
       "when": 1801884707084,
       "tag": "0183_t375_s1_pos_v1_day_feed_structure",
       "breakpoints": true
+    },
+    {
+      "idx": 184,
+      "version": "7",
+      "when": 1801971107084,
+      "tag": "0184_t316_float_on_the_cashier_drawer",
+      "breakpoints": true
     }
   ]
 }

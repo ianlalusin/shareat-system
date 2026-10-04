@@ -13,7 +13,7 @@
  * combinations disagreeing with a reconstruction from raw legs. **A number worth showing is worth
  * deriving.**
  */
-import { and, asc, eq, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert } from './numeric-input';
@@ -41,9 +41,9 @@ export interface MoneyAccountRow {
   isFoundation: boolean;
   /** ⭐ How far below zero a CASHIER drawer may go. Positive; office/staff ignore it. */
   overdraftLimit: string;
-  /** ⭐ T-153 — non-null makes this a TILL FLOAT pot: a side pocket with a configured amount it
-   *  should always hold. ⛔ A pot blocks at zero regardless of custodian, because its balance is
-   *  complete (it only moves by transfer) rather than provisional like a takings drawer. */
+  /** ⭐ T-153/T-316 — non-null marks the cashier's cash drawer (1110) as carrying a TILL FLOAT: the
+   *  configured amount it should always hold. A target on the drawer, not a side pocket; the
+   *  drawer is still judged as a cashier drawer (warn within its overdraft). */
   floatTarget: string | null;
   notes: string | null;
   createdAt: Date;
@@ -198,16 +198,6 @@ export async function setFloatTarget(
   }
 }
 
-/** Every till float pot in the org, with what it is supposed to hold. */
-export async function listFloatPots(tx: Tx, orgId: string): Promise<MoneyAccountRow[]> {
-  const rows = await tx
-    .select(COLUMNS)
-    .from(moneyAccounts)
-    .where(and(eq(moneyAccounts.orgId, orgId), isNotNull(moneyAccounts.floatTarget)))
-    .orderBy(asc(moneyAccounts.name));
-  return rows as MoneyAccountRow[];
-}
-
 // -------------------------------------------------------------------------------------
 // ⭐ Derived positions — read from the ledger, never from a column
 // -------------------------------------------------------------------------------------
@@ -237,7 +227,7 @@ export async function custodianPositions(
   input: { asOf: string; storeId?: string },
 ): Promise<CustodianPositionRow[]> {
   const storeFilter = input.storeId
-    ? sql`and ${journalLines.storeId} = ${input.storeId}`
+    ? sql`and jl.store_id = ${input.storeId}`
     : sql``;
 
   const rows = await tx.execute(sql`

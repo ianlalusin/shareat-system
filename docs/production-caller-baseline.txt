@@ -31,7 +31,6 @@ elevateManager
 endShift
 expectedAccumulated
 fetchPosV1Day
-fetchPosV1PaymentMethods
 findCurrentDocument
 findLiveOfKind
 findPostedSettlementForChannelDay
@@ -85,6 +84,7 @@ remainingFor
 remainingOf
 removeUsageLine
 resolveFingerprintMatchToken
+resolvePosV1Methods
 returnableQuantity
 reverseOwnerEntry
 revokeRoleById
@@ -102,6 +102,7 @@ sumTender
 summarizeConversions
 tablesWithScope
 tilesTheMonth
+tillFloorPosition
 totalOf
 unclosedShiftCount
 undeclareSupplierItem

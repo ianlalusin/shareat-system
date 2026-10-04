@@ -521,7 +521,7 @@ describe('T-186 — what a till may be counted against', () => {
     ).rejects.toThrow(/not a cashier cash account/i);
   });
 
-  it('⭐ the float pot is a separate countable pocket, with its target visible', async () => {
+  it('⭐ T-316 S1: the float is a target on the ONE countable cashier drawer (1110), visible there', async () => {
     const f = await fixture('float');
     await asOrg(f.orgId, (tx) =>
       setTillFloat(tx, f.admin, { storeId: f.storeId, target: '20000.00' }),
@@ -529,9 +529,8 @@ describe('T-186 — what a till may be counted against', () => {
     const accounts = await asOrg(f.orgId, (tx) =>
       tillShiftsRepo.countableAccounts(tx, f.orgId, f.storeId),
     );
-    // The takings drawer (1110) and the float pot (1115) — two pockets, counted separately,
-    // because they reconcile against different things.
-    expect(accounts.map((a) => a.glAccountCode).sort()).toEqual(['1110', '1115']);
-    expect(accounts.find((a) => a.glAccountCode === '1115')!.floatTarget).toBe('20000.00');
+    // T-316 S1: one line instead of two (was ['1110', '1115']); the target sits on the 1110 drawer.
+    expect(accounts.map((a) => a.glAccountCode)).toEqual(['1110']);
+    expect(accounts[0]!.floatTarget).toBe('20000.00');
   });
 });

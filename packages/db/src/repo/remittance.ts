@@ -19,7 +19,9 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { recordGone } from './record-gone';
+import { refuse } from '../refusal';
 import { moneyAccounts } from '../../schema/money-accounts';
+import { custodianPositions } from './money-accounts';
 import {
   remittanceAllocations,
   remittanceLines,
@@ -137,6 +139,93 @@ export async function endDayReports(
     salesDayStatus: (r.sales_day_status ?? r.salesDayStatus ?? null) as string | null,
     remittable: Boolean(r.remittable),
   }));
+}
+
+// -------------------------------------------------------------------------------------
+// T-316 S2 — the till floor position
+// -------------------------------------------------------------------------------------
+
+export interface TillFloorPosition {
+  /** The store's `money_accounts.float_target` (at most one, `one_float_per_store`), or null. */
+  floatTarget: string | null;
+  /** Σ cashier-custody positions at the store as at `upTo` (all cashier accounts, pooled). */
+  cashierBalance: string;
+  /** `cashierBalance − onLoanMovement − closedOwed`: the float as the books hold it. Ordinary
+   *  trading cannot move it. */
+  floatPosition: string;
+}
+
+const cents = (v: string): bigint => {
+  const m = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(v.trim());
+  if (!m) throw refuse(`tillFloorPosition: "${v}" is not a 2dp decimal`, 'The till float position could not be read from the books.');
+  const n = BigInt(m[2]!) * 100n + BigInt((m[3] ?? '').padEnd(2, '0') || '0');
+  return m[1] ? -n : n;
+};
+const fromCents = (n: bigint): string => {
+  const neg = n < 0n;
+  const a = neg ? -n : n;
+  return `${neg ? '-' : ''}${a / 100n}.${String(a % 100n).padStart(2, '0')}`;
+};
+
+/**
+ * ⭐ T-316 §2.1 — where the till float stands, pooled across the store's cashier accounts. It calls
+ * `endDayReports` and `custodianPositions`; it never re-derives either.
+ *
+ * on-loan row: sales day open/submitted, or (✎R-2) no sales day AND the date is after the store's
+ * latest verified date (no verified day ⇒ every day-less date). Its spend is float on loan, repaid
+ * by that day's sales at verify. closed row: every other row; `closedOwed` is Σ max(owed, 0) (a
+ * closed negative day is never repaid by FIFO, so its deficit is a real shortfall).
+ * ✎S-1: no `unverifiedNetCash`, and no `sales_days` figure enters the result.
+ */
+export async function tillFloorPosition(
+  tx: Tx,
+  orgId: string,
+  input: { storeId: string; upTo: string },
+): Promise<TillFloorPosition> {
+  const [target] = await tx
+    .select({ floatTarget: moneyAccounts.floatTarget })
+    .from(moneyAccounts)
+    .where(
+      and(
+        eq(moneyAccounts.orgId, orgId),
+        eq(moneyAccounts.storeId, input.storeId),
+        sql`${moneyAccounts.floatTarget} is not null`,
+        eq(moneyAccounts.isActive, true),
+      ),
+    )
+    .limit(1);
+
+  const positions = await custodianPositions(tx, orgId, { asOf: input.upTo, storeId: input.storeId });
+  const cashierBalance = positions
+    .filter((p) => p.custodian === 'cashier')
+    .reduce((sum, p) => sum + cents(p.balance), 0n);
+
+  const reports = await endDayReports(tx, orgId, input);
+  let latestVerified: string | null = null;
+  for (const r of reports) {
+    if (r.salesDayStatus === 'verified' && (latestVerified === null || r.businessDate > latestVerified)) {
+      latestVerified = r.businessDate;
+    }
+  }
+  let onLoan = 0n;
+  let closedOwed = 0n;
+  for (const r of reports) {
+    const isOnLoan =
+      r.salesDayStatus === 'open' ||
+      r.salesDayStatus === 'submitted' ||
+      (r.salesDayId === null && (latestVerified === null || r.businessDate > latestVerified));
+    if (isOnLoan) onLoan += cents(r.movement);
+    else {
+      const owed = cents(r.owed);
+      if (owed > 0n) closedOwed += owed;
+    }
+  }
+
+  return {
+    floatTarget: target?.floatTarget ?? null,
+    cashierBalance: fromCents(cashierBalance),
+    floatPosition: fromCents(cashierBalance - onLoan - closedOwed),
+  };
 }
 
 /**

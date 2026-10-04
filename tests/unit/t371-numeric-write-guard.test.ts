@@ -142,6 +142,8 @@ const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
   'packages/domain/src/fixed-assets/schedule.ts::periodsThrough::p.period <= asOfPeriod': 'not-a-column-value',
   'packages/domain/src/fixed-assets/dispose.ts::runDispose::input.disposedOn < asset.acquiredOn': 'not-a-column-value',
   'packages/domain/src/fixed-assets/in-service.ts::resolveMode::openingDate > asset.acquiredOn!': 'not-a-column-value',
+  // T-316 S2: ISO 'YYYY-MM-DD' business-date ordering in tillFloorPosition (latest verified day vs a report's day) — string-vs-string, never a money value
+  'packages/db/src/repo/remittance.ts::tillFloorPosition::r.businessDate > latestVerified': 'not-a-column-value',
   // T-374 S5: whole-number bounds, each NaN-safe. `lineCount` passed `/^\d+$/` first; `typedLife` is a `parseWholeNumberInput` result (regex ^\d+$, finite) or a typed
   // number already refused by `!Number.isInteger(...)` (which catches NaN) before `< 1` / `> MAX` are reached; `usefulLifeMonths` is likewise `Number.isInteger`-guarded first.
   'apps/erp/src/app/expenses/actions.ts::parseExpenseForm::lineCount > 50': 'not-a-column-value',

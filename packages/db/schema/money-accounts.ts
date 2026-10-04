@@ -203,8 +203,9 @@ export const moneyAccounts = pgTable(
     check('money_accounts_overdraft_limit_not_negative_check', sql`${t.overdraftLimit} >= 0`),
     // A float pot of zero says what NULL already says, and is far likelier to be an unfilled form.
     check('money_accounts_float_target_positive_check', sql`${t.floatTarget} is null or ${t.floatTarget} > 0`),
-    /** ⭐ A float pot is CASH, held by the CASHIER, rolling into `1115`. Any other shape would put
-     *  a target on a wallet or an office safe and make the off-target detector nonsense. */
+    /** ⭐ T-316 (migration 0184): the float is a TARGET on the cashier's own cash drawer — CASH, held
+     *  by the CASHIER, rolling into `1110` — not a side pocket. Any other shape would put a target on
+     *  a wallet or an office safe and make the off-target detector nonsense. */
     /** ⭐ ONE float pot per store — and this is what makes its BALANCE knowable, not tidiness.
      *  `balanceOf` scopes a non-`1140` account by (gl code, store) because these are not
      *  `requires_party`; two pots in one store would share one figure and the off-target detector
@@ -214,7 +215,7 @@ export const moneyAccounts = pgTable(
       .where(sql`${t.floatTarget} is not null`),
     check(
       'money_accounts_float_target_shape_check',
-      sql`${t.floatTarget} is null or (${t.instrument} = 'cash' and ${t.custodian} = 'cashier' and ${t.glAccountCode} = '1115')`,
+      sql`${t.floatTarget} is null or (${t.instrument} = 'cash' and ${t.custodian} = 'cashier' and ${t.glAccountCode} = '1110')`,
     ),
     check('money_accounts_overdraft_limit_finite_check', sql`${t.overdraftLimit} > '-Infinity'::numeric and ${t.overdraftLimit} < 'Infinity'::numeric`),
     check('money_accounts_float_target_finite_check', sql`${t.floatTarget} > '-Infinity'::numeric and ${t.floatTarget} < 'Infinity'::numeric`),

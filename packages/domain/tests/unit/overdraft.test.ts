@@ -18,7 +18,7 @@ describe('judgeDraw', () => {
   const cashier = { name: 'Cashier drawer', custodian: 'cashier' as const, overdraftLimit: '20000.00', floatTarget: null };
   const office = { name: 'Office safe', custodian: 'office' as const, overdraftLimit: '20000.00', floatTarget: null };
   const staff = { name: 'Ana float', custodian: 'staff' as const, overdraftLimit: '20000.00', floatTarget: null };
-  // ⭐ T-153 — custodian 'cashier', but a SIDE POCKET rather than a drawer that runs behind.
+  // ⭐ T-316 — a cashier drawer that carries a float target (the target lives on 1110 now).
   const pot = { name: 'Lipa till float', custodian: 'cashier' as const, overdraftLimit: '20000.00', floatTarget: '20000.00' };
 
   it('says nothing at all when the money is there', () => {
@@ -95,25 +95,24 @@ describe('judgeDraw', () => {
   // T-153 — the float pot
   // -----------------------------------------------------------------------------------
 
-  it('⭐ a FLOAT POT blocks at zero, even though its custodian is the cashier', () => {
-    // Ian, 2026-08-29: "we guard all accounts to never go negative, all stops at 0 never below."
+  it('⭐ T-316 S1: a float-carrying cashier drawer WARNS within its overdraft (it is the takings drawer, not a side pocket)', () => {
+    // Was T-153: a float pot blocked at zero. After 0184 the target lives on the 1110 takings
+    // drawer, whose ledger balance is provisional, so the cashier branch governs.
     const v = judgeDraw(pot, money('1500.00'), money('2000.00'));
-    expect(v.blocked).toBe(true);
-    expect(v.message).toMatch(/side pocket/);
+    expect(v.blocked).toBe(false);
+    expect(v.message).toMatch(/short 500\.00/);
   });
 
-  it('⛔ and it does NOT consult the overdraft limit, which a drawer of the same custodian does', () => {
-    // Same custodian, same limit, same numbers — opposite verdicts. ⭐ The warn-vs-block split is
-    // about whether the ledger can see the WHOLE balance, not about who holds it: a takings drawer
-    // is provisional until the day is verified, a float pot only ever moves by transfer.
-    expect(judgeDraw(cashier, money('1000.00'), money('1500.00')).blocked).toBe(false);
-    expect(judgeDraw(pot, money('1000.00'), money('1500.00')).blocked).toBe(true);
+  it('⛔ T-316 S1: floatTarget is NOT consulted — a drawer with and without a target give the same verdict', () => {
+    const noTarget = judgeDraw(cashier, money('1000.00'), money('1500.00'));
+    const withTarget = judgeDraw({ ...pot, name: cashier.name }, money('1000.00'), money('1500.00'));
+    expect(withTarget).toEqual(noTarget); // same name, so the whole verdict (blocked + message) must match
+    expect(noTarget.blocked).toBe(false);
+    // control: past the limit both block, so the equality is not two warnings by accident
+    expect(judgeDraw(pot, money('1000.00'), money('22000.00')).blocked).toBe(true);
   });
 
-  it('says nothing when the float covers the draw — spending it IS allowed', () => {
-    // ⚠️ Drawing on the float is ordinary: Ian's worked example pays a delivery from the takings
-    // drawer and then from the float when the drawer is exhausted. What is refused is going BELOW
-    // zero; the pot then reads under target and the finding asks for it to be topped back up.
+  it('says nothing when the float-carrying drawer covers the draw', () => {
     expect(judgeDraw(pot, money('20000.00'), money('1500.00'))).toEqual({ blocked: false });
   });
 

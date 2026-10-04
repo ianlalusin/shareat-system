@@ -167,10 +167,12 @@ async function setup(hint: string): Promise<Fixture> {
     values (${orgId}, ${storeId}, 'GCash — cashier', 'ewallet', '1140', 'cashier')
     returning id
   `;
+  // T-316 S1: reuse the store's foundation Cashier cash (0029 trigger) — a second cashier cash row
+  // would make setTillFloat refuse ("more than one cashier cash account").
   const [drawer] = await sql<{ id: string }[]>`
-    insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
-    values (${orgId}, ${storeId}, 'Cashier drawer', 'cash', '1110', 'cashier')
-    returning id
+    select id from money_accounts
+    where store_id = ${storeId} and instrument = 'cash' and custodian = 'cashier'
+      and gl_account_code = '1110' and is_foundation
   `;
   // ⭐ An OFFICE safe too. Since bible row 154 the overdraft rule turns on the CUSTODIAN — a
   // cashier account only ever warns — so proving the blocking half needs an account whose
@@ -1367,7 +1369,7 @@ describe('overdrawing an expense account — warn for cashier, block for office 
 // =====================================================================================
 
 describe("T-153 — Ian's worked example: the drawer runs out and the float covers the rest", () => {
-  it('⭐ a split expense draws the takings drawer down and then the float, on its own line', async () => {
+  it('⭐ T-316 S1: an expense of takings plus float draws ONE 1110 leg — the float is a target on the drawer, not a second account', async () => {
     // > **Ian, 2026-08-29:** *"sales comes say cashier cash +1000, online +500. Then a delivery
     // > came worth 3000 so cashier cash −1000 = 0, online not touched cause delivery is cash…
     // > 2000 from float then 18k balance to total 3k. So it has its own line on split payment."*
@@ -1380,8 +1382,9 @@ describe("T-153 — Ian's worked example: the drawer runs out and the float cove
     const { moneyAccountId: potId } = await asPerson(f.orgId, (tx) =>
       setTillFloat(tx, actor(f.orgId, f.adminId), { storeId: f.storeId, target: '20000.00' }),
     );
-    await fundAccount(f.orgId, f.storeId, '1115', '20000.00', null);
-    await fundAccount(f.orgId, f.storeId, '1110', '1000.00', null);
+    // T-316 S1: the float and the takings are ONE drawer now, so it holds both (was 1115 20,000 + 1110 1,000).
+    expect(potId).toBe(f.cashDrawerId);
+    await fundAccount(f.orgId, f.storeId, '1110', '21000.00', null);
 
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
@@ -1391,11 +1394,7 @@ describe("T-153 — Ian's worked example: the drawer runs out and the float cove
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Delivery, part drawer part float',
-        payments: [
-          { method: 'cash', amount: '1000.00', moneyAccountId: f.cashDrawerId },
-          // ⭐ THE POINT: the float is an ordinary payment line, picked like any other account.
-          { method: 'cash', amount: '2000.00', moneyAccountId: potId },
-        ],
+        payments: [{ method: 'cash', amount: '3000.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
     const posted = await asPerson(f.orgId, (tx) =>
@@ -1407,8 +1406,9 @@ describe("T-153 — Ian's worked example: the drawer runs out and the float cove
     // spending is visible as its own movement rather than buried in one cash figure.
     const lines = await linesFor(posted.journalEntryId);
     const byCode = Object.fromEntries(lines.map((l) => [l.code, l]));
-    expect(Number(byCode['1110']!.credit)).toBeCloseTo(1000, 2);
-    expect(Number(byCode['1115']!.credit)).toBeCloseTo(2000, 2);
+    expect(Number(byCode['1110']!.credit)).toBeCloseTo(3000, 2); // was 1000 here + 1115 2000
+    expect(byCode['1115']).toBeUndefined(); // T-316 S1: no second cash leg
+    expect(lines.filter((l) => Number(l.credit) > 0)).toHaveLength(1);
 
     // ⭐ The pot now stands at ₱18,000 — Ian's "18k balance" — and says so as a finding, which is
     // exactly the state that asks to be topped back up to target.
@@ -1416,25 +1416,43 @@ describe("T-153 — Ian's worked example: the drawer runs out and the float cove
       const acct = await moneyAccountsRepo.getById(tx, f.orgId, potId);
       return moneyAccountsRepo.balanceOf(tx, f.orgId, acct!);
     });
-    expect(Number(pot)).toBeCloseTo(18000, 2);
+    // setup() already funds the drawer with 500,000: 500,000 + 21,000 - 3,000.
+    expect(Number(pot)).toBeCloseTo(518000, 2);
 
-    const found = await asPerson(f.orgId, (tx) => findingsRepo.tillFloatOffTarget(tx, f.orgId));
-    expect(found).toHaveLength(1);
-    expect(found[0]!.detail).toMatch(/₱2,000\.00 short in the LEDGER/);
-    // ⛔ And it must say so: this is posted spending, not a counted shortage. Charging a
-    // cashier for it would bill them for a delivery they paid for correctly.
-    expect(found[0]!.detail).toMatch(/must not be charged to a cashier/);
   });
 
-  it('⛔ and the float cannot be overdrawn — it stops at zero, unlike the takings drawer', async () => {
+  it('⛔ T-316 S1: a float-carrying drawer is NOT a side pocket — an expense past its balance is allowed (a warning) within the overdraft limit', async () => {
     // Ian, 2026-08-29: "we guard all accounts to never go negative, all stops at 0 never below."
     const f = await setup('t153-guard');
     const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
     const { moneyAccountId: potId } = await asPerson(f.orgId, (tx) =>
       setTillFloat(tx, actor(f.orgId, f.adminId), { storeId: f.storeId, target: '20000.00' }),
     );
-    await fundAccount(f.orgId, f.storeId, '1115', '2000.00', null);
+    await fundAccount(f.orgId, f.storeId, '1110', '2000.00', null);
 
+    const posted = await asPerson(f.orgId, async (tx) => {
+        const created = await createExpense(tx, actor(f.orgId, f.staffId), {
+          storeId: f.storeId,
+          supplierId: f.supplierId,
+          supplierInvoiceId: f.supplierInvoiceId,
+          businessDate: BUSINESS_DATE,
+          categoryId: catId,
+          particulars: 'More than the drawer holds',
+          payments: [{ method: 'cash', amount: '510000.00', moneyAccountId: potId }],
+        });
+        return approveExpense(tx, actor(f.orgId, f.managerId), created.id);
+      });
+    expect(potId).toBe(f.cashDrawerId);
+    expect(posted.created).toBe(true); // was: rejects /side pocket/
+  });
+
+  it('⛔ T-316 S1 control: past the overdraft limit the same float-carrying drawer still refuses', async () => {
+    const f = await setup('t316-guard-limit');
+    const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
+    const { moneyAccountId: potId } = await asPerson(f.orgId, (tx) =>
+      setTillFloat(tx, actor(f.orgId, f.adminId), { storeId: f.storeId, target: '20000.00' }),
+    );
+    await fundAccount(f.orgId, f.storeId, '1110', '2000.00', null);
     await expect(
       asPerson(f.orgId, async (tx) => {
         const created = await createExpense(tx, actor(f.orgId, f.staffId), {
@@ -1443,12 +1461,12 @@ describe("T-153 — Ian's worked example: the drawer runs out and the float cove
           supplierInvoiceId: f.supplierInvoiceId,
           businessDate: BUSINESS_DATE,
           categoryId: catId,
-          particulars: 'More than the pocket holds',
-          payments: [{ method: 'cash', amount: '5000.00', moneyAccountId: potId }],
+          particulars: 'Far past the overdraft',
+          payments: [{ method: 'cash', amount: '600000.00', moneyAccountId: potId }],
         });
         return approveExpense(tx, actor(f.orgId, f.managerId), created.id);
       }),
-    ).rejects.toThrow(/side pocket/);
+    ).rejects.toThrow(/overdraft/);
   });
 });
 

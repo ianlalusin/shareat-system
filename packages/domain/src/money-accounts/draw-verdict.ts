@@ -28,7 +28,9 @@ export interface DrawableAccount {
   custodian: 'cashier' | 'office' | 'staff';
   /** ⭐ How far below zero a CASHIER drawer may go. Positive; office/staff ignore it. */
   overdraftLimit: string;
-  /** ⭐ Non-null makes this a TILL FLOAT pot — it blocks at zero regardless of custodian. */
+  /** ⭐ T-316: a till float is a TARGET on the cashier's takings drawer (1110). NOT consulted by
+   *  `judgeDraw` — the drawer is judged as a cashier drawer (warn within `overdraftLimit`), and the
+   *  floor is enforced at the document (`createRemittance`). Callers still pass it. */
   floatTarget: string | null;
 }
 
@@ -55,30 +57,6 @@ export function judgeDraw(
 
   const short = subtract(drawn, available);
   const holds = available;
-
-  // ⭐ T-153 — A FLOAT POT BLOCKS, even though its custodian is the cashier.
-  //
-  // > **Ian, 2026-08-29:** *"if this is implemented we guard all accounts to never go negative,
-  // > all stops at 0 never below."*
-  //
-  // ⚠️ The warn-vs-block split below is NOT really about the custodian — it is about **whether the
-  // ledger can see the whole balance**. A takings drawer holds today's sales hours before they
-  // post at verify, so its ledger balance is provisional. **A float pot's is complete**: it only
-  // ever moves by transfer, exactly like the office safe two branches down, and every one of those
-  // transfers posts the moment it happens.
-  //
-  // ⛔ So a float going negative is never a timing artefact. It means the side pocket has been
-  // spent past what is in it, which is the one thing the daily count exists to catch.
-  if (account.floatTarget !== null && account.floatTarget !== undefined) {
-    return {
-      blocked: true,
-      message:
-        `"${account.name}" is a till float holding ${holds} and this takes ${drawn}. ` +
-        'A float is a side pocket, not a drawer that runs behind — its balance is complete, so it ' +
-        'cannot go below zero. Pay the rest from the takings drawer, or top the float up from the ' +
-        'office first.',
-    };
-  }
 
   if (account.custodian === 'cashier') {
     // ⭐ T-371 R4/C4 — the stored limit is RE-MINTED, never `Number()`-ed: a malformed value throws
