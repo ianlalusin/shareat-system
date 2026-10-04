@@ -208,19 +208,43 @@ export async function interStorePairOutOfStep(tx: Tx, orgId: string): Promise<De
  * ⭐ T-373 S2 / DEF-559 — 1250/2150 lines that no store pair can read: no store on the line, a party that is not a
  * store, a party code that matches no store in the org, or one that names the line's own store. One finding, org-wide.
  * A NULL party is `unpartiedControlLines`' (one fact, one finding), so it is excluded here.
+ *
+ * ⭐ T-374 S3 / DEF-580 — reversal-chain PARITY. A reversal copies the party onto itself, and a reversal may itself be
+ * reversed (A → R1 → R2 → R3 …). The live tail of a chain re-states the root's line exactly when its depth (reversal
+ * hops from the root) is even: A alone (0) counts, R1 (1) cancels A, R2 (2) re-states A, R3 (3) cancels again. Entries
+ * with status 'reversed' are never the live tail. `interStorePairOutOfStep` needs none of this: it sums signed
+ * credit − debit, so any chain nets correctly; only this count and unsigned sum need the parity.
  */
 export async function interStoreLineUnmatched(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
   const [row] = (await tx.execute(sql`
+    with recursive cand as (
+      select distinct je.id
+      from journal_entries je
+      join journal_lines jl on jl.entry_id = je.id
+      join accounts a on a.id = jl.account_id
+      where je.org_id = ${orgId} and je.status <> 'draft'
+        and a.code in ('1250', '2150') and jl.party_id is not null
+    ),
+    -- walk UP from each candidate to its root; the row whose parent is null carries the depth
+    chain(cand_id, parent_id, depth) as (
+      select je.id, je.reversal_of_entry_id, 0
+      from journal_entries je join cand on cand.id = je.id
+      union all
+      select c.cand_id, p.reversal_of_entry_id, c.depth + 1
+      from chain c join journal_entries p on p.id = c.parent_id
+    ),
+    depths as (select cand_id, depth from chain where parent_id is null)
     select count(*)::text as n,
            coalesce(sum(jl.debit + jl.credit), 0)::numeric(14,2)::text as amount
     from journal_lines jl
     join journal_entries je on je.id = jl.entry_id
     join accounts a on a.id = jl.account_id
+    join depths d on d.cand_id = je.id
     where je.org_id = ${orgId} and je.status <> 'draft'
       and a.code in ('1250', '2150') and jl.party_id is not null
-      -- a reversed posting and its reversal cancel (reverseEntry copies the party onto the reversal)
+      -- a reversed posting and its reversal cancel; the live tail counts only at even depth
       and je.status <> 'reversed'
-      and not exists (select 1 from journal_entries o where o.id = je.reversal_of_entry_id and o.status = 'reversed')
+      and d.depth % 2 = 0
       and not (
         jl.party_type = 'store' and jl.store_id is not null
         and exists (
