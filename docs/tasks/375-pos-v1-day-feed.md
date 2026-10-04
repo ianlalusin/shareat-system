@@ -1,6 +1,6 @@
 # T-375: POS v1 day feed — sales days derived, locked, never typed
 
-**Status:** APPROVED 2026-10-04 after three independent Opus reviews (✎V, ✎W, ✎Y); S1 tester started; migrations 0183/0184 reserved. Earlier: SPEC WRITTEN 2026-10-04 (Opus planner, plan mode). Amended the same day three times: an independent Opus
+**Status:** APPROVED 2026-10-04 after three independent Opus reviews (✎V, ✎W, ✎Y); S1 SHIPPED `2c9b0f2` (migration 0183); S2 next; migrations 0183/0185 (S4). Earlier: SPEC WRITTEN 2026-10-04 (Opus planner, plan mode). Amended the same day three times: an independent Opus
 review (✎V1–✎V13), the orchestrator's per-store ruling (✎V2b), and a second-pass review (✎W1–✎W11). **This text is
 consolidated: every slice, test and table line below already carries the amendments, and the Review log at the end
 says where each one landed.** Not approved; not started. Fixes DEF-586 store by store. Proposes one new section-E defect
@@ -8,8 +8,8 @@ says where each one landed.** Not approved; not started. Fixes DEF-586 store by 
 Written at HEAD `ca852eb`, with T-367 S5's uncommitted work in the tree (`0182`, `expenses/*`, `_journal.json`). Every
 line number below was read there. **T-367 S5 (`0182`) must be committed before S1 adds `0183` to the journal.**
 **Model:** Sonnet per slice, tester first, then builder. Any amendment is written in plan mode (Opus).
-**Migrations:** **0183** (S1: structure, no enforcement) and **0184** (S4: enforcement). Journal head after T-367 S5 is
-0182, `when` 1801798307084 → **0183 `when` = 1801884707084**, **0184 `when` = 1801971107084** (ADR-012 §5 step 5).
+**Migrations:** **0183** (S1: structure, no enforcement; shipped) and **0185** (S4: enforcement; renumbered from 0184 on 2026-10-05 because T-316 takes 0184). **Rule (migration order): the next migration takes the next index at build time; never build a higher index before a lower reserved one is committed.** Drizzle orders by `when`, and a higher-index file applied first can leave the lower one silently skipped (DEF-039's failure mode). Reservations: **0184 = T-316, 0185 = T-375 S4.** Journal head after T-367 S5 is
+0182, `when` 1801798307084 → **0183 `when` = 1801884707084**. 0185's `when` is re-derived by the builder from the journal head at build time (ADR-012 §5 step 5).
 Both are gated on the FULL integration suite on a fresh gate DB, tree frozen while it runs. Both need a production
 read-only precheck run **before the push** (bible row 278).
 **Merging and go-live (✎V2b):** every slice merges to `main` normally; nothing changes for a store until it is LINKED.
@@ -167,7 +167,7 @@ parent's discounts.
   - `pos_v1_store_links`: one row per linked v2 store: `org_id`, `store_id`, `pos_store_id` (POS's Firestore store id),
     `pos_store_name` (display), `sales_channel_id` (the channel POS's sales land in; this store's, remitted daily),
     `pos_tax_type` (`vat_inclusive` | `vat_exclusive` | `non_vat`, NOT NULL, copied by the admin from POS's store
-    settings, ✎V9), `created_at/by`, `updated_at/by`. Never deleted (no DELETE grant); `store_id` never changes (0184
+    settings, ✎V9), `created_at/by`, `updated_at/by`. Never deleted (no DELETE grant); `store_id` never changes (0185
     trigger). **Its existence is the per-store switch (✎V2b).**
   - `pos_v1_day_feeds`: the source document, one row per HTTP response: `org_id`, `store_id`, `business_date`,
     `kind` (`sales` | `sold_items`), `purpose` (`import` | `recheck` | `usage`), `batch_id` (the rows captured together),
@@ -181,14 +181,14 @@ parent's discounts.
   - `sales_day_pos_corrections`: `org_id`, `store_id`, `sales_day_id`, `from_feed_id` (the basis at the time),
     `to_feed_id`, `entry_date`, `journal_entry_id`, `reason`, `posted_by`, `posted_at`. Append-only.
   - On existing tables: `sales_days.source` (`legacy_typed` | `pos_v1_day_feed`, NOT NULL DEFAULT `legacy_typed`,
-    kept by 0184, ✎V2b), `sales_days.pos_v1_day_feed_id` (the `sales` feed of the import), **`sales_days.refunds`
+    kept by 0185, ✎V2b), `sales_days.pos_v1_day_feed_id` (the `sales` feed of the import), **`sales_days.refunds`
     (numeric(14,2) NOT NULL DEFAULT 0, ≥ 0, finite; posts to 4950, ✎W11)**; `pos_usage_pulls.pos_v1_day_feed_id`
     (the `sold_items` feed a pull is pinned to). Every feed reference is one nullable column named
     `pos_v1_day_feed_id`; retiring the feed is "stop writing, keep the frozen rows".
   - **P2 maps 1:1:** `source` gains `pos_receipts` by its own migration then; the derivation's inputs map to receipt
     aggregates as in R4's table.
-- **R2. 0183 is structure only; 0184 is enforcement.** 0183 adds the four tables and the columns, CHECKs included.
-  0184 adds the link-aware triggers (R6). Every commit between S1 and S4 stays green; no default is dropped (✎V2b).
+- **R2. 0183 is structure only; 0185 is enforcement.** 0183 adds the four tables and the columns, CHECKs included.
+  0185 adds the link-aware triggers (R6). Every commit between S1 and S4 stays green; no default is dropped (✎V2b).
 - **R3. Tender mapping fails closed, by explicit alias only.** A POS method resolves to the store's ACTIVE tender whose
   normalized alias equals the method's normalized name (v1's normalization: lowercase, strip `[^a-z0-9]`). No name
   matching, no cash whitelist, no gaps. An unresolved method with a non-zero amount refuses the import; a zero-amount
@@ -246,7 +246,7 @@ parent's discounts.
   - `verified`: refuse; a later change is S6's finding.
   - Every figure, channel and tender write goes through `withSalesDayDerivation(tx, fn)` (R6).
   - The prior-7-days recheck is NOT part of this function (✎V4, R10).
-- **R6. The lock, in the database (0184), per store (✎V2b).**
+- **R6. The lock, in the database (0185), per store (✎V2b).**
   - **The flag.** `withSalesDayDerivation(tx, fn)` runs `select set_config('app.sales_day_derivation', 'on', true)`,
     awaits `fn`, then sets it `off` **on success only** (✎W4). On an error the transaction is already aborted
     (a further statement would raise 25P02 and hide the real constraint name) and the rollback discards the flag, so
@@ -372,7 +372,7 @@ parent's discounts.
 | S1 | 0183, fetcher, store link, channel guard | migration 0183, `_journal.json`, `db/schema/{pos-v1,sales-days,pos-mapping,index}.ts`, `db/src/repo/pos-v1.ts`, `db/src/pos-v1/{wire,fixtures}.ts`, `db/src/{index,cutover/classification,rls/registry}.ts`, `domain/src/pos/{v1-feed,store-link}.ts`, `domain/src/sales-channels/index.ts`, `apps/erp/src/app/settings/pos-link/*`, `route-capability.ts`, `glossary-trap-names.test.ts`, `docs/GLOSSARY.md` | journal | first |
 | S2 | tender master + resolver | `domain/src/pos/{tenders,v1-methods}.ts`, `db/src/repo/pos-v1.ts` (tender fns), `settings/pos-link/*` | `tenders` | after S1 |
 | S3 | derivation, import, typed path gated, fake POS | `domain/src/pos/v1-derive.ts`, `domain/src/sales-days/{import,create,edit,create-block,routing,index}.ts`, `db/src/repo/sales-days.ts`, `apps/erp/src/app/sales-days/{actions.ts,new/page.tsx,[id]/page.tsx,SalesDayForm.tsx,[id]/edit/page.tsx}`, `apps/erp/src/app/api/dev/fake-pos/**`, `apps/erp/dev-fixtures/pos-v1/**` (the TESTER owns `_fixtures/pos-day.ts`, ✎Y-minor) | `sales_days`, feeds | after S2 |
-| S4 | 0184 link-aware lock, platform seam, report modes | migration 0184, `_journal.json`, `domain/src/sales-days/{verify,compose,platform}.ts`, `db/src/repo/reports.ts`, `apps/erp/src/app/sales-days/[id]/page.tsx`, `constraint-messages.ts` | `sales_days` + children; journal | after S3 |
+| S4 | 0185 link-aware lock, platform seam, report modes | migration 0185, `_journal.json`, `domain/src/sales-days/{verify,compose,platform}.ts`, `db/src/repo/reports.ts`, `apps/erp/src/app/sales-days/[id]/page.tsx`, `constraint-messages.ts` | `sales_days` + children; journal | after S3 |
 | S5 | usage from stored sold items | `domain/src/pos/usage-pull.ts`, `db/src/repo/pos-mapping.ts`, `apps/erp/src/app/inventory/pos-usage/*` | `pos_usage_pulls` | after S3; parallel with S4 (file-disjoint; frozen during S4's full-suite gate) |
 | S6 | rechecks, drift findings, correction, corrected-day void, T-210 | `domain/src/pos/v1-recheck.ts`, `domain/src/sales-days/{correction,verify}.ts`, `domain/src/reports/pos-day-reconciliation.ts`, `domain/src/pos/sales-pull.ts` (deleted), `db/src/repo/{findings,reports}.ts`, `domain/src/findings/index.ts`, `apps/erp/src/app/reports/pos-reconciliation/page.tsx`, `components/reports/PosReconciliationCard.tsx`, `apps/erp/src/app/sales-days/{actions.ts,[id]/page.tsx}`, `docs/POSTING-PATTERNS.md` | ledger, corrections | after S4 and S5 |
 
@@ -649,7 +649,7 @@ the typed path, labelled, without the "From POS" checkbox.
 - FP1 (✎W10): the fake POS: under `NODE_ENV=production` with `POS_FAKE_ENABLED=1` → 404; a `posStoreId` of
   `../../etc` or `a/b` → 400 and no file read; wrong key → 401. Control: dev + flag + key → D1's body.
 - G1 (red on HEAD; unit, pure `fs`): no file under `apps/erp/src` contains `posSourced`; the figure inputs exist only in
-  `SalesDayForm.tsx`; `app.sales_day_derivation` appears only in `packages/db/src/repo/sales-days.ts`, the 0184 migration
+  `SalesDayForm.tsx`; `app.sales_day_derivation` appears only in `packages/db/src/repo/sales-days.ts`, the 0185 migration
   and test files; outside `sales-days/import.ts` no domain file calls `salesDaysRepo.updateDerivedFigures |
   replaceRemittedChannels`, and `insertSalesDay` is called only from `import.ts` and `create.ts`. Positive controls: the
   scanner flags fixture strings `name="posSourced"` and `set_config('app.sales_day_derivation'`.
@@ -668,16 +668,16 @@ unset → the not-configured sentence. Screenshots.
 
 ---
 
-## S4: the link-aware lock (0184), the platform seam, report modes
+## S4: the link-aware lock (0185), the platform seam, report modes
 **Goal:** on a linked store, no path but the derivation can write a figure; platform sales are their own small entry;
 the sales report still reconciles.
 
 **BUILDER:**
-- `packages/db/migrations/0184_t375_s4_sales_day_figure_lock.sql`: the R6 trigger functions and triggers
+- `packages/db/migrations/0185_t375_s4_sales_day_figure_lock.sql`: the R6 trigger functions and triggers
   (`sales_days` insert and update, `sales_day_tenders`, `sales_day_channels`, `pos_v1_store_links` update), each reading
   `coalesce(nullif(current_setting('app.sales_day_derivation', true), ''), 'off')` and the link via an invoker lookup,
   with the NULL-org fail-closed guard (R6); raising `23514` with the named constraint. The `source` default is KEPT.
-  Schema files carry `// NOTE … migration 0184`.
+  Schema files carry `// NOTE … migration 0185`.
 - `packages/domain/src/sales-days/platform.ts`: `setPlatformSales` per R8. Sentences: remitted channel → *"{channel} is
   paid at the till, so its sales come from POS, not from here."*; verified/voided → *"Platform sales can only be
   changed before the day is verified."*

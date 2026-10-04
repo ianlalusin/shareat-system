@@ -1,11 +1,11 @@
 # T-376: AP late-bill override and two screen nits — DEF-581, DEF-582, DEF-583
 
-**Status:** APPROVED 2026-10-04 after independent Opus review (✎X); S1 tester started; no migration. Earlier: SPEC 2026-10-04 (Opus planner).
+**Status:** APPROVED 2026-10-04 after independent Opus review (✎X); **S1 SHIPPED `dde37cb` (DEF-581); S2 (DEF-582) and S3 (DEF-583) next**; no migration. Earlier: SPEC 2026-10-04 (Opus planner).
 Written at HEAD `ca852eb`. The tree held uncommitted T-367 S5 work (retiring `other`/`ar_collection`) in
 `expenses/{routing,create,edit}.ts`, `shared/money-lines.ts`, `repo/expenses.ts`, `schema/expenses.ts`,
 `apps/erp/src/app/expenses/actions.ts` and migration 0182. Line numbers below were read in that tree.
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
-**Migration:** none. (If one turns out to be needed, the next free number after T-375's 0183/0184 is **0185**. Stop
+**Migration:** none. (If one turns out to be needed, the next free number after T-316's 0184 and T-375's 0185 is **0186**. Stop
 and report first: it would be a spec defect.)
 
 ## Goal

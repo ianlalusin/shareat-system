@@ -145,7 +145,7 @@
       <div class="count you"><div class="n">6</div><div class="l">things only you can do</div></div>
       <div class="count done"><div class="n">242</div><div class="l">roadmap tasks done</div></div>
     </div>
-    <p class="src">main at 5d28250 (migration 0182) &middot; production at migration 0181 (deployed 4 Oct) &middot; next free migration 0185 (0183/0184 reserved by T-375) &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+    <p class="src">main at 2c9b0f2 (migration 0183) &middot; production at migration 0181 (deployed 4 Oct) &middot; next free migration 0186 (0184 reserved by T-316, 0185 by T-375 S4) &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
   </header>
 
   <div class="dates">
@@ -164,8 +164,8 @@
         <div class="k">Now</div>
         <h3>Sales days from POS, and the bill override</h3>
         <ul>
-          <li>T-375: POS v1 day feed, ERP sales days from POS, before 15 Nov</li>
-          <li>T-376: DEF-581 bill override, DEF-582/583</li>
+          <li>T-375: POS v1 day feed, ERP sales days from POS, before 15 Nov (S1 done, S2-S6 left)</li>
+          <li>T-376: DEF-582/583 (S1, the DEF-581 bill override, done in dde37cb)</li>
         </ul>
       </div>
       <div class="step">
@@ -206,7 +206,6 @@
     <p class="lede">Found while fixing money. None posts a wrong amount today; each is small.</p>
     <div class="items">
       <div class="item"><div class="id">DEF-575</div><div>Resolving a discrepancy into a closed month shows a raw error page instead of a sentence.</div></div>
-      <div class="item s"><div class="id">DEF-581 (T-376)</div><div><b>A supplier bill dated in a closed month can't be posted from the bills screen</b>; the closed-month override reaches expense approval but not bill verification yet.</div></div>
       <div class="item"><div class="id">DEF-582, 583, 592</div><div>A successful supplier return, and a customer return, show no message; the remittance banner shows the old count until a reload.</div></div>
       <div class="item s"><div class="id">DEF-591</div><div><b>v2&rsquo;s POS pulls send v2&rsquo;s own store id</b>, which POS does not recognise, so the usage pull plans empty days and the sales-pull screen finds nothing. Fixed by T-375 S1 (store link).</div></div>
       <div class="item y"><div class="id">DEF-585</div><div><b>Production has no fiscal period before October 2026</b>; cutover postings dated earlier would be refused. The timer is armed and seeded Oct 2026&ndash;Sep 2027.</div></div>
@@ -226,11 +225,11 @@
       <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
       <div class="item"><div class="id">T-338</div><div>Store readiness warns when a store has no manager.</div></div>
       <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
-      <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). Production has no 1115 accounts, so nothing to move there.</div></div>
+      <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). Approved and next, the Phase 2 closer (migration 0184). Production has no 1115 accounts, so nothing to move there.</div></div>
       <div class="item"><div class="id">T-320</div><div>Access that does not come from a position. Number reserved.</div></div>
       <div class="item"><div class="id">T-334</div><div>Inputs, buttons and one shared dropdown across the remaining screens; brand red and a dark-mode toggle.</div></div>
       <div class="item"><div class="id">Phase 7</div><div>Activity-log viewer &middot; memos, performance, checklists, infractions &middot; onboarding as one gated track &middot; cookbook &middot; remaining settings screens &middot; tutorials (count first).</div></div>
-      <div class="item"><div class="id">T-136, T-141</div><div>Cash custody &sect;2 (revolving fund) and the rest of the upload UI.</div></div>
+      <div class="item"><div class="id">T-136, T-141</div><div>Cash custody &sect;2 (revolving fund; still open, ask Ian) and the rest of the upload UI.</div></div>
       <div class="item"><div class="id">T-190, T-193</div><div>Statutory contributions and their remittance. <span class="pill y">blocked on HR data</span></div></div>
       <div class="item"><div class="id">T-314</div><div>Fingerprint capture, slice A built. <span class="pill y">needs a tablet and the reader model</span></div></div>
       <div class="item"><div class="id">T-308</div><div>Alert when production runs an older build; slice A live. <span class="pill y">slice B needs your token</span></div></div>
