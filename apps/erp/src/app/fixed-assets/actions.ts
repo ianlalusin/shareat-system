@@ -66,7 +66,8 @@ export async function createAssetAction(formData: FormData): Promise<void> {
         cost: str(formData, 'cost'),
         // Blank means "use the default" — the domain resolves category default, then 24 months.
         // Sending 0 instead would be a different thing entirely, and it would be refused.
-        usefulLifeMonths: lifeRaw === '' ? null : Number(lifeRaw),
+        // T-374 S5 / DEF-584 — raw: the domain parses it after `authorize()` (`Number('0x10')` was 16).
+        usefulLifeMonths: lifeRaw === '' ? null : lifeRaw,
         salvageValue: salvageRaw === '' ? null : salvageRaw,
         interval: (str(formData, 'interval') || 'monthly') as DepreciationInterval,
         notes: str(formData, 'notes') || null,

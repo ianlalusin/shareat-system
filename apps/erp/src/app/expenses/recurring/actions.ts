@@ -41,7 +41,8 @@ export async function createTemplateAction(formData: FormData): Promise<void> {
         defaultAmount: str(formData, 'defaultAmount'),
         defaultMoneyAccountId: str(formData, 'defaultMoneyAccountId') || null,
         interval: str(formData, 'interval') as RecurringInterval,
-        anchorDay: Number(str(formData, 'anchorDay')),
+        // T-374 S5 / DEF-579 — raw: the domain parses it after `authorize()`; a blank is refused there, never read as 0.
+        anchorDay: str(formData, 'anchorDay'),
         tillIsDeliberate: str(formData, 'tillIsDeliberate') === 'on',
       }),
     );
@@ -68,7 +69,8 @@ export async function updateTemplateAction(formData: FormData): Promise<void> {
         defaultAmount: str(formData, 'defaultAmount'),
         defaultMoneyAccountId: str(formData, 'defaultMoneyAccountId') || null,
         interval: interval ? (interval as RecurringInterval) : undefined,
-        anchorDay: Number(str(formData, 'anchorDay')),
+        // A form that does not carry the box leaves the stored day alone; a box that is there but blank is refused.
+        anchorDay: formData.has('anchorDay') ? str(formData, 'anchorDay') : undefined,
         tillIsDeliberate: str(formData, 'tillIsDeliberate') === 'on',
       }),
     );

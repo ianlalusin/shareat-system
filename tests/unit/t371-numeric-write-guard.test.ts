@@ -142,7 +142,12 @@ const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
   'packages/domain/src/fixed-assets/schedule.ts::periodsThrough::p.period <= asOfPeriod': 'not-a-column-value',
   'packages/domain/src/fixed-assets/dispose.ts::runDispose::input.disposedOn < asset.acquiredOn': 'not-a-column-value',
   'packages/domain/src/fixed-assets/in-service.ts::resolveMode::openingDate > asset.acquiredOn!': 'not-a-column-value',
-  'packages/domain/src/fixed-assets/terms.ts::updateAssetTerms::life < 1': 'not-a-column-value',
+  // T-374 S5: whole-number bounds, each NaN-safe. `lineCount` passed `/^\d+$/` first; `typedLife` is a `parseWholeNumberInput` result (regex ^\d+$, finite) or a typed
+  // number already refused by `!Number.isInteger(...)` (which catches NaN) before `< 1` / `> MAX` are reached; `usefulLifeMonths` is likewise `Number.isInteger`-guarded first.
+  'apps/erp/src/app/expenses/actions.ts::parseExpenseForm::lineCount > 50': 'not-a-column-value',
+  'packages/domain/src/fixed-assets/capitalize.ts::runCreateAsset::typedLife < 1': 'not-a-column-value',
+  'packages/domain/src/fixed-assets/capitalize.ts::runCreateAsset::typedLife > MAX_USEFUL_LIFE_MONTHS': 'not-a-column-value',
+  'packages/domain/src/fixed-assets/capitalize.ts::runCreateAsset::usefulLifeMonths < 1': 'not-a-column-value',
   'apps/erp/src/app/fixed-assets/page.tsx::FixedAssetsPage::Number(sp.failed ?? \'0\') > 0': 'display-only',
   'packages/domain/src/stores/service.ts::setStoreOpeningDate::input.openingDate > firstTrading': 'not-a-column-value',
   'packages/domain/src/stores/service.ts::setStoreOpeningDate::input.openingDate > asset.acquiredOn!': 'not-a-column-value',

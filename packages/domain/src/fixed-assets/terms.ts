@@ -17,6 +17,8 @@ import { compare, equals, money, ZERO, type Money } from '@shareat/core/money';
 import type { Tx } from '@shareat/db';
 import { gone, refuse } from '../shared/refusal';
 import { parseDecimalInput } from '../shared/money-input';
+import { parseWholeNumberInput } from '../shared/whole-number-input';
+import { MAX_USEFUL_LIFE_MONTHS } from './capitalize';
 import { DEPRECIATION_INTERVALS, type DepreciationInterval } from './schedule';
 
 export interface UpdateAssetTermsInput {
@@ -37,14 +39,9 @@ export async function updateAssetTerms(
 ): Promise<void> {
   await authorize(tx, actor, 'manage_fixed_assets', {});
 
-  const lifeRaw = input.usefulLifeMonths.trim();
-  const life = Number(lifeRaw);
-  if (lifeRaw === '' || !Number.isInteger(life) || life < 1) {
-    throw refuse(
-      `updateAssetTerms: useful life must be a whole number of months greater than zero, got ${JSON.stringify(lifeRaw)}.`,
-      'The useful life must be a whole number of months, 1 or more.',
-    );
-  }
+  // T-374 S5 / DEF-584 — `Number('0x10')` was 16 and `Number('1e1')` was 10; the shared helper takes digits only.
+  // A blank is refused too (a supplied terms form always carries a life).
+  const life = parseWholeNumberInput(input.usefulLifeMonths, 'updateAssetTerms: usefulLifeMonths', 'The useful life', 1, MAX_USEFUL_LIFE_MONTHS, ' of months');
   // The interval and the category arrive as raw form text: refused by NAME, never printing what was typed, and
   // before the first read, so nothing is written (the cast at the repo call below is only safe after this).
   if (!(DEPRECIATION_INTERVALS as readonly string[]).includes(input.interval)) {

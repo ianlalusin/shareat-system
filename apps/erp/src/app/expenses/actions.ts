@@ -139,7 +139,14 @@ async function parseExpenseForm(
   // fixed 8-row grid. `lineAccount_`/`lineRequest_` are the component's HIDDEN resolved ids: the
   // visible picker holds one combined source key, and the component splits it, so a float carries
   // both the staff-float account (which resolves the 1120 GL code) and the request (its party).
-  const lineCount = Math.min(Number(str(formData, 'lineCount')) || 0, 50);
+  // T-374 S5 / DEF-579 — the count is judged, never clamped or defaulted: an unreadable one used to read as 0 lines
+  // (`|| 0`) and a 51st line was silently dropped (`Math.min`). `<MoneyLines>` has no 50 cap, so above 50 refuses.
+  const lineCountRaw = str(formData, 'lineCount');
+  if (!/^\d+$/.test(lineCountRaw)) {
+    throw new Error("The payment lines didn't arrive complete — reload the page and try again.");
+  }
+  const lineCount = Number(lineCountRaw);
+  if (lineCount > 50) throw new Error('An expense can carry at most 50 payment lines.');
   const lines: MoneyLine[] = [];
   for (let i = 0; i < lineCount; i++) {
     const method = str(formData, `lineMethod_${i}`);

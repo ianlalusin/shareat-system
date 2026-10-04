@@ -38,7 +38,11 @@ import type { DepreciationInterval } from './schedule';
 import { readPolicyOrRefuse, resolveUsefulLifeMonths } from './policy';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseMoneyInput } from '../shared/money-input';
+import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { gone, refuse } from '../shared/refusal';
+
+/** T-374 S5 ✎R9 — the longest useful life a TYPED value may have: 1200 months (100 years). Shared with `updateAssetTerms`. */
+export const MAX_USEFUL_LIFE_MONTHS = 1200;
 
 export interface CreateAssetInput {
   storeId: string;
@@ -48,7 +52,8 @@ export interface CreateAssetInput {
   cost: string;
   salvageValue?: string | null;
   /** MONTHS (bible row 140). Omitted falls back to the category default, then 24. */
-  usefulLifeMonths?: number | null;
+  /** A raw box string is parsed here, after `authorize()` (T-374 S5 / DEF-584: `Number('0x10')` was 16); a `number` is checked as-is. */
+  usefulLifeMonths?: number | string | null;
   interval?: DepreciationInterval;
   notes?: string | null;
   /**
@@ -126,19 +131,32 @@ async function runCreateAsset(
     );
   }
 
-  // T-343 S5.5q / DEF-464 — a TYPED value (`input.usefulLifeMonths != null`) refuses by name, never
-  // printing the value (`NaN` from a malformed screen input must never reach the sentence). A value
-  // that came from `resolveUsefulLifeMonths` (org policy, not typed) keeps its plain `Error` below,
-  // unchanged: blaming the operator for a config value is T-326 fix 3's exact mistake (comment above).
-  if (input.usefulLifeMonths != null && (!Number.isInteger(input.usefulLifeMonths) || input.usefulLifeMonths < 1)) {
+  // T-343 S5.5q / DEF-464 — a TYPED value (`input.usefulLifeMonths != null`) refuses by name. A typed NUMBER keeps
+  // the old sentence, which never prints the value (`NaN` must never reach it). A value that came from
+  // `resolveUsefulLifeMonths` (org policy, not typed) keeps its plain `Error` below, unchanged: blaming the operator
+  // for a config value is T-326 fix 3's exact mistake (comment above).
+  // T-374 S5 / DEF-584 — a typed STRING is parsed by the shared helper (ceiling `MAX_USEFUL_LIFE_MONTHS`), and that
+  // helper's sentence ECHOES the typed text (`"0x10" is not a whole number...`): safe, it is a string the person typed.
+  const typedLife =
+    typeof input.usefulLifeMonths === 'string'
+      ? parseWholeNumberInput(input.usefulLifeMonths, 'createAsset: usefulLifeMonths', 'The useful life', 1, MAX_USEFUL_LIFE_MONTHS, ' of months')
+      : input.usefulLifeMonths;
+  if (typedLife != null && (!Number.isInteger(typedLife) || typedLife < 1)) {
     throw refuse(
-      `createAsset: useful life must be a whole number of months greater than zero, got ${input.usefulLifeMonths}.`,
+      `createAsset: useful life must be a whole number of months greater than zero, got ${typedLife}.`,
       'The useful life must be a whole number of months, 1 or more.',
+    );
+  }
+  // A typed NUMBER above the ceiling is refused with the string path's own sentence; a string above it never gets here.
+  if (typedLife != null && typedLife > MAX_USEFUL_LIFE_MONTHS) {
+    throw refuse(
+      `createAsset: useful life ${typedLife} is over ${MAX_USEFUL_LIFE_MONTHS} months.`,
+      `The useful life — "${typedLife}" is not a whole number of months from 1 to ${MAX_USEFUL_LIFE_MONTHS}.`,
     );
   }
 
   const usefulLifeMonths =
-    input.usefulLifeMonths ?? (await resolveUsefulLifeMonths(tx, actor.orgId, input.category));
+    typedLife ?? (await resolveUsefulLifeMonths(tx, actor.orgId, input.category));
   if (!Number.isInteger(usefulLifeMonths) || usefulLifeMonths < 1) {
     throw new Error(
       `createAsset: useful life must be a whole number of months greater than zero, got ${usefulLifeMonths}.`,

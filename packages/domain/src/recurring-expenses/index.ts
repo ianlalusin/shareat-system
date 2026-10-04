@@ -19,6 +19,7 @@ import type { RecurringInterval } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { compare, ZERO } from '@shareat/core/money';
 import { parseDecimalInput } from '../shared/money-input';
+import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { refuse } from '../shared/refusal';
 import { firstDueDate, isAnchorValid } from './recurrence';
 
@@ -37,7 +38,8 @@ export interface CreateRecurringTemplateInput {
   defaultAmount: string;
   defaultMoneyAccountId?: string | null;
   interval: RecurringInterval;
-  anchorDay: number;
+  /** A raw box string is parsed here, after `authorize()` (T-374 S5 / DEF-579); a `number` is checked as-is. */
+  anchorDay: number | string;
   /** Defaults to today (Manila). The first due date is derived, never typed. */
   from?: string;
   /**
@@ -80,6 +82,15 @@ async function checkAccount(
   return account.custodian === 'cashier';
 }
 
+/**
+ * T-374 S5 / DEF-579 — the anchor day arrives as the raw box string. `Number('')` is `0` (a blank weekly template became
+ * Sunday) and `Number` reads `0x5` as 5 and `1e1` as 10; `parseWholeNumberInput` refuses all three. 0-31 is the widest
+ * range of any interval; `isAnchorValid` then judges the day against the interval, unchanged.
+ */
+function parseAnchorDay(raw: number | string): number {
+  return parseWholeNumberInput(raw, 'recurring template: anchorDay', 'The day', 0, 31);
+}
+
 export async function createRecurringTemplate(
   tx: Tx | null,
   actor: Actor,
@@ -107,7 +118,8 @@ export async function createRecurringTemplate(
     }
     // ⚠️ The database refuses this too; this exists so a person reads a sentence instead of a
     // constraint name. ⛔ It is not a second source of truth — the CHECK is the rule.
-    if (!isAnchorValid(input.interval, input.anchorDay)) {
+    const anchorDay = parseAnchorDay(input.anchorDay);
+    if (!isAnchorValid(input.interval, anchorDay)) {
       throw new Error(
         input.interval === 'weekly' || input.interval === 'bi_weekly'
           ? `a ${input.interval} template is anchored on a day of the WEEK (0 = Sunday to 6).`
@@ -128,7 +140,7 @@ export async function createRecurringTemplate(
 
     // ⭐ DERIVED, never typed. A template created on the 3rd with a monthly anchor of the 15th is
     // due THIS month — getting that wrong makes every new template a month late, silently.
-    const nextDueDate = firstDueDate(input.from ?? manilaToday(), input.interval, input.anchorDay);
+    const nextDueDate = firstDueDate(input.from ?? manilaToday(), input.interval, anchorDay);
 
     const { id } = await recurringExpensesRepo.insertTemplate(trx, {
       orgId: actor.orgId,
@@ -142,7 +154,7 @@ export async function createRecurringTemplate(
       // deliberate choice about an office account nobody had to think about.
       tillIsDeliberate: isTill && deliberate,
       interval: input.interval,
-      anchorDay: input.anchorDay,
+      anchorDay,
       nextDueDate,
       createdBy: actor.personId,
     });
@@ -160,7 +172,8 @@ export interface UpdateRecurringTemplateInput {
   defaultAmount?: string;
   defaultMoneyAccountId?: string | null;
   interval?: RecurringInterval;
-  anchorDay?: number;
+  /** Omitted leaves the stored day unchanged; a supplied blank is refused (T-374 S5 / DEF-579). */
+  anchorDay?: number | string;
   tillIsDeliberate?: boolean;
 }
 
@@ -175,7 +188,8 @@ export async function updateRecurringTemplate(
     await authorize(trx, actor, 'manage_recurring_expenses', { storeId: template.storeId });
 
     const interval = input.interval ?? template.interval;
-    const anchorDay = input.anchorDay ?? template.anchorDay;
+    const suppliedAnchorDay = input.anchorDay === undefined ? undefined : parseAnchorDay(input.anchorDay);
+    const anchorDay = suppliedAnchorDay ?? template.anchorDay;
     if (!isAnchorValid(interval, anchorDay)) {
       throw new Error(`anchor ${anchorDay} is out of range for a ${interval} template.`);
     }
@@ -215,7 +229,7 @@ export async function updateRecurringTemplate(
       ...(input.defaultMoneyAccountId !== undefined ? { defaultMoneyAccountId: accountId } : {}),
       tillIsDeliberate: isTill && deliberate,
       ...(input.interval !== undefined ? { interval } : {}),
-      ...(input.anchorDay !== undefined ? { anchorDay } : {}),
+      ...(suppliedAnchorDay !== undefined ? { anchorDay } : {}),
       ...(cursorMoved ? { nextDueDate: firstDueDate(manilaToday(), interval, anchorDay) } : {}),
     });
   };

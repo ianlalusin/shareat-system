@@ -347,7 +347,7 @@ describe('T4/T5 — authorize comes before parse', () => {
     expect(bad.name).toBe('AuthorizationError');
     expect(bad.message).toBe(valid.message);
     const admin = await rejection(updateTerms(f, f.admin, assetId, { ...sameTerms(before), usefulLifeMonths: 'abc' }), 'admin, bad life');
-    expect(admin.userMessage).toBe('The useful life must be a whole number of months, 1 or more.');
+    expect(admin.userMessage).toBe('The useful life — "abc" is not a whole number of months from 1 to 1200.');
     expect(await termsOf(assetId)).toEqual(before);
   });
 });

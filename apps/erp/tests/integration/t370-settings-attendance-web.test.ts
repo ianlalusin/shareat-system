@@ -7,8 +7,7 @@ import { sql as dsql } from 'drizzle-orm';
  * T-370 S3 (DEF-409) — the WEB legs W1/W2: the attendance settings form refuses a one-day semi-monthly cycle.
  * `docs/tasks/370-owner-cap-dates.md` tests W1/W2.
  *
- *   W1: `updateAttendanceConfigAction` with payoutDays = "10, 2 5" (parseIntList silently drops the non-integer token
- *       "2 5", so the domain receives [10]) -> redirect with error = SEMI_MONTHLY_TWO_DAYS. Red today: it redirects with ok.
+ *   W1: `updateAttendanceConfigAction` with payoutDays = "10, 2 5" (T-374 S5: was dropped to [10] by parseIntList -> SEMI_MONTHLY_TWO_DAYS; now the token "2 5" is refused by name before the two-days rule)
  *   W2 (control): "10,25" -> the ok banner.
  *
  * ⛔ TESTER. Harness and the form shape are `t352-attendance-auth-before-parse.test.ts`'s (one RedirectSignal, one session
@@ -135,12 +134,12 @@ async function submit(f: Fixture, fd: FormData): Promise<string> {
 }
 
 describe('W1 — a one-day semi-monthly cycle typed into the form is refused, in words', () => {
-  it('payoutDays "10, 2 5" (parseIntList drops "2 5", leaving [10]) -> ?error = SEMI_MONTHLY_TWO_DAYS exactly, no ok banner; no row written — red today: it redirects with ok', async () => {
+  it('payoutDays "10, 2 5" (T-374 S5: the token "2 5" is refused by name, no longer dropped to [10]) -> ?error = the token sentence, no ok banner; no row written', async () => {
     const f = await fixture('w1');
     const before = await rowCount(f.storeId);
     const to = await submit(f, form(f, { payoutDays: '10, 2 5' }));
     expect(param(to, 'ok'), `the one-day cycle was SAVED: ${param(to, 'ok')}`).toBeNull();
-    expect(param(to, 'error')).toBe(TWO_DAYS);
+    expect(param(to, 'error')).toBe('Payout days — "2 5" is not a whole number from 1 to 31.');
     expect(await rowCount(f.storeId), 'a refused save wrote a row').toBe(before);
   });
 

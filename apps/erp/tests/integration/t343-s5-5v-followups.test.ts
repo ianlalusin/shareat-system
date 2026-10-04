@@ -863,12 +863,12 @@ function assetFormData(f: OrgFixture, overrides: Record<string, string> = {}): F
 }
 
 describe('U1/U2 (DEF-472) — fixed-assets usefulLifeMonths (green pins, S5.5q already built this)', () => {
-  it('U1: usefulLifeMonths="1,5" refuses (unchanged sentence)', async () => {
+  it('U1: usefulLifeMonths="1,5" refuses (T-374 S5: the by-name whole-number sentence)', async () => {
     const f = await fixedAssetsFixture('u1');
     ACTOR_HOLDER.actor = f.admin;
     const { createAssetAction } = await import('../../src/app/fixed-assets/actions');
     const to = await expectRedirectTo(() => createAssetAction(assetFormData(f, { usefulLifeMonths: '1,5' })));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('The useful life must be a whole number of months, 1 or more.');
+    expect(errorOf(to), `redirect URL was: ${to}`).toBe('The useful life — "1,5" is not a whole number of months from 1 to 1200.');
   });
 
   it('U2: usefulLifeMonths="" saves the category default (green, unedited)', async () => {

@@ -509,6 +509,21 @@ recorded row.
   - keep `Math.min(…, 50)` → T8 red;
   - parse before `authorize` → T4 red.
 
+**✎R9 (orchestrator, 2026-10-04) — DEF-584 folded in.** The register folds DEF-584 into S5, but the census above
+listed `usefulLifeMonths` as OUT (N1). It is IN. Two sites read the box with `Number()`, which accepts `0x10` (16),
+`1e1` (10) and `0b11` (3):
+- BUILDER, create: `apps/erp/src/app/fixed-assets/actions.ts:69` passes `lifeRaw` raw (blank still → `null` = use the
+  default, unchanged). `packages/domain/src/fixed-assets/capitalize.ts`: `usefulLifeMonths?: number | string | null`;
+  a string is parsed after `authorize()` with `parseWholeNumberInput(raw, 'createAsset: usefulLifeMonths',
+  'The useful life', 1, 1200, ' of months')` (ceiling 1200 = 100 years: a readable sentence, far above any real asset; amended after READY because "from 1 to 2147483647" is not a sentence a person should read). A `number` keeps
+  today's `:133` check untouched.
+- BUILDER, update: `packages/domain/src/fixed-assets/terms.ts:40-47` replaces `Number(lifeRaw)` with the same helper
+  and bounds (blank still refused).
+- TESTER, in `t374-s5-whole-number-refusals.test.ts`: T10 (red on HEAD) `createAsset` with `'0x10'` and `'1e1'` →
+  refused, no asset row; `updateAssetTerms` with `'0x10'` → refused, terms unchanged. T11 (control) `'16'` creates a
+  16-month asset; blank on create → the category default; `'016'` on update → 16.
+- Mutant: keep `Number(lifeRaw)` in `terms.ts` → T10 red.
+
 **Migration:** none.
 **Smoke (9008):** `/settings/attendance`: payout days `10, 2O` → the sentence, nothing saved; `10, 25` saves. A weekly
 recurring template with a blank day → the sentence. Screenshots.

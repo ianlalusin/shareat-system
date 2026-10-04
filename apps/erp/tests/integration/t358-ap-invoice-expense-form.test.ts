@@ -535,7 +535,7 @@ describe('A5 — a cash line whose Account is at ANOTHER store of the same org: 
 // =================================================================================================
 
 describe('DEF-485 repro (evidence) — the old trio\'s exact FormData refuses with no lineCount', () => {
-  it('method_1=cash, amount_1=500, moneyAccountId_1=<id>, no lineCount: refused "Add at least one payment line."', async () => {
+  it("method_1=cash, amount_1=500, moneyAccountId_1=<id>, no lineCount: still refused, now with the T-374 S5 incomplete-form sentence (was 'Add at least one payment line.')", async () => {
     const f = await fixture('repro');
     ACTOR_HOLDER.actor = f.admin;
     const { recordExpenseForInvoiceAction } = await import('../../src/app/expenses/actions');
@@ -553,6 +553,6 @@ describe('DEF-485 repro (evidence) — the old trio\'s exact FormData refuses wi
     // Deliberately NO lineCount — the trio never posted one.
 
     const to = await expectRedirectTo(() => recordExpenseForInvoiceAction(fd));
-    expect(decodeURIComponent(to)).toContain('Add at least one payment line.');
+    expect(decodeURIComponent(to)).toContain("The payment lines didn't arrive complete — reload the page and try again.");
   });
 });

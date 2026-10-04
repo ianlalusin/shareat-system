@@ -137,8 +137,27 @@ function parseLateChargePerMinute(raw: string): Money | undefined {
 }
 
 /**
+ * T-374 S5 / DEF-579 — a comma-typed list of whole numbers, parsed after `authorize()`. It replaces the action's
+ * `parseIntList`, which silently DROPPED any token that was not an integer (`"9, 1O, 14"` saved as `[9, 14]`).
+ * Empty tokens are ignored (`"9,,10,"`); any other token that is not a whole number in `min`..`max` is refused by
+ * name; the result is de-duplicated and sorted. A wholly empty list comes back as `[]` — the database CHECKs
+ * (`store_attendance_config_allowed_hours_check`, `..._payout_days_range_check`, `..._fixed_days_needed_check`)
+ * keep deciding what an empty list means.
+ */
+function parseWholeNumberList(raw: string, key: string, label: string, min: number, max: number): number[] {
+  const seen = new Set<number>();
+  for (const token of raw.split(',')) {
+    const t = token.trim();
+    if (t === '') continue;
+    seen.add(parseWholeNumberInput(t, `supersedeConfig: ${key}`, label, min, max));
+  }
+  return [...seen].sort((a, b) => a - b);
+}
+
+/**
  * `ConfigChanges` with the ten integer keys and `autoClockOutHour` widened so a caller may pass the
- * raw box string — the action does, now that it no longer parses before `authorize()` (T-352).
+ * raw box string — the action does, now that it no longer parses before `authorize()` (T-352). The two integer
+ * ARRAYS (`allowedShiftStartHours`, `payoutDays`) take the raw comma-typed string too (T-374 S5).
  */
 export type ConfigChangesInput = Omit<
   ConfigChanges,
@@ -153,6 +172,8 @@ export type ConfigChangesInput = Omit<
   | 'payoutLagDays'
   | 'maxShiftHours'
   | 'autoClockOutHour'
+  | 'allowedShiftStartHours'
+  | 'payoutDays'
 > & {
   anchorWindowMinutes?: number | string;
   nightDiffStartHour?: number | string;
@@ -165,6 +186,8 @@ export type ConfigChangesInput = Omit<
   payoutLagDays?: number | string;
   maxShiftHours?: number | string;
   autoClockOutHour?: number | string | null;
+  allowedShiftStartHours?: number[] | string;
+  payoutDays?: number[] | string;
 };
 
 type Dec2Key =
@@ -272,6 +295,13 @@ export function parseConfigChanges(c: ConfigChangesInput): ParsedConfigChanges {
         break;
       }
     }
+  }
+  // T-374 S5 / DEF-579 — the two integer arrays: only a STRING is parsed (a `number[]` passes through untouched, ✎R6).
+  if (typeof c.allowedShiftStartHours === 'string') {
+    out.allowedShiftStartHours = parseWholeNumberList(c.allowedShiftStartHours, 'allowedShiftStartHours', 'Allowed shift start hours', 0, 23);
+  }
+  if (typeof c.payoutDays === 'string') {
+    out.payoutDays = parseWholeNumberList(c.payoutDays, 'payoutDays', 'Payout days', 1, 31);
   }
   const {
     requiredHoursPerShift, halfDayHours, defaultWorkHours, defaultBreakHours, nightDiffMultiplier, overtimeMultiplier,

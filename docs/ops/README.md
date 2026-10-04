@@ -26,6 +26,7 @@ deploy: Ian decides each row, through the screens where one exists; no migration
 | 0179 (T-372 S6, DEF-513) | `trade_discrepancies` with `value <= 0`; with a disposition outside `audit, loss, charge, late_receipt` | 0 and 0 |
 | 0180 (T-373 S3, DEF-555) | no precheck (replaces a trigger function on an append-only table) | — |
 | 0181 (T-374 S7, DEF-578) | `pos_usage_pulls` with `status = 'void'` (the new CHECK needs voided_at/by/reason on every void row; nothing wrote 'void' before) | 0 rows |
+| T-374 S5 (no migration, DEF-584) | `SELECT count(*) FROM fixed_assets WHERE useful_life_months > 1200;` (the edit screen now refuses a life above 1200 months, so such an asset could not re-save any term) | 0 rows — else Ian decides each asset's life before the push |
 | T-373 S2 (no migration, DEF-559) | the two new findings on production: inter-store pairs out of step, and 1250/2150 lines no pair can read (run `/findings` read-only, or the two detector queries in `packages/db/src/repo/findings.ts`) | none — else Ian sees the figures before the push, because a hard finding blocks a month close |
 
 ---

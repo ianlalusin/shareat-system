@@ -18,7 +18,7 @@ import { redirect } from 'next/navigation';
 import { supersedeConfig, type ConfigChangesInput } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
-import { withOrgPrincipal, parseIntList } from './lib';
+import { withOrgPrincipal } from './lib';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -54,7 +54,7 @@ export async function updateAttendanceConfigAction(formData: FormData): Promise<
     const changes: ConfigChangesInput = {
       requiredHoursPerShift: str(formData, 'requiredHoursPerShift'),
       halfDayHours: str(formData, 'halfDayHours'),
-      allowedShiftStartHours: parseIntList(str(formData, 'allowedShiftStartHours')),
+      allowedShiftStartHours: str(formData, 'allowedShiftStartHours'),
       anchorWindowMinutes: str(formData, 'anchorWindowMinutes'),
       timeMode,
       defaultWorkHours: str(formData, 'defaultWorkHours'),
@@ -92,7 +92,7 @@ export async function updateAttendanceConfigAction(formData: FormData): Promise<
       semiMonthlyCutoffDay: str(formData, 'semiMonthlyCutoffDay'),
       payoutMode,
       payoutLagDays: str(formData, 'payoutLagDays'),
-      payoutDays: parseIntList(str(formData, 'payoutDays')),
+      payoutDays: str(formData, 'payoutDays'),
 
       autoClockOutHour: str(formData, 'autoClockOutHour'),
       maxShiftHours: str(formData, 'maxShiftHours'),
