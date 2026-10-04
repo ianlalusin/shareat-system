@@ -172,12 +172,12 @@
       payroll once the statutory data arrives, the remaining admin screens, and then the cutover itself.
     </p>
     <div class="facts">
-      <div class="fact done"><span class="n">241</span><span class="l">tasks done</span></div>
+      <div class="fact done"><span class="n">242</span><span class="l">tasks done</span></div>
       <div class="fact active"><span class="n">7</span><span class="l">in progress or partly done</span></div>
       <div class="fact"><span class="n">21</span><span class="l">still to build</span></div>
-      <div class="fact crit"><span class="n">4</span><span class="l">open money defects (plus 2 deferred by your ruling)</span></div>
+      <div class="fact crit"><span class="n">1</span><span class="l">open money defect (plus 2 deferred by your ruling)</span></div>
     </div>
-    <div class="asat">As at <b>4 October 2026</b> &middot; <code>main</code> at <b>79043f8</b> &middot; production at migration <b>0176</b>, code on <code>main</code> through <b>0180</b> &middot; next free migration <b>0181</b></div>
+    <div class="asat">As at <b>4 October 2026</b> &middot; <code>main</code> at <b>17616fc</b> &middot; production at migration <b>0176</b>, code on <code>main</code> through <b>0181</b> &middot; next free migration <b>0182</b></div>
   </header>
 
   <section>
@@ -222,18 +222,18 @@
     <div class="track">
       <div class="step now">
         <span class="step-k">Now</span>
-        <h3>Last money rows</h3>
+        <h3>Production session, then the last money row</h3>
         <ol>
-          <li>T-369 S5b/S6b: DEF-198, 291, 314</li>
-          <li>T-367 S5/S6: DEF-054, after the production count with you</li>
+          <li>With you on erp2: prechecks 0177&ndash;0181 and the T-367 count, then deploy</li>
+          <li>T-367 S5/S6: DEF-054 once the count is in</li>
         </ol>
       </div>
       <div class="step next">
         <span class="step-k">Next</span>
         <h3>Follow-ups</h3>
         <ul>
-          <li>DEF-574, 577, 578, 579, 580</li>
-          <li>Production session: prechecks 0177&ndash;0180, then deploy</li>
+          <li>T-374 S5: DEF-579, 584 (whole-number inputs)</li>
+          <li>DEF-581 override on bill verification; DEF-582, 583 screen nits</li>
         </ul>
       </div>
       <div class="step">
@@ -269,7 +269,7 @@
   <section>
     <div class="sec-head">
       <h2>Every task, by area</h2>
-      <p>269 cards. A filled dot is done, an amber card is in progress, a hollow dot is still to build.</p>
+      <p>270 cards. A filled dot is done, an amber card is in progress, a hollow dot is still to build.</p>
     </div>
     <nav class="jump" aria-label="Jump to area">
       <a href="#p1">Spine</a><a href="#p2">Money documents</a><a href="#money">Money hardening</a><a href="#p3">Inventory</a><a href="#p4">Attendance</a><a href="#p5">Payroll</a><a href="#p6">Reporting</a><a href="#p7">Admin screens</a><a href="#platform">Platform</a><a href="#p8">Cutover</a><a href="#deferred">Deferred</a>
@@ -400,7 +400,7 @@
       </div>
     </div>
     <div class="wave">
-      <div class="wave-head"><h3>The 30 September census</h3><span class="chip c-active">in progress</span><span class="why">34 open money defects at the census; 4 remain, all in T-367 and T-369.</span></div>
+      <div class="wave-head"><h3>The 30 September census</h3><span class="chip c-active">in progress</span><span class="why">34 open money defects at the census; 1 remains (DEF-054, waiting on the production count).</span></div>
       <div class="tasks">
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-364</div><div class="task-what">Money and staff records are authorised before anything is read or judged (DEF-496, 497)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-365</div><div class="task-what">Supplier bank changes are audited; the edit form never wipes fields it did not send (DEF-498, 506)</div></div>
@@ -409,9 +409,10 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-370</div><div class="task-what">Owner drawing cap and business dates; twice-monthly stores need two pay days</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-372</div><div class="task-what">Commissary: a prepared order stays prepared; internal freight posts at receipt</div></div>
         <div class="task t-active"><div class="task-id"><span class="dot"></span>T-367</div><div class="task-what">AP / AR money: one write-off per entry, voided bills unsettleable, due dates from terms</div><div class="task-note">S5, S6 left (DEF-054, needs the production count)</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-369</div><div class="task-what">Money functions get screens: reimbursement payout, closed-month override, draft sales day, cross-store money</div><div class="task-note">S5b, S6b left (DEF-198, 291, 314)</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-369</div><div class="task-what">Money functions get screens: reimbursement payout, closed-month override, draft sales day, cross-store money</div><div class="task-note">Complete 4 Oct (S5b/S6b: DEF-314, 291)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-371</div><div class="task-what">NaN sweep: every money comparison parses its input first</div><div class="task-note">Shipped 4 Oct (3558e52): DEF-382 and DEF-395 fixed</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-373</div><div class="task-what">Money follow-ups: open variances after a reversal, sales-day locks, stock day boundary, inter-store watch</div><div class="task-note">Shipped 4 Oct: DEF-547, 552, 555, 559 fixed (migration 0180)</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-374</div><div class="task-what">Money-push follow-ups: Manila dates everywhere, wastage date, reversal chains, branch recount screen, voiding a POS usage pull</div><div class="task-note">S1-S4, S6, S7 shipped 4 Oct (migration 0181); S5 (DEF-579, 584) left</div></div>
       </div>
     </div>
   </section>

@@ -1,6 +1,6 @@
 # T-374: money-push follow-ups — DEF-577, DEF-580, DEF-576, DEF-579, DEF-574, DEF-578
 
-**Status:** APPROVED 2026-10-04 (orchestrator, after an independent Opus review whose 8 changes ✎R1–✎R8 are folded in). Not started. S1–S6 are un-gated; S5 waits for T-369 S5b/S6b to commit (`expenses/actions.ts`). **S7 (DEF-578) builds with Q1's recommended default and is
+**Status:** **S1, S2, S3, S4, S6, S7 SHIPPED 2026-10-04** — S1 `92541f9`, S2 `17616fc`, S3 `7b2175f`, S4 `cec40bf`, S6 `1bfb46d`, S7 `a87b178` (migration 0181; Q1 built as default (a), re-check against Ian's answer). Tester-first, audited with fixes re-audited (S7: refresh-then-void double count and the stale-snapshot dead end found and fixed). Gates: typecheck 0; unit 4082/4084; FULL integration on fresh `shareat_test_orch_t374gate2` 291 files 4894/4894; build 0. **S5 (DEF-579, + DEF-584) NOT STARTED** — it waited for T-369's `expenses/actions.ts`, which is now committed (`db04bfc`). Screen smoke for S6 and S7: not run yet. Approved 2026-10-04 after an independent Opus review (✎R1–✎R8).
 re-checked against Ian's answer before its commit.**
 Written at HEAD `7d89c46` (tree clean); every line number below was read there. ⚠️ While this was being written,
 another lane's uncommitted T-369 S5/S6 work appeared in `apps/erp/src/app/expenses/actions.ts` (not the `lineCount`
