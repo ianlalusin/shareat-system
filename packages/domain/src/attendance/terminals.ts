@@ -7,6 +7,8 @@
  * one place `firebase-admin` lives for this lane, exactly as `packages/storage-firebase` is for the
  * bucket.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
+import { humanDate } from '../shared/refusal';
 import { sql } from 'drizzle-orm';
 import { authorize, type Actor } from '@shareat/auth';
 import { clockTerminalsRepo, type ClockTerminalRow, type Tx } from '@shareat/db';
@@ -176,7 +178,7 @@ async function requireLive(tx: Tx, terminalId: string): Promise<ClockTerminalRow
   if (!terminal) throw new TerminalError(`No clock terminal ${terminalId}`);
   if (terminal.revokedAt) {
     throw new TerminalError(
-      `Terminal ${terminal.label} was revoked on ${terminal.revokedAt.toISOString().slice(0, 10)} ` +
+      `Terminal ${terminal.label} was revoked on ${humanDate(toBusinessDate(terminal.revokedAt))} ` +
         `(${terminal.revokeReason}). Provision a new one rather than reviving it — its history stays readable.`,
     );
   }

@@ -14,6 +14,8 @@
  * `alreadyProcessed: true` as a **success**, because an ingestor that errors on a re-delivery
  * retries forever.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
+import { humanDate } from '../shared/refusal';
 import { sql } from 'drizzle-orm';
 import {
   attendanceConfigRepo,
@@ -265,7 +267,7 @@ async function ingestOne(tx: Tx, raw: unknown): Promise<Outcome> {
   }
   if (terminal.revokedAt) {
     return quarantineAnd(tx, raw, clientPunchId, 'revoked_device',
-      `Terminal "${terminal.label}" was revoked on ${terminal.revokedAt.toISOString().slice(0, 10)} ` +
+      `Terminal "${terminal.label}" was revoked on ${humanDate(toBusinessDate(terminal.revokedAt))} ` +
         `(${terminal.revokeReason}).`, terminal.storeId, terminal.id);
   }
   if (terminal.storeId !== event.storeId) {

@@ -20,6 +20,8 @@
  * failures cannot tell a bad hour from a broken week. Three empty rows on a Tuesday is noise; three
  * empty rows while the outbox has not moved since breakfast is an outage.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
+import { humanDate } from '../shared/refusal';
 import { authorize, type Actor } from '@shareat/auth';
 import {
   clockTerminalsRepo,
@@ -435,7 +437,7 @@ async function requireOpen(tx: Tx, id: string): Promise<InboxQuarantineRow> {
   if (row.resolvedAt) {
     throw new LaneHealthError(
       `That event was already resolved (${row.resolution}) on ` +
-        `${row.resolvedAt.toISOString().slice(0, 10)}. A resolved row is history, not a queue item.`,
+        `${humanDate(toBusinessDate(row.resolvedAt))}. A resolved row is history, not a queue item.`,
     );
   }
   return row;

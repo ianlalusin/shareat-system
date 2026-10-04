@@ -24,6 +24,8 @@
  * returns metadata a manager needs — which fingers are enrolled, when, by whom — and never the
  * secret itself.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
+import { humanDate } from '../shared/refusal';
 import { randomBytes } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { authorize, type Actor } from '@shareat/auth';
@@ -280,7 +282,7 @@ export async function revokeCredential(
 
   if (row.revokedAt) {
     throw new CredentialError(
-      `That credential was already revoked on ${row.revokedAt.toISOString().slice(0, 10)}.`,
+      `That credential was already revoked on ${humanDate(toBusinessDate(row.revokedAt))}.`,
     );
   }
 

@@ -19,6 +19,7 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
+import { toBusinessDate } from '@shareat/core/datetime';
 import { cashRequestsRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
@@ -95,7 +96,7 @@ export async function decideCashRequest(
       throw new Error(`decideCashRequest: this request is already ${req.status}.`);
     }
 
-    const on = input.on ?? new Date().toISOString().slice(0, 10);
+    const on = input.on ?? toBusinessDate();
     if (input.decision === 'reject') {
       const reason = input.reason.trim();
       if (!reason) throw new Error('decideCashRequest: a refusal needs a reason.');

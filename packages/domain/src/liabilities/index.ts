@@ -20,6 +20,7 @@ import { checkDraw } from '../money-accounts/overdraft';
 import { refuse } from '../shared/refusal';
 import { parseMoneyInput } from '../shared/money-input';
 import { compare, isZero, money, ZERO } from '@shareat/core/money';
+import { toBusinessDate } from '@shareat/core/datetime';
 
 export const LIABILITY_CONTROL_CODE = '2500';
 
@@ -322,7 +323,7 @@ export async function retireLiability(
 export function isOverdue(
   dueOn: string | null,
   outstanding: string,
-  asOf: string = new Date().toISOString().slice(0, 10),
+  asOf: string = toBusinessDate(),
 ): boolean {
   if (!dueOn) return false;
   return dueOn < asOf && compare(money(outstanding), ZERO) > 0;
