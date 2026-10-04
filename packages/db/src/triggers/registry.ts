@@ -296,7 +296,7 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'stock_movements',
     mode: 'origin',
     kind: 'validator',
-    reason: 'A movement may post only into an OPEN period (0063) — reads the period\'s CURRENT status.',
+    reason: 'A movement may post only into an OPEN period (0063; Manila business day since 0180) — reads the period\'s CURRENT status.',
   },
   stock_movements_check_not_frozen_trg: {
     table: 'stock_movements',

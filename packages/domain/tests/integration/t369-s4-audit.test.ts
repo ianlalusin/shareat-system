@@ -6,7 +6,7 @@ import { sql as dsql } from 'drizzle-orm';
 /**
  * T-369 S4 AUDIT legs A-F (orchestrator, 2026-10-01) — what the first S4 pass left open. Fixture and sentence helpers are
  * `t369-s4a-stock-closed-month.test.ts`'s. ⛔ TESTER. Every red leg asserts the TARGET sentence and that nothing was written.
- *   A. the supplier "today" guard must use the date the movement trigger sees (UTC date of now) — fake clock, 02:00 Manila on the 1st.
+ *   A. the supplier "today" guard judges `now` by its MANILA business day, like the trigger (T-373 S3 / DEF-555; was: the UTC date) — fake clock, 02:00 Manila on the 1st succeeds, 23:30 Manila on the last day refuses.
  *   B. receiveTradeOrder with no receivedOn defaults to today's BUSINESS date.
  *   C. voidReturn of a return whose returnedOn month has closed.   D. voidCustomerReturn / voidTradeOrder of a closed-month record.
  *   E. the "today" sentence variant has no "Use a date".          F. voidReturn double submit with no advance credit.
@@ -233,7 +233,9 @@ const customerReturnRows = async (orgId: string) => Number((await sql<{ n: strin
 const todaySentence = (month: string, word: 'closed' | 'locked', doing: string) =>
   `${month} is ${word}. Stock can't be ${doing} today — a closed month's stock stays as it was.`;
 
-/** 02:00 Manila on 1 April 2026 = 18:00 UTC on 31 March: the business date is OPEN (April) while the UTC date the movement trigger sees is CLOSED (March). */
+/** 02:00 Manila on 1 April 2026 = 18:00 UTC on 31 March: the business date is OPEN (April) and, since T-373 S3 / DEF-555 (migration 0180), so is the date the movement trigger sees (its UTC date, 31 March, no longer decides). */
+/** 23:30 Manila on 31 March = 15:30 UTC on 31 March: closed March by both calendars - the refusal control. */
+const MANILA_2330_MARCH_31 = new Date('2026-03-31T15:30:00.000Z');
 const MANILA_2AM_APRIL_1 = new Date('2026-03-31T18:00:00.000Z');
 async function withClock<T>(at: Date, run: () => Promise<T>): Promise<T> {
   vi.useFakeTimers({ toFake: ['Date'], now: at });
@@ -258,35 +260,40 @@ async function supplierReturnFixture(hint: string) {
   return { f, rec, doReturn };
 }
 
-describe('AUDIT A — the "today" guard uses the date the movement trigger sees (UTC), not the Manila business date', () => {
-  it('recordReturn at 02:00 Manila on 1 April, with March closed: the closed-month "today" sentence for March, never a raw P0001; nothing written — control: the same flow at midday Manila (UTC date also April) records', async () => {
+describe('AUDIT A — the "today" guard judges now by its Manila business day, like the movement trigger (T-373 S3 / DEF-555)', () => {
+  it('recordReturn at 02:00 Manila on 1 April, with March closed: RECORDS (April is open; was refused on the UTC date) — controls: at 23:30 Manila on 31 March the closed-month "today" sentence for March, nothing written; at midday Manila it records', async () => {
     const { f, doReturn } = await supplierReturnFixture('auditA-rec');
     await setPeriod(f.orgId, '2026-03', 'closed');
     const before = await counts(f.orgId);
 
-    const said = await withClock(MANILA_2AM_APRIL_1, () => refusalOf(doReturn('2026-04-06'), 'a supplier return at 02:00 Manila with the UTC date in a closed month'));
+    const said = await withClock(MANILA_2330_MARCH_31, () => refusalOf(doReturn('2026-04-06'), 'a supplier return at 23:30 Manila on the last day of a closed month'));
     expect(said).toBe(todaySentence('March 2026', 'closed', 'returned'));
     expect(said).not.toMatch(/cannot move stock|P0001/);
     expect(await counts(f.orgId)).toMatchObject({ movements: before.movements, entries: before.entries });
 
-    const noon = new Date('2026-04-02T04:00:00.000Z'); // 12:00 Manila on 2 April: UTC date is also April
-    expect(await withClock(noon, async () => isOk(doReturn('2026-04-06'))), 'control: with both dates in April the return records').toBe(true);
+    expect(await withClock(MANILA_2AM_APRIL_1, async () => isOk(doReturn('2026-04-06'))), 'a return at 02:00 Manila on 1 April records').toBe(true);
+    expect((await counts(f.orgId)).movements).toBeGreaterThan(before.movements);
+
+    const noon = new Date('2026-04-02T04:00:00.000Z'); // 12:00 Manila on 2 April
+    expect(await withClock(noon, async () => isOk(doReturn('2026-04-06'))), 'control: at midday the return records').toBe(true);
   });
 
-  it('voidReturn at 02:00 Manila on 1 April, with March closed: the same sentence ("voided"); the return stays recorded', async () => {
+  it('voidReturn at 02:00 Manila on 1 April, with March closed: VOIDS — control: at 23:30 Manila on 31 March the same void is refused with the "voided" sentence for March, the return stays recorded', async () => {
     const { f, doReturn } = await supplierReturnFixture('auditA-void');
     const recorded = await doReturn('2026-04-06');
     if (!recorded.ok) throw new Error(`fixture: ${recorded.reason}`);
     await setPeriod(f.orgId, '2026-03', 'closed');
     const before = await counts(f.orgId);
+    const voidIt = () => asOrg(f.orgId, (tx) => voidReturn(tx, f.manager, recorded.returnId, 'Sent back by mistake'));
 
-    const said = await withClock(MANILA_2AM_APRIL_1, () =>
-      refusalOf(asOrg(f.orgId, (tx) => voidReturn(tx, f.manager, recorded.returnId, 'Sent back by mistake')), 'a supplier-return void at 02:00 Manila with the UTC date in a closed month'),
-    );
+    const said = await withClock(MANILA_2330_MARCH_31, () => refusalOf(voidIt(), 'a supplier-return void at 23:30 Manila on the last day of a closed month'));
     expect(said).toBe(todaySentence('March 2026', 'closed', 'voided'));
     expect(said).not.toMatch(/cannot move stock|P0001/);
     expect(await counts(f.orgId)).toMatchObject({ movements: before.movements, entries: before.entries });
     expect((await sql<{ status: string }[]>`select status from supplier_returns where id = ${recorded.returnId}`)[0]!.status).not.toBe('void');
+
+    expect(await withClock(MANILA_2AM_APRIL_1, async () => isOk(voidIt())), 'a void at 02:00 Manila on 1 April goes through').toBe(true);
+    expect((await sql<{ status: string }[]>`select status from supplier_returns where id = ${recorded.returnId}`)[0]!.status).toBe('void');
   });
 });
 

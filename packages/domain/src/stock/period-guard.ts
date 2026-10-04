@@ -11,7 +11,7 @@
  * trigger's raw P0001 text ("cannot move stock into a closed period (moved_at = ...)").
  */
 import { journalRepo, type Tx } from '@shareat/db';
-import { parseBusinessDate } from '@shareat/core/datetime';
+import { parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { humanDate } from '../shared/refusal';
 
 /** "September 2026" - the month a fiscal period covers. */
@@ -49,8 +49,9 @@ export async function closedStockPeriodSentence(
 /**
  * The same refusal for a flow that moves stock at NOW rather than on a date the person chose: there is no
  * date to pick, so it does not tell them to ("Use a date in an open month"). `now` is the instant the
- * movement will be stamped with, and the date tested is its UTC date - exactly what migration 0145's trigger
- * sees - not the Manila business date, which can sit in a different month in the first hours of the 1st.
+ * movement will be stamped with, and the date tested is its Manila business date - exactly what the trigger
+ * sees since migration 0180 (T-373 S3 / DEF-555; before it the trigger read the UTC date, which refused a
+ * movement in the first eight hours of the 1st whenever the month before was closed).
  */
 export async function closedStockPeriodSentenceToday(
   tx: Tx,
@@ -58,7 +59,7 @@ export async function closedStockPeriodSentenceToday(
   now: Date,
   doing: string,
 ): Promise<string | null> {
-  const period = await journalRepo.findPeriodForDate(tx, orgId, now.toISOString().slice(0, 10));
+  const period = await journalRepo.findPeriodForDate(tx, orgId, toBusinessDate(now));
   if (!period || period.status === 'open') return null;
   return `${monthLabel(period.startsOn)} is ${period.status}. Stock can't be ${doing} today — a closed month's stock stays as it was.`;
 }

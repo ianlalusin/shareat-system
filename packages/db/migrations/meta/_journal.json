@@ -1121,6 +1121,13 @@
       "when": 1801539107084,
       "tag": "0179_t372_s6b_over_receipt",
       "breakpoints": true
+    },
+    {
+      "idx": 180,
+      "version": "7",
+      "when": 1801625507084,
+      "tag": "0180_t373_s3_def555_stock_period_manila_day",
+      "breakpoints": true
     }
   ]
 }

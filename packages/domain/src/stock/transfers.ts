@@ -12,12 +12,12 @@
  * this codebase (bible row 104: name the statement the database rejects).
  *
  * ⚠️ **Period lock has no `postEntry` to inherit it from here** — this is the first Phase 3 module
- * with zero journal entries. `assertPeriodOpen` below is the direct equivalent, called explicitly.
+ * with zero journal entries. `closedStockPeriodSentenceToday` (the Manila business day, as the trigger sees it) is the direct equivalent, called explicitly.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { journalRepo, stockLedgerRepo, stockTransfersRepo, type Tx } from '@shareat/db';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { stockLedgerRepo, stockTransfersRepo, type Tx } from '@shareat/db';
 import { compareQuantity, fromThousandths, quantity, toThousandths, type Quantity } from './quantity';
+import { closedStockPeriodSentenceToday } from './period-guard';
 import { parseRequiredQuantity } from './quantity-field';
 import {
   DEFAULT_STUCK_TRANSFER_THRESHOLD_DAYS,
@@ -44,21 +44,6 @@ export interface CreateTransferInput {
 export type TransferOutcome =
   | { readonly ok: true; readonly transferId: string }
   | { readonly ok: false; readonly reason: string };
-
-async function assertPeriodOpen(tx: Tx, orgId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
-  const businessDate = toBusinessDate();
-  const period = await journalRepo.findPeriodForDate(tx, orgId, businessDate);
-  if (!period) {
-    return { ok: false, reason: `no fiscal period covers ${businessDate}` };
-  }
-  if (period.status !== 'open') {
-    return {
-      ok: false,
-      reason: `fiscal period ${period.id} (${period.startsOn}..${period.endsOn}) is ${period.status} — cannot move stock dated ${businessDate}`,
-    };
-  }
-  return { ok: true };
-}
 
 /** T-371 G3: negated in scaled bigint and minted by the one mint, never a string flip cast to the brand. */
 function negate(q: Quantity): Quantity {
@@ -107,13 +92,12 @@ export async function transferNow(tx: Tx, input: CreateTransferInput): Promise<T
   const validation = validateTransferRequest({ ...input, lines: parsedLines });
   if (!validation.ok) return validation;
 
-  const period = await assertPeriodOpen(tx, orgId);
-  if (!period.ok) return period;
+  const now = new Date(); // read ONCE: the instant checked is the instant stamped
+  const closed = await closedStockPeriodSentenceToday(tx, orgId, now, 'moved');
+  if (closed) return { ok: false, reason: closed };
 
   const sufficiency = await checkSufficiency(tx, input.storeId, input.fromLocationId, parsedLines);
   if (!sufficiency.ok) return sufficiency;
-
-  const now = new Date();
 
   // ⭐ Header, movements and lines all agree on `now` from the start — `received` with its
   // dispatched/received timestamps set in this ONE insert, never a later update. The shape
@@ -204,8 +188,9 @@ export async function dispatch(tx: Tx, actor: Actor, transferId: string): Promis
     return { ok: false, reason: `transfer ${transferId} is ${transfer.status}, not draft` };
   }
 
-  const period = await assertPeriodOpen(tx, transfer.orgId);
-  if (!period.ok) return period;
+  const now = new Date(); // read ONCE: the instant checked is the instant stamped
+  const closed = await closedStockPeriodSentenceToday(tx, transfer.orgId, now, 'moved');
+  if (closed) return { ok: false, reason: closed };
 
   const lines = await stockTransfersRepo.getTransferLines(tx, transferId);
   const sufficiency = await checkSufficiency(
@@ -216,7 +201,6 @@ export async function dispatch(tx: Tx, actor: Actor, transferId: string): Promis
   );
   if (!sufficiency.ok) return sufficiency;
 
-  const now = new Date();
   for (const line of lines) {
     const movement = await stockLedgerRepo.insertMovement(tx, {
       orgId: transfer.orgId,
@@ -255,11 +239,11 @@ export async function receiveTransfer(tx: Tx, actor: Actor, transferId: string):
     return { ok: false, reason: `transfer ${transferId} is ${transfer.status}, not in transit` };
   }
 
-  const period = await assertPeriodOpen(tx, transfer.orgId);
-  if (!period.ok) return period;
+  const now = new Date(); // read ONCE: the instant checked is the instant stamped
+  const closed = await closedStockPeriodSentenceToday(tx, transfer.orgId, now, 'moved');
+  if (closed) return { ok: false, reason: closed };
 
   const lines = await stockTransfersRepo.getTransferLines(tx, transferId);
-  const now = new Date();
 
   for (const line of lines) {
     const movement = await stockLedgerRepo.insertMovement(tx, {
@@ -307,11 +291,11 @@ export async function voidTransfer(
     return { ok: false, reason: 'a void needs a reason' };
   }
 
-  const period = await assertPeriodOpen(tx, transfer.orgId);
-  if (!period.ok) return period;
+  const now = new Date(); // read ONCE: the instant checked is the instant stamped
+  const closed = await closedStockPeriodSentenceToday(tx, transfer.orgId, now, 'moved');
+  if (closed) return { ok: false, reason: closed };
 
   const lines = await stockTransfersRepo.getTransferLines(tx, transferId);
-  const now = new Date();
 
   if (transfer.status === 'in_transit' || transfer.status === 'received') {
     for (const line of lines) {

@@ -229,7 +229,9 @@ const customerReturnRows = async (orgId: string) => Number((await sql<{ n: strin
 const todaySentence = (month: string, word: 'closed' | 'locked', doing: string) =>
   `${month} is ${word}. Stock can't be ${doing} today — a closed month's stock stays as it was.`;
 
-/** 02:00 Manila on 1 April 2026 = 18:00 UTC on 31 March: the business date is OPEN (April) while the UTC date the movement trigger sees is CLOSED (March). */
+/** 02:00 Manila on 1 April 2026 = 18:00 UTC on 31 March: the business date is OPEN (April) and, since T-373 S3 / DEF-555 (migration 0180), so is the date the movement trigger sees (its UTC date no longer decides). */
+/** 23:30 Manila on 31 March = 15:30 UTC on 31 March: closed March by both calendars - the refusal control. */
+const MANILA_2330_MARCH_31 = new Date('2026-03-31T15:30:00.000Z');
 const MANILA_2AM_APRIL_1 = new Date('2026-03-31T18:00:00.000Z');
 async function withClock<T>(at: Date, run: () => Promise<T>): Promise<T> {
   vi.useFakeTimers({ toFake: ['Date'], now: at });
@@ -303,10 +305,10 @@ describe('FOLLOW-UP A — the loser of a double voidReturn is told in a sentence
 });
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
-describe('FOLLOW-UP B — voidTradeOrder / voidCustomerReturn stamp their reversal movements NOW: same UTC-date rule as the supplier voids', () => {
+describe('FOLLOW-UP B — voidTradeOrder / voidCustomerReturn stamp their reversal movements NOW: same Manila-day rule as the supplier voids (T-373 S3 / DEF-555)', () => {
   const NOON_APRIL_2 = new Date('2026-04-02T04:00:00.000Z'); // 12:00 Manila: UTC date also April
 
-  it('voidTradeOrder at 02:00 Manila on 1 April with March closed: the "today" sentence, nothing written, the order stays dispatched — control: at midday a second order voids', async () => {
+  it('voidTradeOrder at 02:00 Manila on 1 April with March closed: VOIDS — controls: at 23:30 Manila on 31 March the "today" sentence, nothing written, the order stays dispatched; at midday a second order voids', async () => {
     const f = await fixture('fuB-to');
     const itemId = await wholesaleItem(f);
     await receiveStock(f, itemId, 'raw_material', '50', '90.0000', '2026-01-01');
@@ -321,16 +323,19 @@ describe('FOLLOW-UP B — voidTradeOrder / voidCustomerReturn stamp their revers
     await setPeriod(f.orgId, '2026-03', 'closed');
     const before = await counts(f.orgId);
 
-    const said = await withClock(MANILA_2AM_APRIL_1, () => refusalOf(asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: early, reason: 'Typed wrong' })), 'a trade-order void at 02:00 Manila'));
+    const said = await withClock(MANILA_2330_MARCH_31, () => refusalOf(asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: early, reason: 'Typed wrong' })), 'a trade-order void at 23:30 Manila on 31 March'));
     expect(said).toBe(todaySentence('March 2026', 'closed', 'voided'));
     expect(said).not.toMatch(/cannot move stock|P0001/);
     expect(await counts(f.orgId)).toMatchObject({ movements: before.movements, entries: before.entries });
     expect((await sql<{ status: string }[]>`select status from trade_orders where id = ${early}`)[0]!.status).toBe('dispatched');
 
+    expect(await withClock(MANILA_2AM_APRIL_1, () => isOk(asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: early, reason: 'Typed wrong' })))), 'at 02:00 Manila on 1 April the void goes through').toBe(true);
+    expect((await sql<{ status: string }[]>`select status from trade_orders where id = ${early}`)[0]!.status).not.toBe('dispatched');
+
     expect(await withClock(NOON_APRIL_2, () => isOk(asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: mid, reason: 'Typed wrong' })))), 'control: at midday the void goes through').toBe(true);
   });
 
-  it('voidCustomerReturn at 02:00 Manila on 1 April with March closed: the "today" sentence, the return stays — control: at midday a second return voids', async () => {
+  it('voidCustomerReturn at 02:00 Manila on 1 April with March closed: VOIDS — controls: at 23:30 Manila on 31 March the "today" sentence, the return stays; at midday a second return voids', async () => {
     const f = await fixture('fuB-cr');
     const s = await externalSale(f);
     const early = await returnIt(f, s, '2026-04-12');
@@ -339,11 +344,14 @@ describe('FOLLOW-UP B — voidTradeOrder / voidCustomerReturn stamp their revers
     await setPeriod(f.orgId, '2026-03', 'closed');
     const before = await counts(f.orgId);
 
-    const said = await withClock(MANILA_2AM_APRIL_1, () => refusalOf(asOrg(f.orgId, (tx) => voidCustomerReturn(tx, f.manager, idOf(early), 'Typed wrong')), 'a customer-return void at 02:00 Manila'));
+    const said = await withClock(MANILA_2330_MARCH_31, () => refusalOf(asOrg(f.orgId, (tx) => voidCustomerReturn(tx, f.manager, idOf(early), 'Typed wrong')), 'a customer-return void at 23:30 Manila on 31 March'));
     expect(said).toBe(todaySentence('March 2026', 'closed', 'voided'));
     expect(said).not.toMatch(/cannot move stock|P0001/);
     expect(await counts(f.orgId)).toMatchObject({ movements: before.movements, entries: before.entries });
     expect((await sql<{ status: string }[]>`select status from customer_returns where id = ${idOf(early)}`)[0]!.status).not.toBe('void');
+
+    expect(await withClock(MANILA_2AM_APRIL_1, () => isOk(asOrg(f.orgId, (tx) => voidCustomerReturn(tx, f.manager, idOf(early), 'Typed wrong')))), 'at 02:00 Manila on 1 April the void goes through').toBe(true);
+    expect((await sql<{ status: string }[]>`select status from customer_returns where id = ${idOf(early)}`)[0]!.status).toBe('void');
 
     expect(await withClock(NOON_APRIL_2, () => isOk(asOrg(f.orgId, (tx) => voidCustomerReturn(tx, f.manager, idOf(mid), 'Typed wrong')))), 'control: at midday the void goes through').toBe(true);
   });
