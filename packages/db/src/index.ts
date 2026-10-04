@@ -295,6 +295,9 @@ export type {
 } from './repo/production';
 // T-177 — POS item mapping and the daily usage pull.
 export * as posMappingRepo from './repo/pos-mapping';
+// T-375 S1 - the POS v1 day feed: wire field names (R12), and the repo.
+export * from './pos-v1/wire';
+export * as posV1Repo from './repo/pos-v1';
 export type {
   PosItemMapRow,
   PosMapRequestRow,

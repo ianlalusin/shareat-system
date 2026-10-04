@@ -147,6 +147,19 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
       'A closed period\'s fill-audit columns cannot be rewritten (0160). Decides only from OLD/NEW ' +
       'on the same row.',
   },
+  // T-375 S1 (0183): immutability triggers, ENABLE ALWAYS so replica mode cannot switch them off.
+  pos_v1_day_feeds_append_only: {
+    table: 'pos_v1_day_feeds',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A stored POS response is never updated or deleted (0183). Decides only from TG_OP.',
+  },
+  sales_day_pos_corrections_append_only: {
+    table: 'sales_day_pos_corrections',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A POS correction row is never updated or deleted (0183). Decides only from TG_OP.',
+  },
   missed_month_adjustments_no_update_trg: {
     table: 'missed_month_adjustments',
     mode: 'always',

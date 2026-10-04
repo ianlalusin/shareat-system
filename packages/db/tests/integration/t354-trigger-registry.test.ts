@@ -52,6 +52,9 @@ const ALWAYS_TRIGGERS = [
   { table: 'missed_month_adjustments', trigger: 'missed_month_adjustments_no_direct_delete_trg' },
   { table: 'audit_log', trigger: 'audit_log_append_only' },
   { table: 'trade_orders', trigger: 'trade_orders_ready_is_final_trg' }, // 0175 T-372 S2 DEF-511
+  // T-375 S1 (migration 0183): the two history guards - a day feed and a POS correction are never edited or deleted.
+  { table: 'pos_v1_day_feeds', trigger: 'pos_v1_day_feeds_append_only' },
+  { table: 'sales_day_pos_corrections', trigger: 'sales_day_pos_corrections_append_only' },
 ] as const;
 
 /** The six mirror enqueuers + the money-account seeder — must stay live `'O'` (T5, and R2's list). */
@@ -90,14 +93,14 @@ async function livePgTriggers(): Promise<{ tgname: string; table: string; tgenab
 }
 
 describe('T1 — registry floor', () => {
-  it('TRIGGER_REGISTRY has >=57 entries, exactly 20 with mode:\'always\', and those 20 names equal R1\'s table — was red today: the import fails, triggers/registry.ts does not exist', async () => {
+  it('TRIGGER_REGISTRY has >=57 entries, exactly 22 with mode:\'always\', and those 22 names equal R1\'s table — was red today: the import fails, triggers/registry.ts does not exist', async () => {
     const mod = await loadRegistry();
     expect(mod, 'triggers/registry.ts does not exist yet').toBeDefined();
     const reg = mod!.TRIGGER_REGISTRY;
     expect(Object.keys(reg).length, 'expected >=57 non-internal triggers classified').toBeGreaterThanOrEqual(57);
 
     const always = Object.entries(reg).filter(([, e]) => e.mode === 'always');
-    expect(always.length, 'expected exactly 20 ALWAYS triggers (R1 + 0175 + 0179)').toBe(20);
+    expect(always.length, 'expected exactly 22 ALWAYS triggers (R1 + 0175 + 0179 + 0183)').toBe(22);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {

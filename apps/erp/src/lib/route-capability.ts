@@ -48,6 +48,9 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, Capability>> = {
 
   // --- Configuration that changes how money is classified for everyone ------------------------
   '/settings': 'manage_store_settings',
+  // T-375 S1: which POS store a branch sells under decides where its sales are booked, so it is admin-only
+  // (the longer prefix wins over `/settings`). `linkStoreToPos` checks the same word on the write.
+  '/settings/pos-link': 'manage_chart_of_accounts',
 
   // --- The books. A cashier's own day is theirs; the organisation's ledger is not. -------------
   '/reports/trial-balance': 'view_trial_balance',

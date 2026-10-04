@@ -29,8 +29,9 @@
  *   plainly: *"today every channel is `expense`."* Offering the other value would let a manager
  *   pick a posture the ledger cannot honour.
  */
-import { salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
+import { posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
+import { refuse } from '../shared/refusal';
 
 /** Store-scoped, manager ✅ — `packages/auth/src/capabilities.ts:206`, `:492`. */
 const CAPABILITY = 'manage_store_settings' as const;
@@ -178,6 +179,20 @@ export async function createSalesChannel(
 }
 
 /**
+ * T-375 S1 (V6): a channel a POS link names is where POS's sales land, so it must stay remitted daily and active.
+ * Called AFTER `authorize()`. Only the link's own channel is guarded; another channel of the store is free.
+ */
+async function refuseIfLinkedToPos(tx: Tx, orgId: string, channelId: string): Promise<void> {
+  const link = await posV1Repo.getLinkByChannel(tx, orgId, channelId);
+  if (link) {
+    throw refuse(
+      'sales channel is named by a POS link: it must stay remitted daily and active',
+      "POS's sales land in this channel, so it has to stay remitted daily and active. Change the POS link first.",
+    );
+  }
+}
+
+/**
  * ⭐ **The gate reads the channel's OWN `store_id`, never one the caller supplied.** Authorising
  * against a form-supplied store would let a manager scoped to store A edit store B's channel by
  * posting B's `channelId` with A's store. `setChannelPayoutDestination` already does it in this
@@ -190,6 +205,7 @@ export async function updateSalesChannel(tx: Tx, actor: Actor, input: UpdateSale
   const channel = await salesDaysRepo.channelById(tx, actor.orgId, input.channelId);
   if (!channel) throw new Error('updateSalesChannel: that sales channel does not exist in this organisation.');
   await authorize(tx, actor, CAPABILITY, { storeId: channel.storeId });
+  if (!input.isRemittedDaily) await refuseIfLinkedToPos(tx, actor.orgId, input.channelId);
 
   const name = cleanName(input.name);
   await refuseNameCollision(tx, actor.orgId, channel.storeId, name, input.channelId);
@@ -227,6 +243,7 @@ export async function setSalesChannelActive(
   const channel = await salesDaysRepo.channelById(tx, actor.orgId, input.channelId);
   if (!channel) throw new Error('setSalesChannelActive: that sales channel does not exist in this organisation.');
   await authorize(tx, actor, CAPABILITY, { storeId: channel.storeId });
+  if (!input.isActive) await refuseIfLinkedToPos(tx, actor.orgId, input.channelId);
   await salesDaysRepo.setChannelActive(tx, actor.orgId, input.channelId, input.isActive);
 }
 

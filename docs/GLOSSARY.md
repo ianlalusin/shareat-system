@@ -136,6 +136,11 @@ DEF-002.
 | **re-ring** ✅ | A corrected receipt replacing a voided one; consumes the retained void cash |
 | **voidCashRetained** ⚠️ ✅ | Cash collected on a voided receipt and **not refunded**. It sits in the drawer backing no sale, so ERP carries it into expected remittance and books it to a suspense liability |
 | **comps** 🔸 | Complimentary items. **Contra-revenue** (4950), confirmed by Ian — not marketing expense |
+| **day feed** (T-375) | The stored, immutable copy of one POS v1 response for one store-day (`pos_v1_day_feeds`): the exact text, its parsed form and a sha256. A sales day on a linked store is DERIVED from it and nothing else. Append-only: every fetch is a fact, none is edited or de-duplicated. Interim — retired per store at P2, when that store's sales reach Postgres directly (ADR-015) |
+| **linked store** (T-375) | A store with a row in `pos_v1_store_links`. **That row is the whole switch** — no flag, no env var. Linked: its sales days are imported from POS and never typed. Unlinked: today's typed path, labelled "Typed — store not linked to POS" |
+| **tender (master)** (T-375) | A store's tender definition (`tenders`): a name, `cash` or `wallet`, the money account a wallet pays into, and how POS v1 spells it. **Not** `sales_day_tenders`, which is one day's wallet rows (where that day's money went). The master is what a till will sell against; `sales_day_tenders` is what a day recorded |
+| **platform sales** (T-375) | Foodpanda, Grab and similar: typed per day on the store's NON-remitted channels, kept outside the figures POS derives. One removable seam, until platforms are rung through POS |
+| **refunds (sales day)** (T-375) | `sales_days.refunds`: POS refunds of the day, **contra-revenue 4950**, on a feed-sourced day only. **Never `comps`** — comps keep their meaning (complimentary items). Derived as the amount by which POS's method totals exceed its paid total, above the rounding band |
 
 ## Money and books
 

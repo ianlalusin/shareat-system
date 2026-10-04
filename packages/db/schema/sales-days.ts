@@ -50,6 +50,7 @@ import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
 import { moneyAccounts } from './money-accounts';
+import { posV1DayFeeds } from './pos-v1';
 
 // -------------------------------------------------------------------------------------
 // sales_channels — per-store configuration. v1's Store.salesChannels[], as rows.
@@ -197,6 +198,14 @@ export const salesDays = pgTable(
     posSourced: boolean('pos_sourced').notNull().default(false),
     posSourcedAt: timestamp('pos_sourced_at', { withTimezone: true }),
 
+    /** T-375 S1 (migration 0183, R1): where the figures came from. `legacy_typed` is today's typed path (a store
+     *  not yet linked to POS); `pos_v1_day_feed` is a day DERIVED from a stored POS response. Kept by 0184. */
+    source: text('source', { enum: ['legacy_typed', 'pos_v1_day_feed'] as const }).notNull().default('legacy_typed'),
+    /** The `sales` feed the day was derived from; non-null iff `source = 'pos_v1_day_feed'`. */
+    posV1DayFeedId: uuid('pos_v1_day_feed_id').references(() => posV1DayFeeds.id, { onDelete: 'restrict' }),
+    /** T-375 (W11): POS refunds of the day, contra-revenue 4950 - never comps. Feed days only. */
+    refunds: numeric('refunds', { precision: 14, scale: 2 }).notNull().default('0'),
+
     // ── Revenue: the POSTING split (which account), not the channel split ──────────────
     totalSales: numeric('total_sales', { precision: 14, scale: 2 }).notNull(),
     /** -> 4100 Food sales — unlimited. Renamed from a v1 field whose name means the opposite
@@ -300,6 +309,14 @@ export const salesDays = pgTable(
       (${t.posSourced} = false and ${t.posSourcedAt} is null)
       or (${t.posSourced} = true and ${t.posSourcedAt} is not null)
     `),
+    // T-375 S1 (migration 0183, R6): the shapes of a feed-sourced day.
+    check('sales_days_source_check', sql`${t.source} in ('legacy_typed', 'pos_v1_day_feed')`),
+    check('sales_days_source_feed_id_check', sql`(${t.source} = 'pos_v1_day_feed') = (${t.posV1DayFeedId} is not null)`),
+    check('sales_days_feed_source_pos_sourced_check', sql`${t.source} <> 'pos_v1_day_feed' or ${t.posSourced}`),
+    check('sales_days_refunds_only_on_feed_days_check', sql`${t.source} = 'pos_v1_day_feed' or ${t.refunds} = 0`),
+    check('sales_days_refunds_non_negative_check', sql`${t.refunds} >= 0`),
+    check('sales_days_refunds_finite_check', sql`${t.refunds} > '-Infinity'::numeric and ${t.refunds} < 'Infinity'::numeric`),
+    index('sales_days_pos_v1_day_feed_id_idx').on(t.posV1DayFeedId),
     check('sales_days_total_sales_finite_check', sql`${t.totalSales} > '-Infinity'::numeric and ${t.totalSales} < 'Infinity'::numeric`),
     check('sales_days_unli_sales_finite_check', sql`${t.unliSales} > '-Infinity'::numeric and ${t.unliSales} < 'Infinity'::numeric`),
     check('sales_days_ala_carte_sales_finite_check', sql`${t.alaCarteSales} > '-Infinity'::numeric and ${t.alaCarteSales} < 'Infinity'::numeric`),

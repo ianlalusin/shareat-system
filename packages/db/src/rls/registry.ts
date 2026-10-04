@@ -906,6 +906,24 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason: 'No org_id of its own — reached only through its pull, like production_record_lines.',
     via: 'exists (select 1 from pos_usage_pulls p where p.id = pull_id and p.org_id = app_current_org())',
   },
+
+  // ---- T-375: the POS v1 day feed (migration 0183) --------------------------------------------
+  pos_v1_store_links: {
+    scope: 'org_column',
+    reason: 'Which store is which POS store is an org’s own configuration; a franchisee must not see another’s POS ids.',
+  },
+  pos_v1_day_feeds: {
+    scope: 'org_column',
+    reason: 'The stored POS response for one store-day: sales figures and sold items, org-scoped like sales_days.',
+  },
+  tenders: {
+    scope: 'org_column',
+    reason: 'The tender master names an org’s own wallets and how its POS spells them.',
+  },
+  sales_day_pos_corrections: {
+    scope: 'org_column',
+    reason: 'A correcting posting for an org’s own sales day; org-scoped like the journal entry it names.',
+  },
 };
 
 export function rlsScopeOf(table: string): RlsEntry | undefined {

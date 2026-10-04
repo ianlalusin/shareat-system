@@ -339,7 +339,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // `/inventory/usage/[id]` gains the `ACTION_LINK` to POS usage that replaces the Void form for a pull-made
     // record (a static census counts the source element regardless of branch). Verified by running the census
     // (1103) and by reading the six added elements in the diff.
-    expect(results.length).toBe(1103);
+    // 1103 -> 1110, T-375 S1, 2026-10-04. +7 PASS, FAIL/UNRESOLVED unmoved (the 'no control is undersized or unresolved
+    // outside the accepted baseline' test stays green). New page `/settings/pos-link` (link form controls); a static
+    // census counts the source elements regardless of branch. Verified by running the census (1110).
+    expect(results.length).toBe(1110);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

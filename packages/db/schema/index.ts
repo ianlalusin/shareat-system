@@ -131,3 +131,6 @@ export * from './position-capability-defaults';
 // T-345 — the link between a missed month's catch-up journal entry and the period it counts as
 // booked for.
 export * from './missed-month-adjustments';
+
+// T-375 S1 - the POS v1 day feed: store links, the immutable feed, the tender master, POS corrections.
+export * from './pos-v1';

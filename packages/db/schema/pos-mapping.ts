@@ -56,6 +56,7 @@ import {
 import { items } from './items';
 import { organizations } from './organizations';
 import { persons } from './persons';
+import { posV1DayFeeds } from './pos-v1';
 import { productionRecipes } from './production';
 import { salesDays } from './sales-days';
 import { stockLocations } from './stock-locations';
@@ -185,6 +186,8 @@ export const posUsagePulls = pgTable(
     orphanFinalizedAt: timestamp('orphan_finalized_at', { withTimezone: true }),
     finalizedAt: timestamp('finalized_at', { withTimezone: true }),
     finalizedBy: uuid('finalized_by').references(() => persons.id, { onDelete: 'restrict' }),
+    /** T-375 S1 (migration 0183, R9): the `sold_items` feed this pull is pinned to; null on a pull made before S5. */
+    posV1DayFeedId: uuid('pos_v1_day_feed_id').references(() => posV1DayFeeds.id, { onDelete: 'restrict' }),
     /** T-374 S7 (DEF-578, migration 0181): who voided the pull, when and why. Mirrors `stock_usage_records`. */
     voidedAt: timestamp('voided_at', { withTimezone: true }),
     voidedBy: uuid('voided_by').references(() => persons.id, { onDelete: 'restrict' }),

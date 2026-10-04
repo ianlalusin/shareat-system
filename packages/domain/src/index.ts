@@ -98,6 +98,9 @@ export * from './pos/item-map';
 export * from './pos/usage-pull';
 // T-210 — the daily sales pull, for the POS-day reconciliation report.
 export * from './pos/sales-pull';
+// T-375 S1 - the POS v1 day feed: the bridge fetchers and the store link.
+export * from './pos/v1-feed';
+export * from './pos/store-link';
 // T-178 — order/channel wastage disposition.
 export * from './wastage/orders';
 export * from './wastage/settlement-match';

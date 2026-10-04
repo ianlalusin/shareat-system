@@ -81,6 +81,11 @@ export default async function SettingsPage() {
           description="How each branch sells — walk-in and the delivery platforms. Sets whether a channel’s money reaches the till that day or is owed to us until the platform settles, and whether a wasted order through it gets reviewed or is decided on the spot."
         />
         <SettingsCard
+          href="/settings/pos-link"
+          title="POS link"
+          description="Which POS store each branch sells under. A linked branch's sales days come from POS and can't be typed; a branch that isn't linked keeps typing them in. Admin only."
+        />
+        <SettingsCard
           href="/settings/wastage-monitor"
           title="Wastage Monitor"
           description="Who answers for a wasted or refunded order at each branch. With nobody named, a reviewed wastage is created ownerless and the store absorbs it after 15 days — silently, and nothing is recovered."

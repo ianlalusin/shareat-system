@@ -9,6 +9,7 @@ applyCreditAction
 arrivalLag
 assertUsageSource
 assetsMissingCapitalisation
+basisFor
 branchOrderDetail
 buildCoverageReport
 capitalizeFromExpense
@@ -29,6 +30,8 @@ editPostedProductionAction
 elevateManager
 endShift
 expectedAccumulated
+fetchPosV1Day
+fetchPosV1PaymentMethods
 findCurrentDocument
 findLiveOfKind
 findPostedSettlementForChannelDay
@@ -36,13 +39,16 @@ formatConversionSummary
 formatCoverageReport
 getAllocationsForPayment
 getItemForProduction
+getLinkByStore
 getRecipe
 hasFingerprint
 hasOtherActiveAdmin
+insertBatch
 isConvertibleUnit
 isHeaderCode
 isStartDecisionMaterial
 jobResult
+latestForDay
 linkInvoiceToReceipt
 listAdjustments
 listAvailableCommissaries
@@ -65,6 +71,8 @@ planArm
 poolEntries
 poolFor
 poolKey
+posV1SalesBody
+posV1SoldItemsBody
 positionsBySupplier
 previewDrawingClose
 proxy

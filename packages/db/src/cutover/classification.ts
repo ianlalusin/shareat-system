@@ -1142,6 +1142,34 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'purge',
     reason: 'The detail of a pull, hanging off it by CASCADE. Same class as its parent.',
   },
+
+  // ---- T-375: the POS v1 day feed (migration 0183) --------------------------------------------
+  pos_v1_store_links: {
+    class: 'keep',
+    reason:
+      'Configuration: which v2 store is which POS store, and the channel and tax type its sales land under. The ' +
+      'same class as pos_item_maps - nobody re-links a store on 1 January, and a purged link would silently flip a ' +
+      'linked store back to the typed path (the link row IS the per-store switch, I10).',
+  },
+  tenders: {
+    class: 'keep',
+    reason:
+      'The tender master a till sells against (ADR-015 section 7): configuration, the same class as ' +
+      'pos_item_maps. The names and wallet accounts are standing decisions, not pilot activity.',
+  },
+  pos_v1_day_feeds: {
+    class: 'purge',
+    reason:
+      'Operational - the stored copy of what POS reported for a pilot-era day. Every sales day and usage pull that ' +
+      'cites a feed is itself purged, so no kept row points at one. Append-only by trigger; the purge TRUNCATEs, ' +
+      'which fires no row trigger. Purged AFTER sales_days and pos_usage_pulls (PURGE_ORDER_HINT).',
+  },
+  sales_day_pos_corrections: {
+    class: 'purge',
+    reason:
+      'A posting document: it names a journal entry (purge) and a sales day (purge). Append-only by trigger. Purged ' +
+      'BEFORE sales_days (PURGE_ORDER_HINT).',
+  },
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */
@@ -1182,7 +1210,11 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   'expense_budgets',
   'channel_settlements',
   'sales_day_channels',
+  // T-375: corrections cite a sales day, two feeds and a journal entry; usage pulls cite a sales day and a feed.
+  'sales_day_pos_corrections',
+  'pos_usage_pulls',
   'sales_days',
+  'pos_v1_day_feeds',
   'ar_collection_allocations',
   'ar_write_offs',
   'ar_collections',

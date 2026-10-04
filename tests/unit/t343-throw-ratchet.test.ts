@@ -64,6 +64,7 @@ const DB_SRC_OUTSIDE_REPO = 'packages/db/src/*';
  * message (R1.2).
  */
 const CEILINGS: Record<string, number> = {
+  'packages/db/src/pos-v1': 0, // T-375 S1: new directory enters at its measured count (wire.ts + fixtures.ts, no throws)
   'packages/domain/src/ap': 0, // T-343 S5.2: 39 -> 0, all converted to refuse/gone/internalFault
   'packages/domain/src/ar': 31, // T-343 S5.5p: 35 -> 34, recordCollection's negative-credit throw converted to refuse(...); T-367 S1 + DEF-546 (2026-10-01): 34 -> 31, writeOffCharge, voidCharge and voidCollection not-found throws folded into the uniform AuthorizationError
   'packages/domain/src/attendance': 1,
