@@ -134,18 +134,18 @@
     <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 4 October 2026 &middot; not launched</p>
     <h1>What's Left</h1>
     <p class="answer">
-      <b>One money defect is left</b>, and it waits on a count only you can run on production. The rest of the money push is closed.
+      <b>The money push is closed:</b> no open money defects. Now the POS day feed (sales days from POS, before 15 November) and the closed-month bill fix.
       After that come the remaining admin screens, the last two payroll tasks once the statutory data arrives,
       and the cutover itself. <b>The finish line is 1 January 2027.</b>
     </p>
     <div class="counts">
-      <div class="count money"><div class="n">1</div><div class="l">open money defect (DEF-054, amendment drafted, needs you)</div></div>
+      <div class="count money"><div class="n">0</div><div class="l">open money defects (push closed)</div></div>
       <div class="count struct"><div class="n">21</div><div class="l">roadmap items still to build</div></div>
       <div class="count"><div class="n">7</div><div class="l">roadmap items in progress or partly done</div></div>
-      <div class="count you"><div class="n">4</div><div class="l">things only you can do</div></div>
+      <div class="count you"><div class="n">6</div><div class="l">things only you can do</div></div>
       <div class="count done"><div class="n">242</div><div class="l">roadmap tasks done</div></div>
     </div>
-    <p class="src">main at 7bfccca &middot; production at migration 0181 (deployed 4 Oct), main through 0181 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+    <p class="src">main at 5d28250 (migration 0182) &middot; production at migration 0181 (deployed 4 Oct) &middot; next free migration 0185 (0183/0184 reserved by T-375) &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
   </header>
 
   <div class="dates">
@@ -158,30 +158,30 @@
 
   <section>
     <h2>Order of work</h2>
-    <p class="lede">Sonnet lanes inside the orchestrator work the money push top to bottom. Nothing below the money push starts until it is closed.</p>
+    <p class="lede">Two tracks run in parallel; the money push is closed.</p>
     <div class="order">
       <div class="step now">
         <div class="k">Now</div>
-        <h3>Your answers on DEF-054</h3>
-        <ol>
-          <li>You: OK for a second read-only v1 copy (S0b) and QA1&ndash;QA3, then T-367 Amendment A1 approval</li>
-          <li>Then T-367 S5/S6 (DEF-054)</li>
-        </ol>
+        <h3>Sales days from POS, and the bill override</h3>
+        <ul>
+          <li>T-375: POS v1 day feed, ERP sales days from POS, before 15 Nov</li>
+          <li>T-376: DEF-581 bill override, DEF-582/583</li>
+        </ul>
       </div>
       <div class="step">
         <div class="k">Next</div>
-        <h3>Follow-ups</h3>
+        <h3>Smoke and screens</h3>
         <ul>
-          <li>T-374 S5&ndash;S7 screen smoke on 9008</li>
-          <li>DEF-581 (spec first), DEF-582/583</li>
+          <li>T-374 / T-367 screen smoke on 9008</li>
+          <li>Phase 7 screens, T-343</li>
         </ul>
       </div>
       <div class="step">
         <div class="k">Then</div>
-        <h3>Screens and payroll</h3>
+        <h3>Payroll and the shared backend</h3>
         <ul>
-          <li>Phase 7 screens, T-343</li>
           <li>T-190/T-193 when HR data lands</li>
+          <li>POS &amp; CUSTOMER on the shared backend (ADR-015): copied POS after 1 Jan 2027</li>
         </ul>
       </div>
     </div>
@@ -189,12 +189,12 @@
 
   <section>
     <h2>Open money defects</h2>
-    <p class="lede">Every one is assigned. A row is deleted from here the moment its fix is committed.</p>
+    <p class="lede">No open money defects. DEF-586 stays listed (typed sales figures) until every store is linked; DEF-054 is fixed.</p>
     <div class="tblwrap">
       <table>
         <thead><tr><th>Defect</th><th>What is wrong</th><th>Fixed by</th><th>State</th></tr></thead>
         <tbody>
-          <tr><td class="n">DEF-054</td><td>The old &ldquo;other&rdquo; and &ldquo;AR collection&rdquo; payment methods have no correct posting yet; the count (1,841 AR-collection copies, &#8369;739,985; 322 &ldquo;Other&rdquo;, &#8369;170,957) failed the plan&rsquo;s gate</td><td class="n">T-367 S5/S6</td><td><span class="pill y">A1 drafted &middot; needs Ian (S0b + QA1&ndash;3)</span></td></tr>
+          <tr><td class="n">DEF-586</td><td>Sales-day figures are typed by hand and &ldquo;From POS&rdquo; is an unchecked box</td><td class="n">T-375</td><td><span class="pill y">partly open until every store is linked</span></td></tr>
           <tr class="def"><td class="n">DEF-491, 421</td><td>Same-organisation link checks (about 360) and transactions opened without an organisation</td><td class="n">&mdash;</td><td><span class="pill">deferred: before a 2nd org</span></td></tr>
         </tbody>
       </table>
@@ -206,8 +206,9 @@
     <p class="lede">Found while fixing money. None posts a wrong amount today; each is small.</p>
     <div class="items">
       <div class="item"><div class="id">DEF-575</div><div>Resolving a discrepancy into a closed month shows a raw error page instead of a sentence.</div></div>
-      <div class="item s"><div class="id">DEF-581</div><div><b>A supplier bill dated in a closed month can't be posted from the bills screen</b>; the closed-month override reaches expense approval but not bill verification yet.</div></div>
-      <div class="item"><div class="id">DEF-582, 583</div><div>A successful supplier return shows no message; the remittance banner shows the old count until a reload.</div></div>
+      <div class="item s"><div class="id">DEF-581 (T-376)</div><div><b>A supplier bill dated in a closed month can't be posted from the bills screen</b>; the closed-month override reaches expense approval but not bill verification yet.</div></div>
+      <div class="item"><div class="id">DEF-582, 583, 592</div><div>A successful supplier return, and a customer return, show no message; the remittance banner shows the old count until a reload.</div></div>
+      <div class="item s"><div class="id">DEF-591</div><div><b>v2&rsquo;s POS pulls send v2&rsquo;s own store id</b>, which POS does not recognise, so the usage pull plans empty days and the sales-pull screen finds nothing. Fixed by T-375 S1 (store link).</div></div>
       <div class="item y"><div class="id">DEF-585</div><div><b>Production has no fiscal period before October 2026</b>; cutover postings dated earlier would be refused. The timer is armed and seeded Oct 2026&ndash;Sep 2027.</div></div>
       <div class="item"><div class="id">DEF-476</div><div>Typed amounts and reasons travel in page addresses. <span class="pill y">you said fix before launch</span></div></div>
       <div class="item"><div class="id">DEF-373</div><div>The deploy gate checks that keys exist, not that they are the production keys.</div></div>
@@ -221,6 +222,7 @@
     <h2>Still to build after the money push</h2>
     <p class="lede">None of these posts to the ledger; v1 covers each until it ships.</p>
     <div class="items">
+      <div class="item"><div class="id">ADR-015</div><div><b>POS &amp; CUSTOMER on the shared backend:</b> copied POS after 1 Jan 2027. Planned phase.</div></div>
       <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
       <div class="item"><div class="id">T-338</div><div>Store readiness warns when a store has no manager.</div></div>
       <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
@@ -243,7 +245,9 @@
       <div class="item y"><div class="id">HR data</div><div><b>SSS, PhilHealth, Pag-IBIG and TIN for 126 staff.</b> None on file. <span class="pill y">due 31 Oct</span></div></div>
       <div class="item y"><div class="id">Question</div><div><b>On an edit screen, does a blank box keep the stored figure?</b> T-371 builds the recommended answer (blank keeps it; type 0 to zero it) unless you say otherwise.</div></div>
       <div class="item y"><div class="id">Question</div><div><b>Who may void a day&rsquo;s POS usage pull?</b> Built with the recommended answer: the managers and admins who can already void a usage record. Re-checked against your answer.</div></div>
-      <div class="item y"><div class="id">DEF-054</div><div><b>OK for a second read-only v1 copy (S0b), and answers to QA1&ndash;QA3</b> (t367-qa1-other-meaning, t367-qa2-two-singletons, t367-qa3-manual-platform-fees). Then you approve T-367 Amendment A1.</div></div>
+      <div class="item y"><div class="id">DEF-054 P5</div><div><b>Production check before the next push:</b> posted expense payments using &lsquo;other&rsquo; or &lsquo;ar_collection&rsquo; must be 0 (docs/ops). A push deploys 0182.</div></div>
+      <div class="item y"><div class="id">T-375</div><div><b>Questions t375-q1 to t375-q4</b> on the POS v1 day feed.</div></div>
+      <div class="item y"><div class="id">Question</div><div><b>firebase-exit-scope</b>: how much of Firebase leaves with the shared backend.</div></div>
     </div>
   </section>
 
@@ -263,7 +267,7 @@
 
   <section>
     <h2>Closed in the money push</h2>
-    <p class="lede">Since your 30 September instruction: 34 open at the census, more found while fixing, 1 left.</p>
+    <p class="lede">Since your 30 September instruction: 34 open at the census, more found while fixing, none left.</p>
     <div class="tblwrap">
       <table>
         <thead><tr><th>Task</th><th>What it fixed</th><th>Defects closed</th></tr></thead>
@@ -271,7 +275,7 @@
           <tr><td class="n">T-364</td><td>Forms check permission before reading anything</td><td class="n">496, 497</td></tr>
           <tr><td class="n">T-365</td><td>Supplier bank changes audited; the form no longer wipes hidden fields</td><td class="n">498, 506</td></tr>
           <tr><td class="n">T-366</td><td>Shortages post to the person&rsquo;s receivable; handover caps under a lock; negative floats flagged</td><td class="n">105, 374, 386, 398, 399, 406, 529, 534, 535</td></tr>
-          <tr><td class="n">T-367 S1&ndash;S4</td><td>One write-off per entry; voided bills unsettleable; invoice totals to the centavo; due dates from terms</td><td class="n">201, 396, 420, 499, 500, 508</td></tr>
+          <tr><td class="n">T-367</td><td>One write-off per entry; voided bills unsettleable; invoice totals to the centavo; due dates from terms; &lsquo;other&rsquo; and &lsquo;ar_collection&rsquo; retired as expense payment methods (0182)</td><td class="n">054, 201, 396, 420, 499, 500, 508</td></tr>
           <tr><td class="n">T-368</td><td>No close over a missing month; failed runs stay flagged; asset terms correctable</td><td class="n">424, 426, 433, 434, 435, 436, 441, 442</td></tr>
           <tr><td class="n">T-369 S0&ndash;S9</td><td>Money functions get screens; cross-store money with inter-store balances and settlement</td><td class="n">302, 479, 550, 551, 556, 557, 558, 560, 573</td></tr>
           <tr><td class="n">T-370</td><td>Owner drawing cap; 15th/30th paydays; two pay days for twice-monthly stores</td><td class="n">108, 409, 494, 516, 541, 553</td></tr>

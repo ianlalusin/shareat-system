@@ -553,3 +553,24 @@ matrix already has re-run under the new precedence. That is a planner-level bibl
 task. ⛔ **Do not build it as a special case inside `reconcilePositionGrants`** — a revoke of a
 matrix-held capability is unrepresentable in `person_grants` (the matrix column is `true` whatever
 the rows say), so the only honest implementation is the deny axis or nothing.
+
+---
+
+## Added 2026-10-04 — supplier vouchers need a home (T-367 Amendment A1, bible row 277)
+
+### Supplier vouchers, credits and rebates received in lieu of cash
+
+**What the business does:** a supplier sometimes settles part of a bill with a voucher, a store credit or a
+rebate instead of cash. v1 recorded these as the `other` payment method with an `otherType`
+(`rebate`, `voucher`, `loyalty_points`, `gift_certificate`, `store_credit`). v1's live data holds exactly **two** staff
+rows of this kind (one ₱220 rebate, one ₱266 store credit, none after 2026-09-11); the other 322 `other` rows were
+system copies of depreciation, amortisation and disposal.
+
+**Why it is a gap:** row 277 retires `other` in v2 (migration 0182), and no v2 method or account replaces it. The COA
+has no voucher asset account. Ian, 2026-10-04: supplier vouchers *"should have a home now"* — so this is owned, not
+deferred indefinitely.
+
+**What it needs, unscoped:** a named method (or an AP credit-note path: a supplier rebate already reduces the payable,
+row 260) plus an asset account for a voucher held and its later use. Count from v2 production before sizing it: the
+T-367 S5 P5 count of any `other` rows entered since launch is the utilisation number. **Owner:** a new task spec
+(Opus), after T-367 S5 lands. Not a launch blocker.
