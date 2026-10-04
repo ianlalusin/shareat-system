@@ -36,21 +36,30 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
   const qty = str(fd, 'quantity');
   const reason = str(fd, 'reason');
 
-  const result = await withOrgPrincipal(actor.orgId, (tx) =>
-    recordReturn(tx, {
-      storeId,
-      supplierId,
-      deliveryId,
-      returnedOn: toBusinessDate(),
-      reason,
-      // T-371 S3: the raw figure goes to the domain, which parses it after `authorize()` (R5).
-      lines: [{ itemId, itemKind, locationId, quantity: qty, deliveryLineId }],
-      actor,
-    }),
-  );
-  if (!result.ok) throw new Error(result.reason);
+  // T-376 S2: like voidReturnAction, a refusal ({ok:false} or a thrown RefusalError) reaches the person as a
+  // `?error=` banner, never a thrown error (a production build shows that as a digest); success says so.
+  const keep: Record<string, string> = storeId ? { store: storeId } : {};
+  let result: Awaited<ReturnType<typeof recordReturn>>;
+  try {
+    result = await withOrgPrincipal(actor.orgId, (tx) =>
+      recordReturn(tx, {
+        storeId,
+        supplierId,
+        deliveryId,
+        returnedOn: toBusinessDate(),
+        reason,
+        // T-371 S3: the raw figure goes to the domain, which parses it after `authorize()` (R5).
+        lines: [{ itemId, itemKind, locationId, quantity: qty, deliveryLineId }],
+        actor,
+      }),
+    );
+  } catch (err) {
+    back({ ...keep, error: errorMessage(err) });
+  }
+  if (!result!.ok) back({ ...keep, error: errorMessage(new Error(result!.reason ?? 'The return could not be recorded.')) });
 
   revalidatePath('/inventory/returns');
+  back({ ...keep, ok: 'Return recorded. The stock is taken out, and the supplier owes us the credit.' });
 }
 
 export async function voidReturnAction(fd: FormData): Promise<void> {
@@ -82,17 +91,24 @@ export async function refundCreditAction(fd: FormData): Promise<void> {
   const moneyAccountId = str(fd, 'moneyAccountId');
   const amount = str(fd, 'amount');
 
-  const result = await withOrgPrincipal(actor.orgId, (tx) =>
-    refundSupplierCredit(tx, {
-      storeId,
-      supplierId,
-      moneyAccountId,
-      amount,
-      businessDate: toBusinessDate(),
-      actor,
-    }),
-  );
-  if (!result.ok) throw new Error(result.reason);
+  const keep: Record<string, string> = storeId ? { store: storeId } : {};
+  let result: Awaited<ReturnType<typeof refundSupplierCredit>>;
+  try {
+    result = await withOrgPrincipal(actor.orgId, (tx) =>
+      refundSupplierCredit(tx, {
+        storeId,
+        supplierId,
+        moneyAccountId,
+        amount,
+        businessDate: toBusinessDate(),
+        actor,
+      }),
+    );
+  } catch (err) {
+    back({ ...keep, error: errorMessage(err) });
+  }
+  if (!result!.ok) back({ ...keep, error: errorMessage(new Error(result!.reason ?? 'The refund could not be recorded.')) });
 
   revalidatePath('/inventory/returns');
+  back({ ...keep, ok: "Refund recorded. The supplier's credit is reduced by what they paid back." });
 }

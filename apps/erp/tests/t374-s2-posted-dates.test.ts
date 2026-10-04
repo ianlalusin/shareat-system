@@ -39,9 +39,19 @@ const fd = (o: Record<string, string>) => {
   return f;
 };
 
+/** T-376 S2 (X-4): the two supplier actions now end in a redirect. Swallow ONLY that; rethrow anything else. */
+async function untilRedirect(run: () => Promise<unknown>) {
+  try {
+    await run();
+  } catch (err) {
+    if (err instanceof Error && /^redirect:/.test(err.message)) return;
+    throw err;
+  }
+}
+
 async function runAll() {
-  await supplier.recordReturnAction(fd({ storeId: 's', supplierId: 'x', itemId: 'i', itemKind: 'raw_material', locationId: 'l', quantity: '1', reason: 'r' }));
-  await supplier.refundCreditAction(fd({ storeId: 's', supplierId: 'x', moneyAccountId: 'm', amount: '1.00' }));
+  await untilRedirect(() => supplier.recordReturnAction(fd({ storeId: 's', supplierId: 'x', itemId: 'i', itemKind: 'raw_material', locationId: 'l', quantity: '1', reason: 'r' })));
+  await untilRedirect(() => supplier.refundCreditAction(fd({ storeId: 's', supplierId: 'x', moneyAccountId: 'm', amount: '1.00' })));
   await customer.recordReturnAction(fd({ tradeOrderId: 't', tradeOrderLineId: 'l', quantity: '1', reason: 'r' }));
   await customer.applyCreditAction(fd({ tradeOrderId: 't', moneyAccountId: 'm', amount: '1.00' }));
 }
