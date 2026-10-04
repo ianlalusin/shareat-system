@@ -38,7 +38,9 @@ import { deliveriesRepo, filesRepo, stockLedgerRepo, type Tx } from '@shareat/db
 import type { ShortageReason } from '@shareat/db/schema';
 import { duplicateRisk, type DuplicateWarning } from './duplicate-risk';
 import { receiveDelivery, toBaseUnits, type ReceiveLineInput, type ReceiveResult } from './receive';
+import { compareDecimal, decimal, type Decimal } from '@shareat/core/money';
 import { parseFourDecimalCost } from '../commissary/catalogue';
+import { parseDecimalInput } from '../shared/money-input';
 import { gone, internalFault, refuse } from '../shared/refusal';
 import {
   addQuantity,
@@ -53,6 +55,30 @@ import {
 /** Deliveries recorded in this many days count toward the "same item, same day" and hard-duplicate
  *  warnings — advisory only (§7.4); a delivery older than this simply stops being compared. */
 const DUPLICATE_RISK_WINDOW_DAYS = 30;
+
+/** `delivery_lines.conversion_factor`'s shape — numeric(14,6), packages/db/schema/deliveries.ts. */
+const ZERO_FACTOR = decimal('0', '14,6');
+
+/**
+ * T-371 R6/C3 — parse one line figure into its column's brand, after `authorize()`. Every column this file parses is
+ * NOT NULL with no default (`ordered_quantity`, `conversion_factor`), or is answered at the dock (`received_quantity`),
+ * so a blank is refused in words rather than guessed — never a `'0'` invented here. `parseDecimalInput` writes the
+ * sentence (it names the field, quotes the typed value, and says the places allowed); this re-raises it as a
+ * `RefusalError` so the screen treats it like every other refusal in this file.
+ */
+function parseLineFigure<S extends `${number},${number}`>(
+  raw: string,
+  shape: S,
+  rawLabel: string,
+  humanLabel: string,
+): Decimal<S> {
+  try {
+    return parseDecimalInput(raw, shape, rawLabel, humanLabel, { blank: 'refuse' });
+  } catch (e) {
+    const err = e as Error & { userMessage?: string };
+    throw refuse(err.message, err.userMessage ?? `${humanLabel} — "${raw}" is not a valid figure.`);
+  }
+}
 
 export interface CreateDeliveryLineInput {
   readonly itemId: string;
@@ -133,7 +159,11 @@ export async function createDeliveryDocument(
   // on `parseFourDecimalCost` never changing shape (`tryMoney` elsewhere in this tree is the
   // precedent for a "parser" that returns `null` on failure instead of throwing) — `const cost =
   // parseFourDecimalCost(...)` and using `cost` is self-guarding; a bare statement is not.
-  const validatedUnitCosts: string[] = [];
+  const validatedUnitCosts: Decimal<'14,4'>[] = [];
+  // T-371 — the ordered quantity and conversion factor are CAPTURED as brands too, the same way, and written below
+  // instead of the raw strings (the unit-cost reasoning above applies to them word for word).
+  const validatedQuantities: Quantity[] = [];
+  const validatedFactors: Decimal<'14,6'>[] = [];
   for (const [i, line] of input.lines.entries()) {
     // R4.9 — named by LINE POSITION, never the item id: at this point the line hasn't been proved
     // to name a real item yet, so a position is the only human key available.
@@ -141,13 +171,27 @@ export async function createDeliveryDocument(
     // drops empty rows; the post-filter array index (`i + 1`) is only a fallback for callers that
     // never numbered their rows (existing callers, tests).
     const n = line.lineNo ?? i + 1;
-    if (!isPositiveQuantity(quantity(line.orderedQuantity))) {
+    // T-371 — parsed into the column's brand first: a malformed figure ('abc', 'NaN') gets a sentence that quotes it,
+    // where it used to throw a raw TypeError (the quantity) or read as "not greater than zero" (the factor).
+    const ordered = parseLineFigure(
+      line.orderedQuantity,
+      '14,3',
+      `createDeliveryDocument: item ${line.itemId}'s ordered quantity`,
+      `Line ${n}: the ordered quantity`,
+    );
+    if (!isPositiveQuantity(ordered)) {
       throw refuse(
         `createDeliveryDocument: item ${line.itemId}'s ordered quantity must be greater than zero`,
         `Line ${n}: the ordered quantity must be greater than zero.`,
       );
     }
-    if (!(Number.isFinite(Number(line.conversionFactor)) && Number(line.conversionFactor) > 0)) {
+    const factor = parseLineFigure(
+      line.conversionFactor,
+      '14,6',
+      `createDeliveryDocument: item ${line.itemId}'s conversion factor`,
+      `Line ${n}: the conversion factor`,
+    );
+    if (compareDecimal(factor, ZERO_FACTOR) <= 0) {
       throw refuse(
         `createDeliveryDocument: item ${line.itemId}'s conversion factor must be greater than zero`,
         `Line ${n}: the conversion factor must be greater than zero.`,
@@ -164,6 +208,8 @@ export async function createDeliveryDocument(
     validatedUnitCosts.push(
       parseFourDecimalCost(line.unitCost, `createDeliveryDocument: item ${line.itemId}'s unit cost`, `Line ${n}: the unit cost`),
     );
+    validatedQuantities.push(ordered);
+    validatedFactors.push(factor);
   }
 
   // ⭐ Read what already exists BEFORE writing this one, so the new draft never gets compared
@@ -175,8 +221,9 @@ export async function createDeliveryDocument(
     onHandByItem[row.itemId] = addQuantity(onHandByItem[row.itemId] ?? ZERO_QUANTITY, quantity(row.quantity));
   }
   const incomingByItem: Record<string, Quantity> = {};
-  for (const line of input.lines) {
-    const base = toBaseUnits(quantity(line.orderedQuantity), line.conversionFactor);
+  for (const [i, line] of input.lines.entries()) {
+    // ⛔ `!` — same index invariant as `validatedUnitCosts[i]!` below (one push per line, same order, no filter).
+    const base = toBaseUnits(validatedQuantities[i]!, validatedFactors[i]!);
     incomingByItem[line.itemId] = addQuantity(incomingByItem[line.itemId] ?? ZERO_QUANTITY, base);
   }
 
@@ -200,9 +247,9 @@ export async function createDeliveryDocument(
     input.lines.map((line, i) => ({
       lineNo: String(i + 1),
       itemId: line.itemId,
-      orderedQuantity: line.orderedQuantity,
+      orderedQuantity: validatedQuantities[i]!,
       purchaseUnit: line.purchaseUnit,
-      conversionFactor: line.conversionFactor,
+      conversionFactor: validatedFactors[i]!,
       // T-328 — the validated value captured above, not `line.unitCost` (the raw, un-normalised
       // form `parseFourDecimalCost` already trimmed and proved valid).
       // ⛔ `!` is safe because `validatedUnitCosts` was built by iterating this SAME `input.lines`
@@ -281,7 +328,7 @@ export async function receiveDeliveryDocument(
   const receiveLines: ReceiveLineInput[] = [];
   const lineWrites: {
     lineId: string;
-    receivedQuantity: string;
+    receivedQuantity: Quantity;
     shortageReason: ShortageReason | null;
     overReceiptAllowed: boolean;
     locationId: string | null;
@@ -289,7 +336,16 @@ export async function receiveDeliveryDocument(
 
   for (const line of delivery.lines) {
     const draft = draftByLine.get(line.id)!;
-    const receivedQty = quantity(draft.receivedQuantity || '0');
+    // T-371 — parsed into the column's brand, after `authorize()` above: 'abc' or 'NaN' is refused in words naming the
+    // line, where it used to throw a raw TypeError. ⚠️ The blank-means-nothing-arrived rule (this input's own contract,
+    // documented on `receivedQuantity` above, and the screen sends '0' for an empty box itself) is kept as it was.
+    const receivedQty = parseLineFigure(
+      draft.receivedQuantity || '0',
+      '14,3',
+      `receiveDeliveryDocument: line ${line.lineNo}'s received quantity`,
+      `Line ${line.lineNo}: the received quantity`,
+    );
+    // R4 — a stored value, re-minted (never cast); `0155` keeps it finite, so this never refuses.
     const ordered = quantity(line.orderedQuantity);
     const cmp = compareQuantity(receivedQty, ordered);
 
@@ -312,7 +368,7 @@ export async function receiveDeliveryDocument(
 
     lineWrites.push({
       lineId: line.id,
-      receivedQuantity: draft.receivedQuantity || '0',
+      receivedQuantity: receivedQty,
       shortageReason,
       // ⚠️ Only a line that IS over-received carries the approval flag. The screen sends one
       // document-wide checkbox; stamping it on an in-full line would record a manager-only

@@ -21,10 +21,10 @@ import {
 import type { BaseUnit, ItemKind, PurchaseUnit } from '@shareat/db/schema';
 import { computeBranchPrice, type BranchPrice } from './branch-price';
 import { authorize, type Actor } from '@shareat/auth';
-import { toCentavos } from '@shareat/core/money';
-import { parseMoneyInput } from '../shared/money-input';
+import { decimal, toCentavos, type Decimal } from '@shareat/core/money';
+import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { parseQuantityInput } from '../shared/quantity-input';
-import { toThousandths, type Quantity } from '../stock/quantity';
+import { isPositiveQuantity, toThousandths, type Quantity } from '../stock/quantity';
 import { parseFourDecimalCost } from '../commissary/catalogue';
 import { refuse } from '../shared/refusal';
 
@@ -136,13 +136,43 @@ export interface InvoiceLineDraft {
  * ÷10⁵ — no float anywhere (bible §2.5). Half-up is on the absolute value (away from zero), the same
  * convention as `multiply` in `@shareat/core/money`.
  */
-function lineCentavos(quantity: string, unitPrice: string): bigint {
-  const [whole = '', frac = ''] = unitPrice.split('.');
-  const tenThousandths = BigInt(whole || '0') * 10000n + BigInt(frac.padEnd(4, '0'));
-  const product = toThousandths(quantity as Quantity) * tenThousandths;
+function lineCentavos(quantity: Quantity, unitPrice: Decimal<'14,4'>): bigint {
+  const negative = unitPrice.startsWith('-');
+  const [whole = '', frac = ''] = (negative ? unitPrice.slice(1) : unitPrice).split('.');
+  const abs4 = BigInt(whole || '0') * 10000n + BigInt(frac.padEnd(4, '0'));
+  const tenThousandths = negative ? -abs4 : abs4;
+  // T-371 G3: both parts arrive minted (`parseQuantityInput`, `parseFourDecimalCost`) — no brand is asserted here.
+  const product = toThousandths(quantity) * tenThousandths;
   const abs = product < 0n ? -product : product;
   const rounded = (abs + 50000n) / 100000n;
   return product < 0n ? -rounded : rounded;
+}
+
+/**
+ * T-371 (DEF-382) — what `Number(raw)` made of a conversion factor, decided EXACTLY: is it above zero, and is it 1 to
+ * within 10⁻⁹ (the old `Math.abs(factor - 1) > 1e-9`). Text in the decimal-literal shape `Number()` reads (optional sign,
+ * digits with an optional point, an optional exponent) is read as `digits × 10^exp` in bigint; anything else — blank,
+ * `1,5`, `abc` — is what `Number()` made `NaN` or `0`, so neither positive nor one. The format check that follows still
+ * refuses every non-plain shape, so this widens nothing that is saved.
+ */
+function factorValue(text: string): { positive: boolean; one: boolean } {
+  const m = /^([+-]?)(\d+\.?\d*|\.\d+)(?:e([+-]?\d+))?$/i.exec(text.trim());
+  if (!m) return { positive: false, one: false };
+  const [int = '', frac = ''] = (m[2] ?? '').split('.');
+  const digitText = `${int}${frac}`.replace(/^0+/, '');
+  if (digitText === '') return { positive: false, one: false }; // zero, whatever its exponent
+  if (m[1] === '-') return { positive: false, one: false };
+  // value = digits × 10^exp
+  const digits = BigInt(digitText);
+  const exp = BigInt(m[3] ?? '0') - BigInt(frac.length);
+  // value ∈ [10^(len−1+exp), 10^(len+exp)): far from 1 at either end, decided before any big power is built.
+  const magnitude = BigInt(digitText.length) + exp;
+  if (magnitude > 2n || magnitude < -1n) return { positive: true, one: false };
+  const k = exp < -9n ? -exp : 9n; // a scale at which both the value and the 10⁻⁹ tolerance are integers
+  const scaled = digits * 10n ** (exp + k);
+  const unity = 10n ** k;
+  const diff = scaled > unity ? scaled - unity : unity - scaled;
+  return { positive: true, one: diff <= 10n ** (k - 9n) };
 }
 
 /** ₱ text for a centavo count that may sit outside `numeric(14,2)` — a mismatch sentence must still be
@@ -242,16 +272,19 @@ export async function validateInvoiceLines(
       `validateInvoiceLines: line ${i + 1}'s quantity`,
       `Line ${i + 1}'s quantity`,
     );
-    const qty = Number(quantityText);
     const price = Number(l.unitPrice);
-    const factor = Number(l.conversionFactor);
+    // T-371 (DEF-382) — the factor's value is read EXACTLY (`factorValue`, scaled bigint), never through `Number()`, so no
+    // `NaN` can slip a comparison: text that is no number at all is "not above zero", exactly as `!(NaN > 0)` made it.
+    const factor = factorValue(l.conversionFactor);
 
-    if (!(qty > 0)) throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) needs a quantity above zero.`);
-    if (!(factor > 0)) throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) needs a conversion factor above zero.`);
+    if (!isPositiveQuantity(quantityText)) {
+      throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) needs a quantity above zero.`);
+    }
+    if (!factor.positive) throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) needs a conversion factor above zero.`);
     // S5.5w Amendment A1 item 2 — moved before the format/magnitude checks below: a same-unit line
     // demands factor === 1 regardless of what shape the typed value takes, so a malformed factor on
     // a same-unit line gets the "must be 1" sentence, not the six-decimal/too-large one.
-    if (l.purchaseUnit === item.baseUnit && Math.abs(factor - 1) > 1e-9) {
+    if (l.purchaseUnit === item.baseUnit && !factor.one) {
       // ⚠️ S5.5w Amendment A1 (orchestrator) — now fronts the format/magnitude checks below, so a
       // malformed factor on a same-unit line reaches this branch too; it must be presentable.
       // userMessage is byte-identical to the raw (minus the function-name prefix) — the sentence a
@@ -282,9 +315,17 @@ export async function validateInvoiceLines(
         `Line ${i + 1} (${item.name}) — "${raw}" is not a valid conversion factor. Use a number above zero with up to six decimal places.`,
       );
     }
-    if (factor >= 100000000) {
+    // T-371 R2 — minted at `conversion_factor`'s (14,6) shape, the column it is written to. The format check above has
+    // already passed, so `decimal()` refuses only a value of 10^8 or more (RangeError) — the same boundary as the old
+    // `factor >= 100000000`, decided exactly. ".5" and "1." (accepted above) are canonicalised first.
+    const [factorWhole = '', factorFrac = ''] = raw.split('.');
+    const factorText = `${factorWhole || '0'}${factorFrac ? `.${factorFrac}` : ''}`;
+    let conversionFactor: Decimal<'14,6'>;
+    try {
+      conversionFactor = decimal(factorText, '14,6');
+    } catch {
       throw refuse(
-        `validateInvoiceLines: line ${i + 1} conversion factor ${JSON.stringify(raw)} is too large: ${factor}`,
+        `validateInvoiceLines: line ${i + 1} conversion factor ${JSON.stringify(raw)} is too large: ${factorText.replace(/^0+(?=\d)/, '')}`,
         `Line ${i + 1} (${item.name}) — "${raw}" is too large for a conversion factor. Use a number below 100000000.`,
       );
     }
@@ -336,8 +377,8 @@ export async function validateInvoiceLines(
       quantity: quantityText,
       purchaseUnit: l.purchaseUnit,
       // S5.5w Amendment A1 item 3 — store the TRIMMED factor, not the raw box text (`' 2 '` saves
-      // `2.000000`, not a value with stray whitespace reaching the column).
-      conversionFactor: raw,
+      // `2.000000`, not a value with stray whitespace reaching the column). T-371: now the (14,6)-minted figure.
+      conversionFactor,
       // T-351 / DEF-480 — the PARSED, trimmed string (`parseFourDecimalCost`'s return), not the raw
       // box text: `quantity × price` downstream (`ap/actions.ts`) then uses the exact string stored.
       unitPrice,
@@ -665,6 +706,13 @@ export async function clearStoreSellability(
 export type { BranchPriceRule, BranchPrice } from './branch-price';
 export { computeBranchPrice };
 
+/** The figure each pricing mode cannot do without, in the words a screen shows. */
+const MODE_FIGURE = {
+  fixed: 'The fixed price',
+  fixed_markup: 'The markup amount',
+  percent_markup: 'The markup percent',
+} as const;
+
 /** Say how an item's branch price is worked out. */
 export async function setItemPricing(
   tx: Tx | null,
@@ -683,25 +731,50 @@ export async function setItemPricing(
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw new Error(`setItemPricing: item ${input.itemId} does not exist.`);
 
+    // ⭐ T-371 (R5, R6) — every figure is parsed AFTER `authorize()`, at its `item_pricing` column's shape. All four
+    // columns are NULLABLE with no default, so a blank is stored as null — never a guessed '0'; a blank in the mode's
+    // own figure then meets the "needs its own number" refusal below instead of reaching the column as ''.
+    const fixedAmount = parseDecimalInput(input.fixedAmount, '14,2', 'setItemPricing: the fixed amount', 'The fixed price', {
+      blank: 'null',
+    });
+    const markupPercent = parseDecimalInput(input.markupPercent, '8,4', 'setItemPricing: the markup percent', 'The markup percent', {
+      blank: 'null',
+    });
+    const fixedMarkupAmount = parseDecimalInput(
+      input.fixedMarkupAmount,
+      '14,2',
+      'setItemPricing: the fixed markup amount',
+      'The markup amount',
+      { blank: 'null' },
+    );
+    const marginAlertThresholdPct = parseDecimalInput(
+      input.marginAlertThresholdPct,
+      '8,4',
+      'setItemPricing: the margin alert threshold',
+      'The margin alert threshold',
+      { blank: 'null' },
+    );
+
     const need = {
-      fixed: input.fixedAmount,
-      fixed_markup: input.fixedMarkupAmount,
-      percent_markup: input.markupPercent,
+      fixed: fixedAmount,
+      fixed_markup: fixedMarkupAmount,
+      percent_markup: markupPercent,
     }[input.pricingMode];
     if (need == null) {
-      throw new Error(
+      throw refuse(
         `setItemPricing: ${input.pricingMode} needs its own number - a mode without one prices ` +
           'at zero, silently.',
+        `${MODE_FIGURE[input.pricingMode]} — can't be left blank for this pricing mode. Enter a number.`,
       );
     }
     await itemsRepo.upsertItemPricing(trx, {
       orgId: actor.orgId,
       itemId: input.itemId,
       pricingMode: input.pricingMode,
-      fixedAmount: input.fixedAmount ?? null,
-      markupPercent: input.markupPercent ?? null,
-      fixedMarkupAmount: input.fixedMarkupAmount ?? null,
-      marginAlertThresholdPct: input.marginAlertThresholdPct ?? null,
+      fixedAmount,
+      markupPercent,
+      fixedMarkupAmount,
+      marginAlertThresholdPct,
       setBy: actor.personId,
     });
   };

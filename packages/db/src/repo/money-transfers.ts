@@ -12,6 +12,8 @@ import { stores } from '../../schema/stores';
 import { moneyTransfers, type MoneyTransferStatus } from '../../schema/money-transfers';
 import { refuse } from '../refusal';
 import { recordGone } from './record-gone';
+import type { Money } from '@shareat/core/money';
+import type { SafeInsert } from './numeric-input';
 
 export interface MoneyTransferRow {
   id: string;
@@ -65,22 +67,20 @@ const COLUMNS = {
   createdAt: moneyTransfers.createdAt,
 } as const;
 
-export interface InsertMoneyTransferInput {
-  orgId: string;
-  storeId: string;
-  fromMoneyAccountId: string;
-  toMoneyAccountId: string;
-  amountOut: string;
-  amountIn: string;
+/** T-371 C2 — `amountOut` / `amountIn` are `Money` brands ((14,2)), minted by `decimal()`. Both are NOT NULL, no default. */
+export type InsertMoneyTransferInput = Pick<
+  SafeInsert<typeof moneyTransfers>,
+  'orgId' | 'storeId' | 'fromMoneyAccountId' | 'toMoneyAccountId' | 'transferDate' | 'createdBy'
+> & {
+  amountOut: Money;
+  amountIn: Money;
   feeAccountCode: string | null;
-  transferDate: string;
   reference: string | null;
   notes: string | null;
   journalEntryId: string;
-  createdBy: string;
   /** T-369 S9: a settlement's row id IS its `settlementId`, so the primary key backstops a racing double click. */
   id?: string;
-}
+};
 
 export async function insertMoneyTransfer(
   tx: Tx,

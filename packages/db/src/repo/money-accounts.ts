@@ -14,7 +14,9 @@
  * deriving.**
  */
 import { and, asc, eq, isNotNull, ne, sql } from 'drizzle-orm';
+import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert } from './numeric-input';
 import { recordGone } from './record-gone';
 import { accounts } from '../../schema/accounts';
 import { stores } from '../../schema/stores';
@@ -76,14 +78,14 @@ export interface InsertMoneyAccountInput {
   custodian: Custodian;
   notes?: string | null;
   /** ⭐ T-153 — set to make this a till float pot. See {@link MoneyAccountRow.floatTarget}. */
-  floatTarget?: string | null;
+  floatTarget?: Money | null;
 }
 
 export async function insertMoneyAccount(
   tx: Tx,
   input: InsertMoneyAccountInput,
 ): Promise<{ id: string }> {
-  const [row] = await tx.insert(moneyAccounts).values(input).returning({ id: moneyAccounts.id });
+  const [row] = await tx.insert(moneyAccounts).values(input satisfies SafeInsert<typeof moneyAccounts>).returning({ id: moneyAccounts.id });
   return row!;
 }
 
@@ -184,7 +186,7 @@ export async function setFloatTarget(
   tx: Tx,
   orgId: string,
   id: string,
-  floatTarget: string | null,
+  floatTarget: Money | null,
 ): Promise<void> {
   const updated = await tx
     .update(moneyAccounts)
@@ -415,7 +417,7 @@ export async function renameMoneyAccount(
   tx: Tx,
   orgId: string,
   id: string,
-  input: { name: string; notes: string | null; overdraftLimit?: string },
+  input: { name: string; notes: string | null; overdraftLimit?: Money },
 ): Promise<void> {
   const updated = await tx
     .update(moneyAccounts)

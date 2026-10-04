@@ -26,6 +26,7 @@ import {
   type FloatOption,
   type SourceOption,
 } from '@shareat/domain';
+import { compare, money, ZERO } from '@shareat/core/money';
 import { withOrgPrincipal } from '../../app/expenses/lib';
 
 export interface MoneyLinesData {
@@ -79,7 +80,7 @@ async function openFloatsFor(tx: Tx, orgId: string, storeId: string): Promise<Fl
     }))
     // ⚠️ v1's rule, kept (`picker-options.ts:22`) — a drained float is not a source of money. Read
     // from the ledger here rather than from a stored `remainingAmount` column v2 does not have.
-    .filter((f) => Number(f.outstanding) > 0)
+    .filter((f) => compare(money(f.outstanding), ZERO) > 0)
     .sort((a, b) => a.holderName.localeCompare(b.holderName));
 }
 

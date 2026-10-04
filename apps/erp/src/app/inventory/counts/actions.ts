@@ -22,7 +22,6 @@ import {
   cancelCountSession,
   commitCount,
   openCountSession,
-  quantity,
   recordCount,
 } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
@@ -99,7 +98,8 @@ export async function recordCountAction(fd: FormData): Promise<void> {
   let errorText: string | null = null;
   try {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      recordCount(tx, actor, { sessionId, itemId, locationId, countedQuantity: quantity(countedQuantity) }),
+      // T-371 S3: the raw figure goes to the domain, which parses it after `authorize()` (R5) into a presentable refusal.
+      recordCount(tx, actor, { sessionId, itemId, locationId, countedQuantity }),
     );
     if (!result.ok) errorText = result.reason;
   } catch (err) {

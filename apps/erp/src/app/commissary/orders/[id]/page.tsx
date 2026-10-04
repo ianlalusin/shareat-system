@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SHORTAGE_REASONS } from '@shareat/db/schema';
+import { compareQuantity, quantity, ZERO_QUANTITY } from '@shareat/domain';
 import { requireSession } from '../../../../lib/session';
 import {
   acceptOrderAction,
@@ -585,7 +586,7 @@ function LineCard({
         </form>
       )}
 
-      {receiving && !declined && packed !== null && Number(packed) > 0 && !l.isLedgerOnly && (
+      {receiving && !declined && packed !== null && compareQuantity(quantity(packed), ZERO_QUANTITY) > 0 && !l.isLedgerOnly && (
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <input type="hidden" name="lineId" value={l.id} />
           <label className={LABEL}>

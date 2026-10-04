@@ -13,8 +13,8 @@
  * already does this correctly. This file's job is the two things nothing else computes: the
  * pro-rated 13th month, and the clearance gate.
  */
-import { ZERO, compare, money, type Money } from '@shareat/core/money';
-import { parseMoneyInput } from '../shared/money-input';
+import { ZERO, add, compare, divideMoney, money, subtract, type Money } from '@shareat/core/money';
+import { parseDecimalInput } from '../shared/money-input';
 import { employmentRepo, moneyAccountsRepo, separationsRepo, thirteenthMonthRepo, transaction, type Tx } from '@shareat/db';
 import type { SeparationCause } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
@@ -60,7 +60,7 @@ export async function previewSeparation(
   const basicPayEarned = money(
     await thirteenthMonthRepo.basicPayEarnedInYear(tx, actor.orgId, input.employmentId, year, input.separationDate),
   );
-  const gross = money((Number(basicPayEarned) / 12).toFixed(2));
+  const gross = divideMoney(basicPayEarned, 12);
   const outstanding = await outstandingAdvance(tx, actor.orgId, employment.personId);
 
   return {
@@ -128,17 +128,24 @@ export async function postSeparation(
       separationDate: input.separationDate,
     });
 
-    const separationPay = parseMoneyInput(
-      input.separationPayAmount || '0',
+    // T-371 R6 — `separation_pay_amount` is NOT NULL DEFAULT '0', so a blank is OMITTED rather than refused: the
+    // column's own default (zero) is what applies, and the same zero is what the arithmetic and the posting use. A typed
+    // value is parsed exactly as before (same sentences); nothing guesses a figure out of a malformed one.
+    const separationPayTyped = parseDecimalInput(
+      input.separationPayAmount,
+      '14,2',
       'postSeparation: the separation pay',
       'The separation pay',
+      { blank: 'omit' },
     );
+    // R13: ZERO is arithmetic only; the writer is given `separationPayTyped`, so a blank is omitted (column DEFAULT '0').
+    const separationPay: Money = separationPayTyped ?? ZERO;
     if (compare(separationPay, ZERO) < 0) {
       throw new Error('postSeparation: separation pay cannot be negative.');
     }
-    const grossTotal = money((Number(preview.thirteenthMonthGross) + Number(separationPay)).toFixed(2));
+    const grossTotal = add(preview.thirteenthMonthGross, separationPay);
     const advanceRecovered = advanceToRecover(grossTotal, preview.outstandingAdvance);
-    const netPay = money((Number(grossTotal) - Number(advanceRecovered)).toFixed(2));
+    const netPay = subtract(grossTotal, advanceRecovered);
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
     if (!account) throw new Error('postSeparation: that money account does not exist.');
@@ -155,11 +162,11 @@ export async function postSeparation(
         personId: employment.personId,
         separationDate: input.separationDate,
         cause: input.cause,
-        thirteenthMonthBasicPayEarned: preview.thirteenthMonthBasicPayEarned.toString(),
-        thirteenthMonthGross: preview.thirteenthMonthGross.toString(),
-        separationPayAmount: separationPay.toString(),
-        advanceRecovered: advanceRecovered.toString(),
-        netPay: netPay.toString(),
+        thirteenthMonthBasicPayEarned: preview.thirteenthMonthBasicPayEarned,
+        thirteenthMonthGross: preview.thirteenthMonthGross,
+        separationPayAmount: separationPayTyped,
+        advanceRecovered,
+        netPay,
         moneyAccountId: input.moneyAccountId,
         clearanceConfirmedBy: input.clearanceConfirmedBy,
         clearanceNotes: input.clearanceNotes ?? null,
@@ -170,24 +177,24 @@ export async function postSeparation(
 
     const lines = [
       ...(compare(preview.thirteenthMonthGross, ZERO) > 0
-        ? [{ accountCode: THIRTEENTH_MONTH_ACCOUNT, storeId: input.storeId, debit: preview.thirteenthMonthGross.toString() }]
+        ? [{ accountCode: THIRTEENTH_MONTH_ACCOUNT, storeId: input.storeId, debit: preview.thirteenthMonthGross }]
         : []),
       ...(compare(separationPay, ZERO) > 0
-        ? [{ accountCode: SEPARATION_PAY_ACCOUNT, storeId: input.storeId, debit: separationPay.toString() }]
+        ? [{ accountCode: SEPARATION_PAY_ACCOUNT, storeId: input.storeId, debit: separationPay }]
         : []),
       ...(compare(advanceRecovered, ZERO) > 0
         ? [
             {
               accountCode: PAYROLL_ADVANCE_ACCOUNT,
               storeId: input.storeId,
-              credit: advanceRecovered.toString(),
+              credit: advanceRecovered,
               partyType: 'employee',
               partyId: employment.personId,
             },
           ]
         : []),
       ...(compare(netPay, ZERO) > 0
-        ? [{ accountCode: account.glAccountCode, storeId: input.storeId, credit: netPay.toString() }]
+        ? [{ accountCode: account.glAccountCode, storeId: input.storeId, credit: netPay }]
         : []),
     ];
 
@@ -205,7 +212,7 @@ export async function postSeparation(
       await separationsRepo.setSeparationEntry(trx, separationId, posted.entryId);
     }
 
-    return { id: separationId, netPay: netPay.toString() };
+    return { id: separationId, netPay: netPay };
   };
   if (tx) return run(tx);
   return transaction(run);

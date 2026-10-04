@@ -10,6 +10,15 @@ export const metadata = { title: 'Item — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 /** ₱ per base unit, to 2dp for reading. The stored figure keeps 4 — a per-gram price needs them. */
+/**
+ * T-371 — a month's bar, as a share of the dearest price seen. Display only. No relational test on a figure read from a
+ * string: a ratio that is not finite (a zero peak, or a price that does not read as a number) simply draws no bar.
+ */
+function barWidth(avgPrice: string, peak: number): string {
+  const ratio = Number(avgPrice) / peak;
+  return Number.isFinite(ratio) ? `${ratio * 100}%` : '0%';
+}
+
 function per(value: string): string {
   return peso(Number(value).toFixed(2));
 }
@@ -226,7 +235,7 @@ export default async function ItemDetailPage({
                   <div className="h-5 flex-1 overflow-hidden rounded bg-neutral-100 dark:bg-neutral-900">
                     <div
                       className="h-full rounded bg-neutral-800 dark:bg-neutral-200"
-                      style={{ width: peak > 0 ? `${(Number(m.avgPrice) / peak) * 100}%` : '0%' }}
+                      style={{ width: barWidth(m.avgPrice, peak) }}
                     />
                   </div>
                   <span className="w-28 shrink-0 text-right font-mono tabular-nums">

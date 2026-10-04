@@ -12,6 +12,7 @@ import type { Tx } from '../client';
 import { employments } from '../../schema/employment';
 import { persons } from '../../schema/persons';
 import { separations, type SeparationCause, type SeparationStatus } from '../../schema/separations';
+import type { Money } from '@shareat/core/money';
 
 export interface SeparationRow {
   id: string;
@@ -51,22 +52,38 @@ export async function insertPostedSeparation(
     personId: string;
     separationDate: string;
     cause: SeparationCause;
-    thirteenthMonthBasicPayEarned: string;
-    thirteenthMonthGross: string;
-    separationPayAmount: string;
-    advanceRecovered: string;
-    netPay: string;
     moneyAccountId: string;
     clearanceConfirmedBy: string;
     clearanceNotes: string | null;
     notes: string | null;
     createdBy: string;
+    /** Each NOT NULL DEFAULT 0 — omit to take the column default (R13). */
+    thirteenthMonthBasicPayEarned?: Money;
+    thirteenthMonthGross?: Money;
+    separationPayAmount?: Money;
+    advanceRecovered?: Money;
+    netPay?: Money;
   },
 ): Promise<{ id: string }> {
   const [row] = await tx
     .insert(separations)
     .values({
-      ...input,
+      orgId: input.orgId,
+      storeId: input.storeId,
+      employmentId: input.employmentId,
+      personId: input.personId,
+      separationDate: input.separationDate,
+      cause: input.cause,
+      thirteenthMonthBasicPayEarned: input.thirteenthMonthBasicPayEarned,
+      thirteenthMonthGross: input.thirteenthMonthGross,
+      separationPayAmount: input.separationPayAmount,
+      advanceRecovered: input.advanceRecovered,
+      netPay: input.netPay,
+      moneyAccountId: input.moneyAccountId,
+      clearanceConfirmedBy: input.clearanceConfirmedBy,
+      clearanceNotes: input.clearanceNotes,
+      notes: input.notes,
+      createdBy: input.createdBy,
       status: 'posted',
       postedAt: new Date(),
       postedBy: input.createdBy,

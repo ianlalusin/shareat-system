@@ -8,7 +8,9 @@
  * after a year.
  */
 import { and, eq, sql } from 'drizzle-orm';
+import type { Money, Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert } from './numeric-input';
 import {
   tradeOrders,
   tradeOrderLines,
@@ -145,21 +147,23 @@ export function lineCounts(line: Pick<TradeOrderLineRow, 'approval'>): boolean {
   return line.approval === 'not_required' || line.approval === 'approved';
 }
 
-export async function insertOrder(
-  tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    customerId: string;
-    orderDate: string;
-    referenceNo: string | null;
-    notes: string | null;
-    totalAmount: string;
-    deliveryFee: string;
-    otherFees: string;
-    createdBy: string;
-  },
-): Promise<{ id: string }> {
+/**
+ * T-371 C2 — every numeric column is a `Decimal` brand of that column's own shape, minted by `decimal()`.
+ * ✎R13 `deliveryFee` / `otherFees` are NOT NULL DEFAULT '0': a blank is OMITTED so the column default applies.
+ */
+export type InsertTradeOrderInput = Pick<
+  SafeInsert<typeof tradeOrders>,
+  'orgId' | 'storeId' | 'customerId' | 'orderDate' | 'createdBy'
+> & {
+  referenceNo: string | null;
+  notes: string | null;
+  totalAmount: Money;
+  /** T-151. Outbound freight, on top of the lines. Omit for the column default. */
+  deliveryFee?: Money;
+  otherFees?: Money;
+};
+
+export async function insertOrder(tx: Tx, input: InsertTradeOrderInput): Promise<{ id: string }> {
   const [row] = await tx.insert(tradeOrders).values(input).returning({ id: tradeOrders.id });
   return { id: row!.id };
 }
@@ -170,14 +174,23 @@ export async function insertLines(
   orderId: string,
   lines: readonly {
     itemId: string;
-    quantity: string;
+    quantity: Quantity;
     unit: string;
-    rate: string;
-    lineTotal: string;
+    rate: Money;
+    lineTotal: Money;
   }[],
 ): Promise<void> {
   if (lines.length === 0) return;
-  await tx.insert(tradeOrderLines).values(lines.map((l) => ({ ...l, orgId, orderId })));
+  const rows = lines.map((l) => ({
+    orgId,
+    orderId,
+    itemId: l.itemId,
+    quantity: l.quantity,
+    unit: l.unit,
+    rate: l.rate,
+    lineTotal: l.lineTotal,
+  }));
+  await tx.insert(tradeOrderLines).values(rows);
 }
 
 export async function getOrderById(
@@ -307,12 +320,12 @@ export async function quotedRate(
  * ⭐ T-165. `dispatchOrder`'s own output, persisted so `confirmReceipt` can read back what the
  * DISPATCHED quantity cost — never `rate`, which carries the margin (T-133 §5's whole point).
  */
-export async function setLineDispatchCost(tx: Tx, lineId: string, dispatchCost: string): Promise<void> {
+export async function setLineDispatchCost(tx: Tx, lineId: string, dispatchCost: Money): Promise<void> {
   await tx.update(tradeOrderLines).set({ dispatchCost }).where(eq(tradeOrderLines.id, lineId));
 }
 
 /** ⭐ T-165/T-172. What the branch actually signed for — read back by `receiveTradeOrder`. */
-export async function setLineReceivedQuantity(tx: Tx, lineId: string, receivedQuantity: string): Promise<void> {
+export async function setLineReceivedQuantity(tx: Tx, lineId: string, receivedQuantity: Quantity): Promise<void> {
   await tx.update(tradeOrderLines).set({ receivedQuantity }).where(eq(tradeOrderLines.id, lineId));
 }
 
@@ -321,16 +334,13 @@ export async function setLineReceivedQuantity(tx: Tx, lineId: string, receivedQu
 // `domain/src/commissary/orders.ts` (the branch's side) or `fulfilment.ts` (the commissary's), and
 // which file may call which is invariant 10 — "each field has exactly one owner" — made concrete.
 
-export interface InsertBranchLineInput {
-  orgId: string;
-  orderId: string;
-  itemId: string;
-  quantity: string;
-  unit: string;
-  rate: string;
-  lineTotal: string;
-  requestedQuantity: string | null;
-  fulfilledQuantity: string | null;
+export interface InsertBranchLineInput
+  extends Pick<SafeInsert<typeof tradeOrderLines>, 'orgId' | 'orderId' | 'itemId' | 'unit'> {
+  quantity: Quantity;
+  rate: Money;
+  lineTotal: Money;
+  requestedQuantity: Quantity | null;
+  fulfilledQuantity: Quantity | null;
   origin: TradeOrderLineRow['origin'];
   approval: TradeOrderLineRow['approval'];
   isLedgerOnly: boolean;
@@ -345,11 +355,11 @@ export async function insertBranchLine(tx: Tx, input: InsertBranchLineInput): Pr
 
 /** The writable subset. ⚠️ `quantity` is included only because a DRAFT edit changes the ask itself. */
 export interface UpdateLinePatch {
-  quantity?: string;
-  rate?: string;
-  lineTotal?: string;
-  requestedQuantity?: string | null;
-  fulfilledQuantity?: string | null;
+  quantity?: Quantity;
+  rate?: Money;
+  lineTotal?: Money;
+  requestedQuantity?: Quantity | null;
+  fulfilledQuantity?: Quantity | null;
   sourceLocationId?: string | null;
   approval?: TradeOrderLineRow['approval'];
   isLedgerOnly?: boolean;

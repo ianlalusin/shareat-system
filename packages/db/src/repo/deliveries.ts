@@ -30,7 +30,9 @@ import {
   type LocationStatus,
 } from '../../schema/stock-locations';
 import { suppliers } from '../../schema/suppliers';
+import { decimal, type Decimal, type Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert, SafeUpdate } from './numeric-input';
 
 export interface DeliveryRow {
   readonly id: string;
@@ -72,13 +74,13 @@ export async function getDeliveryLine(tx: Tx, id: string): Promise<DeliveryLineR
 export interface CommissaryDeliveryLineInput {
   readonly lineNo: string;
   readonly itemId: string;
-  /** What the commissary said it packed. */
-  readonly orderedQuantity: string;
-  /** What the branch signed for. May be short, and may be zero. */
-  readonly receivedQuantity: string;
+  /** What the commissary said it packed. T-371 C2: (14,3). */
+  readonly orderedQuantity: Quantity;
+  /** What the branch signed for. May be short, and may be zero. T-371 C2: (14,3). */
+  readonly receivedQuantity: Quantity;
   readonly unit: string;
-  /** The transfer rate. ⚠️ Already in the branch's base unit, so the factor is always 1. */
-  readonly unitCost: string;
+  /** The transfer rate. ⚠️ Already in the branch's base unit, so the factor is always 1. T-371 C2: (14,4). */
+  readonly unitCost: Decimal<'14,4'>;
   readonly locationId: string;
   /**
    * ⚠️ Required by T-166's trigger whenever `received < ordered`, at ANY size. The 0.005 tolerance
@@ -97,6 +99,9 @@ export interface CommissaryDeliveryInput {
   readonly receivedBy: string;
   readonly lines: readonly CommissaryDeliveryLineInput[];
 }
+
+/** T-371 C2 — the one conversion factor a commissary line ever carries, minted once in the column's (14,6) shape. */
+const UNIT_FACTOR: Decimal<'14,6'> = decimal('1', '14,6');
 
 /** The branch's own record of a commissary shipment. Posts nothing. */
 export async function createCommissaryDelivery(
@@ -128,11 +133,11 @@ export async function createCommissaryDelivery(
       orderedQuantity: line.orderedQuantity,
       receivedQuantity: line.receivedQuantity,
       purchaseUnit: line.unit,
-      conversionFactor: '1',
+      conversionFactor: UNIT_FACTOR,
       unitCost: line.unitCost,
       locationId: line.locationId,
       shortageReason: line.shortageReason ?? null,
-    });
+    } satisfies SafeInsert<typeof deliveryLines>);
   }
 
   return delivery;
@@ -178,10 +183,13 @@ export async function insertDelivery(tx: Tx, input: InsertDeliveryInput): Promis
 export interface InsertDeliveryLineInput {
   readonly lineNo: string;
   readonly itemId: string;
-  readonly orderedQuantity: string;
+  /** T-371 C2: (14,3). */
+  readonly orderedQuantity: Quantity;
   readonly purchaseUnit: string;
-  readonly conversionFactor: string;
-  readonly unitCost: string;
+  /** T-371 C2: (14,6). */
+  readonly conversionFactor: Decimal<'14,6'>;
+  /** T-371 C2: (14,4). */
+  readonly unitCost: Decimal<'14,4'>;
   /** `null` — the create-time draft, same as receive time: park in Receiving, never guess. */
   readonly locationId: string | null;
 }
@@ -193,7 +201,7 @@ export async function insertDeliveryLines(
 ): Promise<void> {
   if (lines.length === 0) return;
   await tx.insert(deliveryLines).values(
-    lines.map((l) => ({
+    lines.map((l): SafeInsert<typeof deliveryLines> => ({
       deliveryId,
       lineNo: l.lineNo,
       itemId: l.itemId,
@@ -336,7 +344,8 @@ export async function listDeliveries(tx: Tx, storeId: string): Promise<DeliveryL
 }
 
 export interface UpdateLineReceiptInput {
-  readonly receivedQuantity: string;
+  /** T-371 C2: (14,3). */
+  readonly receivedQuantity: Quantity;
   readonly shortageReason: ShortageReason | null;
   readonly overReceiptAllowed: boolean;
   readonly locationId: string | null;
@@ -350,7 +359,7 @@ export async function updateLineReceipt(tx: Tx, lineId: string, input: UpdateLin
       shortageReason: input.shortageReason,
       overReceiptAllowed: input.overReceiptAllowed,
       locationId: input.locationId,
-    })
+    } satisfies SafeUpdate<typeof deliveryLines>)
     .where(eq(deliveryLines.id, lineId));
 }
 

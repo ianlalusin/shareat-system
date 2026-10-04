@@ -1,5 +1,6 @@
 import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
+import { compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../lib/session';
 import { listActingPersons } from '../expenses/lib';
 import {
@@ -70,7 +71,7 @@ export default async function RemittancePage({
     storeCashPolicy(actor.orgId, storeId),
   ]);
 
-  const owing = days.filter((d) => Number(d.owed) > 0);
+  const owing = days.filter((d) => compare(money(d.owed), ZERO) > 0);
   const remittable = owing.filter((d) => d.remittable);
   const totalRemittable = remittable.reduce((s, d) => s + Number(d.owed), 0);
   const heldBack = owing.filter((d) => !d.remittable);
@@ -78,7 +79,7 @@ export default async function RemittancePage({
 
   // T-324: a declared overage writes a POSITIVE variance, same as any other — the heading below
   // has to speak to both signs, not just the short case it was written for.
-  const varianceShortCount = variances.filter((v) => Number(v.amount) < 0).length;
+  const varianceShortCount = variances.filter((v) => compare(money(v.amount), ZERO) < 0).length;
   const varianceOverCount = variances.length - varianceShortCount;
 
   // T-366 S3 audit finding 5 — both Charge and Recognise-as-income authorise the SAME capability
@@ -212,7 +213,7 @@ export default async function RemittancePage({
               <input type="hidden" name="storeId" value={storeId} />
               <div className="mr-2 text-sm text-amber-900 dark:text-amber-300">
                 <span className="font-mono tabular-nums">
-                  {Number(v.amount) < 0 ? 'Short ' : 'Over '}
+                  {compare(money(v.amount), ZERO) < 0 ? 'Short ' : 'Over '}
                   {peso(Math.abs(Number(v.amount)))}
                 </span>
                 <span className="ml-2 text-xs">on {v.businessDate}</span>
@@ -230,7 +231,7 @@ export default async function RemittancePage({
                 <span className="text-xs text-amber-900 dark:text-amber-300">
                   You don&rsquo;t have permission to resolve this variance.
                 </span>
-              ) : Number(v.amount) < 0 ? (
+              ) : compare(money(v.amount), ZERO) < 0 ? (
                 <>
                   <label className="flex flex-col gap-1">
                     <span className="text-xs font-medium text-amber-900 dark:text-amber-300">

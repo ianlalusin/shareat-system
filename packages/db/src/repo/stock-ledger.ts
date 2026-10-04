@@ -8,6 +8,7 @@
 import { and, asc, eq, lte, sql } from 'drizzle-orm';
 import { stockMovements } from '../../schema/stock-ledger';
 import type { Tx } from '../client';
+import type { Quantity } from '@shareat/core/money';
 
 export interface RecordMovementInput {
   readonly orgId: string;
@@ -16,7 +17,7 @@ export interface RecordMovementInput {
   readonly itemId: string;
   readonly movedAt: Date;
   /** Signed, in base units. Never zero — the database refuses it. */
-  readonly quantity: string;
+  readonly quantity: Quantity;
   readonly kind: (typeof stockMovements.kind)['_']['data'];
   readonly sourceType: string;
   readonly sourceId: string;

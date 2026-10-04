@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { compare, money, ZERO } from '@shareat/core/money';
 import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
 import { canReadFiles } from '@shareat/domain';
 import { ACTION_LINK } from '@/components/action-link';
@@ -170,7 +171,7 @@ export default async function CustomerDetailPage({
           {customer.creditLimit !== null && (
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               limit {peso(customer.creditLimit)}
-              {Number(owedOverall) > Number(customer.creditLimit) && (
+              {compare(money(owedOverall), money(customer.creditLimit)) > 0 && (
                 <span className="ml-1 font-medium text-red-700 dark:text-red-400">over</span>
               )}
             </p>
@@ -180,7 +181,7 @@ export default async function CustomerDetailPage({
               {peso(owedHere)} at {storeName(storeId)}
             </p>
           )}
-          {Number(credit) > 0 && (
+          {compare(money(credit), ZERO) > 0 && (
             <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
               {peso(credit)} store credit held (2140)
             </p>
@@ -275,7 +276,7 @@ export default async function CustomerDetailPage({
               </thead>
               <tbody>
                 {charges.map((c) => {
-                  const overdue = c.dueDate !== null && c.dueDate < now && Number(c.outstanding) > 0;
+                  const overdue = c.dueDate !== null && c.dueDate < now && compare(money(c.outstanding), ZERO) > 0;
                   return (
                     <tr
                       key={c.chargeId}
@@ -348,7 +349,7 @@ export default async function CustomerDetailPage({
                   {peso(c.totalAmount)}
                   <span className="ml-2 text-xs font-normal text-neutral-500">{storeName(c.storeId)}</span>
                 </p>
-                {Number(c.outstanding) > 0 && canWriteOffAt(c.storeId) && (
+                {compare(money(c.outstanding), ZERO) > 0 && canWriteOffAt(c.storeId) && (
                   <form action={writeOffChargeAction} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="customerId" value={customerId} />
                     <input type="hidden" name="storeId" value={storeId} />

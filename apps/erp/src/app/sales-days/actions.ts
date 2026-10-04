@@ -23,11 +23,10 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
-/** A blank money input means zero, not "invalid". The domain and the schema both reject a
- *  genuinely bad figure, so this only has to normalise an empty box. */
+/** T-371 R6: a money box is passed on as typed — a blank stays blank. The domain parses it and its
+ *  COLUMN decides what a blank means (refused, or the default kept); the screen never guesses '0'. */
 function amount(fd: FormData, key: string): string {
-  const raw = str(fd, key);
-  return raw === '' ? '0' : raw;
+  return str(fd, key);
 }
 
 /** Only the FILTER state travels in the URL now. The org and the person come from the session,
@@ -52,10 +51,10 @@ function parseDayFigures(formData: FormData) {
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith('tender_') || typeof value !== 'string') continue;
     const amount = value.trim();
-    // Every wallet the form offered is named. Blank reads as zero ("nothing landed here"): no row on a
-    // create, and on an edit it clears that wallet's row. A negative is passed on so the domain refuses
-    // it in words; nothing typed is dropped silently.
-    tenders.push({ moneyAccountId: key.slice('tender_'.length), amount: amount || '0' });
+    // Every wallet the form offered is named. A blank is passed on as blank and the domain reads it as
+    // "nothing landed here": no row on a create, and on an edit it clears that wallet's row (T-371 R6:
+    // never a guessed '0'). A negative is passed on so the domain refuses it in words.
+    tenders.push({ moneyAccountId: key.slice('tender_'.length), amount });
   }
 
   const channels: { channelId: string; amount: string; noSales: boolean }[] = [];
@@ -67,7 +66,8 @@ function parseDayFigures(formData: FormData) {
     // ⭐ Absent, zero, and "confirmed no sales" are three different things (T-134 B3's lesson,
     // and v1's own noSalesChannelIds). An untouched box writes no row at all.
     if (raw === '' && !noSales) continue;
-    channels.push({ channelId, amount: noSales ? '0' : raw === '' ? '0' : raw, noSales });
+    // A confirmed "no sales" IS a typed zero (the reporter's claim), not a guessed one.
+    channels.push({ channelId, amount: noSales ? '0' : raw, noSales });
   }
 
   return {

@@ -2,6 +2,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { closeDb, lowStockRepo, withOrgPrincipal } from '@shareat/db';
+import { decimal } from '@shareat/core/money';
 import { ensureAutoOrderLines, replenishAfterUsage, suggestFor } from '../../src/commissary/auto-order';
 import { listOrderMessages, postOrderMessage } from '../../src/commissary/messages';
 import { quantity } from '../../src/stock/quantity';
@@ -32,7 +33,7 @@ async function stock(storeId: string, locationId: string, itemId: string, qty: s
 
 async function threshold(storeId: string, itemId: string, value: string): Promise<void> {
   await withOrgPrincipal(orgA, (tx) =>
-    lowStockRepo.setThreshold(tx, { orgId: orgA, storeId, itemId, threshold: value, setBy: personA }),
+    lowStockRepo.setThreshold(tx, { orgId: orgA, storeId, itemId, threshold: decimal(value, '14,3'), setBy: personA }),
   );
 }
 

@@ -5,7 +5,9 @@
  * the database trigger refuses anything else. See the schema file for why.
  */
 import { and, desc, eq, isNull, lte, sql } from 'drizzle-orm';
+import type { Decimal, Money } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert } from './numeric-input';
 import { storeAttendanceConfig, type LatePolicy, type TimeMode } from '../../schema/attendance-config';
 
 export interface AttendanceConfigRow {
@@ -95,17 +97,47 @@ export async function findForDay(
   return row as AttendanceConfigRow | undefined;
 }
 
-export type InsertConfigInput = Partial<
-  Omit<AttendanceConfigRow, 'id' | 'supersededAt' | 'orgId' | 'storeId' | 'effectiveFrom'>
-> & {
-  orgId: string;
-  storeId: string;
-  effectiveFrom: string;
-  createdBy?: string | null;
-};
+/** The (4,2) hours and multipliers, and the two (14,2) money columns: every numeric column of the table. */
+type NumericConfigKey =
+  | 'requiredHoursPerShift'
+  | 'halfDayHours'
+  | 'defaultWorkHours'
+  | 'defaultBreakHours'
+  | 'nightDiffMultiplier'
+  | 'overtimeMultiplier'
+  | 'overtimeFixedHourly'
+  | 'holidayRegularMultiplier'
+  | 'holidaySpecialNonWorkingMultiplier'
+  | 'holidaySpecialWorkingMultiplier'
+  | 'lateChargePerMinute';
+
+/**
+ * T-371 C2 — every numeric column is a `Decimal` brand of that column's own shape, minted by `decimal()`.
+ * ✎R13 every policy column has a database default, so each is optional: a blank is OMITTED and the default applies.
+ * `overtimeFixedHourly` is the one nullable numeric (null = no fixed rate).
+ */
+export type InsertConfigInput = Pick<
+  SafeInsert<typeof storeAttendanceConfig>,
+  'orgId' | 'storeId' | 'effectiveFrom'
+> & { createdBy?: string | null } &
+  Partial<
+    Omit<AttendanceConfigRow, 'id' | 'supersededAt' | 'orgId' | 'storeId' | 'effectiveFrom' | NumericConfigKey>
+  > & {
+    requiredHoursPerShift?: Decimal<'4,2'>;
+    halfDayHours?: Decimal<'4,2'>;
+    defaultWorkHours?: Decimal<'4,2'>;
+    defaultBreakHours?: Decimal<'4,2'>;
+    nightDiffMultiplier?: Decimal<'4,2'>;
+    overtimeMultiplier?: Decimal<'4,2'>;
+    overtimeFixedHourly?: Money | null;
+    holidayRegularMultiplier?: Decimal<'4,2'>;
+    holidaySpecialNonWorkingMultiplier?: Decimal<'4,2'>;
+    holidaySpecialWorkingMultiplier?: Decimal<'4,2'>;
+    lateChargePerMinute?: Money;
+  };
 
 export async function insertConfig(tx: Tx, input: InsertConfigInput): Promise<AttendanceConfigRow> {
-  const [row] = await tx.insert(storeAttendanceConfig).values(input as never).returning();
+  const [row] = await tx.insert(storeAttendanceConfig).values(input).returning();
   return row as AttendanceConfigRow;
 }
 

@@ -25,8 +25,9 @@
  * via T-174's identical charge shape; this is a deliberate policy gate, not a missing capability,
  * and is called out in the task report as a finding for the coordinator to weigh.
  */
-import { add, multiply, subtract, ZERO, money, type Money } from '@shareat/core/money';
-import { parseMoneyInput } from '../shared/money-input';
+import { add, compare, decimal, multiply, subtract, ZERO, money, type Decimal, type Money } from '@shareat/core/money';
+import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
+import { refuse } from '../shared/refusal';
 import {
   channelSettlementsRepo,
   orderWastageRepo,
@@ -94,12 +95,37 @@ export interface AllocationInput {
   percent: string;
 }
 
+/** `order_wastage_allocations.percent` is numeric(5,2) NOT NULL with no default. */
+type Percent = Decimal<'5,2'>;
+interface ParsedAllocation {
+  personId: string;
+  percent: Percent;
+}
+
+/** T-371 R6/R5 — every typed percentage is minted into the column's (5,2) brand, after
+ *  `authorize()`. The column is NOT NULL with no default, so a blank is refused, never zeroed. */
+function parseAllocations(fn: string, allocations: AllocationInput[]): ParsedAllocation[] {
+  return allocations.map((a) => ({
+    personId: a.personId,
+    percent: parseDecimalInput(a.percent, '5,2', `${fn}: an allocation percentage`, 'The allocation percentage', {
+      blank: 'refuse',
+    }),
+  }));
+}
+
+/** T-371 R4 — a stored percentage is re-minted, never cast. */
+function storedAllocations(rows: { personId: string; percent: string }[]): ParsedAllocation[] {
+  return rows.map((a) => ({ personId: a.personId, percent: decimal(a.percent, '5,2') }));
+}
+
+const FULL_SHARE: Percent = decimal('100.00', '5,2');
+
 /**
  * Split `amount` by percentage. ⭐ The LAST share is the remainder, never its own multiply — so
  * the shares always sum to EXACTLY `amount`, whatever rounding the earlier shares needed. A
  * single-allocation case (length 1) skips the loop and returns `[amount]` untouched.
  */
-function splitByPercent(amount: Money, allocations: AllocationInput[]): Money[] {
+function splitByPercent(amount: Money, allocations: ParsedAllocation[]): Money[] {
   const shares: Money[] = [];
   let running = ZERO;
   for (let i = 0; i < allocations.length - 1; i++) {
@@ -121,9 +147,9 @@ interface PostDispositionParams {
   channelId: string;
   /** The name as recorded, for the memo only. */
   channel: string;
-  amount: string;
+  amount: Money;
   disposition: 'absorbed' | 'charged';
-  allocations: AllocationInput[];
+  allocations: ParsedAllocation[];
   entryDate: string;
   sourceId: string;
   /** `null` for the backstop's own system-triggered postings — `journal_entries.posted_by` is
@@ -147,7 +173,7 @@ async function postDisposition(trx: Tx, p: PostDispositionParams): Promise<{ jou
     );
   }
 
-  const amount = money(p.amount);
+  const amount = p.amount;
   const memo = `Order wastage (${p.channel}) — ${p.memoSuffix}`;
   const lines: Parameters<typeof postEntry>[1]['lines'] = [];
 
@@ -290,7 +316,13 @@ export async function recordOrderWastage(
     // DEF-272: was a raw `money()` call — well-formed already, but its TypeError is a developer
     // message, not a written sentence. `parseMoneyInput` is the shared entry point that fixes that.
     const amount = parseMoneyInput(input.amount, 'recordOrderWastage: the amount', 'The wastage amount');
-    if (Number(amount) <= 0) throw new Error('recordOrderWastage: amount must be greater than zero.');
+    if (compare(amount, ZERO) <= 0) {
+      throw refuse('recordOrderWastage: amount must be greater than zero.', 'The wastage amount has to be greater than zero.');
+    }
+
+    // T-371 audit: parse the explicit allocations BEFORE the row is written, so a malformed percent refuses with nothing
+    // recorded (a caller that catches the refusal on its own transaction is left with no orphan wastage row).
+    let allocations = parseAllocations('recordOrderWastage', input.allocations ?? []);
 
     const { id } = await orderWastageRepo.create(trx, {
       orgId: actor.orgId,
@@ -303,7 +335,7 @@ export async function recordOrderWastage(
       channel: channelRow.name,
       orderRef: input.orderRef ?? null,
       typeMode,
-      amount: input.amount,
+      amount,
       reason,
       createdBy: actor.personId,
     });
@@ -312,10 +344,9 @@ export async function recordOrderWastage(
     // wins; otherwise the store's Monitor gets 100%. No Monitor configured is the documented
     // exception the backstop's own third fallback tier exists for — not created "ownerless" by
     // omission, just left for that tier to resolve at day 15.
-    let allocations = input.allocations ?? [];
     if (typeMode === 'tracked' && allocations.length === 0) {
       const monitor = await orderWastageRepo.wastageMonitorFor(trx, actor.orgId, input.storeId);
-      if (monitor) allocations = [{ personId: monitor, percent: '100.00' }];
+      if (monitor) allocations = [{ personId: monitor, percent: FULL_SHARE }];
     }
     if (allocations.length > 0) {
       await orderWastageRepo.replaceAllocations(trx, id, allocations);
@@ -329,7 +360,7 @@ export async function recordOrderWastage(
           storeId: input.storeId,
           channelId: channelRow.id,
           channel: channelRow.name,
-          amount: input.amount,
+          amount,
           disposition: input.disposition as 'absorbed' | 'charged',
           allocations,
           entryDate: input.openedOn,
@@ -429,15 +460,12 @@ export async function resolveOrderWastage(
       };
     }
 
-    if (input.allocations) {
-      await orderWastageRepo.replaceAllocations(trx, row.id, input.allocations);
+    let allocations = input.allocations ? parseAllocations('resolveOrderWastage', input.allocations) : undefined;
+    if (allocations) {
+      await orderWastageRepo.replaceAllocations(trx, row.id, allocations);
     }
-    let allocations = input.allocations;
     if (input.disposition === 'charged' && !allocations) {
-      allocations = (await orderWastageRepo.listAllocations(trx, row.id)).map((a) => ({
-        personId: a.personId,
-        percent: a.percent,
-      }));
+      allocations = storedAllocations(await orderWastageRepo.listAllocations(trx, row.id));
     }
 
     let journalEntryId: string | null = null;
@@ -447,7 +475,7 @@ export async function resolveOrderWastage(
         storeId: row.storeId,
         channelId: row.channelId,
         channel: row.channel,
-        amount: row.amount,
+        amount: money(row.amount),
         disposition: input.disposition,
         allocations: allocations ?? [],
         entryDate: input.resolvedOn,
@@ -588,10 +616,10 @@ export async function runOrderWastageBackstop(
 
       // Fallback order — invariant 5.
       const wouldCharge = hasAllocation || monitor !== null;
-      const allocations: AllocationInput[] = hasAllocation
-        ? allocationRows.map((a) => ({ personId: a.personId, percent: a.percent }))
+      const allocations: ParsedAllocation[] = hasAllocation
+        ? storedAllocations(allocationRows)
         : monitor
-          ? [{ personId: monitor, percent: '100.00' }]
+          ? [{ personId: monitor, percent: FULL_SHARE }]
           : [];
 
       // ⛔ Invariant 10 — never charge into an account nothing can draw down. A would-be charge
@@ -614,7 +642,7 @@ export async function runOrderWastageBackstop(
         storeId: row.storeId,
         channelId: row.channelId,
         channel: row.channel,
-        amount: row.amount,
+        amount: money(row.amount),
         disposition,
         allocations: disposition === 'charged' ? allocations : [],
         entryDate,

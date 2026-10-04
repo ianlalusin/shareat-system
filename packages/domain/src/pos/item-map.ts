@@ -11,7 +11,9 @@
  * anywhere in this module — invariant 11.
  */
 import { authorize, type Actor } from '@shareat/auth';
+import { compareDecimal, decimal, type Decimal } from '@shareat/core/money';
 import { posMappingRepo, type Tx } from '@shareat/db';
+import { parseDecimalInput } from '../shared/money-input';
 
 export interface UpsertPosItemMapInput {
   readonly orgId: string;
@@ -41,9 +43,24 @@ export async function upsertPosItemMap(tx: Tx, actor: Actor, input: UpsertPosIte
 
   if (!input.posItemKey.trim()) return { ok: false, reason: 'a map needs the POS item key' };
 
+  // T-371 — `quantity_per_sale` is numeric(14,6), nullable, but REQUIRED for a direct map (the
+  // `pos_item_maps` mode CHECK). Parsed after `authorize()` into its column's brand: a malformed
+  // value ("abc", "NaN") gets a sentence quoting it instead of reaching the INSERT, and the
+  // positivity test is an exact decimal comparison, not `Number(x) <= 0` (NaN-blind).
+  let quantityPerSale: Decimal<'14,6'> | null = null;
   if (input.mode === 'direct') {
     if (!input.itemId) return { ok: false, reason: 'a direct map needs a stock item' };
-    if (!input.quantityPerSale || Number(input.quantityPerSale) <= 0) {
+    if (input.quantityPerSale == null || String(input.quantityPerSale).trim() === '') {
+      return { ok: false, reason: 'a direct map needs a quantity-per-sale greater than zero' };
+    }
+    try {
+      quantityPerSale = parseDecimalInput(input.quantityPerSale, '14,6', 'upsertPosItemMap: the quantity per sale', 'Quantity per sale');
+    } catch (e) {
+      const userMessage = (e as { userMessage?: unknown }).userMessage;
+      if (typeof userMessage === 'string') return { ok: false, reason: userMessage };
+      throw e;
+    }
+    if (compareDecimal(quantityPerSale, decimal('0', '14,6')) <= 0) {
       return { ok: false, reason: 'a direct map needs a quantity-per-sale greater than zero' };
     }
     const conflict = await posMappingRepo.findOtherActiveDirectMapByItem(tx, input.storeId, input.itemId, input.editMapId ?? null);
@@ -70,7 +87,7 @@ export async function upsertPosItemMap(tx: Tx, actor: Actor, input: UpsertPosIte
     mode: input.mode,
     itemId: input.mode === 'direct' ? input.itemId! : null,
     recipeId: input.mode === 'recipe' ? input.recipeId! : null,
-    quantityPerSale: input.mode === 'direct' ? input.quantityPerSale! : null,
+    quantityPerSale: input.mode === 'direct' ? quantityPerSale : null,
     locationId: input.locationId ?? null,
   };
 

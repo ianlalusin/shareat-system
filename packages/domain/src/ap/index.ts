@@ -47,14 +47,14 @@ import type {
   SupplierVatStatus,
 } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
-import { add, compare, formatMoney, money, subtract } from '@shareat/core/money';
+import { add, compare, formatMoney, isZero, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { addDays, parseBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
 import { withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
-import { parseMoneyInput } from '../shared/money-input';
+import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { gone, humanDate, internalFault, refuse } from '../shared/refusal';
 import { allocateOldestFirst, type AllocationItem, type TypedAmount } from '../shared/allocate-oldest-first';
 import { createExpense, type CreateExpensePaymentInput } from '../expenses/create';
@@ -342,7 +342,8 @@ export async function reconcileSupplier(
     if (!supplier) throw gone(`reconcileSupplier: supplier ${input.supplierId} does not exist.`, 'supplier');
 
     const position = await apRepo.positionOf(trx, actor.orgId, supplier.id);
-    if (Math.abs(Number(position.controlBalance)) > 0.005) {
+    // T-371 (R4, C4): the live balance re-minted and judged exactly — `Number(…)` let a NaN read as "zero owed".
+    if (!isZero(money(position.controlBalance))) {
       throw refuse(
         `reconcileSupplier: this supplier is owed ₱${position.controlBalance}. An anchor says ` +
           `they were verified at ZERO on a date, so stamping one now would tell every later aging ` +
@@ -433,12 +434,13 @@ export async function recordInvoice(
     // T-367 S3 (DEF-420, R8): every money input is parsed ONCE, here, and the row is written from the PARSED
     // values - a typed `abc` or `NaN` used to reach the database (22P02 / 23514) and a non-numeric fee became NaN.
     const total = parseMoneyInput(input.totalAmount, 'recordInvoice: the invoice total', 'The invoice total');
-    if (compare(total, money('0')) <= 0) throw refuse('recordInvoice: an invoice total has to be greater than zero.', 'An invoice total has to be greater than zero.');
-    // A fee is blank (= 0) or a non-negative amount: `abc` is the parser's sentence, `-50` is refused here.
-    const feeOf = (raw: string | null | undefined, rawLabel: string, humanLabel: string) => {
-      if (raw == null || raw.trim() === '') return money('0');
-      const fee = parseMoneyInput(raw, rawLabel, humanLabel);
-      if (compare(fee, money('0')) < 0) throw refuse(`${rawLabel} is negative.`, `${humanLabel} can't be less than zero.`);
+    if (compare(total, ZERO) <= 0) throw refuse('recordInvoice: an invoice total has to be greater than zero.', 'An invoice total has to be greater than zero.');
+    // A fee is blank or a non-negative amount: `abc` is the parser's sentence, `-50` is refused here.
+    // T-371 R6: both fee columns are NOT NULL DEFAULT '0', so a blank fee is `undefined` (the column's default decides),
+    // never an invented zero; the arithmetic below reads a blank fee as nothing added.
+    const feeOf = (raw: string | null | undefined, rawLabel: string, humanLabel: string): Money | undefined => {
+      const fee = parseDecimalInput(raw, '14,2', rawLabel, humanLabel, { blank: 'omit' });
+      if (fee !== undefined && compare(fee, ZERO) < 0) throw refuse(`${rawLabel} is negative.`, `${humanLabel} can't be less than zero.`);
       return fee;
     };
     const deliveryFee = feeOf(input.deliveryFee, 'recordInvoice: the delivery fee', 'The delivery fee');
@@ -447,13 +449,24 @@ export async function recordInvoice(
     // Two fees can together leave the `numeric(14,2)` range, which `subtract` reports as a RangeError - a refusal here.
     const feesTooBig = () =>
       refuse('recordInvoice: the delivery and other fees exceed the invoice total.', "The delivery and other fees can't be more than the invoice total.");
-    let goodsTotal: ReturnType<typeof money>;
+    let goodsTotal: Money;
     try {
-      goodsTotal = subtract(subtract(total, deliveryFee), otherFees);
+      goodsTotal = subtract(subtract(total, deliveryFee ?? ZERO), otherFees ?? ZERO);
     } catch {
       throw feesTooBig();
     }
-    if (compare(goodsTotal, money('0')) < 0) throw feesTooBig();
+    if (compare(goodsTotal, ZERO) < 0) throw feesTooBig();
+    // T-371 (R6): the three VAT columns are nullable, so a blank is null; a typed figure is parsed to its column's shape
+    // (`vat_rate` is numeric(8,4)) instead of reaching the database raw.
+    const vatRate = parseDecimalInput(input.vatRate, '8,4', 'recordInvoice: the VAT rate', 'The VAT rate', { blank: 'null' });
+    const vatAmount = parseDecimalInput(input.vatAmount, '14,2', 'recordInvoice: the VAT amount', 'The VAT amount', { blank: 'null' });
+    const vatExclusiveAmount = parseDecimalInput(
+      input.vatExclusiveAmount,
+      '14,2',
+      'recordInvoice: the VAT-exclusive amount',
+      'The VAT-exclusive amount',
+      { blank: 'null' },
+    );
 
     // T-367 S3 (DEF-499, R9): the due date. A malformed date is a sentence, not a raw throw (DEF-566: a raw throw
     // is a digest page in production). A blank due date takes the supplier's terms, COPIED at recording time (never
@@ -500,15 +513,16 @@ export async function recordInvoice(
       invoiceNo,
       invoiceDate,
       dueDate,
-      totalAmount: String(total),
-      deliveryFee: String(deliveryFee),
-      otherFees: String(otherFees),
+      totalAmount: total,
+      // T-371 R13: a blank fee is OMITTED, so the column's own default applies (the writer's fields are optional).
+      deliveryFee,
+      otherFees,
       notes: input.notes?.trim() || null,
       receiptFileId: input.receiptFileId ?? null,
       vatType: input.vatType ?? null,
-      vatRate: input.vatRate ?? null,
-      vatAmount: input.vatAmount ?? null,
-      vatExclusiveAmount: input.vatExclusiveAmount ?? null,
+      vatRate,
+      vatAmount,
+      vatExclusiveAmount,
       /**
        * ⭐ T-188. COPIED from the supplier's habit, not read through to it.
        *
@@ -948,9 +962,9 @@ export async function recordPayment(
     const supplier = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
     if (!supplier) throw gone(`recordPayment: supplier ${input.supplierId} does not exist.`, 'supplier');
 
-    const parsedAmount = parseMoneyInput(input.amount, 'recordPayment: the amount', 'The payment amount');
-    const amount = Number(parsedAmount);
-    if (amount <= 0) throw refuse('recordPayment: a payment has to be greater than zero.', 'A payment has to be greater than zero.');
+    // T-371 (C4): every figure below stays `Money` and is ordered with `compare` — `Number(…)` let a NaN pass each check.
+    const amount = parseMoneyInput(input.amount, 'recordPayment: the amount', 'The payment amount');
+    if (compare(amount, ZERO) <= 0) throw refuse('recordPayment: a payment has to be greater than zero.', 'A payment has to be greater than zero.');
     if (input.allocations.length === 0) {
       throw refuse(
         'recordPayment: name at least one open item this payment settles (bible §16.10 — a ' +
@@ -997,7 +1011,7 @@ export async function recordPayment(
     // while the other's never clear, and neither store's trial balance shows why.
     const open = await apRepo.openItems(trx, actor.orgId, input.supplierId, input.storeId);
     const byExpense = new Map(open.map((o) => [o.expenseId, o]));
-    let allocatedTotal = 0;
+    let allocatedTotal: Money = ZERO;
     for (const a of allocations) {
       const item = byExpense.get(a.expenseId);
       if (!item) {
@@ -1013,27 +1027,28 @@ export async function recordPayment(
             'another supplier or another store, not be a credit expense, already be fully paid, or not be posted.',
         );
       }
-      const applied = Number(a.amountApplied);
-      if (applied <= 0) {
+      const applied = a.amountApplied;
+      if (compare(applied, ZERO) <= 0) {
         throw refuse(
           `recordPayment: allocation for expense ${a.expenseId} must be greater than zero.`,
           `The allocation for ${await expenseKey(trx, actor.orgId, a.expenseId)} must be greater than zero.`,
         );
       }
-      if (applied > Number(item.outstanding) + 0.005) {
+      // R4: the outstanding figure is a database value, re-minted; both sides are exact to the centavo, so no epsilon.
+      if (compare(applied, money(item.outstanding)) > 0) {
         throw refuse(
           `recordPayment: expense ${a.expenseId} has only ₱${item.outstanding} still owed — ` +
             `₱${a.amountApplied} does not fit.`,
           `${capitalise(await expenseKey(trx, actor.orgId, a.expenseId))} has only ₱${item.outstanding} still owed — ₱${a.amountApplied} doesn't fit.`,
         );
       }
-      allocatedTotal += applied;
+      allocatedTotal = add(allocatedTotal, applied);
     }
-    if (allocatedTotal > amount + 0.005) {
+    if (compare(allocatedTotal, amount) > 0) {
       throw refuse(
-        `recordPayment: allocations total ₱${allocatedTotal.toFixed(2)}, more than the ` +
+        `recordPayment: allocations total ₱${allocatedTotal}, more than the ` +
           `₱${input.amount} handed over — a payment cannot allocate more than it pays.`,
-        `Allocations total ₱${allocatedTotal.toFixed(2)}, more than the ₱${input.amount} handed over — a payment cannot allocate more than it pays.`,
+        `Allocations total ₱${allocatedTotal}, more than the ₱${input.amount} handed over — a payment cannot allocate more than it pays.`,
       );
     }
 
@@ -1047,30 +1062,35 @@ export async function recordPayment(
     // ⭐ T-170 §5. Validated against the LIVE balance, never trusted from the caller — same
     // check-then-write discipline as `openItems` above. `advancesPositionOf` is a query over
     // `journal_lines`, never a stored column (DEF-075's pattern, refused again).
-    const creditApplied = Number(input.creditApplied ?? '0');
-    if (creditApplied > 0) {
+    // T-371: parsed after `authorize`, like every other figure here. A blank (or absent) box applies no credit — this is
+    // a journal amount, not a column, so "none" is the meaning; a malformed one (`abc`, which `Number` turned into a NaN
+    // that slipped past every check below) is now the parser's sentence.
+    const creditApplied =
+      parseDecimalInput(input.creditApplied, '14,2', 'recordPayment: creditApplied', 'The credit applied', { blank: 'omit' }) ??
+      ZERO;
+    if (compare(creditApplied, ZERO) > 0) {
       // ⭐ A distinct decision from recording the payment itself, checked separately even though
       // only manager+ ever holds `record_ap_payment` anyway (this file's own top authorize call).
       await authorize(trx, actor, 'apply_supplier_credit', { storeId: input.storeId });
     }
-    if (creditApplied < 0) throw refuse('recordPayment: creditApplied cannot be negative.', 'The credit applied cannot be negative.');
-    if (creditApplied > amount + 0.005) {
+    if (compare(creditApplied, ZERO) < 0) throw refuse('recordPayment: creditApplied cannot be negative.', 'The credit applied cannot be negative.');
+    if (compare(creditApplied, amount) > 0) {
       throw refuse(
-        `recordPayment: creditApplied (₱${creditApplied.toFixed(2)}) cannot exceed the ` +
+        `recordPayment: creditApplied (₱${creditApplied}) cannot exceed the ` +
           `₱${input.amount} payment it is funding.`,
-        `The credit applied (₱${creditApplied.toFixed(2)}) cannot exceed the ₱${input.amount} payment it is funding.`,
+        `The credit applied (₱${creditApplied}) cannot exceed the ₱${input.amount} payment it is funding.`,
       );
     }
-    if (creditApplied > 0) {
+    if (compare(creditApplied, ZERO) > 0) {
       // T-369 S0·N3: serialise with every other reader/mover of this supplier's credit (another draw,
       // or `voidPayment` handing an overpayment back) BEFORE reading the balance it is about to spend.
       await advisoryLocksRepo.lockSupplierCredit(trx, input.supplierId);
-      const balance = Number(await apRepo.advancesPositionOf(trx, actor.orgId, input.supplierId));
-      if (creditApplied > balance + 0.005) {
+      const balance = money(await apRepo.advancesPositionOf(trx, actor.orgId, input.supplierId));
+      if (compare(creditApplied, balance) > 0) {
         throw refuse(
-          `recordPayment: ${supplier.name} holds only ₱${balance.toFixed(2)} of return credit — ` +
-            `₱${creditApplied.toFixed(2)} does not fit.`,
-          `${supplier.name} holds only ₱${balance.toFixed(2)} of return credit — ₱${creditApplied.toFixed(2)} doesn't fit.`,
+          `recordPayment: ${supplier.name} holds only ₱${balance} of return credit — ` +
+            `₱${creditApplied} does not fit.`,
+          `${supplier.name} holds only ₱${balance} of return credit — ₱${creditApplied} doesn't fit.`,
         );
       }
     }
@@ -1078,52 +1098,56 @@ export async function recordPayment(
     // ⭐ Only the CASH portion draws the money account — a payment fully funded by credit draws
     // nothing from it at all, so `checkDraw` (an overdraft check on a real account) is skipped
     // rather than asked about a draw of zero.
-    const cashPortion = Math.max(0, amount - creditApplied);
-    const warning = cashPortion > 0 ? await checkDraw(trx, actor.orgId, account, cashPortion, 'recordPayment') : undefined;
+    // Both differences are ≥ 0 by the refusals above (credit ≤ amount, allocations ≤ amount); `max` stays as the floor.
+    const atLeastZero = (m: Money): Money => (compare(m, ZERO) < 0 ? ZERO : m);
+    const cashPortion = atLeastZero(subtract(amount, creditApplied));
+    // `checkDraw` (money-accounts) takes `Money`; `cashPortion` is a finite, validated `Money` here.
+    const warning =
+      compare(cashPortion, ZERO) > 0 ? await checkDraw(trx, actor.orgId, account, cashPortion, 'recordPayment') : undefined;
 
-    const unallocated = Math.max(0, amount - allocatedTotal);
+    const unallocated = atLeastZero(subtract(amount, allocatedTotal));
     const allocated = allocatedTotal;
 
     const paymentLines = [
       {
         accountCode: AP_CONTROL_CODE,
         storeId: input.storeId,
-        debit: allocated.toFixed(2),
+        debit: allocated,
         partyType: 'supplier' as const,
         partyId: input.supplierId,
         lineMemo: `AP payment — ${supplier.name}`,
       },
-      ...(unallocated > 0
+      ...(compare(unallocated, ZERO) > 0
         ? [
             {
               accountCode: ADVANCES_CODE,
               storeId: input.storeId,
-              debit: unallocated.toFixed(2),
+              debit: unallocated,
               partyType: 'supplier' as const,
               partyId: input.supplierId,
               lineMemo: `Overpayment — ${supplier.name}`,
             },
           ]
         : []),
-      ...(creditApplied > 0
+      ...(compare(creditApplied, ZERO) > 0
         ? [
             {
               accountCode: ADVANCES_CODE,
               storeId: input.storeId,
-              credit: creditApplied.toFixed(2),
+              credit: creditApplied,
               partyType: 'supplier' as const,
               partyId: input.supplierId,
               lineMemo: `Return credit applied — ${supplier.name}`,
             },
           ]
         : []),
-      ...(cashPortion > 0
+      ...(compare(cashPortion, ZERO) > 0
         ? [
             {
               accountCode: account.glAccountCode,
               // T-369 S8 (DEF-551): the cash credit sits at the ACCOUNT's store - `balanceOf` reads a safe there.
               storeId: account.storeId,
-              credit: cashPortion.toFixed(2),
+              credit: cashPortion,
               ...(account.glAccountCode === '1140'
                 ? { partyType: 'money_account' as const, partyId: account.id }
                 : {}),
@@ -1146,7 +1170,7 @@ export async function recordPayment(
       storeId: input.storeId,
       supplierId: input.supplierId,
       businessDate: input.businessDate,
-      amount: parsedAmount,
+      amount,
       moneyAccountId: input.moneyAccountId,
       cashRequestId: input.cashRequestId ?? null,
       referenceNo: input.referenceNo?.trim() || null,
@@ -1173,8 +1197,8 @@ export async function recordPayment(
     return {
       paymentId,
       entryId: result.entryId,
-      allocated: allocated.toFixed(2),
-      unallocated: unallocated.toFixed(2),
+      allocated,
+      unallocated,
       ...(warning ? { warning } : {}),
     };
   };

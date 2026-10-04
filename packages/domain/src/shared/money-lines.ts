@@ -22,7 +22,7 @@
  * 154's whole point). This module only decides WHICH ACCOUNT a line draws on and how much each
  * account is asked for; `judgeDraw` decides whether that is allowed.
  */
-import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, money, subtract, ZERO, type Money } from '@shareat/core/money';
 /**
  * ⭐ Re-exported so a CLIENT component reaches the overdraft verdict through this one pure
  * subpath (`@shareat/domain/money-lines`) instead of the package barrel.
@@ -246,7 +246,7 @@ export function bandFor(available: Money, needed: Money, alreadyDrawn: Money = Z
 /** Subtraction that stops at zero — a source already over-drawn reads as empty-for-this-line
  *  rather than negative, which the band language has no way to express. */
 function subtractFloor(a: Money, b: Money): Money {
-  return compare(a, b) <= 0 ? ZERO : money((Number(a) - Number(b)).toFixed(2));
+  return compare(a, b) <= 0 ? ZERO : subtract(a, b);
 }
 
 export interface GroupedSources {

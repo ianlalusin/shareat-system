@@ -2,7 +2,9 @@
  * The only place SQL is written for POS item mapping and the daily usage pull. T-177.
  */
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
+import type { Decimal, Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert } from './numeric-input';
 import { items } from '../../schema/items';
 import { productionRecipeLines, productionRecipes } from '../../schema/production';
 import {
@@ -91,18 +93,16 @@ export async function findOtherActiveDirectMapByItem(
   return row;
 }
 
-export interface UpsertMapValues {
-  readonly orgId: string;
-  readonly storeId: string;
-  readonly posItemKey: string;
-  readonly posItemName: string;
-  readonly mode: PosMapMode;
-  readonly itemId: string | null;
-  readonly recipeId: string | null;
-  readonly quantityPerSale: string | null;
-  readonly locationId: string | null;
-  readonly createdBy: string;
-}
+/** T-371 C2 — `quantityPerSale` is a `Decimal` brand of its column's own (14,6) shape, minted by `decimal()`. */
+export type UpsertMapValues = Readonly<
+  Pick<SafeInsert<typeof posItemMaps>, 'orgId' | 'storeId' | 'posItemKey' | 'posItemName' | 'createdBy'> & {
+    mode: PosMapMode;
+    itemId: string | null;
+    recipeId: string | null;
+    quantityPerSale: Decimal<'14,6'> | null;
+    locationId: string | null;
+  }
+>;
 
 export async function insertMap(tx: Tx, input: UpsertMapValues): Promise<{ id: string }> {
   const [row] = await tx
@@ -336,22 +336,22 @@ export async function markPullFinalized(tx: Tx, pullId: string, finalizedBy: str
 // ---------------------------------------------------------------------------------------------
 // pos_usage_pull_lines
 // ---------------------------------------------------------------------------------------------
-export interface InsertPullLine {
-  readonly section: PosUsagePullSection;
-  readonly lineKey: string;
-  readonly posItemKey: string;
-  readonly posItemName: string;
-  readonly itemId: string | null;
-  readonly locationId: string | null;
-  readonly quantity: string | null;
-  readonly blocked: { reason: string } | null;
-}
+/** T-371 C2 — `quantity` is a (14,3) `Quantity` brand, minted by `decimal()`. */
+export type InsertPullLine = Readonly<
+  Pick<SafeInsert<typeof posUsagePullLines>, 'lineKey' | 'posItemKey' | 'posItemName'> & {
+    section: PosUsagePullSection;
+    itemId: string | null;
+    locationId: string | null;
+    quantity: Quantity | null;
+    blocked: { reason: string } | null;
+  }
+>;
 
 export async function replacePullLines(tx: Tx, pullId: string, lines: readonly InsertPullLine[]): Promise<void> {
   await tx.delete(posUsagePullLines).where(eq(posUsagePullLines.pullId, pullId));
   if (lines.length === 0) return;
-  await tx.insert(posUsagePullLines).values(
-    lines.map((l) => ({
+  const rows: (SafeInsert<typeof posUsagePullLines> & { quantity: Quantity | null })[] = lines.map(
+    (l) => ({
       pullId,
       section: l.section,
       lineKey: l.lineKey,
@@ -361,8 +361,9 @@ export async function replacePullLines(tx: Tx, pullId: string, lines: readonly I
       locationId: l.locationId,
       quantity: l.quantity,
       blocked: l.blocked,
-    })),
+    }),
   );
+  await tx.insert(posUsagePullLines).values(rows);
 }
 
 export interface PullLineRow {
@@ -403,7 +404,7 @@ export async function listPullLines(tx: Tx, pullId: string): Promise<PullLineRow
 export async function setLineUsageRecord(
   tx: Tx,
   pullId: string,
-  updates: readonly { lineKey: string; quantity: string; usageRecordId: string }[],
+  updates: readonly { lineKey: string; quantity: Quantity; usageRecordId: string }[],
 ): Promise<void> {
   for (const u of updates) {
     await tx

@@ -15,6 +15,8 @@ import {
   thirteenthMonthRuns,
   type ThirteenthMonthRunStatus,
 } from '../../schema/thirteenth-month';
+import type { Money } from '@shareat/core/money';
+import type { SafeInsert } from './numeric-input';
 
 /**
  * Total `basic_pay` a job earned in a calendar year, from POSTED regular pay runs only.
@@ -204,14 +206,35 @@ export interface ThirteenthMonthPayoutRow {
   journalEntryId: string | null;
 }
 
+/** T-371: the write side of a payout. Every money figure is a branded `Decimal` minted by the caller. */
+export type ThirteenthMonthPayoutInsert = Pick<
+  SafeInsert<typeof thirteenthMonthPayouts>,
+  'orgId' | 'runId' | 'employmentId' | 'personId' | 'journalEntryId'
+> & {
+  basicPayEarned: Money;
+  grossPay: Money;
+  /** NOT NULL DEFAULT 0 — omit to take the column default (R13). */
+  advanceRecovered?: Money;
+  netPay: Money;
+};
+
 export async function insertThirteenthMonthPayout(
   tx: Tx,
-  input: Omit<ThirteenthMonthPayoutRow, 'id' | 'personName'> & { orgId: string },
+  input: ThirteenthMonthPayoutInsert,
 ): Promise<{ id: string }> {
-  const { personName: _drop, ...rest } = { ...input, personName: undefined };
   const [row] = await tx
     .insert(thirteenthMonthPayouts)
-    .values(rest as never)
+    .values({
+      orgId: input.orgId,
+      runId: input.runId,
+      employmentId: input.employmentId,
+      personId: input.personId,
+      basicPayEarned: input.basicPayEarned,
+      grossPay: input.grossPay,
+      advanceRecovered: input.advanceRecovered,
+      netPay: input.netPay,
+      journalEntryId: input.journalEntryId,
+    })
     .returning({ id: thirteenthMonthPayouts.id });
   return row!;
 }

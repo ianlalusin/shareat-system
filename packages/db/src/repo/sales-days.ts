@@ -19,6 +19,8 @@ import {
   salesDays,
 } from '../../schema/sales-days';
 import { moneyAccounts } from '../../schema/money-accounts';
+import type { Money } from '@shareat/core/money';
+import type { SafeInsert } from './numeric-input';
 
 export type SalesDayStatus = 'open' | 'submitted' | 'verified' | 'voided';
 
@@ -294,26 +296,30 @@ export async function setChannelActive(
 // Sales days
 // -------------------------------------------------------------------------------------
 
-export interface InsertSalesDayInput {
-  orgId: string;
-  storeId: string;
-  businessDate: string;
+/**
+ * T-371 C2 — every figure is a `Money` brand minted by `decimal()`.
+ * ✎R13 the nine defaulted figures (NOT NULL DEFAULT '0') are OPTIONAL: a blank is omitted so the column
+ * default applies, never a guessed zero. The three revenue figures (NOT NULL, no default) stay required.
+ */
+export type InsertSalesDayInput = Pick<
+  SafeInsert<typeof salesDays>,
+  'orgId' | 'storeId' | 'businessDate' | 'createdBy'
+> & {
   posSourced: boolean;
   posSourcedAt: Date | null;
-  totalSales: string;
-  unliSales: string;
-  alaCarteSales: string;
-  seniorDiscount: string;
-  pwdDiscount: string;
-  otherDiscount: string;
-  comps: string;
-  serviceCharge: string;
-  otherCharges: string;
-  cashCollected: string;
-  onlineCollected: string;
-  creditSales: string;
-  createdBy: string;
-}
+  totalSales: Money;
+  unliSales: Money;
+  alaCarteSales: Money;
+  seniorDiscount?: Money;
+  pwdDiscount?: Money;
+  otherDiscount?: Money;
+  comps?: Money;
+  serviceCharge?: Money;
+  otherCharges?: Money;
+  cashCollected?: Money;
+  onlineCollected?: Money;
+  creditSales?: Money;
+};
 
 export async function insertSalesDay(tx: Tx, input: InsertSalesDayInput): Promise<{ id: string }> {
   const [row] = await tx.insert(salesDays).values(input).returning({ id: salesDays.id });
@@ -446,21 +452,22 @@ export async function listSalesDays(tx: Tx, input: ListSalesDaysInput): Promise<
     .limit(input.limit ?? 100);
 }
 
+/** T-371 C2 — a figure, when present, is a `Money` brand; an absent one is left unchanged (✎R13). */
 export interface UpdateDraftInput {
   posSourced?: boolean;
   posSourcedAt?: Date | null;
-  totalSales?: string;
-  unliSales?: string;
-  alaCarteSales?: string;
-  seniorDiscount?: string;
-  pwdDiscount?: string;
-  otherDiscount?: string;
-  comps?: string;
-  serviceCharge?: string;
-  otherCharges?: string;
-  cashCollected?: string;
-  onlineCollected?: string;
-  creditSales?: string;
+  totalSales?: Money;
+  unliSales?: Money;
+  alaCarteSales?: Money;
+  seniorDiscount?: Money;
+  pwdDiscount?: Money;
+  otherDiscount?: Money;
+  comps?: Money;
+  serviceCharge?: Money;
+  otherCharges?: Money;
+  cashCollected?: Money;
+  onlineCollected?: Money;
+  creditSales?: Money;
 }
 
 /**
@@ -656,16 +663,23 @@ export async function getChannelsForDay(tx: Tx, salesDayId: string): Promise<Sal
     .orderBy(asc(salesChannels.name));
 }
 
+/** T-371 C2 — `amount` is a `Money` brand. */
 export interface InsertChannelInput {
   channelId: string;
-  amount: string;
+  amount: Money;
   noSales: boolean;
 }
 
 export async function replaceChannels(tx: Tx, salesDayId: string, rows: InsertChannelInput[]): Promise<void> {
   await tx.delete(salesDayChannels).where(eq(salesDayChannels.salesDayId, salesDayId));
   if (rows.length === 0) return;
-  await tx.insert(salesDayChannels).values(rows.map((r) => ({ salesDayId, ...r })));
+  const values: (SafeInsert<typeof salesDayChannels> & { amount: Money })[] = rows.map((r) => ({
+    salesDayId,
+    channelId: r.channelId,
+    amount: r.amount,
+    noSales: r.noSales,
+  }));
+  await tx.insert(salesDayChannels).values(values);
 }
 
 // -------------------------------------------------------------------------------------
@@ -700,9 +714,10 @@ export async function getTendersForDay(tx: Tx, salesDayId: string): Promise<Sale
     .orderBy(asc(moneyAccounts.name));
 }
 
+/** T-371 C2 — `amount` is a `Money` brand. */
 export interface InsertTenderInput {
   moneyAccountId: string;
-  amount: string;
+  amount: Money;
 }
 
 /** Replace-wholesale, the same technique `replaceChannels` uses: a day's tender breakdown is
@@ -714,5 +729,10 @@ export async function replaceTenders(
 ): Promise<void> {
   await tx.delete(salesDayTenders).where(eq(salesDayTenders.salesDayId, salesDayId));
   if (rows.length === 0) return;
-  await tx.insert(salesDayTenders).values(rows.map((r) => ({ salesDayId, ...r })));
+  const values: (SafeInsert<typeof salesDayTenders> & { amount: Money })[] = rows.map((r) => ({
+    salesDayId,
+    moneyAccountId: r.moneyAccountId,
+    amount: r.amount,
+  }));
+  await tx.insert(salesDayTenders).values(values);
 }

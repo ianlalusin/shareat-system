@@ -38,7 +38,7 @@ import { lowStockRepo } from '../packages/db/src/index';
 import { receiveDelivery } from '../packages/domain/src/deliveries/receive';
 import { confirmReceipt, dispatchOrder } from '../packages/domain/src/commissary/transfer';
 import { quantity } from '../packages/domain/src/stock/quantity';
-import { money } from '../packages/core/src/money';
+import { decimal, money } from '../packages/core/src/money';
 import type { LocationLike } from '../packages/domain/src/stock-locations/rules';
 
 const REFERENCE = 'DEV-SEED-COMMISSARY-1';
@@ -260,7 +260,7 @@ async function main(): Promise<void> {
         storeId: branch.id,
         itemId: brPork,
         // Above the 90 kg received, so the branch shows as LOW immediately.
-        threshold: '120',
+        threshold: decimal('120', '14,3'),
         setBy: person.id,
       }),
     );

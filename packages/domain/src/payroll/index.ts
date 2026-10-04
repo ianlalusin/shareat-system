@@ -9,7 +9,7 @@
  * out and exactly what would trigger porting the rest.
  */
 import { sql } from 'drizzle-orm';
-import { ZERO, add, compare, formatMoney, money, subtract, type Money } from '@shareat/core/money';
+import { ZERO, add, compare, decimal, formatMoney, money, subtract, type Money } from '@shareat/core/money';
 import {
   attendanceConfigRepo,
   moneyAccountsRepo,
@@ -77,7 +77,7 @@ export async function setPayRate(
       orgId: actor.orgId,
       employmentId: input.employmentId,
       basis: input.basis,
-      amount: amount.toString(),
+      amount,
       effectiveFrom: input.effectiveFrom,
       note: input.note ?? null,
       createdBy: actor.personId,
@@ -344,7 +344,9 @@ export async function outstandingAdvance(
         and jl.party_id = ${personId}
     `,
   )) as unknown as { total: string }[];
-  return money(Number(rows[0]?.total ?? 0).toFixed(2));
+  // T-371 R3/R4 — the `sum` comes back as numeric text; it is minted through `money()` as it stands, never round-tripped
+  // through a float (`Number(...).toFixed(2)` lost exactness past 2^53 and turned a malformed value into "NaN").
+  return money(rows[0]?.total ?? '0');
 }
 
 // -------------------------------------------------------------------------------------
@@ -433,34 +435,35 @@ export async function postPayRun(
           employmentId: slip.employmentId,
           personId: slip.personId,
           payRateId: slip.payRateId,
-          daysWorked: slip.daysWorked.toFixed(2),
+          // T-371 — `days_worked` is numeric(6,2); minted at that shape, not passed as a bare string.
+          daysWorked: decimal(slip.daysWorked.toFixed(2), '6,2'),
           minutesWorked: slip.minutesWorked,
           otMinutes: slip.otMinutes,
           nightDiffMinutes: slip.nightDiffMinutes,
           holidayMinutes: slip.holidayMinutes,
-          basicPay: slip.basicPay.toString(),
-          otPay: slip.otPay.toString(),
-          nightDiffPay: slip.nightDiffPay.toString(),
-          holidayPay: slip.holidayPay.toString(),
-          grossPay: slip.grossPay.toString(),
-          advanceRecovered: slip.advanceRecovered.toString(),
-          netPay: slip.netPay.toString(),
+          basicPay: slip.basicPay,
+          otPay: slip.otPay,
+          nightDiffPay: slip.nightDiffPay,
+          holidayPay: slip.holidayPay,
+          grossPay: slip.grossPay,
+          advanceRecovered: slip.advanceRecovered,
+          netPay: slip.netPay,
           journalEntryId: null,
-        } as never)
+        })
       ).id;
 
       const lines = [
         {
           accountCode: SALARIES_ACCOUNT,
           storeId: input.storeId,
-          debit: slip.grossPay.toString(),
+          debit: slip.grossPay,
         },
         ...(compare(slip.advanceRecovered, ZERO) > 0
           ? [
               {
                 accountCode: PAYROLL_ADVANCE_ACCOUNT,
                 storeId: input.storeId,
-                credit: slip.advanceRecovered.toString(),
+                credit: slip.advanceRecovered,
                 partyType: 'employee',
                 partyId: slip.personId,
               },
@@ -471,7 +474,7 @@ export async function postPayRun(
               {
                 accountCode: account.glAccountCode,
                 storeId: input.storeId,
-                credit: slip.netPay.toString(),
+                credit: slip.netPay,
               },
             ]
           : []),

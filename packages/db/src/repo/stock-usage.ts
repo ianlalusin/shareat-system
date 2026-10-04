@@ -12,6 +12,7 @@ import { stockUsageLines, stockUsageRecords, type UsageKind, type UsageStatus } 
 import { departments, stockLocations } from '../../schema/stock-locations';
 import { items } from '../../schema/items';
 import type { Tx } from '../client';
+import type { Quantity } from '@shareat/core/money';
 
 export interface UsageRecordRow {
   readonly id: string;
@@ -78,7 +79,7 @@ export interface InsertUsageLineInput {
   readonly lineNo: string;
   readonly itemId: string;
   /** Decimal string. SIGNED only for `kind='adjustment'`, which this pass never writes. */
-  readonly quantity: string;
+  readonly quantity: Quantity;
 }
 
 export async function insertUsageLines(

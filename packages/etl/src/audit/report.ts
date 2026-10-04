@@ -19,7 +19,7 @@
  *     Stated, never corrected for — correcting would invent numbers v1 does not have.
  */
 import type { Money } from '@shareat/core/money';
-import { add, money } from '@shareat/core/money';
+import { add, compare, equals, isZero, money, negate, ZERO } from '@shareat/core/money';
 import type { AccountBalance, PartyBalance, ReconstructBalancesResult } from './balances';
 import type { ClassifyGroupsResult, GroupClass, GroupResult } from './groups';
 import type { CrossCheckResult } from './compare';
@@ -54,8 +54,13 @@ function sumMoney(values: readonly Money[]): Money {
   return values.reduce<Money>((acc, v) => add(acc, v), money('0'));
 }
 
-function isZero(m: Money): boolean {
-  return Number(m) === 0;
+function absMoney(m: Money): Money {
+  return compare(m, ZERO) < 0 ? negate(m) : m;
+}
+
+/** Descending by magnitude, in exact centavos (never a float subtraction, which a NaN would silently scramble). */
+function byMagnitudeDesc(a: Money, b: Money): number {
+  return compare(absMoney(b), absMoney(a));
 }
 
 const CLASS_LABEL: Record<GroupClass, string> = {
@@ -137,7 +142,7 @@ export function renderAuditReport(input: AuditReportInput): string {
   const renderParty = (code: string, heading: string, kind: 'supplier' | 'customer' | 'employee') => {
     const rows = balances.partyBalances
       .filter((p) => p.accountCode === code && !isZero(p.netBalance))
-      .sort((a, b) => Math.abs(Number(b.netBalance)) - Math.abs(Number(a.netBalance)));
+      .sort((a, b) => byMagnitudeDesc(a.netBalance, b.netBalance));
     out.push(section(heading));
     out.push(
       `> ⚠️ **These are movements from 1 May 2026 to ${input.asOf} — not lifetime balances.** ` +
@@ -159,7 +164,7 @@ export function renderAuditReport(input: AuditReportInput): string {
     // Invariant 3, restated for the reader: the subledger must equal its control.
     const control = balances.balances.find((b) => b.accountCode === code);
     if (control) {
-      const ties = Number(control.netBalance) === Number(total);
+      const ties = equals(control.netBalance, total);
       out.push('');
       out.push(
         `**Control-account check:** account ${code} totals ${peso(control.netBalance)}; the ` +
@@ -261,7 +266,7 @@ export function renderAuditReport(input: AuditReportInput): string {
     out.push('| sourceType | Groups | Peso magnitude |');
     out.push('|---|---:|---:|');
     for (const [st, list] of [...bySourceType.entries()].sort(
-      (a, b) => Math.abs(Number(sumMoney(b[1].map((g) => g.imbalance)))) - Math.abs(Number(sumMoney(a[1].map((g) => g.imbalance)))),
+      (a, b) => byMagnitudeDesc(sumMoney(a[1].map((g) => g.imbalance)), sumMoney(b[1].map((g) => g.imbalance))),
     )) {
       out.push(`| \`${st}\` | ${list.length} | ${peso(sumMoney(list.map((g) => g.imbalance)))} |`);
     }
@@ -270,7 +275,7 @@ export function renderAuditReport(input: AuditReportInput): string {
     out.push('');
     out.push('| Store | sourceType | sourceId | Date | Legs | Out by |');
     out.push('|---|---|---|---|---:|---:|');
-    for (const g of [...broken].sort((a, b) => Math.abs(Number(b.imbalance)) - Math.abs(Number(a.imbalance))).slice(0, 20)) {
+    for (const g of [...broken].sort((a, b) => byMagnitudeDesc(a.imbalance, b.imbalance)).slice(0, 20)) {
       out.push(`| ${g.storeCode} | \`${g.sourceType}\` | \`${g.sourceId}\` | ${g.businessDate ?? '—'} | ${g.legCount} | ${peso(g.imbalance)} |`);
     }
   }

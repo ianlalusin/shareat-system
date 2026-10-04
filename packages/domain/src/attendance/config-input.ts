@@ -6,10 +6,11 @@
  * Every human sentence is byte-identical to the action's old ones (R3) — only the raw (developer)
  * prefix changed, from `updateAttendanceConfigAction:` to `supersedeConfig:`.
  */
-import type { ConfigChanges } from './config';
+import type { ConfigChanges, NumericConfigKeys, ParsedConfigChanges } from './config';
 import { refuse } from '../shared/refusal';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { parseMoneyInput } from '../shared/money-input';
+import { compareDecimal, decimal, type Decimal, type Money } from '@shareat/core/money';
 
 /**
  * S5.5w Amendment A2 items 1/2 — a deliberate sane ceiling, far inside int4: no grace period,
@@ -82,7 +83,7 @@ const DEC2_CEILING = 99.99;
  * digit run, not the value): shape first, then the value against `numeric(4,2)`'s own ceiling and
  * the field's own min (no field currently needs a narrower `max` than the column's own).
  */
-function dec2(raw: string, key: string, label: string, min: number, max: number = DEC2_CEILING): string {
+function dec2(raw: string, key: string, label: string, min: number, max: number = DEC2_CEILING): Decimal<'4,2'> {
   const v = String(raw).trim();
   if (v === '') {
     throw refuse(`supersedeConfig: ${key} is blank`, `${label} — enter a number.`);
@@ -93,28 +94,45 @@ function dec2(raw: string, key: string, label: string, min: number, max: number 
       `${label} — "${v}" is not a valid number. Use at most two decimal places.`,
     );
   }
-  const n = Number(v);
-  if (n < min) {
+  // T-371 C4 — the range checks run in scaled bigint on branded values, never as floats. The shape test above already
+  // passed, so the only thing `decimal()` can still refuse is a digit run too long for even (14,2) — which is above
+  // `max` by construction, so it gets the at-most sentence. `.5` and `5.` are the shape's own spellings; `decimal()`
+  // wants a digit on each side of the point, so they are written out (`0.5`, `5`) before minting, value unchanged.
+  const spelled = (v.startsWith('.') ? `0${v}` : v).replace(/\.$/, '');
+  const aboveMax = () =>
+    refuse(`supersedeConfig: ${key} has to be at most ${max}: ${JSON.stringify(v)}`, `${label} has to be at most ${max}.`);
+  let wide: Decimal<'14,2'>;
+  try {
+    wide = decimal(spelled, '14,2');
+  } catch (err) {
+    if (err instanceof RangeError) throw aboveMax();
+    throw err;
+  }
+  if (compareDecimal(wide, decimal(min, '14,2')) < 0) {
     throw refuse(`supersedeConfig: ${key} has to be at least ${min}: ${JSON.stringify(v)}`, `${label} has to be at least ${min}.`);
   }
-  if (n > max) {
-    throw refuse(`supersedeConfig: ${key} has to be at most ${max}: ${JSON.stringify(v)}`, `${label} has to be at most ${max}.`);
+  if (compareDecimal(wide, decimal(max, '14,2')) > 0) {
+    throw aboveMax();
   }
-  return v;
+  return decimal(spelled, '4,2');
 }
 
 /** `null` or blank gives `null` (fixed-OT rate is only meaningful in fixed mode); M4 trims first. */
-function parseOvertimeFixedHourly(raw: string | null): string | null {
+function parseOvertimeFixedHourly(raw: string | null): Money | null {
   if (raw === null) return null;
   const v = String(raw).trim();
   if (v === '') return null;
   return parseMoneyInput(v, 'supersedeConfig: the overtime fixed hourly', 'The overtime fixed hourly');
 }
 
-/** Blank gives `'0'` (today's rule — no charge policy chosen means no charge); M4 trims first. */
-function parseLateChargePerMinute(raw: string): string {
+/**
+ * T-371 R6 (✎R13) — blank gives `undefined`: the key is OMITTED, so the successor row inherits the live rate (the
+ * column is NOT NULL DEFAULT '0', and a supersede is an update of the policy, so "leave unchanged" is the column's rule).
+ * It used to invent `'0'` here; a cleared box no longer silently zeroes a charge policy. M4 trims first.
+ */
+function parseLateChargePerMinute(raw: string): Money | undefined {
   const v = String(raw).trim();
-  if (v === '') return '0';
+  if (v === '') return undefined;
   return parseMoneyInput(v, 'supersedeConfig: the late charge per minute', 'The late charge per minute');
 }
 
@@ -182,7 +200,7 @@ type FieldRow =
   | { kind: 'int'; key: IntKey; label: string; min: number; max?: number }
   | { kind: 'intOrNull'; key: 'autoClockOutHour'; label: string; min: number; max: number }
   | { kind: 'moneyOrNull'; key: 'overtimeFixedHourly' }
-  | { kind: 'moneyBlankZero'; key: 'lateChargePerMinute' };
+  | { kind: 'moneyBlankOmit'; key: 'lateChargePerMinute' };
 
 const FIELD_TABLE: readonly FieldRow[] = [
   { kind: 'dec2', key: 'requiredHoursPerShift', label: 'The required hours / shift', min: 0.5 },
@@ -203,7 +221,7 @@ const FIELD_TABLE: readonly FieldRow[] = [
     min: 1,
   },
   { kind: 'dec2', key: 'holidaySpecialWorkingMultiplier', label: 'The special working holiday multiplier', min: 1 },
-  { kind: 'moneyBlankZero', key: 'lateChargePerMinute' },
+  { kind: 'moneyBlankOmit', key: 'lateChargePerMinute' },
   { kind: 'int', key: 'lateInfractionPoints', label: 'The late infraction points', min: 0 },
   { kind: 'int', key: 'lateGraceMinutes', label: 'The late grace minutes', min: 0 },
   { kind: 'int', key: 'earlyOutGraceMinutes', label: 'The early-out grace minutes', min: 0 },
@@ -215,14 +233,17 @@ const FIELD_TABLE: readonly FieldRow[] = [
 ] as const;
 
 /** T-352 / DEF-478 — parses every field `supersedeConfig` accepts, called directly after `authorize()`. */
-export function parseConfigChanges(c: ConfigChangesInput): ConfigChanges {
+export function parseConfigChanges(c: ConfigChangesInput): ParsedConfigChanges {
+  // The integer and pass-through keys ride on `out` (no brand in `ConfigChanges`); the eleven branded numeric columns are
+  // collected in `numeric` and joined at the end, so no assertion ever targets a brand (T-371 G3).
   const out = { ...c } as unknown as ConfigChanges;
+  const numeric: Pick<ParsedConfigChanges, NumericConfigKeys> = {};
   for (const row of FIELD_TABLE) {
     switch (row.kind) {
       case 'dec2': {
         const raw = c[row.key];
         if (raw === undefined) break;
-        out[row.key] = dec2(raw, row.key, row.label, row.min);
+        numeric[row.key] = dec2(raw, row.key, row.label, row.min);
         break;
       }
       case 'int': {
@@ -240,16 +261,27 @@ export function parseConfigChanges(c: ConfigChangesInput): ConfigChanges {
       case 'moneyOrNull': {
         const raw = c[row.key];
         if (raw === undefined) break;
-        out[row.key] = parseOvertimeFixedHourly(raw);
+        numeric.overtimeFixedHourly = parseOvertimeFixedHourly(raw);
         break;
       }
-      case 'moneyBlankZero': {
+      case 'moneyBlankOmit': {
         const raw = c[row.key];
         if (raw === undefined) break;
-        out[row.key] = parseLateChargePerMinute(raw);
+        const parsed = parseLateChargePerMinute(raw);
+        if (parsed !== undefined) numeric.lateChargePerMinute = parsed;
         break;
       }
     }
   }
-  return out;
+  const {
+    requiredHoursPerShift, halfDayHours, defaultWorkHours, defaultBreakHours, nightDiffMultiplier, overtimeMultiplier,
+    overtimeFixedHourly, holidayRegularMultiplier, holidaySpecialNonWorkingMultiplier, holidaySpecialWorkingMultiplier,
+    lateChargePerMinute, ...rest
+  } = out;
+  void [
+    requiredHoursPerShift, halfDayHours, defaultWorkHours, defaultBreakHours, nightDiffMultiplier, overtimeMultiplier,
+    overtimeFixedHourly, holidayRegularMultiplier, holidaySpecialNonWorkingMultiplier, holidaySpecialWorkingMultiplier,
+    lateChargePerMinute,
+  ]; // the raw box strings are replaced by the parsed brands in `numeric`
+  return { ...rest, ...numeric };
 }

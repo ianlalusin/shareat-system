@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { compare, isZero, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../../lib/session';
 import {
   addOpeningFigureAction,
@@ -41,7 +42,8 @@ export default async function OpeningPage({
   ]);
 
   const residual = Number(gaps.residual);
-  const balanced = Math.abs(residual) < 0.005;
+  // T-371 C4: balanced is decided in centavos on the minted figure; `residual` is display-only.
+  const balanced = isZero(money(gaps.residual));
   const storeName = (id: string | null) => stores.find((s) => s.id === id)?.name ?? '—';
 
   return (
@@ -228,7 +230,7 @@ export default async function OpeningPage({
               </div>
               <div className="flex items-center gap-3">
                 <span className="font-mono text-sm tabular-nums">
-                  {Number(d.debit) > 0 ? peso(Number(d.debit)) : `(${peso(Number(d.credit))})`}
+                  {compare(money(d.debit), ZERO) > 0 ? peso(Number(d.debit)) : `(${peso(Number(d.credit))})`}
                 </span>
                 {/* A draft was never final, so removing one is a delete rather than a reversal. */}
                 <form action={removeOpeningFigureAction}>

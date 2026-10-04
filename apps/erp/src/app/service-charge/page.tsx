@@ -1,3 +1,4 @@
+import { compare, money, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../lib/page-access';
 import { distributeAction } from './actions';
 import { floatBalance, listStores, moneyAccounts, peso, today } from './lib';
@@ -40,7 +41,8 @@ export default async function ServiceChargePage({
     moneyAccounts(actor.orgId, storeId),
   ]);
   const store = stores.find((s) => s.id === storeId);
-  const available = Number(balance);
+  // ⛔ T-371 R4/C4 — the ledger figure re-minted and ordered exactly, never as a float.
+  const hasFloat = compare(money(balance), ZERO) > 0;
 
   return (
     <Page density="table">
@@ -104,12 +106,12 @@ export default async function ServiceChargePage({
         <div>
           <h2 className="font-medium">Distribute</h2>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            {available > 0
+            {hasFloat
               ? "Pay only what is available. A distribution exceeding this store's own float is refused, never negative."
               : 'Nothing is held for this store yet.'}
           </p>
         </div>
-        {available > 0 && (
+        {hasFloat && (
           <form action={distributeAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
             <Field label="Amount" hint={`Up to ${peso(balance)} available.`}>

@@ -11,6 +11,7 @@ import { attendanceConfigRepo, findingsRepo, type AttendanceConfigRow, type Tx }
 import { parseShiftDay, type RawShiftDay, type ShiftDay } from './shift-day';
 import { maxPayoutGapDays } from '../payroll/periods';
 import { refuse } from '../shared/refusal';
+import { decimal, money, type Decimal, type Money } from '@shareat/core/money';
 import { parseConfigChanges, type ConfigChangesInput } from './config-input';
 
 export type { ConfigChangesInput } from './config-input';
@@ -72,6 +73,27 @@ export type ConfigChanges = Partial<
     'id' | 'orgId' | 'storeId' | 'effectiveFrom' | 'supersededAt'
   >
 >;
+
+/** The eleven numeric policy columns: the brand each carries once `decimal()` has minted it (T-371 R4). */
+export type NumericConfigKeys =
+  | 'requiredHoursPerShift' | 'halfDayHours' | 'defaultWorkHours' | 'defaultBreakHours' | 'nightDiffMultiplier'
+  | 'overtimeMultiplier' | 'overtimeFixedHourly' | 'holidayRegularMultiplier' | 'holidaySpecialNonWorkingMultiplier'
+  | 'holidaySpecialWorkingMultiplier' | 'lateChargePerMinute';
+
+/** `ConfigChanges` after parsing: the numeric columns are branded, so the writer's input type is satisfied. */
+export type ParsedConfigChanges = Omit<ConfigChanges, NumericConfigKeys> & {
+  requiredHoursPerShift?: Decimal<'4,2'>;
+  halfDayHours?: Decimal<'4,2'>;
+  defaultWorkHours?: Decimal<'4,2'>;
+  defaultBreakHours?: Decimal<'4,2'>;
+  nightDiffMultiplier?: Decimal<'4,2'>;
+  overtimeMultiplier?: Decimal<'4,2'>;
+  overtimeFixedHourly?: Money | null;
+  holidayRegularMultiplier?: Decimal<'4,2'>;
+  holidaySpecialNonWorkingMultiplier?: Decimal<'4,2'>;
+  holidaySpecialWorkingMultiplier?: Decimal<'4,2'>;
+  lateChargePerMinute?: Money;
+};
 
 /**
  * Change a store's policy from a given shift day, by inserting a new row and retiring the old one
@@ -160,12 +182,27 @@ export async function seedAttendanceConfig(
 }
 
 /** Everything except the row's own identity and lifecycle — i.e. what a successor inherits. */
-function stripLifecycle(row: AttendanceConfigRow): ConfigChanges {
+function stripLifecycle(row: AttendanceConfigRow): ParsedConfigChanges {
   const { id, orgId, storeId, effectiveFrom, supersededAt, ...rest } = row;
   void id;
   void orgId;
   void storeId;
   void effectiveFrom;
   void supersededAt;
-  return rest;
+  // T-371 R4 — the inherited figures are re-written into the successor row, so they are re-minted from the stored text
+  // (never cast). `0155` keeps NaN out of stored data, so these never refuse; they close the hole in the type system.
+  return {
+    ...rest,
+    requiredHoursPerShift: decimal(rest.requiredHoursPerShift, '4,2'),
+    halfDayHours: decimal(rest.halfDayHours, '4,2'),
+    defaultWorkHours: decimal(rest.defaultWorkHours, '4,2'),
+    defaultBreakHours: decimal(rest.defaultBreakHours, '4,2'),
+    nightDiffMultiplier: decimal(rest.nightDiffMultiplier, '4,2'),
+    overtimeMultiplier: decimal(rest.overtimeMultiplier, '4,2'),
+    overtimeFixedHourly: rest.overtimeFixedHourly === null ? null : money(rest.overtimeFixedHourly),
+    holidayRegularMultiplier: decimal(rest.holidayRegularMultiplier, '4,2'),
+    holidaySpecialNonWorkingMultiplier: decimal(rest.holidaySpecialNonWorkingMultiplier, '4,2'),
+    holidaySpecialWorkingMultiplier: decimal(rest.holidaySpecialWorkingMultiplier, '4,2'),
+    lateChargePerMinute: money(rest.lateChargePerMinute),
+  };
 }

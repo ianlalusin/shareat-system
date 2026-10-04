@@ -39,6 +39,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import type { Money } from '@shareat/core/money';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from './receipt-posting';
 import { compareQuantity, quantity, ZERO_QUANTITY } from './quantity';
+import { parseRequiredQuantity } from './quantity-field';
 import {
   postUsageRecord,
   voidUsageRecord,
@@ -80,7 +81,7 @@ function reservedCategoryReason(value: string): string {
 
 export interface UsageDraftLine {
   readonly itemId: string;
-  /** Decimal string, must be greater than zero. */
+  /** Decimal string, must be greater than zero. T-371 S3: parsed at the entry after `authorize()`; a blank is refused. */
   readonly quantity: string;
 }
 
@@ -130,12 +131,17 @@ function capabilityFor(kind: 'usage' | 'wastage'): 'record_wastage' | 'record_st
  */
 export async function saveUsageDraft(tx: Tx, actor: Actor, input: SaveUsageDraftInput): Promise<DraftOutcome> {
   await authorize(tx, actor, capabilityFor(input.kind), { storeId: input.storeId });
+  // T-371 S3 (R5, R6): every line's quantity becomes the brand here, after `authorize()`; a blank is refused.
+  const lines = input.lines.map((l, i) => ({
+    itemId: l.itemId,
+    quantity: parseRequiredQuantity(l.quantity, `saveUsageDraft: the quantity for item ${l.itemId}`, `Line ${i + 1}'s quantity`),
+  }));
 
-  if (input.lines.length === 0) {
+  if (lines.length === 0) {
     return { ok: false, reason: 'a usage record needs at least one line' };
   }
-  for (const line of input.lines) {
-    if (compareQuantity(quantity(line.quantity), ZERO_QUANTITY) <= 0) {
+  for (const line of lines) {
+    if (compareQuantity(line.quantity, ZERO_QUANTITY) <= 0) {
       return { ok: false, reason: `the line for item ${line.itemId} must have a quantity greater than zero` };
     }
   }
@@ -176,7 +182,7 @@ export async function saveUsageDraft(tx: Tx, actor: Actor, input: SaveUsageDraft
   await stockUsageRepo.insertUsageLines(
     tx,
     recordId,
-    input.lines.map((l, i) => ({ lineNo: String(i + 1), itemId: l.itemId, quantity: quantity(l.quantity) })),
+    lines.map((l, i) => ({ lineNo: String(i + 1), itemId: l.itemId, quantity: l.quantity })),
   );
 
   return { ok: true, recordId };
@@ -211,12 +217,13 @@ export async function addUsageLine(
 ): Promise<LineOutcome> {
   const loaded = await loadDraftForEdit(tx, actor, input.recordId);
   if (!loaded.ok) return loaded;
-  if (compareQuantity(quantity(input.quantity), ZERO_QUANTITY) <= 0) {
+  const qty = parseRequiredQuantity(input.quantity, 'addUsageLine: the quantity', 'Quantity');
+  if (compareQuantity(qty, ZERO_QUANTITY) <= 0) {
     return { ok: false, reason: 'a line must have a quantity greater than zero' };
   }
   const existing = await stockUsageRepo.listUsageLines(tx, input.recordId);
   const [line] = await stockUsageRepo.insertUsageLines(tx, input.recordId, [
-    { lineNo: String(existing.length + 1), itemId: input.itemId, quantity: quantity(input.quantity) },
+    { lineNo: String(existing.length + 1), itemId: input.itemId, quantity: qty },
   ]);
   return { ok: true, lineId: line!.id };
 }

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { REISSUE_INTERVALS } from '@shareat/db/schema';
+import { compare, money, toCentavos, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../lib/session';
 import { removeBudgetAction, setBudgetAction } from './actions';
 import {
@@ -130,7 +131,13 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
             ) : (
               <div className="space-y-2">
                 {budgets.map((b) => {
-                  const pct = Number(b.amount) > 0 ? Math.min(100, (Number(b.consumed) / Number(b.amount)) * 100) : 0;
+                  // T-371 C4/R4: the decisions are made on re-minted database values, never a float — `capped` on the
+                  // brand, the amber threshold ("past 90%") as consumed × 10 > cap × 9 in exact centavos. `pct` is only
+                  // the bar's width.
+                  const cap = money(b.amount);
+                  const capped = compare(cap, ZERO) > 0;
+                  const nearCap = capped && toCentavos(money(b.consumed)) * 10n > toCentavos(cap) * 9n;
+                  const pct = capped ? Math.min(100, (Number(b.consumed) / Number(b.amount)) * 100) : 0;
                   return (
                     <div
                       key={b.id}
@@ -157,7 +164,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                           −₱750, and the number is the thing anyone acts on. */}
                       <div className="h-2 w-full overflow-hidden rounded bg-neutral-200 dark:bg-neutral-800">
                         <div
-                          className={`h-full ${b.overBudget ? 'bg-red-500' : pct > 90 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                          className={`h-full ${b.overBudget ? 'bg-red-500' : nearCap ? 'bg-amber-500' : 'bg-emerald-500'}`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>

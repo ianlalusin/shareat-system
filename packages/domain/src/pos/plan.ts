@@ -31,6 +31,7 @@
  * *"an unconvertible unit blocks that line and not the pull."* Followed here as written — each
  * ingredient line stands or falls on its own.
  */
+import { decimal, type Decimal } from '@shareat/core/money';
 import {
   compareQuantity,
   fromThousandths,
@@ -107,9 +108,9 @@ export interface ExplodeInput {
  *  "round once, at the end" discipline `production/index.ts`'s `divideMoneyByQty` uses. Not a
  *  duplicate of that function: this scales a QUANTITY by a dimensionless RATE, not a Money by a
  *  Quantity. */
-function scaleByRate(qty: Quantity, rate: string): Quantity {
+function scaleByRate(qty: Quantity, rate: Decimal<'14,6'>): Quantity {
   const q = toThousandths(qty); // x1e3
-  const [whole, frac = ''] = rate.trim().split('.');
+  const [whole, frac = ''] = rate.split('.');
   const fracPadded = (frac + '000000').slice(0, 6);
   const rateMicros = BigInt(whole || '0') * 1_000_000n + BigInt(fracPadded || '0'); // x1e6
   const scaled = q * rateMicros; // x1e9
@@ -117,8 +118,14 @@ function scaleByRate(qty: Quantity, rate: string): Quantity {
   return fromThousandths(rounded);
 }
 
-function isPositiveDecimalString(s: string): boolean {
-  return /^\d+(\.\d+)?$/.test(s.trim()) && Number(s) > 0;
+/** A plain unsigned decimal string, minted as a `Quantity` when it is greater than zero; anything
+ *  else (blank, signed, malformed, zero) is `ZERO_QUANTITY`. T-371 — the positivity test is an exact
+ *  `compareQuantity`, never `Number(s) > 0` (NaN-blind). More than three places still throws in
+ *  `quantity()`, exactly as before. */
+function positiveQuantityOrZero(s: string): Quantity {
+  if (!/^\d+(\.\d+)?$/.test(s.trim())) return ZERO_QUANTITY;
+  const q = quantity(s);
+  return compareQuantity(q, ZERO_QUANTITY) > 0 ? q : ZERO_QUANTITY;
 }
 
 /**
@@ -166,10 +173,11 @@ export function explodePosSales(input: ExplodeInput): PlanLine[] {
     if (map.mode === 'no_stock') continue;
 
     const resolvedLocationId = map.locationId ?? input.defaultLocationId;
-    const physicalQty = isPositiveDecimalString(item.physicalQty) ? quantity(item.physicalQty) : ZERO_QUANTITY;
+    const physicalQty = positiveQuantityOrZero(item.physicalQty);
 
     if (map.mode === 'direct') {
-      const rate = map.quantityPerSale ?? '1';
+      // R4 — the stored numeric(14,6) rate is re-minted into its brand, never trusted as a bare string.
+      const rate = decimal(map.quantityPerSale ?? '1', '14,6');
       const qty = scaleByRate(physicalQty, rate);
       lines.push({
         key: `direct:${item.posItemKey}`,
@@ -201,7 +209,7 @@ export function explodePosSales(input: ExplodeInput): PlanLine[] {
       });
       continue;
     }
-    const outputQty = isPositiveDecimalString(recipe.outputQuantity) ? quantity(recipe.outputQuantity) : ZERO_QUANTITY;
+    const outputQty = positiveQuantityOrZero(recipe.outputQuantity);
     if (compareQuantity(outputQty, ZERO_QUANTITY) <= 0) {
       lines.push({
         key: `recipe:${item.posItemKey}:invalid-yield`,
@@ -234,7 +242,7 @@ export function explodePosSales(input: ExplodeInput): PlanLine[] {
     if (compareQuantity(physicalQty, ZERO_QUANTITY) <= 0) continue; // nothing sold -> nothing to explode
 
     recipe.lines.forEach((ingredient, index) => {
-      const lineQty = isPositiveDecimalString(ingredient.quantity) ? quantity(ingredient.quantity) : ZERO_QUANTITY;
+      const lineQty = positiveQuantityOrZero(ingredient.quantity);
       const scaledInLineUnit = scaleIngredient(lineQty, physicalQty, outputQty);
       const converted = convertUnit(scaledInLineUnit, ingredient.unit, ingredient.itemBaseUnit);
 

@@ -22,6 +22,7 @@
  * function returns a report instead of throwing, and the reason `postUsageRecord` does not call it.
  */
 import { commissaryRepo, lowStockRepo, withOrgPrincipal, type Tx } from '@shareat/db';
+import type { Money } from '@shareat/core/money';
 import { lineCost } from '../stock/layers';
 import { quantity, toThousandths, type Quantity } from '../stock/quantity';
 import { resolveBranchRate } from './orders';
@@ -174,7 +175,7 @@ async function resolveRate(
   orgId: string,
   commissaryStoreId: string,
   itemId: string,
-): Promise<string | null> {
+): Promise<Money | null> {
   const resolved = await resolveBranchRate(tx, orgId, commissaryStoreId, itemId);
   return resolved?.rate ?? null;
 }

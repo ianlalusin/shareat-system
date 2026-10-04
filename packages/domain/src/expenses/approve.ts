@@ -14,7 +14,7 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { apRepo, expensesRepo, moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
-import { money } from '@shareat/core/money';
+import { add, money, ZERO, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { withInterStoreLegs } from '../ledger/inter-store';
@@ -155,13 +155,11 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
   // ₱1,000 drawer are individually affordable and together are not — checking them one at a time
   // would let exactly that through (the DEF-065 family of error: a split's rows are only ever
   // right when considered together).
-  const drawnPerAccount = new Map<string, number>();
+  // T-371 (R4): summed in exact centavos from re-minted rows, not a float `+`; `checkDraw` takes the `Money` sum.
+  const drawnPerAccount = new Map<string, Money>();
   for (const p of payments) {
     if (!p.moneyAccountId) continue; // credit, reimbursable and cash-request legs move no money now
-    drawnPerAccount.set(
-      p.moneyAccountId,
-      (drawnPerAccount.get(p.moneyAccountId) ?? 0) + Number(p.amount),
-    );
+    drawnPerAccount.set(p.moneyAccountId, add(drawnPerAccount.get(p.moneyAccountId) ?? ZERO, money(p.amount)));
   }
   const warnings: string[] = [];
   for (const [id, drawn] of drawnPerAccount) {
@@ -221,8 +219,8 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
       storeId: l.storeId ?? expense.storeId,
       partyType: l.partyType ?? null,
       partyId: l.partyId ?? null,
-      debit: l.side === 'debit' ? l.amount : '0',
-      credit: l.side === 'credit' ? l.amount : '0',
+      debit: l.side === 'debit' ? l.amount : ZERO,
+      credit: l.side === 'credit' ? l.amount : ZERO,
       lineMemo: l.lineMemo ?? null,
     })),
   });

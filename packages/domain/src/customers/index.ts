@@ -18,6 +18,7 @@ import type { CustomerGroup, CustomerTreatment } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { gone, refuse } from '../shared/refusal';
 import { parseMoneyInput } from '../shared/money-input';
+import { compare, isZero, money, ZERO } from '@shareat/core/money';
 
 export { treatmentOf } from '@shareat/db';
 
@@ -118,7 +119,7 @@ export async function reconcileCustomer(
     if (!customer) throw gone(`reconcileCustomer: customer ${input.customerId} does not exist.`, 'customer');
 
     const balance = await customersRepo.balanceOf(trx, actor.orgId, customer.id);
-    if (Math.abs(Number(balance)) > 0.005) {
+    if (!isZero(money(balance))) {
       throw refuse(
         `reconcileCustomer: this customer owes ₱${balance}. An anchor says they were verified at ` +
           `ZERO on a date, so stamping one now would tell every later aging report that a live ` +
@@ -204,7 +205,7 @@ export async function setPrice(
     // ⚠️ Zero is allowed — a genuinely free line exists (a sample, a promotional unit) and refusing
     // it would push people to enter 0.01. Negative is not: that is a discount, not a price.
     const rate = parseMoneyInput(input.rate, 'setPrice: the rate', 'The rate');
-    if (Number(rate) < 0) {
+    if (compare(rate, ZERO) < 0) {
       throw refuse('setPrice: a rate cannot be negative. A negative price is a discount.', 'A rate cannot be negative. A negative price is a discount.');
     }
 

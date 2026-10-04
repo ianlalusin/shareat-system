@@ -23,7 +23,7 @@
  * — v1 names this as a deliberate fix over its own earlier behaviour of silently defaulting, *"so
  * stock is never lost."*
  */
-import { add, toCentavos, ZERO, type Money } from '@shareat/core/money';
+import { add, decimal, toCentavos, ZERO, type Decimal, type Money } from '@shareat/core/money';
 import { stockLayersRepo, stockLedgerRepo, type Tx } from '@shareat/db';
 import { resolveReceivingLocation, type LocationLike } from '../stock-locations/rules';
 import { lineCost as costOf } from '../stock/layers';
@@ -233,15 +233,16 @@ export function toBaseUnits(purchaseQuantity: Quantity, conversionFactor: string
  * line's quantity was relieved from more than one layer. One implementation of "money ÷ quantity
  * → 4dp", not a second copy.
  */
-export function perBaseUnit(lineCost: Money, baseQuantity: Quantity): string {
+export function perBaseUnit(lineCost: Money, baseQuantity: Quantity): Decimal<'14,4'> {
   const raw = toCentavos(lineCost);
   const centavos = raw < 0n ? -raw : raw;
   const units = toThousandths(baseQuantity);
-  if (units === 0n) return '0.0000';
+  if (units === 0n) return decimal('0.0000', '14,4');
   // centavos (10^2) × 10^5 / thousandths (10^3) → 10^4 scale.
   const scaled = (centavos * 100_000n * 2n + units) / (units * 2n);
   const negative = raw < 0n;
   const whole = scaled / 10_000n;
   const frac = (scaled % 10_000n).toString().padStart(4, '0');
-  return `${negative ? '-' : ''}${whole}.${frac}`;
+  // T-371 R2 — through the one mint, at `stock_layers.unit_cost`'s (14,4) shape, never a bare string.
+  return decimal(`${negative ? '-' : ''}${whole}.${frac}`, '14,4');
 }

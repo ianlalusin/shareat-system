@@ -20,14 +20,12 @@
  */
 import { cutoverRepo, journalRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
+import { compare, isZero, money, ZERO, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
 import { gone, refuse } from '../shared/refusal';
 
 export const OPENING_EQUITY_CODE = '3900';
 export const OPENING_SOURCE_TYPE = 'opening_balance';
-
-/** Decimal noise only. The same value every other module here uses. */
-const EPSILON = 0.005;
 
 export interface OpeningFigureInput {
   /** The real account the balance belongs to — `1110`, `2110`, `1310`… never `3900`. */
@@ -70,7 +68,7 @@ export async function addOpeningFigure(
       );
     }
     const amount = parseMoneyInput(input.amount, 'addOpeningFigure: the amount', 'This amount');
-    if (!(Number(amount) > 0)) {
+    if (compare(amount, ZERO) <= 0) {
       throw refuse('addOpeningFigure: an opening figure has to be greater than zero.', 'An opening figure has to be greater than zero.');
     }
 
@@ -125,8 +123,8 @@ export async function addOpeningFigure(
 type DraftLine = {
   accountCode: string;
   storeId: string;
-  debit?: string;
-  credit?: string;
+  debit?: Money;
+  credit?: Money;
   partyType?: string | null;
   partyId?: string | null;
   lineMemo: string;
@@ -141,8 +139,9 @@ async function resolveLines(tx: Tx, orgId: string, lines: DraftLine[]) {
       accountId: await journalRepo.resolveAccountId(tx, orgId, l.accountCode),
       lineNo: lineNo++,
       storeId: l.storeId,
-      debit: l.debit ?? '0',
-      credit: l.credit ?? '0',
+      // The opposite side of a one-sided line is a real zero, not a guessed blank.
+      debit: l.debit ?? ZERO,
+      credit: l.credit ?? ZERO,
       partyType: l.partyType ?? null,
       partyId: l.partyId ?? null,
       lineMemo: l.lineMemo,
@@ -210,8 +209,9 @@ export async function postOpeningBalances(
       throw refuse('postOpeningBalances: there are no opening figures to post.', 'There are no opening figures to post.');
     }
 
-    const residual = await cutoverRepo.openingEquityResidual(trx, actor.orgId);
-    if (Math.abs(Number(residual)) > EPSILON) {
+    // T-371 C4/R4: the repo's figure is re-minted and tested in centavos, never as a float.
+    const residual = money(await cutoverRepo.openingEquityResidual(trx, actor.orgId));
+    if (!isZero(residual)) {
       throw refuse(
         `postOpeningBalances: opening balance equity still carries ₱${residual}. This halts — ` +
           'there is no plug account. Find the difference; it has been on screen the whole time.',
@@ -219,8 +219,8 @@ export async function postOpeningBalances(
       );
     }
 
-    const drift = await cutoverRepo.trialBalanceDrift(trx, actor.orgId);
-    if (Math.abs(Number(drift)) > EPSILON) {
+    const drift = money(await cutoverRepo.trialBalanceDrift(trx, actor.orgId));
+    if (!isZero(drift)) {
       throw refuse(
         `postOpeningBalances: debits and credits differ by ₱${drift} across the ledger. The books ` +
           'cannot open on an entry that does not balance.',

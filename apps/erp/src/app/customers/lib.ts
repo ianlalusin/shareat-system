@@ -14,6 +14,7 @@ import {
   type PriceListRow,
 } from '@shareat/db';
 import type { CustomerTreatment } from '@shareat/db/schema';
+import { add, money } from '@shareat/core/money';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
@@ -130,7 +131,7 @@ export async function storesWithOpenItems(
       out.push({
         storeId: s.id,
         storeName: s.name,
-        outstanding: items.reduce((t, i) => t + Number(i.outstanding), 0).toFixed(2),
+        outstanding: add(...items.map((i) => money(i.outstanding))),
         count: items.length,
       });
     }

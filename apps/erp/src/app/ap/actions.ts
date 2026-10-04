@@ -9,7 +9,7 @@ import { redirect } from 'next/navigation';
 import { apRepo } from '@shareat/db';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 import { logger } from '@shareat/core/logger';
-import { formatMoney, money } from '@shareat/core/money';
+import { compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import {
   createSupplier,
   editSupplier,
@@ -350,7 +350,7 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
         allocations,
       }),
     );
-    message = `Paid. ₱${result.allocated} allocated${Number(result.unallocated) > 0 ? `, ₱${result.unallocated} to supplier advance (overpayment)` : ''}.`;
+    message = `Paid. ₱${result.allocated} allocated${compare(money(result.unallocated), ZERO) > 0 ? `, ₱${result.unallocated} to supplier advance (overpayment)` : ''}.`;
     if (result.warning) message += ` ⚠️ ${result.warning}`;
   } catch (err) {
     back(`/ap/suppliers/${supplierId}`, { error: errorMessage(err) });

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { PREPAID_CATEGORIES } from '@shareat/db';
+import { add, ZERO } from '@shareat/core/money';
 import { SchedulerStatus } from '../../components/scheduler-status';
 import { requirePageAccess } from '../../lib/page-access';
 import { createPrepaidItemAction } from './actions';
@@ -45,7 +46,7 @@ export default async function PrepaidPage({
 
   const totalRemaining = all
     .filter((i) => i.status === 'active')
-    .reduce((sum, i) => sum + Number(i.remaining), 0);
+    .reduce((sum, i) => add(sum, i.remaining), ZERO);
 
   return (
     <Page density="table">

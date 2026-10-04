@@ -34,6 +34,8 @@
  */
 import { fiscalPeriodsRepo, journalRepo, schema, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
+import { ZERO, type Money } from '@shareat/core/money';
+import { parseMoneyInput } from '../shared/money-input';
 
 export interface PostEntryLine {
   /** e.g. '6200' — never a uuid. The repo resolves code -> id (Contract §1). */
@@ -104,6 +106,28 @@ export interface PostEntryResult {
   entryId: string;
   /** false means the idempotency key already existed and nothing new was written. */
   created: boolean;
+}
+
+/**
+ * ⭐ T-371 S3 — one side of one line, minted into `Money` before anything is written. `undefined`/`null` is a line that
+ * does not use this side: the column's own default is `0` (`journal_lines.debit`/`credit`, NOT NULL DEFAULT '0'), so
+ * ZERO is that default written explicitly, not a guessed figure for a blank box. Anything else — `''`, `'NaN'`, `'abc'`,
+ * more than two places — is refused with a sentence naming the line, before the entry row exists, instead of reaching
+ * `journal_lines` and being caught (or silently rounded) by the database.
+ */
+export function lineAmount(
+  value: string | null | undefined,
+  side: 'debit' | 'credit',
+  index: number,
+  accountCode: string,
+  fn = 'postEntry',
+): Money {
+  if (value == null) return ZERO;
+  return parseMoneyInput(
+    value,
+    `${fn}: the ${side} on line ${index + 1} (account ${accountCode})`,
+    `The ${side} on line ${index + 1} (account ${accountCode})`,
+  );
 }
 
 /**
@@ -195,6 +219,12 @@ async function runPostEntry(tx: Tx, input: PostEntryInput): Promise<PostEntryRes
   // (Contract §1). A reserved or header code resolves fine here and is rejected by
   // T-103's eligibility trigger when the line is inserted below (invariants 6 and 7)
   // — not re-checked here, per the task's explicit "do not re-implement" rule.
+  // T-371 S3 — every figure is minted first, synchronously, so a malformed one is refused before any account lookup
+  // or write (and before a line's lookup could race another line's refusal).
+  const amounts = input.lines.map((line, index) => ({
+    debit: lineAmount(line.debit, 'debit', index, line.accountCode),
+    credit: lineAmount(line.credit, 'credit', index, line.accountCode),
+  }));
   const resolvedLines = await Promise.all(
     input.lines.map(async (line, index) => ({
       lineNo: index + 1,
@@ -203,8 +233,8 @@ async function runPostEntry(tx: Tx, input: PostEntryInput): Promise<PostEntryRes
       channelId: line.channelId ?? null,
       partyType: line.partyType ?? null,
       partyId: line.partyId ?? null,
-      debit: line.debit ?? '0',
-      credit: line.credit ?? '0',
+      debit: amounts[index]!.debit,
+      credit: amounts[index]!.credit,
       lineMemo: line.lineMemo ?? null,
     })),
   );

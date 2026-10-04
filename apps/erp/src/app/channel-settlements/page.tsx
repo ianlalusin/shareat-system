@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
 import { auditLogRepo } from '@shareat/db';
 import { logger } from '@shareat/core/logger';
+import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../lib/session';
 import {
   previewSettlementAction,
@@ -133,7 +134,8 @@ export default async function ChannelSettlementsPage({
 
   const today = new Date().toISOString().slice(0, 10);
   const unwired = channels.filter((c) => !c.destinationMoneyAccountId && c.isActive);
-  const owed = channels.reduce((sum, c) => sum + Number(c.outstanding), 0);
+  // T-371 — re-minted, never `Number()`: a malformed balance throws here instead of summing to NaN.
+  const owed = add(ZERO, ...channels.map((c) => money(c.outstanding)));
   const oldest = waiting.reduce((max, d) => Math.max(max, d.ageDays), 0);
 
   return (
@@ -245,7 +247,7 @@ export default async function ChannelSettlementsPage({
                     <span className="text-sm font-medium">{c.name}</span>
                     <span
                       className={`font-mono text-sm tabular-nums ${
-                        Number(c.outstanding) < 0 ? 'text-amber-600 dark:text-amber-400' : ''
+                        compare(money(c.outstanding), ZERO) < 0 ? 'text-amber-600 dark:text-amber-400' : ''
                       }`}
                     >
                       {peso(c.outstanding)}
@@ -326,7 +328,7 @@ export default async function ChannelSettlementsPage({
               ))}
             </div>
             <p className="text-xs text-neutral-400 dark:text-neutral-600">
-              {peso(owed.toFixed(2))} outstanding across every channel — summed from{' '}
+              {peso(owed)} outstanding across every channel — summed from{' '}
               <span className="font-mono">1220</span> by party on this request, never from a stored
               balance. A negative would mean more was settled than was ever owed.
             </p>

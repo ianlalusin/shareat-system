@@ -16,6 +16,7 @@
  * exercised in a real browser.
  */
 import { useEffect, useRef, useState, useTransition } from 'react';
+import { compare, money, ZERO } from '@shareat/core/money';
 import { PhotoInput } from '@/components/PhotoInput';
 import type { AutoAllocateCollectionRequest, AutoAllocateCollectionResponse } from '../actions';
 
@@ -253,7 +254,7 @@ export function AutoAllocateCollectionForm({
         )}
         {surplus !== null && !pageStale && !raceDetected && !editedSinceCheck && (
           <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
-            {Number(surplus) > 0
+            {compare(money(surplus), ZERO) > 0
               ? `₱${surplus} would be surplus — booked as 2140 (customer store credit) unless you edit the boxes above.`
               : 'Fully allocated across the boxes above.'}
           </p>
@@ -297,7 +298,7 @@ export function AutoAllocateCollectionForm({
         </Field>
       </div>
 
-      {Number(credit) > 0 && (
+      {compare(money(credit), ZERO) > 0 && (
         <Field
           label="Store credit to apply"
           hint={`${peso(credit)} held at 2140. Spending it draws the liability down instead of taking cash.`}

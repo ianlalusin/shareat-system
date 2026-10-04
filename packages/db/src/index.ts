@@ -339,4 +339,7 @@ export * as positionDefaultsRepo from './repo/position-defaults';
 
 // T-345 — the missed-month catch-up link.
 export * as missedMonthsRepo from './repo/missed-months';
+
+// T-371 C2 — the writer's input type: every `numeric` column a branded `Decimal`.
+export type { SafeInsert, SafeUpdate } from './repo/numeric-input';
 export type { MissedMonthSchedule } from '../schema/missed-month-adjustments';

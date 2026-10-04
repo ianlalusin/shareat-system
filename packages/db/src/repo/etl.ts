@@ -21,6 +21,7 @@
  *     is a plain typed query rather than a literal `CREATE VIEW`.
  */
 import { createHash } from 'node:crypto';
+import type { Money } from '@shareat/core/money';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { etlQuarantine, etlReconciliation, etlRuns, etlSourceDocuments } from '../../schema';
 import { systemTransaction, type Tx } from '../client';
@@ -369,9 +370,10 @@ export interface WriteReconciliationInput {
   skippedCount: number | null;
   quarantinedCount: number | null;
   entriesPosted: number;
-  sourceAmountTotal: string | null;
-  debitTotal: string | null;
-  creditTotal: string | null;
+  // T-371 C2: the (14,2) numeric columns take only a minted Money, or null.
+  sourceAmountTotal: Money | null;
+  debitTotal: Money | null;
+  creditTotal: Money | null;
 }
 
 /**

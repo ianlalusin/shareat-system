@@ -11,11 +11,12 @@ import {
   type TransferStatus,
 } from '../../schema/stock-transfers';
 import type { Tx } from '../client';
+import { decimal, type Quantity } from '@shareat/core/money';
 
 export interface TransferLineInput {
   readonly lineNo: string;
   readonly itemId: string;
-  readonly quantity: string;
+  readonly quantity: Quantity;
 }
 
 export interface CreateTransferInput {
@@ -55,7 +56,8 @@ export interface TransferLineRow {
   readonly transferId: string;
   readonly lineNo: string;
   readonly itemId: string;
-  readonly quantity: string;
+  /** Re-minted on read (T-371 R4): a line's quantity is written back as movements and reservations. */
+  readonly quantity: Quantity;
   readonly outMovementId: string | null;
   readonly inMovementId: string | null;
 }
@@ -112,7 +114,7 @@ export async function getTransfer(tx: Tx, id: string): Promise<TransferRow | und
 }
 
 export async function getTransferLines(tx: Tx, transferId: string): Promise<TransferLineRow[]> {
-  return tx
+  const rows = await tx
     .select({
       id: stockTransferLines.id,
       transferId: stockTransferLines.transferId,
@@ -124,6 +126,7 @@ export async function getTransferLines(tx: Tx, transferId: string): Promise<Tran
     })
     .from(stockTransferLines)
     .where(eq(stockTransferLines.transferId, transferId));
+  return rows.map((r) => ({ ...r, quantity: decimal(r.quantity, '14,3') }));
 }
 
 export async function setLineOutMovement(tx: Tx, lineId: string, movementId: string): Promise<void> {
@@ -160,7 +163,7 @@ export interface CreateReservationInput {
   readonly storeId: string;
   readonly locationId: string;
   readonly itemId: string;
-  readonly quantity: string;
+  readonly quantity: Quantity;
   readonly transferId: string;
 }
 

@@ -7,6 +7,7 @@
  */
 import { prepaidRepo, type PrepaidItemRow } from '@shareat/db';
 import { prepaidSchedule } from '@shareat/domain';
+import { money, subtract, type Money } from '@shareat/core/money';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
@@ -15,9 +16,9 @@ export type { StoreOption } from '../expenses/lib';
 
 export interface PrepaidListRow extends PrepaidItemRow {
   /** Released into the P&L so far, summed from the ledger. */
-  amortised: string;
+  amortised: Money;
   /** Cost less released. ⛔ There is no `remaining` column — this is arithmetic on two facts. */
-  remaining: string;
+  remaining: Money;
   /** How many of the scheduled months have posted. */
   monthsPosted: number;
 }
@@ -32,8 +33,9 @@ export async function listRegister(orgId: string): Promise<PrepaidListRow[]> {
       const amortised = amortisedMap.get(i.id) ?? '0';
       return {
         ...i,
-        amortised: Number(amortised).toFixed(2),
-        remaining: (Number(i.totalCost) - Number(amortised)).toFixed(2),
+        // T-371 R4 — stored figures re-minted and subtracted in centavos, never through a float.
+        amortised: money(amortised),
+        remaining: subtract(money(i.totalCost), money(amortised)),
         monthsPosted: 0,
       };
     });
@@ -66,8 +68,8 @@ export async function getDetail(orgId: string, id: string): Promise<PrepaidDetai
     }));
     return {
       ...item,
-      amortised: Number(amortised).toFixed(2),
-      remaining: (Number(item.totalCost) - Number(amortised)).toFixed(2),
+      amortised: money(amortised),
+      remaining: subtract(money(item.totalCost), money(amortised)),
       monthsPosted: posted.size,
       schedule,
     };

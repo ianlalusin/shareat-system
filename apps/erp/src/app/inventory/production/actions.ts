@@ -58,7 +58,8 @@ export async function saveProductionDraftAction(fd: FormData): Promise<void> {
   const locationId = str(fd, 'locationId');
   const kind = str(fd, 'kind');
   const producedOn = str(fd, 'producedOn');
-  const labourCost = str(fd, 'labourCost') || '0';
+  // T-371 R6: a blank labour cost is passed on blank; the domain applies the column's default. Never `|| '0'`.
+  const labourCost = str(fd, 'labourCost');
   const inputs = parseLines(fd, 'input');
   const outputs = parseLines(fd, 'output');
 

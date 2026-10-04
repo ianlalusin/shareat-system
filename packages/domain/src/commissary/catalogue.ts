@@ -24,6 +24,7 @@ import {
 } from '@shareat/db';
 import { LINK_STATUSES } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
+import { decimal, type Decimal } from '@shareat/core/money';
 import { gone, refuse } from '../shared/refusal';
 
 export type LinkStatus = (typeof LINK_STATUSES)[number];
@@ -56,7 +57,7 @@ const MANUAL_COST_PATTERN = /^(?=.*\d)\d*(?:\.\d{0,4})?$/;
  * SEPARATE, id-free phrase the userMessage uses — `deliveries/documents.ts`'s call passes
  * `Line ${n}: the unit cost`. T-328 — introduced for `deliveries/documents.ts`'s `unitCost`.
  */
-export function parseFourDecimalCost(raw: string, rawLabel: string, humanLabel: string): string {
+export function parseFourDecimalCost(raw: string, rawLabel: string, humanLabel: string): Decimal<'14,4'> {
   const trimmed = raw.trim();
   if (!MANUAL_COST_PATTERN.test(trimmed)) {
     throw refuse(
@@ -75,7 +76,11 @@ export function parseFourDecimalCost(raw: string, rawLabel: string, humanLabel: 
       `${humanLabel} — "${raw}" is too large. Use a number below 10000000000.`,
     );
   }
-  return trimmed;
+  // ⭐ T-371 R2: the accepted set and the sentences above are unchanged; the RETURN VALUE now passes through `decimal()`,
+  // the one mint, at the (14,4) shape every caller writes. The pattern also accepts ".5" and "1.", which `decimal()` does
+  // not, so the shape is canonicalised first (a missing whole part is `0`, a bare `.` is dropped).
+  const [whole = '', frac = ''] = trimmed.split('.');
+  return decimal(`${whole || '0'}${frac ? `.${frac}` : ''}`, '14,4');
 }
 
 // -----------------------------------------------------------------------------------------
@@ -207,7 +212,8 @@ export async function upsertOffering(
       );
     }
 
-    let manualCost: string | null = null;
+    // T-371 R6: `commissary_item_offerings.manual_cost` is NULLABLE, so a blank stores null (never a guessed '0').
+    let manualCost: Decimal<'14,4'> | null = null;
     if (input.manualCost != null && input.manualCost.trim() !== '') {
       const trimmed = input.manualCost.trim();
       if (!MANUAL_COST_PATTERN.test(trimmed)) {
@@ -216,7 +222,18 @@ export async function upsertOffering(
           `"${input.manualCost}" is not a manual cost — a non-negative amount, up to four decimals.`,
         );
       }
-      manualCost = trimmed;
+      // T-371 R2: minted through `decimal()` at the column's (14,4) shape. The pattern accepts ".5" and "1.", which
+      // `decimal()` does not, so the shape is canonicalised first; an 11+-digit whole part (which the pattern does not
+      // cap, and Postgres would refuse) gets a sentence instead of the generic DB-refused fallback.
+      const [whole = '', frac = ''] = trimmed.split('.');
+      try {
+        manualCost = decimal(`${whole || '0'}${frac ? `.${frac}` : ''}`, '14,4');
+      } catch {
+        throw refuse(
+          `upsertOffering: "${input.manualCost}" is too large for a manual cost. Use a number below 10000000000.`,
+          `"${input.manualCost}" is too large for a manual cost. Use a number below 10000000000.`,
+        );
+      }
     }
 
     return commissaryCatalogueRepo.upsertOffering(trx, {

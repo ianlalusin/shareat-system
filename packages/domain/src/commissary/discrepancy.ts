@@ -38,7 +38,7 @@
  * ⛔ That is deliberate: an escape hatch that stopped the blocking would be a way to make the
  * dispute disappear without deciding it, which is the state this whole task exists to prevent.
  */
-import { compare, money, subtract, ZERO, type Money } from '@shareat/core/money';
+import { compare, decimal, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import {
   commissaryRepo,
   customersRepo,
@@ -304,7 +304,7 @@ async function resolveAsExtraDispatch(
   // branch's books), exactly as the receipt does it — never the commissary's layer cost.
   await stockLayersRepo.createLayer(tx, {
     orgId: input.orgId, storeId: branchStoreId, itemId: map.branchItemId, receivedAt: movedAt,
-    quantity: extra, unitCost: line.rate, source: 'transfer_in', sourceId: row.id, movementId: movement.id,
+    quantity: extra, unitCost: decimal(line.rate, '14,4'), source: 'transfer_in', sourceId: row.id, movementId: movement.id,
   });
 
   const codes = await moneyTransfersRepo.storeCodes(tx, input.orgId, [row.storeId, branchStoreId]);

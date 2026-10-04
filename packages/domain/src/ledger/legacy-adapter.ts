@@ -28,7 +28,7 @@
  * the expected input for a function that will classify millions of ETL rows. Every
  * rejection is a classified `{ ok: false, reason }`, never an exception.
  */
-import { moneyFromLegacyFloat, ZERO } from '@shareat/core/money';
+import { moneyFromLegacyFloat, ZERO, type Money } from '@shareat/core/money';
 
 export type LegDirection = 'in' | 'out';
 
@@ -60,10 +60,10 @@ export interface ResolvedAccount {
 export interface AdaptedLine {
   accountCode: string;
   /** Money as a decimal string, matching numeric(14,2). '0.00' when this leg is not on
-   *  the debit side. */
-  debit: string;
+   *  the debit side. Minted (T-371): `moneyFromLegacyFloat` or ZERO, never a bare string. */
+  debit: Money;
   /** Money as a decimal string. '0.00' when this leg is not on the credit side. */
-  credit: string;
+  credit: Money;
   legKey?: string;
 }
 

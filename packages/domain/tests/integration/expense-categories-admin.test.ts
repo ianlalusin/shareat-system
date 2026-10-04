@@ -46,6 +46,7 @@ import {
 } from '@shareat/db';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { AuthorizationError, type Actor } from '@shareat/auth';
+import { money } from '@shareat/core/money';
 // ⚠️ Relative, not through `@shareat/domain` — the barrel line
 // (`export * from './categories'` in packages/domain/src/expenses/index.ts) is added by the
 // integrating session, not by this lane. T-229 Scope.
@@ -509,7 +510,7 @@ describe('T-229 slice 2 — every raw-SQL reader of the dropped column still run
     await asOrg(f.orgId, (tx) =>
       budgetsRepo.setBudget(tx, {
         orgId: f.orgId, storeId: f.storeId, categoryId, periodKey: '202601',
-        amount: '1000.00', autoReissue: false, reissueInterval: null, createdBy: f.staffId,
+        amount: money('1000.00'), autoReissue: false, reissueInterval: null, createdBy: f.staffId,
       }),
     );
     const rows = await asOrg(f.orgId, (tx) =>

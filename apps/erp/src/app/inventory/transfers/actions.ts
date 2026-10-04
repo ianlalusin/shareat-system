@@ -11,7 +11,6 @@
 import { revalidatePath } from 'next/cache';
 import {
   dispatch,
-  quantity,
   receiveTransfer,
   saveDraft,
   transferNow,
@@ -39,7 +38,8 @@ export async function createTransferAction(fd: FormData): Promise<void> {
     storeId,
     fromLocationId,
     toLocationId,
-    lines: [{ itemId, quantity: quantity(qty) }],
+    // T-371 S3: the raw figure goes to the domain, which parses it after `authorize()` (R5).
+    lines: [{ itemId, quantity: qty }],
     note: note || null,
     actor,
   };

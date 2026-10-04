@@ -16,11 +16,11 @@
 import { moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
 import type { DrawingLimitPeriod, PersonalExpenseTreatment } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
-import { add, compare, money, type Money } from '@shareat/core/money';
+import { add, compare, compareDecimal, decimal, isZero, money, negate, subtract, ZERO, type Decimal, type Money } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
-import { parseMoneyInput } from '../shared/money-input';
+import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
 
 export const CAPITAL_CODE = '3100';
@@ -75,10 +75,15 @@ export async function createOwner(
     // a daily operation — the same reasoning that made renaming a money account admin-only.
     await authorize(trx, actor, 'manage_chart_of_accounts', { storeId: input.storeId });
 
-    const limit =
-      input.drawingLimit != null
-        ? parseMoneyInput(input.drawingLimit, 'createOwner: the drawing limit', 'The drawing limit')
-        : null;
+    // T-371 R6 — `drawing_limit` is NULLABLE: a blank box is no limit (null), never a guessed ₱0. A typed value parses
+    // into the column's (14,2) brand with `parseMoneyInput`'s sentences unchanged.
+    const limit = parseDecimalInput(
+      input.drawingLimit,
+      '14,2',
+      'createOwner: the drawing limit',
+      'The drawing limit',
+      { blank: 'null' },
+    );
     const period = input.drawingLimitPeriod ?? null;
     // ⛔ Half a rule is not a rule — DEF-071 is what the second half looks like in production.
     if ((limit === null) !== (period === null)) {
@@ -87,7 +92,7 @@ export async function createOwner(
           'other cannot be enforced, which is exactly the defect this replaces.',
       );
     }
-    if (limit !== null && Number(limit) <= 0) {
+    if (limit !== null && compare(limit, ZERO) <= 0) {
       throw refuse('createOwner: a drawing limit has to be greater than zero.', 'A drawing limit has to be greater than zero.');
     }
 
@@ -97,18 +102,29 @@ export async function createOwner(
     // "0050" (four digits, value 50) was refused though 50 is well within range: a digit-run cap
     // standing in for the value ceiling, the same DEF-481-shaped bug whole-number-input.ts fixed
     // for loans/prepaid. `\d+` accepts any digit run (a zero-padded "000050" still saves as 50);
-    // the ceiling is the `Number(t) > 100` comparison below, on the parsed VALUE, never the string.
-    let ownershipPercentage: string | null = null;
+    // the ceiling is the 100 comparison below, on the parsed VALUE, never the string.
+    // T-371 — the range is decided on the (6,3) brand in scaled bigint (`compareDecimal`), never `Number(t) > 0`. The
+    // digit-run regex still decides the accepted SET (a zero-padded "000050" stays accepted, DEF-486); the padding is
+    // stripped before minting so `decimal()`'s integer-digit ceiling never refuses a value the regex accepted, and an
+    // over-range value ("1000") gets the same sentence as before, not `decimal()`'s RangeError.
+    let ownershipPercentage: Decimal<'6,3'> | null = null;
     if (input.ownershipPercentage != null) {
       const raw = input.ownershipPercentage;
       const t = raw.trim();
-      if (!/^\d+(\.\d{1,3})?$/.test(t) || !(Number(t) > 0) || Number(t) > 100) {
-        throw refuse(
+      const notAPercentage = () =>
+        refuse(
           `createOwner: ownershipPercentage must be above 0 and at most 100 with at most three decimal places, got ${JSON.stringify(raw)}.`,
           `The ownership percentage — "${raw}" is not a percentage. Use a number above 0 and up to 100, with at most three decimal places.`,
         );
+      if (!/^\d+(\.\d{1,3})?$/.test(t)) throw notAPercentage();
+      const unpadded = t.replace(/^0+(?=\d)/, '');
+      // more than three integer digits once the padding is gone is already over 100
+      if ((unpadded.split('.')[0] ?? '').length > 3) throw notAPercentage();
+      const pct = decimal(unpadded, '6,3');
+      if (compareDecimal(pct, decimal('0', '6,3')) <= 0 || compareDecimal(pct, decimal('100', '6,3')) > 0) {
+        throw notAPercentage();
       }
-      ownershipPercentage = t;
+      ownershipPercentage = pct;
     }
 
     return ownersRepo.insertOwner(trx, {
@@ -143,7 +159,7 @@ export async function recordContribution(
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
 
     const amount = parseMoneyInput(input.amount, 'recordContribution: the amount', 'The contribution amount');
-    if (Number(amount) <= 0) {
+    if (compare(amount, ZERO) <= 0) {
       // ⚠️ S5.5v — converted to `refuse` (satisfies the ratchet, T-343 R1.2) with the SAME text on
       // both sides: the tester's followups file pins this exact lowercase sentence as UNCHANGED.
       throw refuse('recordContribution: a contribution has to be greater than zero.', 'a contribution has to be greater than zero.');
@@ -288,8 +304,7 @@ export async function recordDrawing(
     await ownersRepo.lockOwnerForUpdate(trx, actor.orgId, owner.id);
 
     const parsed = parseMoneyInput(input.amount, 'recordDrawing: the amount', 'The drawing amount');
-    const amount = Number(parsed);
-    if (amount <= 0) throw refuse('recordDrawing: a drawing has to be greater than zero.', 'A drawing has to be greater than zero.');
+    if (compare(parsed, ZERO) <= 0) throw refuse('recordDrawing: a drawing has to be greater than zero.', 'A drawing has to be greater than zero.');
 
     await assertMonthOpen(trx, actor.orgId, owner.id, input.on, 'recordDrawing');
 
@@ -304,14 +319,15 @@ export async function recordDrawing(
     if (account.storeId !== owner.storeId) {
       throw new Error('recordDrawing: that account belongs to another store.');
     }
-    const warning = await checkDraw(trx, actor.orgId, account, amount, 'recordDrawing');
+    // `checkDraw` (money-accounts) takes `Money` and compares exactly (T-371 S4).
+    const warning = await checkDraw(trx, actor.orgId, account, parsed, 'recordDrawing');
 
     const result = await postEntry(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'drawing',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:drawing:${input.on}:${amount.toFixed(2)}`,
+      idempotencyKey: `owner:${owner.id}:drawing:${input.on}:${parsed}`,
       memo: input.memo?.trim() || 'Owner drawing',
       postedBy: actor.personId,
       lines: [
@@ -347,14 +363,16 @@ async function assertWithinReceivable(
   trx: Tx,
   orgId: string,
   ownerId: string,
-  amount: number,
+  amount: Money,
   context: string,
 ): Promise<void> {
-  if (amount <= 0) throw refuse(`${context}: the amount has to be greater than zero.`, 'The amount settled has to be greater than zero.');
-  const outstanding = Number(await ownersRepo.receivableOf(trx, orgId, ownerId));
-  if (amount > outstanding + 0.005) {
+  if (compare(amount, ZERO) <= 0) throw refuse(`${context}: the amount has to be greater than zero.`, 'The amount settled has to be greater than zero.');
+  // T-371 — exact centavos (R4 re-mint), not `amount > outstanding + 0.005`: both sides are (14,2), so the half-centavo
+  // float slack has nothing left to absorb.
+  const outstanding = money(await ownersRepo.receivableOf(trx, orgId, ownerId));
+  if (compare(amount, outstanding) > 0) {
     throw new Error(
-      `${context}: that is more than the ₱${outstanding.toFixed(2)} this owner still owes. ` +
+      `${context}: that is more than the ₱${outstanding} this owner still owes. ` +
         `Settling more would turn a receivable into a payable without anyone deciding to.`,
     );
   }
@@ -378,7 +396,7 @@ export async function repayFromOwner(
     if (!owner) throw new Error(`repayFromOwner: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
     const parsed = parseMoneyInput(input.amount, 'repayFromOwner: the amount', 'The amount settled');
-    await assertWithinReceivable(trx, actor.orgId, owner.id, Number(parsed), 'repayFromOwner');
+    await assertWithinReceivable(trx, actor.orgId, owner.id, parsed, 'repayFromOwner');
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
     if (!account) throw new Error('repayFromOwner: that money account does not exist.');
@@ -391,7 +409,7 @@ export async function repayFromOwner(
       entryDate: input.on,
       sourceType: 'owner_repayment',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:repayment:${input.on}:${Number(parsed).toFixed(2)}`,
+      idempotencyKey: `owner:${owner.id}:repayment:${input.on}:${parsed}`,
       memo: input.memo?.trim() || 'Owner repayment',
       postedBy: actor.personId,
       lines: [
@@ -452,7 +470,7 @@ export async function recoverFromPay(
     if (!owner) throw new Error(`recoverFromPay: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: owner.storeId });
     const parsed = parseMoneyInput(input.amount, 'recoverFromPay: the amount', 'The amount settled');
-    await assertWithinReceivable(trx, actor.orgId, owner.id, Number(parsed), 'recoverFromPay');
+    await assertWithinReceivable(trx, actor.orgId, owner.id, parsed, 'recoverFromPay');
 
     // ⚠️ The best check available until payroll exists: this person must actually work here. It does
     // not prove they are PAID — nothing can, yet — and the screens say so rather than implying it.
@@ -469,7 +487,7 @@ export async function recoverFromPay(
       entryDate: input.on,
       sourceType: 'owner_pay_recovery',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:pay-recovery:${input.on}:${Number(parsed).toFixed(2)}`,
+      idempotencyKey: `owner:${owner.id}:pay-recovery:${input.on}:${parsed}`,
       memo: input.memo?.trim() || 'Owner receivable moved to salary advance',
       postedBy: actor.personId,
       lines: [
@@ -542,7 +560,7 @@ export async function writeOffReceivable(
       trx,
       actor.orgId,
       owner.id,
-      Number(parsed),
+      parsed,
       'writeOffReceivable',
     );
     await assertMonthOpen(trx, actor.orgId, owner.id, input.on, 'writeOffReceivable');
@@ -552,7 +570,7 @@ export async function writeOffReceivable(
       entryDate: input.on,
       sourceType: 'owner_writeoff',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:writeoff:${input.on}:${Number(parsed).toFixed(2)}`,
+      idempotencyKey: `owner:${owner.id}:writeoff:${input.on}:${parsed}`,
       memo: `Owner receivable written off — ${reason}`,
       postedBy: actor.personId,
       lines: [
@@ -665,36 +683,38 @@ export async function closeDrawingMonth(
       );
     }
 
-    const ledger = Number(
+    // T-371 — (14,2) brands and integer centavos throughout, never `Number`: the ledger figure is re-minted (R4) and the
+    // difference is `subtract`, so no float rounding decides whether an adjustment posts.
+    const ledger = money(
       await ownersRepo.drawnInWindow(trx, actor.orgId, owner, {
         since: periodMonth,
         until: nextMonthOf(periodMonth),
       }),
     );
-    const acknowledged =
+    const acknowledged: Money =
       input.acknowledgedAmount === undefined
         ? ledger
-        : Number(parseMoneyInput(input.acknowledgedAmount, 'closeDrawingMonth: the agreed amount', 'The agreed amount'));
-    if (acknowledged < 0) {
+        : parseMoneyInput(input.acknowledgedAmount, 'closeDrawingMonth: the agreed amount', 'The agreed amount');
+    if (compare(acknowledged, ZERO) < 0) {
       throw refuse('closeDrawingMonth: an agreed amount cannot be negative.', 'The agreed amount cannot be negative.');
     }
 
-    const difference = Number((acknowledged - ledger).toFixed(2));
+    const difference = subtract(acknowledged, ledger);
     let adjustmentEntryId: string | null = null;
     let adjustmentReason: string | null = null;
 
-    if (difference !== 0) {
+    if (!isZero(difference)) {
       const reason = input.adjustmentReason?.trim();
       // ⛔ An unexplained difference is not a close. This is the "enforced" half.
       if (!reason) {
         throw new Error(
-          `closeDrawingMonth: the agreed ₱${acknowledged.toFixed(2)} differs from the ledger's ` +
-            `₱${ledger.toFixed(2)} by ₱${difference.toFixed(2)} — say why. An unexplained ` +
+          `closeDrawingMonth: the agreed ₱${acknowledged} differs from the ledger's ` +
+            `₱${ledger} by ₱${difference} — say why. An unexplained ` +
             `difference cannot be posted, and a close that swallowed it would be a report, not a ` +
             `control.`,
         );
       }
-      const magnitude = Math.abs(difference).toFixed(2);
+      const magnitude = compare(difference, ZERO) < 0 ? negate(difference) : difference;
       // ⭐ The adjustment moves between drawings and the owner receivable, because those are the two
       // things it can be: either more was drawn than the ledger caught, or something booked as a
       // drawing is actually owed back.
@@ -707,7 +727,7 @@ export async function closeDrawingMonth(
         memo: `Drawings close ${periodMonth.slice(0, 7)} — ${reason}`,
         postedBy: actor.personId,
         lines:
-          difference > 0
+          compare(difference, ZERO) > 0
             ? [
                 { accountCode: DRAWINGS_CODE, storeId: owner.storeId, debit: magnitude, partyType: 'owner' as const, partyId: owner.id },
                 { accountCode: DUE_FROM_OWNER_CODE, storeId: owner.storeId, credit: magnitude, partyType: 'owner' as const, partyId: owner.id },
@@ -726,8 +746,8 @@ export async function closeDrawingMonth(
       storeId: owner.storeId,
       ownerId: owner.id,
       periodMonth,
-      acknowledgedAmount: acknowledged.toFixed(2),
-      adjustmentAmount: difference === 0 ? null : difference.toFixed(2),
+      acknowledgedAmount: acknowledged,
+      adjustmentAmount: isZero(difference) ? null : difference,
       adjustmentReason,
       adjustmentEntryId,
       closedOn: input.on,
@@ -737,8 +757,8 @@ export async function closeDrawingMonth(
 
     return {
       closeId: close.id,
-      acknowledgedAmount: acknowledged.toFixed(2),
-      adjustmentAmount: difference === 0 ? null : difference.toFixed(2),
+      acknowledgedAmount: acknowledged,
+      adjustmentAmount: isZero(difference) ? null : difference,
     };
   };
   if (tx) return run(tx);

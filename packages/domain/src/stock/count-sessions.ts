@@ -18,7 +18,7 @@
  * ⛔ **Never zero.** A free layer makes the next consumption's margin fictional, and that
  * distortion outlives the count that caused it by however long the stock lasts.
  */
-import { add, ZERO, type Money } from '@shareat/core/money';
+import { add, decimal, ZERO, type Decimal, type Money } from '@shareat/core/money';
 import { stockLayersRepo, stockLedgerRepo, type Tx } from '@shareat/db';
 import { consume } from './consume';
 import { postCountVariance } from './consumption-posting';
@@ -220,9 +220,9 @@ export async function commitCountSession(
 }
 
 /** The fallback chain for stock that appeared with no receipt behind it. */
-async function resolveLongCost(tx: Tx, storeId: string, itemId: string): Promise<string | null> {
+async function resolveLongCost(tx: Tx, storeId: string, itemId: string): Promise<Decimal<'14,4'> | null> {
   const open = await stockLayersRepo.openLayersForUpdate(tx, itemId, storeId);
-  if (open.length > 0) return open[open.length - 1]!.unitCost;
+  if (open.length > 0) return decimal(open[open.length - 1]!.unitCost, '14,4'); // T-371 R4: re-minted, never cast
   // ⚠️ Tier 2 (T-151's landed price history) is not reachable until a delivery exists for the
   // item; `resolveLongCost` returning null is what makes the commit refuse rather than guess.
   return null;

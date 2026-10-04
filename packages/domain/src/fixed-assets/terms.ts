@@ -13,10 +13,10 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { ASSET_CATEGORIES, fixedAssetsRepo, type AssetCategory } from '@shareat/db';
-import { compare, equals, money } from '@shareat/core/money';
+import { compare, equals, money, ZERO, type Money } from '@shareat/core/money';
 import type { Tx } from '@shareat/db';
 import { gone, refuse } from '../shared/refusal';
-import { parseMoneyInput } from '../shared/money-input';
+import { parseDecimalInput } from '../shared/money-input';
 import { DEPRECIATION_INTERVALS, type DepreciationInterval } from './schedule';
 
 export interface UpdateAssetTermsInput {
@@ -56,13 +56,18 @@ export async function updateAssetTerms(
   if (!(ASSET_CATEGORIES as readonly string[]).includes(input.category)) {
     throw refuse('updateAssetTerms: the asset category is not one of the allowed categories.', 'Choose an asset category from the list.');
   }
-  const salvage =
-    input.salvageValue === null || input.salvageValue.trim() === ''
-      ? null
-      : String(parseMoneyInput(input.salvageValue, 'updateAssetTerms: the salvage value', 'The salvage value'));
+  // T-371 R6: `salvage_value` is nullable, so a blank box stores null - never a guessed '0'. The brand flows to the
+  // writer unconverted (no `String(...)`), so the repo receives the parsed `Money`, not a bare string.
+  const salvage: Money | null = parseDecimalInput(
+    input.salvageValue,
+    '14,2',
+    'updateAssetTerms: the salvage value',
+    'The salvage value',
+    { blank: 'null' },
+  );
 
   // Refused before any read: a negative salvage is a typo, not a term (and no read can change the answer).
-  if (salvage !== null && compare(money(salvage), money('0')) < 0) {
+  if (salvage !== null && compare(salvage, ZERO) < 0) {
     throw refuse(`updateAssetTerms: salvage value ${salvage} is negative`, 'The salvage value cannot be negative.');
   }
 
@@ -71,7 +76,7 @@ export async function updateAssetTerms(
 
   // The same rule `createAsset` holds (and the CHECK constraint backs): salvage at or above cost means the asset
   // never depreciates. A shell row has no cost yet, so there is nothing to compare.
-  if (salvage !== null && asset.cost !== null && compare(money(salvage), money(asset.cost)) >= 0) {
+  if (salvage !== null && asset.cost !== null && compare(salvage, money(asset.cost)) >= 0) {
     throw refuse(
       `updateAssetTerms: salvage value ${salvage} must be below cost ${asset.cost}, or the asset never depreciates.`,
       "The salvage value must be below the asset's cost, or it never depreciates.",
@@ -83,7 +88,7 @@ export async function updateAssetTerms(
     const changed =
       life !== asset.usefulLifeMonths ||
       input.interval !== asset.interval ||
-      !equals(money(salvage ?? '0'), money(asset.salvageValue ?? '0'));
+      !equals(salvage ?? ZERO, money(asset.salvageValue ?? '0'));
     if (changed) {
       const first = posted[0]!;
       const last = posted[posted.length - 1]!;

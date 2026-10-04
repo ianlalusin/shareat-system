@@ -3,6 +3,7 @@
  * Internal to `money-transfers/`: `index.ts` and `settle.ts` import from here and the barrel does not re-export it.
  */
 import { authorize, type Actor } from '@shareat/auth';
+import { compare, isZero, subtract, ZERO, type Money } from '@shareat/core/money';
 import { moneyAccountsRepo, type MoneyAccountRow, type Tx } from '@shareat/db';
 import { checkDraw } from '../money-accounts/overdraft';
 import type { PostEntryLine } from '../ledger/post-entry';
@@ -38,9 +39,9 @@ export interface PreparedTransfer {
   from: MoneyAccountRow;
   to: MoneyAccountRow;
   crossStore: boolean;
-  amountOut: string;
-  amountIn: string;
-  fee: string;
+  amountOut: Money;
+  amountIn: Money;
+  fee: Money;
   feeAccountCode: string | null;
   memo: string;
   /** The cash legs and the fee leg only — a cross-store transfer or a settlement appends its own pair. */
@@ -113,22 +114,22 @@ export async function prepareTransfer(
 
   const amountOut = parseMoneyInput(input.amountOut, 'createMoneyTransfer: amountOut', 'The amount sent');
   const amountIn = parseMoneyInput(input.amountIn, 'createMoneyTransfer: amountIn', 'The amount received');
-  const out = Number(amountOut);
-  const inn = Number(amountIn);
-  if (!(out > 0) || !(inn > 0)) {
+  // T-371: both figures are `Money` brands from `parseMoneyInput`, so every comparison below is scaled bigint
+  // (`compare`) — never `Number()`, which a NaN would slip past.
+  if (compare(amountOut, ZERO) <= 0 || compare(amountIn, ZERO) <= 0) {
     throw new Error('createMoneyTransfer: both amounts must be greater than zero.');
   }
   // ⛔ Money arriving that never left is not a transfer — it is income, and it must not be
   // enterable here.
-  if (inn > out) {
+  if (compare(amountIn, amountOut) > 0) {
     throw new Error(
       `createMoneyTransfer: ${amountIn} arrived but only ${amountOut} left. Money ` +
         'that arrives without leaving somewhere is income, not a transfer.',
     );
   }
 
-  const fee = (out - inn).toFixed(2);
-  const feeAccountCode = Number(fee) > 0 ? (input.feeAccountCode ?? DEFAULT_FEE_ACCOUNT_CODE) : null;
+  const fee = subtract(amountOut, amountIn);
+  const feeAccountCode = isZero(fee) ? null : (input.feeAccountCode ?? DEFAULT_FEE_ACCOUNT_CODE);
 
   // ⭐ Party goes on 1140 legs ONLY. `1110`/`1120`/`1130` already say who holds them — the code IS
   // the location — while one control account covers every wallet, so only 1140 is ambiguous.
@@ -179,7 +180,7 @@ export async function prepareTransfer(
     // which can overdraw it if the money has since moved on — but refusing the reversal would leave
     // a wrong entry with no way to correct it. A correction must always be possible; the resulting
     // negative is the signal to fix what came after it.
-    checkDraw: () => checkDraw(tx, actor.orgId, from, out, 'createMoneyTransfer'),
+    checkDraw: () => checkDraw(tx, actor.orgId, from, amountOut, 'createMoneyTransfer'),
   };
 }
 

@@ -19,7 +19,7 @@
  *      "straight line" — and the total is fixed, so the final balance is exact rather than
  *      approximately right.
  */
-import { add, money, type Money } from '@shareat/core/money';
+import { add, compare, money, toCentavos, ZERO, type Money } from '@shareat/core/money';
 
 export interface StraightLineInput {
   /** `YYYY-MM-DD`. The first period starts in this month. */
@@ -55,11 +55,12 @@ function lastDayOfMonth(year: number, month1: number): string {
 /** Every period this schedule will ever charge, in order. Empty when there is nothing to spread. */
 export function buildStraightLine(input: StraightLineInput): SchedulePeriod[] {
   if (!Number.isFinite(input.periods) || input.periods < 1) return [];
-  if (Number(input.amount) <= 0) return [];
+  // T-371: `amount` is a branded `Money`, so the positivity test is `compare` on the brand, not a float `Number()` compare.
+  if (compare(input.amount, ZERO) <= 0) return [];
 
   // Work in centavos so the division is exact and the remainder is visible rather than rounded
   // away. Money is already 2dp; this just makes the arithmetic integer.
-  const totalCentavos = Math.round(Number(input.amount) * 100);
+  const totalCentavos = Number(toCentavos(input.amount));
   const per = Math.floor(totalCentavos / input.periods);
   const remainder = totalCentavos - per * input.periods;
 

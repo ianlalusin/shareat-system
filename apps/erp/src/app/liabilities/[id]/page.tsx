@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { compare, money, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../../lib/page-access';
 import { chargeAction, payAction, retireAction, reverseAction } from '../actions';
 import {
@@ -46,7 +47,8 @@ export default async function LiabilityPage({
     listStores(actor.orgId),
   ]);
   const store = stores.find((s) => s.id === liability.storeId);
-  const outstanding = Number(liability.position.outstanding);
+  // T-371 — the ledger's figure is re-minted and ordered in scaled bigint, never as a float.
+  const owing = compare(money(liability.position.outstanding), ZERO);
 
   return (
     <Page density="table">
@@ -89,7 +91,7 @@ export default async function LiabilityPage({
               ⭐ <strong>Outstanding</strong> is the balance of <code>2500</code> for this
               obligation. Charged and paid are the same balance split by what happened — which is
               why they cannot disagree with it, and why nothing here is stored.
-              {outstanding <= 0.005 && liability.position.charged !== '0.00' && (
+              {owing <= 0 && liability.position.charged !== '0.00' && (
                 <> It has reached <strong>zero</strong>, so this is settled.</>
               )}
             </p>
@@ -138,7 +140,7 @@ export default async function LiabilityPage({
           <div>
             <h2 className="font-medium">Pay it</h2>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              {outstanding > 0 ? (
+              {owing > 0 ? (
                 <>
                   <strong>{peso(liability.position.outstanding)}</strong> is owed. Paying more than
                   that is refused — it would turn a debt into a receivable.
@@ -148,7 +150,7 @@ export default async function LiabilityPage({
               )}
             </p>
           </div>
-          {outstanding > 0 && (
+          {owing > 0 && (
             <form action={payAction} className="space-y-3">
               <input type="hidden" name="liabilityId" value={liability.id} />
               <Field label="Amount">
@@ -256,7 +258,7 @@ export default async function LiabilityPage({
       </section>
 
       {/* ── Retire ───────────────────────────────────────────────────────────────────── */}
-      {outstanding <= 0.005 && !liability.retiredAt && (
+      {owing <= 0 && !liability.retiredAt && (
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <div>
             <h2 className="font-medium">Retire</h2>

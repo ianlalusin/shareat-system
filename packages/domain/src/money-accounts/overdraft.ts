@@ -26,6 +26,7 @@
  * fund itself from another store one menu across), and exactly how v1's two amortisation runners
  * drifted apart. One rule, one place.
  */
+import { money, type Money } from '@shareat/core/money';
 import { moneyAccountsRepo, type MoneyAccountRow, type Tx } from '@shareat/db';
 
 /**
@@ -46,10 +47,10 @@ export async function checkDraw(
   tx: Tx,
   orgId: string,
   account: MoneyAccountRow,
-  drawn: number,
+  drawn: Money,
   context: string,
 ): Promise<string | null> {
-  const available = Number(await moneyAccountsRepo.balanceOf(tx, orgId, account));
+  const available = money(await moneyAccountsRepo.balanceOf(tx, orgId, account));
   const verdict = judgeDraw(account, available, drawn);
   if (verdict.blocked) throw new Error(`${context}: ${verdict.message}`);
   return verdict.message ?? null;

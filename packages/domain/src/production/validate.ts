@@ -11,6 +11,7 @@ import {
   addQuantity,
   compareQuantity,
   isPositiveQuantity,
+  quantity,
   subtractQuantity,
   toThousandths,
   ZERO_QUANTITY,
@@ -24,7 +25,7 @@ import { convertUnit } from './unit-conversion';
  * `numeric(14,3)` decimals; this one fires constantly and should). Used in exactly two places:
  * stock sufficiency and output-exceeds-input. ⛔ Do not delete this by analogy with T-161 §8.
  */
-export const PRODUCTION_QTY_EPS: Quantity = '0.010' as Quantity;
+export const PRODUCTION_QTY_EPS: Quantity = quantity('0.010');
 
 export interface ProductionInputLine {
   readonly itemId: string;
@@ -69,7 +70,13 @@ function parseQty(raw: string, label: string): Quantity | null {
   // §10.3: non-numeric is refused SEPARATELY from non-positive — both are HARD blocks, but a
   // caller reading the message should not have to guess which one fired.
   if (!/^-?\d+(\.\d{1,3})?$/.test(trimmed)) return null;
-  return trimmed as Quantity;
+  // T-371 G3: minted by the one `decimal()`, never cast. The regex above admits only (14,3)-shaped strings, so the only
+  // refusal left is a value past numeric(14,3)'s 11 integer digits, treated here as not a usable quantity.
+  try {
+    return quantity(trimmed);
+  } catch {
+    return null;
+  }
 }
 
 /**

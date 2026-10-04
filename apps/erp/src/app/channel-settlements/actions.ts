@@ -28,9 +28,13 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
-/** A blank money field is zero, not an error — most settlements use three of the six kinds. */
-function money(fd: FormData, key: string): string {
-  return str(fd, key) || '0';
+/**
+ * A blank deduction is OMITTED, not an error — most settlements use three of the six kinds. T-371 R6: the
+ * deduction columns carry a default, so a blank box is left out (the domain books no such deduction) rather than
+ * turned into an invented `'0'` here.
+ */
+function optional(fd: FormData, key: string): string | undefined {
+  return str(fd, key) || undefined;
 }
 
 export interface PreviewRequest {
@@ -74,17 +78,18 @@ export async function previewSettlementAction(req: PreviewRequest): Promise<Prev
         grossAmount: req.grossAmount,
         netDeposited: req.netDeposited,
         deductions: {
-          commission: req.commission || '0',
-          marketing: req.marketing || '0',
-          platformFee: req.platformFee || '0',
-          vatOnFees: req.vatOnFees || '0',
-          withholdingTax: req.withholdingTax || '0',
-          penalty: req.penalty || '0',
+          commission: req.commission || undefined,
+          marketing: req.marketing || undefined,
+          platformFee: req.platformFee || undefined,
+          vatOnFees: req.vatOnFees || undefined,
+          withholdingTax: req.withholdingTax || undefined,
+          penalty: req.penalty || undefined,
         },
-        loan: req.loanId
+        // T-371 R6 — a loan picked with a blank amount is a picker left open, exactly as the record path reads it.
+        loan: req.loanId && req.loanAmount
           ? {
               loanId: req.loanId,
-              amount: req.loanAmount || '0',
+              amount: req.loanAmount,
               ownerStoreId: req.loanOwnerStoreId || null,
             }
           : null,
@@ -120,8 +125,8 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
     // ⚠️ A loan named with no amount is a picker left open, not a zero repayment — and the
     // schema's own CHECK refuses the pair anyway. Treated as "no loan" rather than surfaced as a
     // constraint error, because that is what the person meant.
-    const loanAmount = money(formData, 'loanAmount');
-    const hasLoan = loanId !== '' && Number(loanAmount) !== 0;
+    const loanAmount = str(formData, 'loanAmount');
+    const hasLoan = loanId !== '' && loanAmount !== '' && Number(loanAmount) !== 0;
 
     await withOrgPrincipal(actor.orgId, (tx) =>
       recordChannelSettlement(tx, actor, {
@@ -132,12 +137,12 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
         grossAmount,
         netDeposited,
         deductions: {
-          commission: money(formData, 'commission'),
-          marketing: money(formData, 'marketing'),
-          platformFee: money(formData, 'platformFee'),
-          vatOnFees: money(formData, 'vatOnFees'),
-          withholdingTax: money(formData, 'withholdingTax'),
-          penalty: money(formData, 'penalty'),
+          commission: optional(formData, 'commission'),
+          marketing: optional(formData, 'marketing'),
+          platformFee: optional(formData, 'platformFee'),
+          vatOnFees: optional(formData, 'vatOnFees'),
+          withholdingTax: optional(formData, 'withholdingTax'),
+          penalty: optional(formData, 'penalty'),
         },
         loan: hasLoan
           ? {

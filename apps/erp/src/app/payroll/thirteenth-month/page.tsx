@@ -1,4 +1,5 @@
 import { requirePageAccess } from '../../../lib/page-access';
+import { compare, money, ZERO } from '@shareat/core/money';
 import { post13thMonthRunAction, void13thMonthRunAction } from './actions';
 import { cashAccountsFor, listStores, payoutsFor, peso, preview, runsFor } from './lib';
 import { Page } from '@/components/shell/Page';
@@ -124,7 +125,7 @@ export default async function ThirteenthMonthPage({
                       </td>
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums">{peso(Number(p.grossPay))}</td>
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-amber-700 dark:text-amber-400">
-                        {Number(p.advanceRecovered) > 0 ? `−${peso(Number(p.advanceRecovered))}` : '—'}
+                        {compare(money(p.advanceRecovered), ZERO) > 0 ? `−${peso(Number(p.advanceRecovered))}` : '—'}
                       </td>
                       <td className="py-1.5 text-right font-mono font-medium tabular-nums">
                         {peso(Number(p.netPay))}
@@ -182,7 +183,7 @@ export default async function ThirteenthMonthPage({
                   {latestPayouts.map((p) => (
                     <li key={p.id}>
                       {p.personName} — net <span className="font-mono">{peso(Number(p.netPay))}</span>
-                      {Number(p.advanceRecovered) > 0 && ` (advance −${peso(Number(p.advanceRecovered))})`}
+                      {compare(money(p.advanceRecovered), ZERO) > 0 && ` (advance −${peso(Number(p.advanceRecovered))})`}
                     </li>
                   ))}
                 </ul>

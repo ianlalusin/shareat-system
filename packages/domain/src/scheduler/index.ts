@@ -40,7 +40,7 @@ import { sweepOrphanedFiles } from '../files';
 import { fiscalPeriodSeedWindow } from '../organizations';
 import { classifyHoles } from '../fiscal-periods';
 
-import { toBusinessDate } from '@shareat/core';
+import { money, toBusinessDate } from '@shareat/core';
 import { sql } from 'drizzle-orm';
 import { sweepStore } from '../attendance/sweep';
 import { drainOutbox, ingestEvents, type InboxDriver, type MirrorDriver } from '../sync';
@@ -869,7 +869,7 @@ export async function runBudgetReissue(
                   storeId: from.storeId,
                   categoryId: from.categoryId,
                   periodKey: key!,
-                  amount: from.amount,
+                  amount: money(from.amount), // R4: a database value re-written is re-minted, never passed through
                   autoReissue: from.autoReissue,
                   reissueInterval: from.reissueInterval,
                   reissuedFromId: from.id,

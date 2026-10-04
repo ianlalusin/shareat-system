@@ -10,6 +10,8 @@ import { and, asc, eq, lt, ne, or, sql } from 'drizzle-orm';
 import { orderWastageAllocations, orderWastages } from '../../schema/order-wastage';
 import { stores } from '../../schema/stores';
 import type { Tx } from '../client';
+import type { Decimal, Money } from '@shareat/core/money';
+import type { SafeInsert } from './numeric-input';
 
 export interface OrderWastageRow {
   readonly id: string;
@@ -71,9 +73,16 @@ export interface CreateOrderWastageInput {
   readonly channel: string;
   readonly orderRef: string | null;
   readonly typeMode: 'instant' | 'tracked';
-  readonly amount: string;
+  /** ⭐ T-371 C2 — a branded `Decimal`, minted by `decimal()` in the domain; a plain string does not compile. */
+  readonly amount: Money;
   readonly reason: string;
   readonly createdBy: string;
+}
+
+/** ⭐ T-371 C2 — one allocation row as the writer takes it: `percent` is a branded `Decimal`. */
+export interface ReplaceAllocationInput {
+  readonly personId: string;
+  readonly percent: Decimal<'5,2'>;
 }
 
 /**
@@ -125,13 +134,16 @@ export async function listAllocations(tx: Tx, wastageId: string): Promise<Alloca
 export async function replaceAllocations(
   tx: Tx,
   wastageId: string,
-  allocations: { personId: string; percent: string }[],
+  allocations: readonly ReplaceAllocationInput[],
 ): Promise<void> {
   await tx.delete(orderWastageAllocations).where(eq(orderWastageAllocations.wastageId, wastageId));
   if (allocations.length === 0) return;
-  await tx.insert(orderWastageAllocations).values(
-    allocations.map((a) => ({ wastageId, personId: a.personId, percent: a.percent })),
-  );
+  const rows: (SafeInsert<typeof orderWastageAllocations> & { percent: Decimal<'5,2'> })[] = allocations.map((a) => ({
+    wastageId,
+    personId: a.personId,
+    percent: a.percent,
+  }));
+  await tx.insert(orderWastageAllocations).values(rows);
 }
 
 export async function markDisputed(tx: Tx, orgId: string, id: string): Promise<void> {

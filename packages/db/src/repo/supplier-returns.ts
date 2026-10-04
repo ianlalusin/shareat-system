@@ -11,6 +11,7 @@ import {
 } from '../../schema/supplier-returns';
 import { stockLocations } from '../../schema/stock-locations';
 import type { Tx } from '../client';
+import type { Decimal, Quantity } from '@shareat/core/money';
 
 /**
  * ⭐ `stock_movements`/`stock_locations` carry no composite FK tying a location to a store (T-167's
@@ -43,10 +44,11 @@ export interface ReturnLineInput {
   readonly lineNo: string;
   readonly itemId: string;
   readonly locationId: string;
-  readonly quantity: string;
+  readonly quantity: Quantity;
   readonly deliveryLineId: string | null;
   readonly movementId: string;
-  readonly unitCost: string;
+  /** numeric(14,4) — the layer's landed cost per base unit. */
+  readonly unitCost: Decimal<'14,4'>;
   readonly creditBasis: 'grni' | 'supplier_advance';
 }
 

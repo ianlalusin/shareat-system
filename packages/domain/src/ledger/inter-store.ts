@@ -13,10 +13,10 @@
  * ⚠️ `partyId` on both lines is the OTHER store's CODE, never its database id (`moneyTransfersRepo.storeCodes`).
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { fromCentavos, money, toCentavos } from '@shareat/core/money';
+import { fromCentavos, toCentavos } from '@shareat/core/money';
 import { moneyTransfersRepo, type Tx } from '@shareat/db';
 import { internalFault } from '../shared/refusal-leaf';
-import type { PostEntryLine } from './post-entry';
+import { lineAmount, type PostEntryLine } from './post-entry';
 
 /** Inter-store due-from / due-to, both `requires_party` with `party_type = 'store'`. */
 const DUE_FROM_STORE = '1250';
@@ -58,10 +58,13 @@ export async function withInterStoreLegs(
 
   // Net (debit − credit) per store other than the owing one, in first-seen order.
   const net = new Map<string, bigint>();
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     const storeId = line.storeId ?? null;
     if (storeId === null || storeId === owingStoreId) continue;
-    const delta = toCentavos(money(line.debit ?? '0')) - toCentavos(money(line.credit ?? '0'));
+    // T-371 S3 — the same mint postEntry applies, so a malformed figure is refused in words here, not as a TypeError.
+    const debit = lineAmount(line.debit, 'debit', index, line.accountCode, 'withInterStoreLegs');
+    const credit = lineAmount(line.credit, 'credit', index, line.accountCode, 'withInterStoreLegs');
+    const delta = toCentavos(debit) - toCentavos(credit);
     net.set(storeId, (net.get(storeId) ?? 0n) + delta);
   }
 

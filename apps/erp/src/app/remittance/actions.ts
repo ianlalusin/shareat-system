@@ -17,7 +17,7 @@ import {
 import { cashierAccounts, withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
-import { add, isZero, money } from '@shareat/core/money';
+import { add, compare, isZero, money, ZERO } from '@shareat/core/money';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 
 function str(fd: FormData, key: string): string {
@@ -91,13 +91,13 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
       const parsed = parseMoneyInput(amount, 'createRemittanceAction: the amount handed over', 'The amount handed over');
       // T-343 S5.5s / DEF-470 item 7 — backs the dropped `min="0"`: without it, a negative line was
       // silently dropped by the `> 0` filter below rather than refused.
-      if (Number(parsed) < 0) {
+      if (compare(parsed, ZERO) < 0) {
         throw refuse(
           'createRemittanceAction: the amount handed over cannot be negative.',
           'The amount handed over cannot be negative.',
         );
       }
-      return Number(parsed) > 0;
+      return compare(parsed, ZERO) > 0;
     };
 
     // The account name is added HERE, at the call sites, not inside `isHandedOver` — whatever it
@@ -175,7 +175,7 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
       // The domain refusal is what makes the two agree; resting this on a client-side gate
       // would contradict docs/RULES.md §1 rule 7.
       (result.varianceId
-        ? ` ⚠️ ${Number(result.variance) < 0 ? 'SHORT' : 'OVER'} by ${Math.abs(Number(result.variance)).toFixed(2)} — recorded as an open item.`
+        ? ` ⚠️ ${compare(money(result.variance ?? '0'), ZERO) < 0 ? 'SHORT' : 'OVER'} by ${Math.abs(Number(result.variance)).toFixed(2)} — recorded as an open item.`
         : '');
   } catch (err) {
     back({ error: errorMessage(err), store: storeId });
@@ -274,7 +274,8 @@ export async function setCashPolicyAction(formData: FormData): Promise<void> {
       setStoreCashPolicy(tx, actor, {
         storeId,
         remittanceCadence: cadence as Parameters<typeof setStoreCashPolicy>[2]['remittanceCadence'],
-        unremittedCeiling: rawCeiling === '' ? null : rawCeiling,
+        // T-371 R6: the domain parses the ceiling; a blank becomes NULL there (a nullable column).
+        unremittedCeiling: rawCeiling,
       }),
     );
   } catch (err) {

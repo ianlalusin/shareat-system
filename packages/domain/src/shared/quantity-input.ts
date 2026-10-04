@@ -7,10 +7,11 @@
  * and `cutover/index.ts` can share the same sentence-producing entry point rather than each growing
  * their own copy; every existing sentence stays byte-identical.
  */
-import { quantity as parseQuantity } from '../stock/quantity';
+import { quantity as parseQuantity, type Quantity } from '../stock/quantity';
+import { exceedsMaxMagnitude } from './money-input';
 import { refuse } from './refusal';
 
-export function parseQuantityInput(raw: string, rawLabel: string, humanLabel: string): string {
+export function parseQuantityInput(raw: string, rawLabel: string, humanLabel: string): Quantity {
   try {
     return parseQuantity(raw);
   } catch (err) {
@@ -29,7 +30,7 @@ export function parseQuantityInput(raw: string, rawLabel: string, humanLabel: st
     // presentable sentence, not a bare `TypeError` from this catch block itself.
     const trimmed = String(raw).trim();
     const hugeExponent =
-      /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)e[+-]?\d+$/i.test(trimmed) && Math.abs(Number(trimmed)) > 99999999999.999;
+      /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)e[+-]?\d+$/i.test(trimmed) && exceedsMaxMagnitude(trimmed, 14, 3);
     if (hugeExponent || (err instanceof RangeError && /out of range/.test(err.message))) {
       throw refuse(
         `${rawLabel} — "${raw}" is too large. The most a quantity can be is 99,999,999,999.999.`,

@@ -42,6 +42,7 @@
  * a cheap, safe no-op — even if the original has since been reversed by this very call
  * on its first, successful attempt.
  */
+import { money } from '@shareat/core/money';
 import { journalRepo, transaction, type Tx } from '@shareat/db';
 import { postEntry } from './post-entry';
 
@@ -175,8 +176,9 @@ async function runReverseEntry(tx: Tx, input: ReverseEntryInput): Promise<Revers
     partyType: line.partyType,
     partyId: line.partyId,
     // The mirror: debit and credit swapped, everything else identical (Contract §2).
-    debit: line.credit,
-    credit: line.debit,
+    // T-371 R4 — re-minted from the stored row, never cast (0155 keeps NaN out, so this never refuses).
+    debit: money(line.credit),
+    credit: money(line.debit),
     lineMemo: line.lineMemo,
   }));
 

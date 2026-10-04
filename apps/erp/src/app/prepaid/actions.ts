@@ -16,6 +16,7 @@ import {
   writeOffPrepaidItem,
 } from '@shareat/domain';
 import type { PrepaidCategory } from '@shareat/db';
+import { compare, ZERO } from '@shareat/core/money';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -148,7 +149,7 @@ export async function writeOffAction(formData: FormData): Promise<void> {
     );
     summary =
       `Written off. ₱${result.expensed} recognised as expense` +
-      (Number(result.refunded) > 0 ? `, ₱${result.refunded} refunded to the books.` : '.');
+      (compare(result.refunded, ZERO) > 0 ? `, ₱${result.refunded} refunded to the books.` : '.');
   } catch (err) {
     // T-343 S5.5u item 3 (DEF-473) — keeps what was typed after a refusal, the fixed-assets/[id]
     // precedent (`sp.reason ?? ''`); omitted keys just mean the box was already blank.

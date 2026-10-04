@@ -14,6 +14,8 @@
  */
 import { and, asc, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
+import type { Decimal, Money } from '@shareat/core/money';
+import type { SafeInsert } from './numeric-input';
 import { accounts } from '../../schema/accounts';
 import { journalEntries, journalLines } from '../../schema/journal';
 import {
@@ -53,21 +55,24 @@ export interface LoanRow {
   createdAt: Date;
 }
 
-export interface InsertLoanInput {
-  orgId: string;
-  storeId: string;
-  lenderName: string;
-  name: string;
-  principalAmount: string;
-  interestRate: string;
-  ratePeriod: RatePeriod;
-  interestMethod: InterestMethod;
-  paymentFrequency: PaymentFrequency;
-  termPeriods: number;
-  startDate: string;
-  notes?: string | null;
-  createdBy: string;
-}
+/** T-371 C2 — every numeric column is a `Decimal` brand of that column's own shape, minted by `decimal()`. */
+export type InsertLoanInput = Pick<
+  SafeInsert<typeof loans>,
+  | 'orgId'
+  | 'storeId'
+  | 'lenderName'
+  | 'name'
+  | 'ratePeriod'
+  | 'interestMethod'
+  | 'paymentFrequency'
+  | 'termPeriods'
+  | 'startDate'
+  | 'notes'
+  | 'createdBy'
+> & {
+  principalAmount: Money;
+  interestRate: Decimal<'8,4'>;
+};
 
 export async function insertLoan(tx: Tx, input: InsertLoanInput): Promise<{ id: string }> {
   const [row] = await tx.insert(loans).values(input).returning({ id: loans.id });

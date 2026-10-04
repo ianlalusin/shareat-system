@@ -20,8 +20,8 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { auditLogRepo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
-import { parseMoneyInput } from '../shared/money-input';
-import { writeChannels, writeTenders, type CreateSalesDayInput } from './create';
+import { money, type Money } from '@shareat/core/money';
+import { parseSalesDayFigures, writeChannels, writeTenders, type CreateSalesDayInput } from './create';
 
 export interface EditSalesDayInput extends Omit<CreateSalesDayInput, 'storeId' | 'businessDate'> {
   salesDayId: string;
@@ -46,22 +46,14 @@ async function runEdit(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<
     );
   }
 
-  const fig = (value: string | undefined, label: string): string =>
-    String(parseMoneyInput(value ?? '0', `editSalesDay: ${label}`, label));
-  const figures = {
-    totalSales: fig(input.totalSales, 'Total sales'),
-    unliSales: fig(input.unliSales, 'Unli sales'),
-    alaCarteSales: fig(input.alaCarteSales, 'À la carte sales'),
-    seniorDiscount: fig(input.seniorDiscount, 'Senior discount'),
-    pwdDiscount: fig(input.pwdDiscount, 'PWD discount'),
-    otherDiscount: fig(input.otherDiscount, 'Other discount'),
-    comps: fig(input.comps, 'Comps'),
-    serviceCharge: fig(input.serviceCharge, 'Service charge'),
-    otherCharges: fig(input.otherCharges, 'Other charges'),
-    cashCollected: fig(input.cashCollected, 'Cash collected'),
-    onlineCollected: fig(input.onlineCollected, 'Online collected'),
-    creditSales: fig(input.creditSales, 'Credit sales'),
-  };
+  // T-371 R5/R6: parsed after authorize(). The three revenue figures are refused when blank; a blank
+  // defaulted figure is left out of the patch, so the stored figure stands (never a guessed '0').
+  const parsed = parseSalesDayFigures(input, 'editSalesDay');
+  const figures: Partial<Record<keyof typeof parsed, Money>> = {};
+  for (const key of Object.keys(parsed) as (keyof typeof parsed)[]) {
+    const value = parsed[key];
+    if (value !== undefined) figures[key] = value;
+  }
 
   // Channels and tenders are validated against THIS store's own configuration by the same helpers
   // `createSalesDay` uses; both replace the day's rows when given. A refusal throws out of the one
@@ -79,7 +71,7 @@ async function runEdit(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<
     await writeTenders(tx, actor, day.storeId, day.id, input.tenders);
     if (untouched.length > 0) {
       const written = await salesDaysRepo.getTendersForDay(tx, day.id);
-      await salesDaysRepo.replaceTenders(tx, day.id, [...written, ...untouched].map((t) => ({ moneyAccountId: t.moneyAccountId, amount: t.amount })));
+      await salesDaysRepo.replaceTenders(tx, day.id, [...written, ...untouched].map((t) => ({ moneyAccountId: t.moneyAccountId, amount: money(t.amount) })));
     }
   }
 

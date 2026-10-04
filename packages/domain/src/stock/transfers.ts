@@ -17,7 +17,8 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { journalRepo, stockLedgerRepo, stockTransfersRepo, type Tx } from '@shareat/db';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { compareQuantity, quantity, type Quantity } from './quantity';
+import { compareQuantity, fromThousandths, quantity, toThousandths, type Quantity } from './quantity';
+import { parseRequiredQuantity } from './quantity-field';
 import {
   DEFAULT_STUCK_TRANSFER_THRESHOLD_DAYS,
   validateTransferRequest,
@@ -25,7 +26,8 @@ import {
 
 export interface TransferLineInput {
   readonly itemId: string;
-  readonly quantity: Quantity;
+  /** T-371 S3: the raw typed figure (a `Quantity` is one too) — parsed at the entry, after `authorize()`. */
+  readonly quantity: string;
 }
 
 export interface CreateTransferInput {
@@ -58,8 +60,17 @@ async function assertPeriodOpen(tx: Tx, orgId: string): Promise<{ ok: true } | {
   return { ok: true };
 }
 
+/** T-371 G3: negated in scaled bigint and minted by the one mint, never a string flip cast to the brand. */
 function negate(q: Quantity): Quantity {
-  return (q.startsWith('-') ? q.slice(1) : `-${q}`) as Quantity;
+  return fromThousandths(-toThousandths(q));
+}
+
+/** T-371 S3 (R5, R6): every line's quantity parsed into the brand, after `authorize()`; a blank is refused. */
+function parseLines(fn: string, lines: readonly TransferLineInput[]): { itemId: string; quantity: Quantity }[] {
+  return lines.map((l, i) => ({
+    itemId: l.itemId,
+    quantity: parseRequiredQuantity(l.quantity, `${fn}: the quantity for item ${l.itemId}`, `Line ${i + 1}'s quantity`),
+  }));
 }
 
 /** ⭐ Locks and checks EVERY line before writing anything — so a shortfall on line 3 never leaves
@@ -68,11 +79,11 @@ async function checkSufficiency(
   tx: Tx,
   storeId: string,
   fromLocationId: string,
-  lines: readonly { itemId: string; quantity: string }[],
+  lines: readonly { itemId: string; quantity: Quantity }[],
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   for (const line of lines) {
     const onHand = await stockLedgerRepo.onHandForUpdate(tx, line.itemId, fromLocationId);
-    if (compareQuantity(quantity(onHand), quantity(line.quantity)) < 0) {
+    if (compareQuantity(quantity(onHand), line.quantity) < 0) {
       return {
         ok: false,
         reason: `only ${onHand} of item ${line.itemId} is on hand at the source location — cannot move ${line.quantity}`,
@@ -91,14 +102,15 @@ export async function transferNow(tx: Tx, input: CreateTransferInput): Promise<T
   // ⭐ `authorize` has just proven this store belongs to the actor's org, so deriving the org from
   // the actor is the only reading that can be self-consistent (T-231/DEF-210).
   const orgId = input.actor.orgId;
+  const parsedLines = parseLines('transferNow', input.lines);
 
-  const validation = validateTransferRequest(input);
+  const validation = validateTransferRequest({ ...input, lines: parsedLines });
   if (!validation.ok) return validation;
 
   const period = await assertPeriodOpen(tx, orgId);
   if (!period.ok) return period;
 
-  const sufficiency = await checkSufficiency(tx, input.storeId, input.fromLocationId, input.lines);
+  const sufficiency = await checkSufficiency(tx, input.storeId, input.fromLocationId, parsedLines);
   if (!sufficiency.ok) return sufficiency;
 
   const now = new Date();
@@ -121,7 +133,7 @@ export async function transferNow(tx: Tx, input: CreateTransferInput): Promise<T
     receivedBy: input.actor.personId,
     note: input.note ?? null,
     createdBy: input.actor.personId,
-    lines: input.lines.map((l, i) => ({ lineNo: String(i + 1), itemId: l.itemId, quantity: l.quantity })),
+    lines: parsedLines.map((l, i) => ({ lineNo: String(i + 1), itemId: l.itemId, quantity: l.quantity })),
   });
 
   const lines = await stockTransfersRepo.getTransferLines(tx, transferId);
@@ -163,8 +175,9 @@ export async function transferNow(tx: Tx, input: CreateTransferInput): Promise<T
 export async function saveDraft(tx: Tx, input: CreateTransferInput): Promise<TransferOutcome> {
   await authorize(tx, input.actor, 'transfer_stock', { storeId: input.storeId });
   const orgId = input.actor.orgId; // T-231/DEF-210 — see transferNow.
+  const parsedLines = parseLines('saveDraft', input.lines);
 
-  const validation = validateTransferRequest(input);
+  const validation = validateTransferRequest({ ...input, lines: parsedLines });
   if (!validation.ok) return validation;
 
   const { id: transferId } = await stockTransfersRepo.createTransfer(tx, {
@@ -176,7 +189,7 @@ export async function saveDraft(tx: Tx, input: CreateTransferInput): Promise<Tra
     status: 'draft',
     note: input.note ?? null,
     createdBy: input.actor.personId,
-    lines: input.lines.map((l, i) => ({ lineNo: String(i + 1), itemId: l.itemId, quantity: l.quantity })),
+    lines: parsedLines.map((l, i) => ({ lineNo: String(i + 1), itemId: l.itemId, quantity: l.quantity })),
   });
   return { ok: true, transferId };
 }
@@ -195,7 +208,12 @@ export async function dispatch(tx: Tx, actor: Actor, transferId: string): Promis
   if (!period.ok) return period;
 
   const lines = await stockTransfersRepo.getTransferLines(tx, transferId);
-  const sufficiency = await checkSufficiency(tx, transfer.storeId, transfer.fromLocationId, lines);
+  const sufficiency = await checkSufficiency(
+    tx,
+    transfer.storeId,
+    transfer.fromLocationId,
+    lines.map((l) => ({ itemId: l.itemId, quantity: quantity(l.quantity) })), // T-371 R4: re-minted database values
+  );
   if (!sufficiency.ok) return sufficiency;
 
   const now = new Date();

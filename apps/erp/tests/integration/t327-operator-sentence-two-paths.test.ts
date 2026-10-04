@@ -93,7 +93,6 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createItem, createPriceList, postEntry } from '@shareat/domain';
-import { customersRepo } from '@shareat/db';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { errorMessage } from '../../src/lib/constraint-messages';
 
@@ -168,6 +167,19 @@ async function provoke<T>(fn: () => Promise<T>, cleanupOnSuccess?: (ok: T) => Pr
   throw new Error('expected a real constraint violation, but the call succeeded');
 }
 
+/**
+ * T-371 S2: `postEntry` now refuses 'NaN' in the domain parser before the database, so the journal_lines CHECK is reached by a RAW insert (a draft entry + one
+ * 'NaN' debit line) — the constraint, not the parser, is what these two paths test. The parser's own refusal has its own leg below.
+ */
+const nanJournalLine = async (tx: Tx, orgId: string) => {
+  // two statements, not one CTE: the journal_lines RLS policy reads the entry, which a same-statement CTE insert is not yet visible to
+  const entry = await tx.execute(dsql`insert into journal_entries (org_id, entry_date, period_id, source_type, source_id)
+    select ${orgId}, '2026-01-10'::date, p.id, 'test', ${uid('src')} from fiscal_periods p where p.org_id = ${orgId} and p.starts_on = '2026-01-01' returning id`);
+  const entryId = (entry as unknown as { id: string }[])[0]!.id;
+  await tx.execute(dsql`insert into journal_lines (entry_id, line_no, account_id, debit, credit)
+    select ${entryId}::uuid, 1, a.id, 'NaN', '0' from accounts a where a.org_id = ${orgId} and a.code = '6200'`);
+};
+
 /** The raw driver's own structured field — never CONSTRAINT_MESSAGES, never a parse of prose. */
 function constraintNameOf(err: unknown): string | null {
   const name = (err as { constraint_name?: unknown } | null)?.constraint_name;
@@ -186,14 +198,7 @@ describe('T-327 test 3 — the cashier reads a sentence, on two different constr
 
     const err = await provoke(() =>
       asOrg(f.orgId, (tx) =>
-        postEntry(tx, {
-          orgId: f.orgId,
-          entryDate: '2026-01-10',
-          sourceType: 'test',
-          sourceId: uid('src'),
-          idempotencyKey: uid('idem'),
-          lines: [{ accountCode: '6200', debit: 'NaN', credit: '0' }],
-        }),
+        nanJournalLine(tx, f.orgId),
       ),
     );
 
@@ -217,12 +222,12 @@ describe('T-327 test 3 — the cashier reads a sentence, on two different constr
 
     // T-343 S5.5v item 6 — `setPrice` now routes `rate` through `parseMoneyInput` first, which
     // refuses 'NaN' before it ever reaches this constraint (that path is closed by the parser).
-    // Repointed to the repo function directly — the same table, the same raw-string-to-numeric
+    // Repointed to a raw INSERT (after T-371 S2 no repo writer accepts a plain string; the DB CHECK is what this leg tests) — the same table, the same raw-string-to-numeric
     // mechanism, just without the domain function that would now intercept it.
     const err = await provoke(
       () =>
         asOrg(f.orgId, (tx) =>
-          customersRepo.upsertPriceListItem(tx, { orgId: f.orgId, priceListId: list.id, itemId: item.id, rate: 'NaN', unit: null }),
+          tx.execute(dsql`insert into price_list_items (org_id, price_list_id, item_id, rate) values (${f.orgId}, ${list.id}, ${item.id}, 'NaN')`),
         ),
       // `upsertPriceListItem` upserts on the (priceListId, itemId) natural key, so that pair is
       // what identifies the row it wrote.
@@ -234,6 +239,25 @@ describe('T-327 test 3 — the cashier reads a sentence, on two different constr
     const constraintName = constraintNameOf(err);
     expect(constraintName).toMatch(/^price_list_items_.*_finite_check$/);
     expect(errorMessage(err)).toBe(EXPECTED_SENTENCE);
+  });
+
+  it("postEntry refuses debit 'NaN' with the plain sentence before the database (T-371's intended behaviour; no constraint is reached)", async () => {
+    const f = await fixture();
+    await seedChartOfAccounts(sql, f.orgId);
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${f.orgId}, m::date, (m + interval '1 month - 1 day')::date, 'open' from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') m`;
+    let thrown: unknown = null;
+    try {
+      await asOrg(f.orgId, (tx) =>
+        postEntry(tx, { orgId: f.orgId, entryDate: '2026-01-10', sourceType: 'test', sourceId: uid('src'), idempotencyKey: uid('idem'), lines: [{ accountCode: '6200', debit: 'NaN', credit: '0' }] }),
+      );
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown, 'postEntry accepted a NaN debit').not.toBeNull();
+    expect(constraintNameOf(thrown), 'it reached a database constraint instead of being refused first').toBeNull();
+    expect((thrown as { userMessage?: string }).userMessage ?? (thrown as Error).message).toContain('"NaN" is not a valid amount');
+    const [n] = await sql<{ n: number }[]>`select count(*)::int as n from journal_entries where org_id = ${f.orgId}`;
+    expect(n!.n, 'a refused entry left a row').toBe(0);
   });
 
   it('the two paths trip two DIFFERENT constraint names — proving a suffix rule, not one exact-name entry', async () => {
@@ -253,14 +277,7 @@ describe('T-327 test 3 — the cashier reads a sentence, on two different constr
 
     const err1 = await provoke(() =>
       asOrg(f.orgId, (tx) =>
-        postEntry(tx, {
-          orgId: f.orgId,
-          entryDate: '2026-01-10',
-          sourceType: 'test',
-          sourceId: uid('src'),
-          idempotencyKey: uid('idem'),
-          lines: [{ accountCode: '6200', debit: 'NaN', credit: '0' }],
-        }),
+        nanJournalLine(tx, f.orgId),
       ),
     );
     // T-343 S5.5v item 6 — same re-point as path 2: `setPrice` now closes this path via
@@ -268,7 +285,7 @@ describe('T-327 test 3 — the cashier reads a sentence, on two different constr
     const err2 = await provoke(
       () =>
         asOrg(f.orgId, (tx) =>
-          customersRepo.upsertPriceListItem(tx, { orgId: f.orgId, priceListId: list.id, itemId: item.id, rate: 'NaN', unit: null }),
+          tx.execute(dsql`insert into price_list_items (org_id, price_list_id, item_id, rate) values (${f.orgId}, ${list.id}, ${item.id}, 'NaN')`),
         ),
       async () => {
         await sql`delete from price_list_items where price_list_id = ${list.id} and item_id = ${item.id}`;

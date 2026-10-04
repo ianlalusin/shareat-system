@@ -491,8 +491,7 @@ async function liabilityChargeCount(orgId: string): Promise<number> {
 
 describe('O3 (DEF-472) — chargeAction amount="1.234" (extra decimal place, valid syntax)', () => {
   it(
-    'wanted: refuse with the charge sentence (not yet built) — observed today (measured, NOT ' +
-      'presumed): NO ERROR — posts silently rounded to 1.23',
+    'refused with the charge sentence (T-371: built — was NO ERROR, silently rounded to 1.23); nothing posts',
     async () => {
       const f = await liabilityFixture('o3');
       ACTOR_HOLDER.actor = f.admin;
@@ -503,19 +502,17 @@ describe('O3 (DEF-472) — chargeAction amount="1.234" (extra decimal place, val
       fd.set('againstAccountCode', '6100');
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => chargeAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBeNull();
-      const [row] = await sql<{ debit: string }[]>`
-        select jl.debit::text from journal_entries je join journal_lines jl on jl.entry_id = je.id
-        where je.org_id = ${f.orgId} and je.source_type = 'liability_charge' and jl.debit::numeric > 0`;
-      expect(row!.debit, 'observed today: silently rounded, no refusal').toBe('1.23');
+      expect(errorOf(to), `redirect URL was: ${to}`).toBe(
+        'The charge amount — "1.234" is not a valid amount. Use at most two decimal places.',
+      );
+      expect(await liabilityChargeCount(f.orgId), 'nothing should have posted').toBe(0);
     },
   );
 });
 
 describe('Comma legs — Tier 2: chargeAction/payAction amount="1,5" (no server parse today)', () => {
   it(
-    `charge "1,5": wanted a presentable refusal (not yet built) — observed today (measured): ` +
-      `"${DATABASE_ERROR_FALLBACK}" (22P02 invalid input syntax for type numeric)`,
+    `charge "1,5": a presentable refusal (T-371: built — was "${DATABASE_ERROR_FALLBACK}", 22P02)`,
     async () => {
       const f = await liabilityFixture('liab-charge-comma');
       ACTOR_HOLDER.actor = f.admin;
@@ -526,7 +523,9 @@ describe('Comma legs — Tier 2: chargeAction/payAction amount="1,5" (no server 
       fd.set('againstAccountCode', '6100');
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => chargeAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(DATABASE_ERROR_FALLBACK);
+      expect(errorOf(to), `redirect URL was: ${to}`).toBe(
+        'The charge amount — "1,5" is not a valid amount. Use at most two decimal places.',
+      );
       expect(await liabilityChargeCount(f.orgId), 'nothing should have posted').toBe(0);
     },
   );

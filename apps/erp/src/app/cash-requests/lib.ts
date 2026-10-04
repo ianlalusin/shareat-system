@@ -15,6 +15,7 @@ import {
   type CashRequestRow,
   type FloatPosition,
 } from '@shareat/db';
+import { compare, money, ZERO as ZERO_MONEY } from '@shareat/core/money';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
@@ -53,7 +54,7 @@ export async function getDetail(orgId: string, id: string): Promise<CashRequestD
     const row = await cashRequestsRepo.getById(tx, orgId, id);
     if (!row) return null;
     const float = await cashRequestsRepo.floatPositionOf(tx, orgId, id);
-    return { ...row, float, isSettled: Number(float.outstanding) <= 0.005 };
+    return { ...row, float, isSettled: compare(money(float.outstanding), ZERO_MONEY) <= 0 };
   });
 }
 

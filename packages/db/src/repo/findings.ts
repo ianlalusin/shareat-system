@@ -14,7 +14,7 @@ import { findingAcknowledgements } from '../../schema/findings';
 // ⛔ The ONE definition of how long each cadence allows. A private copy here would be a second
 // source of truth for a number the screen also shows — bible §6.3.
 import { CADENCE_DAYS } from '../../schema/stores';
-import { formatMoney, money } from '@shareat/core/money';
+import { ZERO, add, compare, formatMoney, isZero, money, negate, subtract, type Money } from '@shareat/core/money';
 // ⛔ T-218 — the ONE definition of "today" for the repo layer. Never bare `current_date`.
 import { MANILA_TODAY, daysBetweenDates } from './sql-time';
 import { isPreOpeningSql } from './stores';
@@ -30,7 +30,37 @@ import { periodBounds } from './fiscal-periods';
  *
  * ⭐ One formatter, `@shareat/core`'s — not a fourth copy of the `Intl` options.
  */
-const peso = (n: number): string => formatMoney(money(n.toFixed(2)));
+const peso = (n: number | Money): string =>
+  typeof n === 'string' ? formatMoney(n) : formatMoney(money(n.toFixed(2)));
+
+/**
+ * T-371 — the FIFO "what is the oldest credit nothing has cleared yet" walk shared by the three ageing detectors.
+ * Every figure is minted to `Money` from the (14,2) SUM text and ordered with `compare`, never as a float, so a
+ * NaN-text can no longer make a comparison silently false. `null` = nothing is held (balance not positive).
+ */
+function oldestUnclearedCredit(
+  entries: { entry_date: string; credited: string; debited: string }[],
+): { balance: Money; oldestUncleared: string | null } | null {
+  let balance: Money = ZERO;
+  let remainingDebits: Money = ZERO;
+  for (const r of entries) {
+    balance = add(balance, subtract(money(r.credited), money(r.debited)));
+    remainingDebits = add(remainingDebits, money(r.debited));
+  }
+  if (compare(balance, ZERO) <= 0) return null; // nothing held — silent
+  let oldestUncleared: string | null = null;
+  for (const r of entries) {
+    const credited = money(r.credited);
+    if (compare(credited, ZERO) <= 0) continue;
+    if (compare(remainingDebits, credited) >= 0) {
+      remainingDebits = subtract(remainingDebits, credited);
+      continue;
+    }
+    oldestUncleared = r.entry_date;
+    break;
+  }
+  return { balance, oldestUncleared };
+}
 
 
 export interface DetectedFinding {
@@ -513,11 +543,11 @@ export async function unremittedCeilingBreached(
   const out: DetectedFinding[] = [];
   for (const r of rows) {
     if (r.ceiling === null) continue; // a `daily` store may have none — that is lawful (T-152 §2)
-    const ceiling = Number(r.ceiling);
-    const outstanding = Number(r.outstanding);
-    if (!(outstanding > ceiling)) continue;
-    const remittable = Number(r.remittable);
-    const held = outstanding - remittable;
+    const ceiling = money(r.ceiling);
+    const outstanding = money(r.outstanding);
+    if (!(compare(outstanding, ceiling) > 0)) continue;
+    const remittable = money(r.remittable);
+    const held = subtract(outstanding, remittable);
     out.push({
       kind: 'unremittedCeilingBreached',
       key: `unremittedCeilingBreached:${r.store_id}`,
@@ -526,7 +556,7 @@ export async function unremittedCeilingBreached(
       detail:
         `${r.store_name} is holding ${peso(outstanding)} un-remitted against a ceiling of ` +
         `${peso(ceiling)}. ${peso(remittable)} of that can be remitted now` +
-        (held > 0.005
+        (compare(held, ZERO) > 0
           ? `; ${peso(held)} sits on days that are not verified yet, so it cannot.`
           : '.'),
     });
@@ -549,7 +579,7 @@ export async function remittanceOverdue(tx: Tx, orgId: string): Promise<Detected
     const age = Number(r.age_days);
     const limit = CADENCE_DAYS[r.cadence as keyof typeof CADENCE_DAYS] ?? 1;
     if (!(age > limit)) continue;
-    const outstanding = Number(r.outstanding);
+    const outstanding = money(r.outstanding);
     out.push({
       kind: 'remittanceOverdue',
       key: `remittanceOverdue:${r.store_id}`,
@@ -634,15 +664,15 @@ export async function tillFloatOffTarget(tx: Tx, orgId: string): Promise<Detecte
 
   const out: DetectedFinding[] = [];
   for (const r of rows) {
-    const target = Number(r.target);
-    const balance = Number(r.balance);
-    const drift = balance - target;
-    if (Math.abs(drift) < 0.005) continue;
+    const target = money(r.target!);
+    const balance = money(r.balance!);
+    const drift = subtract(balance, target);
+    if (isZero(drift)) continue;
     // R1.6/R6.1 — suppressed ONLY when the store is still pre-opening by BOTH measures AND the
     // balance itself is exactly zero (nothing has ever touched this pot yet). Any non-zero
     // balance still fires regardless — that is evidence something was posted where it should not
     // have been.
-    if (r.still_pre_opening === 'true' && Math.abs(balance) < 0.005) continue;
+    if (r.still_pre_opening === 'true' && isZero(balance)) continue;
     out.push({
       kind: 'tillFloatOffTarget',
       key: `tillFloatOffTarget:${r.account_id}`,
@@ -650,8 +680,8 @@ export async function tillFloatOffTarget(tx: Tx, orgId: string): Promise<Detecte
       severity: 'soft',
       detail:
         `${r.name} holds ${peso(balance)} against a float of ${peso(target)} — ` +
-        (drift < 0
-          ? `${peso(-drift)} short in the LEDGER. The float was spent and not topped back up; ` +
+        (compare(drift, ZERO) < 0
+          ? `${peso(negate(drift))} short in the LEDGER. The float was spent and not topped back up; ` +
             'the office replenishes it. ⛔ This is NOT a counted shortage and must not be charged ' +
             'to a cashier — it is money that was legitimately paid out and posted.'
           : `${peso(drift)} over in the LEDGER. Something was posted INTO the float that belongs ` +
@@ -830,22 +860,9 @@ export async function serviceChargeFloatAgeing(
 
   const findings: DetectedFinding[] = [];
   for (const [storeId, entries] of byStore) {
-    const balance = entries.reduce((n, r) => n + Number(r.credited) - Number(r.debited), 0);
-    if (balance < 0.005) continue; // nothing held at this store — silent, which is today's state
-
-    // FIFO: consume the oldest credits with everything ever debited against this store's float.
-    let remainingDebits = entries.reduce((n, r) => n + Number(r.debited), 0);
-    let oldestUncleared: string | null = null;
-    for (const r of entries) {
-      const credited = Number(r.credited);
-      if (credited <= 0) continue;
-      if (remainingDebits >= credited - 0.005) {
-        remainingDebits -= credited;
-        continue;
-      }
-      oldestUncleared = r.entry_date;
-      break;
-    }
+    const fifo = oldestUnclearedCredit(entries);
+    if (fifo === null) continue; // nothing held — silent
+    const { balance, oldestUncleared } = fifo;
     if (oldestUncleared === null) continue;
 
     const ageDays = daysBetweenDates(oldestUncleared, String(entries[0]!.manila_today));
@@ -1211,22 +1228,9 @@ export async function reimbursablePayableAgeing(
 
   const findings: DetectedFinding[] = [];
   for (const [employeeId, entries] of byEmployee) {
-    const balance = entries.reduce((n, r) => n + Number(r.credited) - Number(r.debited), 0);
-    if (balance < 0.005) continue;
-
-    // FIFO: consume the oldest credits with everything ever debited for this employee.
-    let remainingDebits = entries.reduce((n, r) => n + Number(r.debited), 0);
-    let oldestUncleared: string | null = null;
-    for (const r of entries) {
-      const credited = Number(r.credited);
-      if (credited <= 0) continue;
-      if (remainingDebits >= credited - 0.005) {
-        remainingDebits -= credited;
-        continue;
-      }
-      oldestUncleared = r.entry_date;
-      break;
-    }
+    const fifo = oldestUnclearedCredit(entries);
+    if (fifo === null) continue; // nothing held — silent
+    const { balance, oldestUncleared } = fifo;
     if (oldestUncleared === null) continue;
 
     const ageDays = daysBetweenDates(oldestUncleared, String(rows[0]!.manila_today));
@@ -1394,11 +1398,11 @@ export async function tillCountVarianceOpen(tx: Tx, orgId: string): Promise<Dete
   `)) as unknown as Record<string, string>[];
 
   return rows.map((r) => {
-    const variance = Number(r.variance);
+    const variance = money(r.variance!);
     const who = r.closed_by_name ? ` Closed by ${r.closed_by_name}.` : '';
     // ⚠️ The magnitude is formatted, never the signed number — `peso(-500)` renders "₱-500.00",
     // which has bitten this file's siblings three times. The DIRECTION is a word, not a minus sign.
-    const magnitude = peso(Math.abs(variance));
+    const magnitude = peso(compare(variance, ZERO) < 0 ? negate(variance) : variance);
     return {
       kind: 'tillCountVarianceOpen',
       key: `tillCountVarianceOpen:${r.line_id}`,
@@ -1406,7 +1410,7 @@ export async function tillCountVarianceOpen(tx: Tx, orgId: string): Promise<Dete
       severity: 'soft' as const,
       detail:
         `${r.name}, ${r.business_date} shift ${r.shift_no}.${who} ` +
-        (variance < 0
+        (compare(variance, ZERO) < 0
           ? `⭐ ${magnitude} SHORT ON A PHYSICAL COUNT — cash that should have been in the pocket ` +
             'was not. ⚠️ This one IS chargeable to the cashier who held it, unlike a ledger ' +
             'shortfall. Charge it or write it off; it will not clear on its own.'
@@ -1625,22 +1629,9 @@ export async function grniNotAtRest(
 
   const findings: DetectedFinding[] = [];
   for (const [storeId, entries] of byStore) {
-    const balance = entries.reduce((n, r) => n + Number(r.credited) - Number(r.debited), 0);
-    if (balance < 0.005) continue;
-
-    // FIFO: clear the oldest credits with everything ever debited against this store's pool.
-    let remainingDebits = entries.reduce((n, r) => n + Number(r.debited), 0);
-    let oldestUncleared: string | null = null;
-    for (const r of entries) {
-      const credited = Number(r.credited);
-      if (credited <= 0) continue;
-      if (remainingDebits >= credited - 0.005) {
-        remainingDebits -= credited;
-        continue;
-      }
-      oldestUncleared = r.entry_date;
-      break;
-    }
+    const fifo = oldestUnclearedCredit(entries);
+    if (fifo === null) continue; // nothing held — silent
+    const { balance, oldestUncleared } = fifo;
     if (oldestUncleared === null) continue;
 
     const ageDays = daysBetweenDates(oldestUncleared, String(entries[0]!.manila_today));

@@ -10,7 +10,9 @@
  * it is why every number below is a query.
  */
 import { and, eq, sql } from 'drizzle-orm';
+import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert } from './numeric-input';
 import { recordGone } from './record-gone';
 import {
   arCharges,
@@ -53,21 +55,18 @@ export interface ArChargeRow {
   createdAt: Date;
 }
 
-export async function insertCharge(
-  tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    customerId: string;
-    chargeDate: string;
-    dueDate: string | null;
-    referenceNo: string | null;
-    notes: string | null;
-    totalAmount: string;
-    revenueAccountCode: string;
-    createdBy: string;
-  },
-): Promise<{ id: string }> {
+/** T-371 C2 — `totalAmount` is a `(14,2)` brand, minted by `money()`/`decimal()`; nothing else may stand in for it. */
+export type InsertChargeInput = Pick<
+  SafeInsert<typeof arCharges>,
+  'orgId' | 'storeId' | 'customerId' | 'chargeDate' | 'revenueAccountCode' | 'createdBy'
+> & {
+  dueDate: string | null;
+  referenceNo: string | null;
+  notes: string | null;
+  totalAmount: Money;
+};
+
+export async function insertCharge(tx: Tx, input: InsertChargeInput): Promise<{ id: string }> {
   const [row] = await tx.insert(arCharges).values(input).returning({ id: arCharges.id });
   return row!;
 }
@@ -362,22 +361,22 @@ export interface ArCollectionRow {
   createdBy: string;
 }
 
-export async function insertCollection(
-  tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    customerId: string;
-    collectionDate: string;
-    amount: string;
-    platformFee: string;
-    moneyAccountId: string;
-    referenceNo: string | null;
-    notes: string | null;
-    receiptFileId: string | null;
-    createdBy: string;
-  },
-): Promise<{ id: string }> {
+/**
+ * T-371 C2 — `amount` and `platformFee` are `(14,2)` brands. ✎R13: `platform_fee` is NOT NULL DEFAULT 0, so a blank
+ * fee is OMITTED and the column default applies — the writer never invents `'0'`.
+ */
+export type InsertCollectionInput = Pick<
+  SafeInsert<typeof arCollections>,
+  'orgId' | 'storeId' | 'customerId' | 'collectionDate' | 'moneyAccountId' | 'createdBy'
+> & {
+  amount: Money;
+  platformFee?: Money;
+  referenceNo: string | null;
+  notes: string | null;
+  receiptFileId: string | null;
+};
+
+export async function insertCollection(tx: Tx, input: InsertCollectionInput): Promise<{ id: string }> {
   const [row] = await tx.insert(arCollections).values(input).returning({ id: arCollections.id });
   return row!;
 }
@@ -420,29 +419,26 @@ export async function markCollectionVoided(
 export async function insertAllocations(
   tx: Tx,
   collectionId: string,
-  allocations: { chargeId: string; amountApplied: string }[],
+  allocations: { chargeId: string; amountApplied: Money }[],
 ): Promise<void> {
   if (allocations.length === 0) return;
-  await tx.insert(arCollectionAllocations).values(
-    allocations.map((a) => ({
-      arCollectionId: collectionId,
-      arChargeId: a.chargeId,
-      amountApplied: a.amountApplied,
-    })),
-  );
+  const rows: (SafeInsert<typeof arCollectionAllocations> & { amountApplied: Money })[] = allocations.map((a) => ({
+    arCollectionId: collectionId,
+    arChargeId: a.chargeId,
+    amountApplied: a.amountApplied,
+  }));
+  await tx.insert(arCollectionAllocations).values(rows);
 }
 
-export async function insertWriteOff(
-  tx: Tx,
-  input: {
-    orgId: string;
-    arChargeId: string;
-    amount: string;
-    reason: string;
-    journalEntryId: string;
-    writtenOffBy: string;
-  },
-): Promise<{ id: string }> {
+/** T-371 C2 — `amount` is a `(14,2)` brand. */
+export type InsertWriteOffInput = Pick<
+  SafeInsert<typeof arWriteOffs>,
+  'orgId' | 'arChargeId' | 'reason' | 'journalEntryId' | 'writtenOffBy'
+> & {
+  amount: Money;
+};
+
+export async function insertWriteOff(tx: Tx, input: InsertWriteOffInput): Promise<{ id: string }> {
   const [row] = await tx.insert(arWriteOffs).values(input).returning({ id: arWriteOffs.id });
   return row!;
 }

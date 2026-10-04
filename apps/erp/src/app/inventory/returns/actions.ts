@@ -9,7 +9,7 @@
  */
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { quantity, recordReturn, refundSupplierCredit, voidReturn } from '@shareat/domain';
+import { recordReturn, refundSupplierCredit, voidReturn } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -42,7 +42,8 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
       deliveryId,
       returnedOn: new Date().toISOString().slice(0, 10),
       reason,
-      lines: [{ itemId, itemKind, locationId, quantity: quantity(qty), deliveryLineId }],
+      // T-371 S3: the raw figure goes to the domain, which parses it after `authorize()` (R5).
+      lines: [{ itemId, itemKind, locationId, quantity: qty, deliveryLineId }],
       actor,
     }),
   );

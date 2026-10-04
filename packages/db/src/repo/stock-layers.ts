@@ -9,14 +9,16 @@
 import { and, asc, eq, gt, sql } from 'drizzle-orm';
 import { stockLayerConsumptions, stockLayers } from '../../schema/stock-layers';
 import type { Tx } from '../client';
+import { compareDecimal, decimal, type Decimal, type Money, type Quantity } from '@shareat/core/money';
 
 export interface CreateLayerInput {
   readonly orgId: string;
   readonly storeId: string;
   readonly itemId: string;
   readonly receivedAt: Date;
-  readonly quantity: string;
-  readonly unitCost: string;
+  readonly quantity: Quantity;
+  /** numeric(14,4) — landed cost per base unit. */
+  readonly unitCost: Decimal<'14,4'>;
   readonly source: (typeof stockLayers.source)['_']['data'];
   readonly sourceId: string;
   readonly movementId: string;
@@ -83,9 +85,9 @@ export async function applyConsumption(
     orgId: string;
     layerId: string;
     movementId: string;
-    quantity: string;
-    unitCost: string;
-    cost: string;
+    quantity: Quantity;
+    unitCost: Decimal<'14,4'>;
+    cost: Money;
   },
 ): Promise<void> {
   await tx.insert(stockLayerConsumptions).values({
@@ -150,7 +152,7 @@ export async function outstandingConsumptions(
 export async function reverseConsumption(
   tx: Tx,
   consumptionId: string,
-  quantity: string,
+  quantity: Quantity,
   reversedByMovementId: string,
 ): Promise<void> {
   const [row] = await tx
@@ -162,13 +164,20 @@ export async function reverseConsumption(
     .from(stockLayerConsumptions)
     .where(eq(stockLayerConsumptions.id, consumptionId));
   if (!row) throw new Error(`consumption ${consumptionId} not found`);
-  if (Number(quantity) > Number(row.quantity) + 0.0005) {
+  // T-371 R4: values read back to be re-written are re-minted, never cast. Exact scaled-bigint arithmetic — the
+  // old Number() comparisons carried a ±0.0005 float tolerance that a (14,3) value can never need.
+  const outstanding = decimal(row.quantity, '14,3');
+  const unitCost = decimal(row.unitCost, '14,4');
+  const rowCost = decimal(row.cost, '14,2');
+  const take = compareDecimal(quantity, outstanding);
+  if (take > 0) {
     throw new Error(`reverseConsumption: row ${consumptionId} only has ${row.quantity} outstanding, ${quantity} requested`);
   }
 
-  const reversedCost = (Number(quantity) * Number(row.unitCost)).toFixed(2);
+  // quantity (10^3) x unit cost (10^4) = 10^7; one half-up rounding to centavos (10^2) — `lineCost`'s rule.
+  const reversedCost = decimal(divideRoundHalfUp(scaled(quantity, 3) * scaled(unitCost, 4), 100_000n), '14,2');
 
-  if (Number(quantity) >= Number(row.quantity) - 0.0005) {
+  if (take === 0) {
     // The whole row — no split needed.
     await tx
       .update(stockLayerConsumptions)
@@ -178,15 +187,15 @@ export async function reverseConsumption(
     // ⭐ Partial — the original row shrinks to what remains outstanding (never touching
     // unit_cost, the fact §5 requires stays fixed); a new, already-reversed row carries exactly
     // the amount given back, against the SAME original movement.
-    const remainingQuantity = (Number(row.quantity) - Number(quantity)).toFixed(3);
-    const remainingCost = (Number(row.cost) - Number(reversedCost)).toFixed(2);
+    const remainingQuantity = decimal(scaled(outstanding, 3) - scaled(quantity, 3), '14,3');
+    const remainingCost = decimal(scaled(rowCost, 2) - scaled(reversedCost, 2), '14,2');
     await tx
       .update(stockLayerConsumptions)
       .set({ quantity: remainingQuantity, cost: remainingCost })
       .where(eq(stockLayerConsumptions.id, consumptionId));
     await tx.insert(stockLayerConsumptions).values({
       orgId: row.orgId, layerId: row.layerId, movementId: row.movementId,
-      quantity, unitCost: row.unitCost, cost: reversedCost, reversedByMovementId,
+      quantity, unitCost, cost: reversedCost, reversedByMovementId,
     });
   }
 
@@ -199,6 +208,23 @@ export async function reverseConsumption(
       updatedAt: new Date(),
     })
     .where(eq(stockLayers.id, row.layerId));
+}
+
+/** A branded decimal as its integer count of 10^-scale units (the brand guarantees the plain decimal form). */
+function scaled(value: Decimal, scale: number): bigint {
+  const negative = value.startsWith('-');
+  const [whole = '0', frac = ''] = (negative ? value.slice(1) : value).split('.');
+  const n = BigInt(whole) * 10n ** BigInt(scale) + BigInt(frac.padEnd(scale, '0').slice(0, scale) || '0');
+  return negative ? -n : n;
+}
+
+/** Half-up on the absolute value, sign restored — matching `money.ts` and `lineCost`. */
+function divideRoundHalfUp(numerator: bigint, denominator: bigint): bigint {
+  const negative = numerator < 0n;
+  const abs = negative ? -numerator : numerator;
+  const quotient = abs / denominator;
+  const rounded = (abs % denominator) * 2n >= denominator ? quotient + 1n : quotient;
+  return negative ? -rounded : rounded;
 }
 
 /**

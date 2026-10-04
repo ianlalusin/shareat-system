@@ -81,6 +81,7 @@
  * nothing here has been exercised in a real browser.
  */
 import { useEffect, useRef, useState, useTransition } from 'react';
+import { compare, money, ZERO } from '@shareat/core/money';
 import type { AutoAllocateRequest, AutoAllocateResponse } from '../../actions';
 
 export interface PayableItem {
@@ -301,7 +302,7 @@ export function AutoAllocatePaymentForm({
         )}
         {unallocated !== null && !pageStale && !raceDetected && !editedSinceCheck && (
           <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
-            {Number(unallocated) > 0
+            {compare(money(unallocated), ZERO) > 0
               ? `₱${unallocated} would be unallocated — routed to 1240 (supplier advance) as an overpayment unless you edit the boxes above.`
               : 'Fully allocated across the boxes above.'}
           </p>

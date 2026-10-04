@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../../lib/page-access';
 import { disburseLoanAction, recordPaymentAction, reverseEntryAction } from '../actions';
 import { METHOD_LABEL, STATUS_LABEL, getDetail, moneyAccounts, peso, today } from '../lib';
@@ -32,8 +33,9 @@ export default async function LoanPage({
   if (!loan) notFound();
 
   const accounts = await moneyAccounts(actor.orgId, loan.storeId);
-  const undrawn = Number(loan.principalAmount) - Number(loan.position.disbursed);
-  const owes = Number(loan.position.outstanding) > 0;
+  // T-371 R4/C4: re-minted database values, ordered in exact centavos — no float tolerance needed.
+  const undrawn = subtract(money(loan.principalAmount), money(loan.position.disbursed));
+  const owes = compare(money(loan.position.outstanding), ZERO) > 0;
 
   return (
     <Page density="table">
@@ -83,7 +85,7 @@ export default async function LoanPage({
         }
       >
       {/* ── Draw it ──────────────────────────────────────────────────────────────────── */}
-      {undrawn > 0.005 && accounts.length > 0 && (
+      {compare(undrawn, ZERO) > 0 && accounts.length > 0 && (
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <div>
             <h2 className="font-medium">Draw the money</h2>
@@ -98,7 +100,7 @@ export default async function LoanPage({
               <input
                 name="amount"
                 required
-                defaultValue={undrawn.toFixed(2)}
+                defaultValue={undrawn}
                 inputMode="decimal"
                 className={INPUT}
               />

@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation';
 import { arRepo } from '@shareat/db';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 import { logger } from '@shareat/core/logger';
+import { compare, money, ZERO } from '@shareat/core/money';
 import {
   createCustomer,
   createPriceList,
@@ -213,7 +214,8 @@ export async function recordCollectionAction(formData: FormData): Promise<void> 
         amount: str(formData, 'amount'),
         // ⛔ The fee is booked HERE and nowhere else. v1 recognised it twice, in the collection
         // and again as an expense document: ₱198,148.29 across two stores, 37 documents voided.
-        platformFee: str(formData, 'platformFee') || '0',
+        // T-371 R6 — `ar_collections.platform_fee` has a default: a blank fee is omitted, never a typed '0'.
+        ...(str(formData, 'platformFee') ? { platformFee: str(formData, 'platformFee') } : {}),
         moneyAccountId: str(formData, 'moneyAccountId'),
         referenceNo: str(formData, 'referenceNo') || null,
         notes: str(formData, 'notes') || null,
@@ -232,7 +234,7 @@ export async function recordCollectionAction(formData: FormData): Promise<void> 
     // it; here it is a real `2140` balance the next collection can draw on.
     message =
       `Collected. ₱${result.allocated} settled against named charges` +
-      (Number(result.surplus) > 0
+      (compare(money(result.surplus), ZERO) > 0
         ? `, and ₱${result.surplus} more than was owed is now store credit (2140) they can spend next time.`
         : '.');
   } catch (err) {

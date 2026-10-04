@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { money, add } from '@shareat/core/money';
 import { judgeDraw } from '../../src/money-accounts/overdraft';
 
 /**
@@ -21,12 +22,12 @@ describe('judgeDraw', () => {
   const pot = { name: 'Lipa till float', custodian: 'cashier' as const, overdraftLimit: '20000.00', floatTarget: '20000.00' };
 
   it('says nothing at all when the money is there', () => {
-    expect(judgeDraw(cashier, 1000, 400)).toEqual({ blocked: false });
-    expect(judgeDraw(office, 1000, 1000)).toEqual({ blocked: false });
+    expect(judgeDraw(cashier, money('1000.00'), money('400.00'))).toEqual({ blocked: false });
+    expect(judgeDraw(office, money('1000.00'), money('1000.00'))).toEqual({ blocked: false });
   });
 
   it('⭐ WARNS but does not block a cashier drawer WITHIN its overdraft', () => {
-    const v = judgeDraw(cashier, 1000, 1500);
+    const v = judgeDraw(cashier, money('1000.00'), money('1500.00'));
     expect(v.blocked).toBe(false);
     // The message has to explain the timing, or it reads as an accusation. A cashier who can see
     // ₱40,000 in front of them will not trust a system that says the drawer is empty.
@@ -40,7 +41,7 @@ describe('judgeDraw', () => {
     //
     // ⚠️ Row 154's unverified-day reasoning has no floor of its own — it justifies a drawer being
     // ₱2,000 behind and equally ₱2,000,000 behind. This is where the two stop being the same thing.
-    const v = judgeDraw(cashier, 1000, 22000);
+    const v = judgeDraw(cashier, money('1000.00'), money('22000.00'));
     expect(v.blocked).toBe(true);
     expect(v.message).toMatch(/would go to −21000\.00/);
     expect(v.message).toMatch(/past the 20000\.00 overdraft/);
@@ -48,30 +49,30 @@ describe('judgeDraw', () => {
 
   it('⭐ the boundary is where the balance LANDS, not how big the draw is', () => {
     // Exactly at the limit is allowed — −0 to −20,000 inclusive.
-    expect(judgeDraw(cashier, 0, 20000).blocked).toBe(false);
+    expect(judgeDraw(cashier, money('0.00'), money('20000.00')).blocked).toBe(false);
     // One peso past it is not.
-    expect(judgeDraw(cashier, 0, 20001).blocked).toBe(true);
+    expect(judgeDraw(cashier, money('0.00'), money('20001.00')).blocked).toBe(true);
     // ⚠️ And a HUGE draw against a well-funded drawer is fine, because it lands inside the limit —
     // judging the draw instead of the resulting balance would refuse this wrongly.
-    expect(judgeDraw(cashier, 100000, 105000).blocked).toBe(false);
+    expect(judgeDraw(cashier, money('100000.00'), money('105000.00')).blocked).toBe(false);
   });
 
   it('⛔ a limit of ZERO means this drawer may never go below zero at all', () => {
     const strict = { ...cashier, overdraftLimit: '0.00' };
-    expect(judgeDraw(strict, 1000, 1000).blocked).toBe(false);
-    expect(judgeDraw(strict, 1000, 1000.01).blocked).toBe(true);
+    expect(judgeDraw(strict, money('1000.00'), money('1000.00')).blocked).toBe(false);
+    expect(judgeDraw(strict, money('1000.00'), money('1000.01')).blocked).toBe(true);
   });
 
   it('⚠️ the limit is IGNORED for office and staff — their balances are complete', () => {
     const generous = { ...office, overdraftLimit: '999999.00' };
     // A limit column exists on every account, but consulting it here would invent an overdraft for
     // an account whose balance has nothing outstanding to explain a shortfall.
-    expect(judgeDraw(generous, 1000, 1500).blocked).toBe(true);
+    expect(judgeDraw(generous, money('1000.00'), money('1500.00')).blocked).toBe(true);
   });
 
   it('⛔ BLOCKS an office safe and a staff float — their balances are complete', () => {
     for (const acct of [office, staff]) {
-      const v = judgeDraw(acct, 1000, 1500);
+      const v = judgeDraw(acct, money('1000.00'), money('1500.00'));
       expect(v.blocked).toBe(true);
       // ⚠️ Nothing is waiting to be posted into these, so a shortfall is real rather than a
       // timing artefact. The message says so, because "insufficient funds" alone invites the
@@ -81,13 +82,13 @@ describe('judgeDraw', () => {
   });
 
   it('⚠️ exact equality is not an overdraft', () => {
-    expect(judgeDraw(office, 1000, 1000).blocked).toBe(false);
-    expect(judgeDraw(office, 1000, 1000).message).toBeUndefined();
+    expect(judgeDraw(office, money('1000.00'), money('1000.00')).blocked).toBe(false);
+    expect(judgeDraw(office, money('1000.00'), money('1000.00')).message).toBeUndefined();
   });
 
   it('a cent over IS, on both paths', () => {
-    expect(judgeDraw(office, 1000, 1000.01).blocked).toBe(true);
-    expect(judgeDraw(cashier, 1000, 1000.01).message).toBeTruthy();
+    expect(judgeDraw(office, money('1000.00'), money('1000.01')).blocked).toBe(true);
+    expect(judgeDraw(cashier, money('1000.00'), money('1000.01')).message).toBeTruthy();
   });
 
   // -----------------------------------------------------------------------------------
@@ -96,7 +97,7 @@ describe('judgeDraw', () => {
 
   it('⭐ a FLOAT POT blocks at zero, even though its custodian is the cashier', () => {
     // Ian, 2026-08-29: "we guard all accounts to never go negative, all stops at 0 never below."
-    const v = judgeDraw(pot, 1500, 2000);
+    const v = judgeDraw(pot, money('1500.00'), money('2000.00'));
     expect(v.blocked).toBe(true);
     expect(v.message).toMatch(/side pocket/);
   });
@@ -105,14 +106,34 @@ describe('judgeDraw', () => {
     // Same custodian, same limit, same numbers — opposite verdicts. ⭐ The warn-vs-block split is
     // about whether the ledger can see the WHOLE balance, not about who holds it: a takings drawer
     // is provisional until the day is verified, a float pot only ever moves by transfer.
-    expect(judgeDraw(cashier, 1000, 1500).blocked).toBe(false);
-    expect(judgeDraw(pot, 1000, 1500).blocked).toBe(true);
+    expect(judgeDraw(cashier, money('1000.00'), money('1500.00')).blocked).toBe(false);
+    expect(judgeDraw(pot, money('1000.00'), money('1500.00')).blocked).toBe(true);
   });
 
   it('says nothing when the float covers the draw — spending it IS allowed', () => {
     // ⚠️ Drawing on the float is ordinary: Ian's worked example pays a delivery from the takings
     // drawer and then from the float when the drawer is exhausted. What is refused is going BELOW
     // zero; the pot then reads under target and the finding asks for it to be topped back up.
-    expect(judgeDraw(pot, 20000, 1500)).toEqual({ blocked: false });
+    expect(judgeDraw(pot, money('20000.00'), money('1500.00'))).toEqual({ blocked: false });
+  });
+
+  // -----------------------------------------------------------------------------------
+  // T-371 S4 — the float hazard is gone: sums of cents are judged exactly
+  // -----------------------------------------------------------------------------------
+
+  it('⭐ a draw built from summed parts is judged exactly, not as a float', () => {
+    // Float: 0.1 + 0.2 === 0.30000000000000004 > 0.3 would call a balance of 0.30 SHORT by a hair.
+    expect(0.1 + 0.2 > 0.3).toBe(true); // the hazard, shown
+    const drawn = add(money('0.10'), money('0.20'));
+    expect(judgeDraw(office, money('0.30'), drawn)).toEqual({ blocked: false });
+    // 0.07 balance against a 0.07 draw summed from 0.01 x 7 (float sum is 0.07 - ~1e-17 or +, never trusted)
+    const seven = add(...Array.from({ length: 7 }, () => money('0.01')));
+    expect(judgeDraw(office, money('0.07'), seven)).toEqual({ blocked: false });
+    expect(judgeDraw(strictCashier(), money('0.07'), seven)).toEqual({ blocked: false });
+    // and one centavo more is exactly one centavo short
+    expect(judgeDraw(office, money('0.30'), add(drawn, money('0.01'))).blocked).toBe(true);
   });
 });
+function strictCashier() {
+  return { name: 'Cashier drawer', custodian: 'cashier' as const, overdraftLimit: '0.00', floatTarget: null };
+}

@@ -26,6 +26,8 @@
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { recordGone } from './record-gone';
+import type { SafeInsert, SafeUpdate } from './numeric-input';
+import type { Money } from '@shareat/core/money';
 import { accounts } from '../../schema/accounts';
 import { journalEntries, journalLines } from '../../schema/journal';
 import {
@@ -81,19 +83,20 @@ const COLUMNS = {
 // The register
 // -------------------------------------------------------------------------------------
 
-export interface InsertPrepaidItemInput {
-  orgId: string;
-  storeId: string;
-  name: string;
-  category: PrepaidCategory;
-  coverageStartDate: string;
-  coverageMonths: number;
-  totalCost: string;
-  needsReview?: boolean;
-  sourceExpenseId?: string | null;
-  notes?: string | null;
-  createdBy: string;
-}
+/** T-371 C2 — `totalCost` is a `Money` brand ((14,2)), minted by `decimal()`; an unparsed string cannot reach it. */
+export type InsertPrepaidItemInput = Pick<
+  SafeInsert<typeof prepaidItems>,
+  | 'orgId'
+  | 'storeId'
+  | 'name'
+  | 'category'
+  | 'coverageStartDate'
+  | 'coverageMonths'
+  | 'needsReview'
+  | 'sourceExpenseId'
+  | 'notes'
+  | 'createdBy'
+> & { totalCost: Money };
 
 export async function insertPrepaidItem(
   tx: Tx,
@@ -172,7 +175,7 @@ export async function confirmTerm(
   tx: Tx,
   orgId: string,
   id: string,
-  input: { coverageMonths: number; coverageStartDate: string },
+  input: Required<Pick<SafeUpdate<typeof prepaidItems>, 'coverageMonths' | 'coverageStartDate'>>,
 ): Promise<void> {
   const updated = await tx
     .update(prepaidItems)
@@ -188,11 +191,8 @@ export async function markStatus(
   tx: Tx,
   orgId: string,
   id: string,
-  input: {
+  input: Pick<SafeUpdate<typeof prepaidItems>, 'writtenOffOn' | 'writeOffReason' | 'writtenOffBy'> & {
     status: PrepaidStatus;
-    writtenOffOn?: string | null;
-    writeOffReason?: string | null;
-    writtenOffBy?: string | null;
   },
 ): Promise<void> {
   const updated = await tx

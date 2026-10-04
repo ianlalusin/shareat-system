@@ -14,7 +14,7 @@
  * one quoted 2% *annually* differ by more than twelve-fold in effect, and nothing on the number
  * itself says which it is. That is why `ratePeriod` is carried on every loan and is **NOT NULL**.
  */
-import { add, money, subtract, type Money } from '@shareat/core/money';
+import { add, compare, fromCentavos, money, subtract, toCentavos, ZERO, type Money } from '@shareat/core/money';
 
 export type RatePeriod = 'day' | 'month' | 'year';
 export type InterestMethod = 'straight' | 'amortizing' | 'equal_principal';
@@ -62,7 +62,8 @@ export function accruedInterest(input: AccruedInput): Money {
   if (days <= 0) return money('0');
 
   const base = input.method === 'straight' ? input.principal : input.outstanding;
-  if (Number(base) <= 0) return money('0');
+  // T-371 C4: ordered in scaled bigint on the brand, never as a float.
+  if (compare(base, ZERO) <= 0) return money('0');
 
   const amount = Number(base) * dailyRate(input.ratePercent, input.ratePeriod) * days;
   return money(amount.toFixed(2));
@@ -95,20 +96,24 @@ export interface PaymentSplit {
  * the caller has to decide what to do with it rather than having it vanish into principal.
  */
 export function splitPayment(input: SplitInput): PaymentSplit {
-  const pay = Number(input.payment);
-  if (pay <= 0) return { interest: money('0'), principal: money('0'), overpayment: money('0') };
+  // T-371 C4 / RULES §6: the split is integer centavos end to end — the brands are ordered with `compare`, and the
+  // arithmetic is bigint, so no float rounding can move a centavo between interest and principal.
+  if (compare(input.payment, ZERO) <= 0) return { interest: money('0'), principal: money('0'), overpayment: money('0') };
+  const pay = toCentavos(input.payment);
+  const min = (a: bigint, b: bigint) => (a < b ? a : b);
+  const nonNegative = (v: Money) => (compare(v, ZERO) > 0 ? toCentavos(v) : 0n);
 
   // Interest first — the standard order, and the one that stops a small payment from looking like
   // it retired debt when it only serviced the cost of carrying it.
-  const interest = Math.min(pay, Math.max(0, Number(input.accrued)));
+  const interest = min(pay, nonNegative(input.accrued));
   const afterInterest = pay - interest;
-  const principal = Math.min(afterInterest, Math.max(0, Number(input.outstanding)));
+  const principal = min(afterInterest, nonNegative(input.outstanding));
   const overpayment = afterInterest - principal;
 
   return {
-    interest: money(interest.toFixed(2)),
-    principal: money(principal.toFixed(2)),
-    overpayment: money(overpayment.toFixed(2)),
+    interest: fromCentavos(interest),
+    principal: fromCentavos(principal),
+    overpayment: fromCentavos(overpayment),
   };
 }
 
@@ -131,8 +136,9 @@ export interface InstalmentInput {
  * is how a register ends up asserting a debt was serviced on a day nobody paid.
  */
 export function scheduledInstalment(input: InstalmentInput): Money {
+  // T-371 C4: the guard orders the brand, not its float.
+  if (compare(input.principal, ZERO) <= 0 || input.periods < 1) return money('0');
   const p = Number(input.principal);
-  if (p <= 0 || input.periods < 1) return money('0');
 
   const r = dailyRate(input.ratePercent, input.ratePeriod) * input.daysPerPeriod;
 

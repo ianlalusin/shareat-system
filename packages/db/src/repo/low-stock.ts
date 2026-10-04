@@ -11,7 +11,9 @@ import { storeItemThresholds, tradeOrderMessages } from '../../schema/item-thres
 import { stockMovements } from '../../schema/stock-ledger';
 import { commissaryItemOfferings, commissaryLinks } from '../../schema/commissary';
 import { tradeOrderLines, tradeOrders } from '../../schema/trade';
+import { money, type Money, type Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert } from './numeric-input';
 
 export interface LowStockRow {
   readonly itemId: string;
@@ -83,7 +85,10 @@ export async function itemsWithoutThreshold(tx: Tx, orgId: string, storeId: stri
 
 export async function setThreshold(
   tx: Tx,
-  input: { orgId: string; storeId: string; itemId: string; threshold: string; setBy: string },
+  input: Pick<SafeInsert<typeof storeItemThresholds>, 'orgId' | 'storeId' | 'itemId' | 'setBy'> & {
+    /** T-371 C2 — `low_stock_threshold` is (14,3). */
+    threshold: Quantity;
+  },
 ): Promise<void> {
   await tx
     .insert(storeItemThresholds)
@@ -159,19 +164,20 @@ export async function itemsAlreadyOnOrder(tx: Tx, orderId: string): Promise<Set<
   return new Set(rows.map((r) => r.itemId));
 }
 
+/** T-371 C2 — every numeric figure is a brand of its own column's shape: quantities (14,3), rate and total (14,2). */
 export interface AppendLineInput {
   readonly orgId: string;
   readonly orderId: string;
   readonly itemId: string;
   readonly unit: string;
-  readonly suggestedQuantity: string;
-  readonly rate: string;
+  readonly suggestedQuantity: Quantity;
+  readonly rate: Money;
   /**
    * ⛔ Computed by the CALLER with `lineCost`, never here. A repo may not reach into
    * `@shareat/domain` (ADR-004), and doing the multiplication locally would mean floats — the one
    * thing money arithmetic in this codebase never uses.
    */
-  readonly lineTotal: string;
+  readonly lineTotal: Money;
   readonly expenseCategoryId?: string | null;
 }
 
@@ -211,7 +217,7 @@ export async function createDraftOrder(
       status: 'draft',
       // ⚠️ `trade_orders_total_positive_check` refuses zero, and a draft with no lines yet has no
       // total. One centavo is a placeholder the first appended line replaces.
-      totalAmount: '0.01',
+      totalAmount: money('0.01'),
       requestedByStoreId: input.branchStoreId,
       createdBy: input.createdBy,
     })

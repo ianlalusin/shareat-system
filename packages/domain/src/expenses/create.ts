@@ -39,10 +39,11 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { apRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
-import { add, money } from '@shareat/core/money';
+import { add } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import type { ExpensePaymentMethod } from './routing';
 import { refuse, gone } from '../shared/refusal';
+import { parseDecimalInput } from '../shared/money-input';
 import { cashOnDeliverySentence } from '../shared/money-lines';
 
 /**
@@ -130,7 +131,9 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
     throw gone(`createExpense: category ${input.categoryId} does not exist in org ${actor.orgId}`, 'expense category');
   }
 
-  const amounts = input.payments.map((p) => money(p.amount));
+  // T-371 (R5, R6, C3): each payment amount is parsed AFTER authorize() into its column's (14,2) brand. A typed `abc`
+  // or a blank (`expense_payments.amount` is NOT NULL with no default) is a sentence naming the row, not a raw throw.
+  const amounts = input.payments.map((p, i) => parsePaymentAmount(p.amount, i, 'createExpense'));
   const totalAmount = add(...amounts);
 
   // ⭐ T-130 Invariant 2 — the gate, checked here for a clean error; the DB trigger is the
@@ -228,4 +231,14 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
   );
 
   return { id };
+}
+
+/**
+ * T-371 — one payment row's amount, parsed into `expense_payments.amount`'s (14,2) brand. Shared by `editExpense`, which
+ * replaces the same rows. The column is NOT NULL with no default, so a blank is refused (R6), never an invented zero.
+ */
+export function parsePaymentAmount(raw: string, index: number, fn: string) {
+  return parseDecimalInput(raw, '14,2', `${fn}: payment ${index + 1}'s amount`, `Payment ${index + 1}'s amount`, {
+    blank: 'refuse',
+  });
 }

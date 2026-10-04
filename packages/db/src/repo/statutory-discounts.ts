@@ -14,6 +14,7 @@
 import { and, asc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { statutoryDiscountRecords } from '../../schema/statutory-discounts';
+import type { Money } from '@shareat/core/money';
 
 export type StatutoryDiscountKind = 'senior' | 'pwd';
 export type StatutoryDiscountSource = 'manual' | 'pos';
@@ -26,8 +27,8 @@ export interface CreateStatutoryDiscountRow {
   kind: StatutoryDiscountKind;
   idNumber: string;
   holderName: string;
-  grossAmount: string;
-  discountAmount: string;
+  grossAmount: Money;
+  discountAmount: Money;
   signatory?: string | null;
   source?: StatutoryDiscountSource;
   notes?: string | null;

@@ -16,39 +16,120 @@
  * Never `if (amount)`. Use `amount == null` to test for absence.
  */
 
+/**
+ * ⭐ T-371 C1 — a decimal figure that has been through `decimal()`, the ONE mint. The brand carries the column's
+ * `'precision,scale'` as a string literal, so a (14,4) value cannot be written into a (14,2) column and silently
+ * rounded (DEF-272's class), and an unparsed string cannot reach a constrained numeric column under any spelling:
+ * the compiler finds every caller. `Money` and `Quantity` are two of the shapes.
+ */
+export type Decimal<S extends string = string> = string & { readonly __decimal: S };
+
 /** A decimal money amount as a string, e.g. "1234.50". Matches numeric(14,2). */
-export type Money = string & { readonly __brand: 'Money' };
+export type Money = Decimal<'14,2'>;
+
+/** A decimal stock quantity as a string, e.g. "12.500". Matches numeric(14,3). */
+export type Quantity = Decimal<'14,3'>;
 
 const SCALE = 2;
 const FACTOR = 100n;
-const MAX_ABS = 10n ** 12n * FACTOR; // numeric(14,2) → 12 integer digits
 
-/** Parse a string or integer-centavo value into Money. Rejects anything ambiguous. */
-export function money(value: string | number | bigint): Money {
-  if (typeof value === 'bigint') return fromCentavos(value);
+/** What `decimal()` calls a value in its messages — money's and quantity's wording predates the generalisation. */
+function nameFor(precision: number, scale: number): { noun: string; Noun: string; unit: string; finite: string } {
+  if (precision === 14 && scale === 2) return { noun: 'money', Noun: 'Money', unit: 'centavos', finite: 'money value' };
+  if (precision === 14 && scale === 3) return { noun: 'quantity', Noun: 'Quantity', unit: 'thousandths', finite: 'quantity' };
+  return { noun: 'decimal', Noun: 'Decimal', unit: `units of 1e-${scale}`, finite: 'decimal value' };
+}
+
+function shapeOf(shape: string): { precision: number; scale: number } {
+  const m = /^(\d+),(\d+)$/.exec(shape);
+  const precision = Number(m?.[1]);
+  const scale = Number(m?.[2]);
+  if (!m || !Number.isInteger(precision) || !Number.isInteger(scale) || scale > precision || precision < 1) {
+    throw new TypeError(`decimal(): "${shape}" is not a 'precision,scale' shape`);
+  }
+  return { precision, scale };
+}
+
+/**
+ * ⭐ T-371 C1 — THE mint of a branded `Decimal<'p,s'>`. Everything else (`money()`, `quantity()`, `parseMoneyInput`,
+ * `parseQuantityInput`, `normaliseRate`, `parseFourDecimalCost`) ends in this function; none adds a validator of its own.
+ *
+ * The accepted set is `money()`'s, generalised to `scale` places and `precision − scale` integer digits: surrounding
+ * whitespace is trimmed; `"0.00"`, `"-0"` and `"-0.00"` normalise to zero at `scale` places; a finite number is accepted
+ * when it is exact to `scale` places; a bigint is the integer count of 10^-scale units. A leading `+` is refused
+ * (money() refuses it today). It throws `TypeError` for a malformed value and `RangeError` for an out-of-range one, and
+ * never accepts `NaN`, `Infinity`, an exponent or `''`.
+ */
+export function decimal<S extends `${number},${number}`>(value: string | number | bigint, shape: S): Decimal<S> {
+  const { precision, scale } = shapeOf(shape);
+  const { noun, Noun, unit, finite } = nameFor(precision, scale);
+  const limit = 10n ** BigInt(precision);
+  const factor = 10n ** BigInt(scale);
+
+  const fromScaled = (scaled: bigint): Decimal<S> => {
+    // The bound is EXCLUSIVE: 10^precision itself is the first refused value, matching the column (T-343 S5.5n/p).
+    if (scaled >= limit || scaled <= -limit) {
+      throw new RangeError(`${Noun} out of range for numeric(${precision},${scale}): ${scaled} ${unit}`);
+    }
+    const negative = scaled < 0n;
+    const abs = negative ? -scaled : scaled;
+    const whole = abs / factor;
+    const frac = scale > 0 ? `.${(abs % factor).toString().padStart(scale, '0')}` : '';
+    return `${negative ? '-' : ''}${whole}${frac}` as Decimal<S>;
+  };
+
+  if (typeof value === 'bigint') return fromScaled(value);
 
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
-      throw new TypeError(`Not a finite money value: ${value}`);
+      throw new TypeError(`Not a finite ${finite}: ${value}`);
     }
     // A float reaching this function is a smell, but rejecting outright would make porting
-    // v1 code impossible. Accept only values that are exact to 2dp.
-    const scaled = Math.round(value * 100);
-    if (Math.abs(scaled - value * 100) > 1e-6) {
-      throw new RangeError(
-        `Money from float lost precision: ${value}. Pass a string instead (bible §6).`,
-      );
+    // v1 code impossible. Accept only values that are exact to `scale` places.
+    const scaled = Math.round(value * 10 ** scale);
+    if (Math.abs(scaled - value * 10 ** scale) > 1e-6) {
+      throw new RangeError(`${Noun} from float lost precision: ${value}. Pass a string instead (bible §6).`);
     }
-    return fromCentavos(BigInt(scaled));
+    return fromScaled(BigInt(scaled));
   }
 
   const trimmed = value.trim();
-  if (!/^-?\d+(\.\d{1,2})?$/.test(trimmed)) {
+  if (!(scale > 0 ? new RegExp(`^-?\\d+(\\.\\d{1,${scale}})?$`) : /^-?\d+$/).test(trimmed)) {
     throw new TypeError(
-      `Invalid money string: ${JSON.stringify(value)} (expected up to ${SCALE} decimal places)`,
+      `Invalid ${noun} string: ${JSON.stringify(value)} (expected up to ${scale} decimal places)`,
     );
   }
-  return normalise(trimmed);
+  const negative = trimmed.startsWith('-');
+  const [whole, frac = ''] = (negative ? trimmed.slice(1) : trimmed).split('.');
+  const scaled = BigInt(whole ?? '0') * factor + BigInt(frac.padEnd(scale, '0') || '0');
+  return fromScaled(negative ? -scaled : scaled);
+}
+
+/**
+ * ⭐ T-371 C1 — order two decimals of the SAME shape in scaled bigint, never as floats. Both are branded, so both are plain
+ * decimal strings; they are aligned to the longer scale before comparing.
+ */
+export function compareDecimal<S extends string>(a: Decimal<S>, b: Decimal<S>): -1 | 0 | 1 {
+  const parts = (v: string) => {
+    const negative = v.startsWith('-');
+    const [whole = '0', frac = ''] = (negative ? v.slice(1) : v).split('.');
+    return { negative, whole, frac };
+  };
+  const x = parts(a);
+  const y = parts(b);
+  const scale = Math.max(x.frac.length, y.frac.length);
+  const scaled = (p: ReturnType<typeof parts>) => {
+    const n = BigInt(p.whole) * 10n ** BigInt(scale) + BigInt(p.frac.padEnd(scale, '0') || '0');
+    return p.negative ? -n : n;
+  };
+  const left = scaled(x);
+  const right = scaled(y);
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** Parse a string or integer-centavo value into Money. Rejects anything ambiguous. */
+export function money(value: string | number | bigint): Money {
+  return decimal(value, '14,2');
 }
 
 export const ZERO = money('0');
@@ -61,22 +142,9 @@ export function toCentavos(value: Money): bigint {
 }
 
 export function fromCentavos(centavos: bigint): Money {
-  // T-343 S5.5n / DEF-458 — was `>`/`<`, which let ±1,000,000,000,000.00 through: MAX_ABS is
-  // 10^12 * 100 centavos, an EXCLUSIVE bound (13 integer digits), but numeric(14,2) allows only 12
-  // integer digits — true max 999,999,999,999.99 (`10n ** 14n - 1n` centavos). `>=`/`<=` makes
-  // MAX_ABS itself the first REFUSED value, matching the column.
-  if (centavos >= MAX_ABS || centavos <= -MAX_ABS) {
-    throw new RangeError(`Money out of range for numeric(14,2): ${centavos} centavos`);
-  }
-  const negative = centavos < 0n;
-  const abs = negative ? -centavos : centavos;
-  const whole = abs / FACTOR;
-  const frac = (abs % FACTOR).toString().padStart(SCALE, '0');
-  return `${negative ? '-' : ''}${whole}.${frac}` as Money;
-}
-
-function normalise(value: string): Money {
-  return fromCentavos(toCentavos(value as Money));
+  // T-343 S5.5n / DEF-458: MAX_ABS (10^12 * 100 centavos) is an EXCLUSIVE bound — the first REFUSED value, matching
+  // numeric(14,2)'s 12 integer digits. T-371: the check and the formatting now live in `decimal()`, the one mint.
+  return decimal(centavos, '14,2');
 }
 
 export function add(...values: Money[]): Money {
@@ -109,6 +177,44 @@ export function multiply(value: Money, rate: number | string): Money {
 
   const product = toCentavos(value) * rNum;
   return fromCentavos(divideRoundHalfUp(product, rScale));
+}
+
+/** Scaled-integer view of a branded decimal string: `{ n, scale }` where value = n / 10^scale. */
+function scaledOf(v: string): { n: bigint; scale: number } {
+  // A brand is only ever minted by `decimal()`, so this cannot fail without a cast — but `BigInt('')` is `0n`, so a
+  // forged '' / '-' / '.5' would otherwise read as zero. Refuse the shape outright (T-371 audit).
+  if (!/^-?\d+(\.\d+)?$/.test(v)) throw new TypeError(`Not a decimal string: ${JSON.stringify(v)}`);
+  const negative = v.startsWith('-');
+  const [whole = '0', frac = ''] = (negative ? v.slice(1) : v).split('.');
+  const n = BigInt(whole) * 10n ** BigInt(frac.length) + BigInt(frac || '0');
+  return { n: negative ? -n : n, scale: frac.length };
+}
+
+/**
+ * T-371 S4 — exact `quantity x unit cost` to centavos, in scaled bigint (no float). Works for any scale pair (a
+ * (14,3) quantity and a (14,4) cost, or whatever the strings carry). ROUNDING: HALF-UP away from zero on the absolute
+ * value, once, at the end - what `(Number(q) * Number(c)).toFixed(2)` effectively intended on exact decimals.
+ */
+export function multiplyToMoney(qty: Decimal<string>, cost: Decimal<string>): Money {
+  const a = scaledOf(qty);
+  const b = scaledOf(cost);
+  const product = a.n * b.n; // scale a.scale + b.scale
+  const drop = a.scale + b.scale - SCALE;
+  if (drop <= 0) return fromCentavos(product * 10n ** BigInt(-drop));
+  return fromCentavos(divideRoundHalfUp(product, 10n ** BigInt(drop)));
+}
+
+/**
+ * T-371 S4 — divide money by a positive integer (a month count, a quantity of whole units). ROUNDING: HALF-UP away
+ * from zero on the absolute value, once, to the centavo - what `(Number(x) / 12).toFixed(2)` effectively intended.
+ */
+export function divideMoney(value: Money, divisor: bigint | number): Money {
+  if (typeof divisor === 'number' && !Number.isInteger(divisor)) {
+    throw new TypeError(`divideMoney() needs an integer divisor, got ${divisor}`);
+  }
+  const d = BigInt(divisor);
+  if (d === 0n) throw new RangeError('divideMoney() by zero');
+  return fromCentavos(divideRoundHalfUp(toCentavos(value), d));
 }
 
 /** Split an amount into n parts that sum EXACTLY to the original. Remainder goes to the
@@ -148,9 +254,8 @@ export function isZero(value: Money): boolean {
 }
 
 export function compare(a: Money, b: Money): -1 | 0 | 1 {
-  const x = toCentavos(a);
-  const y = toCentavos(b);
-  return x < y ? -1 : x > y ? 1 : 0;
+  // T-371: one ordering, in scaled bigint — `compareDecimal` is it, and `compare` is its money-typed face.
+  return compareDecimal(a, b);
 }
 
 export function equals(a: Money, b: Money): boolean {

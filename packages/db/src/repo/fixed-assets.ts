@@ -21,7 +21,9 @@
  * reached only through `postEntry` (bible §4.3). This file reads the ledger; it never writes it.
  */
 import { and, asc, desc, eq, isNull, ne, sql } from 'drizzle-orm';
+import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert } from './numeric-input';
 import { recordGone } from './record-gone';
 import { accounts } from '../../schema/accounts';
 import { journalEntries, journalLines } from '../../schema/journal';
@@ -131,11 +133,18 @@ export async function findPolicy(tx: Tx, orgId: string): Promise<AssetPolicyRow 
 
 export async function upsertPolicy(
   tx: Tx,
-  input: { orgId: string; capitalizationThreshold: string; defaultSalvageValue: string },
+  /** T-371 R6: `defaultSalvageValue` is NOT NULL DEFAULT 0 — a blank is OMITTED, so an insert takes the database
+   *  default and an update leaves the stored value unchanged. Never a guessed `'0'`. */
+  input: { orgId: string; capitalizationThreshold: Money; defaultSalvageValue?: Money },
 ): Promise<void> {
+  // Drizzle writes DEFAULT for an `undefined` insert value and drops an `undefined` key from an update SET.
   await tx
     .insert(assetPolicy)
-    .values(input)
+    .values({
+      orgId: input.orgId,
+      capitalizationThreshold: input.capitalizationThreshold,
+      defaultSalvageValue: input.defaultSalvageValue,
+    } satisfies SafeInsert<typeof assetPolicy>)
     .onConflictDoUpdate({
       target: assetPolicy.orgId,
       set: {
@@ -198,8 +207,9 @@ export interface InsertAssetInput {
   name: string;
   category: AssetCategory;
   acquiredOn: string | null;
-  cost: string | null;
-  salvageValue: string | null;
+  cost: Money | null;
+  /** T-371 R6: nullable WITH a default of 0 — omit it for the default, `null` stores null. */
+  salvageValue?: Money | null;
   usefulLifeMonths: number;
   interval: DepreciationIntervalValue;
   status: AssetStatus;
@@ -215,7 +225,7 @@ export interface InsertAssetInput {
 }
 
 export async function insertAsset(tx: Tx, input: InsertAssetInput): Promise<{ id: string }> {
-  const [row] = await tx.insert(fixedAssets).values(input).returning({ id: fixedAssets.id });
+  const [row] = await tx.insert(fixedAssets).values(input satisfies SafeInsert<typeof fixedAssets>).returning({ id: fixedAssets.id });
   return row!;
 }
 
@@ -318,7 +328,7 @@ export interface UpdateAssetTermsInput {
   category: AssetCategory;
   usefulLifeMonths: number;
   interval: DepreciationIntervalValue;
-  salvageValue: string | null;
+  salvageValue: Money | null;
   notes: string | null;
 }
 
@@ -372,7 +382,7 @@ export async function valuateShell(
   tx: Tx,
   orgId: string,
   id: string,
-  input: { acquiredOn: string; cost: string; salvageValue: string; usefulLifeMonths: number },
+  input: { acquiredOn: string; cost: Money; salvageValue: Money; usefulLifeMonths: number },
 ): Promise<void> {
   const updated = await tx
     .update(fixedAssets)

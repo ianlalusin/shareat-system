@@ -6,9 +6,18 @@
  * changing it changes how much cash may sit in a drawer.
  */
 import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import type { Money } from '@shareat/core/money';
 import type { Executor, Tx } from '../client';
 import { stores, type RemittanceCadence, type StockModel } from '../../schema/stores';
 import { MANILA_TODAY } from './sql-time';
+import type { SafeInsert, SafeUpdate } from './numeric-input';
+
+/**
+ * T-371 C2 — the store row a writer may send: every numeric column a `Decimal` brand of its OWN shape. `SafeInsert`
+ * alone says only "branded"; the ceiling is narrowed to `Money` (14,2), the column's shape.
+ */
+type StoreInsert = Omit<SafeInsert<typeof stores>, 'unremittedCeiling'> & { unremittedCeiling?: Money | null };
+type StoreUpdate = Omit<SafeUpdate<typeof stores>, 'unremittedCeiling'> & { unremittedCeiling?: Money | null };
 
 export interface StoreCashPolicy {
   storeId: string;
@@ -48,15 +57,17 @@ export async function cashPolicy(
 export async function setCashPolicy(
   tx: Tx,
   orgId: string,
-  input: { storeId: string; remittanceCadence: RemittanceCadence; unremittedCeiling: string | null },
+  input: { storeId: string; remittanceCadence: RemittanceCadence; unremittedCeiling: Money | null },
 ): Promise<void> {
+  // T-371 C2 — the ceiling is a parsed `Money` (or null), never a raw string.
+  const set: StoreUpdate = {
+    remittanceCadence: input.remittanceCadence,
+    unremittedCeiling: input.unremittedCeiling,
+    updatedAt: new Date(),
+  };
   await tx
     .update(stores)
-    .set({
-      remittanceCadence: input.remittanceCadence,
-      unremittedCeiling: input.unremittedCeiling,
-      updatedAt: new Date(),
-    })
+    .set(set)
     .where(and(eq(stores.orgId, orgId), eq(stores.id, input.storeId)));
 }
 
@@ -168,25 +179,22 @@ export interface InsertStoreInput {
   readonly timezone?: string;
   readonly stockModel?: 'single_room' | 'multi_room';
   readonly remittanceCadence?: string;
-  readonly unremittedCeiling?: string | null;
+  /** T-371 C2 — parsed through `decimal()` upstream; absent leaves the column alone, `null` stores null. */
+  readonly unremittedCeiling?: Money | null;
   /** T-346 S1. Absent or `null` both mean "not yet open". */
   readonly openingDate?: string | null;
 }
 
 export async function insertStore(tx: Tx, input: InsertStoreInput): Promise<{ id: string }> {
-  const [row] = await tx
-    .insert(stores)
-    .values({
-      orgId: input.orgId,
-      code: input.code,
-      name: input.name,
-      ...(input.timezone ? { timezone: input.timezone } : {}),
-      ...(input.stockModel ? { stockModel: input.stockModel } : {}),
-      ...(input.remittanceCadence ? { remittanceCadence: input.remittanceCadence as 'daily' } : {}),
-      ...(input.unremittedCeiling !== undefined ? { unremittedCeiling: input.unremittedCeiling } : {}),
-      ...(input.openingDate !== undefined ? { openingDate: input.openingDate } : {}),
-    })
-    .returning({ id: stores.id });
+  // T-371 C2 — a typed row, no spreads: an absent optional key is left off so its column default applies.
+  const values: StoreInsert = { orgId: input.orgId, code: input.code, name: input.name };
+  if (input.timezone) values.timezone = input.timezone;
+  if (input.stockModel) values.stockModel = input.stockModel;
+  // ⚠️ Not a numeric column: an unknown cadence is refused by `stores_remittance_cadence_check`.
+  if (input.remittanceCadence) values.remittanceCadence = input.remittanceCadence as RemittanceCadence;
+  if (input.unremittedCeiling !== undefined) values.unremittedCeiling = input.unremittedCeiling;
+  if (input.openingDate !== undefined) values.openingDate = input.openingDate;
+  const [row] = await tx.insert(stores).values(values).returning({ id: stores.id });
   return row!;
 }
 

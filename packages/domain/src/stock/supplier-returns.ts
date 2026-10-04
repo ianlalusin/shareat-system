@@ -26,7 +26,7 @@
  * that must reference this return (`sourceId`) has to exist before the row does, so the id is
  * fixed first and both the stock movements and the entry carry it from the start.
  */
-import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, decimal, money, multiplyToMoney, ZERO, type Decimal, type Money } from '@shareat/core/money';
 import { advisoryLocksRepo, apRepo, deliveriesRepo, moneyAccountsRepo, stockLayersRepo, supplierReturnsRepo, type Tx } from '@shareat/db';
 import { parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
@@ -38,6 +38,7 @@ import { GRNI_ACCOUNT, INVENTORY_ACCOUNT_BY_ITEM_KIND } from './receipt-posting'
 import { perBaseUnit } from '../deliveries/receive';
 import { closedStockPeriodSentence, closedStockPeriodSentenceToday } from './period-guard';
 import { compareQuantity, isPositiveQuantity, quantity, subtractQuantity, type Quantity } from './quantity';
+import { parseRequiredQuantity } from './quantity-field';
 
 const ADVANCES_ACCOUNT = apRepo.ADVANCES_CODE;
 
@@ -45,7 +46,8 @@ export interface ReturnLineInput {
   readonly itemId: string;
   readonly itemKind: string;
   readonly locationId: string;
-  readonly quantity: Quantity;
+  /** T-371 S3: the raw typed figure (a `Quantity` is one too), parsed at the entry after `authorize()`. */
+  readonly quantity: string;
   readonly deliveryLineId: string | null;
 }
 
@@ -81,6 +83,11 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
   // ⭐ The org comes from the session-resolved actor. `authorize` above has just proven the store
   // belongs to THIS org, so the two can no longer disagree (T-231/DEF-210).
   const orgId = input.actor.orgId;
+  // T-371 S3 (R5, R6): every line's quantity becomes the brand here, after `authorize()`; a blank is refused.
+  const lines = input.lines.map((l, i) => ({
+    ...l,
+    quantity: parseRequiredQuantity(l.quantity, `recordReturn: the quantity for item ${l.itemId}`, `Line ${i + 1}'s quantity`),
+  }));
 
   // T-369 S4a (DEF-528): the stock moves at NOW but the entry posts at `returnedOn`, so BOTH months have to
   // take it. Said in words, before the first write; the trigger stays the backstop.
@@ -90,13 +97,13 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
   const closedToday = await closedStockPeriodSentenceToday(tx, orgId, now, 'returned');
   if (closedToday) return { ok: false, reason: closedToday };
 
-  if (input.lines.length === 0) {
+  if (lines.length === 0) {
     return { ok: false, reason: 'a return with no lines returns nothing' };
   }
   if (!input.reason.trim()) {
     return { ok: false, reason: 'a return needs a reason' };
   }
-  for (const line of input.lines) {
+  for (const line of lines) {
     if (!isPositiveQuantity(line.quantity)) {
       return { ok: false, reason: `the quantity for item ${line.itemId} must be greater than zero` };
     }
@@ -108,7 +115,7 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
   // ⭐ `stock_movements` carries no composite FK tying `location_id` to `store_id` (unlike
   // T-167's `stock_transfers`, which added one) — so this is checked explicitly rather than
   // trusted to a constraint that does not exist. Invariant 15's cross-store analogue for returns.
-  for (const line of input.lines) {
+  for (const line of lines) {
     const belongs = await supplierReturnsRepo.locationBelongsToStore(tx, line.locationId, input.storeId);
     if (!belongs) {
       return { ok: false, reason: `location ${line.locationId} does not belong to store ${input.storeId}` };
@@ -126,7 +133,7 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
 
   // ⭐ Invariant 2 — capped at received minus already returned, per delivery line. Checked BEFORE
   // any write, same "all preconditions first" discipline T-166 §7.2 named.
-  for (const line of input.lines) {
+  for (const line of lines) {
     if (!line.deliveryLineId) continue;
     const deliveryLine = await deliveriesRepo.getDeliveryLine(tx, line.deliveryLineId);
     if (!deliveryLine) return { ok: false, reason: `delivery line ${line.deliveryLineId} does not exist` };
@@ -151,10 +158,10 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
     lineNo: string;
     itemId: string;
     locationId: string;
-    quantity: string;
+    quantity: Quantity;
     deliveryLineId: string | null;
     movementId: string;
-    unitCost: string;
+    unitCost: Decimal<'14,4'>;
     creditBasis: 'grni' | 'supplier_advance';
     itemKind: string;
     cost: Money;
@@ -162,8 +169,8 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
 
   // ⭐ Invariant 3 — no negative on-hand, NO override. `consume()` is the one place that rule is
   // enforced; a shortfall returns ok:false before anything is written for that line.
-  for (let i = 0; i < input.lines.length; i++) {
-    const line = input.lines[i]!;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
     const result = await consume(tx, {
       orgId,
       storeId: input.storeId,
@@ -317,7 +324,7 @@ export async function voidReturn(
   // would leave that spend backed by nothing — the exact orphan the invariant exists to prevent.
   const advanceContribution = lines
     .filter((l) => l.creditBasis === 'supplier_advance')
-    .reduce((sum, l) => add(sum, money((Number(l.quantity) * Number(l.unitCost)).toFixed(2))), ZERO);
+    .reduce((sum, l) => add(sum, multiplyToMoney(quantity(l.quantity), decimal(l.unitCost, '14,4'))), ZERO);
   if (compare(advanceContribution, ZERO) > 0) {
     const balance = money(await apRepo.advancesPositionOf(tx, actor.orgId, ret.supplierId));
     if (compare(balance, advanceContribution) < 0) {

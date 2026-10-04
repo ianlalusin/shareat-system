@@ -23,6 +23,7 @@
 // identical interface here collided under `export * from` in the package barrel (two same-named
 // exports), which is exactly the kind of drift a single source of truth avoids.
 import type { PostedSettlementSummary } from '../channel-settlements';
+import { compare, money, ZERO } from '@shareat/core/money';
 
 export interface SettleableOrderWastage {
   wastageId: string;
@@ -105,8 +106,8 @@ export function matchWastagesToSettlement(
       rationale:
         `${settlement.channel} settled ${w.businessDate} — gross ${settlement.grossAmount}, ` +
         `net deposited ${settlement.netDeposited}` +
-        (Number(settlement.variance) > 0 ? `, a ${settlement.variance} shortfall was already swept to expense` : '') +
-        (Number(settlement.settlementGain) > 0 ? `, a ${settlement.settlementGain} gain was already recognised` : '') +
+        (compare(money(settlement.variance), ZERO) > 0 ? `, a ${settlement.variance} shortfall was already swept to expense` : '') +
+        (compare(money(settlement.settlementGain), ZERO) > 0 ? `, a ${settlement.settlementGain} gain was already recognised` : '') +
         `. Review against this wastage's ${w.amount} before marking it paid.`,
     });
   }

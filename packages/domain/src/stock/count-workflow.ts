@@ -33,6 +33,7 @@ import { FREEZING_STATUSES } from '@shareat/db/schema';
 import { commitCountSession, type CountLineInput, type VarianceLine } from './count-sessions';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from './receipt-posting';
 import { quantity, type Quantity } from './quantity';
+import { parseRequiredQuantity } from './quantity-field';
 
 // -------------------------------------------------------------------------------------------
 // Open — freezes every named room the moment the rooms row is written (the trigger, not this file)
@@ -94,8 +95,9 @@ export interface RecordCountInput {
   readonly sessionId: string;
   readonly itemId: string;
   readonly locationId: string;
-  /** ⭐ Zero is a real, meaningful answer — see count-sessions.ts schema header. */
-  readonly countedQuantity: Quantity;
+  /** ⭐ Zero is a real, meaningful answer — see count-sessions.ts schema header. T-371 S3: the raw typed figure (a
+   *  `Quantity` is one too), parsed here after `authorize()`; a blank is refused, never read as zero. */
+  readonly countedQuantity: string;
 }
 
 export type RecordCountOutcome =
@@ -113,6 +115,7 @@ export async function recordCount(
   if (!session) return { ok: false, reason: `count session ${input.sessionId} does not exist` };
 
   await authorize(tx, actor, 'record_stock_movement', { storeId: session.storeId });
+  const countedQuantity = parseRequiredQuantity(input.countedQuantity, 'recordCount: the counted quantity', 'Counted quantity');
 
   if (session.status !== 'open' && session.status !== 'counting') {
     return {
@@ -128,7 +131,7 @@ export async function recordCount(
     sessionId: input.sessionId,
     itemId: input.itemId,
     locationId: input.locationId,
-    countedQuantity: input.countedQuantity,
+    countedQuantity,
     countedBy: actor.personId,
   });
 

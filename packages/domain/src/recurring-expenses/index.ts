@@ -17,7 +17,9 @@
 import { moneyAccountsRepo, recurringExpensesRepo, transaction, type Tx } from '@shareat/db';
 import type { RecurringInterval } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
-import { parseMoneyInput } from '../shared/money-input';
+import { compare, ZERO } from '@shareat/core/money';
+import { parseDecimalInput } from '../shared/money-input';
+import { refuse } from '../shared/refusal';
 import { firstDueDate, isAnchorValid } from './recurrence';
 
 export interface CreateRecurringTemplateInput {
@@ -88,9 +90,20 @@ export async function createRecurringTemplate(
 
     const name = input.name.trim();
     if (!name) throw new Error('give the template a name — "Lipa branch rent", not "expense 3".');
-    const defaultAmount = parseMoneyInput(input.defaultAmount, 'createRecurringTemplate: the default amount', 'The default amount');
-    if (Number(defaultAmount) <= 0) {
-      throw new Error('a default amount has to be greater than zero. ⚠️ It is a DEFAULT — the drafted expense is edited against the real bill.');
+    // T-371: `recurring_expenses.default_amount` is NOT NULL with no default, so a blank is refused (R6), never an
+    // invented zero; the positivity check compares the (14,2) brand, never a float.
+    const defaultAmount = parseDecimalInput(
+      input.defaultAmount,
+      '14,2',
+      'createRecurringTemplate: the default amount',
+      'The default amount',
+      { blank: 'refuse' },
+    );
+    if (compare(defaultAmount, ZERO) <= 0) {
+      throw refuse(
+        'a default amount has to be greater than zero. ⚠️ It is a DEFAULT — the drafted expense is edited against the real bill.',
+        'The default amount has to be greater than zero. It is a default — the drafted expense is edited against the real bill.',
+      );
     }
     // ⚠️ The database refuses this too; this exists so a person reads a sentence instead of a
     // constraint name. ⛔ It is not a second source of truth — the CHECK is the rule.
@@ -166,12 +179,15 @@ export async function updateRecurringTemplate(
     if (!isAnchorValid(interval, anchorDay)) {
       throw new Error(`anchor ${anchorDay} is out of range for a ${interval} template.`);
     }
+    // T-371: absent leaves the column unchanged; a SUPPLIED blank is refused (R6 — NOT NULL, no default), never zeroed.
     const defaultAmount =
       input.defaultAmount !== undefined
-        ? parseMoneyInput(input.defaultAmount, 'updateRecurringTemplate: the default amount', 'The default amount')
+        ? parseDecimalInput(input.defaultAmount, '14,2', 'updateRecurringTemplate: the default amount', 'The default amount', {
+            blank: 'refuse',
+          })
         : undefined;
-    if (defaultAmount !== undefined && Number(defaultAmount) <= 0) {
-      throw new Error('a default amount has to be greater than zero.');
+    if (defaultAmount !== undefined && compare(defaultAmount, ZERO) <= 0) {
+      throw refuse('a default amount has to be greater than zero.', 'The default amount has to be greater than zero.');
     }
 
     const deliberate = input.tillIsDeliberate ?? template.tillIsDeliberate;

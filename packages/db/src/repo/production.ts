@@ -2,7 +2,9 @@
  * The only place SQL is written for production recipes and records. T-176.
  */
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import type { Money, Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert } from './numeric-input';
 import { items } from '../../schema/items';
 import {
   productionRecipeLines,
@@ -75,16 +77,12 @@ export interface RecipeRow {
   readonly status: ProductionRecipeStatus;
 }
 
-export async function insertRecipe(
-  tx: Tx,
-  input: {
-    orgId: string;
-    name: string;
-    outputItemId: string;
-    outputQuantity: string;
-    createdBy: string;
-  },
-): Promise<{ id: string }> {
+/** T-371 C2 — `outputQuantity` is a `Decimal<'14,3'>` minted by `decimal()`. */
+export type InsertRecipeInput = Required<
+  Pick<SafeInsert<typeof productionRecipes>, 'orgId' | 'name' | 'outputItemId' | 'createdBy'>
+> & { outputQuantity: Quantity };
+
+export async function insertRecipe(tx: Tx, input: InsertRecipeInput): Promise<{ id: string }> {
   const [row] = await tx
     .insert(productionRecipes)
     .values({
@@ -98,15 +96,26 @@ export async function insertRecipe(
   return row!;
 }
 
+/** T-371 C2 — one recipe line; `quantity` is a `Decimal<'14,3'>`. */
+export type InsertRecipeLineInput = Required<Pick<SafeInsert<typeof productionRecipeLines>, 'itemId' | 'unit'>> & {
+  quantity: Quantity;
+};
+
 export async function insertRecipeLines(
   tx: Tx,
   recipeId: string,
-  lines: readonly { itemId: string; quantity: string; unit: string }[],
+  lines: readonly InsertRecipeLineInput[],
 ): Promise<{ id: string }[]> {
   if (lines.length === 0) return [];
+  const rows: (SafeInsert<typeof productionRecipeLines> & { quantity: Quantity })[] = lines.map((l) => ({
+    recipeId,
+    itemId: l.itemId,
+    quantity: l.quantity,
+    unit: l.unit,
+  }));
   return tx
     .insert(productionRecipeLines)
-    .values(lines.map((l) => ({ recipeId, itemId: l.itemId, quantity: l.quantity, unit: l.unit })))
+    .values(rows)
     .returning({ id: productionRecipeLines.id });
 }
 
@@ -182,19 +191,22 @@ export interface ProductionRecordRow {
   readonly createdBy: string;
 }
 
-export async function insertProductionRecord(
-  tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    locationId: string;
-    kind: ProductionKind;
-    recipeId: string | null;
-    producedOn: string;
-    labourCost: string;
-    createdBy: string;
-  },
-): Promise<{ id: string }> {
+/**
+ * T-371 C2 — `labourCost` is a `Decimal<'14,2'>` minted by `decimal()`.
+ * ✎R13 `labour_cost` is NOT NULL DEFAULT '0': a blank is OMITTED so the column default applies.
+ */
+export type InsertProductionRecordInput = Required<
+  Pick<
+    SafeInsert<typeof productionRecords>,
+    'orgId' | 'storeId' | 'locationId' | 'kind' | 'producedOn' | 'createdBy'
+  >
+> & {
+  recipeId: string | null;
+  /** Omit for the column default ('0'). */
+  labourCost?: Money;
+};
+
+export async function insertProductionRecord(tx: Tx, input: InsertProductionRecordInput): Promise<{ id: string }> {
   const [row] = await tx
     .insert(productionRecords)
     .values({
@@ -204,6 +216,7 @@ export async function insertProductionRecord(
       kind: input.kind,
       recipeId: input.recipeId,
       producedOn: input.producedOn,
+      // ✎R13 `undefined` is skipped by Drizzle, so the column default applies.
       labourCost: input.labourCost,
       createdBy: input.createdBy,
     })
@@ -317,26 +330,27 @@ export interface ProductionRecordLineRow {
   readonly reversedAt: Date | null;
 }
 
+/** T-371 C2 — one record line; `quantity` is a `Decimal<'14,3'>`. */
+export type InsertProductionRecordLineInput = Required<
+  Pick<SafeInsert<typeof productionRecordLines>, 'itemId' | 'unit'>
+> & { direction: ProductionLineDirection; quantity: Quantity };
+
 export async function insertProductionRecordLines(
   tx: Tx,
   recordId: string,
   revision: number,
-  lines: readonly { direction: ProductionLineDirection; itemId: string; quantity: string; unit: string }[],
+  lines: readonly InsertProductionRecordLineInput[],
 ): Promise<ProductionRecordLineRow[]> {
   if (lines.length === 0) return [];
-  const rows = await tx
-    .insert(productionRecordLines)
-    .values(
-      lines.map((l) => ({
-        recordId,
-        direction: l.direction,
-        itemId: l.itemId,
-        quantity: l.quantity,
-        unit: l.unit,
-        revision,
-      })),
-    )
-    .returning();
+  const values: (SafeInsert<typeof productionRecordLines> & { quantity: Quantity })[] = lines.map((l) => ({
+    recordId,
+    direction: l.direction,
+    itemId: l.itemId,
+    quantity: l.quantity,
+    unit: l.unit,
+    revision,
+  }));
+  const rows = await tx.insert(productionRecordLines).values(values).returning();
   return rows as ProductionRecordLineRow[];
 }
 

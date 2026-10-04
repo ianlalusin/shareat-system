@@ -31,13 +31,18 @@
  * deliberately shaped like `money`'s so the move is mechanical.
  */
 
-/** A decimal quantity as a string, e.g. `"12.500"`. Matches `numeric(14,3)`. */
-export type Quantity = string & { readonly __brand: 'Quantity' };
+import { decimal, type Quantity } from '@shareat/core/money';
+
+/**
+ * A decimal quantity as a string, e.g. `"12.500"`. Matches `numeric(14,3)`.
+ *
+ * ⭐ T-371 R4: `Quantity` is `Decimal<'14,3'>` and lives in `@shareat/core/money` beside `Money`, minted by the ONE
+ * `decimal()`. It is re-exported here so the ~80 importers do not change.
+ */
+export type { Quantity };
 
 const SCALE = 3;
 const FACTOR = 1000n;
-/** numeric(14,3) → 11 integer digits. */
-const MAX_ABS = 10n ** 11n * FACTOR;
 
 /**
  * Parse a string, integer-thousandths bigint, or exact-at-3dp number into a Quantity.
@@ -47,28 +52,7 @@ const MAX_ABS = 10n ** 11n * FACTOR;
  * when precision has already been lost.
  */
 export function quantity(value: string | number | bigint): Quantity {
-  if (typeof value === 'bigint') return fromThousandths(value);
-
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      throw new TypeError(`Not a finite quantity: ${value}`);
-    }
-    const scaled = Math.round(value * 1000);
-    if (Math.abs(scaled - value * 1000) > 1e-6) {
-      throw new RangeError(
-        `Quantity from float lost precision: ${value}. Pass a string instead (bible §6).`,
-      );
-    }
-    return fromThousandths(BigInt(scaled));
-  }
-
-  const trimmed = value.trim();
-  if (!/^-?\d+(\.\d{1,3})?$/.test(trimmed)) {
-    throw new TypeError(
-      `Invalid quantity string: ${JSON.stringify(value)} (expected up to ${SCALE} decimal places)`,
-    );
-  }
-  return fromThousandths(toThousandths(trimmed as Quantity));
+  return decimal(value, '14,3');
 }
 
 export const ZERO_QUANTITY = quantity('0');
@@ -81,17 +65,9 @@ export function toThousandths(value: Quantity): bigint {
 }
 
 export function fromThousandths(units: bigint): Quantity {
-  // T-343 S5.5p / DEF-462 — the same off-by-one `money.ts`'s MAX_ABS had (S5.5n): `>`/`<` let
-  // ±100,000,000,000.000 through, which numeric(14,3) refuses (11 integer digits, true max
-  // 99,999,999,999.999). `>=`/`<=` makes MAX_ABS itself the first REFUSED value.
-  if (units >= MAX_ABS || units <= -MAX_ABS) {
-    throw new RangeError(`Quantity out of range for numeric(14,3): ${units} thousandths`);
-  }
-  const negative = units < 0n;
-  const abs = negative ? -units : units;
-  const whole = abs / FACTOR;
-  const frac = (abs % FACTOR).toString().padStart(SCALE, '0');
-  return `${negative ? '-' : ''}${whole}.${frac}` as Quantity;
+  // T-343 S5.5p / DEF-462: the bound is EXCLUSIVE (10^14 thousandths is the first REFUSED value, matching
+  // numeric(14,3)'s 11 integer digits). T-371: the check and the formatting live in `decimal()`, the one mint.
+  return decimal(units, '14,3');
 }
 
 export function addQuantity(...values: Quantity[]): Quantity {

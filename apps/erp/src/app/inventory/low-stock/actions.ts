@@ -10,6 +10,7 @@
 import { revalidatePath } from 'next/cache';
 import { authorize } from '@shareat/auth';
 import { lowStockRepo } from '@shareat/db';
+import { parseDecimalInput } from '@shareat/domain/money-input';
 import { requireActor } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 
@@ -37,11 +38,14 @@ export async function setThresholdAction(fd: FormData): Promise<void> {
       await lowStockRepo.clearThreshold(tx, storeId, itemId);
       return;
     }
+    // ⭐ T-371 — a direct repo write, so the parse lives here, AFTER `authorize()` (R5): the typed figure is minted at the
+    // column's (14,3) shape, and `'abc'` / `'NaN'` get a sentence naming the field instead of the database's finite CHECK.
+    const threshold = parseDecimalInput(raw, '14,3', 'setThresholdAction: the low-stock threshold', 'Low-stock threshold');
     await lowStockRepo.setThreshold(tx, {
       orgId: actor.orgId,
       storeId,
       itemId,
-      threshold: raw,
+      threshold,
       setBy: actor.personId,
     });
   });

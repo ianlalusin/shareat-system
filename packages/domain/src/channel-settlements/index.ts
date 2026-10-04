@@ -20,22 +20,36 @@ import {
 } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
+import { compare, fromCentavos, isZero, money, negate, toCentavos, ZERO, type Money } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
-import { parseMoneyInput } from '../shared/money-input';
+import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
 
 const R = channelSettlementsRepo;
 
-/** Decimal noise only, never a business allowance. The same value AP, AR and trade use. */
-const EPSILON = 0.005;
-
 /**
  * ⚠️ Above this, a variance is not a rounding difference — it is a disagreement, and the posting
  * is refused so somebody reconciles instead of sweeping it to expense.
+ *
+ * T-371 — max(₱50, 10% of |gross|), exact, in THOUSANDTHS of a peso (10% of a centavo figure is a
+ * thousandths figure with the same digits), never a float. The old `EPSILON = 0.005` decimal-noise
+ * allowance is gone with the floats it existed for: every figure here is whole centavos, so
+ * "above tolerance + ₱0.005" is exactly "10 × centavos > tolerance thousandths + 5".
  */
-function toleranceFor(gross: number): number {
-  return Math.max(50, Math.abs(gross) * 0.1);
+function toleranceMillsFor(grossCentavos: bigint): bigint {
+  const abs = grossCentavos < 0n ? -grossCentavos : grossCentavos;
+  return abs > 50_000n ? abs : 50_000n;
+}
+
+/** Thousandths to the nearest centavo (half up) — the tolerance as the screen shows it. Non-negative only. */
+function millsToMoney(mills: bigint): Money {
+  return fromCentavos((mills + 5n) / 10n);
+}
+
+/** Is a centavo figure past the tolerance (thousandths), allowing the half-centavo the float version allowed? */
+function pastTolerance(centavos: bigint, toleranceMills: bigint): boolean {
+  return centavos * 10n > toleranceMills + 5n;
 }
 
 export interface SettlementDeductions {
@@ -123,13 +137,13 @@ export interface SettlementPreview {
 }
 
 interface ComputedSettlement {
-  outstandingCleared: number;
-  feesTotal: number;
-  loanDeduction: number;
-  netDeposited: number;
-  variance: number;
-  settlementGain: number;
-  tolerance: number;
+  outstandingCleared: Money;
+  feesTotal: Money;
+  loanDeduction: Money;
+  netDeposited: Money;
+  variance: Money;
+  settlementGain: Money;
+  tolerance: Money;
   blockers: string[];
   needsGainAcknowledgement: boolean;
 }
@@ -137,23 +151,37 @@ interface ComputedSettlement {
 /** S5.5v Amendment A2 item 2 — what a preview shows while a figure refusal blocks the arithmetic:
  *  zeroed, never NaN. */
 const ZERO_COMPUTED_SETTLEMENT: ComputedSettlement = {
-  outstandingCleared: 0,
-  feesTotal: 0,
-  loanDeduction: 0,
-  netDeposited: 0,
-  variance: 0,
-  settlementGain: 0,
-  tolerance: 0,
+  outstandingCleared: ZERO,
+  feesTotal: ZERO,
+  loanDeduction: ZERO,
+  netDeposited: ZERO,
+  variance: ZERO,
+  settlementGain: ZERO,
+  tolerance: ZERO,
   blockers: [],
   needsGainAcknowledgement: false,
 };
 
 /**
+ * T-371 — every typed figure, parsed (after `authorize()`) into a `Money` brand. The arithmetic and
+ * the writer only ever see these, never the raw strings. A deduction left blank or absent is
+ * `undefined`: no such deduction (R6 — its column carries a default; nothing invents a `'0'`).
+ */
+interface SettlementFigures {
+  gross: Money;
+  netDeposited: Money;
+  deductions: Partial<Record<keyof SettlementDeductions, Money>>;
+  loanAmount: Money | null;
+}
+
+type FigureAccumulator = Partial<SettlementFigures> & { deductions: SettlementFigures['deductions'] };
+
+/**
  * T-343 S5.5s / DEF-470 item 8 — every figure below reached bare `Number()` in `computeSettlement`
  * with no parse at all: a comma-typed value became `NaN`, `NaN`-blind comparisons let it slip past
  * every guard, and the write itself hit a raw, unmapped `_finite_check`/`_identity_check` CHECK
- * violation. Throw-only: the existing `Number()` arithmetic in `computeSettlement` is unchanged —
- * this only confirms every typed string parses before that arithmetic ever runs.
+ * violation. T-371: the parse now RETURNS the `Money` brands, and `computeSettlement` computes on
+ * those (whole centavos) — no raw string reaches the arithmetic or the writer.
  */
 const DEDUCTION_LABELS: Record<keyof SettlementDeductions, string> = {
   commission: 'The commission',
@@ -191,41 +219,62 @@ function figureBlank(raw: string, key: string, label: string, fn: string): void 
 function figureChecks(
   fn: string,
   input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loan'>,
+  out: FigureAccumulator,
 ): Array<() => void> {
   const checks: Array<() => void> = [
     () => {
       figureBlank(input.grossAmount, 'grossAmount', 'The gross settled', fn);
-      parseMoneyInput(input.grossAmount, `${fn}: the gross amount`, 'The gross settled');
+      out.gross = parseMoneyInput(input.grossAmount, `${fn}: the gross amount`, 'The gross settled');
     },
     () => {
       figureBlank(input.netDeposited, 'netDeposited', 'The net deposited', fn);
-      parseMoneyInput(input.netDeposited, `${fn}: the net deposited`, 'The net deposited');
+      out.netDeposited = parseMoneyInput(input.netDeposited, `${fn}: the net deposited`, 'The net deposited');
     },
   ];
   const d = input.deductions ?? {};
   for (const key of Object.keys(DEDUCTION_LABELS) as (keyof SettlementDeductions)[]) {
     const v = d[key];
     if (v !== undefined) {
-      checks.push(() => parseMoneyInput(v, `${fn}: ${lead(DEDUCTION_LABELS[key])}`, DEDUCTION_LABELS[key]));
+      checks.push(() => {
+        // T-371 R6 — every deduction column carries a default, so a blank box is OMITTED: no such deduction.
+        const parsed = parseDecimalInput(v, '14,2', `${fn}: ${lead(DEDUCTION_LABELS[key])}`, DEDUCTION_LABELS[key], { blank: 'omit' });
+        if (parsed !== undefined) out.deductions[key] = parsed;
+      });
     }
   }
   if (input.loan) {
     checks.push(() => {
       const amount = parseMoneyInput(input.loan!.amount, `${fn}: the loan amount docked`, 'The amount docked');
-      if (Number(amount) < 0) {
+      if (compare(amount, ZERO) < 0) {
         throw refuse(`${fn}: the loan amount docked cannot be negative.`, 'The amount docked cannot be negative.');
       }
+      out.loanAmount = amount;
     });
+  } else {
+    out.loanAmount = null;
   }
   return checks;
+}
+
+/** Every check passed, so every figure is present — narrowed without a cast. */
+function completeFigures(out: FigureAccumulator): SettlementFigures {
+  if (out.gross === undefined || out.netDeposited === undefined || out.loanAmount === undefined) {
+    throw refuse(
+      'channel settlement: a figure check passed without recording its figure — that is a bug.',
+      'The settlement figures could not be read. Nothing was saved; try again.',
+    );
+  }
+  return { gross: out.gross, netDeposited: out.netDeposited, deductions: out.deductions, loanAmount: out.loanAmount };
 }
 
 /** `recordChannelSettlement`'s shape — all-or-nothing, throws on the first bad field. */
 function assertSettlementFigures(
   fn: string,
   input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loan'>,
-): void {
-  for (const check of figureChecks(fn, input)) check();
+): SettlementFigures {
+  const out: FigureAccumulator = { deductions: {} };
+  for (const check of figureChecks(fn, input, out)) check();
+  return completeFigures(out);
 }
 
 /** Presentable message off a thrown refusal — S5.5v Amendment A2 item 4: never developer text in
@@ -243,16 +292,17 @@ function blockerMessageFor(err: unknown): string {
 function collectSettlementFigureBlockers(
   fn: string,
   input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loan'>,
-): string[] {
+): { blockers: string[]; figures: SettlementFigures | null } {
   const blockers: string[] = [];
-  for (const check of figureChecks(fn, input)) {
+  const out: FigureAccumulator = { deductions: {} };
+  for (const check of figureChecks(fn, input, out)) {
     try {
       check();
     } catch (err) {
       blockers.push(blockerMessageFor(err));
     }
   }
-  return blockers;
+  return { blockers, figures: blockers.length === 0 ? completeFigures(out) : null };
 }
 
 /**
@@ -264,33 +314,33 @@ function collectSettlementFigureBlockers(
  * of one rule.
  */
 function computeSettlement(
-  input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loan' | 'recognizeGain'>,
-  outstanding: number,
+  figures: SettlementFigures,
+  recognizeGain: boolean | undefined,
+  outstanding: Money,
   channelName: string,
 ): ComputedSettlement {
-  const d = input.deductions ?? {};
-  const num = (v: string | undefined) => Number(v ?? 0);
-  const commission = num(d.commission);
-  const marketing = num(d.marketing);
-  const platformFee = num(d.platformFee);
-  const vatOnFees = num(d.vatOnFees);
-  const withholdingTax = num(d.withholdingTax);
-  const penalty = num(d.penalty);
-  const feesTotal = commission + marketing + platformFee + vatOnFees + withholdingTax + penalty;
-  const loanDeduction = input.loan ? Number(input.loan.amount) : 0;
-  const netDeposited = Number(input.netDeposited);
-  const gross = Number(input.grossAmount);
-  const tolerance = toleranceFor(gross);
+  // T-371 — whole centavos (bigint) throughout, never `Number()`: a figure that is not a parsed
+  // `Money` cannot reach this function, and no comparison here can be NaN-blind.
+  const c = (v: Money | undefined | null): bigint => (v == null ? 0n : toCentavos(v));
+  const d = figures.deductions;
+  const feesTotal =
+    c(d.commission) + c(d.marketing) + c(d.platformFee) + c(d.vatOnFees) + c(d.withholdingTax) + c(d.penalty);
+  const loanDeduction = c(figures.loanAmount);
+  const netDeposited = c(figures.netDeposited);
+  const gross = c(figures.gross);
+  const owed = c(outstanding);
+  const toleranceMills = toleranceMillsFor(gross);
+  const tolerance = millsToMoney(toleranceMills);
 
   const blockers: string[] = [];
 
-  if (netDeposited < 0) {
+  if (netDeposited < 0n) {
     blockers.push(
       'fees exceeding the payout is a refusal, not a negative deposit. ' +
         'Check the figures against the platform statement.',
     );
   }
-  if (outstanding <= EPSILON) {
+  if (owed <= 0n) {
     blockers.push(
       `${channelName} has nothing outstanding to settle. Either the sales day was never ` +
         'verified, or this payout is already settled.',
@@ -299,38 +349,38 @@ function computeSettlement(
 
   // The receivable this clears is capped at what is actually outstanding — settling more than
   // is owed would drive 1220 negative, which is never a real state.
-  const outstandingCleared = Math.min(outstanding, gross);
+  const outstandingCleared = owed < gross ? owed : gross;
 
   // ⭐ variance is a statement about the SALES DAY, not about the platform.
   //    positive → staff over-reported; the shortfall is swept to 6420
   //    negative → staff under-reported; the excess is income at 7100
   const difference = outstandingCleared - (feesTotal + loanDeduction + netDeposited);
-  const variance = difference > 0 ? difference : 0;
-  const settlementGain = difference < 0 ? -difference : 0;
+  const variance = difference > 0n ? difference : 0n;
+  const settlementGain = difference < 0n ? -difference : 0n;
 
-  if (variance > tolerance + EPSILON) {
+  if (pastTolerance(variance, toleranceMills)) {
     blockers.push(
-      `the day is short by ₱${variance.toFixed(2)}, past the ₱${tolerance.toFixed(2)} tolerance. ` +
+      `the day is short by ₱${fromCentavos(variance)}, past the ₱${tolerance} tolerance. ` +
         'That is a disagreement, not rounding — reconcile it against the platform statement ' +
         'rather than sweeping it to expense.',
     );
   }
-  const needsGainAcknowledgement = settlementGain > tolerance + EPSILON && !input.recognizeGain;
+  const needsGainAcknowledgement = pastTolerance(settlementGain, toleranceMills) && !recognizeGain;
   if (needsGainAcknowledgement) {
     blockers.push(
-      `the payout exceeds the day by ₱${settlementGain.toFixed(2)}, past the ` +
-        `₱${tolerance.toFixed(2)} tolerance. Pass recognizeGain to book it as income — a typo ` +
+      `the payout exceeds the day by ₱${fromCentavos(settlementGain)}, past the ` +
+        `₱${tolerance} tolerance. Pass recognizeGain to book it as income — a typo ` +
         'must not quietly become revenue.',
     );
   }
 
   return {
-    outstandingCleared,
-    feesTotal,
-    loanDeduction,
-    netDeposited,
-    variance,
-    settlementGain,
+    outstandingCleared: fromCentavos(outstandingCleared),
+    feesTotal: fromCentavos(feesTotal),
+    loanDeduction: fromCentavos(loanDeduction),
+    netDeposited: fromCentavos(netDeposited),
+    variance: fromCentavos(variance),
+    settlementGain: fromCentavos(settlementGain),
     tolerance,
     blockers,
     needsGainAcknowledgement,
@@ -352,7 +402,7 @@ async function gatherSettlementContext(
 ): Promise<{
   config: { name: string; storeId: string; destinationMoneyAccountId: string | null; taxTreatment: string };
   destinationName: string | null;
-  outstanding: number;
+  outstanding: Money;
   configBlockers: string[];
 }> {
   await authorize(trx, actor, 'record_ar_collection', { storeId: input.storeId });
@@ -391,7 +441,8 @@ async function gatherSettlementContext(
     destinationName = destination?.name ?? null;
   }
 
-  const outstanding = Number(await R.outstandingFor(trx, actor.orgId, input.channelId));
+  // T-371 R4 — the ledger's balance is re-minted, never `Number()`-ed: a malformed figure throws here.
+  const outstanding = money(await R.outstandingFor(trx, actor.orgId, input.channelId));
   return { config, destinationName, outstanding, configBlockers };
 }
 
@@ -411,22 +462,22 @@ export async function previewChannelSettlement(
     // S5.5v Amendment A1 / A2 item 3 — the docstring's promise is "every refusal it would hit", so
     // EVERY bad figure is COLLECTED alongside the config blockers, never thrown past them.
     // `recordChannelSettlement` (below) keeps the throw — a post is all-or-nothing, a preview is not.
-    const figureBlockers = collectSettlementFigureBlockers('previewChannelSettlement', input);
-    // S5.5v Amendment A2 item 2 — a figure that failed to parse has no safe Number() to compute
+    const { blockers: figureBlockers, figures } = collectSettlementFigureBlockers('previewChannelSettlement', input);
+    // S5.5v Amendment A2 item 2 — a figure that failed to parse has no safe value to compute
     // with; running the arithmetic anyway is how "NaN" reaches the screen. Zero figures, blockers
     // only, until every field parses.
-    const c = figureBlockers.length === 0 ? computeSettlement(input, ctx.outstanding, ctx.config.name) : ZERO_COMPUTED_SETTLEMENT;
+    const c = figures ? computeSettlement(figures, input.recognizeGain, ctx.outstanding, ctx.config.name) : ZERO_COMPUTED_SETTLEMENT;
     return {
       channelName: ctx.config.name,
       storeId: ctx.config.storeId,
-      outstanding: ctx.outstanding.toFixed(2),
-      outstandingCleared: c.outstandingCleared.toFixed(2),
-      feesTotal: c.feesTotal.toFixed(2),
-      loanDeduction: c.loanDeduction.toFixed(2),
-      netDeposited: c.netDeposited.toFixed(2),
-      variance: c.variance.toFixed(2),
-      settlementGain: c.settlementGain.toFixed(2),
-      tolerance: c.tolerance.toFixed(2),
+      outstanding: ctx.outstanding,
+      outstandingCleared: c.outstandingCleared,
+      feesTotal: c.feesTotal,
+      loanDeduction: c.loanDeduction,
+      netDeposited: c.netDeposited,
+      variance: c.variance,
+      settlementGain: c.settlementGain,
+      tolerance: c.tolerance,
       destinationAccountName: ctx.destinationName,
       blockers: [...ctx.configBlockers, ...figureBlockers, ...c.blockers],
       needsGainAcknowledgement: c.needsGainAcknowledgement,
@@ -453,9 +504,9 @@ export async function recordChannelSettlement(
     // unique index refuses a duplicate too — this says WHY, and it is the same context the
     // preview reads, so a screen cannot show a green light this then refuses.
     const ctx = await gatherSettlementContext(trx, actor, input);
-    assertSettlementFigures('recordChannelSettlement', input);
+    const figures = assertSettlementFigures('recordChannelSettlement', input);
     const config = ctx.config;
-    const c = computeSettlement(input, ctx.outstanding, config.name);
+    const c = computeSettlement(figures, input.recognizeGain, ctx.outstanding, config.name);
 
     // ⚠️ Config refusals first — "no destination account" explains a settlement that cannot be
     // banked far better than the arithmetic error it would otherwise cause.
@@ -465,15 +516,16 @@ export async function recordChannelSettlement(
     const {
       outstandingCleared, variance, settlementGain, loanDeduction, netDeposited,
     } = c;
-    const d = input.deductions ?? {};
-    const num = (v: string | undefined) => Number(v ?? 0);
-    const commission = num(d.commission);
-    const marketing = num(d.marketing);
-    const platformFee = num(d.platformFee);
-    const vatOnFees = num(d.vatOnFees);
-    const withholdingTax = num(d.withholdingTax);
-    const penalty = num(d.penalty);
-    const gross = Number(input.grossAmount);
+    // T-371 — an ABSENT deduction is no deduction: it books nothing and is stored as zero. The
+    // column's own default is '0', so the locals are arithmetic only; the writer is given the optional values.
+    const d = figures.deductions;
+    const commission = d.commission ?? ZERO;
+    const marketing = d.marketing ?? ZERO;
+    const platformFee = d.platformFee ?? ZERO;
+    const vatOnFees = d.vatOnFees ?? ZERO;
+    const withholdingTax = d.withholdingTax ?? ZERO;
+    const penalty = d.penalty ?? ZERO;
+    const gross = figures.gross;
 
     const { id: settlementId } = await R.insertSettlement(trx, {
       orgId: actor.orgId,
@@ -481,20 +533,21 @@ export async function recordChannelSettlement(
       channelId: input.channelId,
       salesDayId: input.salesDayId,
       businessDate: input.businessDate,
-      grossAmount: gross.toFixed(2),
-      outstandingCleared: outstandingCleared.toFixed(2),
-      commission: commission.toFixed(2),
-      marketing: marketing.toFixed(2),
-      platformFee: platformFee.toFixed(2),
-      vatOnFees: vatOnFees.toFixed(2),
-      withholdingTax: withholdingTax.toFixed(2),
-      penalty: penalty.toFixed(2),
-      variance: variance.toFixed(2),
-      settlementGain: settlementGain.toFixed(2),
-      loanDeduction: loanDeduction.toFixed(2),
+      grossAmount: gross,
+      outstandingCleared,
+      // R13: an absent deduction is OMITTED, so the column's own DEFAULT '0' applies (the locals above are arithmetic).
+      commission: d.commission,
+      marketing: d.marketing,
+      platformFee: d.platformFee,
+      vatOnFees: d.vatOnFees,
+      withholdingTax: d.withholdingTax,
+      penalty: d.penalty,
+      variance,
+      settlementGain,
+      loanDeduction,
       loanId: input.loan?.loanId ?? null,
       loanOwnerStoreId: input.loan?.ownerStoreId ?? null,
-      netDeposited: netDeposited.toFixed(2),
+      netDeposited,
       destinationMoneyAccountId: config.destinationMoneyAccountId!,
       reference: input.reference?.trim() || null,
       settledOn: input.settledOn,
@@ -510,7 +563,7 @@ export async function recordChannelSettlement(
     const lines: Parameters<typeof postEntry>[1]['lines'] = [];
 
     // The money that actually landed.
-    if (netDeposited > EPSILON) {
+    if (compare(netDeposited, ZERO) > 0) {
       const destination = await moneyAccountsRepo.getById(trx, actor.orgId, config.destinationMoneyAccountId!);
       if (!destination) throw new Error('recordChannelSettlement: the channel’s destination account no longer exists.');
       // ⚠️ Asked of the chart, not hard-coded: 1140 demands a money_account party, 1130 does not,
@@ -519,7 +572,7 @@ export async function recordChannelSettlement(
       lines.push({
         accountCode: destination.glAccountCode,
         storeId: input.storeId,
-        debit: netDeposited.toFixed(2),
+        debit: netDeposited,
         ...(needsParty ? { partyType: 'money_account' as const, partyId: destination.id } : {}),
         lineMemo: memo,
       });
@@ -527,12 +580,12 @@ export async function recordChannelSettlement(
 
     // ⚠️ Each fee to a REAL account, per the spec's deduction map — never one lump "fees" line.
     // Signed: a negative deduction becomes a credit, and that is the promo-day case v1 got wrong.
-    const fee = (code: string, amount: number, label: string) => {
-      if (Math.abs(amount) <= EPSILON) return;
+    const fee = (code: string, amount: Money, label: string) => {
+      if (isZero(amount)) return;
       lines.push(
-        amount > 0
-          ? { accountCode: code, storeId: input.storeId, debit: amount.toFixed(2), lineMemo: `${label} — ${memo}` }
-          : { accountCode: code, storeId: input.storeId, credit: (-amount).toFixed(2), lineMemo: `${label} (credit) — ${memo}` },
+        compare(amount, ZERO) > 0
+          ? { accountCode: code, storeId: input.storeId, debit: amount, lineMemo: `${label} — ${memo}` }
+          : { accountCode: code, storeId: input.storeId, credit: negate(amount), lineMemo: `${label} (credit) — ${memo}` },
       );
     };
     fee(R.PLATFORM_FEE_CODE, commission, 'Commission');
@@ -547,17 +600,17 @@ export async function recordChannelSettlement(
     fee(R.TAXES_CODE, withholdingTax, 'Withholding tax');
     fee(R.SETTLEMENT_VARIANCE_CODE, variance, 'Settlement variance');
 
-    if (settlementGain > EPSILON) {
+    if (compare(settlementGain, ZERO) > 0) {
       lines.push({
         accountCode: R.SETTLEMENT_GAIN_CODE,
         storeId: input.storeId,
-        credit: settlementGain.toFixed(2),
+        credit: settlementGain,
         lineMemo: `Settlement gain — ${memo}`,
       });
     }
 
     // The loan the platform docked out of the payout.
-    if (loanDeduction > EPSILON) {
+    if (compare(loanDeduction, ZERO) > 0) {
       const ownerStoreId = input.loan?.ownerStoreId ?? null;
       if (ownerStoreId && ownerStoreId !== input.storeId) {
         // ⭐ Cross-store: the paying store is owed by the store that owns the loan, and invariant
@@ -577,17 +630,17 @@ export async function recordChannelSettlement(
         // case is watched by a check that already exists rather than one written for it.
         lines.push(
           {
-            accountCode: R.DUE_FROM_STORE_CODE, storeId: input.storeId, debit: loanDeduction.toFixed(2),
+            accountCode: R.DUE_FROM_STORE_CODE, storeId: input.storeId, debit: loanDeduction,
             partyType: 'store' as const, partyId: owningCode,
             lineMemo: `Due from ${owningCode} — their loan repaid out of this payout`,
           },
           {
-            accountCode: R.LOANS_PAYABLE_CODE, storeId: ownerStoreId, debit: loanDeduction.toFixed(2),
+            accountCode: R.LOANS_PAYABLE_CODE, storeId: ownerStoreId, debit: loanDeduction,
             partyType: 'loan' as const, partyId: input.loan!.loanId,
             lineMemo: `Loan repayment — ${memo}`,
           },
           {
-            accountCode: R.DUE_TO_STORE_CODE, storeId: ownerStoreId, credit: loanDeduction.toFixed(2),
+            accountCode: R.DUE_TO_STORE_CODE, storeId: ownerStoreId, credit: loanDeduction,
             partyType: 'store' as const, partyId: payingCode,
             lineMemo: `Due to ${payingCode} — they paid our loan`,
           },
@@ -596,7 +649,7 @@ export async function recordChannelSettlement(
         lines.push({
           accountCode: R.LOANS_PAYABLE_CODE,
           storeId: input.storeId,
-          debit: loanDeduction.toFixed(2),
+          debit: loanDeduction,
           partyType: 'loan' as const,
           partyId: input.loan!.loanId,
           lineMemo: `Loan repayment — ${memo}`,
@@ -608,7 +661,7 @@ export async function recordChannelSettlement(
     lines.push({
       accountCode: R.CHANNEL_RECEIVABLE_CODE,
       storeId: input.storeId,
-      credit: outstandingCleared.toFixed(2),
+      credit: outstandingCleared,
       partyType: R.PARTY_TYPE,
       partyId: input.channelId,
       lineMemo: memo,
@@ -633,8 +686,8 @@ export async function recordChannelSettlement(
     return {
       settlementId,
       entryId: posted.entryId,
-      variance: variance.toFixed(2),
-      settlementGain: settlementGain.toFixed(2),
+      variance,
+      settlementGain,
     };
   };
   if (tx) return run(tx);

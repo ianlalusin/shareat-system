@@ -75,6 +75,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { compare, ZERO } from '@shareat/core/money';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -317,10 +318,14 @@ describe('T-324 slice B — an overage on a zero-amount line must not resurrect 
     expect(body!.toLowerCase()).not.toContain('overage');
 
     // The REAL function, running for real — never a re-implementation of what it should do.
-    const isHandedOver = new Function('parseMoneyInput', 'amount', body!) as (
+    // `compare` and `ZERO` are the real @shareat/core/money exports the body reads (T-371: no Number() on a money string) — bound, not re-implemented.
+    const isHandedOverFn = new Function('parseMoneyInput', 'compare', 'ZERO', 'amount', body!) as (
       parseMoneyInput: typeof import('@shareat/domain/money-input').parseMoneyInput,
+      compare: typeof import('@shareat/core/money').compare,
+      ZERO: typeof import('@shareat/core/money').ZERO,
       amount: string,
     ) => boolean;
+    const isHandedOver = (pmi: typeof parseMoneyInput, amount: string): boolean => isHandedOverFn(pmi, compare, ZERO, amount);
 
     expect(isHandedOver(parseMoneyInput, ''), 'blank amount must not count as handed over').toBe(false);
     expect(isHandedOver(parseMoneyInput, '0'), 'a zero amount must not count as handed over').toBe(false);
@@ -359,10 +364,13 @@ describe('T-324 slice B — an overage on a zero-amount line must not resurrect 
   it("actions.ts: handedOverOn (what the filter ACTUALLY calls today) decides only via isHandedOver, ignores declaredOverage even when present, and labels a refusal with the account", () => {
     const isHandedOverBody = extractArrowFunctionBody(actionsSource, 'const isHandedOver = ');
     expect(isHandedOverBody, 'could not extract isHandedOver').not.toBeNull();
-    const realIsHandedOver = new Function('parseMoneyInput', 'amount', isHandedOverBody!) as (
+    const realIsHandedOverFn = new Function('parseMoneyInput', 'compare', 'ZERO', 'amount', isHandedOverBody!) as (
       parseMoneyInput: typeof import('@shareat/domain/money-input').parseMoneyInput,
+      compare: typeof import('@shareat/core/money').compare,
+      ZERO: typeof import('@shareat/core/money').ZERO,
       amount: string,
     ) => boolean;
+    const realIsHandedOver = (pmi: typeof parseMoneyInput, amount: string): boolean => realIsHandedOverFn(pmi, compare, ZERO, amount);
 
     const handedOverOnBody = extractArrowFunctionBody(actionsSource, 'const handedOverOn = ');
     expect(handedOverOnBody, 'could not extract handedOverOn').not.toBeNull();

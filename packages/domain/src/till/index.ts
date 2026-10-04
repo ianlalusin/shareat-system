@@ -187,8 +187,8 @@ export async function recordTillCount(
         shiftId: input.shiftId,
         moment: input.moment,
         moneyAccountId: line.moneyAccountId,
-        counted: counted.toString(),
-        expected: money(expected).toString(),
+        counted,
+        expected: money(expected),
         countedBy: actor.personId,
         notes: line.notes ?? null,
       });
@@ -313,7 +313,7 @@ export async function chargeTillShortage(
       orgId: actor.orgId,
       storeId: line.storeId,
       personId: input.personId,
-      amount: amount.toString(),
+      amount,
       creditAccountCode: line.glAccountCode,
       // No credit-line party: HEAD's till credit line carries none (T-366 S2 R8 — byte-identical).
       entryDate: line.businessDate,

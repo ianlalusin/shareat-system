@@ -30,7 +30,8 @@ import {
   type MoneyInstrument,
   type Tx,
 } from '@shareat/db';
-import { parseMoneyInput } from '../shared/money-input';
+import { compare, isZero, money, ZERO } from '@shareat/core/money';
+import { parseDecimalInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
 
 export interface CreateMoneyAccountInput {
@@ -174,7 +175,7 @@ async function runRetire(
   // ⚠️ Checked against the LEDGER, not a stored figure, so the guard cannot be fooled by a stale
   // column — there is no column. It is the same number the register shows.
   const balance = await moneyAccountsRepo.balanceOf(tx, actor.orgId, account);
-  if (Number(balance) !== 0) {
+  if (!isZero(money(balance))) {
     throw new Error(
       `retireMoneyAccount: "${account.name}" still holds ${balance}. Transfer the balance out ` +
         `first — retiring it would hide the account from every picker and strand the money in a ` +
@@ -230,12 +231,18 @@ export async function renameMoneyAccount(
     // ⛔ Stored positive, and zero is meaningful — it means this drawer may never go below zero at
     // all. A negative value would invert the comparison silently, so it is refused here as well as
     // by the CHECK.
-    const limitRaw = input.overdraftLimit?.trim();
-    const limit =
-      limitRaw !== undefined && limitRaw !== ''
-        ? parseMoneyInput(limitRaw, 'renameMoneyAccount: the overdraft limit', 'The overdraft limit')
-        : undefined;
-    if (limit !== undefined && Number(limit) < 0) {
+    //
+    // ⭐ T-371 R6 — the column is NOT NULL DEFAULT '20000.00', so a BLANK (or absent) limit is
+    // OMITTED: the stored limit is left unchanged. It is never a guessed zero, which would be the
+    // strictest setting there is.
+    const limit = parseDecimalInput(
+      input.overdraftLimit?.trim(),
+      '14,2',
+      'renameMoneyAccount: the overdraft limit',
+      'The overdraft limit',
+      { blank: 'omit' },
+    );
+    if (limit !== undefined && compare(limit, ZERO) < 0) {
       throw refuse(
         'renameMoneyAccount: an overdraft limit is how far BELOW zero the drawer may go, so it is ' +
           'entered as a positive number. Zero means it may never go below zero at all.',
@@ -284,6 +291,16 @@ export async function setTillFloat(
 ): Promise<{ moneyAccountId: string }> {
   await authorize(tx, actor, 'set_cash_policy', { storeId: input.storeId });
 
+  // ⭐ T-371 R5/R6 — parsed AFTER authorize(). `float_target` is nullable, so a blank is null
+  // (clear the target), never a guessed zero.
+  const target = parseDecimalInput(
+    input.target,
+    '14,2',
+    'setTillFloat: the float target',
+    'The till float target',
+    { blank: 'null' },
+  );
+
   const existing = (await moneyAccountsRepo.listFloatPots(tx, actor.orgId)).find(
     (a) => a.storeId === input.storeId,
   );
@@ -291,11 +308,11 @@ export async function setTillFloat(
   if (existing) {
     // ⚠️ Clearing the target (null) retires the pot's float STATUS, not the account or its money.
     // Cash sitting in it stays exactly where it is — which is why this never posts anything.
-    await moneyAccountsRepo.setFloatTarget(tx, actor.orgId, existing.id, input.target);
+    await moneyAccountsRepo.setFloatTarget(tx, actor.orgId, existing.id, target);
     return { moneyAccountId: existing.id };
   }
 
-  if (input.target === null) {
+  if (target === null) {
     throw new Error('setTillFloat: this store has no till float to clear.');
   }
 
@@ -308,7 +325,7 @@ export async function setTillFloat(
     // from the takings is the GL account and the target, not the custodian.
     custodian: 'cashier',
     glAccountCode: TILL_FLOAT_GL_CODE,
-    floatTarget: input.target,
+    floatTarget: target,
   });
   return { moneyAccountId: id };
 }

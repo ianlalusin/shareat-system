@@ -26,6 +26,7 @@ import {
   type ItemStatus,
 } from '../../schema/items';
 import { supplierItems, type CatalogueSource } from '../../schema/supplier-items';
+import type { Decimal, Money, Quantity } from '@shareat/core/money';
 import { storeItemSellability } from '../../schema/items';
 
 export interface ItemRow {
@@ -114,15 +115,19 @@ export async function updateItem(
 // supplier_invoice_lines
 // -------------------------------------------------------------------------------------
 
+/**
+ * T-371 C2 — what `insertInvoiceLines` binds. Raw SQL, so `SafeInsert` cannot type it: each numeric is branded with
+ * its column's shape instead (quantity (14,3), conversion_factor (14,6), unit_price (14,4), line_total (14,2)).
+ */
 export interface InvoiceLineInput {
   lineNo: number;
   itemId: string;
   description: string | null;
-  quantity: string;
+  quantity: Quantity;
   purchaseUnit: string;
-  conversionFactor: string;
-  unitPrice: string;
-  lineTotal: string;
+  conversionFactor: Decimal<'14,6'>;
+  unitPrice: Decimal<'14,4'>;
+  lineTotal: Money;
 }
 
 export async function insertInvoiceLines(
@@ -149,7 +154,16 @@ export async function deleteInvoiceLines(tx: Tx, supplierInvoiceId: string): Pro
   await tx.execute(sql`delete from supplier_invoice_lines where supplier_invoice_id = ${supplierInvoiceId}`);
 }
 
-export interface InvoiceLineRow extends InvoiceLineInput {
+/** A line as READ back. Plain strings: a read is not a write, and nothing here is bound to a column. */
+export interface InvoiceLineRow {
+  lineNo: number;
+  itemId: string;
+  description: string | null;
+  quantity: string;
+  purchaseUnit: string;
+  conversionFactor: string;
+  unitPrice: string;
+  lineTotal: string;
   id: string;
   itemName: string;
   baseUnit: string;
@@ -934,10 +948,11 @@ export async function upsertItemPricing(
     orgId: string;
     itemId: string;
     pricingMode: 'fixed' | 'fixed_markup' | 'percent_markup';
-    fixedAmount: string | null;
-    markupPercent: string | null;
-    fixedMarkupAmount: string | null;
-    marginAlertThresholdPct: string | null;
+    /** T-371 C2 — raw SQL, so each numeric carries its column's shape: (14,2), (8,4), (14,2), (8,4). */
+    fixedAmount: Money | null;
+    markupPercent: Decimal<'8,4'> | null;
+    fixedMarkupAmount: Money | null;
+    marginAlertThresholdPct: Decimal<'8,4'> | null;
     setBy: string;
   },
 ): Promise<void> {

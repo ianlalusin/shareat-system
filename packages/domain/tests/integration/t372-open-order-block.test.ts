@@ -19,6 +19,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { closeDb, lowStockRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { decimal } from '@shareat/core/money';
 import type { Actor } from '@shareat/auth';
 import {
   saveBranchOrderDraft,
@@ -290,7 +291,7 @@ describe('T-372 S5 — the one-open-order-per-branch block (guards: green today,
     const orderId = await dispatched(f);
     // The branch's own pork is below its threshold, so the auto-order has something to order.
     await asOrg(f.orgId, (tx) =>
-      lowStockRepo.setThreshold(tx, { orgId: f.orgId, storeId: f.br.id, itemId: f.porkBr, threshold: '10', setBy: f.superAdmin.personId }),
+      lowStockRepo.setThreshold(tx, { orgId: f.orgId, storeId: f.br.id, itemId: f.porkBr, threshold: decimal('10', '14,3'), setBy: f.superAdmin.personId }),
     );
     const res = await asOrg(f.orgId, (tx) =>
       ensureAutoOrderLines(tx, { orgId: f.orgId, branchStoreId: f.br.id, orderedOn: '2026-08-25', createdBy: f.superAdmin.personId }),

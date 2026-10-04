@@ -14,6 +14,7 @@
  * accounting effect never depends on that table existing.
  */
 import { authorize, type Actor } from '@shareat/auth';
+import type { Money } from '@shareat/core/money';
 import {
   fiscalPeriodsRepo,
   fixedAssetsRepo,
@@ -177,7 +178,8 @@ export async function bookMissedMonth(
   }
 
   // Step 7 — post the catch-up entry. Same shape the run itself would use.
-  const amount = String(charge.amount);
+  // T-371 R4: the schedule's amount is already a minted `Money`; keep the brand rather than `String()`-ing it away.
+  const amount: Money = charge.amount;
   const idempotencyKey =
     input.schedule === 'depreciation'
       ? fixedAssetsRepo.depreciationRevisionKey(
@@ -320,7 +322,7 @@ export async function missedMonths(tx: Tx, orgId: string, through: string): Prom
         subjectId: asset.id,
         subjectName: asset.name,
         belongsToPeriod: p.period,
-        amount: String(p.amount),
+        amount: p.amount,
       });
     }
   }
@@ -340,7 +342,7 @@ export async function missedMonths(tx: Tx, orgId: string, through: string): Prom
         subjectId: item.id,
         subjectName: item.name,
         belongsToPeriod: p.period,
-        amount: String(p.amount),
+        amount: p.amount,
       });
     }
   }

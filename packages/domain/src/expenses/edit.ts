@@ -13,9 +13,9 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { apRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
-import { add, money } from '@shareat/core/money';
+import { add } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
-import type { CreateExpensePaymentInput } from './create';
+import { parsePaymentAmount, type CreateExpensePaymentInput } from './create';
 import { refuse, gone } from '../shared/refusal';
 import { cashOnDeliverySentence } from '../shared/money-lines';
 
@@ -182,7 +182,8 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
     if (input.payments.length === 0) {
       throw refuse('editExpense: at least one payment is required', 'At least one payment is required.');
     }
-    const amounts = input.payments.map((p) => money(p.amount));
+    // T-371 (R5, R6): parsed after authorize(), the same sentence `createExpense` gives for the same row.
+    const amounts = input.payments.map((p, i) => parsePaymentAmount(p.amount, i, 'editExpense'));
     patch.totalAmount = add(...amounts);
     await expensesRepo.replacePayments(
       tx,

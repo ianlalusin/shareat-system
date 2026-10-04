@@ -67,8 +67,9 @@ export async function recordStatutoryDiscountAction(formData: FormData): Promise
         kind: kind === 'pwd' ? 'pwd' : 'senior',
         idNumber: str(formData, 'idNumber'),
         holderName: str(formData, 'holderName'),
-        grossAmount: str(formData, 'grossAmount') || '0',
-        discountAmount: str(formData, 'discountAmount') || '0',
+        // T-371 R6 — a blank goes to the domain AS a blank, which refuses it in words; never a guessed '0'.
+        grossAmount: str(formData, 'grossAmount'),
+        discountAmount: str(formData, 'discountAmount'),
         signatory: str(formData, 'signatory') || null,
         notes: str(formData, 'notes') || null,
       }),

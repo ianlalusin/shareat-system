@@ -12,6 +12,7 @@
  * duplicated.
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
+import type { Decimal } from '@shareat/core/money';
 import type { Tx } from '../client';
 import { commissaryItemMap, commissaryItemOfferings, commissaryLinks, LINK_STATUSES } from '../../schema/commissary';
 import { stores } from '../../schema/stores';
@@ -143,7 +144,8 @@ export async function upsertOffering(
     orgId: string;
     commissaryStoreId: string;
     itemId: string;
-    manualCost: string | null;
+    /** T-371 C2 — `manual_cost` is (14,4); null means "no manual cost". */
+    manualCost: Decimal<'14,4'> | null;
     status: LinkStatus;
     createdBy: string;
   },

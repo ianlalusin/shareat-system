@@ -30,7 +30,8 @@ import { authorize, type Actor } from '@shareat/auth';
 import { productionRepo, stockLayersRepo, stockLedgerRepo, journalRepo, type Tx } from '@shareat/db';
 import { stockLayers as stockLayersTable } from '@shareat/db/schema';
 import { eq, sql as drizzleSql } from 'drizzle-orm';
-import { add, compare, subtract, toCentavos, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, decimal, money, subtract, toCentavos, ZERO, type Decimal, type Money } from '@shareat/core/money';
+import { parseDecimalInput } from '../shared/money-input';
 import { postEntry, type PostEntryLine } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { consume, reverseConsumption } from '../stock/consume';
@@ -111,11 +112,19 @@ export async function createRecipe(tx: Tx, actor: Actor, input: CreateRecipeInpu
   await authorize(tx, actor, 'manage_items', {});
   if (!input.name.trim()) return { ok: false, reason: 'a recipe needs a name' };
   if (input.lines.length === 0) return { ok: false, reason: 'a recipe needs at least one ingredient line' };
-  if (!isPositiveQuantity(quantity(input.outputQuantity))) {
+  // T-371 R5/R6: parsed AFTER authorize(), into the column's (14,3) brand. Both columns are NOT NULL with no default, so a
+  // blank is refused in words, never a guessed zero. Every line is parsed before anything is written.
+  const outputQuantity = parseDecimalInput(input.outputQuantity, '14,3', 'createRecipe.outputQuantity', "The recipe's output quantity", { blank: 'refuse' });
+  const lines = input.lines.map((line, i) => ({
+    itemId: line.itemId,
+    quantity: parseDecimalInput(line.quantity, '14,3', `createRecipe.lines[${i}].quantity`, `Ingredient line ${i + 1} quantity`, { blank: 'refuse' }),
+    unit: line.unit,
+  }));
+  if (!isPositiveQuantity(outputQuantity)) {
     return { ok: false, reason: 'a recipe\'s output quantity must be greater than zero' };
   }
-  for (const line of input.lines) {
-    if (!isPositiveQuantity(quantity(line.quantity))) {
+  for (const line of lines) {
+    if (!isPositiveQuantity(line.quantity)) {
       return { ok: false, reason: `ingredient ${line.itemId} must have a quantity greater than zero` };
     }
   }
@@ -123,10 +132,10 @@ export async function createRecipe(tx: Tx, actor: Actor, input: CreateRecipeInpu
     orgId: input.orgId,
     name: input.name.trim(),
     outputItemId: input.outputItemId,
-    outputQuantity: input.outputQuantity,
+    outputQuantity,
     createdBy: actor.personId,
   });
-  await productionRepo.insertRecipeLines(tx, recipeId, input.lines);
+  await productionRepo.insertRecipeLines(tx, recipeId, lines);
   return { ok: true, recipeId };
 }
 
@@ -165,6 +174,12 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
     return { ok: false, reason: 'a production run needs at least one output — record a wastage instead' };
   }
 
+  // T-371 R5/R6: every figure is parsed AFTER authorize() and BEFORE the first write, so a refused line can never leave an
+  // orphan record behind. `labour_cost` is NOT NULL DEFAULT 0: a blank takes the column default.
+  const parsedLabour = parseDecimalInput(input.labourCost, '14,2', 'createProductionDraft.labourCost', 'Labour cost', { blank: 'omit' });
+  const inputs = parseDraftLines(input.inputs, 'createProductionDraft.inputs', 'Input line');
+  const outputs = parseDraftLines(input.outputs, 'createProductionDraft.outputs', 'Output line');
+
   const { id: recordId } = await productionRepo.insertProductionRecord(tx, {
     orgId: input.orgId,
     storeId: input.storeId,
@@ -172,16 +187,31 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
     kind: input.kind,
     recipeId: input.recipeId ?? null,
     producedOn: input.producedOn,
-    labourCost: input.labourCost ?? '0',
+    // T-371 R13: a blank labour cost is OMITTED, so the column's own DEFAULT applies.
+    labourCost: parsedLabour,
     createdBy: actor.personId,
   });
 
   await productionRepo.insertProductionRecordLines(tx, recordId, 1, [
-    ...input.inputs.map((l) => ({ direction: 'out' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
-    ...input.outputs.map((l) => ({ direction: 'in' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
+    ...inputs.map((l) => ({ direction: 'out' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
+    ...outputs.map((l) => ({ direction: 'in' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
   ]);
 
   return { ok: true, recordId };
+}
+
+/** T-371: one draft/edit line set, each `quantity` parsed into `production_record_lines.quantity`'s (14,3) brand. The column
+ *  is NOT NULL with no default, so a blank is refused in words. `rawPath` is e.g. `createProductionDraft.inputs`. */
+function parseDraftLines(
+  lines: readonly DraftLineInput[],
+  rawPath: string,
+  humanNoun: string,
+): { itemId: string; quantity: Quantity; unit: string }[] {
+  return lines.map((l, i) => ({
+    itemId: l.itemId,
+    quantity: parseDecimalInput(l.quantity, '14,3', `${rawPath}[${i}].quantity`, `${humanNoun} ${i + 1} quantity`, { blank: 'refuse' }),
+    unit: l.unit,
+  }));
 }
 
 /**
@@ -455,7 +485,7 @@ async function runProductionPosting(
   if (input.kind === 'convert') {
     // The target layer carries the SAME per-unit rate the source carried — a re-cut changes the
     // count, never the value (zero GL impact, §4).
-    const rate = compareQuantity(sourceQuantity, ZERO_QUANTITY) > 0 ? divideMoneyByQty(totalInputCost, sourceQuantity) : '0.0000';
+    const rate = compareQuantity(sourceQuantity, ZERO_QUANTITY) > 0 ? divideMoneyByQty(totalInputCost, sourceQuantity) : ZERO_RATE;
     const outputMovements: { itemId: string; movementId: string; quantity: Quantity; unit: string }[] = [];
     for (const line of baseOutputs) {
       const movement = await stockLedgerRepo.insertMovement(tx, {
@@ -500,7 +530,7 @@ async function runProductionPosting(
   const outputRate =
     compareQuantity(outputQuantity, ZERO_QUANTITY) > 0
       ? divideMoneyByQty(identity.outputTotalValue, outputQuantity)
-      : '0.0000';
+      : ZERO_RATE;
 
   const outputMovements: { itemId: string; movementId: string; quantity: Quantity; unit: string }[] = [];
   const debitByAccount = new Map<string, Money>();
@@ -531,7 +561,7 @@ async function runProductionPosting(
     });
     // ⭐ Layered at THIS line's own rate (value / quantity) — never the blanket `outputRate`
     // directly, so the layer's own (quantity x unitCost) matches the entry's line to the centavo.
-    const layerUnitCost = compareQuantity(line.quantity, ZERO_QUANTITY) > 0 ? divideMoneyByQty(lineValue, line.quantity) : '0.0000';
+    const layerUnitCost = compareQuantity(line.quantity, ZERO_QUANTITY) > 0 ? divideMoneyByQty(lineValue, line.quantity) : ZERO_RATE;
     await stockLayersRepo.createLayer(tx, {
       orgId: input.orgId,
       storeId: input.storeId,
@@ -575,22 +605,22 @@ async function runProductionPosting(
   return { ok: true, journalEntryId: posted.entryId, warnings, inputMovements, outputMovements };
 }
 
+/** A zero `stock_layers.unit_cost`: numeric(14,4), minted rather than spelled `'0.0000'`. */
+const ZERO_RATE = decimal(0n, '14,4');
+
 /** Money / Quantity -> a numeric(14,4) rate string, half-up. Uses the real exported
- *  `toCentavos`/`toThousandths` — no private bigint mirrors. */
-function divideMoneyByQty(total: Money, qty: Quantity): string {
+ *  `toCentavos`/`toThousandths` — no private bigint mirrors. T-371: the result is minted by `decimal()` from the scaled
+ *  bigint (the same digits the old hand formatting produced), so the (14,4) column gets a branded value. */
+function divideMoneyByQty(total: Money, qty: Quantity): Decimal<'14,4'> {
   // rate = total/qty. We want the result as an integer count of TEN-THOUSANDTHS (numeric(14,4)):
   //   rate * 10^4 = (cents/10^2) / (thousandths/10^3) * 10^4 = cents * 10^5 / thousandths.
   const cents = toCentavos(total);
   const thousandths = toThousandths(qty);
-  if (thousandths === 0n) return '0.0000';
+  if (thousandths === 0n) return ZERO_RATE;
   const scaled = cents * 100_000n;
   const denom = thousandths;
   const rounded = (scaled + denom / 2n) / denom;
-  const negative = rounded < 0n;
-  const abs = negative ? -rounded : rounded;
-  const whole = abs / 10_000n;
-  const frac = (abs % 10_000n).toString().padStart(4, '0');
-  return `${negative ? '-' : ''}${whole}.${frac}`;
+  return decimal(rounded, '14,4');
 }
 
 // -----------------------------------------------------------------------------------------
@@ -629,7 +659,8 @@ export async function postProduction(tx: Tx, actor: Actor, input: { recordId: st
     kind: record.kind,
     recordId: record.id,
     producedOn: record.producedOn,
-    labourCost: record.labourCost as Money,
+    // T-371 R4: a database value that is re-written is re-minted, never cast.
+    labourCost: money(record.labourCost),
     inputs,
     outputs,
     postedBy: actor.personId,
@@ -683,6 +714,13 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
     return { ok: false, reason: 'a live slicer payment covers this date — editing it now would leave labour expensed against output that no longer exists' };
   }
 
+  // T-371 R5/R6: parsed AFTER authorize() and BEFORE any leg is reversed or written. A blank labour cost leaves it
+  // unchanged (the column has a default); the stored value is re-minted, never cast (R4).
+  const editLabour = parseDecimalInput(input.labourCost, '14,2', 'editPostedProduction.labourCost', 'Labour cost', { blank: 'omit' });
+  const labourCost = editLabour ?? money(record.labourCost);
+  const editInputs = parseDraftLines(input.inputs, 'editPostedProduction.inputs', 'Input line');
+  const editOutputs = parseDraftLines(input.outputs, 'editPostedProduction.outputs', 'Output line');
+
   const oldLines = await productionRepo.listProductionRecordLines(tx, record.id, { revision: record.revision, unreversedOnly: true });
 
   // ---- Reverse the old legs — stock first, ledger second (T-166's "unwind before write" order,
@@ -728,20 +766,20 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
   // collide on `stock_movements_source_pair_key` if two lines named the same (item, location)).
   const newInputRows = await productionRepo.insertProductionRecordLines(
     tx, record.id, newRevision,
-    input.inputs.map((l) => ({ direction: 'out' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
+    editInputs.map((l) => ({ direction: 'out' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
   );
   const newOutputRows = await productionRepo.insertProductionRecordLines(
     tx, record.id, newRevision,
-    input.outputs.map((l) => ({ direction: 'in' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
+    editOutputs.map((l) => ({ direction: 'in' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
   );
 
-  const inputs = input.inputs.map((l, i) => ({ lineRowId: newInputRows[i]!.id, itemId: l.itemId, quantity: quantity(l.quantity), unit: l.unit }));
-  const outputs = input.outputs.map((l, i) => ({ lineRowId: newOutputRows[i]!.id, itemId: l.itemId, quantity: quantity(l.quantity), unit: l.unit }));
+  const inputs = editInputs.map((l, i) => ({ lineRowId: newInputRows[i]!.id, itemId: l.itemId, quantity: l.quantity, unit: l.unit }));
+  const outputs = editOutputs.map((l, i) => ({ lineRowId: newOutputRows[i]!.id, itemId: l.itemId, quantity: l.quantity, unit: l.unit }));
 
   const result = await runProductionPosting(tx, {
     orgId: record.orgId, storeId: record.storeId, locationId: record.locationId, kind: record.kind,
     recordId: record.id, producedOn: record.producedOn,
-    labourCost: (input.labourCost ?? record.labourCost) as Money,
+    labourCost,
     inputs, outputs, postedBy: actor.personId, idempotencySuffix: `rev${newRevision}`,
   });
   if (!result.ok) throw new Error(`editPostedProduction: new legs refused after old ones were reversed — ${result.reason}`);
@@ -793,7 +831,8 @@ async function reverseOwnLayer(
   return { ok: true };
 }
 function negate(q: Quantity): Quantity {
-  return (q.startsWith('-') ? q.slice(1) : `-${q}`) as Quantity;
+  // T-371 G3: minted from thousandths, never a cast onto a hand-flipped string.
+  return fromThousandths(-toThousandths(q));
 }
 
 // -----------------------------------------------------------------------------------------

@@ -16,6 +16,12 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { expenseBudgets, type ReissueInterval } from '../../schema/expense-budgets';
+import { compare, money, subtract, type Money } from '@shareat/core/money';
+import type { SafeInsert } from './numeric-input';
+
+/** T-371 C2: the writer's input — every numeric column a branded `Decimal`; `amount` is (14,2). */
+type BudgetInsert = SafeInsert<typeof expenseBudgets>;
+type BudgetKeys = 'orgId' | 'storeId' | 'categoryId' | 'periodKey' | 'autoReissue' | 'reissueInterval';
 
 export interface ExpenseBudgetRow {
   id: string;
@@ -99,15 +105,16 @@ export async function listForStorePeriod(
   `)) as unknown as Record<string, unknown>[];
 
   return rows.map((r) => {
-    const amount = Number(r.amount);
-    const consumed = Number(r.consumed);
+    // T-371 R4 / C4: database values are re-minted and compared in scaled bigint, never as floats.
+    const amount = money(String(r.amount));
+    const consumed = money(String(r.consumed));
     return {
       id: String(r.id),
       orgId: String(r.org_id),
       storeId: String(r.store_id),
       categoryId: String(r.category_id),
       periodKey: String(r.period_key),
-      amount: amount.toFixed(2),
+      amount,
       autoReissue: r.auto_reissue === true,
       reissueInterval: (r.reissue_interval as ReissueInterval | null) ?? null,
       reissuedFromId: r.reissued_from_id ? String(r.reissued_from_id) : null,
@@ -117,12 +124,12 @@ export async function listForStorePeriod(
       // every row it ever had, so this label never once rendered its second half.
       categoryLabel: String(r.category),
       accountCode: r.account_code ? String(r.account_code) : null,
-      consumed: consumed.toFixed(2),
+      consumed,
       // ⚠️ Remaining may be NEGATIVE and is deliberately not floored. `cashPayments` in v1's
       // sales report floors a residual at zero and hides exactly the signal worth seeing
       // (`docs/GLOSSARY.md`); an over-spent envelope is that signal here.
-      remaining: (amount - consumed).toFixed(2),
-      overBudget: consumed > amount + 0.005,
+      remaining: subtract(amount, consumed),
+      overBudget: compare(consumed, amount) > 0,
     };
   });
 }
@@ -156,13 +163,14 @@ export async function remainingFor(
     limit 1
   `)) as unknown as Record<string, string>[];
   if (!row) return null;
-  const amount = Number(row.amount);
-  const consumed = Number(row.consumed);
+  // T-371 R4 / C4: re-minted and compared exactly — `compare` in scaled bigint replaces the float `> amount + 0.005`.
+  const amount = money(row.amount!);
+  const consumed = money(row.consumed!);
   return {
-    amount: amount.toFixed(2),
-    consumed: consumed.toFixed(2),
-    remaining: (amount - consumed).toFixed(2),
-    overBudget: consumed > amount + 0.005,
+    amount,
+    consumed,
+    remaining: subtract(amount, consumed),
+    overBudget: compare(consumed, amount) > 0,
   };
 }
 
@@ -185,16 +193,7 @@ export async function getById(tx: Tx, orgId: string, id: string): Promise<Expens
  */
 export async function setBudget(
   tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    categoryId: string;
-    periodKey: string;
-    amount: string;
-    autoReissue: boolean;
-    reissueInterval: ReissueInterval | null;
-    createdBy: string;
-  },
+  input: Required<Pick<BudgetInsert, BudgetKeys>> & { amount: Money; createdBy: string },
 ): Promise<{ id: string }> {
   const [row] = await tx
     .insert(expenseBudgets)
@@ -236,17 +235,7 @@ export async function listAutoReissuing(tx: Tx, orgId: string): Promise<ExpenseB
  */
 export async function insertReissued(
   tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    categoryId: string;
-    periodKey: string;
-    amount: string;
-    autoReissue: boolean;
-    reissueInterval: ReissueInterval | null;
-    reissuedFromId: string;
-    createdBy: string | null;
-  },
+  input: Required<Pick<BudgetInsert, BudgetKeys | 'createdBy'>> & { amount: Money; reissuedFromId: string },
 ): Promise<{ id: string } | null> {
   const rows = await tx
     .insert(expenseBudgets)

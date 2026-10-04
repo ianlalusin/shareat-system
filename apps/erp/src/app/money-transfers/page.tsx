@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { compare, money, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../lib/page-access';
 import type { PickerOption } from '../../components/two-way-picker';
 import { createMoneyTransferAction, settleBetweenStoresAction, voidMoneyTransferAction } from './actions';
@@ -46,7 +47,7 @@ export default async function MoneyTransfersPage({
   // ⚠️ The grouping is for disambiguation, NOT a same-store restriction: office-to-office across
   // stores is allowed (bible row 152). The rule that matters there is about the CUSTODIAN, not
   // the store, so the domain enforces it and says why rather than the picker hiding options.
-  const overdrawn = accounts.filter((a) => Number(a.balance) < 0);
+  const overdrawn = accounts.filter((a) => compare(money(a.balance), ZERO) < 0);
 
   const byStore = stores
     .map((s) => ({ store: s, accounts: usable.filter((a) => a.storeId === s.id) }))
@@ -160,7 +161,7 @@ export default async function MoneyTransfersPage({
                       negative cash balance is never ordinary. */}
                   <span
                     className={`font-mono text-sm tabular-nums ${
-                      Number(a.balance) < 0 ? 'text-amber-600 dark:text-amber-400' : ''
+                      compare(money(a.balance), ZERO) < 0 ? 'text-amber-600 dark:text-amber-400' : ''
                     }`}
                   >
                     {peso(a.balance)}
@@ -277,7 +278,7 @@ export default async function MoneyTransfersPage({
                       {peso(t.amountIn)}
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
-                      {Number(t.fee) > 0 ? (
+                      {compare(money(t.fee), ZERO) > 0 ? (
                         <span className="text-amber-700 dark:text-amber-400">{peso(t.fee)}</span>
                       ) : (
                         <span className="text-neutral-300 dark:text-neutral-700">—</span>

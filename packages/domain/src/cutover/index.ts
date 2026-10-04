@@ -25,6 +25,8 @@ import { authorize, type Actor } from '@shareat/auth';
 import { CUTOVER_STEPS, gatesBefore, stepDef, type StepDef } from './steps';
 import { parseFourDecimalCost } from '../commissary/catalogue';
 import { parseQuantityInput } from '../shared/quantity-input';
+import { compareQuantity, ZERO_QUANTITY } from '../stock/quantity';
+import { isZero, money } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
 
 export * from './steps';
@@ -162,7 +164,8 @@ async function evaluate(
   }
   if (code === 'C4') {
     const residual = await cutoverRepo.openingEquityResidual(tx, orgId);
-    return Math.abs(Number(residual)) < 0.005
+    // T-371 C4: re-minted and tested in centavos, never as a float — a malformed residual throws instead of reading as balanced.
+    return isZero(money(residual))
       ? { holds: true, detail: null }
       : {
           holds: false,
@@ -222,9 +225,10 @@ export async function recordOpeningCount(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'run_cutover', { storeId: input.storeId });
     const quantity = parseQuantityInput(input.quantity, 'recordOpeningCount: the quantity', 'The count');
-    if (Number(quantity) < 0) throw refuse('recordOpeningCount: a count cannot be negative.', 'A count cannot be negative.');
+    if (compareQuantity(quantity, ZERO_QUANTITY) < 0) throw refuse('recordOpeningCount: a count cannot be negative.', 'A count cannot be negative.');
     const unitCost =
-      input.unitCost != null
+      // T-371 R13: unit_cost is nullable, so a blank cost is null — never a guessed zero.
+      input.unitCost != null && input.unitCost.trim() !== ''
         ? parseFourDecimalCost(input.unitCost, 'recordOpeningCount: the unit cost', 'The cost per unit')
         : null;
     await cutoverRepo.upsertOpeningCount(trx, {

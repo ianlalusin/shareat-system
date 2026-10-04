@@ -17,6 +17,7 @@
  */
 import { advisoryLocksRepo, moneyAccountsRepo, serviceChargeRepo, storesRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
+import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
@@ -50,8 +51,8 @@ export async function distributeServiceCharge(
     // against the un-rounded figure. `parsedAmount` is what every check below runs against AND
     // what actually gets posted, so the value validated and the value written are the same value.
     const parsedAmount = parseMoneyInput(input.amount, 'distributeServiceCharge: the amount', 'The amount to distribute');
-    const amount = Number(parsedAmount);
-    if (amount <= 0) {
+    // ⛔ T-371 C4 — ordered in scaled bigint on the brand, never as a float.
+    if (compare(parsedAmount, ZERO) <= 0) {
       throw new Error('distributeServiceCharge: a distribution has to be greater than zero.');
     }
 
@@ -81,11 +82,13 @@ export async function distributeServiceCharge(
     // ⛔⛔ §7 invariants 1–3 — THE CAP, derived from the ledger, checked and thrown on strictly
     // BEFORE `postEntry` below. Nothing above this point writes anything, so every throw in this
     // function is a refusal before any write.
-    const balance = Number(await serviceChargeRepo.floatBalance(trx, actor.orgId, input.storeId));
-    if (amount > balance + 0.005) {
+    // ⛔ T-371 R4/C4 — the ledger's sum re-minted as Money and compared exactly; the old
+    // `+ 0.005` float tolerance is unnecessary once both sides are two-place decimals.
+    const balance = money(await serviceChargeRepo.floatBalance(trx, actor.orgId, input.storeId));
+    if (compare(parsedAmount, balance) > 0) {
       throw new Error(
         `distributeServiceCharge: ${store.name}'s service charge float only holds ` +
-          `₱${balance.toFixed(2)} — ₱${(amount - balance).toFixed(2)} more than that was ` +
+          `₱${balance} — ₱${subtract(parsedAmount, balance)} more than that was ` +
           'requested. Pay only what is available; it is never negative.',
       );
     }
@@ -94,7 +97,7 @@ export async function distributeServiceCharge(
     // staff" (2160); this one asks "is the cash actually there" (the money account itself). Both
     // must pass — mirrors every other outflow in this codebase (payLiability, ap, expenses,
     // money-transfers, ...), all nine now, through the one shared answer in `money-accounts/overdraft.ts`.
-    const warning = await checkDraw(trx, actor.orgId, account, amount, 'distributeServiceCharge');
+    const warning = await checkDraw(trx, actor.orgId, account, parsedAmount, 'distributeServiceCharge');
 
     const result = await postEntry(trx, {
       orgId: actor.orgId,

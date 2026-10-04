@@ -192,7 +192,7 @@ async function postPeriodsFor(
         {
           accountCode: DEPRECIATION_EXPENSE_CODE,
           storeId: asset.storeId,
-          debit: String(period.amount),
+          debit: period.amount,
           credit: '0',
           lineMemo: asset.name,
         },
@@ -200,7 +200,7 @@ async function postPeriodsFor(
           accountCode: ACCUMULATED_DEPRECIATION_CODE,
           storeId: asset.storeId,
           debit: '0',
-          credit: String(period.amount),
+          credit: period.amount,
           lineMemo: asset.name,
         },
       ],

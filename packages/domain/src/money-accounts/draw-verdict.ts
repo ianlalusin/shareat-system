@@ -21,6 +21,8 @@
 
 /** The account facts the verdict turns on — structural, so a caller may pass a `MoneyAccountRow`,
  *  a picker option, or a test fixture without any of them importing each other. */
+import { compare, money, negate, subtract, type Money } from '@shareat/core/money';
+
 export interface DrawableAccount {
   name: string;
   custodian: 'cashier' | 'office' | 'staff';
@@ -45,13 +47,14 @@ const OK: DrawVerdict = { blocked: false };
  */
 export function judgeDraw(
   account: DrawableAccount,
-  available: number,
-  drawn: number,
+  available: Money,
+  drawn: Money,
 ): DrawVerdict {
-  if (drawn <= available) return OK;
+  // ⭐ T-371 S4 — exact: both sides are Money, compared and subtracted in centavos, never as floats.
+  if (compare(drawn, available) <= 0) return OK;
 
-  const short = (drawn - available).toFixed(2);
-  const holds = available.toFixed(2);
+  const short = subtract(drawn, available);
+  const holds = available;
 
   // ⭐ T-153 — A FLOAT POT BLOCKS, even though its custodian is the cashier.
   //
@@ -70,7 +73,7 @@ export function judgeDraw(
     return {
       blocked: true,
       message:
-        `"${account.name}" is a till float holding ${holds} and this takes ${drawn.toFixed(2)}. ` +
+        `"${account.name}" is a till float holding ${holds} and this takes ${drawn}. ` +
         'A float is a side pocket, not a drawer that runs behind — its balance is complete, so it ' +
         'cannot go below zero. Pay the rest from the takings drawer, or top the float up from the ' +
         'office first.',
@@ -78,22 +81,26 @@ export function judgeDraw(
   }
 
   if (account.custodian === 'cashier') {
-    const limit = Number(account.overdraftLimit);
+    // ⭐ T-371 R4/C4 — the stored limit is RE-MINTED, never `Number()`-ed: a malformed value throws
+    // here instead of becoming NaN and silently failing the comparison below into a block.
+    const limit = money(account.overdraftLimit);
     // ⭐ Where the balance LANDS, not how big the draw is. A ₱50,000 draw against a ₱49,000 drawer
     // leaves it ₱1,000 behind, which is ordinary; a ₱1,000 draw against a drawer already ₱19,500
     // behind is what pushes it past the cap.
-    const after = available - drawn;
+    const after = subtract(available, drawn);
+    // How far below zero the drawer lands, compared to the limit as Money, not floats.
+    const behind = negate(after);
 
-    if (-after <= limit) {
+    if (compare(behind, limit) <= 0) {
       // ⚠️ A WARNING, NOT A REFUSAL. The till's true balance is unknowable until the day is
       // verified, so this is a "look at this", not a "you are wrong".
       return {
         blocked: false,
         message:
           `"${account.name}" is short ${short} against the books (holds ${holds}, this takes ` +
-          `${drawn.toFixed(2)}). That is expected while today's sales are unverified — the cash is ` +
+          `${drawn}). That is expected while today's sales are unverified — the cash is ` +
           'in the till before it is in the ledger. If the day IS verified, the drawer is genuinely ' +
-          `over-spent and needs counting. Allowed down to −${limit.toFixed(2)}.`,
+          `over-spent and needs counting. Allowed down to −${limit}.`,
       };
     }
 
@@ -108,8 +115,8 @@ export function judgeDraw(
     return {
       blocked: true,
       message:
-        `"${account.name}" would go to −${(-after).toFixed(2)}, past the ${limit.toFixed(2)} ` +
-        `overdraft this drawer is allowed (holds ${holds}, this takes ${drawn.toFixed(2)}). ` +
+        `"${account.name}" would go to −${behind}, past the ${limit} ` +
+        `overdraft this drawer is allowed (holds ${holds}, this takes ${drawn}). ` +
         'A cashier drawer is expected to run behind while the day is unverified, but not this far. ' +
         'Verify the day, remit what is in the till, or raise the limit deliberately.',
     };
@@ -120,7 +127,7 @@ export function judgeDraw(
   return {
     blocked: true,
     message:
-      `"${account.name}" holds ${holds} and this takes ${drawn.toFixed(2)}. Unlike a cashier ` +
+      `"${account.name}" holds ${holds} and this takes ${drawn}. Unlike a cashier ` +
       'drawer, this balance is complete — nothing is waiting to be posted into it — so record ' +
       'the money coming in first, or draw it from somewhere that holds it.',
   };

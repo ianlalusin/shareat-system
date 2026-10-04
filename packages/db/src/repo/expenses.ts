@@ -17,7 +17,9 @@
  */
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { expenseCategories, expensePayments, expenses } from '../../schema';
+import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert, SafeUpdate } from './numeric-input';
 import { recordGone } from './record-gone';
 
 /** DEF-157: the account `expense/routing.ts` credits for a reimbursable payment. Duplicated as
@@ -423,18 +425,17 @@ const EXPENSE_COLUMNS = {
   createdAt: expenses.createdAt,
 } as const;
 
-export interface InsertExpenseInput {
-  orgId: string;
-  storeId: string;
-  businessDate: string;
-  totalAmount: string;
+/** T-371 C2 — `totalAmount` is a `Money` brand ((14,2)), minted by `decimal()`. */
+export type InsertExpenseInput = Pick<
+  SafeInsert<typeof expenses>,
+  'orgId' | 'storeId' | 'businessDate' | 'ownerId' | 'createdBy'
+> & {
+  totalAmount: Money;
   categoryId: string;
   supplierId: string;
   supplierInvoiceId: string;
-  ownerId?: string | null;
   particulars: string;
-  createdBy: string;
-}
+};
 
 export async function insertExpense(tx: Tx, input: InsertExpenseInput): Promise<{ id: string }> {
   const [row] = await tx
@@ -450,7 +451,7 @@ export async function insertExpense(tx: Tx, input: InsertExpenseInput): Promise<
       ownerId: input.ownerId ?? null,
       particulars: input.particulars,
       createdBy: input.createdBy,
-    })
+    } satisfies SafeInsert<typeof expenses>)
     .returning({ id: expenses.id });
   if (!row) throw new Error('insertExpense: insert returned no row');
   return row;
@@ -488,16 +489,17 @@ export async function listExpenses(tx: Tx, input: ListExpensesInput): Promise<Ex
   return rows as ExpenseRow[];
 }
 
-export interface UpdateExpenseDraftInput {
-  storeId?: string;
-  businessDate?: string;
-  totalAmount?: string;
+/** T-371 C2 — `totalAmount`, when patched, is a `Money` brand ((14,2)), minted by `decimal()`. */
+export type UpdateExpenseDraftInput = Pick<
+  SafeUpdate<typeof expenses>,
+  'storeId' | 'businessDate' | 'ownerId'
+> & {
+  totalAmount?: Money;
   categoryId?: string;
   supplierId?: string;
   supplierInvoiceId?: string;
-  ownerId?: string | null;
   particulars?: string;
-}
+};
 
 /** Updates header fields on a DRAFT expense only — the caller (edit.ts) has already
  *  proven status === 'draft' and the 48h/role window; this just writes. Throws if the
@@ -510,9 +512,20 @@ export async function updateExpenseDraft(
   id: string,
   patch: UpdateExpenseDraftInput,
 ): Promise<void> {
+  // T-371: each column named, no spread — Drizzle skips an `undefined` value in `set`, so an absent field is untouched.
   const updated = await tx
     .update(expenses)
-    .set({ ...patch, updatedAt: sql`now()` })
+    .set({
+      storeId: patch.storeId,
+      businessDate: patch.businessDate,
+      totalAmount: patch.totalAmount,
+      categoryId: patch.categoryId,
+      supplierId: patch.supplierId,
+      supplierInvoiceId: patch.supplierInvoiceId,
+      ownerId: patch.ownerId,
+      particulars: patch.particulars,
+      updatedAt: sql`now()`,
+    })
     .where(and(eq(expenses.id, id), eq(expenses.orgId, orgId), eq(expenses.status, 'draft')))
     .returning({ id: expenses.id });
   if (updated.length === 0) {
@@ -595,9 +608,10 @@ export interface ExpensePaymentRow {
   cashRequestId: string | null;
 }
 
+/** T-371 C2 — `amount` is a `Money` brand ((14,2)), minted by `decimal()`. */
 export interface InsertPaymentInput {
   method: ExpensePaymentRow['method'];
-  amount: string;
+  amount: Money;
   accountCode?: string | null;
   staffId?: string | null;
   moneyAccountId?: string | null;
@@ -607,15 +621,17 @@ export interface InsertPaymentInput {
 export async function insertPayments(tx: Tx, expenseId: string, payments: InsertPaymentInput[]): Promise<void> {
   if (payments.length === 0) return;
   await tx.insert(expensePayments).values(
-    payments.map((p) => ({
-      expenseId,
-      method: p.method,
-      amount: p.amount,
-      accountCode: p.accountCode ?? null,
-      staffId: p.staffId ?? null,
-      moneyAccountId: p.moneyAccountId ?? null,
-      cashRequestId: p.cashRequestId ?? null,
-    })),
+    payments.map(
+      (p): SafeInsert<typeof expensePayments> & { amount: Money } => ({
+        expenseId,
+        method: p.method,
+        amount: p.amount,
+        accountCode: p.accountCode ?? null,
+        staffId: p.staffId ?? null,
+        moneyAccountId: p.moneyAccountId ?? null,
+        cashRequestId: p.cashRequestId ?? null,
+      }),
+    ),
   );
 }
 

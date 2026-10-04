@@ -43,10 +43,10 @@ import {
   type RemittanceCadence,
   type Tx,
 } from '@shareat/db';
-import { add, compare, formatMoney, money, negate, subtract, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, formatMoney, isZero, money, negate, subtract, ZERO, type Money } from '@shareat/core/money';
 import { parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { createMoneyTransfer, voidMoneyTransfer } from '../money-transfers';
-import { parseMoneyInput } from '../shared/money-input';
+import { parseDecimalInput } from '../shared/money-input';
 import { allocateFifo, type DayOwed } from './allocate';
 
 export { allocateFifo } from './allocate';
@@ -123,6 +123,25 @@ async function runCreate(
     throw new Error('createRemittance: a remittance has to hand over something.');
   }
 
+  // ⭐ T-371 R5/R6 — every line's amount is parsed HERE, after `authorize()` and before any read or
+  // write, into a `Money` brand: a typed 'abc' or 'NaN' gets a sentence naming the field and quoting
+  // the value, not `money()`'s raw TypeError. `remittance_lines.amount` is NOT NULL with no default,
+  // so a blank is refused — never a guessed '0'.
+  const parsedAmounts = new Map<RemittanceLineInput, Money>();
+  for (const line of input.lines) {
+    parsedAmounts.set(
+      line,
+      parseDecimalInput(line.amount, '14,2', 'createRemittance: the amount handed over', 'The amount handed over', {
+        blank: 'refuse',
+      }),
+    );
+  }
+  const amountOf = (line: RemittanceLineInput): Money => {
+    const parsed = parsedAmounts.get(line);
+    if (parsed === undefined) throw internalFault('createRemittance: a line was not parsed.');
+    return parsed;
+  };
+
   // ⚠️ Every line must run cashier → office. A remittance that moved money the other way would be
   // a float top-up wearing a remittance's name, and would settle days it never funded.
   // ⭐ T-324: also collects each `fromMoneyAccountId`'s name, for check 1's refusal message below —
@@ -157,7 +176,7 @@ async function runCreate(
     }
   }
 
-  const handedOver: Money = input.lines.reduce((sum, l) => add(sum, money(l.amount)), money('0'));
+  const handedOver: Money = input.lines.reduce((sum, l) => add(sum, amountOf(l)), money('0'));
 
   // ⭐ What the days are owed, oldest first — derived from the ledger, never from a column.
   // ⚠️ Only VERIFIED days: an unverified one has no signed count behind it, so there is nothing to
@@ -166,7 +185,7 @@ async function runCreate(
     storeId: input.storeId,
     upTo: input.remittedOn,
   });
-  const settleable = reports.filter((r) => r.remittable && Number(r.owed) > 0);
+  const settleable = reports.filter((r) => r.remittable && compare(money(r.owed), ZERO) > 0);
 
   // ⛔⛔ DEF-358/T-319 — REFUSE BEFORE ANY WRITE. Placed here, immediately after `settleable` is
   // computed and BEFORE `insertRemittance` and the transfer loop below: those move real money and
@@ -215,16 +234,17 @@ async function runCreate(
   // Parse and validate the declared overage per line. Absent/empty ⇒ zero for comparison, stored
   // as NULL ("never asked"); an explicit "0" compares as zero and is stored as "0.00" ("I declare
   // no overage") — packages/core/src/money.ts:15-16, zero is a legitimate value, not "unset".
+  // T-371 R6: `declared_overage` is nullable, so a blank is `null` — never a guessed '0' stored.
   const linesWithOverage = input.lines.map((line) => {
     const raw = line.declaredOverage;
-    const isAbsent = raw == null || raw.trim() === '';
-    const declared: Money = isAbsent
-      ? money('0')
-      : parseMoneyInput(raw, 'createRemittance: the declared overage', 'A declared overage');
-    if (compare(declared, money('0')) < 0) {
+    const parsed = parseDecimalInput(raw, '14,2', 'createRemittance: the declared overage', 'A declared overage', {
+      blank: 'null',
+    });
+    const declared: Money = parsed ?? ZERO;
+    if (compare(declared, ZERO) < 0) {
       throw new Error(`createRemittance: a declared overage cannot be negative — "${raw}" is.`);
     }
-    return { line, declaredForCompare: declared, declaredToStore: isAbsent ? null : String(declared) };
+    return { line, amount: amountOf(line), declaredForCompare: declared, declaredToStore: parsed };
   });
 
   // Check 1 — per ACCOUNT, not per line: nothing makes `fromMoneyAccountId` unique across
@@ -240,12 +260,12 @@ async function runCreate(
   // "tighten" this to owed without giving `remittance_allocations` an account dimension — that
   // would start refusing correct remittances.
   const perAccount = new Map<string, { amountSum: Money; declaredSum: Money }>();
-  for (const { line, declaredForCompare } of linesWithOverage) {
+  for (const { line, amount, declaredForCompare } of linesWithOverage) {
     const entry = perAccount.get(line.fromMoneyAccountId) ?? {
       amountSum: money('0'),
       declaredSum: money('0'),
     };
-    entry.amountSum = add(entry.amountSum, money(line.amount));
+    entry.amountSum = add(entry.amountSum, amount);
     entry.declaredSum = add(entry.declaredSum, declaredForCompare);
     perAccount.set(line.fromMoneyAccountId, entry);
   }
@@ -342,12 +362,12 @@ async function runCreate(
   // transfer, and it inherits every rule T-139 already enforces — including the cashier overdraft
   // WARNING (row 154), which is exactly right here: the till holds what the ledger cannot see
   // until the day is verified.
-  for (const { line, declaredToStore } of linesWithOverage) {
+  for (const { line, amount, declaredToStore } of linesWithOverage) {
     const transfer = await createMoneyTransfer(tx, actor, {
       fromMoneyAccountId: line.fromMoneyAccountId,
       toMoneyAccountId: line.toMoneyAccountId,
-      amountOut: line.amount,
-      amountIn: line.amount,
+      amountOut: amount,
+      amountIn: amount,
       transferDate: input.remittedOn,
       reference: input.reference ?? null,
       notes: `Remittance ${input.remittedOn}`,
@@ -356,7 +376,7 @@ async function runCreate(
       remittanceId: id,
       fromMoneyAccountId: line.fromMoneyAccountId,
       toMoneyAccountId: line.toMoneyAccountId,
-      amount: line.amount,
+      amount,
       moneyTransferId: transfer.id,
       declaredOverage: declaredToStore,
     });
@@ -368,13 +388,13 @@ async function runCreate(
       remittanceId: id,
       businessDate: a.salesDayId,
       salesDayId: byDate.get(a.salesDayId)?.salesDayId ?? null,
-      amount: String(a.amount),
+      amount: a.amount,
       source: 'cash',
     });
   }
 
   let varianceId: string | null = null;
-  if (Number(result.variance) !== 0 && result.varianceDayId) {
+  if (!isZero(result.variance) && result.varianceDayId) {
     // ⛔ Recorded OPEN, with nobody attached. FIFO put the residual on this date; that says nothing
     // about who was holding the money. Charging it requires a person, named by a human (row 144).
     const row = await remittanceRepo.insertVariance(tx, {
@@ -382,7 +402,7 @@ async function runCreate(
       remittanceId: id,
       businessDate: result.varianceDayId,
       salesDayId: byDate.get(result.varianceDayId)?.salesDayId ?? null,
-      amount: String(result.variance),
+      amount: result.variance,
     });
     varianceId = row.id;
   }
@@ -394,7 +414,7 @@ async function runCreate(
       businessDate: a.salesDayId,
       amount: String(a.amount),
     })),
-    variance: Number(result.variance) === 0 ? null : String(result.variance),
+    variance: isZero(result.variance) ? null : String(result.variance),
     varianceId,
   };
 }
@@ -717,7 +737,7 @@ export async function resolveRemittanceVariance(
         remittanceId: variance.remittanceId,
         businessDate: a.salesDayId,
         salesDayId: byDate.get(a.salesDayId)?.salesDayId ?? null,
-        amount: String(a.amount),
+        amount: a.amount,
         source: 'charge',
       });
     }
@@ -767,14 +787,15 @@ export function remittanceStateOf(report: {
   movement: string;
   allocated: string;
 }): 'nothing_owed' | 'unremitted' | 'partially_remitted' | 'remitted' {
-  const owed = Number(report.movement);
-  const done = Number(report.allocated);
+  // T-371 C4: re-minted, so a malformed figure throws instead of NaN falling through every branch.
+  const owed = money(report.movement);
+  const done = money(report.allocated);
   // ⚠️ A day the cashier paid MORE out of than came in owes nothing — the office is out of pocket,
   // not the till. Calling that "not remitted" would put it on a list of things somebody has to
   // chase, which is the opposite of true.
-  if (owed <= 0 && done <= 0) return 'nothing_owed';
-  if (done <= 0) return 'unremitted';
-  if (done >= owed) return 'remitted';
+  if (compare(owed, ZERO) <= 0 && compare(done, ZERO) <= 0) return 'nothing_owed';
+  if (compare(done, ZERO) <= 0) return 'unremitted';
+  if (compare(done, owed) >= 0) return 'remitted';
   return 'partially_remitted';
 }
 
@@ -809,10 +830,20 @@ export async function setStoreCashPolicy(
   input: {
     storeId: string;
     remittanceCadence: RemittanceCadence;
-    unremittedCeiling: string | null;
+    /** T-371 R6: `unremitted_ceiling` is nullable, so a blank (or null) is stored as NULL — never 0. */
+    unremittedCeiling: string | null | undefined;
   },
 ): Promise<void> {
   await authorize(tx, actor, 'set_cash_policy', { storeId: input.storeId });
+
+  // T-371 R5 — parsed after `authorize()`, before anything is written.
+  const unremittedCeiling = parseDecimalInput(
+    input.unremittedCeiling,
+    '14,2',
+    'setStoreCashPolicy: the unremitted ceiling',
+    'The un-remitted ceiling',
+    { blank: 'null' },
+  );
 
   if (!REMITTANCE_CADENCES.includes(input.remittanceCadence)) {
     throw new Error(
@@ -821,5 +852,9 @@ export async function setStoreCashPolicy(
     );
   }
 
-  await storesRepo.setCashPolicy(tx, actor.orgId, input);
+  await storesRepo.setCashPolicy(tx, actor.orgId, {
+    storeId: input.storeId,
+    remittanceCadence: input.remittanceCadence,
+    unremittedCeiling,
+  });
 }

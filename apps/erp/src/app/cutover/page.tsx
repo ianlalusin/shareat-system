@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { isZero, money } from '@shareat/core/money';
 import { requireSession } from '../../lib/session';
 import { attestStepAction } from './actions';
 import { PHASE_TITLE, kindLabel, listStores, loadGaps, loadProgress, peso } from './lib';
@@ -33,7 +34,8 @@ export default async function CutoverPage({
     id ? (stores.find((s) => s.id === id)?.name ?? 'Unknown store') : null;
 
   const residual = Number(progress.openingResidual);
-  const balanced = Math.abs(residual) < 0.005;
+  // T-371 C4: balanced is decided in centavos on the minted figure; `residual` is display-only.
+  const balanced = isZero(money(progress.openingResidual));
 
   return (
     <Page density="form">

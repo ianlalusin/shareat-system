@@ -45,7 +45,9 @@ import type {
   CustomerReturnTreatment,
   StockMovementKind,
 } from '@shareat/db/schema';
-import type { Money } from '@shareat/core/money';
+import { add, compare, decimal, money, multiply, subtract, ZERO, type Money } from '@shareat/core/money';
+import { parseMoneyInput } from '../shared/money-input';
+import { perBaseUnit } from '../deliveries/receive';
 import { postEntry, type PostEntryLine } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { consume, reverseConsumption } from '../stock/consume';
@@ -64,8 +66,8 @@ interface ReturnLineRecord {
   readonly tradeOrderLineId: string;
   readonly quantity: Quantity;
   readonly saleable: boolean;
-  readonly amount: string;
-  readonly cost: string;
+  readonly amount: Money;
+  readonly cost: Money;
   readonly itemId: string;
   readonly movementId: string;
 }
@@ -112,7 +114,8 @@ export async function customerReturnableQuantity(tx: Tx, orgId: string, tradeOrd
 
 /** Contract: `customerCreditBalance(customerId)` — derived from `2140`, never stored (DEF-075). */
 export async function customerCreditBalance(tx: Tx, orgId: string, customerId: string): Promise<Money> {
-  return (await arRepo.creditBalanceOf(tx, orgId, customerId)) as Money;
+  // T-371 R4 — a database figure is re-minted, never cast.
+  return money(await arRepo.creditBalanceOf(tx, orgId, customerId));
 }
 
 // -----------------------------------------------------------------------------------------
@@ -249,7 +252,7 @@ async function recordExternalReturn(
   const lineInputs: ReturnLineRecord[] = [];
   const cogsGroups = new Map<string, { inventoryAccount: string; lines: ConsumedLine[] }>();
   const wastageGroups = new Map<string, { inventoryAccount: string; lines: ConsumedLine[] }>();
-  let totalAmount = 0;
+  let totalAmount: Money = ZERO;
   let lineNo = 0;
 
   for (const p of prepared) {
@@ -266,8 +269,9 @@ async function recordExternalReturn(
     }
 
     // ⭐ Invariant 4 — the rate CAPTURED on the order line, never today's price list.
-    const amount = (Number(p.orderLine.rate) * Number(p.quantity)).toFixed(2);
-    totalAmount += Number(amount);
+    // T-371 — exact (scaled bigint, half-up once at the centavo), never a float product.
+    const amount = multiply(money(p.orderLine.rate), p.quantity);
+    totalAmount = add(totalAmount, amount);
 
     // ⭐ Invariant 5/6 — the exact layers the sale relieved, reversed in reverse order of
     // consumption. Already built for exactly this call (T-162's own doc comment on
@@ -316,46 +320,47 @@ async function recordExternalReturn(
     if (!account) return { ok: false, reason: 'that money account does not exist.' };
     settlement = 'cash_refund';
     creditLines.push({
-      accountCode: account.glAccountCode, storeId: order.storeId, credit: totalAmount.toFixed(2),
+      accountCode: account.glAccountCode, storeId: order.storeId, credit: totalAmount,
       ...(account.glAccountCode === '1140' ? { partyType: 'money_account' as const, partyId: account.id } : {}),
       lineMemo: `Return refunded — ${customer.name}`,
     });
   } else {
-    const outstanding = Number(await arRepo.outstandingForCharge(tx, input.orgId, order.arChargeId));
-    const reduceAr = Math.min(totalAmount, outstanding);
-    const storeCredit = totalAmount - reduceAr;
-    if (reduceAr > 0) {
+    // T-371 C4 — the split is decided in scaled bigint on minted figures, never as floats.
+    const outstanding = money(await arRepo.outstandingForCharge(tx, input.orgId, order.arChargeId));
+    const reduceAr = compare(totalAmount, outstanding) <= 0 ? totalAmount : outstanding;
+    const storeCredit = subtract(totalAmount, reduceAr);
+    const reducesAr = compare(reduceAr, ZERO) > 0;
+    const leavesCredit = compare(storeCredit, ZERO) > 0;
+    if (reducesAr) {
       creditLines.push({
-        accountCode: arRepo.AR_CONTROL_CODE, storeId: order.storeId, credit: reduceAr.toFixed(2),
+        accountCode: arRepo.AR_CONTROL_CODE, storeId: order.storeId, credit: reduceAr,
         partyType: 'customer' as const, partyId: order.customerId, lineMemo: `Return — ${customer.name}`,
       });
     }
-    if (storeCredit > 0) {
+    if (leavesCredit) {
       creditLines.push({
-        accountCode: arRepo.STORE_CREDIT_CODE, storeId: order.storeId, credit: storeCredit.toFixed(2),
+        accountCode: arRepo.STORE_CREDIT_CODE, storeId: order.storeId, credit: storeCredit,
         partyType: 'customer' as const, partyId: order.customerId, lineMemo: `Return credit — ${customer.name}`,
       });
     }
-    settlement = reduceAr > 0 && storeCredit > 0 ? 'mixed' : storeCredit > 0 ? 'store_credit' : 'reduce_ar';
+    settlement = reducesAr && leavesCredit ? 'mixed' : leavesCredit ? 'store_credit' : 'reduce_ar';
   }
 
-  const totalCost = [...cogsGroups.values()].reduce(
-    (n, g) => n + g.lines.reduce((m, l) => m + Number(l.cost), 0), 0,
-  );
+  const totalCost = add(...[...cogsGroups.values()].flatMap((g) => g.lines.map((l) => l.cost)));
 
   // ⭐ §3, ONE entry: revenue reversal, settlement, and cost reversal together — never split,
   // never by debiting 4300 directly (invariant 3).
   const lines: PostEntryLine[] = [
-    { accountCode: RETURN_REVENUE_CODE, storeId: order.storeId, debit: totalAmount.toFixed(2), lineMemo: `Return — ${customer.name}` },
+    { accountCode: RETURN_REVENUE_CODE, storeId: order.storeId, debit: totalAmount, lineMemo: `Return — ${customer.name}` },
     ...creditLines,
     ...[...cogsGroups.values()].map((g) => ({
       accountCode: g.inventoryAccount, storeId: order.storeId,
-      debit: g.lines.reduce((n, l) => n + Number(l.cost), 0).toFixed(2),
+      debit: add(...g.lines.map((l) => l.cost)),
       lineMemo: `Return — inventory reopened`,
     })),
     // ⚠️ All lines here booked 'food' at dispatch (T-165 — no per-item COGS category exists
     // yet), so the reversal targets the same single account, summed once.
-    { accountCode: '5100', storeId: order.storeId, credit: totalCost.toFixed(2), lineMemo: `Return — cost reversed` },
+    { accountCode: '5100', storeId: order.storeId, credit: totalCost, lineMemo: `Return — cost reversed` },
   ];
 
   const posted = await postEntry(tx, {
@@ -413,7 +418,7 @@ async function recordInternalReturn(
   const lineInputs: ReturnLineRecord[] = [];
   const branchGroups = new Map<string, { inventoryAccount: string; amount: string }>();
   const commissaryGroups = new Map<string, { inventoryAccount: string; amount: string }>();
-  let totalValue = 0;
+  let totalValue: Money = ZERO;
   let lineNo = 0;
 
   for (const p of prepared) {
@@ -443,7 +448,7 @@ async function recordInternalReturn(
     if (!consumed.ok) return consumed;
 
     const value = consumed.totalCost;
-    totalValue += Number(value);
+    totalValue = add(totalValue, value);
 
     // The commissary receives a fresh layer back, at the same value — a straight return has no
     // margin to carry (unlike a T-133 dispatch, this is not a sale of processing work).
@@ -454,7 +459,7 @@ async function recordInternalReturn(
     });
     await stockLayersRepo.createLayer(tx, {
       orgId: input.orgId, storeId: commissaryStoreId, itemId: item.id, receivedAt: movedAt, quantity: p.quantity,
-      unitCost: (Number(value) / Number(p.quantity)).toFixed(4), source: 'transfer_in', sourceId: returnId,
+      unitCost: perBaseUnit(value, p.quantity), source: 'transfer_in', sourceId: returnId,
       movementId: movement.id,
     });
 
@@ -464,9 +469,9 @@ async function recordInternalReturn(
     });
 
     const bGroup = branchGroups.get(branchAccount);
-    branchGroups.set(branchAccount, { inventoryAccount: branchAccount, amount: ((Number(bGroup?.amount ?? '0')) + Number(value)).toFixed(2) });
+    branchGroups.set(branchAccount, { inventoryAccount: branchAccount, amount: add(bGroup ? money(bGroup.amount) : ZERO, value) });
     const cGroup = commissaryGroups.get(commissaryAccount);
-    commissaryGroups.set(commissaryAccount, { inventoryAccount: commissaryAccount, amount: ((Number(cGroup?.amount ?? '0')) + Number(value)).toFixed(2) });
+    commissaryGroups.set(commissaryAccount, { inventoryAccount: commissaryAccount, amount: add(cGroup ? money(cGroup.amount) : ZERO, value) });
   }
 
   // ⭐ §4/invariant 12 — ONE entry, four legs (or more, if the return spans several inventory
@@ -474,13 +479,13 @@ async function recordInternalReturn(
   const memo = `Return ${branchCode} → ${commissaryCode} — ${input.reason.trim()}`;
   const lines: PostEntryLine[] = [
     {
-      accountCode: '2150', storeId: branchStoreId, debit: totalValue.toFixed(2),
+      accountCode: '2150', storeId: branchStoreId, debit: totalValue,
       partyType: 'store' as const, partyId: commissaryCode, lineMemo: memo,
     },
     ...[...branchGroups.values()].map((g) => ({ accountCode: g.inventoryAccount, storeId: branchStoreId, credit: g.amount, lineMemo: memo })),
     ...[...commissaryGroups.values()].map((g) => ({ accountCode: g.inventoryAccount, storeId: commissaryStoreId, debit: g.amount, lineMemo: memo })),
     {
-      accountCode: '1250', storeId: commissaryStoreId, credit: totalValue.toFixed(2),
+      accountCode: '1250', storeId: commissaryStoreId, credit: totalValue,
       partyType: 'store' as const, partyId: branchCode, lineMemo: memo,
     },
   ];
@@ -538,15 +543,16 @@ export async function voidCustomerReturn(
     if (closedVoid) return { ok: false, reason: closedVoid };
 
     if (ret.settlement === 'store_credit' || ret.settlement === 'mixed') {
-      const balance = Number(await arRepo.creditBalanceOf(trx, ret.orgId, ret.customerId));
+      // T-371 R4/C4 — both sides minted from the database and compared in scaled bigint.
+      const balance = money(await arRepo.creditBalanceOf(trx, ret.orgId, ret.customerId));
       const lines = await customerReturnsRepo.getReturnLines(trx, returnId);
-      const contribution = lines.reduce((n, l) => n + Number(l.amount), 0);
+      const contribution = add(...lines.map((l) => money(l.amount)));
       // ⚠️ A rough but honest check, matching T-170's own: if the live balance is already below
       // what this return alone would have contributed, some of it is provably gone. ⚠️ For
       // `mixed`, `contribution` over-counts (part of it reduced AR, not 2140) — a deliberately
       // CONSERVATIVE check: it may refuse a few valid voids it cannot prove safe, never the
       // reverse, since the split between the two legs is not stored separately.
-      if (balance + 0.005 < contribution) {
+      if (compare(balance, contribution) < 0) {
         return { ok: false, reason: 'this return\'s credit looks partly spent — unwind that first.' };
       }
     }
@@ -616,7 +622,7 @@ export async function voidCustomerReturn(
 }
 
 function absQty(q: string): Quantity {
-  return (q.startsWith('-') ? q.slice(1) : q) as Quantity;
+  return quantity(q.startsWith('-') ? q.slice(1) : q);
 }
 
 // -----------------------------------------------------------------------------------------
@@ -649,17 +655,19 @@ export async function applyCredit(
     if (!order.arChargeId) return { ok: false, reason: 'this order has no receivable to apply credit against.' };
     await authorize(trx, actor, 'apply_customer_credit', { storeId: order.storeId });
 
-    const outstanding = Number(await arRepo.outstandingForCharge(trx, orgId, order.arChargeId));
-    const amount = Number(input.amount);
-    if (amount <= 0) return { ok: false, reason: 'the amount must be greater than zero.' };
-    if (amount > outstanding + 0.005) {
-      return { ok: false, reason: `only ₱${outstanding.toFixed(2)} is outstanding on this order.` };
+    // T-371 — parsed AFTER authorize() (R5), so a typo is refused in a sentence that QUOTES what was typed; it was
+    // `Number(input.amount)`, which turned 'abc' into NaN, slipped past both guards and was forwarded as the text "NaN".
+    const amount = parseMoneyInput(input.amount, 'applyCredit: the amount', 'The amount');
+    const outstanding = money(await arRepo.outstandingForCharge(trx, orgId, order.arChargeId));
+    if (compare(amount, ZERO) <= 0) return { ok: false, reason: 'the amount must be greater than zero.' };
+    if (compare(amount, outstanding) > 0) {
+      return { ok: false, reason: `only ₱${outstanding} is outstanding on this order.` };
     }
 
     const result = await recordCollection(trx, actor, {
       storeId: order.storeId, customerId: order.customerId, collectionDate: input.collectionDate,
-      amount: amount.toFixed(2), moneyAccountId: input.moneyAccountId, creditApplied: amount.toFixed(2),
-      allocations: [{ chargeId: order.arChargeId, amountApplied: amount.toFixed(2) }],
+      amount, moneyAccountId: input.moneyAccountId, creditApplied: amount,
+      allocations: [{ chargeId: order.arChargeId, amountApplied: amount }],
     });
     return { ok: true, collectionId: result.collectionId };
   };

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../../lib/session';
 import { cancelAction, decideAction, releaseAction, settleAction } from '../actions';
 import {
@@ -45,7 +46,7 @@ export default async function CashRequestPage({
   const store = stores.find((s) => s.id === req.storeId);
   const holder = persons.find((p) => p.id === req.requestedFor);
 
-  const outstanding = Number(req.float.outstanding);
+  const outstanding = money(req.float.outstanding);
   const canDecide = req.status === 'requested';
   const canRelease = req.status === 'approved';
   const canSettle = req.status === 'released';
@@ -311,7 +312,7 @@ export default async function CashRequestPage({
           />
           <Row
             label="Outstanding"
-            value={outstanding > 0 ? `${peso(outstanding)} still with the holder` : 'Nothing'}
+            value={compare(outstanding, ZERO) > 0 ? `${peso(outstanding)} still with the holder` : 'Nothing'}
           />
           {req.notes && <Row label="Notes" value={req.notes} />}
         </dl>

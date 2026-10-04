@@ -11,7 +11,7 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { journalRepo, loansRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
-import { money, type Money } from '@shareat/core/money';
+import { compare, decimal, money, subtract, ZERO, type Decimal, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
@@ -59,14 +59,25 @@ export async function createLoan(
       throw new Error('createLoan: a loan needs a name and a lender.');
     }
     const principal = parseMoneyInput(input.principalAmount, 'createLoan: the amount agreed', 'The amount agreed');
-    if (Number(principal) <= 0) {
+    if (compare(principal, ZERO) <= 0) {
       throw refuse('createLoan: the amount agreed has to be greater than zero.', 'The amount agreed has to be greater than zero.');
     }
     // S5.5v Amendment A2 item 5 — must not narrow what was already accepted (".5", "1." stay
     // valid): shape first, then the VALUE ceiling — a leading-zero run like "00012.5" is a digit
     // run, not the value, so it saves as 12.5, not a refusal.
-    const rate = input.interestRate.trim();
-    if (!/^(?=.*\d)\d*(?:\.\d{0,4})?$/.test(rate) || Number(rate) > 9999.9999) {
+    // T-371 R2/R3: the accepted set is unchanged (".5" and "1." included); the VALUE ceiling is now the column's own,
+    // decided by minting `loans.interest_rate`'s numeric(8,4) brand — `decimal()` refuses 10000 and above exactly, where
+    // `Number(rate) > 9999.9999` let a NaN-adjacent float decide.
+    const rawRate = input.interestRate.trim();
+    let rate: Decimal<'8,4'> | null = null;
+    if (/^(?=.*\d)\d*(?:\.\d{0,4})?$/.test(rawRate)) {
+      try {
+        rate = decimal(`${rawRate.startsWith('.') ? '0' : ''}${rawRate.replace(/\.$/, '')}`, '8,4');
+      } catch {
+        rate = null;
+      }
+    }
+    if (rate === null) {
       throw refuse(
         `createLoan: the interest rate — "${input.interestRate}" is not a valid rate. Use a number from 0 to 9999.9999 with up to four decimal places.`,
         `The interest rate — "${input.interestRate}" is not a valid rate. Use a number from 0 to 9999.9999 with up to four decimal places.`,
@@ -112,7 +123,7 @@ export async function disburseLoan(
     await authorize(trx, actor, 'record_ap_payment', { storeId: loan.storeId });
 
     const amount = parseMoneyInput(input.amount, 'disburseLoan: the amount', 'The loan amount');
-    if (Number(amount) <= 0) {
+    if (compare(amount, ZERO) <= 0) {
       throw refuse('disburseLoan: the amount has to be greater than zero.', 'The loan amount has to be greater than zero.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
@@ -126,10 +137,12 @@ export async function disburseLoan(
     const position = await loansRepo.positionOf(trx, actor.orgId, loan.id);
     // ⛔ A draw beyond the agreement is not a bigger loan — it is a second agreement, and it needs
     // its own terms rather than quietly inflating these.
-    const remaining = Number(loan.principalAmount) - Number(position.disbursed);
-    if (Number(amount) > remaining + 0.005) {
+    // T-371 R4/C4: both are re-minted database values and the difference is exact centavos, so the old float
+    // tolerance (`+ 0.005`) has nothing left to absorb.
+    const remaining = subtract(money(loan.principalAmount), money(position.disbursed));
+    if (compare(amount, remaining) > 0) {
       throw new Error(
-        `disburseLoan: ${amount} exceeds the ${remaining.toFixed(2)} still undrawn on this ` +
+        `disburseLoan: ${amount} exceeds the ${remaining} still undrawn on this ` +
           'agreement. Record a separate loan for anything beyond it.',
       );
     }
@@ -200,7 +213,7 @@ export async function recordLoanPayment(
     await authorize(trx, actor, 'record_ap_payment', { storeId: loan.storeId });
 
     const amount = parseMoneyInput(input.amount, 'recordLoanPayment: the amount', 'The payment amount');
-    if (Number(amount) <= 0) {
+    if (compare(amount, ZERO) <= 0) {
       throw refuse('recordLoanPayment: the amount has to be greater than zero.', 'The payment amount has to be greater than zero.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
@@ -212,14 +225,15 @@ export async function recordLoanPayment(
     }
 
     const position = await loansRepo.positionOf(trx, actor.orgId, loan.id);
-    if (Number(position.outstanding) <= 0) {
+    const outstanding = money(position.outstanding);
+    if (compare(outstanding, ZERO) <= 0) {
       throw new Error(`recordLoanPayment: ${loan.name} has nothing outstanding.`);
     }
 
     // Interest runs from the last payment, or from the loan's start if there has been none.
     const since = (await loansRepo.lastPaymentDate(trx, actor.orgId, loan.id)) ?? loan.startDate;
     const accrued = accruedInterest({
-      outstanding: money(position.outstanding),
+      outstanding,
       principal: money(loan.principalAmount),
       ratePercent: Number(loan.interestRate),
       ratePeriod: loan.ratePeriod,
@@ -230,13 +244,13 @@ export async function recordLoanPayment(
 
     const split = splitPayment({
       payment: amount,
-      outstanding: money(position.outstanding),
+      outstanding,
       accrued,
     });
 
     // ⛔ An overpayment is money the lender owes back, not a negative loan. Refused rather than
     // absorbed, so somebody decides what to do with it.
-    if (Number(split.overpayment) > 0) {
+    if (compare(split.overpayment, ZERO) > 0) {
       throw new Error(
         `recordLoanPayment: ${input.amount} is more than this loan needs — ${split.interest} ` +
           `interest plus ${position.outstanding} principal. The extra ${split.overpayment} would ` +
@@ -250,22 +264,22 @@ export async function recordLoanPayment(
       trx,
       actor.orgId,
       account,
-      Number(amount),
+      amount,
       'recordLoanPayment',
     );
 
     const paymentLines = [
-      ...(Number(split.principal) > 0
+      ...(compare(split.principal, ZERO) > 0
         ? [{
             accountCode: LOAN_LIABILITY_CODE,
             storeId: loan.storeId,
-            debit: String(split.principal),
+            debit: split.principal,
             partyType: 'loan' as const,
             partyId: loan.id,
           }]
         : []),
-      ...(Number(split.interest) > 0
-        ? [{ accountCode: INTEREST_EXPENSE_CODE, storeId: loan.storeId, debit: String(split.interest) }]
+      ...(compare(split.interest, ZERO) > 0
+        ? [{ accountCode: INTEREST_EXPENSE_CODE, storeId: loan.storeId, debit: split.interest }]
         : []),
       {
         accountCode: account.glAccountCode,
@@ -296,7 +310,7 @@ export async function recordLoanPayment(
     });
 
     const after = await loansRepo.positionOf(trx, actor.orgId, loan.id);
-    const paidOff = Number(after.outstanding) <= 0;
+    const paidOff = compare(money(after.outstanding), ZERO) <= 0;
     // ⚠️ Derived, not stamped: the ledger decides, the column records.
     if (paidOff && loan.status === 'active') {
       await loansRepo.setStatus(trx, actor.orgId, loan.id, { status: 'paid_off' });
@@ -362,7 +376,7 @@ export async function reverseLoanEntry(
     });
 
     const after = await loansRepo.positionOf(trx, actor.orgId, loan.id);
-    if (Number(after.outstanding) > 0 && loan.status === 'paid_off') {
+    if (compare(money(after.outstanding), ZERO) > 0 && loan.status === 'paid_off') {
       // ⚠️ Otherwise a reversed final payment would leave a settled-looking loan that still owes
       // money — the exact state a stored total gets stuck in.
       await loansRepo.setStatus(trx, actor.orgId, loan.id, { status: 'active' });

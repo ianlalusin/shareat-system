@@ -9,6 +9,8 @@ import { and, eq, sql } from 'drizzle-orm';
 // ⛔ T-218 — Manila, never bare current_date (DEF-172).
 import { MANILA_TODAY } from './sql-time';
 import type { Tx } from '../client';
+import type { Money } from '@shareat/core/money';
+import type { SafeInsert } from './numeric-input';
 import {
   channelSettlements,
   type ChannelSettlementStatus,
@@ -62,9 +64,44 @@ export interface ChannelSettlementRow {
   createdBy: string;
 }
 
+/**
+ * ⭐ T-371 C2 — every money column is a branded `Decimal`; an unparsed string cannot reach this insert. The fee,
+ * variance, gain and loan columns are NOT NULL DEFAULT 0, so they are optional here (R13): a blank is omitted and the
+ * column's own default writes the zero.
+ */
+export type InsertSettlementInput = Pick<
+  SafeInsert<typeof channelSettlements>,
+  | 'orgId'
+  | 'storeId'
+  | 'channelId'
+  | 'salesDayId'
+  | 'businessDate'
+  | 'loanId'
+  | 'loanOwnerStoreId'
+  | 'destinationMoneyAccountId'
+  | 'reference'
+  | 'settledOn'
+  | 'withholdingCertificateFileId'
+  | 'createdBy'
+> & {
+  grossAmount: Money;
+  outstandingCleared: Money;
+  netDeposited: Money;
+  /** NOT NULL DEFAULT 0 — omit a blank and the column default applies (R13). */
+  commission?: Money;
+  marketing?: Money;
+  platformFee?: Money;
+  vatOnFees?: Money;
+  withholdingTax?: Money;
+  penalty?: Money;
+  variance?: Money;
+  settlementGain?: Money;
+  loanDeduction?: Money;
+};
+
 export async function insertSettlement(
   tx: Tx,
-  input: Omit<ChannelSettlementRow, 'id' | 'status' | 'journalEntryId'>,
+  input: InsertSettlementInput,
 ): Promise<{ id: string }> {
   const [row] = await tx
     .insert(channelSettlements)

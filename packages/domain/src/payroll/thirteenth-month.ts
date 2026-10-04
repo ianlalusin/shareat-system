@@ -13,7 +13,7 @@
  * ⛔ **Not built on `pay_runs`/`payslips`** — see `schema/thirteenth-month.ts`'s own top comment
  * for why forcing that fit would have meant satisfying CHECKs that mean nothing for this shape.
  */
-import { ZERO, compare, formatMoney, money, type Money } from '@shareat/core/money';
+import { ZERO, add, compare, formatMoney, divideMoney, money, subtract, type Money } from '@shareat/core/money';
 import { thirteenthMonthRepo, payrollRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
@@ -88,10 +88,10 @@ export async function preview13thMonthRun(
     // reasoning previewPayRun uses for "only people who worked."
     if (compare(earned, ZERO) <= 0) continue;
 
-    const gross = money((Number(earned) / 12).toFixed(2));
+    const gross = divideMoney(earned, 12);
     const outstanding = await outstandingAdvance(tx, actor.orgId, emp.personId);
     const advanceRecovered = advanceToRecover(gross, outstanding);
-    const netPay = money((Number(gross) - Number(advanceRecovered)).toFixed(2));
+    const netPay = subtract(gross, advanceRecovered);
 
     payouts.push({
       employmentId: emp.id,
@@ -102,9 +102,9 @@ export async function preview13thMonthRun(
       advanceRecovered,
       netPay,
     });
-    totalGross = money((Number(totalGross) + Number(gross)).toFixed(2));
-    totalNet = money((Number(totalNet) + Number(netPay)).toFixed(2));
-    totalAdvanceRecovered = money((Number(totalAdvanceRecovered) + Number(advanceRecovered)).toFixed(2));
+    totalGross = add(totalGross, gross);
+    totalNet = add(totalNet, netPay);
+    totalAdvanceRecovered = add(totalAdvanceRecovered, advanceRecovered);
   }
 
   return { payouts, totalGross, totalNet, totalAdvanceRecovered };
@@ -178,26 +178,26 @@ export async function post13thMonthRun(
           runId,
           employmentId: payout.employmentId,
           personId: payout.personId,
-          basicPayEarned: payout.basicPayEarned.toString(),
-          grossPay: payout.grossPay.toString(),
-          advanceRecovered: payout.advanceRecovered.toString(),
-          netPay: payout.netPay.toString(),
+          basicPayEarned: payout.basicPayEarned,
+          grossPay: payout.grossPay,
+          advanceRecovered: payout.advanceRecovered,
+          netPay: payout.netPay,
           journalEntryId: null,
-        } as never)
+        })
       ).id;
 
       const lines = [
         {
           accountCode: THIRTEENTH_MONTH_ACCOUNT,
           storeId: input.storeId,
-          debit: payout.grossPay.toString(),
+          debit: payout.grossPay,
         },
         ...(compare(payout.advanceRecovered, ZERO) > 0
           ? [
               {
                 accountCode: PAYROLL_ADVANCE_ACCOUNT,
                 storeId: input.storeId,
-                credit: payout.advanceRecovered.toString(),
+                credit: payout.advanceRecovered,
                 partyType: 'employee',
                 partyId: payout.personId,
               },
@@ -208,7 +208,7 @@ export async function post13thMonthRun(
               {
                 accountCode: account.glAccountCode,
                 storeId: input.storeId,
-                credit: payout.netPay.toString(),
+                credit: payout.netPay,
               },
             ]
           : []),

@@ -51,6 +51,7 @@ import {
   type SchedulerFailure,
 } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
+import { money } from '@shareat/core/money';
 import { createExpense } from '../expenses';
 import { recordInvoice } from '../ap';
 import { runJobForOrg, listOrgsToRun, type JobOutcome } from '../scheduler';
@@ -147,6 +148,9 @@ export async function runRecurringExpenses(
             }
 
             const dueDate = template.nextDueDate;
+            // T-371 R4: the stored default is re-written onto the invoice and the payment row, so it is re-minted into
+            // the (14,2) brand, never cast. 0155 keeps NaN out of stored data, so this never refuses.
+            const amount = money(template.defaultAmount);
             const actor: Actor = { personId: template.createdBy, orgId: org.id };
 
             const result = await withOrgPrincipal(org.id, async (tx) => {
@@ -169,7 +173,7 @@ export async function runRecurringExpenses(
                 // T-367 S3 (DEF-499): a blank due date now means invoice date + the supplier's terms, which would
                 // push this bill's due date out by the terms. The template's date IS the due date, so say so.
                 dueDate,
-                totalAmount: template.defaultAmount,
+                totalAmount: amount,
                 invoiceNo: `RECUR-${template.id}-${dueDate}`,
                 notes: `Recurring: ${template.name}. Drafted by the recurring-expense job; the real bill replaces this.`,
               });
@@ -192,7 +196,7 @@ export async function runRecurringExpenses(
                 payments: [
                   {
                     method: payment.method,
-                    amount: template.defaultAmount,
+                    amount,
                     moneyAccountId: payment.moneyAccountId,
                   },
                 ],

@@ -35,7 +35,8 @@ export async function postSeparationAction(formData: FormData): Promise<void> {
         employmentId,
         separationDate,
         cause: str(formData, 'cause') as SeparationCause,
-        separationPayAmount: str(formData, 'separationPayAmount') || '0',
+        // T-371 R6 — a blank goes to the domain AS a blank; the column (NOT NULL DEFAULT '0') decides, not this form.
+        separationPayAmount: str(formData, 'separationPayAmount'),
         moneyAccountId: str(formData, 'moneyAccountId'),
         clearanceConfirmedBy: str(formData, 'clearanceConfirmed') === 'on' ? actor.personId : '',
         clearanceNotes: str(formData, 'clearanceNotes') || null,

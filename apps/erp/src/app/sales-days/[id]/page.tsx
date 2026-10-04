@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { authorize, AuthorizationError } from '@shareat/auth';
 import { salesDaysRepo, journalRepo } from '@shareat/db';
-import { formatMoney, money } from '@shareat/core/money';
+import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import { listStores, listActingPersons } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
@@ -82,10 +82,11 @@ export default async function SalesDayDetailPage({
   const carry = new URLSearchParams();
   if (sp.store) carry.set('store', sp.store);
 
-  const discountsTotal =
-    Number(day.seniorDiscount) + Number(day.pwdDiscount) + Number(day.otherDiscount);
+  // T-371 C4: summed and compared as Money (exact centavos), never as floats.
+  const discountsTotal = add(money(day.seniorDiscount), money(day.pwdDiscount), money(day.otherDiscount));
   const nonRemitted = channels.filter((c) => !c.isRemittedDaily);
-  const nonRemittedTotal = nonRemitted.reduce((a, c) => a + Number(c.amount), 0);
+  const nonRemittedTotal = add(ZERO, ...nonRemitted.map((c) => money(c.amount)));
+  const isPositive = (v: string) => compare(money(v), ZERO) > 0;
 
   // ⭐ Only the DOCUMENT is named here. Who is acting comes from the session (T-138) — this used
   // to carry an actingPersonId, which is what made the submit/verify segregation unenforceable.
@@ -140,20 +141,20 @@ export default async function SalesDayDetailPage({
         <Panel title="Tender">
           <Row label="Cash → 1110" value={formatMoney(money(day.cashCollected))} />
           <Row label="Online → 1140" value={formatMoney(money(day.onlineCollected))} />
-          {Number(day.creditSales) > 0 && (
+          {isPositive(day.creditSales) && (
             <Row label="Credit / on account" value={formatMoney(money(day.creditSales))} />
           )}
-          {nonRemittedTotal > 0 && (
-            <Row label="Non-remitted channels" value={formatMoney(money(String(nonRemittedTotal)))} />
+          {compare(nonRemittedTotal, ZERO) > 0 && (
+            <Row label="Non-remitted channels" value={formatMoney(nonRemittedTotal)} />
           )}
-          <Row label="Discounts → 4900" value={formatMoney(money(String(discountsTotal)))} />
+          <Row label="Discounts → 4900" value={formatMoney(discountsTotal)} />
           <Row label="Comps → 4950" value={formatMoney(money(day.comps))} />
-          {Number(day.otherCharges) > 0 && (
+          {isPositive(day.otherCharges) && (
             <Row label="Other charges → 4500" value={formatMoney(money(day.otherCharges))} />
           )}
           {/* ⭐ A float — neither revenue nor AP. Fills here, empties through payroll, and never
               reaches the P&L (bible row 135). */}
-          {Number(day.serviceCharge) > 0 && (
+          {isPositive(day.serviceCharge) && (
             <Row label="Service charge → 2160 float (held for staff)" value={formatMoney(money(day.serviceCharge))} />
           )}
         </Panel>

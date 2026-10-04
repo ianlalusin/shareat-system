@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { and, asc, desc, eq, inArray, sql as dsql } from 'drizzle-orm';
 import { schema } from '@shareat/db';
-import { supplierCreditBalance } from '@shareat/domain';
+import { compare, ZERO } from '@shareat/core/money';
+import { isPositiveQuantity, quantity, subtractQuantity, supplierCreditBalance } from '@shareat/domain';
 import { listStores } from '../lib';
 import { recordReturnAction, refundCreditAction, voidReturnAction } from './actions';
 import { requireSession } from '../../../lib/session';
@@ -54,12 +55,13 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
     `) as unknown as {
       delivery_line_id: string; delivery_id: string; supplier_id: string; supplier_name: string;
       item_id: string; item_name: string; item_kind: string; base_unit: string;
-      received_quantity: string; location_id: string | null; already_returned: string;
+      received_quantity: string | null; location_id: string | null; already_returned: string;
     }[];
 
     const returnable = lines
-      .map((l) => ({ ...l, returnable: (Number(l.received_quantity) - Number(l.already_returned)).toFixed(3) }))
-      .filter((l) => Number(l.returnable) > 0);
+      // T-371 C4: exact (14,3) arithmetic on minted values, never `Number(...) - Number(...)` and a float `> 0`.
+      .map((l) => ({ ...l, returnable: subtractQuantity(quantity(l.received_quantity ?? '0'), quantity(l.already_returned)) }))
+      .filter((l) => isPositiveQuantity(l.returnable));
 
     const supplierRows = await tx
       .select({ id: schema.suppliers.id, name: schema.suppliers.name })
@@ -70,7 +72,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
     const creditBySupplier = new Map<string, string>();
     for (const s of supplierRows) {
       const bal = await supplierCreditBalance(tx, actor.orgId, s.id);
-      if (Number(bal) > 0) creditBySupplier.set(s.id, bal);
+      if (compare(bal, ZERO) === 1) creditBySupplier.set(s.id, bal);
     }
 
     const recentReturns = await tx

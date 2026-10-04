@@ -28,7 +28,7 @@
  * `reconstructBalances`'s single `balances` row for that code — comparing the same total
  * at the same granularity on both sides, never one entity against everyone's total.
  */
-import { add, moneyFromLegacyFloat, subtract, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, isZero, moneyFromLegacyFloat, negate, subtract, ZERO, type Money } from '@shareat/core/money';
 import {
   DEFAULT_STORE_IDS,
   EXCLUDED_STORES,
@@ -91,12 +91,8 @@ export interface CrossCheckResult {
   readonly precisionLossFindings: readonly { storeCode: string; v1AccountId: string; message: string }[];
 }
 
-function isZeroMoney(m: Money): boolean {
-  return Number(m) === 0;
-}
-
 function absMoney(m: Money): Money {
-  return m.startsWith('-') ? (m.slice(1) as Money) : m;
+  return compare(m, ZERO) < 0 ? negate(m) : m;
 }
 
 export function filterAccountsDocs(docs: readonly LandedDocLike[]): readonly LandedDocLike[] {
@@ -200,10 +196,10 @@ export function crossCheck(
     partyRows.push({ storeCode, accountCode, partyType, partyId, v1Balance, ourBalance, delta, oneSided });
   }
 
-  const byAbsDeltaDesc = (a: { delta: Money }, b: { delta: Money }) => Number(absMoney(b.delta)) - Number(absMoney(a.delta));
+  const byAbsDeltaDesc = (a: { delta: Money }, b: { delta: Money }) => compare(absMoney(b.delta), absMoney(a.delta));
 
-  const disagreements = accountRows.filter((r) => !isZeroMoney(r.delta)).sort(byAbsDeltaDesc);
-  const partyDisagreements = partyRows.filter((r) => !isZeroMoney(r.delta)).sort(byAbsDeltaDesc);
+  const disagreements = accountRows.filter((r) => !isZero(r.delta)).sort(byAbsDeltaDesc);
+  const partyDisagreements = partyRows.filter((r) => !isZero(r.delta)).sort(byAbsDeltaDesc);
 
   return {
     includedStoreCodes: [...storeIds],

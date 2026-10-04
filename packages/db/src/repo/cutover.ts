@@ -5,9 +5,11 @@
  * click**, which is invariant 1 and the difference between a verified step and an honest tick.
  */
 import { and, eq, sql } from 'drizzle-orm';
+import type { Decimal, Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
 import { cutoverSteps, openingCounts } from '../../schema/cutover';
 import { tablesInClass } from '../cutover/classification';
+import type { SafeInsert } from './numeric-input';
 
 export const OPENING_EQUITY_CODE = '3900';
 
@@ -157,12 +159,10 @@ export async function recordStep(
 
 export async function upsertOpeningCount(
   tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    itemId: string;
-    quantity: string;
-    unitCost: string | null;
+  input: Pick<SafeInsert<typeof openingCounts>, 'orgId' | 'storeId' | 'itemId'> & {
+    // T-371 C2/R3: each numeric column takes its own minted shape — quantity (14,3), unit_cost (14,4), nullable.
+    quantity: Quantity;
+    unitCost: Decimal<'14,4'> | null;
     note: string | null;
     countedBy: string;
   },

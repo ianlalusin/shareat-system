@@ -11,6 +11,8 @@ import { attendanceDays } from '../../schema/attendance-days';
 import { employments } from '../../schema/employment';
 import { payRates, payRuns, payslips, type PayBasis, type PayRunStatus } from '../../schema/payroll';
 import { persons } from '../../schema/persons';
+import type { Decimal, Money } from '@shareat/core/money';
+import type { SafeInsert } from './numeric-input';
 
 export interface PayRateRow {
   id: string;
@@ -26,19 +28,21 @@ export interface PayRateRow {
 
 export async function insertPayRate(
   tx: Tx,
-  input: {
-    orgId: string;
-    employmentId: string;
-    basis: PayBasis;
-    amount: string;
-    effectiveFrom: string;
-    note?: string | null;
-    createdBy: string;
+  input: Pick<SafeInsert<typeof payRates>, 'orgId' | 'employmentId' | 'basis' | 'effectiveFrom' | 'note' | 'createdBy'> & {
+    amount: Money;
   },
 ): Promise<{ id: string }> {
   const [row] = await tx
     .insert(payRates)
-    .values({ ...input, note: input.note ?? null })
+    .values({
+      orgId: input.orgId,
+      employmentId: input.employmentId,
+      basis: input.basis,
+      amount: input.amount,
+      effectiveFrom: input.effectiveFrom,
+      note: input.note ?? null,
+      createdBy: input.createdBy,
+    })
     .returning({ id: payRates.id });
   return row!;
 }
@@ -203,14 +207,57 @@ export interface PayslipRow {
   journalEntryId: string | null;
 }
 
-export async function insertPayslip(
-  tx: Tx,
-  input: Omit<PayslipRow, 'id' | 'personName'> & { orgId: string },
-): Promise<{ id: string }> {
-  const { personName: _drop, ...rest } = { ...input, personName: undefined };
+/**
+ * T-371: the write side of a payslip. Every money/day figure is a branded `Decimal` of its column's shape — the caller
+ * mints it through `@shareat/core/money`; no unparsed string can reach this insert.
+ */
+export type PayslipInsert = Pick<
+  SafeInsert<typeof payslips>,
+  | 'orgId'
+  | 'runId'
+  | 'employmentId'
+  | 'personId'
+  | 'payRateId'
+  | 'minutesWorked'
+  | 'otMinutes'
+  | 'nightDiffMinutes'
+  | 'holidayMinutes'
+  | 'journalEntryId'
+> & {
+  daysWorked: Decimal<'6,2'>;
+  basicPay: Money;
+  /** NOT NULL DEFAULT 0 — omit to take the column default (R13). */
+  otPay?: Money;
+  nightDiffPay?: Money;
+  holidayPay?: Money;
+  grossPay: Money;
+  advanceRecovered?: Money;
+  netPay: Money;
+};
+
+export async function insertPayslip(tx: Tx, input: PayslipInsert): Promise<{ id: string }> {
   const [row] = await tx
     .insert(payslips)
-    .values(rest as never)
+    .values({
+      orgId: input.orgId,
+      runId: input.runId,
+      employmentId: input.employmentId,
+      personId: input.personId,
+      payRateId: input.payRateId,
+      daysWorked: input.daysWorked,
+      minutesWorked: input.minutesWorked,
+      otMinutes: input.otMinutes,
+      nightDiffMinutes: input.nightDiffMinutes,
+      holidayMinutes: input.holidayMinutes,
+      basicPay: input.basicPay,
+      otPay: input.otPay,
+      nightDiffPay: input.nightDiffPay,
+      holidayPay: input.holidayPay,
+      grossPay: input.grossPay,
+      advanceRecovered: input.advanceRecovered,
+      netPay: input.netPay,
+      journalEntryId: input.journalEntryId,
+    })
     .returning({ id: payslips.id });
   return row!;
 }

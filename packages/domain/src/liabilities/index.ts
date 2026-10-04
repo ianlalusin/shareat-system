@@ -18,6 +18,8 @@ import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { refuse } from '../shared/refusal';
+import { parseMoneyInput } from '../shared/money-input';
+import { compare, isZero, money, ZERO } from '@shareat/core/money';
 
 export const LIABILITY_CONTROL_CODE = '2500';
 
@@ -88,11 +90,11 @@ export async function chargeLiability(
       );
     }
 
-    // ⚠️ S5.5v item 5 — deliberately NOT `parseMoneyInput`: a comma/imprecise amount falls through
-    // to today's raw-string DB behaviour unchanged (measured; the followups file's O3 and comma
-    // legs pin this). Only the zero-guard's SENTENCE changes.
-    const amount = Number(input.amount);
-    if (amount <= 0) throw refuse('chargeLiability: a charge has to be greater than zero.', 'A charge has to be greater than zero.');
+    // ⭐ T-371 — parsed after `authorize()` into a (14,2) brand. A comma or a third decimal place is
+    // now refused in words instead of reaching the database (22P02) or being silently rounded
+    // (DEF-472, the followups file's O3 and comma legs). The zero-guard's sentence is unchanged.
+    const amount = parseMoneyInput(input.amount, 'chargeLiability: the amount', 'The charge amount');
+    if (compare(amount, ZERO) <= 0) throw refuse('chargeLiability: a charge has to be greater than zero.', 'A charge has to be greater than zero.');
 
     await assertChargeableAccount(trx, actor.orgId, input.againstAccountCode);
 
@@ -101,19 +103,19 @@ export async function chargeLiability(
       entryDate: input.on,
       sourceType: 'liability_charge',
       sourceId: liability.id,
-      idempotencyKey: `liability:${liability.id}:charge:${input.on}:${amount.toFixed(2)}:${input.againstAccountCode}`,
+      idempotencyKey: `liability:${liability.id}:charge:${input.on}:${amount}:${input.againstAccountCode}`,
       memo: input.memo?.trim() || `Charge — ${liability.name}`,
       postedBy: actor.personId,
       lines: [
         {
           accountCode: input.againstAccountCode,
           storeId: liability.storeId,
-          debit: input.amount,
+          debit: amount,
         },
         {
           accountCode: LIABILITY_CONTROL_CODE,
           storeId: liability.storeId,
-          credit: input.amount,
+          credit: amount,
           partyType: 'liability' as const,
           partyId: liability.id,
         },
@@ -171,17 +173,18 @@ export async function payLiability(
     // ⛔ T-366 S1 / DEF-374 — row-lock the liability before `positionOf` reads what is owed.
     await liabilitiesRepo.lockForPayment(trx, actor.orgId, liability.id);
 
-    const amount = Number(input.amount);
-    if (amount <= 0) throw refuse('payLiability: a payment has to be greater than zero.', 'A payment has to be greater than zero.');
+    const amount = parseMoneyInput(input.amount, 'payLiability: the amount', 'The payment amount');
+    if (compare(amount, ZERO) <= 0) throw refuse('payLiability: a payment has to be greater than zero.', 'A payment has to be greater than zero.');
 
-    const before = Number(
+    // R4 — the ledger's figure is re-minted, never cast; it is always a 2-place string.
+    const before = money(
       (await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id)).outstanding,
     );
     // ⛔ Overpaying would turn a liability into a receivable with nobody deciding to — the same
     // ceiling `assertWithinReceivable` puts on an owner settlement.
-    if (amount > before + 0.005) {
+    if (compare(amount, before) > 0) {
       throw new Error(
-        `payLiability: that is more than the ₱${before.toFixed(2)} still owed on this obligation.`,
+        `payLiability: that is more than the ₱${before} still owed on this obligation.`,
       );
     }
 
@@ -197,21 +200,21 @@ export async function payLiability(
       entryDate: input.on,
       sourceType: 'liability_payment',
       sourceId: liability.id,
-      idempotencyKey: `liability:${liability.id}:payment:${input.on}:${amount.toFixed(2)}`,
+      idempotencyKey: `liability:${liability.id}:payment:${input.on}:${amount}`,
       memo: input.memo?.trim() || `Payment — ${liability.name}`,
       postedBy: actor.personId,
       lines: [
         {
           accountCode: LIABILITY_CONTROL_CODE,
           storeId: liability.storeId,
-          debit: input.amount,
+          debit: amount,
           partyType: 'liability' as const,
           partyId: liability.id,
         },
         {
           accountCode: account.glAccountCode,
           storeId: liability.storeId,
-          credit: input.amount,
+          credit: amount,
           ...(account.glAccountCode === '1140'
             ? { partyType: 'money_account' as const, partyId: account.id }
             : {}),
@@ -224,7 +227,7 @@ export async function payLiability(
       entryId: result.entryId,
       outstanding: after.outstanding,
       // ⭐ Settled is the LEDGER's answer, not a column and not the form's arithmetic.
-      settled: Number(after.outstanding) <= 0.005,
+      settled: compare(money(after.outstanding), ZERO) <= 0,
       ...(warning ? { warning } : {}),
     };
   };
@@ -303,7 +306,7 @@ export async function retireLiability(
     await liabilitiesRepo.lockForPayment(trx, actor.orgId, liability.id);
 
     const position = await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id);
-    if (Math.abs(Number(position.outstanding)) > 0.005) {
+    if (!isZero(money(position.outstanding))) {
       throw new Error(
         `retireLiability: ₱${position.outstanding} is still owed on this obligation. Settle it or ` +
           `reverse the charge — retiring it would hide a real debt.`,
@@ -322,5 +325,5 @@ export function isOverdue(
   asOf: string = new Date().toISOString().slice(0, 10),
 ): boolean {
   if (!dueOn) return false;
-  return dueOn < asOf && Number(outstanding) > 0.005;
+  return dueOn < asOf && compare(money(outstanding), ZERO) > 0;
 }

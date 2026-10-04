@@ -14,6 +14,9 @@
 import { budgetsRepo, transaction, type Tx } from '@shareat/db';
 import type { ReissueInterval } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
+import { compare, ZERO } from '@shareat/core/money';
+import { parseDecimalInput } from '../shared/money-input';
+import { refuse } from '../shared/refusal';
 
 export interface SetBudgetInput {
   storeId: string;
@@ -43,9 +46,15 @@ export async function setExpenseBudget(
     if (!/^\d{6}$/.test(input.periodKey)) {
       throw new Error(`setExpenseBudget: '${input.periodKey}' is not a YYYYMM period.`);
     }
-    const amount = Number(input.amount);
-    if (!Number.isFinite(amount) || amount < 0) {
-      throw new Error('setExpenseBudget: a cap cannot be negative. Zero means "spend nothing here".');
+    // T-371 R5/R6/C4: parsed after authorize() into the column's numeric(14,2) brand. `expense_budgets.amount` is
+    // NOT NULL with no default, so a blank is refused in words — never the `Number('') === 0` cap of zero it used to
+    // become (and "1.234" is refused, not silently rounded by `toFixed(2)`).
+    const amount = parseDecimalInput(input.amount, '14,2', 'setExpenseBudget: the cap', 'The cap', { blank: 'refuse' });
+    if (compare(amount, ZERO) < 0) {
+      throw refuse(
+        'setExpenseBudget: a cap cannot be negative. Zero means "spend nothing here".',
+        'A cap cannot be negative. Zero means "spend nothing here".',
+      );
     }
     const autoReissue = input.autoReissue === true;
     const reissueInterval = input.reissueInterval ?? null;
@@ -65,7 +74,7 @@ export async function setExpenseBudget(
       storeId: input.storeId,
       categoryId: input.categoryId,
       periodKey: input.periodKey,
-      amount: amount.toFixed(2),
+      amount,
       autoReissue,
       reissueInterval,
       createdBy: actor.personId,

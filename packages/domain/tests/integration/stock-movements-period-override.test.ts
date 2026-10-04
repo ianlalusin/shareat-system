@@ -33,6 +33,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { closeDb, journalRepo, stockLedgerRepo, withOrgPrincipal, type Tx } from '@shareat/db';
+import { decimal } from '@shareat/core/money';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -105,7 +106,7 @@ function writeMovement(tx: Tx, f: Fixture) {
     locationId: f.locationId,
     itemId: f.itemId,
     movedAt: new Date('2026-02-15T00:00:00Z'),
-    quantity: '1.000',
+    quantity: decimal('1.000', '14,3'),
     kind: 'opening',
     sourceType: 'test',
     sourceId: crypto.randomUUID(),

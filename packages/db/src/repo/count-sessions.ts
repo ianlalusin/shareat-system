@@ -19,6 +19,7 @@ import { stockLocations } from '../../schema/stock-locations';
 import { stockMovements } from '../../schema/stock-ledger';
 import { stores } from '../../schema/stores';
 import type { Tx } from '../client';
+import type { Quantity } from '@shareat/core/money';
 
 export interface CountSessionRow {
   readonly id: string;
@@ -214,7 +215,7 @@ export async function upsertCountLine(
     readonly sessionId: string;
     readonly itemId: string;
     readonly locationId: string;
-    readonly countedQuantity: string;
+    readonly countedQuantity: Quantity;
     readonly countedBy: string;
   },
 ): Promise<{ id: string }> {
@@ -264,7 +265,7 @@ export async function listCountLines(tx: Tx, sessionId: string): Promise<CountLi
 export async function setCountLineResult(
   tx: Tx,
   lineId: string,
-  input: { readonly expectedQuantity: string; readonly variance: string; readonly movementId: string | null },
+  input: { readonly expectedQuantity: Quantity; readonly variance: Quantity; readonly movementId: string | null },
 ): Promise<void> {
   await tx
     .update(countLines)

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { compareQuantity, quantity, ZERO_QUANTITY } from '@shareat/domain';
 import { getCountSessionDetail, type SheetLine } from '../lib';
 import { advanceCountAction, cancelCountAction, commitCountAction, recordCountAction } from '../actions';
 import { requireSession } from '../../../../lib/session';
@@ -33,6 +34,8 @@ function when(d: Date | null): string {
 /** One row of the count sheet — its own `<form>`, per T-172's `LineCard` pattern: the phone-portrait
  *  canvas (a stockroom, held in one hand) cannot host a table cell that is also a form. */
 function SheetRow({ line, sessionId, editable }: { line: SheetLine; sessionId: string; editable: boolean }) {
+  // T-371 C4: the variance's sign in scaled bigint on the minted (14,3) value, never `Number(...) < 0`.
+  const varianceSign = line.variance !== null ? compareQuantity(quantity(line.variance), ZERO_QUANTITY) : 0;
   return (
     <tr className="border-b border-neutral-200 align-top dark:border-neutral-800">
       <td className="py-2 pr-4">
@@ -69,7 +72,7 @@ function SheetRow({ line, sessionId, editable }: { line: SheetLine; sessionId: s
       <td className="py-2 pr-4 tabular-nums">{line.expectedQuantity ?? '—'}</td>
       <td className="py-2 pr-4 tabular-nums">
         {line.variance !== null ? (
-          <span className={Number(line.variance) < 0 ? 'text-red-700 dark:text-red-400' : Number(line.variance) > 0 ? 'text-green-700 dark:text-green-400' : ''}>
+          <span className={varianceSign === -1 ? 'text-red-700 dark:text-red-400' : varianceSign === 1 ? 'text-green-700 dark:text-green-400' : ''}>
             {line.variance}
           </span>
         ) : (

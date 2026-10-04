@@ -18,6 +18,7 @@
  * would show a float in someone's hands before anyone handed it over.
  */
 import { authorize, type Actor } from '@shareat/auth';
+import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
 import { cashRequestsRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
@@ -52,7 +53,7 @@ export async function createCashRequest(
     const purpose = input.purpose.trim();
     if (!purpose) throw new Error('createCashRequest: say what the money is for.');
     const amount = parseMoneyInput(input.amount, 'createCashRequest: the amount', 'The amount requested');
-    if (Number(amount) <= 0) {
+    if (compare(amount, ZERO) <= 0) {
       throw refuse('createCashRequest: the amount has to be greater than zero.', 'The amount requested has to be greater than zero.');
     }
     return cashRequestsRepo.insertRequest(trx, {
@@ -108,7 +109,7 @@ export async function decideCashRequest(
     }
 
     const approvedAmount = parseMoneyInput(input.amount, 'decideCashRequest: the approved amount', 'The approved amount');
-    if (Number(approvedAmount) <= 0) {
+    if (compare(approvedAmount, ZERO) <= 0) {
       throw refuse('decideCashRequest: an approved amount has to be greater than zero.', 'The approved amount has to be greater than zero.');
     }
     // ⚠️ Approving MORE than was asked for is allowed and is not an error — a manager may know the
@@ -186,12 +187,13 @@ export async function releaseCashRequest(
       );
     }
     const amount = parseMoneyInput(input.amount, 'releaseCashRequest: the amount', 'The amount released');
-    if (Number(amount) <= 0) {
+    if (compare(amount, ZERO) <= 0) {
       throw refuse('releaseCashRequest: the amount released has to be greater than zero.', 'The amount released has to be greater than zero.');
     }
     // ⛔ The approval is the authority for the amount. Releasing more would make the approval
     // decorative.
-    if (Number(amount) > Number(req.approvedAmount ?? 0)) {
+    // T-371 R4: the stored approval is re-minted, never trusted as a bare string, before it is compared.
+    if (compare(amount, req.approvedAmount == null ? ZERO : money(req.approvedAmount)) > 0) {
       throw new Error(
         `releaseCashRequest: ${amount} is more than the ${req.approvedAmount} approved.`,
       );
@@ -228,7 +230,7 @@ export async function releaseCashRequest(
       trx,
       actor.orgId,
       account,
-      Number(amount),
+      amount,
       'releaseCashRequest',
     );
 
@@ -313,35 +315,40 @@ export async function settleCashRequest(
     }
 
     const before = await cashRequestsRepo.floatPositionOf(trx, actor.orgId, req.id);
-    const returned =
+    // T-371: both figures stay branded Money end to end; an absent one is ZERO (it is not a column value — nothing is
+    // written for it, its leg is simply not posted).
+    const returned: Money =
       input.returnedAmount === undefined
-        ? 0
-        : Number(parseMoneyInput(input.returnedAmount, 'settleCashRequest: the returned amount', 'The returned amount'));
-    const short =
+        ? ZERO
+        : parseMoneyInput(input.returnedAmount, 'settleCashRequest: the returned amount', 'The returned amount');
+    const short: Money =
       input.shortAmount === undefined
-        ? 0
-        : Number(parseMoneyInput(input.shortAmount, 'settleCashRequest: the short amount', 'The short amount'));
+        ? ZERO
+        : parseMoneyInput(input.shortAmount, 'settleCashRequest: the short amount', 'The short amount');
+    const held = money(before.outstanding);
     // T-343 S5.5s / DEF-470 item 6 — before "nothing to settle": a lone negative return used to read
     // as "nothing to settle", the wrong reason (an order bug, not a missing check).
-    if (returned < 0 || short < 0) {
+    if (compare(returned, ZERO) < 0 || compare(short, ZERO) < 0) {
       throw refuse(
         'settleCashRequest: a returned or short amount cannot be negative.',
         'A returned or short amount cannot be negative.',
       );
     }
-    if (returned <= 0 && short <= 0) {
+    if (compare(returned, ZERO) <= 0 && compare(short, ZERO) <= 0) {
       throw new Error('settleCashRequest: nothing to settle — give a return, a shortage, or both.');
     }
     // ⛔ You cannot account for more than is still held. The rest was spent, and spending is an
     // expense, not a settlement.
-    if (returned + short > Number(before.outstanding) + 0.005) {
+    // Both sides are (14,2), so the old half-centavo tolerance is exact equality in centavos.
+    const accounted = add(returned, short);
+    if (compare(accounted, held) > 0) {
       throw new Error(
-        `settleCashRequest: ${(returned + short).toFixed(2)} is more than the ` +
+        `settleCashRequest: ${accounted} is more than the ` +
           `${before.outstanding} still held. Anything spent is recorded as an expense against ` +
           'this request, not settled here.',
       );
     }
-    if (short > 0 && !input.shortReason?.trim()) {
+    if (compare(short, ZERO) > 0 && !input.shortReason?.trim()) {
       throw new Error('settleCashRequest: a shortage needs a reason.');
     }
 
@@ -355,7 +362,7 @@ export async function settleCashRequest(
     // they can happen on different days. One entry each also means either can be reversed alone.
     const entryIds: string[] = [];
 
-    if (returned > 0) {
+    if (compare(returned, ZERO) > 0) {
       if (!input.toMoneyAccountId) {
         throw new Error('settleCashRequest: say which account the money came back into.');
       }
@@ -367,14 +374,14 @@ export async function settleCashRequest(
         entryDate: input.on,
         sourceType: 'cash_request_return',
         sourceId: req.id,
-        idempotencyKey: `cash-request:${req.id}:return:${input.on}:${returned.toFixed(2)}`,
+        idempotencyKey: `cash-request:${req.id}:return:${input.on}:${returned}`,
         memo: `Cash request returned — ${req.purpose}`,
         postedBy: actor.personId,
         lines: [
           {
             accountCode: account.glAccountCode,
             storeId: req.storeId,
-            debit: returned.toFixed(2),
+            debit: returned,
             ...(account.glAccountCode === '1140'
               ? { partyType: 'money_account' as const, partyId: account.id }
               : {}),
@@ -382,7 +389,7 @@ export async function settleCashRequest(
           {
             accountCode: STAFF_FLOAT_CODE,
             storeId: req.storeId,
-            credit: returned.toFixed(2),
+            credit: returned,
             partyType: 'cash_request' as const,
             partyId: req.id,
           },
@@ -391,13 +398,13 @@ export async function settleCashRequest(
       entryIds.push(r.entryId);
     }
 
-    if (short > 0) {
+    if (compare(short, ZERO) > 0) {
       const r = await postEntry(trx, {
         orgId: actor.orgId,
         entryDate: input.on,
         sourceType: 'cash_request_shortage',
         sourceId: req.id,
-        idempotencyKey: `cash-request:${req.id}:shortage:${input.on}:${short.toFixed(2)}`,
+        idempotencyKey: `cash-request:${req.id}:shortage:${input.on}:${short}`,
         memo: `Cash request shortage — ${req.purpose}`,
         postedBy: actor.personId,
         lines: [
@@ -407,7 +414,7 @@ export async function settleCashRequest(
           {
             accountCode: STAFF_ADVANCE_CODE,
             storeId: req.storeId,
-            debit: short.toFixed(2),
+            debit: short,
             partyType: 'employee' as const,
             partyId: req.requestedFor,
             lineMemo: input.shortReason?.trim(),
@@ -415,7 +422,7 @@ export async function settleCashRequest(
           {
             accountCode: STAFF_FLOAT_CODE,
             storeId: req.storeId,
-            credit: short.toFixed(2),
+            credit: short,
             partyType: 'cash_request' as const,
             partyId: req.id,
           },
@@ -427,7 +434,7 @@ export async function settleCashRequest(
     const after = await cashRequestsRepo.floatPositionOf(trx, actor.orgId, req.id);
     // ⭐ Zero closes it, and zero is the LEDGER's answer — the four postings net to nothing when the
     // request is done, which is the whole shape of a float.
-    const liquidated = Number(after.outstanding) <= 0.005;
+    const liquidated = compare(money(after.outstanding), ZERO) <= 0;
     if (liquidated) {
       await cashRequestsRepo.update(trx, actor.orgId, req.id, { status: 'liquidated' });
     }

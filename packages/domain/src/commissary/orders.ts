@@ -45,6 +45,7 @@ import {
   type TradeOrderLineRow,
   type TradeOrderRow,
 } from '@shareat/db';
+import { decimal, money, ZERO, type Money } from '@shareat/core/money';
 import { branchPriceFor } from '../items';
 import { lineCost } from '../stock/layers';
 import { isPositiveQuantity, quantity, type Quantity } from '../stock/quantity';
@@ -152,7 +153,7 @@ export function parseQuantity(raw: string, what: string): Quantity {
  * so `lineCost` multiplies the SAME figure the row keeps and `line_total` can never disagree with
  * `rate × quantity` by a rounding hair.
  */
-export function normaliseRate(raw: string, what: string): string {
+export function normaliseRate(raw: string, what: string): Money {
   const trimmed = raw.trim();
   if (!/^\d+(\.\d{1,4})?$/.test(trimmed)) {
     throw new Error(`${what}: "${raw}" is not a rate (a non-negative amount, up to four decimals).`);
@@ -160,11 +161,12 @@ export function normaliseRate(raw: string, what: string): string {
   const [whole, frac = ''] = trimmed.split('.');
   const tenThousandths = BigInt(whole!) * 10_000n + BigInt(frac.padEnd(4, '0'));
   const centavos = (tenThousandths + 50n) / 100n;
-  return `${centavos / 100n}.${(centavos % 100n).toString().padStart(2, '0')}`;
+  // ⭐ T-371 R2: the result is a `numeric(14,2)` figure, so it comes out of the one mint.
+  return decimal(`${centavos / 100n}.${(centavos % 100n).toString().padStart(2, '0')}`, '14,2');
 }
 
 export interface ResolvedRate {
-  rate: string;
+  rate: Money;
   /** Which tier answered — T-171 §5. The margin rule is T-151's and is not re-implemented here. */
   from: 'branch_price' | 'manual_cost';
 }
@@ -302,7 +304,7 @@ async function buildBranchLine(
   const qty = parseQuantity(draft.quantity, item.name);
   if (!isPositiveQuantity(qty)) throw new Error(`${item.name}: a quantity must be more than zero.`);
 
-  let rate: string;
+  let rate: Money;
   if (draft.rate != null && draft.rate.trim() !== '') {
     rate = normaliseRate(draft.rate, item.name);
   } else {
@@ -464,7 +466,7 @@ export async function updateBranchOrderLine(
 
     const qty = parseQuantity(input.quantity, 'quantity');
     if (!isPositiveQuantity(qty)) throw new Error('updateBranchOrderLine: a quantity must be more than zero — remove the line instead.');
-    const rate = input.rate != null && input.rate.trim() !== '' ? normaliseRate(input.rate, 'rate') : line.rate;
+    const rate = input.rate != null && input.rate.trim() !== '' ? normaliseRate(input.rate, 'rate') : money(line.rate);
 
     await tradeRepo.updateLine(trx, actor.orgId, line.id, {
       quantity: qty,
@@ -608,7 +610,7 @@ export async function decideProposedLine(
       await tradeRepo.updateLine(trx, actor.orgId, line.id, {
         approval: 'rejected',
         fulfilledQuantity: quantity('0'),
-        lineTotal: '0.00',
+        lineTotal: ZERO,
       });
       await noteOnThread(trx, actor.orgId, order.id, actor.personId, `Declined the commissary's proposed ${name}.`);
     }

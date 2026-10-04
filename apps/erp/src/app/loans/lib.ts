@@ -7,7 +7,7 @@
  */
 import { loansRepo, moneyAccountsRepo, type LoanPosition, type LoanRow } from '@shareat/db';
 import { accruedInterest, scheduledInstalment } from '@shareat/domain';
-import { money } from '@shareat/core/money';
+import { compare, money, ZERO as NO_MONEY } from '@shareat/core/money';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
@@ -67,7 +67,7 @@ export async function getDetail(orgId: string, id: string): Promise<LoanDetail |
 
     const today = new Date().toISOString().slice(0, 10);
     const accruedNow =
-      Number(position.outstanding) > 0
+      compare(money(position.outstanding), NO_MONEY) > 0
         ? accruedInterest({
             outstanding: money(position.outstanding),
             principal: money(loan.principalAmount),

@@ -20,10 +20,10 @@
  * is exactly v1's shape: two posters read the same remaining quantities and both commit. The lock
  * is what makes the plan still true by the time it is applied.
  */
-import type { Money } from '@shareat/core/money';
+import { decimal, money, type Money } from '@shareat/core/money';
 import { stockLayersRepo, stockLedgerRepo, type Tx } from '@shareat/db';
 import { planConsumption, planReversal, type ConsumedLine, type CostLayer } from './layers';
-import { quantity, type Quantity } from './quantity';
+import { fromThousandths, quantity, toThousandths, type Quantity } from './quantity';
 import type { StockMovementKind } from '@shareat/db/schema';
 
 export interface ConsumeInput {
@@ -63,7 +63,7 @@ export async function consume(tx: Tx, input: ConsumeInput): Promise<ConsumeOutco
     id: l.id,
     receivedAt: l.receivedAt,
     remainingQuantity: quantity(l.remainingQuantity),
-    unitCost: l.unitCost,
+    unitCost: decimal(l.unitCost, '14,4'), // T-371 R4: re-minted at the column's shape before it is re-written
   }));
 
   // 2. Plan — pure, and separately unit-tested without a database.
@@ -92,7 +92,7 @@ export async function consume(tx: Tx, input: ConsumeInput): Promise<ConsumeOutco
       layerId: line.layerId,
       movementId: movement.id,
       quantity: line.quantity,
-      unitCost: line.unitCost,
+      unitCost: decimal(line.unitCost, '14,4'),
       cost: line.cost,
     });
   }
@@ -128,8 +128,8 @@ export async function reverseConsumption(
   const consumed: ConsumedLine[] = outstanding.map((c) => ({
     layerId: c.layerId,
     quantity: quantity(c.quantity),
-    unitCost: c.unitCost,
-    cost: c.cost as Money,
+    unitCost: decimal(c.unitCost, '14,4'),
+    cost: money(c.cost), // T-371 R4: a database value is re-minted, never cast
   }));
 
   const plan = planReversal(consumed, input.quantity);
@@ -159,6 +159,7 @@ export async function reverseConsumption(
   return { ok: true, movementId: movement.id, lines: plan.lines, totalCost: plan.totalCost };
 }
 
+/** T-371 G3: negated in scaled bigint and minted by the one mint, never a string flip cast to the brand. */
 function negate(q: Quantity): Quantity {
-  return (q.startsWith('-') ? q.slice(1) : `-${q}`) as Quantity;
+  return fromThousandths(-toThousandths(q));
 }

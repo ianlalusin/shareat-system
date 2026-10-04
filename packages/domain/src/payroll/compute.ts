@@ -7,7 +7,7 @@
  * ⚠️ **Every peso goes through `@shareat/core/money`**, which is exact bigint centavo arithmetic
  * with round-half-up. Bible §6 bans floats for money, and a payslip is the last place to start.
  */
-import { ZERO, add, compare, money, multiply, type Money } from '@shareat/core/money';
+import { ZERO, add, compare, compareDecimal, decimal, money, multiply, type Money } from '@shareat/core/money';
 
 /**
  * ⭐ **Minutes become hours on a HALF-HOUR LADDER, rounded at 25 and 50.**
@@ -155,7 +155,11 @@ function unitsFor(day: DayInput): number {
  * normal shift, so they pay the full multiplier.
  */
 export function computePay(days: DayInput[], m: Multipliers): ComputedPay {
-  const required = Number(m.requiredHoursPerShift);
+  // T-371 C4 — `required_hours_per_shift` is numeric(4,2). Minted at that shape so a malformed value throws here instead
+  // of becoming NaN, and the "misconfigured shift" guard below orders it in scaled bigint, not as a float.
+  const requiredHours = decimal(m.requiredHoursPerShift, '4,2');
+  const shiftIsMisconfigured = compareDecimal(requiredHours, decimal('0', '4,2')) <= 0;
+  const required = Number(requiredHours);
   const otMult = Number(m.overtimeMultiplier);
   const ndMult = Number(m.nightDiffMultiplier);
 
@@ -188,7 +192,7 @@ export function computePay(days: DayInput[], m: Multipliers): ComputedPay {
     // ⭐ FIXED-mode overtime is exempt from that guard, and deliberately: a flat peso amount per
     // hour never divides by the shift length, so a misconfigured `requiredHoursPerShift` has no
     // way to corrupt it and there is no reason to withhold it.
-    if (required <= 0) {
+    if (shiftIsMisconfigured) {
       if (m.overtimeMode === 'fixed') {
         const flatHours = steppedHours(day.otMinutes);
         if (flatHours > 0) {

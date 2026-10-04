@@ -33,7 +33,7 @@ import {
   type PrepaidCategory,
   type Tx,
 } from '@shareat/db';
-import { money, subtract, type Money } from '@shareat/core/money';
+import { compare, isZero, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { buildStraightLine, periodsThroughOf, type SchedulePeriod } from '../shared/straight-line';
@@ -118,7 +118,8 @@ async function runCreate(
   // "Failed to save prepaid item."
   const policy = await readPolicyOrRefuse(tx, actor.orgId);
   const cost = parseMoneyInput(input.totalCost, 'createPrepaidItem: the total cost', 'The total cost');
-  if (Number(cost) < Number(policy.threshold)) {
+  // T-371 C4 — scaled-bigint ordering on branded values; the policy figure is a stored value, re-minted (R4).
+  if (compare(cost, money(policy.threshold)) < 0) {
     throw new Error(
       `createPrepaidItem: total cost ${cost} is below the capitalisation threshold ` +
         `(${policy.threshold}). File it as an immediate expense instead — spreading something this ` +
@@ -390,7 +391,7 @@ export async function writeOffPrepaidItem(
   tx: Tx | null,
   actor: Actor,
   input: WriteOffInput,
-): Promise<{ entryId: string; expensed: string; refunded: string }> {
+): Promise<{ entryId: string; expensed: Money; refunded: Money }> {
   if (tx) return runWriteOff(tx, actor, input);
   return transaction((trx) => runWriteOff(trx, actor, input));
 }
@@ -399,7 +400,7 @@ async function runWriteOff(
   tx: Tx,
   actor: Actor,
   input: WriteOffInput,
-): Promise<{ entryId: string; expensed: string; refunded: string }> {
+): Promise<{ entryId: string; expensed: Money; refunded: Money }> {
   await authorize(tx, actor, 'manage_prepaid_items', {});
 
   const reason = input.reason.trim();
@@ -417,7 +418,7 @@ async function runWriteOff(
   // `remaining` column to trust or repair.
   const amortised = await prepaidRepo.amortisedFromLedger(tx, actor.orgId, item.id);
   const remaining: Money = subtract(money(item.totalCost), money(amortised));
-  if (Number(remaining) <= 0) {
+  if (compare(remaining, ZERO) <= 0) {
     throw new Error(
       `writeOffPrepaidItem: ${item.name} has nothing left to write off — it is fully released.`,
     );
@@ -425,24 +426,29 @@ async function runWriteOff(
 
   // DEF-272: was a raw `money()` call — well-formed already, but its TypeError is a developer
   // message, not a written sentence. `parseMoneyInput` is the shared entry point that fixes that.
-  const refunded = parseMoneyInput(input.refundAmount ?? '0', 'writeOffPrepaidItem: the refund amount', 'The refund amount');
+  // T-371 R6 — an omitted refund is no refund (`ZERO`), not a typed '0' run through the parser; a typed value is parsed
+  // exactly as before, and a blank string is still refused as an invalid amount.
+  const refunded: Money =
+    input.refundAmount === undefined
+      ? ZERO
+      : parseMoneyInput(input.refundAmount, 'writeOffPrepaidItem: the refund amount', 'The refund amount');
   // T-343 S5.5p / DEF-460 — these three arms were plain, developer-worded `Error`s. The app-layer
   // gate above used to keep the negative and no-account cases unreachable (it only ever forwarded a
   // refund that already passed `Number(x) > 0`); fixing that gate exposes them for real, and the
   // exceeds-remaining arm was already reachable. Raw text stays byte-identical; only `userMessage`
   // is added (Invariant 1).
-  if (Number(refunded) < 0) {
+  if (compare(refunded, ZERO) < 0) {
     throw refuse('writeOffPrepaidItem: a refund cannot be negative.', 'The refund amount cannot be negative.');
   }
   // Invariant 6 — write-off plus refund can never exceed what is left.
-  if (Number(refunded) > Number(remaining)) {
+  if (compare(refunded, remaining) > 0) {
     throw refuse(
       `writeOffPrepaidItem: the refund ${refunded} is more than the ${remaining} still unused. ` +
         'Money coming back beyond what was prepaid is income, not a refund.',
       `The refund can't be more than what's left on this item. ₱${remaining} remains.`,
     );
   }
-  if (Number(refunded) > 0 && !input.refundAccountCode) {
+  if (compare(refunded, ZERO) > 0 && !input.refundAccountCode) {
     throw refuse(
       'writeOffPrepaidItem: a refund has to say which account it landed in.',
       'Say which account the refund landed in.',
@@ -452,7 +458,7 @@ async function runWriteOff(
   // zero) refund is a picker left open, not "no refund" — the app layer now forwards the account
   // even when the amount box is blank, so this refuses rather than silently expensing the whole
   // balance with the picked account discarded.
-  if (Number(refunded) === 0 && input.refundAccountCode) {
+  if (isZero(refunded) && input.refundAccountCode) {
     throw refuse(
       'writeOffPrepaidItem: a refund account was picked but the refund amount is blank or zero.',
       'Enter the refund amount, or clear the refund account.',
@@ -463,10 +469,10 @@ async function runWriteOff(
 
   const lines = [
     // ⚠️ The unrecovered part is the ONLY thing that reaches the P&L.
-    ...(Number(expensed) > 0
+    ...(compare(expensed, ZERO) > 0
       ? [{ accountCode: AMORTISATION_EXPENSE_CODE, storeId: item.storeId, debit: expensed }]
       : []),
-    ...(Number(refunded) > 0
+    ...(compare(refunded, ZERO) > 0
       ? [{ accountCode: input.refundAccountCode!, storeId: item.storeId, debit: refunded }]
       : []),
     { accountCode: PREPAID_ACCOUNT_CODE, storeId: item.storeId, credit: remaining },
@@ -490,7 +496,7 @@ async function runWriteOff(
     writtenOffBy: actor.personId,
   });
 
-  return { entryId: result.entryId, expensed: String(expensed), refunded: String(refunded) };
+  return { entryId: result.entryId, expensed, refunded };
 }
 
 /**

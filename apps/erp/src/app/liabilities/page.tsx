@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { add, compare, money, ZERO } from '@shareat/core/money';
 import { LIABILITY_CATEGORIES } from '@shareat/db/schema';
 import { requirePageAccess } from '../../lib/page-access';
 import { createLiabilityAction } from './actions';
@@ -29,7 +30,7 @@ export default async function LiabilitiesPage({
   // ⭐ Overdue first. v1 has no due date at all, so it can show what is owed and never what is late
   // — the question people open this screen to ask.
   const overdue = rows.filter((r) => r.overdue);
-  const owed = rows.reduce((sum, r) => sum + Number(r.position.outstanding), 0);
+  const owed = add(ZERO, ...rows.map((r) => money(r.position.outstanding)));
 
   return (
     <Page density="table">
@@ -94,7 +95,7 @@ export default async function LiabilitiesPage({
                 <tr
                   key={r.id}
                   className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
-                    Number(r.position.outstanding) > 0 ? '' : 'opacity-60'
+                    compare(money(r.position.outstanding), ZERO) > 0 ? '' : 'opacity-60'
                   }`}
                 >
                   <td className="px-3 py-2">

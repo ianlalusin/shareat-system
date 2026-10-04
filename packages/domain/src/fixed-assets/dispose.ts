@@ -116,7 +116,7 @@ async function runDispose(
     lines.push({
       accountCode: ACCUMULATED_DEPRECIATION_CODE,
       storeId: asset.storeId,
-      debit: String(cappedAccumulated),
+      debit: cappedAccumulated,
       credit: '0',
       lineMemo: `Accumulated depreciation cleared — ${asset.name}`,
     });
@@ -125,7 +125,7 @@ async function runDispose(
     lines.push({
       accountCode: LOSS_ON_DISPOSAL_CODE,
       storeId: asset.storeId,
-      debit: String(bookValue),
+      debit: bookValue,
       credit: '0',
       lineMemo: `Remaining book value written off — ${asset.name}`,
     });
@@ -134,7 +134,7 @@ async function runDispose(
     accountCode: ASSET_COST_CODE,
     storeId: asset.storeId,
     debit: '0',
-    credit: String(cost),
+    credit: cost,
     lineMemo: `Cost removed — ${asset.name}`,
   });
 

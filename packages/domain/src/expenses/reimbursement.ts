@@ -16,7 +16,7 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { advisoryLocksRepo, expensesRepo, journalRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
-import { equals, money } from '@shareat/core/money';
+import { compare, equals, money, ZERO } from '@shareat/core/money';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
@@ -78,7 +78,8 @@ export async function payReimbursement(
     }
 
     const amount = parseMoneyInput(input.amount, 'payReimbursement: the amount', 'The reimbursement amount');
-    if (Number(amount) <= 0) {
+    // T-371 (C4): judged on the parsed brand, exactly — `Number(…) <= 0` read a NaN as "not zero or less".
+    if (compare(amount, ZERO) <= 0) {
       throw refuse('payReimbursement: the amount has to be greater than zero.', 'The amount has to be greater than zero.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
@@ -163,13 +164,16 @@ export async function payReimbursement(
 
     // N2: the cap is what is owed AT the store the debit lands on, not the organisation's total.
     const position = await expensesRepo.reimbursablePayableOf(trx, actor.orgId, input.employeeId, input.storeId);
-    if (Number(position.outstanding) <= 0) {
+    // T-371 (R4, C4): the derived balance is re-minted and judged exactly. Both sides are (14,2), so the old `+ 0.005`
+    // float tolerance is an exact `compare` now; a NaN can no longer read as "nothing owed" or "within the cap".
+    const outstanding = money(position.outstanding);
+    if (compare(outstanding, ZERO) <= 0) {
       throw refuse(
         'payReimbursement: this employee has nothing outstanding on 2130 at this store.',
         'This employee has no unpaid reimbursement at this store.',
       );
     }
-    if (Number(amount) > Number(position.outstanding) + 0.005) {
+    if (compare(amount, outstanding) > 0) {
       throw refuse(
         `payReimbursement: ${amount} is more than the ${position.outstanding} owed. There is ` +
           'no account for a reimbursement overpayment to land in — check the amount.',
@@ -181,7 +185,7 @@ export async function payReimbursement(
       trx,
       actor.orgId,
       account,
-      Number(amount),
+      amount,
       'payReimbursement',
     );
 

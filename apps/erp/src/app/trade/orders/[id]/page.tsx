@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SHORTAGE_REASONS } from '@shareat/db/schema';
+import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../../../lib/session';
 import { dispatchOrderAction, receiveOrderAction, voidOrderAction } from '../actions';
 import { STATUS_LABEL, orderDetail, peso, today } from '../lib';
@@ -53,8 +54,9 @@ export default async function TradeOrderPage({
   // built (T-165) — the domain refuses it, so the button is not offered. A received SALE may
   // still be voided: AR unwinds the charge and the stock comes back.
   const canVoid = order.status !== 'void' && !(order.status === 'received' && isInternal);
-  const goods = lines.reduce((n, l) => n + Number(l.lineTotal), 0);
-  const fees = Number(order.deliveryFee) + Number(order.otherFees);
+  // T-371 C4 — stored figures re-minted and summed/compared in scaled bigint, never as floats.
+  const goods = add(...lines.map((l) => money(l.lineTotal)));
+  const fees = add(money(order.deliveryFee), money(order.otherFees));
 
   return (
     <Page density="table">
@@ -157,11 +159,11 @@ export default async function TradeOrderPage({
             <tfoot>
               <tr className="border-t border-neutral-200 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
                 <td className="px-3 py-2" colSpan={3}>
-                  Goods {peso(goods.toFixed(2))}
-                  {fees > 0 && (
+                  Goods {peso(goods)}
+                  {compare(fees, ZERO) > 0 && (
                     <>
                       {' '}+ freight {peso(order.deliveryFee)}
-                      {Number(order.otherFees) > 0 && <> + other {peso(order.otherFees)}</>}
+                      {compare(money(order.otherFees), ZERO) > 0 && <> + other {peso(order.otherFees)}</>}
                       {' '}<span className="text-neutral-400">(on top of the goods, never into an item&rsquo;s cost)</span>
                     </>
                   )}

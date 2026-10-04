@@ -12,6 +12,8 @@ import {
   type RecurringStatus,
 } from '../../schema/recurring-expenses';
 import { recurringExpenseDrafts } from '../../schema/recurring-expense-drafts';
+import type { Money } from '@shareat/core/money';
+import type { SafeInsert, SafeUpdate } from './numeric-input';
 
 export interface RecurringExpenseRow {
   id: string;
@@ -77,23 +79,19 @@ export async function listDue(tx: Tx, orgId: string, onOrBefore: string): Promis
   return rows as RecurringExpenseRow[];
 }
 
-export async function insertTemplate(
-  tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    name: string;
-    categoryId: string;
-    supplierId: string | null;
-    defaultAmount: string;
-    defaultMoneyAccountId: string | null;
-    tillIsDeliberate: boolean;
-    interval: RecurringInterval;
-    anchorDay: number;
-    nextDueDate: string;
-    createdBy: string;
-  },
-): Promise<{ id: string }> {
+/** T-371 C2 — `defaultAmount` is a `Money` brand minted by `decimal()`/`money()`, never a raw string. */
+export type InsertTemplateInput = Pick<
+  SafeInsert<typeof recurringExpenses>,
+  'orgId' | 'storeId' | 'name' | 'categoryId' | 'interval' | 'anchorDay' | 'nextDueDate'
+> & {
+  supplierId: string | null;
+  defaultAmount: Money;
+  defaultMoneyAccountId: string | null;
+  tillIsDeliberate: boolean;
+  createdBy: string;
+};
+
+export async function insertTemplate(tx: Tx, input: InsertTemplateInput): Promise<{ id: string }> {
   const [row] = await tx.insert(recurringExpenses).values(input).returning({ id: recurringExpenses.id });
   return row!;
 }
@@ -102,18 +100,18 @@ export async function updateTemplate(
   tx: Tx,
   orgId: string,
   id: string,
-  values: Partial<{
-    name: string;
-    categoryId: string;
-    supplierId: string | null;
-    defaultAmount: string;
-    defaultMoneyAccountId: string | null;
-    tillIsDeliberate: boolean;
-    interval: RecurringInterval;
-    anchorDay: number;
-    nextDueDate: string;
-    status: RecurringStatus;
-  }>,
+  values: Pick<
+    SafeUpdate<typeof recurringExpenses>,
+    | 'name'
+    | 'categoryId'
+    | 'supplierId'
+    | 'defaultMoneyAccountId'
+    | 'tillIsDeliberate'
+    | 'interval'
+    | 'anchorDay'
+    | 'nextDueDate'
+    | 'status'
+  > & { defaultAmount?: Money },
 ): Promise<void> {
   await tx
     .update(recurringExpenses)

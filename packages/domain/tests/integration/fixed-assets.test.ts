@@ -949,8 +949,8 @@ describe('the capitalisation threshold (bible row 141)', () => {
     await asPerson(f.orgId, (tx) =>
       fixedAssetsRepo.upsertPolicy(tx, {
         orgId: f.orgId,
-        capitalizationThreshold: '20000.00',
-        defaultSalvageValue: '0.00',
+        capitalizationThreshold: money('20000.00'),
+        defaultSalvageValue: money('0.00'),
       }),
     );
 

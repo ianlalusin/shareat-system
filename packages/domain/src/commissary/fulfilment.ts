@@ -37,6 +37,7 @@ import {
   type Tx,
 } from '@shareat/db';
 import { dispatchTradeOrder, type DispatchResult } from '../trade';
+import { money, ZERO, type Money } from '@shareat/core/money';
 import { lineCost } from '../stock/layers';
 import { isPositiveQuantity, isZeroQuantity, quantity, type Quantity } from '../stock/quantity';
 import {
@@ -84,7 +85,7 @@ export async function acceptOrder(tx: Tx | null, actor: Actor, input: { orderId:
     for (const line of await tradeRepo.linesFor(trx, actor.orgId, order.id)) {
       if (line.fulfilledQuantity !== null) continue;
       await tradeRepo.updateLine(trx, actor.orgId, line.id, {
-        fulfilledQuantity: line.requestedQuantity ?? line.quantity,
+        fulfilledQuantity: quantity(line.requestedQuantity ?? line.quantity),
       });
     }
     await tradeRepo.markAccepted(trx, actor.orgId, order.id, actor.personId);
@@ -148,13 +149,13 @@ export async function fulfilLine(tx: Tx | null, actor: Actor, input: FulfilLineI
 
     const qty: Quantity = parseQuantity(input.quantity, 'fulfilLine');
     if (qty.startsWith('-')) throw new Error('fulfilLine: a fulfilled quantity cannot be negative.');
-    const rate = input.rate != null && input.rate.trim() !== '' ? normaliseRate(input.rate, 'fulfilLine') : line.rate;
+    const rate = input.rate != null && input.rate.trim() !== '' ? normaliseRate(input.rate, 'fulfilLine') : money(line.rate);
     const sourceLocationId = await resolveSourceLocation(trx, order.storeId, input.sourceLocationId, line.sourceLocationId);
 
     await tradeRepo.updateLine(trx, actor.orgId, line.id, {
       fulfilledQuantity: qty,
       rate,
-      lineTotal: isZeroQuantity(qty) ? '0.00' : lineCost(qty, rate),
+      lineTotal: isZeroQuantity(qty) ? ZERO : lineCost(qty, rate),
       sourceLocationId,
     });
     await lowStockRepo.refreshOrderTotal(trx, order.id);
@@ -199,7 +200,7 @@ export async function proposeLine(tx: Tx | null, actor: Actor, input: ProposeLin
     const qty = parseQuantity(input.quantity, item.name);
     if (!isPositiveQuantity(qty)) throw new Error(`proposeLine: propose more than zero of ${item.name}.`);
 
-    let rate: string;
+    let rate: Money;
     if (input.rate != null && input.rate.trim() !== '') {
       rate = normaliseRate(input.rate, item.name);
     } else {
@@ -220,7 +221,7 @@ export async function proposeLine(tx: Tx | null, actor: Actor, input: ProposeLin
       replacedName = originalItem?.name ?? original.itemId;
       // "Unavailable — replacement proposed": none of the original goes. The branch's ask stays on
       // the row as the record of what it wanted.
-      await tradeRepo.updateLine(trx, actor.orgId, original.id, { fulfilledQuantity: quantity('0'), lineTotal: '0.00' });
+      await tradeRepo.updateLine(trx, actor.orgId, original.id, { fulfilledQuantity: quantity('0'), lineTotal: ZERO });
     }
 
     // The map, if any, is previewed here and captured at approval — `decideProposedLine`.

@@ -33,6 +33,7 @@ import {
   type Tx,
 } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
+import { money } from '@shareat/core/money';
 import {
   createRemittance,
   resolveRemittanceVariance,
@@ -827,7 +828,7 @@ describe('T-153 — the till float pot', () => {
           instrument: 'cash',
           custodian: 'cashier',
           glAccountCode: '1115',
-          floatTarget: '5000.00',
+          floatTarget: money('5000.00'),
         }),
       ),
     ).rejects.toThrow(/money_accounts_one_float_per_store/);
@@ -844,7 +845,7 @@ describe('T-153 — the till float pot', () => {
           instrument: 'ewallet',
           custodian: 'office',
           glAccountCode: '1140',
-          floatTarget: '5000.00',
+          floatTarget: money('5000.00'),
         }),
       ),
     ).rejects.toThrow(/money_accounts_float_target_shape_check/);

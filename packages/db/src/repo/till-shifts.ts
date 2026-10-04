@@ -13,6 +13,7 @@
  * expectation would silently rewrite a variance somebody was already charged for.
  */
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import { moneyAccounts } from '../../schema/money-accounts';
 import {
@@ -149,8 +150,8 @@ export async function recordCount(
     shiftId: string;
     moment: CountMoment;
     moneyAccountId: string;
-    counted: string;
-    expected: string;
+    counted: Money;
+    expected: Money;
     countedBy: string;
     notes?: string | null;
   },

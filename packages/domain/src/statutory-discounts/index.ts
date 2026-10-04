@@ -48,6 +48,7 @@ import {
   type StatutoryDiscountSummary,
   type Tx,
 } from '@shareat/db';
+import { parseDecimalInput } from '../shared/money-input';
 
 export interface RecordStatutoryDiscountInput {
   storeId: string;
@@ -83,6 +84,23 @@ export async function recordStatutoryDiscount(
 async function runRecord(tx: Tx, actor: Actor, input: RecordStatutoryDiscountInput): Promise<{ id: string }> {
   await authorize(tx, actor, 'record_statutory_discount', { storeId: input.storeId });
 
+  // T-371 (R5, R6) — parsed AFTER authorize(), into the column's (14,2) brand. Both columns are NOT NULL with no
+  // default, so a blank is refused with a sentence; it is never turned into '0'.
+  const grossAmount = parseDecimalInput(
+    input.grossAmount,
+    '14,2',
+    'recordStatutoryDiscount: the gross amount',
+    'The gross amount',
+    { blank: 'refuse' },
+  );
+  const discountAmount = parseDecimalInput(
+    input.discountAmount,
+    '14,2',
+    'recordStatutoryDiscount: the discount amount',
+    'The discount amount',
+    { blank: 'refuse' },
+  );
+
   return statutoryDiscountsRepo.create(tx, {
     orgId: actor.orgId,
     storeId: input.storeId,
@@ -91,8 +109,8 @@ async function runRecord(tx: Tx, actor: Actor, input: RecordStatutoryDiscountInp
     kind: input.kind,
     idNumber: input.idNumber.trim(),
     holderName: input.holderName.trim(),
-    grossAmount: input.grossAmount,
-    discountAmount: input.discountAmount,
+    grossAmount,
+    discountAmount,
     signatory: input.signatory?.trim() || null,
     // ⭐ Never accepted from the caller. Provenance is a fact about how the row was produced, and
     // this path is by definition the human one — a parameter would let a future caller claim

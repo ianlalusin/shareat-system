@@ -11,6 +11,7 @@ import {
   type CustomerReturnTreatment,
 } from '../../schema/customer-returns';
 import type { Tx } from '../client';
+import type { Money, Quantity } from '@shareat/core/money';
 
 /**
  * Mint the id the new return WILL have, before inserting it — same reason T-170's
@@ -25,10 +26,10 @@ export async function nextReturnId(tx: Tx): Promise<string> {
 export interface ReturnLineInput {
   readonly lineNo: string;
   readonly tradeOrderLineId: string;
-  readonly quantity: string;
+  readonly quantity: Quantity;
   readonly saleable: boolean;
-  readonly amount: string;
-  readonly cost: string;
+  readonly amount: Money;
+  readonly cost: Money;
   readonly itemId: string;
   readonly movementId: string;
 }

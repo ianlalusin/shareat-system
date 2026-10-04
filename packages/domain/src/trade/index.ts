@@ -37,14 +37,14 @@ import {
   type Tx,
 } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor, type Capability } from '@shareat/auth';
-import { parseMoneyInput } from '../shared/money-input';
+import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFiguresReconcile } from '../shared/reconcile';
 import { parseQuantityInput } from '../shared/quantity-input';
 import { recordCharge, voidCharge } from '../ar';
 import { branchPriceFor } from '../items';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
-import { add, money, type Money } from '@shareat/core/money';
+import { add, compare, money, toCentavos, ZERO, type Money } from '@shareat/core/money';
 import { bookedReceiptQuantity, confirmReceipt, dispatchOrder, postInternalFreight, type ReceiptLineInput } from '../commissary/transfer';
 import { consume, reverseConsumption } from '../stock/consume';
 import { postConsumption } from '../stock/consumption-posting';
@@ -120,6 +120,18 @@ const EPSILON = 0.005;
  */
 export function assertTradeTotalReconciles(stated: number, computed: number): void {
   assertFiguresReconcile('assertTradeTotalReconciles', stated, computed, EPSILON);
+}
+
+/**
+ * T-371 — a line's total, `quantity × rate`, exact in scaled bigint and rounded HALF-UP (away from zero) once, at the
+ * centavo. Deliberately UNBOUNDED: the caller passes the text to `parseMoneyInput`, which owns the column's range check
+ * and its presentable "too large" sentence.
+ */
+function lineProductText(q: Quantity, rate: Money): string {
+  const product = toThousandths(q) * toCentavos(rate); // units of 1e-5
+  const negative = product < 0n;
+  const centavos = ((negative ? -product : product) + 500n) / 1000n;
+  return `${negative && centavos !== 0n ? '-' : ''}${centavos / 100n}.${(centavos % 100n).toString().padStart(2, '0')}`;
 }
 
 export interface TradeLineDraft {
@@ -212,8 +224,8 @@ export async function createTradeOrder(
       throw new Error('createTradeOrder: an order with no lines is the lump sum this task exists to replace.');
     }
 
-    const lines: { itemId: string; quantity: string; unit: string; rate: string; lineTotal: string }[] = [];
-    let total = 0;
+    const lines: { itemId: string; quantity: Quantity; unit: string; rate: Money; lineTotal: Money }[] = [];
+    let total: Money = ZERO;
 
     for (const [i, draft] of input.lines.entries()) {
       // S7 / S5.3b R3 — `lineNo` is the operator's own VISIBLE form row, assigned by the caller
@@ -273,14 +285,15 @@ export async function createTradeOrder(
       // N's total" on whichever box the operator actually mistyped. `rate` is `numeric(14,2)`
       // (packages/db/schema/trade.ts:201), the same shape `parseMoneyInput` enforces; `quantity`
       // is `numeric(14,3)`, a different axis (`parseQuantityInput`, defined above).
+      // T-371 — both are branded by the parse and compared in scaled bigint (C4), never as floats.
       const rate = parseMoneyInput(rawRate, `createTradeOrder: line ${n}'s rate`, `Line ${n}'s rate`);
-      if (Number(rate) < 0) throw new Error(`createTradeOrder: line ${n} has a negative rate.`);
+      if (compare(rate, ZERO) < 0) throw new Error(`createTradeOrder: line ${n} has a negative rate.`);
       const parsedQuantity = parseQuantityInput(
         draft.quantity,
         `createTradeOrder: line ${n}'s quantity`,
         `Line ${n}'s quantity`,
       );
-      if (Number(parsedQuantity) <= 0) {
+      if (!isPositiveQuantity(parsedQuantity)) {
         throw new Error(`createTradeOrder: line ${n} has a quantity of ${draft.quantity}.`);
       }
 
@@ -290,33 +303,38 @@ export async function createTradeOrder(
       // needs its own finite check before `.toFixed(2)` can turn a stray `Infinity` into a string
       // Postgres would otherwise have to refuse. Do not delete this call as decoration; the two
       // guards above and this one are not redundant with each other.
+      // T-371 — the product is now exact (scaled bigint, half-up at the centavo) rather than a float `toFixed(2)`;
+      // `parseMoneyInput` still owns the range check and its "too large" sentence.
       const lineTotal = parseMoneyInput(
-        (Number(parsedQuantity) * Number(rate)).toFixed(2),
+        lineProductText(parsedQuantity, rate),
         `createTradeOrder: line ${n}'s total`,
         `Line ${n}'s total`,
       );
-      if (Number(lineTotal) <= 0) {
+      if (compare(lineTotal, ZERO) <= 0) {
         throw new Error(`createTradeOrder: line ${n} comes to zero, so it bills nothing.`);
       }
-      total += Number(lineTotal);
+      total = add(total, lineTotal);
       lines.push({
         itemId: draft.itemId,
         quantity: parsedQuantity,
         unit: draft.unit?.trim() || quoted?.unit || item.baseUnit,
-        rate: Number(rate).toFixed(2),
+        rate,
         lineTotal,
       });
     }
 
-    const deliveryFee = Number(parseMoneyInput(input.deliveryFee ?? '0', 'createTradeOrder: the delivery fee', 'The delivery fee'));
-    const otherFees = Number(parseMoneyInput(input.otherFees ?? '0', 'createTradeOrder: other fees', 'The other fees'));
-    if (deliveryFee < 0 || otherFees < 0) {
+    // T-371 R6 — a blank fee follows its column: `delivery_fee` / `other_fees` are NOT NULL DEFAULT 0, so a blank is
+    // OMITTED (undefined), never parsed as an invented '0'. The arithmetic below reads an omitted fee as the default.
+    const deliveryFee = parseDecimalInput(input.deliveryFee, '14,2', 'createTradeOrder: the delivery fee', 'The delivery fee', { blank: 'omit' });
+    const otherFees = parseDecimalInput(input.otherFees, '14,2', 'createTradeOrder: other fees', 'The other fees', { blank: 'omit' });
+    if ((deliveryFee !== undefined && compare(deliveryFee, ZERO) < 0) || (otherFees !== undefined && compare(otherFees, ZERO) < 0)) {
       throw new Error('createTradeOrder: a fee cannot be negative.');
     }
     const goodsTotal = total;
-    total += deliveryFee + otherFees;
+    const fees = add(deliveryFee ?? ZERO, otherFees ?? ZERO);
+    total = add(total, fees);
 
-    const totalAmount = total.toFixed(2);
+    const totalAmount = total;
     if (input.totalAmount != null) {
       const statedTotal = Number(parseMoneyInput(input.totalAmount, 'createTradeOrder: the total', 'The stated total'));
       // T-328 Contract §4b — delegates to the extracted, independently-testable guard. Its own
@@ -333,11 +351,11 @@ export async function createTradeOrder(
       // So re-throw anything that is not the ordinary-mismatch case unchanged, rather than
       // assuming every refusal here means the same thing.
       try {
-        assertTradeTotalReconciles(statedTotal, total);
+        assertTradeTotalReconciles(statedTotal, Number(total));
       } catch (err) {
-        if (!Number.isFinite(statedTotal) || !Number.isFinite(total)) throw err;
+        if (!Number.isFinite(statedTotal) || !Number.isFinite(Number(total))) throw err;
         throw new Error(
-          `createTradeOrder: the lines come to ₱${goodsTotal.toFixed(2)} plus ₱${(deliveryFee + otherFees).toFixed(2)} ` +
+          `createTradeOrder: the lines come to ₱${goodsTotal} plus ₱${fees} ` +
             `of fees, so ₱${totalAmount} — but the order says ₱${input.totalAmount}. One of the two is wrong.`,
         );
       }
@@ -351,8 +369,9 @@ export async function createTradeOrder(
       referenceNo: input.referenceNo?.trim() || null,
       notes: input.notes?.trim() || null,
       totalAmount,
-      deliveryFee: deliveryFee.toFixed(2),
-      otherFees: otherFees.toFixed(2),
+      // T-371 R13: a blank fee is OMITTED, so the column's own default applies.
+      deliveryFee,
+      otherFees,
       createdBy: actor.personId,
     });
     await tradeRepo.insertLines(trx, actor.orgId, orderId, lines);
@@ -630,7 +649,7 @@ export async function dispatchTradeOrder(
 
 /** `-3.500` → `3.500`. `Quantity` carries no arithmetic of its own — this is string trimming. */
 function absQuantity(q: string): Quantity {
-  return (q.startsWith('-') ? q.slice(1) : q) as Quantity;
+  return quantity(q.startsWith('-') ? q.slice(1) : q);
 }
 
 /**
@@ -930,7 +949,7 @@ export async function receiveTradeOrder(
           branchBaseUnit: branchItem.baseUnit,
           commissaryBaseUnit: item.baseUnit,
           rate: line.rate,
-          dispatchCost: line.dispatchCost as Money,
+          dispatchCost: money(line.dispatchCost),
           branchItemKind: branchItem.kind,
           shortageReason: override?.shortageReason ?? null,
         });

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { compare, money, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../../lib/page-access';
 import {
   closeMonthAction,
@@ -51,7 +52,8 @@ export default async function OwnerPage({
   ]);
   const store = stores.find((s) => s.id === owner.storeId);
   const who = persons.find((p) => p.id === owner.personId);
-  const owes = Number(owner.position.receivable);
+  // T-371 — decided on the (14,2) brand, not `Number(x) > 0`: the repo hands back a fixed two-place string, re-minted here.
+  const owes = compare(money(owner.position.receivable), ZERO) > 0;
 
   return (
     <Page density="table">
@@ -109,7 +111,7 @@ export default async function OwnerPage({
         }
       >
       {/* ── Settle what is owed ──────────────────────────────────────────────────────── */}
-      {owes > 0 && (
+      {owes && (
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <div>
             <h2 className="font-medium">Settle {peso(owner.position.receivable)}</h2>

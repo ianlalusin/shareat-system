@@ -11,6 +11,8 @@ import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { cashRequests, type CashRequestStatus } from '../../schema/cash-requests';
 import { recordGone } from './record-gone';
+import type { Money } from '@shareat/core/money';
+import type { SafeInsert, SafeUpdate } from './numeric-input';
 
 export const STAFF_FLOAT_CODE = '1120';
 export const RELEASE_SOURCE = 'cash_request_release';
@@ -38,18 +40,18 @@ export interface CashRequestRow {
   createdAt: Date;
 }
 
+/** T-371 C2 — `requestedAmount` is NOT NULL, no default: a `Money` brand minted by `money()`/`decimal()`. */
+export type InsertRequestInput = Pick<
+  SafeInsert<typeof cashRequests>,
+  'orgId' | 'storeId' | 'requestedFor' | 'purpose' | 'requestedOn' | 'createdBy'
+> & {
+  requestedAmount: Money;
+  notes: string | null;
+};
+
 export async function insertRequest(
   tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    requestedFor: string;
-    purpose: string;
-    requestedAmount: string;
-    requestedOn: string;
-    notes: string | null;
-    createdBy: string;
-  },
+  input: InsertRequestInput,
 ): Promise<{ id: string }> {
   const [row] = await tx.insert(cashRequests).values(input).returning({ id: cashRequests.id });
   return row!;
@@ -85,20 +87,20 @@ export async function listRequests(
   return rows as CashRequestRow[];
 }
 
+/** T-371 C2 — `approvedAmount` is nullable (14,2): a `Money` brand or null. */
+export type UpdateRequestValues = Pick<
+  SafeUpdate<typeof cashRequests>,
+  'approvedBy' | 'decidedOn' | 'rejectReason' | 'releasedFromMoneyAccountId' | 'releasedOn' | 'releasedBy'
+> & {
+  status?: CashRequestStatus;
+  approvedAmount?: Money | null;
+};
+
 export async function update(
   tx: Tx,
   orgId: string,
   id: string,
-  values: Partial<{
-    status: CashRequestStatus;
-    approvedAmount: string | null;
-    approvedBy: string | null;
-    decidedOn: string | null;
-    rejectReason: string | null;
-    releasedFromMoneyAccountId: string | null;
-    releasedOn: string | null;
-    releasedBy: string | null;
-  }>,
+  values: UpdateRequestValues,
 ): Promise<void> {
   const updated = await tx
     .update(cashRequests)

@@ -1,4 +1,5 @@
 import { requirePageAccess } from '../../lib/page-access';
+import { compare, money, ZERO } from '@shareat/core/money';
 import { postPayRunAction, setPayRateAction, voidPayRunAction } from './actions';
 import {
   cashAccountsFor,
@@ -293,7 +294,7 @@ export default async function PayrollPage({
                         {peso(Number(s.grossPay))}
                       </td>
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-amber-700 dark:text-amber-400">
-                        {Number(s.advanceRecovered) > 0 ? `−${peso(Number(s.advanceRecovered))}` : '—'}
+                        {compare(money(s.advanceRecovered), ZERO) > 0 ? `−${peso(Number(s.advanceRecovered))}` : '—'}
                       </td>
                       <td className="py-1.5 text-right font-mono font-medium tabular-nums">
                         {peso(Number(s.netPay))}
@@ -422,7 +423,7 @@ export default async function PayrollPage({
                     <li key={s.id}>
                       {s.personName} — {s.daysWorked} day(s), net{' '}
                       <span className="font-mono">{peso(Number(s.netPay))}</span>
-                      {Number(s.advanceRecovered) > 0 &&
+                      {compare(money(s.advanceRecovered), ZERO) > 0 &&
                         ` (advance −${peso(Number(s.advanceRecovered))})`}
                     </li>
                   ))}

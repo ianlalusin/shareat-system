@@ -6,7 +6,9 @@
  * so there is never a column for T-131 (AR) to have to remove.
  */
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert } from './numeric-input';
 import { recordGone } from './record-gone';
 import {
   customers,
@@ -236,6 +238,16 @@ export async function getPriceList(
   return row as PriceListRow | undefined;
 }
 
+/** T-371 C2 — `rate` is a `(14,2)` brand, minted by `money()`/`decimal()`; nothing else may stand in for it. */
+export type UpsertPriceListItemInput = Pick<
+  SafeInsert<typeof priceListItems>,
+  'orgId' | 'priceListId' | 'itemId'
+> & {
+  rate: Money;
+  /** The unit this LIST quotes in, when it differs from the item's base unit. */
+  unit: string | null;
+};
+
 /**
  * ⭐ Upsert on `(price_list_id, item_id)` — re-quoting an item is a NEW RATE, not a second row.
  *
@@ -245,17 +257,7 @@ export async function getPriceList(
  * now lives on the `items` row and a price list holds only the rate. There is nothing left here
  * to blank.
  */
-export async function upsertPriceListItem(
-  tx: Tx,
-  input: {
-    orgId: string;
-    priceListId: string;
-    itemId: string;
-    rate: string;
-    /** The unit this LIST quotes in, when it differs from the item's base unit. */
-    unit: string | null;
-  },
-): Promise<void> {
+export async function upsertPriceListItem(tx: Tx, input: UpsertPriceListItemInput): Promise<void> {
   await tx
     .insert(priceListItems)
     .values(input)

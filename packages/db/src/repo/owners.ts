@@ -12,8 +12,9 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 // ⛔ T-218 — Manila, never bare current_date (DEF-172).
 import { MANILA_TODAY } from './sql-time';
 // T-370 / DEF-108 — integer centavos for fifoOwnerOutstanding, never Number (bible §6).
-import { fromCentavos, money, toCentavos } from '@shareat/core/money';
+import { fromCentavos, money, toCentavos, type Decimal, type Money } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert, SafeUpdate } from './numeric-input';
 import { owners, type OwnerStatus, type PersonalExpenseTreatment } from '../../schema/owners';
 import { owner_drawing_closes } from '../../schema/owner-drawing-closes';
 import { recordGone } from './record-gone';
@@ -42,21 +43,20 @@ export interface OwnerRow {
   createdAt: Date;
 }
 
-export async function insertOwner(
-  tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    personId: string;
-    role: string | null;
-    ownershipPercentage: string | null;
-    drawingLimit: string | null;
-    drawingLimitPeriod: 'monthly' | 'total' | null;
-    personalExpenseTreatment: PersonalExpenseTreatment;
-    notes: string | null;
-    createdBy: string;
-  },
-): Promise<{ id: string }> {
+/** T-371 C2 — every numeric column is a `Decimal` brand of that column's own shape, minted by `decimal()`. */
+export type InsertOwnerInput = Pick<
+  SafeInsert<typeof owners>,
+  'orgId' | 'storeId' | 'personId' | 'createdBy'
+> & {
+  role: string | null;
+  ownershipPercentage: Decimal<'6,3'> | null;
+  drawingLimit: Money | null;
+  drawingLimitPeriod: 'monthly' | 'total' | null;
+  personalExpenseTreatment: PersonalExpenseTreatment;
+  notes: string | null;
+};
+
+export async function insertOwner(tx: Tx, input: InsertOwnerInput): Promise<{ id: string }> {
   const [row] = await tx.insert(owners).values(input).returning({ id: owners.id });
   return row!;
 }
@@ -112,19 +112,16 @@ export async function updateOwner(
   tx: Tx,
   orgId: string,
   id: string,
-  values: Partial<{
-    role: string | null;
-    /** ⚠️ T-343 S5.5s — this repo write is unvalidated; `ownershipPercentage` must already have
-     *  passed `createOwner`'s regex+range guard (`packages/domain/src/owners/index.ts`) before it
-     *  reaches here. No caller writes it today — a future one must parse first, not assume this
-     *  layer checks anything. */
-    ownershipPercentage: string | null;
-    drawingLimit: string | null;
-    drawingLimitPeriod: 'monthly' | 'total' | null;
-    personalExpenseTreatment: PersonalExpenseTreatment;
-    status: OwnerStatus;
-    notes: string | null;
-  }>,
+  values: Pick<
+    SafeUpdate<typeof owners>,
+    'role' | 'drawingLimitPeriod' | 'personalExpenseTreatment' | 'status' | 'notes'
+  > & {
+    /** ⚠️ T-343 S5.5s — `ownershipPercentage` must already have passed `createOwner`'s range guard
+     *  (`packages/domain/src/owners/index.ts`); T-371 C2 — the brand proves it went through
+     *  `decimal()`, not that it is in range. No caller writes it today. */
+    ownershipPercentage?: Decimal<'6,3'> | null;
+    drawingLimit?: Money | null;
+  },
 ): Promise<void> {
   const updated = await tx
     .update(owners)
@@ -653,22 +650,19 @@ export interface DrawingCloseRow {
   notes: string | null;
 }
 
-export async function insertClose(
-  tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    ownerId: string;
-    periodMonth: string;
-    acknowledgedAmount: string;
-    adjustmentAmount: string | null;
-    adjustmentReason: string | null;
-    adjustmentEntryId: string | null;
-    closedOn: string;
-    closedBy: string;
-    notes: string | null;
-  },
-): Promise<{ id: string }> {
+/** T-371 C2 — both amounts are `Money` (14,2), minted by `decimal()`. */
+export type InsertCloseInput = Pick<
+  SafeInsert<typeof owner_drawing_closes>,
+  'orgId' | 'storeId' | 'ownerId' | 'periodMonth' | 'closedOn' | 'closedBy'
+> & {
+  acknowledgedAmount: Money;
+  adjustmentAmount: Money | null;
+  adjustmentReason: string | null;
+  adjustmentEntryId: string | null;
+  notes: string | null;
+};
+
+export async function insertClose(tx: Tx, input: InsertCloseInput): Promise<{ id: string }> {
   const [row] = await tx
     .insert(owner_drawing_closes)
     .values(input)

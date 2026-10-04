@@ -8,7 +8,9 @@
  */
 import { and, asc, eq, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { tradeDiscrepancies, type DiscrepancyDirection } from '../../schema/trade-discrepancies';
+import type { Money, Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
+import type { SafeInsert } from './numeric-input';
 
 export interface TradeDiscrepancyRow {
   readonly id: string;
@@ -24,17 +26,16 @@ export interface TradeDiscrepancyRow {
   readonly note: string | null;
 }
 
-export interface CreateDiscrepancyInput {
-  /** T-372 S6b. Defaults to `short`, which is every row there was before an over-receipt could be raised. */
-  readonly direction?: DiscrepancyDirection;
-  readonly orgId: string;
-  readonly storeId: string;
-  readonly orderId: string;
-  readonly orderLineId: string;
-  readonly quantity: string;
-  readonly value: string;
-  readonly note?: string | null;
-}
+/** T-371 C2 — `quantity` is (14,3) and `value` is (14,2), each a brand of its own column's shape. */
+export type CreateDiscrepancyInput = Readonly<
+  Pick<SafeInsert<typeof tradeDiscrepancies>, 'orgId' | 'storeId' | 'orderId' | 'orderLineId'> & {
+    /** T-372 S6b. Defaults to `short`, which is every row there was before an over-receipt could be raised. */
+    direction?: DiscrepancyDirection;
+    quantity: Quantity;
+    value: Money;
+    note?: string | null;
+  }
+>;
 
 const COLUMNS = {
   id: tradeDiscrepancies.id,

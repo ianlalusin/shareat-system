@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { and, desc, eq, sql as dsql } from 'drizzle-orm';
 import { schema } from '@shareat/db';
-import { customerCreditBalance } from '@shareat/domain';
+import { compare, ZERO } from '@shareat/core/money';
+import { customerCreditBalance, isPositiveQuantity, quantity, subtractQuantity } from '@shareat/domain';
 import { listStores } from '../../inventory/lib';
 import { recordReturnAction, voidReturnAction } from './actions';
 import { requireSession } from '../../../lib/session';
@@ -63,13 +64,14 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
 
     const returnable = lines
       .map((l) => {
+        // T-371 R4/C4 — stored quantities re-minted and subtracted/compared in scaled bigint, never as floats.
         const basis = l.counterparty_store_id
-          ? Number(l.received_quantity ?? 0)
-          : Number(l.fulfilled_quantity ?? l.quantity);
-        const cap = (basis - Number(l.already_returned)).toFixed(3);
+          ? quantity(l.received_quantity ?? '0')
+          : quantity(l.fulfilled_quantity ?? l.quantity);
+        const cap = subtractQuantity(basis, quantity(l.already_returned));
         return { ...l, cap, isInternal: l.counterparty_store_id !== null };
       })
-      .filter((l) => Number(l.cap) > 0);
+      .filter((l) => isPositiveQuantity(l.cap));
 
     const customerRows = await tx
       .select({ id: schema.customers.id, name: schema.customers.name })
@@ -79,7 +81,7 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
     const creditByCustomer = new Map<string, string>();
     for (const c of customerRows) {
       const bal = await customerCreditBalance(tx, actor.orgId, c.id);
-      if (Number(bal) > 0) creditByCustomer.set(c.id, bal);
+      if (compare(bal, ZERO) > 0) creditByCustomer.set(c.id, bal);
     }
 
     const recentReturns = await tx

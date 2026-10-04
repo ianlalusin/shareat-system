@@ -61,6 +61,7 @@ import { seedAttendanceConfig } from '../attendance/config';
 // comment on that import). No cycle exists today between `people` and `stores/service` specifically —
 // this is the defensive default, not a fix for one measured.
 import { seedStoreAccessDefaults } from '../people/position-defaults';
+import { parseDecimalInput } from '../shared/money-input';
 
 const CAPABILITY = 'manage_stores' as const;
 
@@ -116,6 +117,16 @@ export async function createStore(
     throw new Error(`createStore: "${input.openingDate}" is not a valid date (expected YYYY-MM-DD)`);
   }
 
+  // T-371 R5/R6 — parsed after `authorize()`, before anything is written. `unremitted_ceiling` is
+  // NULLABLE, so a blank stores null (never a guessed '0'); the same labels as `setStoreCashPolicy`.
+  const unremittedCeiling = parseDecimalInput(
+    input.unremittedCeiling,
+    '14,2',
+    'createStore: the unremitted ceiling',
+    'The un-remitted ceiling',
+    { blank: 'null' },
+  );
+
   // 2. The store row. ⛔ The cash-custody pairing is NOT re-checked here — the database refuses an
   //    unbounded pile of cash on a long cadence (`stores_pooling_requires_ceiling_check`), and a
   //    TypeScript copy would be a second source of truth that drifts (bible §6.3).
@@ -126,7 +137,7 @@ export async function createStore(
     timezone: input.timezone,
     stockModel: input.stockModel,
     remittanceCadence: input.remittanceCadence,
-    unremittedCeiling: input.unremittedCeiling,
+    unremittedCeiling,
     openingDate: input.openingDate,
   });
 

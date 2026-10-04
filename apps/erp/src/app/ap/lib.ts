@@ -10,6 +10,7 @@ import {
   type SupplierRow,
 } from '@shareat/db';
 import { withOrgPrincipal, listStores } from '../expenses/lib';
+import { compare, money } from '@shareat/core/money';
 
 export { peso } from '../../lib/format';
 export { listStores, withOrgPrincipal, listCategoriesGrouped } from '../expenses/lib';
@@ -83,7 +84,8 @@ export async function listOpenInvoicesForPicker(orgId: string): Promise<InvoiceP
     const out: InvoicePickerOption[] = [];
     for (const inv of [...pending, ...verified]) {
       const capacity = await apRepo.capacityOf(tx, orgId, inv.id);
-      if (!capacity || Number(capacity.remaining) < 1) continue;
+      // T-371 (R4, C4): the room left is a database figure, re-minted and ordered exactly — a NaN no longer reads as room.
+      if (!capacity || compare(money(capacity.remaining), money('1')) < 0) continue;
       out.push({
         id: inv.id,
         supplierId: inv.supplierId,

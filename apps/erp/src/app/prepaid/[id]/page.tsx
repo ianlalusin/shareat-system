@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { compare, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../../lib/page-access';
 import {
   amortiseAction,
@@ -243,7 +244,7 @@ export default async function PrepaidItemPage({
       </section>
 
       {/* ── Early termination ────────────────────────────────────────────────────────── */}
-      {active && Number(item.remaining) > 0 && (
+      {active && compare(item.remaining, ZERO) > 0 && (
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <div>
             <h2 className="font-medium">End it early</h2>

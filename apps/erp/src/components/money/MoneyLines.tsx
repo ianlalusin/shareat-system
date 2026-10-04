@@ -44,7 +44,7 @@ import {
   type MoneyLineMethod,
   type SourceOption,
 } from '@shareat/domain/money-lines';
-import { money } from '@shareat/core/money';
+import { compare, money, subtract } from '@shareat/core/money';
 import { visibleIssues, type LineField } from './money-line-visibility';
 
 const ALL_LINE_FIELDS: readonly LineField[] = ['method', 'amount', 'moneyAccountId', 'cashRequestId', 'staffId'];
@@ -189,8 +189,8 @@ export function MoneyLines({
           overdraftLimit: source.overdraftLimit,
           floatTarget: source.floatTarget,
         },
-        Number(availableOf(source)),
-        Number(amount),
+        money(availableOf(source)),
+        amount,
       );
       if (verdict.message) {
         out.push({ key, label: source.name, blocked: verdict.blocked, message: verdict.message });
@@ -212,7 +212,7 @@ export function MoneyLines({
           const mine = tryMoney(line.amount);
           const all = drawn.get(key);
           if (!all) return money('0');
-          return mine ? money((Number(all) - Number(mine)).toFixed(2)) : all;
+          return mine ? subtract(all, mine) : all;
         };
 
         return (
@@ -292,7 +292,7 @@ export function MoneyLines({
                       <optgroup
                         key={group.band}
                         label={
-                          group.band === 'covers' && Number(needed) > 0
+                          group.band === 'covers' && compare(needed, money('0')) > 0
                             ? `${group.label} ${peso(needed)}`
                             : group.label
                         }

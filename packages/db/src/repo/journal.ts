@@ -210,6 +210,8 @@ export async function insertDraftEntry(
 // added at the top of the file would shift both and make a correctly-classified site read as
 // newly unclassified. Every `recordGone(...)` conversion below this point is unaffected either way.
 import { recordGone } from './record-gone';
+import type { Money } from '@shareat/core/money';
+import type { SafeInsert } from './numeric-input';
 
 // -----------------------------------------------------------------------------------------
 // Lines (Contract §2) — inserted only while the parent entry is still 'draft'. Once
@@ -228,15 +230,18 @@ export interface InsertLineInput {
    * precedent). */
   partyType: string | null;
   partyId: string | null;
-  debit: string;
-  credit: string;
+  /** T-371 C2 — `journal_lines.debit`/`credit` are (14,2): a `Money` brand minted by `money()`/`decimal()`. Both are
+   * required: a one-sided line's opposite side is a real zero, not a blank (✎R13 does not apply). */
+  debit: Money;
+  credit: Money;
   lineMemo: string | null;
 }
 
 export async function insertLines(tx: Tx, entryId: string, lines: InsertLineInput[]): Promise<void> {
   if (lines.length === 0) return;
+  // Inline `.map` inside `.values(...)`: the G1 checker reads the returned literal's own `debit`/`credit` brands.
   await tx.insert(journalLines).values(
-    lines.map((line) => ({
+    lines.map((line): SafeInsert<typeof journalLines> => ({
       entryId,
       lineNo: line.lineNo,
       accountId: line.accountId,

@@ -92,7 +92,7 @@
  * internal/external split) — a franchise's freight would be revenue, not a recovery, and is out of
  * this task's scope entirely.
  */
-import { add, compare, fromCentavos, isZero, subtract, toCentavos, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, decimal, fromCentavos, isZero, subtract, toCentavos, ZERO, type Money } from '@shareat/core/money';
 import { deliveriesRepo, stockLayersRepo, stockLedgerRepo, tradeDiscrepanciesRepo, type Tx } from '@shareat/db';
 import type { ShortageReason } from '@shareat/db/schema';
 import { consume } from '../stock/consume';
@@ -466,7 +466,7 @@ export async function confirmReceipt(
     await stockLayersRepo.createLayer(tx, {
       orgId: input.orgId, storeId: input.branchStoreId, itemId: line.branchItemId,
       receivedAt: new Date(`${input.receivedOn}T00:00:00Z`),
-      quantity: bookedByLineId.get(line.lineId)!, unitCost: line.rate,
+      quantity: bookedByLineId.get(line.lineId)!, unitCost: decimal(line.rate, '14,4'),
       source: 'transfer_in', sourceId: input.orderId, movementId: movement.id,
     });
   }
@@ -523,7 +523,7 @@ export async function confirmReceipt(
       // that flag means a manager approved it). The excess lives on the `over` discrepancy row.
       receivedQuantity: bookedByLineId.get(line.lineId)!,
       unit: line.branchBaseUnit ?? line.commissaryBaseUnit,
-      unitCost: line.rate,
+      unitCost: decimal(line.rate, '14,4'),
       locationId: line.branchLocationId,
       shortageReason:
         toThousandths(bookedByLineId.get(line.lineId)!) < toThousandths(line.dispatchedQuantity)

@@ -12,6 +12,7 @@
  */
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { businessDayRange, formatBusinessDateTime, parseBusinessDate } from '@shareat/core/datetime';
+import { compare, money, type Decimal, type Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import { refuse } from '../refusal';
 import { recordGone } from './record-gone';
@@ -30,6 +31,7 @@ import {
   type ApPaymentStatus,
 } from '../../schema/ap-payments';
 import type { ExpenseStatus } from './expenses';
+import type { SafeInsert } from './numeric-input';
 
 export const AP_CONTROL_CODE = '2110';
 export const ADVANCES_CODE = '1240';
@@ -40,8 +42,6 @@ export const PARTY_TYPE = 'supplier';
  *  question ("does THIS posting fit") and needs a much tighter tolerance, or a single expense
  *  could overshoot the invoice total by up to a peso. */
 export const FULLY_RECORDED_TOLERANCE = 1;
-/** The capacity check's own tolerance — decimal rounding only, never a business allowance. */
-const CAPACITY_EPSILON = 0.005;
 
 // -------------------------------------------------------------------------------------
 // suppliers
@@ -200,30 +200,31 @@ export interface SupplierInvoiceRow {
   voidReason: string | null;
 }
 
-export async function insertSupplierInvoice(
-  tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    supplierId: string;
-    invoiceNo: string | null;
-    invoiceDate: string;
-    dueDate: string | null;
-    totalAmount: string;
-    /** T-151. Inbound freight, part of totalAmount but not a line. */
-    deliveryFee: string;
-    otherFees: string;
-    notes: string | null;
-    receiptFileId: string | null;
-    vatType: SupplierInvoiceVatType | null;
-    vatRate: string | null;
-    vatAmount: string | null;
-    vatExclusiveAmount: string | null;
-    /** T-188 — copied from the supplier at creation, owned by the invoice thereafter. */
-    isOfficialReceipt?: boolean;
-    createdBy: string;
-  },
-): Promise<{ id: string }> {
+/**
+ * T-371 C2 — every numeric column is a `Decimal` brand of that column's own shape, minted by `decimal()`.
+ * ✎R13 `deliveryFee` / `otherFees` are NOT NULL DEFAULT '0': a blank is OMITTED so the column default applies.
+ */
+export type InsertSupplierInvoiceInput = Pick<
+  SafeInsert<typeof supplierInvoices>,
+  'orgId' | 'storeId' | 'supplierId' | 'invoiceNo' | 'invoiceDate' | 'dueDate' | 'notes' | 'receiptFileId' | 'createdBy'
+> & {
+  invoiceNo: string | null;
+  dueDate: string | null;
+  notes: string | null;
+  receiptFileId: string | null;
+  totalAmount: Money;
+  /** T-151. Inbound freight, part of totalAmount but not a line. Omit for the column default. */
+  deliveryFee?: Money;
+  otherFees?: Money;
+  vatType: SupplierInvoiceVatType | null;
+  vatRate: Decimal<'8,4'> | null;
+  vatAmount: Money | null;
+  vatExclusiveAmount: Money | null;
+  /** T-188 — copied from the supplier at creation, owned by the invoice thereafter. */
+  isOfficialReceipt?: boolean;
+};
+
+export async function insertSupplierInvoice(tx: Tx, input: InsertSupplierInvoiceInput): Promise<{ id: string }> {
   const [row] = await tx.insert(supplierInvoices).values(input).returning({ id: supplierInvoices.id });
   return row!;
 }
@@ -483,7 +484,8 @@ export async function assertOpenForRecording(
       `${capitalise(invoicePhrase(capacity))} hasn't been verified yet, so this can't post against it.`,
     );
   }
-  if (Number(amount) > Number(capacity.remaining) + CAPACITY_EPSILON) {
+  // T-371 C4 — exact (14,2) comparison; both sides are minted (R4), so a NaN cannot slip past as "fits".
+  if (compare(money(amount), money(capacity.remaining)) > 0) {
     throw refuse(
       `assertOpenForRecording: supplier invoice ${invoiceId} has only ₱${capacity.remaining} ` +
         `remaining (total ₱${capacity.totalAmount}, already recorded ₱${capacity.recorded}) — ` +
@@ -906,21 +908,18 @@ export interface ApPaymentRow {
   createdAt: Date;
 }
 
-export async function insertApPayment(
-  tx: Tx,
-  input: {
-    orgId: string;
-    storeId: string;
-    supplierId: string;
-    businessDate: string;
-    amount: string;
-    moneyAccountId: string;
-    cashRequestId: string | null;
-    referenceNo: string | null;
-    notes: string | null;
-    createdBy: string;
-  },
-): Promise<{ id: string }> {
+/** T-371 C2 — `amount` is a `Money` brand ((14,2)), minted by `decimal()`. */
+export type InsertApPaymentInput = Pick<
+  SafeInsert<typeof apPayments>,
+  'orgId' | 'storeId' | 'supplierId' | 'businessDate' | 'moneyAccountId' | 'createdBy'
+> & {
+  amount: Money;
+  cashRequestId: string | null;
+  referenceNo: string | null;
+  notes: string | null;
+};
+
+export async function insertApPayment(tx: Tx, input: InsertApPaymentInput): Promise<{ id: string }> {
   const [row] = await tx.insert(apPayments).values(input).returning({ id: apPayments.id });
   return row!;
 }
@@ -977,7 +976,7 @@ export async function markApPaymentVoided(
 export async function insertApPaymentAllocations(
   tx: Tx,
   apPaymentId: string,
-  allocations: { expenseId: string; amountApplied: string }[],
+  allocations: { expenseId: string; amountApplied: Money }[],
 ): Promise<void> {
   if (allocations.length === 0) return;
   await tx.insert(apPaymentAllocations).values(

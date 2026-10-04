@@ -28,9 +28,9 @@
  */
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { moneyAccountsRepo, salesDaysRepo, tradeDiscrepanciesRepo, transaction, type Tx } from '@shareat/db';
-import { add, compare, isZero, money, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, isZero, ZERO, type Money } from '@shareat/core/money';
 import { parseBusinessDate } from '@shareat/core/datetime';
-import { parseMoneyInput } from '../shared/money-input';
+import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { refuse, humanDate, RefusalError } from '../shared/refusal';
 
 /**
@@ -209,20 +209,11 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
     }
   }
 
-  const figures = {
-    totalSales: money(input.totalSales),
-    unliSales: money(input.unliSales),
-    alaCarteSales: money(input.alaCarteSales),
-    seniorDiscount: money(input.seniorDiscount ?? '0'),
-    pwdDiscount: money(input.pwdDiscount ?? '0'),
-    otherDiscount: money(input.otherDiscount ?? '0'),
-    comps: money(input.comps ?? '0'),
-    serviceCharge: money(input.serviceCharge ?? '0'),
-    otherCharges: money(input.otherCharges ?? '0'),
-    cashCollected: money(input.cashCollected ?? '0'),
-    onlineCollected: money(input.onlineCollected ?? '0'),
-    creditSales: money(input.creditSales ?? '0'),
-  };
+  // T-371 R5/R6: parsed after authorize(), and a blank follows its column — the three revenue figures
+  // (NOT NULL, no default) are refused in words; the defaulted ones fall back to the column default.
+  const parsed = parseSalesDayFigures(input, 'createSalesDay');
+  // The defaulted figures stay optional: `insertSalesDay` omits a blank one, so the column's own DEFAULT applies (R13).
+  const figures = parsed;
 
   const posSourced = input.posSourced ?? false;
   const { id } = await salesDaysRepo.insertSalesDay(tx, {
@@ -232,18 +223,18 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
     posSourced,
     // Provenance is a pair or neither — a CHECK constraint enforces it too.
     posSourcedAt: posSourced ? new Date() : null,
-    totalSales: String(figures.totalSales),
-    unliSales: String(figures.unliSales),
-    alaCarteSales: String(figures.alaCarteSales),
-    seniorDiscount: String(figures.seniorDiscount),
-    pwdDiscount: String(figures.pwdDiscount),
-    otherDiscount: String(figures.otherDiscount),
-    comps: String(figures.comps),
-    serviceCharge: String(figures.serviceCharge),
-    otherCharges: String(figures.otherCharges),
-    cashCollected: String(figures.cashCollected),
-    onlineCollected: String(figures.onlineCollected),
-    creditSales: String(figures.creditSales),
+    totalSales: figures.totalSales,
+    unliSales: figures.unliSales,
+    alaCarteSales: figures.alaCarteSales,
+    seniorDiscount: figures.seniorDiscount,
+    pwdDiscount: figures.pwdDiscount,
+    otherDiscount: figures.otherDiscount,
+    comps: figures.comps,
+    serviceCharge: figures.serviceCharge,
+    otherCharges: figures.otherCharges,
+    cashCollected: figures.cashCollected,
+    onlineCollected: figures.onlineCollected,
+    creditSales: figures.creditSales,
     createdBy: actor.personId,
   });
 
@@ -283,16 +274,18 @@ export async function writeChannels(
         "One of the sales channels on this day isn't set up for this store. Reload the page and try again.",
       );
     }
-    const amount = money(c.amount);
+    // T-371: parsed in words (was a raw `money()` whose TypeError is a developer message). The column is
+    // NOT NULL DEFAULT '0', but a channel row is only sent when it carries a figure or a confirmed zero.
+    const amount = parseMoneyInput(c.amount, `sales day channels: "${cfg.name}"'s amount`, `The amount for "${cfg.name}"`);
     const noSales = c.noSales ?? false;
-    if (noSales && Number(amount) !== 0) {
+    if (noSales && !isZero(amount)) {
       throw refuse(
         `sales day channels: "${cfg.name}" is marked "no sales" but carries ${amount} — ` +
           `a confirmed zero and an amount are different claims`,
         `"${cfg.name}" is marked "no sales" but carries ${amount} — a confirmed zero and an amount are different claims.`,
       );
     }
-    return { channelId: c.channelId, amount: String(amount), noSales };
+    return { channelId: c.channelId, amount, noSales };
   });
 
   await salesDaysRepo.replaceChannels(tx, salesDayId, rows);
@@ -347,7 +340,7 @@ export async function writeTenders(
   const byId = new Map(available.map((m) => [m.id, m]));
 
   const seen = new Set<string>();
-  const rows: { moneyAccountId: string; amount: string }[] = [];
+  const rows: { moneyAccountId: string; amount: Money }[] = [];
   for (const t of tenders) {
     const cfg = byId.get(t.moneyAccountId);
     if (!cfg) {
@@ -366,18 +359,65 @@ export async function writeTenders(
     seen.add(t.moneyAccountId);
     // DEF-272: was a raw `money()` call — well-formed already, but its TypeError is a developer
     // message, not a written sentence. `parseMoneyInput` is the shared entry point that fixes that.
-    const amount = parseMoneyInput(t.amount, `sales day tenders: "${cfg.name}"'s amount`, `The amount for "${cfg.name}"`);
+    // T-371 R6: a blank box is "nothing landed here" — no row, never a guessed '0'.
+    const amount = parseDecimalInput(t.amount, '14,2', `sales day tenders: "${cfg.name}"'s amount`, `The amount for "${cfg.name}"`, {
+      blank: 'omit',
+    });
     // A typed zero says "nothing landed here", which is exactly what a blank box says: no row (a row of
     // zero would claim money moved). A negative is not a figure a wallet can receive.
-    if (isZero(amount)) continue;
+    if (amount === undefined || isZero(amount)) continue;
     if (compare(amount, ZERO) < 0) {
       throw refuse(
         `sales day tenders: "${cfg.name}" carries ${amount} — a tender cannot be negative`,
         `The amount for "${cfg.name}" can't be negative. Leave it blank if no money landed there.`,
       );
     }
-    rows.push({ moneyAccountId: t.moneyAccountId, amount: String(amount) });
+    rows.push({ moneyAccountId: t.moneyAccountId, amount });
   }
 
   await salesDaysRepo.replaceTenders(tx, salesDayId, rows);
+}
+
+/**
+ * T-371 R6 — a sales day's twelve figures, parsed into `Money` in words. Shared by create and edit.
+ *
+ * The three revenue figures are NOT NULL with no default, so a blank is refused with a sentence. The
+ * other nine are NOT NULL DEFAULT '0', so a blank (or an absent field) is `undefined`: the caller omits
+ * it — the database default on insert, the stored figure kept on an edit. `'0'` is never invented here.
+ */
+export function parseSalesDayFigures(
+  input: Omit<CreateSalesDayInput, 'storeId' | 'businessDate'>,
+  fn: string,
+): {
+  totalSales: Money;
+  unliSales: Money;
+  alaCarteSales: Money;
+  seniorDiscount: Money | undefined;
+  pwdDiscount: Money | undefined;
+  otherDiscount: Money | undefined;
+  comps: Money | undefined;
+  serviceCharge: Money | undefined;
+  otherCharges: Money | undefined;
+  cashCollected: Money | undefined;
+  onlineCollected: Money | undefined;
+  creditSales: Money | undefined;
+} {
+  const required = (value: string | undefined, label: string): Money =>
+    parseDecimalInput(value, '14,2', `${fn}: ${label}`, label, { blank: 'refuse' });
+  const defaulted = (value: string | undefined, label: string): Money | undefined =>
+    parseDecimalInput(value, '14,2', `${fn}: ${label}`, label, { blank: 'omit' });
+  return {
+    totalSales: required(input.totalSales, 'Total sales'),
+    unliSales: required(input.unliSales, 'Unli sales'),
+    alaCarteSales: required(input.alaCarteSales, 'À la carte sales'),
+    seniorDiscount: defaulted(input.seniorDiscount, 'Senior discount'),
+    pwdDiscount: defaulted(input.pwdDiscount, 'PWD discount'),
+    otherDiscount: defaulted(input.otherDiscount, 'Other discount'),
+    comps: defaulted(input.comps, 'Comps'),
+    serviceCharge: defaulted(input.serviceCharge, 'Service charge'),
+    otherCharges: defaulted(input.otherCharges, 'Other charges'),
+    cashCollected: defaulted(input.cashCollected, 'Cash collected'),
+    onlineCollected: defaulted(input.onlineCollected, 'Online collected'),
+    creditSales: defaulted(input.creditSales, 'Credit sales'),
+  };
 }

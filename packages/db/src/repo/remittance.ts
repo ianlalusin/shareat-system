@@ -28,6 +28,8 @@ import {
   type RemittanceAllocationSource,
   type VarianceStatus,
 } from '../../schema/remittance';
+import type { Money } from '@shareat/core/money';
+import type { SafeInsert } from './numeric-input';
 
 /**
  * ⭐ T-366 S2 / R3 — journal `source_type`s that are CUSTODY movements, not activity of a trading
@@ -295,15 +297,14 @@ export async function insertRemittance(
 
 export async function insertLine(
   tx: Tx,
-  input: {
-    remittanceId: string;
-    fromMoneyAccountId: string;
-    toMoneyAccountId: string;
-    amount: string;
-    moneyTransferId: string;
+  input: Pick<
+    SafeInsert<typeof remittanceLines>,
+    'remittanceId' | 'fromMoneyAccountId' | 'toMoneyAccountId' | 'moneyTransferId'
+  > & {
+    amount: Money;
     /** ⭐ T-324 §3.5. NULL = never asked; '0.00' = "I declare no overage" — a real answer, not
-     *  the same as absence (`packages/core/src/money.ts:15-16`). */
-    declaredOverage: string | null;
+     *  the same as absence (`packages/core/src/money.ts:15-16`). T-371: a branded `Decimal`. */
+    declaredOverage: Money | null;
   },
 ): Promise<void> {
   await tx.insert(remittanceLines).values(input);
@@ -311,11 +312,9 @@ export async function insertLine(
 
 export async function insertAllocation(
   tx: Tx,
-  input: {
-    remittanceId: string;
-    businessDate: string;
+  input: Pick<SafeInsert<typeof remittanceAllocations>, 'remittanceId' | 'businessDate'> & {
+    amount: Money;
     salesDayId: string | null;
-    amount: string;
     /** Defaults to 'cash'. 'charge' = a shortage charged to a person (T-366 S2). */
     source?: RemittanceAllocationSource;
   },
@@ -325,12 +324,9 @@ export async function insertAllocation(
 
 export async function insertVariance(
   tx: Tx,
-  input: {
-    orgId: string;
-    remittanceId: string;
-    businessDate: string;
+  input: Pick<SafeInsert<typeof remittanceVariances>, 'orgId' | 'remittanceId' | 'businessDate'> & {
+    amount: Money;
     salesDayId: string | null;
-    amount: string;
   },
 ): Promise<{ id: string }> {
   const [row] = await tx

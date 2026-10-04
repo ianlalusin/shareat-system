@@ -10,20 +10,17 @@
  */
 import { arRepo, customersRepo, journalRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
-import { compare, money, ZERO } from '@shareat/core/money';
+import { add, compare, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
 import { authorizeOtherStores, withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
-import { parseMoneyInput } from '../shared/money-input';
+import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
 import { allocateOldestFirst, type AllocationItem, type TypedAmount } from '../shared/allocate-oldest-first';
 
 export const AR_CONTROL_CODE = arRepo.AR_CONTROL_CODE;
 export const STORE_CREDIT_CODE = arRepo.STORE_CREDIT_CODE;
-
-/** Decimal noise only — matches the tolerance every other money comparison in this codebase uses. */
-const EPSILON = 0.005;
 
 // -------------------------------------------------------------------------------------
 // Charges
@@ -65,7 +62,8 @@ export async function recordCharge(
       throw new Error(`recordCharge: ${customer.name} is ${customer.status}, not active.`);
     }
     const totalAmount = parseMoneyInput(input.totalAmount, 'recordCharge: the charge amount', 'The charge amount');
-    if (Number(totalAmount) <= 0) {
+    // T-371 C4 — ordered in scaled bigint on the branded value, never `Number()` (NaN-blind).
+    if (compare(totalAmount, ZERO) <= 0) {
       throw new Error('recordCharge: a charge has to be greater than zero.');
     }
 
@@ -76,9 +74,11 @@ export async function recordCharge(
     if (customer.creditLimit !== null) {
       // ⚠️ Derived from the ledger, never a stored balance — org-wide, because a credit limit is
       // extended to a BUYER, not to a buyer at one branch.
-      const { controlBalance } = await arRepo.positionOf(trx, actor.orgId, input.customerId);
-      const after = Number(controlBalance) + Number(totalAmount);
-      if (after > Number(customer.creditLimit) + EPSILON) {
+      // T-371 R4/C4 — the ledger figure and the stored limit are re-minted and compared exactly; on 2dp values the old
+      // `+ 0.005` tolerance decided nothing an exact comparison does not.
+      const controlBalance = money((await arRepo.positionOf(trx, actor.orgId, input.customerId)).controlBalance);
+      const after = add(controlBalance, totalAmount);
+      if (compare(after, money(customer.creditLimit)) > 0) {
         const reason = input.creditOverrideReason?.trim() || '';
         let mayOverride = true;
         try {
@@ -90,7 +90,7 @@ export async function recordCharge(
         if (!mayOverride || !reason) {
           throw new Error(
             `recordCharge: ${customer.name} owes ₱${controlBalance} and this charge is ` +
-              `₱${totalAmount}, which would take them to ₱${after.toFixed(2)} against a ` +
+              `₱${totalAmount}, which would take them to ₱${after} against a ` +
               `limit of ₱${customer.creditLimit}. A manager or admin can charge it anyway by ` +
               'saying why.',
           );
@@ -248,11 +248,16 @@ export async function recordCollection(
     // `platformFee` and `creditApplied` were bare `Number()`, and `Number('abc') <= 0` is `false`,
     // so a mistyped figure passed every guard below silently. Parsing first turns that into the
     // parser's own readable refusal, same as every other converted site in this task.
-    const amount = Number(parseMoneyInput(input.amount, 'recordCollection: the amount', 'The amount collected'));
-    const fee = Number(parseMoneyInput(input.platformFee ?? '0', 'recordCollection: the platform fee', 'The platform fee'));
-    if (amount <= 0) throw new Error('recordCollection: a collection has to be greater than zero.');
-    if (fee < 0) throw new Error('recordCollection: a platform fee cannot be negative.');
-    if (fee > amount) {
+    // T-371 R6 — `ar_collections.platform_fee` is NOT NULL DEFAULT '0': a blank or absent fee is omitted (no fee),
+    // never a typed '0'. `ZERO` below is only the arithmetic for "no fee leg" (C4: every order below is exact).
+    const amount = parseMoneyInput(input.amount, 'recordCollection: the amount', 'The amount collected');
+    const parsedFee = parseDecimalInput(input.platformFee, '14,2', 'recordCollection: the platform fee', 'The platform fee', {
+      blank: 'omit',
+    });
+    const fee: Money = parsedFee ?? ZERO;
+    if (compare(amount, ZERO) <= 0) throw new Error('recordCollection: a collection has to be greater than zero.');
+    if (compare(fee, ZERO) < 0) throw new Error('recordCollection: a platform fee cannot be negative.');
+    if (compare(fee, amount) > 0) {
       throw new Error(
         `recordCollection: a fee of ₱${input.platformFee} exceeds the ₱${input.amount} collected — ` +
           'that would clear the debt while receiving nothing.',
@@ -267,13 +272,15 @@ export async function recordCollection(
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
     if (!account) throw new Error('recordCollection: that money account does not exist.');
-    const creditApplied = Number(
-      parseMoneyInput(input.creditApplied ?? '0', 'recordCollection: creditApplied', 'The store credit applied'),
-    );
+    // T-371 — store credit applied is no column (a journal leg only); absent or blank means none applied.
+    const creditApplied: Money =
+      parseDecimalInput(input.creditApplied, '14,2', 'recordCollection: creditApplied', 'The store credit applied', {
+        blank: 'omit',
+      }) ?? ZERO;
     // T-343 S5.5p / DEF-461 — was a plain, developer-worded Error. DEF-457/S5.5n's app-layer fix
     // (`customers/actions.ts`'s `creditApplied ? { creditApplied } : {}`, no positivity test) forwards
     // a negative credit for real now, so this needed a presentable sentence too. Raw byte-identical.
-    if (creditApplied < 0) {
+    if (compare(creditApplied, ZERO) < 0) {
       throw refuse('recordCollection: creditApplied cannot be negative.', 'The store credit applied cannot be negative.');
     }
     // T-369 S8b (DEF-556): collecting INTO another store's account moves money there, so it needs the right to
@@ -281,21 +288,24 @@ export async function recordCollection(
     // actually lands in the account: a fully credit-funded collection (`trade/returns.ts` applyCredit) touches no
     // account, and the cash portion is `amount - fee - creditApplied`, already known here from the parsed input.
     // Before the credit-balance read and the charge lock, so a non-holder reads and waits on nothing.
-    if (account.storeId !== input.storeId && creditApplied < amount - fee - 0.005) {
+    const net = subtract(amount, fee);
+    const cashPortion = subtract(net, creditApplied);
+    const cashMoves = compare(cashPortion, ZERO) > 0;
+    if (account.storeId !== input.storeId && cashMoves) {
       await authorize(trx, actor, 'transfer_funds', { storeId: account.storeId });
     }
-    if (creditApplied > 0) {
-      const balance = Number(await arRepo.creditBalanceOf(trx, actor.orgId, input.customerId));
-      if (creditApplied > balance + 0.005) {
+    if (compare(creditApplied, ZERO) > 0) {
+      const balance = money(await arRepo.creditBalanceOf(trx, actor.orgId, input.customerId));
+      if (compare(creditApplied, balance) > 0) {
         throw new Error(
-          `recordCollection: ${customer.name} holds only ₱${balance.toFixed(2)} of store credit — ` +
+          `recordCollection: ${customer.name} holds only ₱${balance} of store credit — ` +
             `₱${input.creditApplied} does not fit.`,
         );
       }
     }
     // ⭐ v1's real rule: proof is required when the money arrived online, never for cash. ⚠️ Only
     // when cash is actually moving — a fully credit-funded collection touches no account.
-    if (creditApplied < amount - fee - 0.005 && account.instrument !== 'cash' && !input.receiptFileId) {
+    if (cashMoves && account.instrument !== 'cash' && !input.receiptFileId) {
       throw new Error(
         'recordCollection: an online collection needs proof of payment — attach the deposit slip ' +
           'or transfer screenshot.',
@@ -327,7 +337,7 @@ export async function recordCollection(
 
     const open = await arRepo.openItems(trx, actor.orgId, input.customerId, input.storeId);
     const byCharge = new Map(open.map((o) => [o.chargeId, o]));
-    let allocatedTotal = 0;
+    let allocatedTotal: Money = ZERO;
     for (const a of allocations) {
       const item = byCharge.get(a.chargeId);
       if (!item) {
@@ -336,32 +346,30 @@ export async function recordCollection(
             'it may belong to another customer or store, already be settled, or not be posted.',
         );
       }
-      const applied = Number(a.amountApplied);
-      if (applied <= 0) throw new Error(`recordCollection: allocation for ${a.chargeId} must be above zero.`);
-      if (applied > Number(item.outstanding) + 0.005) {
+      const applied = a.amountApplied;
+      if (compare(applied, ZERO) <= 0) throw new Error(`recordCollection: allocation for ${a.chargeId} must be above zero.`);
+      if (compare(applied, money(item.outstanding)) > 0) {
         throw new Error(
           `recordCollection: charge ${a.chargeId} has only ₱${item.outstanding} outstanding — ` +
             `₱${a.amountApplied} does not fit.`,
         );
       }
-      allocatedTotal += applied;
+      allocatedTotal = add(allocatedTotal, applied);
     }
-    if (allocatedTotal > amount + 0.005) {
+    if (compare(allocatedTotal, amount) > 0) {
       throw new Error(
-        `recordCollection: allocations total ₱${allocatedTotal.toFixed(2)}, more than the ` +
+        `recordCollection: allocations total ₱${allocatedTotal}, more than the ` +
           `₱${input.amount} collected.`,
       );
     }
 
-    const surplus = Math.max(0, amount - allocatedTotal);
-    const net = amount - fee;
-    if (creditApplied > net + 0.005) {
+    const surplus = compare(amount, allocatedTotal) > 0 ? subtract(amount, allocatedTotal) : ZERO;
+    if (compare(creditApplied, net) > 0) {
       throw new Error(
-        `recordCollection: creditApplied (₱${input.creditApplied}) cannot exceed the ₱${net.toFixed(2)} ` +
+        `recordCollection: creditApplied (₱${input.creditApplied}) cannot exceed the ₱${net} ` +
           'the collection nets after its fee.',
       );
     }
-    const cashPortion = net - creditApplied;
 
     /**
      * ⭐ POSTING-PATTERNS.md `ar_collection`, ported exactly, plus T-179's credit leg:
@@ -372,13 +380,13 @@ export async function recordCollection(
      *   Cr 2140            surplus        party = customer, only when there is one
      */
     const collectionLines = [
-      ...(cashPortion > 0
+      ...(cashMoves
         ? [
             {
               accountCode: account.glAccountCode,
               // T-369 S8b: the cash debit sits at the ACCOUNT's store - `balanceOf` reads a safe there.
               storeId: account.storeId,
-              debit: cashPortion.toFixed(2),
+              debit: cashPortion,
               ...(account.glAccountCode === '1140'
                 ? { partyType: 'money_account' as const, partyId: account.id }
                 : {}),
@@ -386,24 +394,24 @@ export async function recordCollection(
             },
           ]
         : []),
-      ...(creditApplied > 0
+      ...(compare(creditApplied, ZERO) > 0
         ? [
             {
               accountCode: STORE_CREDIT_CODE,
               storeId: input.storeId,
-              debit: creditApplied.toFixed(2),
+              debit: creditApplied,
               partyType: 'customer' as const,
               partyId: input.customerId,
               lineMemo: `Store credit applied — ${customer.name}`,
             },
           ]
         : []),
-      ...(fee > 0
+      ...(compare(fee, ZERO) > 0
         ? [
             {
               accountCode: arRepo.PLATFORM_FEE_CODE,
               storeId: input.storeId,
-              debit: fee.toFixed(2),
+              debit: fee,
               lineMemo: `Platform fee — ${customer.name}`,
             },
           ]
@@ -411,17 +419,17 @@ export async function recordCollection(
       {
         accountCode: AR_CONTROL_CODE,
         storeId: input.storeId,
-        credit: allocatedTotal.toFixed(2),
+        credit: allocatedTotal,
         partyType: 'customer' as const,
         partyId: input.customerId,
         lineMemo: `Collection — ${customer.name}`,
       },
-      ...(surplus > 0
+      ...(compare(surplus, ZERO) > 0
         ? [
             {
               accountCode: STORE_CREDIT_CODE,
               storeId: input.storeId,
-              credit: surplus.toFixed(2),
+              credit: surplus,
               partyType: 'customer' as const,
               partyId: input.customerId,
               lineMemo: `Overpayment held as store credit — ${customer.name}`,
@@ -446,8 +454,8 @@ export async function recordCollection(
       // T-328 — the validated, normalised value, same as `platformFee` immediately below (was
       // `input.amount`, the raw un-normalised form the parser had already validated but not
       // reshaped).
-      amount: amount.toFixed(2),
-      platformFee: fee.toFixed(2),
+      amount,
+      platformFee: parsedFee, // R13: a blank is omitted, so the column default applies
       moneyAccountId: input.moneyAccountId,
       referenceNo: input.referenceNo?.trim() || null,
       notes: input.notes?.trim() || null,
@@ -473,15 +481,15 @@ export async function recordCollection(
         collectionId,
         // T-328 — the parsed array, not `input.allocations`: same reasoning as `createRemittance`
         // storing `String(declared)` rather than the raw form (packages/domain/src/remittance/index.ts).
-        allocations.map((a) => ({ chargeId: a.chargeId, amountApplied: String(a.amountApplied) })),
+        allocations.map((a) => ({ chargeId: a.chargeId, amountApplied: a.amountApplied })),
       );
     }
 
     return {
       collectionId,
       entryId: result.entryId,
-      allocated: allocatedTotal.toFixed(2),
-      surplus: surplus.toFixed(2),
+      allocated: allocatedTotal,
+      surplus,
     };
   };
   if (tx) return run(tx);
