@@ -1,122 +1,88 @@
-# Handoff — 2026-10-03 (orchestrator, money-defect push day 4)
+# Handoff — 2026-10-04 (orchestrator, money-defect push day 5)
 
 ## Where things stand
-Goal (Ian): close every open money defect in v2. **Not launched.** This session (2 Oct evening → 3 Oct) shipped
-**9 slices to `main`** and closed **13 money defects**. The register was also recounted against git, which corrected
-**15 rows** that were fixed but still marked open. **10 money defects are open**, plus DEF-491 and 421 deferred by
-Ian's ruling.
-**T-371 (the NaN sweep) is mid-flight on branch `wip/2026-10-03b` (`ad6f856`, 188 files), not on `main`.** Its spec
-(✎R9) keeps `main` green at every commit, so its red tests and partial writer flip stay off `main` until S4 closes
-them.
+Goal (Ian): close every open money defect in v2. **Not launched.** This session shipped T-371 (the NaN sweep),
+T-373, the rest of T-369 and six of seven T-374 slices. **One money defect is open: DEF-054**, and it waits on the
+T-367 count of old "other"/"AR collection" payments that only Ian can run on production. DEF-491 and DEF-421 stay
+deferred by Ian's ruling. `main` is at the commit that carries this file; migrations on `main` run through **0181**,
+production is still at **0176**. Next free migration: **0182**.
 
-## Gates at f3ee87c (main; docs commits follow)
-typecheck **0** · unit **3758/3764** in the full run (5 load timeouts that pass alone, 98/98; 1 skipped) · integration FULL suite on fresh `shareat_test_orch_wrap1003`, **262 files, 4650/4650** · build **OK**. The T-371 branch is NOT gated (10 tsc errors on it; S4 owns them).
+## Gates at 17616fc (main, before the docs commit)
+typecheck **0** · unit **4082/4084** (1 skipped; 1 load timeout, `t343-s7-wrapper-refusals` passes alone 43/43) ·
+integration FULL on fresh `shareat_test_orch_t374gate2` (0180, 0181 applied) **291 files, 4894/4894** · build **OK**.
 
 ## What happened (themes; each record lives where it says)
-- **Shipped to `main`:**
-  - T-367 S3: DEF-420, 499, 500 (`1d28795`).
-  - T-368 S4: DEF-434 (`39b2a35`).
-  - T-369 S8: DEF-551, plus DEF-571, an S3 regression the auditor caught (`8086ff4`).
-  - T-369 S8b: DEF-556 (`629abef`).
-  - T-369 S9: DEF-557, 558, 573 (`35c1a31`).
-  - T-372 S5: guard tests (`10d84c5`).
-  - T-372 S6: DEF-512, 513, migration **0179**, full suite 4645/4645 (`3774d2c`).
-  - T-372 S4: freight posting pattern (`c49a407`).
-  - **T-368 and T-372 are complete.**
-- **Register (`9830f85`, `3774d2c`):** 15 money rows corrected to fixed after a git-verified sweep (DEF-105, 108, 374,
-  426, 433, 494, 496, 497, 498, 506, 516, 529, 534, 535, 541). New rows DEF-568 to 578. The ones that matter most:
-  - DEF-574: no screen for the branch recount return.
-  - DEF-577: 19 UTC "today" defaults pre-fill yesterday's date before 8 a.m. Manila.
-  - DEF-578: "Void the pull first" is a dead end, because nothing can void a usage pull.
-- **T-373 spec approved (`f3ee87c`):** DEF-547, 552, 555, 559. An Opus planner wrote it and an independent Opus review
-  added 10 changes, including R7, a guard against a double usage pull after re-entering a voided date. Four slices can
-  run in parallel; S3 takes migration **0180**.
-- **Deploy gate:** `docs/ops/README.md` now has a precheck table for 0177–0179 (production is at 0176).
-- **Ian's decisions this session:**
-  - T-373 Q1 → (a), recorded in the T-373 spec and on the Open Questions page with the R7 note.
-  - "Use a workflow for T-371", recorded in the T-371 status line.
-  - No bible row was written: both rulings are task-scoped, and the bible is planner-only.
-- **T-371 progress (on the branch):**
-  - S0: census, guards G1–G4 and per-module NaN tests, audited three times. The census was hardened after audits found
-    bulk inserts and `Math.abs(Number(x))` invisible. 43 self-tests prove each detector can fail.
-  - S1: `decimal()`, `SafeInsert`/`SafeUpdate`, `parseDecimalInput`. Audited.
-  - S3: entry parse in 37 modules, via Workflow. Audited: no wrong money outcome. 61+13 EXEMPTs, all date, id or count
-    orderings.
-  - S2: writer flip via Workflow, 28 of 31 groups. **till-fiscal, statutory-discounts and ledger failed on an expired API
-    token** and must be re-run.
-  - The branch tree has **10 tsc errors**, all callers passing plain strings to now-typed writers, which is S4's job:
-    trade/index.ts:378, attendance/config.ts:140, stock consume/count-sessions/supplier-returns, trade/returns.ts:383/500,
-    and 3 setThreshold test/script callers.
+- **Roadmap and What's Left rewritten whole** (Ian: one current plan, no accreted notes). Both state current
+  position only; history lives in git and this file. Sources: `docs/ROADMAP.html`, `docs/WHATS-LEFT.html` (new: the
+  board's repo source). Artifacts: roadmap https://claude.ai/artifact/CXHPh1sKHbeSNr5muaKzFq, board
+  https://claude.ai/artifact/7uvWzSMRGikq4P7PRmCQTf. Ian's rule is recorded in memory and in each page's header comment.
+- **T-371 shipped** (`3558e52`): DEF-382, DEF-395 (constrained part) fixed. Every write to a finite-checked numeric
+  column takes a `Decimal` brand; every NaN-blind money comparison is `compare()`/`isZero()` or EXEMPT; exact
+  `multiplyToMoney`/`divideMoney` replace float `toFixed` (a posted 13th-month/separation/return can move ₱0.01, the
+  correct way). DEF-579 split out (integer fields). Screen smoke: 4/4 after the low-stock fix (`0844788`).
+- **T-373 shipped** (`5e676c1`, `c03851b`, `79043f8`, `d00d0c9`): DEF-547, 552, 555, 559. Migration **0180** (stock
+  period = Manila day). Screen smoke S1–S4 PASS. R7 re-keyed on a finalized section (audit).
+- **T-369 complete** (`db04bfc`): S5b/S6b — closed-month override on expense approval (DEF-314), other branches'
+  accounts in the money lines (DEF-291); DEF-198 closed out. Orchestrator ruling: built ahead of T-367 S5 (blocked);
+  T-367 S5 rebases on it. Recorded in the T-369 status line.
+- **T-374 specced, reviewed, built** (spec `docs/tasks/374-money-push-follow-ups.md`, independent Opus review ✎R1–R8):
+  S1 `92541f9` + S2 `17616fc` (DEF-577: Manila dates, guard over apps and packages), S3 `7b2175f` (DEF-580), S4
+  `cec40bf` (DEF-576), S6 `1bfb46d` (DEF-574), S7 `a87b178` (DEF-578, migration **0181**: void a POS usage pull). The
+  S7 audit caught a refresh-then-void double count and then a stale-snapshot dead end; both fixed and re-audited.
+- **New defects:** DEF-579 (integer fields), 580 (fixed), 581 (no override on bill verification), 582 (supplier
+  return shows no message), 583 (remittance banner stale after redirect), 584 (`0x10` accepted as a whole number).
+- **Ian's decisions this session:** "rewrite the pages as one current plan" (memory + page headers); "go ahead with
+  T-371, then T-373, keep going". No bible row needed. Open Questions page: added `t374-q1-pull-void-who`.
 
 ## Pick up here
-1. **Finish T-371.**
-   1. Restore the branch: `git checkout wip/2026-10-03b -- .`. Check that `git status` shows 188 paths. The branch is a
-      snapshot to restore from, not history to merge.
-   2. Re-run S2 for the 3 failed groups: `till-fiscal` (till-shifts.ts, fiscal-periods.ts, findings.ts),
-      `statutory-discounts`, `ledger` (journal.ts). The script is saved at
-      `~/.claude/projects/C--Users-ianla-webapps-shareat-system/50393d91-…/workflows/scripts/t371-s2-writer-flip-wf_7d9b6956-30b.js`;
-      resume with `resumeFromRunId: wf_7d9b6956-30b`, and the 28 done groups replay from cache.
-   3. **S4 (builder):**
-      - the 10 caller errors;
-      - remove the `?? ZERO` at now-optional writer call sites (ar fee, ap fees, trade fees, production labour,
-        sales-days figures);
-      - exact helpers in core for qty×cost, value÷qty and ÷12 (supplier-returns:327, separation:63,
-        thirteenth-month:91, money-lines:249, trade/returns recordInternalReturn);
-      - `checkDraw` takes Money;
-      - money-lines/load.ts:82 and MoneyLines.tsx:295.
-      The tester adds the 2 S2 EXEMPT requests (`%TEMP%/t371-s2-exempt-requests.txt`) and fixes the setThreshold test
-      callers.
-   4. Then the auditor reads the joined diff, the FULL suite runs on a fresh DB, and the smoke from the T-371 spec runs
-      (`abc` in three boxes). Commit T-371 as one green commit set.
-2. **T-373** (after T-371): four parallel slices; S3 = migration 0180, gated on the full suite.
-3. **Then:** DEF-054 (T-367 S5/S6, needs Ian's production count), DEF-198/291/314 (rest of T-369 S5b/S6b), and the new
-   follow-ups DEF-574/577/578.
+1. **Production session with Ian on erp2 (`159.223.46.224`, never `.78.207`)**: the read-only prechecks for
+   **0177–0181** in the table at the top of `docs/ops/README.md` (incl. the two new T-373 inter-store findings and
+   0181's "0 void pulls"), the **T-367 count** of old "other"/"AR collection" payments, the 1115 balance for T-316,
+   and confirm the fiscal-period timer is armed. Then push/deploy is Ian's call.
+2. **T-374 S5** (DEF-579 + DEF-584, whole-number inputs): tester first, then builder. Its wait on `expenses/actions.ts`
+   is cleared (`db04bfc`). Then the T-374 S6/S7 screen smoke on 9008 (not run yet).
+3. **T-367 S5/S6 (DEF-054)** as soon as the count is in. Then DEF-581 (spec first), DEF-582/583, then Phase 7.
 
 ## Do not decide these alone — they are Ian's
-- **Open Questions page** (bible row 252):
-  - **t371-blank-on-edit (new):** on an edit screen, a blank box keeps the stored figure, and the person types 0 to zero
-    it. Recommended (a), and that is what T-371 builds.
-  - **HR statutory data:** due end of October.
-- **Production with Ian, before any push that DEPLOYS 0177–0179:** the precheck table at the top of
-  `docs/ops/README.md`. Run on `159.223.46.224`, never `.78.207`.
+- **Open Questions page** (bible row 252): `t371-blank-on-edit` (built as recommended (a)); `t374-q1-pull-void-who`
+  (built as (a): managers/admins who can void a usage record — re-check S7 if he answers otherwise);
+  `hr-statutory-data` (due 31 Oct).
+- Any deploy of 0177–0181: only after the prechecks with Ian.
 
 ## Traps that bit this session
-- **The browser pane auto-starts the `erp` dev config on 9008.** It wrote a half-built `apps/erp/.next/dev/types` file
-  that broke repo-wide tsc. If 9008 is busy and no lane admits it, check `preview_list` before suspecting a peer.
-- **A census nominates; running settles.** The first T-371 census under-reported by about 30%: it missed bulk inserts,
-  `Math.abs(Number(x))` and nullable strings. Only self-tests that prove each detector can fail made it trustworthy.
-- **A sentinel must outlive the fix.** One "this site is flagged" sentinel would have forced weakening the guard once
-  the site was repaired.
-- **Snapshotting WIP with a fresh index and `git add -A` re-normalises line endings repo-wide** (442 files instead of
-  188). Stage only the `git status` paths: `git add --pathspec-from-file`.
-- **Grep every caller when a blank's meaning changes.** DEF-571 (the recurring job's due date) came from S3 checking
-  only the form caller.
-- Memory is tight: run integration files one at a time, and freeze lanes during the full suite.
+- **A census nominates; running settles** held again: the full suite caught two old-behaviour pins (T-371), a fixture
+  CHECK (0181) and a pinned control count; per-slice runs did not.
+- **Audits found three real money holes the slice tests passed over** (R7 planned-only pull; refresh wiping
+  pull→usage links; the stale-snapshot dead end the first fix created). Keep the audit-then-re-audit loop.
+- **Python on Windows writes CRLF unless `newline=''`**; the pre-commit hook refuses CR in docs. LF everything.
+- Kill the full-suite run when an audit confirms a defect — fix first, then one gate run (saves an hour).
+- The orchestrator's roadmap generator lived in a session scratchpad; next wrap-ups edit `docs/ROADMAP.html` by hand
+  (the skill's `t-done`/chip conventions are intact).
 
-## Sessions — all three SAFE TO CLEAR (re-brief from this file)
-| Role | Session | Lane DBs (survive by name) |
+## Sessions — all SAFE TO CLEAR (re-brief from this file)
+| Role | Session | Note |
 |---|---|---|
-| Tester | `webapps-a2` | `shareat_test_t371_tester`, `shareat_test_t372_s6_tester`, `shareat_test_t369_s8_tester` |
-| Builder | `webapps-02` | `shareat_test_t371_builder`, `shareat_test_t372_s6_builder`, `shareat_test_t369_s8_builder` |
-| Auditor | `system32-2f` | — |
-Workflow agents left per-module DBs `shareat_test_t371wf_<module>` and `shareat_test_t371s2_<group>`; they can be
-dropped. None of the sessions holds uncommitted work; everything is on `main` or on `wip/2026-10-03b`.
+| Tester | `webapps-a2` | idle all session; no state |
+| Builder | `webapps-02` | held all session; no edits |
+| Auditor | `system32-2f` | read-only; audited T-371, T-373, T-369, T-374 |
+All work was done by orchestrator subagents; none holds uncommitted work. Lane DBs `shareat_test_t371*`,
+`shareat_test_t373*`, `shareat_test_t374*`, `shareat_test_t369_s5b*`, `shareat_test_orch_*` can be dropped.
+`shareat_test_setup` now has 0178–0180 applied and T-373 smoke data in it.
 
 ## The paste-ready prompt
 ```
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global
-/orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all), docs/RULES.md,
-docs/plans/money-defects-2026-09-30.md and docs/tasks/371-nan-sweep.md (status line + S2/S4).
-Read the Open Questions page (bible row 252) with ArtifactData before building anything gated on Ian.
-GREP the register and bible, never Read them whole. Goal (Ian): close all open money defects in v2;
-NOT launched. Queue: HANDOFF "Pick up here" 1→3. T-371 is on branch wip/2026-10-03b (restore with
-git checkout wip/2026-10-03b -- .); re-run the 3 failed S2 groups, then S4, audit, FULL suite, smoke,
-commit. Then T-373 (S3 = migration 0180). Next free migration index: 0180.
-STANDING: lanes run Sonnet (auditor too); Opus only via subagents for specs and judgement. Ian opted
-in to Workflows for T-371. Commit slices locally; push ONLY at wrap-up; republish the What's Left
-board after every commit that closes a DEF; every wrap-up updates "what's left", ROADMAP.html and the
-board. Reds assert the target; every "not" gets a positive control. Each tester/helper gets its own
-_test DB. Gate any CHECK/trigger migration on the FULL suite on a fresh gate DB. No git stash, no lane
-dev servers, no mutants in the shared tree. Freeze lanes during gates. Messages are short. Render
-before deciding. Ian runs this terminal on Opus 5.5 at medium effort; do not ask him to switch.
+/orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all), docs/RULES.md and
+docs/tasks/374-money-push-follow-ups.md (status line + S5). Read the Open Questions page (bible row 252)
+with ArtifactData before building anything gated on Ian. GREP the register and bible, never Read them whole.
+Goal (Ian): close all open money defects in v2; NOT launched. One is left: DEF-054 (T-367 S5/S6), blocked on
+Ian's production count. Queue: HANDOFF "Pick up here" 1→3 — first offer Ian the erp2 session (prechecks
+0177–0181 in docs/ops/README.md + the T-367 count), then T-374 S5 tester-first. Next free migration: 0182.
+STANDING: lanes run Sonnet (auditor too); Opus only via subagents for specs and judgement. Commit slices
+locally; push ONLY at wrap-up; republish the What's Left board (source docs/WHATS-LEFT.html) after every
+commit that closes a DEF; ROADMAP.html and the board state current position only, never appended history.
+Reds assert the target; every "not" gets a positive control. Each tester/helper gets its own _test DB.
+Gate any migration on the FULL suite on a fresh gate DB. No git stash, no lane dev servers, no mutants in
+the shared tree. Freeze lanes during gates. Messages are short. Ian runs this terminal on Opus 5.5 at medium
+effort; do not ask him to switch.
 ```
