@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic';
 
 interface SearchParams {
   store?: string;
+  error?: string;
 }
 
 export default async function LowStockPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -65,6 +66,12 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
         Recomputed on every load from the ledger — there is no cached alert list, because a stale
         low-stock alert is indistinguishable from a real one.
       </PageDescription>
+
+      {sp.error && (
+        <div className="mt-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          {sp.error}
+        </div>
+      )}
 
       <FilterRow className="mt-6">
         <label className="text-sm">
