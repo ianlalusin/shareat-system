@@ -9,6 +9,7 @@
  * ⚠️ `floatsByRequest` is one grouped query for the whole register rather than a lookup per row.
  * The N+1 is what makes a derived figure feel expensive and tempts the next person to store it.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 import {
   cashRequestsRepo,
   moneyAccountsRepo,
@@ -94,5 +95,5 @@ export const STATUS_TONE: Record<string, string> = {
 };
 
 export function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toBusinessDate();
 }

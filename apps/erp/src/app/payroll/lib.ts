@@ -7,6 +7,7 @@
  * no error, no visual difference, wrong money."* That cache exists to dodge 375 billed Firestore
  * reads per page load. **Postgres does not have that problem, so the landmine is not ported.**
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 import { payrollRepo, type PayRunRow, type PayslipRow } from '@shareat/db';
 import { derivePeriods, previewPayRun, type PayPeriod, type PayRunPreview } from '@shareat/domain';
 import { withOrgPrincipal } from '../expenses/lib';
@@ -43,7 +44,7 @@ export async function slipsFor(orgId: string, runId: string): Promise<PayslipRow
 export async function rosterFor(orgId: string, storeId: string) {
   return withOrgPrincipal(orgId, async (tx) => {
     const roster = await payrollRepo.employmentsForStore(tx, orgId, storeId);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toBusinessDate();
     return Promise.all(
       roster.map(async (r) => ({
         ...r,
@@ -85,7 +86,7 @@ export function periodsForMonth(
   cfg: { payrollPeriodType: 'monthly' | 'semi_monthly' | 'weekly'; semiMonthlyCutoffDay: number },
   now = new Date(),
 ): PayPeriod[] {
-  return derivePeriods(cfg, now.getUTCFullYear(), now.getUTCMonth() + 1);
+  return derivePeriods(cfg, Number(toBusinessDate(now).slice(0, 4)), Number(toBusinessDate(now).slice(5, 7)));
 }
 
 /** The period containing today, else the first of the month — what the form opens on. */
@@ -93,7 +94,7 @@ export function currentPeriod(
   cfg: { payrollPeriodType: 'monthly' | 'semi_monthly' | 'weekly'; semiMonthlyCutoffDay: number },
   now = new Date(),
 ): PayPeriod {
-  const today = now.toISOString().slice(0, 10);
+  const today = toBusinessDate(now);
   const all = periodsForMonth(cfg, now);
   return all.find((p) => today >= p.start && today <= p.end) ?? all[0]!;
 }

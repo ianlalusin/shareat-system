@@ -1,3 +1,4 @@
+import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import {
@@ -60,7 +61,7 @@ export default async function AttendanceReviewPage({
     );
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toBusinessDate();
   const fallback = await defaultRange(actor.orgId, storeId, today);
   const from = sp.from || fallback.from;
   const to = sp.to || fallback.to;

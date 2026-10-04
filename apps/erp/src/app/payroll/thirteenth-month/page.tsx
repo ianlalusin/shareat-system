@@ -1,3 +1,4 @@
+import { toBusinessDate } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { post13thMonthRunAction, void13thMonthRunAction } from './actions';
@@ -33,7 +34,7 @@ export default async function ThirteenthMonthPage({
 
   const stores = await listStores(actor.orgId);
   const storeId = sp.store || stores[0]?.id;
-  const year = Number(sp.year) || new Date().getFullYear();
+  const year = Number(sp.year) || Number(toBusinessDate().slice(0, 4));
 
   if (!storeId) {
     return (

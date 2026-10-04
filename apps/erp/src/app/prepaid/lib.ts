@@ -5,6 +5,7 @@
  * rather than a per-row lookup — the N+1 is what makes a derived figure look expensive and tempts
  * someone to store it again, which is the exact mistake v1 made.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 import { prepaidRepo, type PrepaidItemRow } from '@shareat/db';
 import { prepaidSchedule } from '@shareat/domain';
 import { money, subtract, type Money } from '@shareat/core/money';
@@ -93,5 +94,5 @@ export const STATUS_LABEL: Record<string, string> = {
 
 /** The current period as `YYYY-MM` — what the run defaults to catching up through. */
 export function thisPeriod(): string {
-  return new Date().toISOString().slice(0, 7);
+  return toBusinessDate().slice(0, 7);
 }

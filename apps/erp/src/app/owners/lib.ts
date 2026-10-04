@@ -6,6 +6,7 @@
  * books. ⛔ v1 keeps all three on the owner document, the last a stored copy of a subtraction
  * (DEF-072).
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 import {
   moneyAccountsRepo,
   ownersRepo,
@@ -105,7 +106,7 @@ export async function moneyAccounts(orgId: string, storeId: string) {
 }
 
 export function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toBusinessDate();
 }
 
 /** ⚠️ String maths, no `Date` — the same reason `monthOf` uses it: no timezone can shift a month. */

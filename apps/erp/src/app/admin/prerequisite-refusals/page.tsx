@@ -1,3 +1,4 @@
+import { toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { refusalCounts } from './lib';
 import { Page } from '@/components/shell/Page';
@@ -48,7 +49,7 @@ export default async function PrerequisiteRefusalsPage() {
                   <td className="py-2 pr-4 font-mono text-xs">{r.reasonCode}</td>
                   <td className="py-2 pr-4">{r.domain}</td>
                   <td className="py-2 pr-4">{r.count}</td>
-                  <td className="py-2 pr-4">{r.lastOccurredAt.toISOString().slice(0, 10)}</td>
+                  <td className="py-2 pr-4">{toBusinessDate(r.lastOccurredAt)}</td>
                 </tr>
               ))}
             </tbody>

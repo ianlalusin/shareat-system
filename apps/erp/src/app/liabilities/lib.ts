@@ -5,6 +5,7 @@
  * balance, and settled means that balance reached zero. ⛔ v1 stores all three on the account plus a
  * fourth copy in its own ledger entry (DEF-074).
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 import {
   liabilitiesRepo,
   moneyAccountsRepo,
@@ -72,7 +73,7 @@ export async function chargeableAccounts(orgId: string) {
 }
 
 export function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toBusinessDate();
 }
 
 export const CATEGORY_LABEL: Record<string, string> = {

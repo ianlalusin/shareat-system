@@ -5,6 +5,7 @@
  * on each date — it does not sum document types, so a document type nobody has invented yet is
  * already counted.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 import { eq } from 'drizzle-orm';
 import { moneyAccountsRepo, remittanceRepo, schema, storesRepo, type EndDayReport } from '@shareat/db';
 import { listFindings, remittanceStateOf } from '@shareat/domain';
@@ -117,7 +118,7 @@ export const STATE_LABEL: Record<string, string> = {
 };
 
 export function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toBusinessDate();
 }
 
 // -------------------------------------------------------------------------------------

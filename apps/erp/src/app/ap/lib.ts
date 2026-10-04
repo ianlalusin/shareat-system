@@ -1,6 +1,7 @@
 /**
  * Server-only helpers for the AP screens — suppliers, supplier invoices, and payments. T-130.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 import {
   apRepo,
   itemsRepo,
@@ -142,7 +143,7 @@ export async function moneyAccountsFor(orgId: string, storeId: string) {
 }
 
 export function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toBusinessDate();
 }
 
 /** How many line rows the invoice form offers. Blank rows are dropped server-side. */

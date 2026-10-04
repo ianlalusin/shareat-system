@@ -1,3 +1,4 @@
+import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../lib/page-access';
@@ -38,7 +39,7 @@ export default async function MoneyTransfersPage({
   // T-369 S9: the pairs of stores where one owes the other, only where this person holds `transfer_funds` at both.
   const settlementPairs = await listSettlementPairs(actor, usable);
   const storeById = new Map(stores.map((s) => [s.id, s]));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toBusinessDate();
 
   // ⭐ Grouped by store because names REPEAT across stores — "Office safe" exists at every
   // branch — and a flat list showed two identical labels holding different money, which made the

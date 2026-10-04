@@ -5,6 +5,7 @@
  * `expected` itself, and that inversion is deliberate: a count is an observation of a moment, and
  * a backdated entry must never move a figure somebody was already charged for.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 import { sql } from 'drizzle-orm';
 import { tillShiftsRepo, type TillCountRow, type TillShiftRow } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
@@ -72,7 +73,7 @@ export async function tillOverview(
 
 /** Today, as a `YYYY-MM-DD` string. ⚠️ The trading date, which the user may override. */
 export function today(now = new Date()): string {
-  return now.toISOString().slice(0, 10);
+  return toBusinessDate(now);
 }
 
 /**

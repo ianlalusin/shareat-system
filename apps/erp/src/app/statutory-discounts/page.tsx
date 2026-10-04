@@ -1,3 +1,4 @@
+import { toBusinessDate } from '@shareat/core/datetime';
 import { listStatutoryDiscounts, summariseStatutoryDiscounts } from '@shareat/domain';
 // ⛔ `peso()` and NOT `₱${formatMoney(...)}` — formatMoney already emits the symbol, and
 // prefixing another rendered every figure on this page as ₱₱0.00. See lib/format.ts's header:
@@ -21,9 +22,9 @@ interface SearchParams {
 }
 
 /** First and last day of the month a date falls in — the register is read by month in practice. */
-function monthBounds(d: Date): { from: string; to: string } {
-  const y = d.getUTCFullYear();
-  const m = d.getUTCMonth();
+function monthBounds(businessDate: string): { from: string; to: string } {
+  const y = Number(businessDate.slice(0, 4));
+  const m = Number(businessDate.slice(5, 7)) - 1;
   const pad = (n: number) => String(n).padStart(2, '0');
   const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
   return { from: `${y}-${pad(m + 1)}-01`, to: `${y}-${pad(m + 1)}-${pad(last)}` };
@@ -41,7 +42,7 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
   const stores = await listStores(actor.orgId);
 
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : undefined;
-  const defaults = monthBounds(new Date());
+  const defaults = monthBounds(toBusinessDate());
   const from = sp.from && ISO_DATE.test(sp.from) ? sp.from : defaults.from;
   const to = sp.to && ISO_DATE.test(sp.to) ? sp.to : defaults.to;
   const includeVoided = sp.showVoided === '1';

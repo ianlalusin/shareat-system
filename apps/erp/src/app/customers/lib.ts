@@ -4,6 +4,7 @@
  * ⭐ The treatment is derived from the links on every read — there is no stored flag to render, and
  * that is deliberate (ADR-008 §2).
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 import {
   arRepo,
   customersRepo,
@@ -154,7 +155,7 @@ export async function otherOrgs(orgId: string) {
 }
 
 export function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toBusinessDate();
 }
 
 /**

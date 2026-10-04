@@ -14,6 +14,7 @@
  * on failure trains people to read a blank page as healthy — and a blank page is exactly what a
  * dead scheduler produces.
  */
+import { formatBusinessDateTime, toBusinessDate } from '@shareat/core/datetime';
 import { schedulerRepo, type SchedulerJob } from '@shareat/db';
 import { withOrgPrincipal } from '../app/expenses/lib';
 import { containsIdentifier } from '../lib/error-shape';
@@ -34,10 +35,9 @@ function redactSubject(subjectName: string): string {
 }
 
 function monthsSince(date: Date): number {
-  const now = new Date();
-  return (
-    (now.getUTCFullYear() - date.getUTCFullYear()) * 12 + (now.getUTCMonth() - date.getUTCMonth())
-  );
+  const [ny, nm] = toBusinessDate().split('-').map(Number) as [number, number];
+  const [dy, dm] = toBusinessDate(date).split('-').map(Number) as [number, number];
+  return (ny - dy) * 12 + (nm - dm);
 }
 
 export async function SchedulerStatus({
@@ -69,7 +69,7 @@ export async function SchedulerStatus({
 
   const stale = monthsSince(last.startedAt) >= 2;
   const stuck = unfinished.filter((r) => r.job === job);
-  const when = last.startedAt.toISOString().slice(0, 10);
+  const when = toBusinessDate(last.startedAt);
 
   if (stuck.length > 0) {
     // Started and never reported back — a killed process. Invisible without a row written BEFORE
@@ -77,7 +77,7 @@ export async function SchedulerStatus({
     return (
       <Box tone="alarm">
         <strong className="font-medium">A {label.toLowerCase()} run started and never finished.</strong>{' '}
-        Began {stuck[0]!.startedAt.toISOString().slice(0, 16).replace('T', ' ')} for{' '}
+        Began {toBusinessDate(stuck[0]!.startedAt)} {formatBusinessDateTime(stuck[0]!.startedAt, { hour: '2-digit', minute: '2-digit', hour12: false })} for{' '}
         {stuck[0]!.period}. The process was probably killed. Re-running is safe.
       </Box>
     );

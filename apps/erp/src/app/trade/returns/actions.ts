@@ -7,6 +7,7 @@
  * session, never the form (T-138) — authorization itself is `recordCustomerReturn`/
  * `voidCustomerReturn`'s own first statement, not repeated here.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { applyCredit, recordCustomerReturn, voidCustomerReturn } from '@shareat/domain';
@@ -36,7 +37,7 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
   const result = await withOrgPrincipal(actor.orgId, (tx) =>
     recordCustomerReturn(tx, {
       tradeOrderId,
-      returnedOn: new Date().toISOString().slice(0, 10),
+      returnedOn: toBusinessDate(),
       reason,
       lines: [{ tradeOrderLineId, quantity: qty, saleable }],
       refund,
@@ -81,7 +82,7 @@ export async function applyCreditAction(fd: FormData): Promise<void> {
     applyCredit(tx, actor, {
       tradeOrderId,
       amount,
-      collectionDate: new Date().toISOString().slice(0, 10),
+      collectionDate: toBusinessDate(),
       moneyAccountId,
     }),
   );

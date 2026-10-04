@@ -5,6 +5,7 @@
  * than a lookup per row — the N+1 is what makes a derived figure look expensive and tempts someone
  * to store it again, which is exactly what v1 did four times over.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 import { loansRepo, moneyAccountsRepo, type LoanPosition, type LoanRow } from '@shareat/db';
 import { accruedInterest, scheduledInstalment } from '@shareat/domain';
 import { compare, money, ZERO as NO_MONEY } from '@shareat/core/money';
@@ -65,7 +66,7 @@ export async function getDetail(orgId: string, id: string): Promise<LoanDetail |
       loansRepo.lastPaymentDate(tx, orgId, id),
     ]);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toBusinessDate();
     const accruedNow =
       compare(money(position.outstanding), NO_MONEY) > 0
         ? accruedInterest({
@@ -121,5 +122,5 @@ export const STATUS_LABEL: Record<string, string> = {
 };
 
 export function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toBusinessDate();
 }

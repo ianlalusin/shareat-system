@@ -249,7 +249,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                 <tr key={w.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-2 tabular-nums">
                     <Link href={`/wastage/${w.id}`} className="underline underline-offset-4">
-                      {w.openedAt.toISOString().slice(0, 10)}
+                      {toBusinessDate(w.openedAt)}
                     </Link>
                   </td>
                   <td className="px-3 py-2">{w.channel}</td>
@@ -281,7 +281,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                   <tr key={w.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2 tabular-nums">
                       <Link href={`/wastage/${w.id}`} className="underline underline-offset-4">
-                        {w.openedAt.toISOString().slice(0, 10)}
+                        {toBusinessDate(w.openedAt)}
                       </Link>
                     </td>
                     <td className="px-3 py-2">{w.channel}</td>

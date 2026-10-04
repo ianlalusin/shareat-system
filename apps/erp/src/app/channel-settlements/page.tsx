@@ -1,3 +1,4 @@
+import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
 import { auditLogRepo } from '@shareat/db';
@@ -132,7 +133,7 @@ export default async function ChannelSettlementsPage({
 
   const okMessage = payoutBannerMessage ?? (sp.ok ? OK_MESSAGE[sp.ok] : undefined);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toBusinessDate();
   const unwired = channels.filter((c) => !c.destinationMoneyAccountId && c.isActive);
   // T-371 — re-minted, never `Number()`: a malformed balance throws here instead of summing to NaN.
   const owed = add(ZERO, ...channels.map((c) => money(c.outstanding)));

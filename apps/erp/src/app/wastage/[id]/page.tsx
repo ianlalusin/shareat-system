@@ -89,7 +89,7 @@ export default async function WastageDetailPage({
           {row.channel} — {peso(row.amount)}
         </h1>
         <PageDescription className="mt-1">
-          {row.typeMode === 'instant' ? 'Instant' : 'Tracked'} · opened {row.openedAt.toISOString().slice(0, 10)}
+          {row.typeMode === 'instant' ? 'Instant' : 'Tracked'} · opened {toBusinessDate(row.openedAt)}
           {row.orderRef ? ` · order ${row.orderRef}` : ''}
         </PageDescription>
         <p className="mt-1 text-sm">&ldquo;{row.reason}&rdquo;</p>

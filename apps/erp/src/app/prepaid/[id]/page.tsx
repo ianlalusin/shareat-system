@@ -1,3 +1,4 @@
+import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, ZERO } from '@shareat/core/money';
@@ -261,7 +262,7 @@ export default async function PrepaidItemPage({
                   name="writtenOffOn"
                   type="date"
                   required
-                  defaultValue={sp.writtenOffOn ?? new Date().toISOString().slice(0, 10)}
+                  defaultValue={sp.writtenOffOn ?? toBusinessDate()}
                   className={INPUT}
                 />
               </Field>

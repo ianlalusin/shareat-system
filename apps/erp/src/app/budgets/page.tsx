@@ -1,3 +1,4 @@
+import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { REISSUE_INTERVALS } from '@shareat/db/schema';
 import { compare, money, toCentavos, ZERO } from '@shareat/core/money';
@@ -178,7 +179,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                       {b.autoReissue && b.reissueInterval && (
                         <p className="text-xs text-neutral-500 dark:text-neutral-400">
                           ↻ {INTERVAL_LABEL[b.reissueInterval] ?? b.reissueInterval}
-                          {b.lastResetAt && ` · window began ${b.lastResetAt.toISOString().slice(0, 10)}`}
+                          {b.lastResetAt && ` · window began ${toBusinessDate(b.lastResetAt)}`}
                           {b.reissuedFromId && ' · created by the reissue job'}
                         </p>
                       )}

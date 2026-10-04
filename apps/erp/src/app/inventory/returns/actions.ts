@@ -7,6 +7,7 @@
  * session, never the form (T-138) — authorization itself is `recordReturn`/`voidReturn`'s own
  * first statement, not repeated here.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { recordReturn, refundSupplierCredit, voidReturn } from '@shareat/domain';
@@ -40,7 +41,7 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
       storeId,
       supplierId,
       deliveryId,
-      returnedOn: new Date().toISOString().slice(0, 10),
+      returnedOn: toBusinessDate(),
       reason,
       // T-371 S3: the raw figure goes to the domain, which parses it after `authorize()` (R5).
       lines: [{ itemId, itemKind, locationId, quantity: qty, deliveryLineId }],
@@ -87,7 +88,7 @@ export async function refundCreditAction(fd: FormData): Promise<void> {
       supplierId,
       moneyAccountId,
       amount,
-      businessDate: new Date().toISOString().slice(0, 10),
+      businessDate: toBusinessDate(),
       actor,
     }),
   );
