@@ -127,6 +127,122 @@ export async function reciprocalDrift(tx: Tx, orgId: string): Promise<DetectedFi
 }
 
 /**
+ * ⭐ T-373 S2 / DEF-559 — every UNORDERED pair of stores whose two books disagree about what one owes the other.
+ *
+ * `reciprocalDrift` only sums 1250 and 2150 across the whole org, so two pairs out of step by +X and -X net to zero
+ * and stay silent. This is the per-pair reading `interStorePosition` uses for one pair, run for every pair at once.
+ *
+ * With `amt = credit - debit` on a 1250/2150 line at store S naming store P: "S owes P, per S's books" = Σ amt at S.
+ * For the pair {A, B} (A < B by id) A's reading is Σ amt at A, B's reading of the same debt is -Σ amt at B, and the
+ * pair is out of step exactly when the two sums do not cancel (`having`, in SQL `numeric` — never a JS compare).
+ * Non-draft entries only. A line that names no pair of different stores is `interStoreLineUnmatched`'s.
+ */
+export async function interStorePairOutOfStep(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    with pair_lines as (
+      select jl.store_id as store_id,
+             p.id as party_store_id,
+             (jl.credit - jl.debit) as amt
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      join stores p on p.org_id = je.org_id and p.code = jl.party_id and p.id <> jl.store_id
+      where je.org_id = ${orgId} and je.status <> 'draft'
+        and a.code in ('1250', '2150') and jl.party_type = 'store' and jl.store_id is not null
+    ),
+    pairs as (
+      select least(store_id::text, party_store_id::text)    as a_id,
+             greatest(store_id::text, party_store_id::text) as b_id,
+             sum(case when store_id::text < party_store_id::text then amt else 0 end) as sum_a,
+             sum(case when store_id::text > party_store_id::text then amt else 0 end) as sum_b
+      from pair_lines
+      group by 1, 2
+      having sum(amt) <> 0
+    )
+    select pr.a_id, pr.b_id,
+           sa.name as a_name, sb.name as b_name,
+           (sa.code < sb.code or (sa.code = sb.code and pr.a_id < pr.b_id)) as a_first,
+           pr.sum_a::numeric(14,2)::text      as a_per_a,
+           (-pr.sum_b)::numeric(14,2)::text   as a_per_b,
+           pr.sum_b::numeric(14,2)::text      as b_per_b,
+           (-pr.sum_a)::numeric(14,2)::text   as b_per_a
+    from pairs pr
+    join stores sa on sa.id::text = pr.a_id
+    join stores sb on sb.id::text = pr.b_id
+    order by pr.a_id, pr.b_id
+  `)) as unknown as {
+    a_id: string; b_id: string; a_name: string; b_name: string; a_first: boolean;
+    a_per_a: string; a_per_b: string; b_per_b: string; b_per_a: string;
+  }[];
+
+  return rows.map((r) => {
+    // Name the two stores in a fixed order (by store code) so the sentence never flips with the ids.
+    const aFirst = r.a_first;
+    const first = aFirst ? r.a_name : r.b_name;
+    const second = aFirst ? r.b_name : r.a_name;
+    const perFirst = aFirst ? r.a_per_a : r.b_per_b;
+    const perSecond = aFirst ? r.a_per_b : r.b_per_a;
+    // Each reading is "what `first` owes `second`" (signed). Say it in words, as an absolute amount, so the sentence
+    // always names who owes whom.
+    const says = (reading: string): string => {
+      const m = money(reading);
+      if (isZero(m)) return 'nothing is owed';
+      // `reading` is always what `first` owes `second`; a negative one is the reverse debt.
+      return compare(m, ZERO) > 0
+        ? `${first} owes ${second} ${peso(m)}`
+        : `${second} owes ${first} ${peso(negate(m))}`;
+    };
+    return {
+      kind: 'interStorePairOutOfStep',
+      key: `interStorePairOutOfStep:${r.a_id}:${r.b_id}`,
+      storeId: null,
+      severity: 'hard' as const,
+      detail:
+        `${first}'s books say ${says(perFirst)}, but ${second}'s books say ${says(perSecond)}. ` +
+        'An inter-store posting is missing on one side.',
+    };
+  });
+}
+
+/**
+ * ⭐ T-373 S2 / DEF-559 — 1250/2150 lines that no store pair can read: no store on the line, a party that is not a
+ * store, a party code that matches no store in the org, or one that names the line's own store. One finding, org-wide.
+ * A NULL party is `unpartiedControlLines`' (one fact, one finding), so it is excluded here.
+ */
+export async function interStoreLineUnmatched(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const [row] = (await tx.execute(sql`
+    select count(*)::text as n,
+           coalesce(sum(jl.debit + jl.credit), 0)::numeric(14,2)::text as amount
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId} and je.status <> 'draft'
+      and a.code in ('1250', '2150') and jl.party_id is not null
+      -- a reversed posting and its reversal cancel (reverseEntry copies the party onto the reversal)
+      and je.status <> 'reversed'
+      and not exists (select 1 from journal_entries o where o.id = je.reversal_of_entry_id and o.status = 'reversed')
+      and not (
+        jl.party_type = 'store' and jl.store_id is not null
+        and exists (
+          select 1 from stores p
+          where p.org_id = je.org_id and p.code = jl.party_id and p.id <> jl.store_id
+        )
+      )
+  `)) as unknown as { n: string; amount: string }[];
+  const n = Number(row?.n ?? 0);
+  if (!(n > 0)) return [];
+  return [{
+    kind: 'interStoreLineUnmatched',
+    key: 'interStoreLineUnmatched',
+    storeId: null,
+    severity: 'hard',
+    detail:
+      `${n} due-from/due-to line(s) worth ${peso(money(row!.amount))} don't name two different stores, ` +
+      'so no store pair can account for them.',
+  }];
+}
+
+/**
  * ⭐ T-366 S5 / DEF-406 — three liability control accounts that can never carry a debit balance:
  * `2160` service charge float (per STORE — Ian's T-187 Q5: the float is never negative, so `hard`),
  * `2130` reimbursables owed to staff (per EMPLOYEE party, `soft` — Q2) and `2120` goods received,

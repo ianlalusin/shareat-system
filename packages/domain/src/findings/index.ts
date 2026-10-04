@@ -149,6 +149,8 @@ export async function listFindings(
   const detected = [
     ...(await findingsRepo.trialBalanceDrift(tx, orgId)),
     ...(await findingsRepo.reciprocalDrift(tx, orgId)),
+    ...(await findingsRepo.interStorePairOutOfStep(tx, orgId)),
+    ...(await findingsRepo.interStoreLineUnmatched(tx, orgId)),
     ...(await findingsRepo.unpartiedControlLines(tx, orgId)),
     ...(await findingsRepo.openingBalanceResidual(tx, orgId)),
     ...(await findingsRepo.clearingNotAtRest(tx, orgId)),

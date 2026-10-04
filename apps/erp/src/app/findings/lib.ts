@@ -84,6 +84,8 @@ export function bySeverityThenStatus<T extends { severity: 'hard' | 'soft'; stat
 export const KIND_LABEL: Record<string, string> = {
   trialBalanceDoesNotTie: 'Trial balance does not tie',
   dueFromDueToNotReciprocal: 'Due-from and due-to disagree',
+  interStorePairOutOfStep: 'Two stores disagree on what one owes the other',
+  interStoreLineUnmatched: 'Due-from/due-to lines with no store pair',
   subledgerDoesNotMatchControl: 'Control account has unattributed lines',
   openingBalanceEquityNonZero: 'Opening balance equity is not zero',
   clearingAccountNotAtRest: 'Clearing account not at rest',

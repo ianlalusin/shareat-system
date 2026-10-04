@@ -839,7 +839,10 @@ describe('acknowledgement accepts a risk without pretending it is fixed', () => 
     expect(finding.acknowledgedBy).toBe(f.personId);
     expect(finding.acknowledgementAgeDays).toBe(0);
     // ⭐ The difference from "resolved": it is still there, still counted.
-    expect(result.openCount).toBe(0);
+    // T-373 S2: the same STORE-X line (a party that names no store) also raises interStoreLineUnmatched, which is not
+    // acknowledged here — so exactly that one stays open, and the acknowledged one leaves the open count.
+    expect(result.findings.filter((x) => x.status === 'open').map((x) => x.kind)).toEqual(['interStoreLineUnmatched']);
+    expect(result.openCount).toBe(1);
     expect(result.acknowledgedCount).toBe(1);
   });
 
@@ -880,7 +883,8 @@ describe('acknowledgement accepts a risk without pretending it is fixed', () => 
       where org_id = ${f.orgId}`;
     const result = await feed(f);
     expect(result.findings.find((x) => x.kind === 'dueFromDueToNotReciprocal')!.status).toBe('open');
-    expect(result.openCount).toBe(1);
+    // T-373 S2: plus interStoreLineUnmatched from the same STORE-X line, never acknowledged.
+    expect(result.openCount).toBe(2);
   });
 });
 
