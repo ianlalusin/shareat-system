@@ -946,7 +946,7 @@ T-123 raises `1220 Channel receivable` on every verified Foodpanda / Grab day, a
 
 ⛔ **The trap, restated because it cost ₱198,148.29 once:** these fees are booked **here, once**. A
 module that posts this settlement *and* lets someone raise a separate expense document for the same
-platform fee has rebuilt the confirmed v1 defect (see `expense.channel_fee`'s own trap).
+platform fee has rebuilt the confirmed v1 defect (see `channel_settlement.plain` below).
 
 ### `channel_settlement.plain` — fees to real accounts, receivable to exactly zero
 

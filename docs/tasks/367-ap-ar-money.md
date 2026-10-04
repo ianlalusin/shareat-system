@@ -1,6 +1,6 @@
 # T-367: AP/AR money — DEF-201, DEF-396, DEF-420, DEF-499, DEF-500, DEF-395, DEF-508, DEF-054
 
-**Status:** **S0 RAN 2026-10-04: gate FAILED (1,841 `ar_collection` legs, ₱739,985.33, none a SYSTEM Platform Fee doc); Amendment A1 drafted, awaiting Ian (S0b capture + QA1–QA3); S5/S6 wait on A1 approval + S0b.** **S3 DONE 2026-10-02 (DEF-420, 499, 500; audited twice; smoke on 9008); S4 DONE 2026-10-02 (pin tests only, DEF-395 overdraftLimit leg); S2 DONE 2026-10-01 (DEF-396, 508, 518, 519; migration 0176; ⛔ prod P2-P4 with Ian before the push; DEF-550 = no void-payment screen); S1 DONE 2026-10-01 (DEF-201, 517, 520 + DEF-546; migration 0173 — ⛔ prod duplicate count with Ian before the push, docs/ops)** — ⭐ allocation 2026-10-01 (orchestrator): T-367 S1 = 0173, T-368 S0 = 0174, T-372 S2 = 0175; supersedes the order on line 11 — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
+**Status:** **A1 FINAL 2026-10-04: S5 READY (retire `ar_collection` AND `other`, migration 0182 reserved, no ETL change; ⛔ P5 on prod with Ian before the push). S6 WITHDRAWN. S0/S0b done.** **S3 DONE 2026-10-02 (DEF-420, 499, 500; audited twice; smoke on 9008); S4 DONE 2026-10-02 (pin tests only, DEF-395 overdraftLimit leg); S2 DONE 2026-10-01 (DEF-396, 508, 518, 519; migration 0176; ⛔ prod P2-P4 with Ian before the push; DEF-550 = no void-payment screen); S1 DONE 2026-10-01 (DEF-201, 517, 520 + DEF-546; migration 0173 — ⛔ prod duplicate count with Ian before the push, docs/ops)** — ⭐ allocation 2026-10-01 (orchestrator): T-367 S1 = 0173, T-368 S0 = 0174, T-372 S2 = 0175; supersedes the order on line 11 — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
 1–7 and the minors applied. Spec by the Opus planner, 2026-09-30. Batch B of the money-defect
 push (Ian, 2026-09-30: *"close all open money defects in v2"*), `docs/plans/money-defects-2026-09-30.md`.
 **Model:** Sonnet for each slice, tester first and then builder. One lane runs the slices in order.
@@ -10,7 +10,7 @@ at HEAD `72a6102`; both of those tasks will shift them, so the builder re-reads 
 **Migrations:** up to THREE, hand-authored per ADR-012 §5, each at the **next free index at build** (T-366 holds 0172,
 T-368 0173, T-372 0174, so T-367 starts at ≥ 0175): S1 (write-off unique backstop), S2 (invoice gate trigger), S5
 (retire `ar_collection` in the method CHECK). Journal `when` = previous `when` + 86,400,000 × (idx − previous idx).
-**Gates:** S0 (a read-only count) runs first and gates S5. ⛔ S6 is BLOCKED on Ian's Q1–Q3. Every other slice has a
+**Gates:** S0/S0b ran (A1 FINAL). S6 is WITHDRAWN. Every other slice has a
 default that ships unless Ian rules otherwise.
 
 ## Goal
@@ -158,11 +158,8 @@ Every AP and AR figure stays equal to the ledger it summarises, under double-cli
 - **R10. DEF-054, the part that needs no new account:**
   - `ar_collection` is retired as an expense method: the domain refuses it at create, the action stops accepting it,
     and the CHECK is recreated without it, `NOT VALID` so any history survives.
-  - The ETL SKIPS a v1 auto fee expense (all four markers in the Census) with reason
-    `platform_fee_carried_by_collection:<collectionId>`, because the collection's own conversion already books the 6400
-    leg (`leg-mapping.ts:450-456`), and booking it twice is the ₱198,148.29 v1 defect (`POSTING-PATTERNS.md:432-436`).
-    Any other `ar_collection` doc stays QUARANTINED; it is never skipped on a partial match.
-  - `other` is untouched until Q1–Q3 are answered (S6).
+  - ~~The ETL skip and the `other` deferral~~ **VOID (A1 FINAL, 2026-10-04):** the premise was false (no converter
+    books the collection), and the cutover converts no v1 expense. `other` is retired with `ar_collection` in S5.
 
 ## Invariants (every slice)
 - Bible §16.1 inv. 1: every entry balances with at least two lines. Inv. 5: corrections are reversals. Inv. 6 (row 98):
@@ -230,119 +227,71 @@ from p where pay->>'method' in ('other','ar_collection') group by 1,2,3,4 order 
 
 ---
 
-## Amendment A1 (S0 results, 2026-10-04) — DRAFT, awaiting Ian (S0b capture + QA1–QA3)
+## Amendment A1 (S0 + S0b results, Ian's QA1–QA3) — FINAL 2026-10-04
 
-**Verdict: AMEND, do not re-plan.** S5's domain and migration halves stand as written. What changes is the
-ETL rule (R10) and the size of S6. The S0 gate failed because R10 described the wrong v1 writer, not because
-the plan is wrong. `[read]` = cited from source. `[inferred]` = not yet checked against data.
+**Verdict: SHRINK.** DEF-054 is fixed by retiring BOTH methods in v2 (S5, migration **0182**). The ETL half of
+R10 is **CUT**: no converter will ever run over these v1 documents, so a skip rule would protect nothing. S6 is
+**WITHDRAWN**. `[read]` = cited from source; `[inferred]` = not checked against data.
 
-### S0 numbers (fresh capture, 2026-10-04: 9,036 expense docs, 4 stores)
-| Population | Legs / docs | ₱ |
-|---|---:|---:|
-| `ar_collection`, category `Online Order Expenses`, supplier ≠ SYSTEM, no `sourceId`, posted | 1,841 / 1,841 | 739,985.33 |
-| SYSTEM `Platform Fee` doc (R10's four markers), matched to its `arCollections` doc | 1 / 1 | — |
-| `other` / `other` | 322 / 322 | 170,957.12 |
-| `other` / `rebate` | 1 | 220.00 |
-| `other` / `store_credit` | 1 | 266.00 |
-| SYSTEM docs with category `Online Order Expenses` but no `ar_collection` leg | 2 | — |
-| `Platform Fee` docs with a non-SYSTEM supplier | 3 | — |
+### Why the ETL half is cut [read]
+- The cutover is **opening-balance only** (bible §12 phase 8; row 83: balance-sheet only, 2026 "never loaded as
+  real"; row 105: per-party lump AR/AP typed by Ian; row 109: assets at net book value). No v1 expense document
+  reaches the v2 ledger at cutover. The pilot ledger is purged on 1 January (row 108).
+- `runLoad`/`runAnalyze` (`packages/etl/src/run.ts`) have no production caller, only `tests/integration/etl-run.test.ts`.
+- The one live consumer of `convertExpense` is the T-114b audit (`packages/etl/src/audit/groups.ts:286-302`), and it
+  calls it only to synthesise the missing P&L leg for a v1 journal group with `sourceType='expense_payment'` that does
+  not already balance. The 1,841 fee docs and the 322 system `other` docs post no `expense_payment` leg in v1
+  (`ar_collection` resolves to null at `accounts/account-resolver.ts:49-53`, and system docs never go through
+  `buildExpenseJournalEntries`), so the audit never converts them. The channel adjustments post their own balanced
+  `sale` group (`channel-settlement-batch.actions.ts:327-329`: `online__<dest>` OUT / `expense__online_order_expenses`
+  IN), which the audit classifies `balances_as_is` (`groups.ts:280-282`) without opening the expense doc.
+- The replay harness (`convertSpecimen`) already quarantines both methods (`convert.ts:435-445`). That is correct,
+  and it stays.
+- **What DEF-054's ETL side still protects:** nothing new. `convert.ts` keeps quarantining `other`/`ar_collection`,
+  so the two staff `other` docs (rebate, store credit) show as ⚠️ ambiguous groups in the T-114b audit. That is
+  the "show me" Ian asked for, already in place.
 
-### 1. What the 1,841 are in v1 [read]
-**v1 goal:** *Show each Grab/Foodpanda payout deduction (commission, ads, VAT, tax withheld, penalty, variance)
-as its own line in the expense reports, because v1's income statement reads expense documents and not the
-journal.*
-- Written by `recordChannelSettlementAction`, one doc per deduction (`ERP-rebuild/src/lib/actions/channel-settlement.actions.ts:331-360`):
-  `payments:[{method:'ar_collection'}]`, `supplierId: channel_<id>`, `category:'Online Order Expenses'`,
-  `createdVia:'channel_settlement'`, `settlementId`, `projectionState:'applied'`. **No `sourceId`**, which is why R10 missed them.
-- The journal posting lives in the SETTLEMENT, not in the expense doc: `fees_expense` → `expense__online_order_expenses`,
-  paid out of `clearing__<platform>` (`channel-settlement/posting.ts:85-86`). The doc posts no leg of its own:
-  `ar_collection` resolves to null (`accounts/account-resolver.ts:49-53`) and system docs never go through
-  `buildExpenseJournalEntries` (callers: `expense.actions.ts:297,1024`, `recurring-expense.actions.ts:50` only).
-- Same settlement writes `arCollections/{settlementId}` with `platformFee` = all deductions and `feeBreakdown`
-  (`:366-390`), so **the fee is counted three times in v1's data**: settlement journal, collection doc, expense docs.
-  Each v1 report reads only one of them, so v1 itself does not double-count. A converter that books two of them
-  would.
-- Second writer, `recordChannelAdjustmentAction` (`channel-settlement-batch.actions.ts:330-360`): refunds and
-  Appendix-B charges, `createdVia:'channel_adjustment'`. ⚠️ Here the money really left the bank
-  (`online__<dest>` OUT, `:327`), and the record of that is `channelSettlements/{adjId}`, **which S0 did not capture.**
-- **What it does to v1's books:** it reduces nothing and creates nothing. It is a report-only copy of fee lines
-  whose ledger effect is inside the settlement.
+### S0b numbers (full capture incl. `channelSettlements`: 811 docs = 501 settlements, 297 adjustments, 13 refunds)
+| Population | Legs | ₱ | v2 treatment |
+|---|---:|---:|---|
+| `ar_collection`, `createdVia='channel_settlement'`, `settlementId` set | 1,531 | 691,054.11 | none (report-only copy of the settlement's fee line) |
+| `ar_collection`, `channel_adjustment`, `settlementId` set (a statement ref, not a key) | 295 | 33,562.93 | none (the bank outflow is in v1's own journal) |
+| `ar_collection`, `channel_adjustment`, no `settlementId` | 2 | 338.63 | same |
+| `ar_collection`, `channel_refund`, no `settlementId` | 13 | 15,029.66 | same |
+| `other/other`, system: depreciation 297 (₱138,429.62), amortization 23 (₱32,065.00), asset_disposal 2 (₱462.50) | 322 | 170,957.12 | none (assets re-entered at NBV, row 109; T-124/T-125 post 2027 natively) |
+| `other/rebate` (iGOW 2026-06-26, Sides) | 1 | 220.00 | Ian, by hand (QA2) |
+| `other/store_credit` (dZUy 2026-05-16, Supplies and Stocks) | 1 | 266.00 | Ian, by hand (QA2) |
+| SYSTEM `Online Order Expenses`, no `ar_collection` leg (dZUy 2026-06-09, online) | 2 docs | 206.70 commission + 24.80 VAT | Ian, by hand (QA2) |
+| non-SYSTEM `Platform Fee`, b9Dz, online: 2026-05-26 · 2026-05-31 · 2026-05-31 | 3 docs | 31,804.04 · 15,145.74 · 16,898.69 (Σ 63,848.47) | Ian, by hand (QA3) |
+- **Settlement cross-check:** 497 settlements, 0 missing. Σ legs = `fees` for 495. The other 2 (b9Dz 2026-06-02/03,
+  ₱575.50) equal `fees + variance`: v1 books the variance as an extra leg. **Σ legs = `fees + variance` holds for all
+  497**, and `expenseIds` count = legs for all 497. Nothing is mismatched.
+- **Adjustments and refunds (310 legs):** every one has a `channelSettlements` doc (`type:'refund'`) whose `expenseId`
+  points at the leg. `recordChannelAdjustmentAction` posts Dr `expense__online_order_expenses` / Cr `online__<dest>`
+  (`sourceType:'sale'`, `sourceId:<adjId>`, `:327-329`) in the same transaction as the expense doc (`:337-374`), so the
+  money that left is already in v1's ledger, and from there in the 31 Dec wallet balance that becomes the opening
+  figure. The `channel_refund` writer is no longer in v1 `src/` (grep finds only `channel_adjustment` and
+  `channel_settlement`). The 13 have the same doc shape [inferred: same posting]. **Decision: no conversion, no
+  quarantine rule.** Their balance-sheet effect arrives through the opening balance; their P&L effect is 2026 legacy
+  (row 83).
+- **The 3 manual Platform Fees** [inferred]: paid `online`, so in v1 they reduced a b9Dz online wallet. If the payouts
+  had already netted those fees, v1's wallet is ₱63,848.47 low. That matters only if the opening wallet figure is taken
+  from v1 rather than from the wallet statement. Ian decides (QA3).
 
-### 2. What the 322 `other` legs are in v1 [read; split by population is inferred]
-**v1 goal:** *A sentinel for "no money left any tracked account". Staff could pick a sub-type by hand, and v1's
-own non-cash postings (depreciation, amortisation, asset write-off) used it so those charges would show in
-the expense reports.*
-- **System writers use exactly `otherType:'other'`:** depreciation (`depreciation.actions.ts:179`, category
-  `Depreciation`, `sourceType:'depreciation'`), amortisation (`amortization.actions.ts:188`), and asset write-off
-  (`asset.actions.ts:444`, `Loss on Disposal`). All are `supplierName:'System'` with a `sourceId`, and the real posting
-  is in their own journal builders. They have the same shape as the 1,841: a report-only copy.
-- **Staff-entered:** `PaymentSplitEditor.tsx:254-270` offers the sub-types. `expense.builder.ts:79-90` posts one
-  leg OUT of `others__<type>`, an account marked "labels only … no running balance" (`account-defs.ts:83-87`).
-  The expense hits the P&L and the money comes from nowhere. Nobody can tell what the payment was.
-- ⚠️ **[inferred] Most of the 322 are probably the system copies**, because those are monthly, per asset, every
-  month. S0 did not group by `category`/`sourceType`/`supplierName`, so this is unproven. S0b (below) settles it.
-
-### 3. What v2 does today [read]
-- v2 books platform fees once, inside its own settlement (T-150, `packages/domain/src/channel-settlements/index.ts:9-11`,
-  `POSTING-PATTERNS.md` `channel_settlement.plain`). v2 has no fee expense document at all. **The domain half of S5
-  (retire the method, NOT VALID CHECK) is unaffected.**
-- ⛔ **R10's premise is false.** It says *"the collection's own conversion already books the 6400 leg (leg-mapping.ts:450-456)"*.
-  `leg-mapping.ts` is a classification table, not a converter. The ETL converts only `salesDay` and `expense`
-  (`packages/etl/src/convert.ts:597-599`), and `channel.settlement` is an UNSUPPORTED class (`:570`). F1's
-  "converting C1 gives Dr cash/Dr 6400/Cr 1210" has no converter to test.
-- The ETL quarantines `other` and `ar_collection` together (`convert.ts:435-445`). Categories `Online Order Expenses`
-  → 6410, `Depreciation` → 6700, `Amortization` → 6750, `Loss on Disposal` → 7400 are mapped (`leg-mapping.ts:143,154,155,165`).
-  Converting these docs as ordinary expenses would therefore post a second 6410/6700/6750/7400 charge, the
-  ₱198,148.29 defect shape.
-- ⚠️ `POSTING-PATTERNS.md:949` points at an `expense.channel_fee` trap that does not exist (dangling reference).
-- Stakes [read: bible rows 83, 105, 108]: the cutover opening balance is balance-sheet only and typed per party, and
-  2026 history is never loaded as real. These rules decide ETL audit/pilot output, **not the 2027 books.** That argues
-  for the smallest correct rule and against new accounts.
-
-### 4. Recommended v2 treatment
-| Population | Treatment | Pattern |
-|---|---|---|
-| (a) 1,841 `channel_settlement` docs | **SKIP**, reason `fee_carried_by_channel_settlement:<settlementId>`. Exact markers: `createdVia='channel_settlement'`, `settlementId` present, category `Online Order Expenses`, the ONLY payment is `ar_collection`. Cross-check: Σ docs per `settlementId` = `arCollections/{settlementId}.platformFee` (± variance, both in `feeBreakdown`). A mismatch is quarantined, never skipped | `channel_settlement.plain` (the fee lives there, once) |
-| (a′) `channel_adjustment` docs (count unknown) | **SKIP**, reason `carried_by_channel_adjustment:<adjId>`, cross-checked against a landed `channelSettlements/{adjId}.expenseId`. Until that collection is captured: QUARANTINE | none needed: the bank outflow belongs to the settlement converter (unsupported today) |
-| SYSTEM `Platform Fee` (1) | R10's existing skip, unchanged | `ar_collection.with-platform-fee` |
-| (b1) `other/other` system copies (`supplierName='System'` AND `sourceType ∈ {depreciation, amortization, asset_disposal}` AND `sourceId`) | **SKIP**, reason `carried_by_<sourceType>:<sourceId>` | `amortization.monthly`; depreciation/disposal by their own builders |
-| (b2) `other/other` residue (staff-entered) | Lands Dr category / **Cr new suspense account** with a finding per row, as ruled (q3b "add new") | **none, new row needed** (Q7-style sign-off) |
-| (c) rebate ₱220, store credit ₱266 | QUARANTINE and show Ian (q6 "show me"). No new method | `supplier.credit-applied` covers spending a credit. Arising is unwritten |
-| 2 SYSTEM OOE without `ar_collection`; 3 non-SYSTEM `Platform Fee` | QUARANTINE and list for Ian. The 3 are the shape of the ₱198k manual double-count [inferred] | — |
-- **The voucher/points/gift asset account is NOT built.** Ian answered q2 "only if the count shows more than a handful".
-  The count is voucher 0, points 0, gift 0, store_credit 1.
-
-### 5. Slice changes
-- **S0b (new, read-only, before S5's ETL half):** on the same scratch DB if it still exists; otherwise recapture with
-  Ian's okay (PII). Add `--collection channelSettlements` per store. Report (i) the 1,841 grouped by `createdVia` and by
-  whether `settlementId` is present, plus the per-settlement Σ vs `platformFee` match/mismatch counts; (ii) the 322
-  grouped by `category`, `sourceType`, `supplierName`, `createdVia`, with ₱; (iii) the 7 singletons listed row by row.
-- **S5:** the domain, action and migration parts are unchanged (migration unchanged). ETL part rewritten:
-  - F1 drops the "convert C1" half. It becomes "fee doc skipped; zero entries; skip reason carries the settlement id".
-  - Add F1b (channel_settlement skip plus Σ cross-check, and a mismatch → quarantined) and F1c (adjustment → quarantined
-    until a channelSettlements doc is landed).
-  - F2's controls extend to one marker missing at a time for the new keys.
-  - `convert.ts:437-441`'s comment and R10's text are corrected.
-- **S6:** shrinks to (b1) system-copy skip + (b2) suspense landing. Needs ONE new COA leaf (next to 2900, e.g.
-  "Unclassified payments (from old system)", liability/credit, active). [inferred] This needs a seed row plus a
-  backfill for existing orgs; the builder confirms the mechanism, and it is migration-or-seed per ADR-012. One new
-  POSTING-PATTERNS row (`expense.v1_unclassified`) for Ian's sign-off. No voucher method, no new expense method,
-  `UNMAPPED_PAYMENT_METHODS` stays `{'other'}` in the domain.
-- Fix the dangling `expense.channel_fee` reference (POSTING-PATTERNS.md:949) in S5's doc pass.
-
-### Questions only Ian can answer
-- **QA1. When staff paid an expense with "Other", what was usually going on?** Example: a ₱1,500 "Other" payment
-  for LPG. Was it (a) you or a partner paying from your own pocket, (b) a supplier giving it free or offsetting it,
-  or (c) nobody knows? The answer decides where those rows go after they leave the holding account.
-  **Recommended:** wait for the S0b list (it shows how many are really staff-entered) and park them in the holding
-  account until then. Nothing is lost by waiting.
-- **QA2. The ₱220 rebate and ₱266 store credit from the old system: fix by hand?** **Recommended:** yes. We show you the
-  two rows and you tell us which supplier's credit they are, or that they are used up. Building a tool for two rows
-  costs more than the rows.
-- **QA3 (confirm only). Three manual "Platform Fee" expenses look like the old double-counted fee.** Example: a
-  ₱300 Grab fee typed in by hand when the payout had already taken it. **Recommended:** we list them under your
-  "show me" ruling; nothing changes without you.
-- (Not a question: per your q2 answer, the voucher/points/gift account is NOT built. The count found zero of each.)
+### Ian's answers, and what each means
+- **QA1 (2026-10-04): retire `other`.** *"i dont want others as payment now its ambigious"*. It is retired exactly like
+  `ar_collection`, in the same S5 slice and the same migration 0182.
+  ⚠️ **His reason is not supported by v1 data, said plainly:** v1 has **0** staff-entered `other/other` legs. All 322
+  are system copies of depreciation, amortisation and disposal, which v2 already models (T-124, T-125). The only staff
+  `other` legs are one rebate (₱220) and one store credit (₱266), and none is dated after 2026-09-11. "Supplier vouchers
+  need a home" is therefore a **separate, unscoped capability**: a CAPABILITY-GAPS candidate (the orchestrator logs it
+  at wrap-up), not part of this task. **Unknown:** whether v2 production has `other` expenses entered since launch.
+  P5 answers that.
+- **QA2 (yes):** the rebate, the store credit and the 2 dZUy OOE docs are fixed by hand with Ian, outside v2 (in his
+  2026 close or the opening spreadsheet). No tool.
+- **QA3 (yes):** the 3 manual Platform Fee docs are listed above for Ian. Nothing changes without him.
+- The original Q1–Q3 (rebate arising, voucher account, suspense account) are **superseded**. No v1 `other` lands
+  anywhere in v2, so no suspense account and no new posting are needed.
 
 ---
 
@@ -594,57 +543,105 @@ T-371.
 
 ---
 
-## S5: DEF-054, part 1 — retire `ar_collection`; the ETL skips v1's duplicate fee (after S0)
-**BUILDER** (source):
-- `packages/db/migrations/<N+2>_t367_def054_retire_ar_collection_method.sql` (new) and `meta/_journal.json`:
-  `ALTER TABLE expense_payments DROP CONSTRAINT expense_payments_method_check;` then `ADD CONSTRAINT … CHECK (method in
-  ('cash','online','credit','other','reimbursable')) NOT VALID;`.
-- `packages/db/schema/expenses.ts`: the enum and check without `ar_collection`, with `// NOTE: NOT VALID, hand-added in
-  migration <N+2>` beside it.
-- `packages/domain/src/expenses/routing.ts`: `ExpensePaymentMethod` loses `ar_collection`; `UNMAPPED_PAYMENT_METHODS`
-  is `{'other'}`; the header comment says why.
-- `packages/domain/src/expenses/create.ts`: refuse any line whose method is not in `EXPENSE_PAYMENT_METHODS` before any
-  write (*"That payment method is no longer used. A platform fee is recorded on the customer's collection."* for
-  `ar_collection`).
-- `apps/erp/src/app/expenses/actions.ts:67`: `PAYMENT_METHODS` loses `ar_collection`.
-- `packages/etl/src/convert.ts`: the R10 skip, keyed on all four markers; `packages/etl/src/convert.ts`'s own
-  `ExpensePaymentMethod` KEEPS `ar_collection` (it reads v1).
-- `packages/domain/src/shared/money-lines.ts:58-62`: comment only.
-- `apps/erp/src/app/expenses/[id]/page.tsx:25-32`: the `ar_collection` label stays (history display). Checked: `METHOD_LABEL` is `Record<string, string>`, so it still typechecks once `ar_collection` leaves the union; the builder confirms with typecheck.
+## S5: DEF-054 — retire `ar_collection` AND `other` as expense payment methods (A1 FINAL; migration 0182)
+**Precheck:** P5 (below) runs on production with Ian before the push. Its result changes nothing in the build: the
+CHECK is NOT VALID, and routing keeps blocking any legacy row (step 4). If P5 finds a POSTED row, stop and ask Ian.
 
-**TESTER:** `packages/etl/tests/unit/t367-s5-platform-fee-skip.test.ts` (new);
-`packages/domain/tests/integration/t367-s5-ar-collection-retired.test.ts` (new);
-`packages/db/tests/integration/t367-s5-migration.test.ts` (new).
+**BUILDER** (source; re-read each site at HEAD first):
+1. `packages/db/migrations/0182_t367_def054_retire_other_ar_collection_methods.sql` (new, **reserved**) and
+   `meta/_journal.json`, per ADR-012 §5: `ALTER TABLE expense_payments DROP CONSTRAINT expense_payments_method_check;`
+   then `ALTER TABLE expense_payments ADD CONSTRAINT expense_payments_method_check CHECK (method in
+   ('cash','online','credit','reimbursable')) NOT VALID;`. If 0182 is taken at build, use the next free index and say
+   so in the report.
+2. `packages/db/schema/expenses.ts:214,262`: the enum and the check become the four methods, with
+   `// NOTE: NOT VALID, hand-added in migration 0182; legacy rows may still hold 'other'/'ar_collection'` beside it.
+3. `packages/domain/src/expenses/routing.ts`: `ExpensePaymentMethod` and `EXPENSE_PAYMENT_METHODS` become
+   `cash | online | credit | reimbursable`. ✎R-7 `UNMAPPED_PAYMENT_METHODS` (`:69`) has no importers: **delete it**.
+   Export `RETIRED_PAYMENT_METHODS: ReadonlySet<string> = new Set(['other','ar_collection'])`. The header comment says
+   why (Ian, 2026-10-04, A1).
+   ✎R-3 **Types, three of them, deliberately different:**
+   - `packages/db/src/repo/expenses.ts:603` `ExpensePaymentRow.method` (the READ type) KEEPS all six values, because
+     legacy rows exist;
+   - `InsertPaymentInput.method` (`:613`, the WRITE type) narrows to the four, so no caller can compile an insert of a
+     retired method;
+   - `RoutingPayment.method` widens to `string`, so the rows `approve.ts:214` passes in reach the `default:` branch
+     with their legacy value intact.
+4. `routing.ts` funding switch (`:242-249`): the `'other'`/`'ar_collection'` cases become a `default:` branch that
+   refuses ANY method not in `EXPENSE_PAYMENT_METHODS`. A legacy DB row must still be blocked at approval: this is the
+   second layer (bible §15.11). ✎R-6 Its error is `payment #${index}: ` + the SAME sentence `assertLivePaymentMethod`
+   gives (step 5). It comes from one function, not a copy, and the stale *"Ian must decide…"* text at `:247` is
+   deleted. Existing behaviour, unchanged and noted: a legacy draft on a pending supplier invoice keeps blocking that
+   invoice's `verifyInvoice` until the draft is voided or re-entered.
+5. `packages/domain/src/expenses/create.ts` AND `edit.ts` (payments rebuilt at `:185-195`) refuse, before any write,
+   any line whose method is not in `EXPENSE_PAYMENT_METHODS`. Both go through ONE helper in `routing.ts`
+   (`assertLivePaymentMethod`) so the two cannot drift. Sentences:
+   - `ar_collection`: *"That payment method is no longer used. A platform fee is recorded on the channel settlement."*
+   - `other`: *"'Other' is no longer a payment method. Choose how the money actually left: cash, online, credit or
+     reimbursable."*
+   - anything else: *"That payment method is not recognised."*
+6. ✎R-5 `apps/erp/src/app/expenses/actions.ts:69`: `PAYMENT_METHODS` is dead (its only occurrence). **Delete the
+   constant.** The action already refuses an unknown method through `validateMoneyLines` (`money-lines.ts:333`), so
+   the new domain sentences are reachable only by direct domain calls, including AP's `recordExpenseForInvoice`
+   (`ap/index.ts:871`). F3e tests that path.
+7. `packages/domain/src/recurring-expenses/job.ts:82-87`: unchanged (it emits only credit, cash and online). Typecheck
+   confirms.
+8. `packages/domain/src/shared/money-lines.ts:58-62`: comment only (both are now retired, not merely absent).
+   `apps/erp/src/app/expenses/[id]/page.tsx:25-32`: the history labels STAY (`Record<string,string>`).
+9. **No ETL change.** `packages/etl/src/convert.ts` keeps its own v1 `ExpensePaymentMethod` and its quarantine at
+   `:435-445`. R10's ETL bullets are void (A1).
+10. Doc pass: remove `POSTING-PATTERNS.md:949`'s dangling `expense.channel_fee` reference, or point it at
+    `channel_settlement.plain`. This is the only POSTING-PATTERNS edit, and it adds no posting. ✎R-8b **Edit within the
+    line, so the file's line count is unchanged** (the `toc-freshness` test checks the line ranges).
 
-**Tests.**
-- **F1:** a v1 fee doc (₱250.00, `SYSTEM`, `Platform Fee`, one `ar_collection` payment, `sourceId` C1) → `skipped`,
-  zero entries, reason `platform_fee_carried_by_collection:C1`. Converting C1 (₱5,000 gross, fee 250) gives Dr cash
-  4,750 / Dr 6400 250 / Cr 1210 5,000. Across both conversions there is exactly **one** 6400 leg of **250.00**
-  (`POSTING-PATTERNS.md:421-436`). HEAD: `quarantined` → red. Mutant: convert the fee doc to Dr 6400 → two legs, red.
-- **F2 (controls: the skip is exact, never partial):** `ar_collection` with supplier ≠ `SYSTEM` → quarantined
-  `unimplemented_payment_method`; `SYSTEM`/`Platform Fee` with no `sourceId` → quarantined; `SYSTEM`/`Platform Fee`
-  paid `cash` → converted as an ordinary expense; a doc mixing `ar_collection` and `cash` → quarantined.
-- **F3:** `createExpense` with an `ar_collection` line → refused with the sentence, nothing written; the same with `cash`
-  succeeds. An `other` line keeps today's behaviour (blocked by routing at approval).
-- **F4 (migration):** a new `ar_collection` payment row → 23514; a pre-existing one survives the migration (NOT VALID);
-  `other` still accepted.
+**TESTER** (writes first, shows each red): `packages/domain/tests/integration/t367-s5-methods-retired.test.ts`,
+`packages/domain/tests/unit/t367-s5-routing-retired.test.ts`, `packages/db/tests/integration/t367-s5-migration.test.ts`.
+✎R-4 **Existing tests this slice breaks, owned by the tester:**
+- `packages/domain/tests/integration/expenses.test.ts:727-748` creates `other`/`ar_collection` drafts and expects
+  `/DEF-054/`. Retire it; F3a and F3d replace it.
+- `packages/domain/tests/unit/expense-routing.test.ts:187-211` uses the literals and asserts `'DEF-054'`. Fold it into
+  F3c.
+- `packages/domain/tests/unit/expense-routing-mirror.test.ts:134` asserts that both methods are unmapped in
+  `convertExpense` AND `routeExpense`. It stays true (convert quarantines, routing refuses), but if it asserts the text,
+  update the routing half to the new sentence.
+- ✎R-1/R-2 **Every refusal assertion checks the EXACT domain sentence, and checks that the error is NOT a Postgres
+  23514.** After 0182 the CHECK also refuses these rows, so "zero rows written" alone passes even without the guard.
+- **F3a (create):** `createExpense` with one `ar_collection` line → its exact sentence, no 23514, zero `expenses` and
+  zero `expense_payments` rows. One `other` line → its sentence, likewise. A `cash` + `other` mix → the `other`
+  sentence, no 23514, zero rows. `cash` alone succeeds. ✎R-2 *Mutant:* delete the create guard. Nothing is written
+  either way (the header insert at `create.ts:206` rolls back on the payment insert's 23514 at `:220`), so **only the
+  sentence assertion kills it.** Red = a 23514 / wrong message.
+- **F3b (edit):** `editExpense` on a draft, replacing its `cash` line with `other` → the exact `other` sentence, no
+  23514, and the draft's payments unchanged. ✎R-1 *Mutant:* the guard only in create. `replacePayments` then raises
+  23514 and rolls back, so the payments ARE unchanged, and only the sentence assertion turns it red.
+- **F3c (routing, unit):** payments with `method: 'other'` and `'ar_collection'` (plain strings now, R-3) → an error equal
+  to `payment #0: ` + that method's sentence, with no funding line. `'bogus'` → the not-recognised sentence.
+  *Mutant:* `default:` maps to 1110 → red.
+- **F3d (approve a legacy row, integration):** ✎R-8 inside ONE fixture transaction: `DROP CONSTRAINT
+  expense_payments_method_check`, insert a draft whose payment is `other`, then re-`ADD` the same CHECK `NOT VALID`.
+  DDL is transactional, so the shared DB never commits without the CHECK. Then `approveExpense` → refused with
+  `payment #0: ` + the `other` sentence, no journal entry, status stays `draft`. **Positive control:** a `cash` draft
+  made by the same fixture approves and posts. *Mutant:* as F3c.
+- ✎R-5 **F3e (AP path):** `recordExpenseForInvoice` with an `other` line → the exact `other` sentence, no 23514,
+  nothing written. It goes through `createExpense` (`ap/index.ts:877`), so this proves the sentence reaches an AP caller. *Mutant:* delete
+  the create guard → 23514 surfaces instead, red.
+- **F4 (migration):** after 0182, a new `other` row → 23514 and a new `ar_collection` row → 23514. `cash`, `online`,
+  `credit` and `reimbursable` are accepted. Rows of both retired methods inserted before 0182 survive.
+  `pg_constraint.convalidated = false` for `expense_payments_method_check`. At HEAD, `other` is accepted → red.
+- Authorization: the existing `create_expense` / `approve_expense` ✗ tests cover these paths. No new capability.
 
-**Smoke:** none of its own (no v2 form offers either method). The report says so and relies on F1–F4.
+**Smoke (9008, a 2027-02 date):** open New Expense. A screenshot shows the payment-method control offering exactly Cash,
+Online, Credit and Reimbursable: no Other and no AR collection.
+
+**Done when:** F3a–F4 (incl. F3e) shown red against HEAD or their mutant, then green; typecheck clean; the FULL integration suite
+green (migration rule); 0182 applies from zero and on a scratch DB; P5 pasted; smoke screenshot taken; DEF-054 →
+`fixed` with the hash (whole defect: there is no part 2).
 
 ---
 
-## S6: DEF-054, part 2 — `other` split and v1 `other` to suspense. ⛔ BLOCKED on Q1–Q3
-Nothing is built until Ian answers. Once he does, the planner amends this slice. The likely shape, stated so the
-questions have something concrete to answer:
-- **Supplier credit / rebate "reduces AP"** already exists as `supplier.credit-applied` (Dr 2110 / Cr 1240, spent
-  inside `ap_payment`, `POSTING-PATTERNS.md:513-527`). The planner recommends NO new expense method: a rebate-funded bill
-  is recorded on Credit (AP) and settled with the supplier's credit. A second path that spends 1240 would need its own
-  lock and would drift from the first. What is missing is how a rebate ARISES (Q1).
-- **Voucher / points / gift certificate** needs a new party-carrying asset account and an arising posting (Q2), then a
-  `voucher` method that credits it, guarded by its balance under a lock, the same shape as `checkDraw`.
-- **v1 `other` history** lands in a suspense account with a finding per row (Ian's ruling); Q3 asks only which account.
-
----
+## S6: WITHDRAWN (A1 FINAL, 2026-10-04)
+No v1 `other` history lands in v2 (opening-balance cutover), and `other` is retired in S5. There is no suspense
+account, no voucher method and no new posting. The two staff `other` rows and the five singleton docs go to Ian by hand
+(QA2, QA3). "Supplier vouchers need a home" is a CAPABILITY-GAPS candidate, unscoped.
 
 ## Production prechecks (read-only; `begin transaction read only; … rollback;` against `erp2`, 159.223.46.224)
 Run before the slice that needs them; paste the output in the report. Never a build or a write on either droplet.
@@ -658,39 +655,43 @@ Run before the slice that needs them; paste the output in the report. Never a bu
 - **P4 (S2):** `select apa.expense_id, apa.amount_applied from ap_payment_allocations apa join ap_payments p on
   p.id = apa.ap_payment_id join expenses e on e.id = apa.expense_id where p.status = 'posted' and e.status = 'voided';`
   → live DEF-519 damage (a 2110 debit per supplier); report the supplier totals.
-- **P5 (S5):** `select method, count(*) from expense_payments where method in ('other','ar_collection') group by 1;`
-  (informational; the CHECK is NOT VALID either way).
+- **P5 (S5, blocks the push; owner connection, `expense_payments` is RLS-scoped):**
+```sql
+begin transaction read only;
+select p.method, e.status, count(*) legs, count(distinct e.id) docs, sum(p.amount) amount,
+       min(e.business_date) first_day, max(e.business_date) last_day
+from expense_payments p join expenses e on e.id = p.expense_id
+where p.method in ('other','ar_collection') group by 1,2 order by 1,2;
+select e.id, e.store_id, e.business_date, e.status, e.particulars, p.method, p.amount, e.created_at
+from expense_payments p join expenses e on e.id = p.expense_id
+where p.method in ('other','ar_collection') order by e.created_at;
+rollback;
+```
+  Expected: 0 rows. Drafts are listed for Ian (void, or re-enter with a live method); routing already blocks their
+  approval. A POSTED row → stop and ask Ian. Any `other` row is also the utilisation number for the vouchers gap.
 
 ## Out of scope
 - DEF-395's other 21 sites and every other NaN site (T-371). DEF-494's date parser (T-370).
 - AR `voidCharge` with collections allocated (reported above; its own DEF).
 - Backfilling due dates on existing invoices (T-330 already falls back to `invoice_date`).
 - A per-submission form token for write-offs (Q5 option (b)).
-- Any new account or posting (S6, after Ian).
+- Any new account or posting. Supplier vouchers / rebate arising: a CAPABILITY-GAPS candidate (A1), unscoped.
 - Bible amendments. At approval the orchestrator adds a §13 row recording R1, R4, R6, R7 and R10.
 
 ## Done when
-- S1–S5 are green; S6 is amended after Ian's answers or left blocked in the handoff.
+- S1–S5 are green; S6 is withdrawn (A1).
 - Each red leg was shown red against HEAD, or against its named mutant, before the build; mutant results recorded.
-- P1–P5 were run and pasted; migrations `<N>`, `<N+1>`, `<N+2>` apply from zero and on a scratch DB.
+- P1–P5 were run and pasted; migrations 0173, 0176 and 0182 apply from zero and on a scratch DB.
 - Typecheck clean; the unit suite passes (including `toc-freshness`); the FULL integration suite passes before push.
 - The S1, S2 and S3 smoke ran on 9008 with 2027-02 dates, with screenshots.
 - `npm run build` passes with the dev server stopped.
 - Register at wrap-up: DEF-201, DEF-396, DEF-420, DEF-499, DEF-500, DEF-508 fixed with hashes; DEF-395's overdraft leg
-  fixed at `33dbd3f`, rest → T-371; DEF-054 split (part 1 fixed, part 2 open on Q1–Q3); DEF-517, 518, 519 and 520
+  fixed at `33dbd3f`, rest → T-371; DEF-054 fixed (both methods retired, A1); DEF-517, 518, 519 and 520
   fixed with hashes; DEF-396's stale "ask Ian" remedy corrected to row 170. T-364's E15 green.
 
 ## Questions only Ian can answer
-- **Q1 (blocks S6): when a supplier gives us a rebate or promo credit (not a return, not an overpayment), what does it
-  count as?** v2 can already hold a supplier's credit (account 1240) and spend it against their bills, which is how
-  "reduces AP" works. What has no rule yet is the day the rebate is granted. Options: (a) it lowers the cost of what we
-  bought from them; (b) it is other income. Planner's lean: (a) for a volume rebate on goods.
-- **Q2 (blocks S6): vouchers, points and gift certificates the BUSINESS holds need a new asset account.** Approve an
-  account such as "Vouchers and gift certificates held", tracked per issuer? And when we receive one free (a promo), is
-  that other income, or a reduction of what we paid that issuer?
-- **Q3 (blocks S6): which suspense account do v1's old `other` payments land in?** You ruled they land in suspense,
-  flagged. There is no active suspense account today (2900 is reserved for void cash). Approve a new one, for example
-  "Suspense — unclassified v1 payments", and say who clears it.
+- **Q1–Q3: SUPERSEDED by A1 FINAL (2026-10-04).** Ian retired `other`; no v1 `other` lands in v2. The open items
+  for Ian are A1's hand lists (QA2, QA3) and P5.
 - **Q7 (no slice blocked): two everyday postings have no written pattern yet** — writing off a customer's bad debt
   (Dr 6860 / Cr 1210) and voiding an expense (a full reversal). The code already does both, and this task does not change
   either. Should the planner add them to the posting patterns for your sign-off?

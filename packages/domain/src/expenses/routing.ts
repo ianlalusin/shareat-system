@@ -38,16 +38,37 @@
  */
 import { add, equals, isZero, type Money } from '@shareat/core/money';
 
-export type ExpensePaymentMethod = 'cash' | 'online' | 'credit' | 'other' | 'reimbursable' | 'ar_collection';
+/**
+ * The four live payment methods. `other` and `ar_collection` are RETIRED (Ian, 2026-10-04, T-367 A1, DEF-054):
+ * `other` is ambiguous, and an `ar_collection` leg is only ever a copy of a channel settlement's fee line. Legacy
+ * rows may still hold them (migration 0182 adds the CHECK NOT VALID), so `routeExpense` refuses them at approval
+ * as the second layer, and `assertLivePaymentMethod` refuses them at create/edit as the first.
+ */
+export type ExpensePaymentMethod = 'cash' | 'online' | 'credit' | 'reimbursable';
 
-export const EXPENSE_PAYMENT_METHODS: readonly ExpensePaymentMethod[] = [
-  'cash',
-  'online',
-  'credit',
-  'other',
-  'reimbursable',
-  'ar_collection',
-];
+const EXPENSE_PAYMENT_METHODS: readonly ExpensePaymentMethod[] = ['cash', 'online', 'credit', 'reimbursable'];
+
+/** One record, keyed by retired method: a future retirement is one edit here. */
+const RETIRED_METHOD_SENTENCES: Readonly<Record<string, string>> = {
+  ar_collection: 'That payment method is no longer used. A platform fee is recorded on the channel settlement.',
+  other: "'Other' is no longer a payment method. Choose how the money actually left: cash, online, credit or reimbursable.",
+};
+
+/** The one sentence for a method that is not live. `undefined` when the method is live. */
+export function retiredPaymentMethodSentence(method: string): string | undefined {
+  if ((EXPENSE_PAYMENT_METHODS as readonly string[]).includes(method)) return undefined;
+  return RETIRED_METHOD_SENTENCES[method] ?? 'That payment method is not recognised.';
+}
+
+/** Create and edit both call this, before any write, so the two cannot drift. Throws via the caller's `refuse`. */
+export function assertLivePaymentMethod(
+  method: string,
+  refuseWith: (internal: string, userSentence: string) => Error,
+  where: string,
+): void {
+  const sentence = retiredPaymentMethodSentence(method);
+  if (sentence) throw refuseWith(`${where}: payment method "${method}" is not a live payment method`, sentence);
+}
 
 export type ExpenseGroup = 'OPEX' | 'COGS' | 'CAPEX' | 'PERSONAL';
 
@@ -64,12 +85,9 @@ export const EXPENSE_FUNDING_ACCOUNTS = {
   REIMBURSABLE_TO_EMPLOYEES: '2130',
 } as const;
 
-/** Payment methods with no v2 account mapping — DEF-054. Blocks posting exactly like an
- *  unmapped category (invariant 10), never a silent drop from the enum. */
-export const UNMAPPED_PAYMENT_METHODS: ReadonlySet<ExpensePaymentMethod> = new Set(['other', 'ar_collection']);
-
 export interface RoutingPayment {
-  method: ExpensePaymentMethod;
+  /** A plain string on purpose: a legacy row's retired value must reach the `default:` refusal intact. */
+  method: string;
   amount: Money;
   /** Reimbursable's party (2130, employee) — required for that method (invariant 3). */
   staffId?: string | null;
@@ -239,12 +257,11 @@ function fundingLine(
         lineMemo: `reimbursable payment #${index}`,
       };
     }
-    case 'other':
-    case 'ar_collection':
-      // DEF-054 / invariant 10 — blocks exactly like an unmapped category, never a
-      // silent drop from the enum.
+    default:
+      // DEF-054 / invariant 10 — a retired or unknown method (a legacy DB row) blocks at approval, the
+      // second layer behind `assertLivePaymentMethod`. Same sentence, one function.
       return {
-        error: `payment #${index}: method "${payment.method}" has no account mapping (DEF-054) — Ian must decide whether it needs one or should be retired`,
+        error: `payment #${index}: ${retiredPaymentMethodSentence(payment.method) ?? 'That payment method is not recognised.'}`,
       };
   }
 }

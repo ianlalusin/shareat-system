@@ -184,32 +184,7 @@ describe('routeExpense', () => {
     expect(classification.accountCode).toBe('1510');
   });
 
-  it('invariant 10 — "other" BLOCKS posting with a named reason (DEF-054)', () => {
-    const result = routeExpense({
-      totalAmount: money('300.00'),
-      supplierId: null,
-      categoryName: 'Rent',
-      categoryAccountCode: '6200',
-      payments: [{ method: 'other', amount: money('300.00') }],
-    });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.reason).toContain('other');
-    expect(result.reason).toContain('DEF-054');
-  });
-
-  it('invariant 10 — "ar_collection" BLOCKS posting with a named reason (DEF-054)', () => {
-    const result = routeExpense({
-      totalAmount: money('300.00'),
-      supplierId: null,
-      categoryName: 'Rent',
-      categoryAccountCode: '6200',
-      payments: [{ method: 'ar_collection', amount: money('300.00') }],
-    });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.reason).toContain('ar_collection');
-  });
+  // invariant 10 (DEF-054): retired methods are refused in t367-s5-routing-retired.test.ts (T-367 S5, F3c).
 
   // ⭐ These two used to assert the FLAGS: a `cashRequestId` routed to 1120 and a free-text
   // `accountCode: 'office'` routed to 1130. DEF-058 removed both — Ian: *"payments must

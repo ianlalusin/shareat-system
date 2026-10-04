@@ -66,8 +66,6 @@ function errorMessage(err: unknown): string {
   return sharedErrorMessage(err);
 }
 
-const PAYMENT_METHODS = new Set<string>(['cash', 'online', 'credit', 'reimbursable', 'other', 'ar_collection']);
-
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';

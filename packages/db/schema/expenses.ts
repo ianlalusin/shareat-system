@@ -211,7 +211,8 @@ export const expensePayments = pgTable(
       .notNull()
       .references(() => expenses.id, { onDelete: 'cascade' }),
     method: text('method', {
-      enum: ['cash', 'online', 'credit', 'other', 'reimbursable', 'ar_collection'],
+      // NOTE: NOT VALID, hand-added in migration 0182; legacy rows may still hold 'other'/'ar_collection'
+      enum: ['cash', 'online', 'credit', 'reimbursable'],
     }).notNull(),
     amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
     // Free text, read only for a 'cash' payment's office/cashier sub-route (the literal
@@ -259,7 +260,8 @@ export const expensePayments = pgTable(
     index('expense_payments_staff_id_idx').on(t.staffId),
     check(
       'expense_payments_method_check',
-      sql`${t.method} in ('cash', 'online', 'credit', 'other', 'reimbursable', 'ar_collection')`,
+      // NOTE: NOT VALID, hand-added in migration 0182; legacy rows may still hold 'other'/'ar_collection'
+      sql`${t.method} in ('cash', 'online', 'credit', 'reimbursable')`,
     ),
     check('expense_payments_amount_positive_check', sql`${t.amount} > 0`),
     check('expense_payments_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),

@@ -55,7 +55,7 @@ export type MoneyLineMethod =
   | 'offset';
 
 /**
- * ⛔ `other` and `ar_collection` are deliberately ABSENT (Ian's ruling 4, 2026-09-11).
+ * ⛔ `other` and `ar_collection` are deliberately ABSENT (Ian's ruling 4, 2026-09-11) and now RETIRED (T-367 S5, 2026-10-04).
  *
  * They remain in `expense_payments.method` for ETL'd history, and `routeExpense` blocks them by
  * design (DEF-054) — but v2's form offered them labelled *"(DEF-054 — blocks posting)"*, which is

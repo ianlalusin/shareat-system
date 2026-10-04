@@ -18,6 +18,7 @@ import { logger } from '@shareat/core/logger';
 import { parsePaymentAmount, type CreateExpensePaymentInput } from './create';
 import { refuse, gone } from '../shared/refusal';
 import { cashOnDeliverySentence } from '../shared/money-lines';
+import { assertLivePaymentMethod } from './routing';
 
 /** S2/R2's `savepointLookup` (`packages/auth/src/authorize.ts`), same reasoning as
  *  `expenses/create.ts`'s own copy: a refusal-path naming lookup here must not abort a
@@ -149,6 +150,11 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
     patch.supplierInvoiceId = invoiceId;
     patch.supplierId = invoice.supplierId;
     patch.businessDate = invoice.invoiceDate;
+  }
+
+  // T-367 S5 (DEF-054): same guard and sentences as `createExpense`, ahead of the cash-on-delivery rule, as there.
+  if (input.payments !== undefined) {
+    for (const p of input.payments) assertLivePaymentMethod(p.method, refuse, 'editExpense');
   }
 
   // T-361 / DEF-492 — R3: the same cash-on-delivery rule `createExpense` holds, so a draft cannot

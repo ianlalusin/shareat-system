@@ -724,28 +724,8 @@ describe('invariant 9 — CAPEX routes to a 15xx asset, never a P&L line', () =>
   });
 });
 
-describe('invariant 10 — "other" and "ar_collection" BLOCK posting with a named reason (DEF-054)', () => {
-  it.each(['other', 'ar_collection'] as const)('a %s payment cannot post', async (method) => {
-    const f = await setup(`inv10-${method}`);
-    const catId = await categoryId(f.orgId, 'Bank Fees');
-
-    const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
-        storeId: f.storeId,
-        supplierId: f.supplierId,
-        supplierInvoiceId: f.supplierInvoiceId,
-        businessDate: BUSINESS_DATE,
-        categoryId: catId,
-        particulars: `Paid via ${method}`,
-        payments: [{ method, amount: '100.00' }],
-      }),
-    );
-
-    await expect(
-      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id)),
-    ).rejects.toThrow(/DEF-054/);
-  });
-});
+// invariant 10 (DEF-054) retired by T-367 S5: 'other' / 'ar_collection' can no longer be CREATED; the refusal and
+// the approve-time backstop are proven in t367-s5-methods-retired.test.ts (F3a, F3d) and t367-s5-routing-retired.test.ts (F3c).
 
 // =========================================================================================
 // Controls — invariants 11-14

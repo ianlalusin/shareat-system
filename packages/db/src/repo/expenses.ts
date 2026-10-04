@@ -610,7 +610,8 @@ export interface ExpensePaymentRow {
 
 /** T-371 C2 — `amount` is a `Money` brand ((14,2)), minted by `decimal()`. */
 export interface InsertPaymentInput {
-  method: ExpensePaymentRow['method'];
+  /** The WRITE type: four live methods only (T-367 S5). `ExpensePaymentRow.method` keeps six for legacy reads. */
+  method: 'cash' | 'online' | 'credit' | 'reimbursable';
   amount: Money;
   accountCode?: string | null;
   staffId?: string | null;

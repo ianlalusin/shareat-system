@@ -41,7 +41,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { apRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
 import { add } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
-import type { ExpensePaymentMethod } from './routing';
+import { assertLivePaymentMethod, type ExpensePaymentMethod } from './routing';
 import { refuse, gone } from '../shared/refusal';
 import { parseDecimalInput } from '../shared/money-input';
 import { cashOnDeliverySentence } from '../shared/money-lines';
@@ -125,6 +125,8 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
   if (input.payments.length === 0) {
     throw refuse('createExpense: at least one payment is required', 'At least one payment is required.');
   }
+  // T-367 S5 (DEF-054): a retired or unknown method is refused with its own sentence before any write.
+  for (const p of input.payments) assertLivePaymentMethod(p.method, refuse, 'createExpense');
 
   const category = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
   if (!category) {
