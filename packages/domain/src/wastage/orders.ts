@@ -28,6 +28,7 @@
 import { add, compare, decimal, multiply, subtract, ZERO, money, type Decimal, type Money } from '@shareat/core/money';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
+import { lockLiveSalesDay } from '../sales-days/live-day';
 import {
   channelSettlementsRepo,
   orderWastageRepo,
@@ -276,6 +277,9 @@ export async function recordOrderWastage(
     if (input.disposition === 'charged') {
       await authorize(trx, actor, 'charge_staff_for_wastage', { storeId: input.storeId });
     }
+
+    // T-373 S1 (DEF-552): the sales day must be live and this store's, checked under a lock a void waits for.
+    await lockLiveSalesDay(trx, actor.orgId, { salesDayId: input.salesDayId, storeId: input.storeId, doing: 'wastage' });
 
     // ⭐ T-230 — the channel is resolved HERE, at creation, and this one move does three things:
     // it supplies the `channel_id` pointer, it derives the wastage policy (bible §13 row 180), and

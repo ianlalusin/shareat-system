@@ -1,7 +1,8 @@
 /**
  * The only place SQL is written for POS item mapping and the daily usage pull. T-177.
  */
-import { and, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
+import { salesDays } from '../../schema/sales-days';
 import type { Decimal, Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert } from './numeric-input';
@@ -283,6 +284,40 @@ export async function findLivePullForDay(tx: Tx, storeId: string, salesDayId: st
     .from(posUsagePulls)
     .where(and(eq(posUsagePulls.storeId, storeId), eq(posUsagePulls.salesDayId, salesDayId), ne(posUsagePulls.status, 'void')));
   return row;
+}
+
+/**
+ * T-373 S1 (R7): a pull of this store on a VOIDED sales day of this business date that has POSTED usage
+ * (its direct or recipe section is finalized; the orphan section has no stock effect). Keyed on what was
+ * posted, not on the pull's status: a merely planned pull posts nothing and must not block the
+ * replacement day, while a pull with one section finalized is the real double count.
+ */
+export async function findLivePullOnVoidedDayForDate(tx: Tx, storeId: string, businessDate: string): Promise<{ id: string } | undefined> {
+  const [row] = await tx
+    .select({ id: posUsagePulls.id })
+    .from(posUsagePulls)
+    .innerJoin(salesDays, eq(salesDays.id, posUsagePulls.salesDayId))
+    .where(
+      and(
+        eq(posUsagePulls.storeId, storeId),
+        ne(posUsagePulls.status, 'void'),
+        or(isNotNull(posUsagePulls.directFinalizedAt), isNotNull(posUsagePulls.recipeFinalizedAt)),
+        eq(salesDays.status, 'voided'),
+        eq(salesDays.businessDate, businessDate),
+      ),
+    )
+    .limit(1);
+  return row;
+}
+
+/** T-373 S1: which of these sales days carry a non-void pull (the picker keeps a voided one that does). */
+export async function listDayIdsWithLivePull(tx: Tx, storeId: string, salesDayIds: readonly string[]): Promise<Set<string>> {
+  if (salesDayIds.length === 0) return new Set();
+  const rows = await tx
+    .select({ salesDayId: posUsagePulls.salesDayId })
+    .from(posUsagePulls)
+    .where(and(eq(posUsagePulls.storeId, storeId), ne(posUsagePulls.status, 'void'), inArray(posUsagePulls.salesDayId, [...salesDayIds])));
+  return new Set(rows.map((r) => r.salesDayId));
 }
 
 export async function getPull(tx: Tx, id: string): Promise<PosUsagePullRow | undefined> {

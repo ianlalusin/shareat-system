@@ -352,6 +352,22 @@ export async function getByIdForUpdate(tx: Tx, orgId: string, id: string): Promi
 }
 
 /**
+ * T-373 S1 (R1): the day row under `FOR SHARE`. A writer that records something AGAINST a day (a POS
+ * usage pull, an order wastage) takes this before its first write. `FOR SHARE` conflicts with the
+ * `FOR UPDATE` that void, edit and verify take (`getByIdForUpdate`), so a writer and a void
+ * serialize and the one that waited re-reads the committed status; two writers do not block each other.
+ */
+export async function getByIdForShare(tx: Tx, orgId: string, id: string): Promise<SalesDayRow | undefined> {
+  const [row] = await tx
+    .select(COLUMNS)
+    .from(salesDays)
+    .where(and(eq(salesDays.id, id), eq(salesDays.orgId, orgId)))
+    .limit(1)
+    .for('share');
+  return row;
+}
+
+/**
  * The LIVE day for this store and date - open, submitted or verified - never a voided one (T-369 S7:
  * a voided day frees its date; migration 0177 narrowed the unique index to match). At most one row can
  * qualify, which is what `limit(1)` was already assuming.

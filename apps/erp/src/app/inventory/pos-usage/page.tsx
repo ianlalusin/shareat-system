@@ -31,6 +31,7 @@ function SectionTable({
   pullId,
   section,
   showQuantity,
+  viewOnly,
 }: {
   title: string;
   lines: PullLineView[];
@@ -40,6 +41,7 @@ function SectionTable({
   pullId: string;
   section: 'direct' | 'recipe' | 'orphan';
   showQuantity: boolean;
+  viewOnly?: boolean;
 }) {
   const confirmable = lines.filter((l) => !l.blocked);
   const blocked = lines.filter((l) => l.blocked);
@@ -109,7 +111,7 @@ function SectionTable({
             </table>
           </div>
 
-          {!finalizedAt && confirmable.length > 0 && (
+          {!finalizedAt && !viewOnly && confirmable.length > 0 && (
             <button type="submit" className={BTN_SM}>
               Finalize {title.toLowerCase()}
             </button>
@@ -118,6 +120,7 @@ function SectionTable({
       )}
 
       {section === 'orphan' &&
+        !viewOnly &&
         confirmable.map((l) => (
           <form key={`req-${l.lineKey}`} action={requestMapFromPullAction} className="mt-2 flex items-center gap-2 text-xs">
             <input type="hidden" name="storeId" value={storeId} />
@@ -156,6 +159,7 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
     listOperatingLocationsForStore(actor.orgId, storeId),
   ]);
   const salesDayId = sp.day && salesDays.some((d) => d.id === sp.day) ? sp.day : salesDays[0]?.id;
+  const viewOnly = salesDays.find((d) => d.id === salesDayId)?.viewOnly === true;
 
   let pullId = sp.pull ?? null;
   if (!pullId && salesDayId) {
@@ -206,7 +210,7 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
           <select name="day" defaultValue={salesDayId} className={INPUT}>
             {salesDays.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.businessDate} ({d.status})
+                {d.businessDate} ({d.viewOnly ? 'voided — view only' : d.status})
               </option>
             ))}
           </select>
@@ -220,6 +224,10 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
       ) : locations.length === 0 ? (
         <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
           This store has no active operating room yet — a pull needs one to consume from.
+        </p>
+      ) : viewOnly ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          This sales day was voided. Its pull is shown for reference only — nothing more can be built or finalized against it.
         </p>
       ) : (
         <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -260,6 +268,7 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
             pullId={pull.id}
             section="direct"
             showQuantity
+            viewOnly={viewOnly}
           />
           <SectionTable
             title="Recipe"
@@ -270,6 +279,7 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
             pullId={pull.id}
             section="recipe"
             showQuantity
+            viewOnly={viewOnly}
           />
           <SectionTable
             title="Orphan (unmapped)"
@@ -280,6 +290,7 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
             pullId={pull.id}
             section="orphan"
             showQuantity={false}
+            viewOnly={viewOnly}
           />
         </>
       )}

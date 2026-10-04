@@ -14,12 +14,21 @@ export interface SalesDayOption {
   readonly id: string;
   readonly businessDate: string;
   readonly status: string;
+  /** T-373 S1: a voided day kept only because it carries a live pull — readable, never writable. */
+  readonly viewOnly?: boolean;
 }
 
 export async function listSalesDaysForStore(orgId: string, storeId: string): Promise<SalesDayOption[]> {
   return withOrgPrincipal(orgId, async (tx) => {
     const rows = await salesDaysRepo.listSalesDays(tx, { orgId, storeId, limit: 60 });
-    return rows.map((r) => ({ id: r.id, businessDate: r.businessDate, status: r.status }));
+    const voidedIds = rows.filter((r) => r.status === 'voided').map((r) => r.id);
+    const withPull = await posMappingRepo.listDayIdsWithLivePull(tx, storeId, voidedIds);
+    // On a business_date tie, live days sort before view-only voided ones (the page defaults to the first row).
+    const rank = (r: { status: string }) => (r.status === 'voided' ? 1 : 0);
+    return [...rows]
+      .sort((a, b) => (a.businessDate === b.businessDate ? rank(a) - rank(b) : b.businessDate.localeCompare(a.businessDate)))
+      .filter((r) => r.status !== 'voided' || withPull.has(r.id))
+      .map((r) => ({ id: r.id, businessDate: r.businessDate, status: r.status, ...(r.status === 'voided' ? { viewOnly: true } : {}) }));
   });
 }
 

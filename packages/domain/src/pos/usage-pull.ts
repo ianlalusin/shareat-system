@@ -30,6 +30,9 @@ import { authorize, type Actor } from '@shareat/auth';
 import { env } from '@shareat/core/env';
 import { posMappingRepo, salesDaysRepo, type Tx } from '@shareat/db';
 import { postUsage, saveUsageDraft } from '../stock/usage-records';
+import { lockLiveSalesDay } from '../sales-days/live-day';
+import { RefusalError, humanDate } from '../shared/refusal';
+import type { BusinessDate } from '@shareat/core/datetime';
 import { compareQuantity, quantity, ZERO_QUANTITY } from '../stock/quantity';
 import { explodePosSales, type PlanLine, type PlanSection } from './plan';
 
@@ -107,6 +110,21 @@ async function rebuildLines(
   });
 }
 
+/**
+ * T-373 S1 (R2): lock the day and re-check it AFTER the POS fetch, never across it. The date cannot
+ * change in between (an edit never changes the date), so the fetched lines stay valid; only status and
+ * store are re-checked. This module returns Outcomes, so the refusal becomes its sentence.
+ */
+async function lockDayOutcome(tx: Tx, orgId: string, salesDayId: string, storeId: string): Promise<{ ok: false; reason: string } | null> {
+  try {
+    await lockLiveSalesDay(tx, orgId, { salesDayId, storeId, doing: 'usage' });
+    return null;
+  } catch (err) {
+    if (err instanceof RefusalError) return { ok: false, reason: err.userMessage };
+    throw err;
+  }
+}
+
 // -----------------------------------------------------------------------------------------
 // buildPlan — read is open to anyone who can record usage (v1's own framing: "sorting a day's
 // sales is the job, and a staff member has to be able to see what needs fixing before they can
@@ -135,12 +153,30 @@ export async function buildPlan(
   if (!salesDay) return { ok: false, reason: `sales day ${input.salesDayId} does not exist` };
   if (salesDay.storeId !== input.storeId) return { ok: false, reason: 'that sales day does not belong to this store' };
 
+  // T-373 S1: refuse a voided day from the plain read, before the POS fetch (re-checked under the lock after it).
+  if (salesDay.status === 'voided') {
+    return { ok: false, reason: `The sales day for ${humanDate(salesDay.businessDate as BusinessDate)} has been voided, so usage can't be recorded against it.` };
+  }
+
   const existing = await posMappingRepo.findLivePullForDay(tx, input.storeId, input.salesDayId);
   if (existing && existing.status !== 'planned') {
     return { ok: false, reason: `this day's pull is already ${existing.status} — invariant 12: only one live pull per (store, sales day)` };
   }
 
+  // T-373 S1 R7: one date, one live pull, across a void.
+  const pulledOnVoided = await posMappingRepo.findLivePullOnVoidedDayForDate(tx, input.storeId, salesDay.businessDate);
+  if (pulledOnVoided) {
+    return {
+      ok: false,
+      reason: `Stock usage for ${humanDate(salesDay.businessDate as BusinessDate)} was already pulled against the voided day, so pulling it again would count it twice.`,
+    };
+  }
+
   const lines = await rebuildLines(tx, input.orgId, input.storeId, salesDay.businessDate, input.locationId, fetchSnapshot);
+
+  // T-373 S1 R1/R2: lock the live day after the fetch, before the first write.
+  const refused = await lockDayOutcome(tx, input.orgId, input.salesDayId, input.storeId);
+  if (refused) return refused;
   const now = new Date();
 
   const pullId = existing
@@ -210,6 +246,9 @@ export async function finalizeSections(
   if (!salesDay) throw new Error(`finalizeSections: sales day ${pull.salesDayId} no longer exists`);
 
   const freshLines = await rebuildLines(tx, pull.orgId, pull.storeId, salesDay.businessDate, pull.locationId, fetchSnapshot);
+  // T-373 S1 (DEF-552): a voided day posts nothing. Before the section loop so a refused day marks no section finalized.
+  const refused = await lockDayOutcome(tx, pull.orgId, pull.salesDayId, pull.storeId);
+  if (refused) return refused;
   const freshKeys = new Set(freshLines.map((l) => l.key));
   const confirmedSet = new Set(input.confirmedKeys);
 
