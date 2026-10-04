@@ -175,7 +175,7 @@ describe('T-178 test 1 — ⭐ no stock moves, whatever the disposition', () => 
       const rec2 = await asOrg(f.orgId, (tx) =>
         recordOrderWastage(tx, f.manager, {
           storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
-          amount: '80.00', reason: 'refund', openedOn: '2026-01-12',
+          amount: '80.00', reason: 'refund', openedOn: '2026-01-10', // T-374 S4: a wastage is dated on its sales day
           allocations: [{ personId: f.staffAId, percent: '100.00' }],
         }),
       );

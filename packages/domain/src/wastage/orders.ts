@@ -27,7 +27,8 @@
  */
 import { add, compare, decimal, multiply, subtract, ZERO, money, type Decimal, type Money } from '@shareat/core/money';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
-import { refuse } from '../shared/refusal';
+import { humanDate, refuse } from '../shared/refusal';
+import { toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { lockLiveSalesDay } from '../sales-days/live-day';
 import {
   channelSettlementsRepo,
@@ -241,7 +242,7 @@ export interface RecordOrderWastageInput {
   //    test says what the policy is, because that is where a store says it.
   amount: string;
   reason: string;
-  /** Business date the posting (instant) or the eventual resolution dates against. */
+  /** Business date of the wastage. Must EQUAL the sales day's business date (T-374 R4); the posting uses the day's date. */
   openedOn: string;
   /** Tracked: an optional explicit seed, overriding the Monitor default (invariant 2). Instant +
    *  `charged`: required. Ignored for instant `absorbed`/`platform_paid`. */
@@ -279,7 +280,17 @@ export async function recordOrderWastage(
     }
 
     // T-373 S1 (DEF-552): the sales day must be live and this store's, checked under a lock a void waits for.
-    await lockLiveSalesDay(trx, actor.orgId, { salesDayId: input.salesDayId, storeId: input.storeId, doing: 'wastage' });
+    const day = await lockLiveSalesDay(trx, actor.orgId, { salesDayId: input.salesDayId, storeId: input.storeId, doing: 'wastage' });
+    // T-374 S4 (DEF-576, R4): the day's date IS the wastage's date; a different `openedOn` is refused, nothing written.
+    if (input.openedOn !== day.businessDate) {
+      throw refuse(
+        `recordOrderWastage: openedOn ${input.openedOn} does not equal sales day ${day.id} business date ${day.businessDate}`,
+        // A malformed openedOn is not formatted (humanDate would throw on it): the sentence then names only the day.
+        /^\d{4}-\d{2}-\d{2}$/.test(input.openedOn)
+          ? `This wastage is dated ${humanDate(input.openedOn as BusinessDate)}, but the sales day it's recorded against is ${humanDate(day.businessDate as BusinessDate)}.`
+          : `This wastage's date doesn't match its sales day, ${humanDate(day.businessDate as BusinessDate)}.`,
+      );
+    }
 
     // ⭐ T-230 — the channel is resolved HERE, at creation, and this one move does three things:
     // it supplies the `channel_id` pointer, it derives the wastage policy (bible §13 row 180), and
@@ -367,7 +378,7 @@ export async function recordOrderWastage(
           amount,
           disposition: input.disposition as 'absorbed' | 'charged',
           allocations,
-          entryDate: input.openedOn,
+          entryDate: day.businessDate,
           sourceId: id,
           postedBy: actor.personId,
           idempotencySuffix: 'create',
@@ -541,7 +552,7 @@ export async function reverseAutoCharge(
       return {
         ok: false,
         reason:
-          `order wastage ${row.id} was auto-charged on ${row.resolvedAt.toISOString().slice(0, 10)}, ` +
+          `order wastage ${row.id} was auto-charged on ${toBusinessDate(row.resolvedAt)}, ` +
           `more than ${AUTO_CHARGE_REVERSAL_DAYS} days ago — no longer reversible here`,
       };
     }
@@ -609,7 +620,7 @@ export async function runOrderWastageBackstop(
 
   const outcomes: BackstopOutcome[] = [];
   const failures: { wastageId: string; storeId: string; label: string; reason: string }[] = [];
-  const entryDate = now.toISOString().slice(0, 10);
+  const entryDate = toBusinessDate(now);
 
   for (const row of due) {
     try {
