@@ -112,5 +112,5 @@ export async function pullView(orgId: string, pullId: string): Promise<PullView 
 }
 
 export async function findLivePull(orgId: string, storeId: string, salesDayId: string) {
-  return withOrgPrincipal(orgId, (tx) => posMappingRepo.findLivePullForDay(tx, storeId, salesDayId));
+  return withOrgPrincipal(orgId, async (tx) => (await posMappingRepo.findLivePullForDay(tx, storeId, salesDayId)) ?? null);
 }

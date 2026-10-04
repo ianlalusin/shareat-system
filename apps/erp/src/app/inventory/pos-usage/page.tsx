@@ -1,6 +1,7 @@
 import Link from 'next/link';
+import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
-import { buildPlanAction, finalizeSectionAction, requestMapFromPullAction } from './actions';
+import { buildPlanAction, finalizeSectionAction, requestMapFromPullAction, voidPullAction } from './actions';
 import { findLivePull, listOperatingLocationsForStore, listSalesDaysForStore, listStores, pullView, type PullLineView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
@@ -52,7 +53,7 @@ function SectionTable({
         <h2 className="text-sm font-medium">
           {title} ({lines.length})
         </h2>
-        {finalizedAt && <span className="text-xs text-emerald-700 dark:text-emerald-400">Finalized {finalizedAt.toLocaleString()}</span>}
+        {finalizedAt && <span className="text-xs text-emerald-700 dark:text-emerald-400">Finalized {formatBusinessDateTime(finalizedAt)}</span>}
       </div>
 
       {lines.length === 0 ? (
@@ -251,7 +252,7 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
           </form>
           {pull && (
             <p className="mt-2 text-xs text-neutral-500">
-              Snapshot taken {pull.snapshotTakenAt.toLocaleString()} — a plan older than an hour is refused at finalize.
+              Snapshot taken {formatBusinessDateTime(pull.snapshotTakenAt)} — a plan older than an hour is refused at finalize.
             </p>
           )}
         </section>
@@ -292,6 +293,26 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
             showQuantity={false}
             viewOnly={viewOnly}
           />
+          {pull.status !== 'void' && (
+            <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+              <h2 className="text-sm font-medium">Void this pull</h2>
+              <p className="mt-1 text-xs text-neutral-500">
+                Puts back the stock this pull used and reverses its cost, so the day can be pulled again. All of it or none.
+              </p>
+              <form action={voidPullAction} className="mt-3 flex flex-wrap items-end gap-3">
+                <input type="hidden" name="storeId" value={storeId} />
+                <input type="hidden" name="salesDayId" value={pull.salesDayId} />
+                <input type="hidden" name="pullId" value={pull.id} />
+                <label className="text-sm">
+                  <span className="block text-neutral-600 dark:text-neutral-400">Why is it being voided?</span>
+                  <input name="reason" required className={`${INPUT} w-80`} />
+                </label>
+                <button type="submit" className={BTN_SM}>
+                  Void this pull
+                </button>
+              </form>
+            </section>
+          )}
         </>
       )}
     </Page>

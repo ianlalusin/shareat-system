@@ -5,7 +5,8 @@
  */
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { finalizeSections, requestMap } from '@shareat/domain';
+import { finalizeSections, requestMap, voidPosUsagePull } from '@shareat/domain';
+import { salesDaysRepo } from '@shareat/db';
 import { buildPlanForDay, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -102,4 +103,36 @@ export async function requestMapFromPullAction(fd: FormData): Promise<void> {
   }
 
   back(storeId, { day: salesDayId, pull: pullId, ok: 'Flagged — a manager will decide from the mapping screen.' });
+}
+
+/** T-374 S7 (DEF-578): void the whole pull - every usage record it made is reversed, and the day can be pulled again. */
+export async function voidPullAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/inventory/pos-usage');
+  const storeId = str(fd, 'storeId');
+  const salesDayId = str(fd, 'salesDayId');
+  const pullId = str(fd, 'pullId');
+  const reason = str(fd, 'reason');
+
+  let count = 0;
+  let dayVoided = false;
+  try {
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const r = await voidPosUsagePull(tx, actor, { pullId, reason });
+      const day = await salesDaysRepo.getById(tx, actor.orgId, salesDayId);
+      dayVoided = day?.status === 'voided';
+      return r;
+    });
+    count = result.reversedRecordCount;
+  } catch (err) {
+    back(storeId, { day: salesDayId, pull: pullId, error: errorMessage(err) });
+  }
+
+  revalidatePath('/inventory/pos-usage');
+  revalidatePath('/inventory/usage');
+  back(storeId, {
+    day: salesDayId,
+    ok: dayVoided
+      ? `Pull voided — ${count} usage record(s) reversed. A replacement day can now be pulled.`
+      : `Pull voided — ${count} usage record(s) reversed. The day can be pulled again.`,
+  });
 }

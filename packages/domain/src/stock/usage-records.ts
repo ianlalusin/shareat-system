@@ -34,8 +34,10 @@
  * through as `VoidUsageInput.reason`, which lands on the reversal entries' memo.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { stockUsageRepo, type Tx } from '@shareat/db';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { posMappingRepo, stockUsageRepo, type Tx } from '@shareat/db';
+import { toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
+import { humanDate } from '../shared/refusal-leaf';
+import { voidPullUsageRecord } from './void-pull-usage-record';
 import type { Money } from '@shareat/core/money';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from './receipt-posting';
 import { compareQuantity, quantity, ZERO_QUANTITY } from './quantity';
@@ -341,38 +343,21 @@ export async function voidUsage(
   if (!record) return { ok: false, reason: `usage record ${input.recordId} does not exist` };
   await authorize(tx, actor, 'void_usage_record', { storeId: record.storeId });
 
-  if (record.status !== 'posted') {
-    return { ok: false, reason: `usage record ${input.recordId} is ${record.status}, not posted` };
-  }
-  const reason = input.reason.trim();
-  if (!reason) return { ok: false, reason: 'a void needs a reason' };
-  if (record.kind !== 'usage' && record.kind !== 'wastage') {
-    return { ok: false, reason: `voiding a "${record.kind}" record is not built yet` };
-  }
-
-  const lines = await stockUsageRepo.listUsageLines(tx, input.recordId);
-  const missing = lines.find((l) => !l.movementId);
-  if (missing) {
-    // ⛔ A posted record with an un-linked line means `postUsage`'s own assertion above was
-    // bypassed by some other writer — data is inconsistent, not merely refused.
-    throw new Error(`voidUsage: posted line ${missing.id} carries no movement id — data is inconsistent`);
+  // T-374 S7 (R10): a record a live POS pull made is voided WITH the pull, so the day can be pulled again.
+  // After `authorize`, so a person who may not void learns nothing about the pull. A record of an already-void
+  // pull is not linked to a live one, and fails the "not posted" check inside the core as before.
+  const livePull = await posMappingRepo.livePullForUsageRecord(tx, input.recordId);
+  if (livePull) {
+    return {
+      ok: false,
+      reason: `This usage came from the POS pull for ${humanDate(livePull.businessDate as BusinessDate)}. Void the pull instead, so the day can be pulled again.`,
+    };
   }
 
-  const voidInput: VoidUsageInput = {
-    orgId: record.orgId,
-    storeId: record.storeId,
-    locationId: record.locationId,
-    recordId: record.id,
-    kind: record.kind,
+  return voidPullUsageRecord(tx, {
+    recordId: input.recordId,
+    reason: input.reason,
     voidedOn: toBusinessDate(),
     voidedBy: actor.personId,
-    lines: lines.map((l) => ({ itemId: l.itemId, movementId: l.movementId!, quantity: quantity(l.quantity) })),
-    reason,
-  };
-
-  const result = await voidUsageRecord(tx, voidInput);
-  if (!result.ok) return result;
-
-  await stockUsageRepo.markUsageVoid(tx, record.id, actor.personId, reason);
-  return { ok: true, reversalEntryIds: result.reversalEntryIds };
+  });
 }

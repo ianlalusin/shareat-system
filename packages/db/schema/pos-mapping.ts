@@ -26,6 +26,9 @@
  *    Ported verbatim rather than re-derived, and it is what makes invariant 9's *per-line* freeze
  *    behaviour ("refuses its lines" — plural, some but not all) possible: lines sharing a resolved
  *    location succeed or fail together, and different lines may resolve to different locations.
+ * 0. **T-374 S7 (DEF-578, migration 0181): a pull can be voided.** `voided_at`, `voided_by`, `void_reason` record who, when
+ *    and why, written only by `voidPosUsagePull` (`domain/src/pos/usage-pull.ts`), which reverses every usage record the
+ *    pull made first. `pos_usage_pulls_void_shape_check` refuses `status = 'void'` without all three (and a blank reason).
  * 2. **Three `*_finalized_at` timestamps on `pos_usage_pulls`, plus a stricter uniqueness than
  *    literally stated.** Invariant 4 requires finalize to be idempotent PER SECTION, independent of
  *    whether individual lines within it succeeded (invariant 9's frozen lines are skipped, not
@@ -182,6 +185,10 @@ export const posUsagePulls = pgTable(
     orphanFinalizedAt: timestamp('orphan_finalized_at', { withTimezone: true }),
     finalizedAt: timestamp('finalized_at', { withTimezone: true }),
     finalizedBy: uuid('finalized_by').references(() => persons.id, { onDelete: 'restrict' }),
+    /** T-374 S7 (DEF-578, migration 0181): who voided the pull, when and why. Mirrors `stock_usage_records`. */
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidedBy: uuid('voided_by').references(() => persons.id, { onDelete: 'restrict' }),
+    voidReason: text('void_reason'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -192,6 +199,10 @@ export const posUsagePulls = pgTable(
     check(
       'pos_usage_pulls_finalized_shape_check',
       sql`${t.status} <> 'finalized' or (${t.finalizedAt} is not null and ${t.finalizedBy} is not null)`,
+    ),
+    check(
+      'pos_usage_pulls_void_shape_check',
+      sql`${t.status} <> 'void' or (${t.voidedAt} is not null and ${t.voidedBy} is not null and ${t.voidReason} is not null and ${t.voidReason} ~ '[^[:space:]]')`,
     ),
     index('pos_usage_pulls_store_status_idx').on(t.storeId, t.status),
     index('pos_usage_pulls_org_idx').on(t.orgId),

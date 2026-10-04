@@ -6,7 +6,7 @@
  * These helpers only read; every rule they surface lives in `packages/domain` and is enforced
  * there.
  */
-import { itemsRepo, stockLedgerRepo, stockUsageRepo } from '@shareat/db';
+import { itemsRepo, posMappingRepo, stockLedgerRepo, stockUsageRepo } from '@shareat/db';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
 export { listStores, withOrgPrincipal };
@@ -61,6 +61,8 @@ export interface UsageRecordDetail {
   readonly record: NonNullable<Awaited<ReturnType<typeof stockUsageRepo.getUsageRecord>>>;
   readonly locationName: string;
   readonly lines: UsageLineView[];
+  /** T-374 S7 (R10): a live POS pull made this record, so it is voided with the pull, not here. */
+  readonly fromLivePull: boolean;
 }
 
 export async function usageRecordDetail(orgId: string, id: string): Promise<UsageRecordDetail | null> {
@@ -87,6 +89,7 @@ export async function usageRecordDetail(orgId: string, id: string): Promise<Usag
       });
     }
 
-    return { record, locationName: roomName, lines: lineViews };
+    const fromLivePull = !!(await posMappingRepo.livePullForUsageRecord(tx, id));
+    return { record, locationName: roomName, lines: lineViews, fromLivePull };
   });
 }

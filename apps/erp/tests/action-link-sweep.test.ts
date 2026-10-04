@@ -332,7 +332,14 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // dispatch / return / audit) beside the short row's existing one; a static census counts the source
     // element regardless of which branch renders. FAIL and UNRESOLVED did not move, so it is PASS by
     // partition, not per-control pixel reading. Verified by running the census (1097).
-    expect(results.length).toBe(1097);
+    // 1097 -> 1103, T-374 S6 + S7 (DEF-574, DEF-578), 2026-10-04. +6 PASS, FAIL/UNRESOLVED unmoved (both asserted
+    // above). `/commissary/discrepancies` gains the branch recount section: the order `ACTION_LINK`, the required
+    // note `<input>` and the Return `<button>` (its hidden id/storeId/resolvedOn/disposition inputs are not
+    // controls). `/inventory/pos-usage` gains the void-pull form: the reason `<input>` and its `<button>`.
+    // `/inventory/usage/[id]` gains the `ACTION_LINK` to POS usage that replaces the Void form for a pull-made
+    // record (a static census counts the source element regardless of branch). Verified by running the census
+    // (1103) and by reading the six added elements in the diff.
+    expect(results.length).toBe(1103);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

@@ -89,8 +89,11 @@ async function fixture(hint: string) {
   const voidIt = (id: string) => asOrg(orgId, (tx) => voidSalesDay(tx, manager, id, 'Entered wrong'));
   const pull = async (salesDayId: string, status: 'planned' | 'void' = 'planned') => {
     await sql`
-      insert into pos_usage_pulls (org_id, store_id, sales_day_id, location_id, snapshot_taken_at, status)
-      values (${orgId}, ${storeId}, ${salesDayId}, ${loc!.id}, now(), ${status})`;
+      insert into pos_usage_pulls (org_id, store_id, sales_day_id, location_id, snapshot_taken_at, status,
+                                   voided_at, voided_by, void_reason)
+      values (${orgId}, ${storeId}, ${salesDayId}, ${loc!.id}, now(), ${status},
+              ${status === 'void' ? sql`now()` : null}, ${status === 'void' ? manager.personId : null},
+              ${status === 'void' ? 'fixture: voided pull' : null})`; // T-374 S7 (0181): a void pull records who, when, why
   };
   return { orgId, storeId, mk, voidIt, pull };
 }

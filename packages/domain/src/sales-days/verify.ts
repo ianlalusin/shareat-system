@@ -204,7 +204,7 @@ async function runVoid(
     if (blockers.usagePull) {
       throw refuse(
         `voidSalesDay: sales day ${salesDayId} has a live POS usage pull`,
-        'This day has a POS usage pull. Void the pull first.',
+        'This day has a POS usage pull. Void it first under Inventory › POS usage.',
       );
     }
     if (blockers.wastage) {

@@ -473,9 +473,12 @@ async function stockRoom(f: Fixture): Promise<string> {
   return loc!.id;
 }
 const addPull = async (f: Fixture, dayId: string, status: string) =>
-  sql`insert into pos_usage_pulls (org_id, store_id, sales_day_id, location_id, snapshot_taken_at, status, finalized_at, finalized_by)
+  sql`insert into pos_usage_pulls (org_id, store_id, sales_day_id, location_id, snapshot_taken_at, status, finalized_at, finalized_by,
+                                   voided_at, voided_by, void_reason)
       values (${f.orgId}, ${f.storeId}, ${dayId}, ${await stockRoom(f)}, now(), ${status},
-              ${status === 'finalized' ? new Date() : null}, ${status === 'finalized' ? f.managerId : null})`;
+              ${status === 'finalized' ? new Date() : null}, ${status === 'finalized' ? f.managerId : null},
+              ${status === 'void' ? new Date() : null}, ${status === 'void' ? f.managerId : null},
+              ${status === 'void' ? 'fixture: voided pull' : null})`; // T-374 S7 (0181): a void pull records who, when, why
 const addWastage = async (f: Fixture, dayId: string) =>
   sql`insert into order_wastages (org_id, store_id, sales_day_id, channel, channel_id, type_mode, amount, reason, created_by)
       values (${f.orgId}, ${f.storeId}, ${dayId}, 'Foodpanda', ${f.foodpanda}, 'instant', '50.00', 'spoiled in transit', ${f.managerId})`;
@@ -491,7 +494,7 @@ describe('T11 (R3) — withdraw refused while a dependent hangs off the day; the
     {
       name: '(i) a live POS usage pull',
       arrange: (f, id) => addPull(f, id, 'planned'),
-      sentence: 'This day has a POS usage pull. Void the pull first.',
+      sentence: 'This day has a POS usage pull. Void it first under Inventory › POS usage.', // T-374 S7: the void now exists
       controlName: 'a VOID pull does not block',
       control: (f, id) => addPull(f, id, 'void'),
     },

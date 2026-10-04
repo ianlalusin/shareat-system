@@ -1,8 +1,9 @@
 /**
  * The only place SQL is written for POS item mapping and the daily usage pull. T-177.
  */
-import { and, eq, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql } from 'drizzle-orm';
 import { salesDays } from '../../schema/sales-days';
+import { stockUsageRecords } from '../../schema/stock-usage';
 import type { Decimal, Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert } from './numeric-input';
@@ -382,8 +383,28 @@ export type InsertPullLine = Readonly<
   }
 >;
 
-export async function replacePullLines(tx: Tx, pullId: string, lines: readonly InsertPullLine[]): Promise<void> {
-  await tx.delete(posUsagePullLines).where(eq(posUsagePullLines.pullId, pullId));
+export async function replacePullLines(
+  tx: Tx,
+  pullId: string,
+  allLines: readonly InsertPullLine[],
+  /** T-374 S7: sections already finalized on this pull. Their lines (and links) are left exactly as they are. */
+  keepSections: readonly PosUsagePullSection[] = [],
+): Promise<void> {
+  // Defence in depth: a line that carries a usage record is the only link from the pull to posted stock. Never
+  // drop it (a void and R10 both read it), and never duplicate its key. A finalized section is not rewritten.
+  const keep = [...keepSections];
+  await tx
+    .delete(posUsagePullLines)
+    .where(
+      and(
+        eq(posUsagePullLines.pullId, pullId),
+        isNull(posUsagePullLines.usageRecordId),
+        keep.length > 0 ? notInArray(posUsagePullLines.section, keep) : undefined,
+      ),
+    );
+  const kept = await tx.select({ lineKey: posUsagePullLines.lineKey }).from(posUsagePullLines).where(eq(posUsagePullLines.pullId, pullId));
+  const keptKeys = new Set(kept.map((k) => k.lineKey));
+  const lines = allLines.filter((l) => !keptKeys.has(l.lineKey) && !keep.includes(l.section));
   if (lines.length === 0) return;
   const rows: (SafeInsert<typeof posUsagePullLines> & { quantity: Quantity | null })[] = lines.map(
     (l) => ({
@@ -447,4 +468,44 @@ export async function setLineUsageRecord(
       .set({ quantity: u.quantity, usageRecordId: u.usageRecordId })
       .where(and(eq(posUsagePullLines.pullId, pullId), eq(posUsagePullLines.lineKey, u.lineKey)));
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-374 S7 (DEF-578): voiding a pull
+// ---------------------------------------------------------------------------------------------
+/** R9: the pull row under `FOR UPDATE`. A void and a finalize of the same pull serialize here. */
+export async function getPullForUpdate(tx: Tx, id: string): Promise<PosUsagePullRow | undefined> {
+  const [row] = await tx.select(pullColumns).from(posUsagePulls).where(eq(posUsagePulls.id, id)).for('update');
+  return row;
+}
+
+/** R13: the pull goes `void` with who, when and why (the DB's `pos_usage_pulls_void_shape_check` insists on all three). */
+export async function markPullVoid(tx: Tx, id: string, voidedBy: string, reason: string): Promise<void> {
+  await tx
+    .update(posUsagePulls)
+    .set({ status: 'void', voidedAt: sql`now()`, voidedBy, voidReason: reason })
+    .where(eq(posUsagePulls.id, id));
+}
+
+/** The distinct usage records this pull made that are still `posted`, in id order (stable, so the void is repeatable). */
+export async function postedUsageRecordIdsForPull(tx: Tx, pullId: string): Promise<string[]> {
+  const rows = await tx
+    .selectDistinct({ id: stockUsageRecords.id })
+    .from(posUsagePullLines)
+    .innerJoin(stockUsageRecords, eq(stockUsageRecords.id, posUsagePullLines.usageRecordId))
+    .where(and(eq(posUsagePullLines.pullId, pullId), eq(stockUsageRecords.status, 'posted')))
+    .orderBy(stockUsageRecords.id);
+  return rows.map((r) => r.id);
+}
+
+/** R10: the non-void pull, with its sales day's business date, that links this usage record; none when no live pull does. */
+export async function livePullForUsageRecord(tx: Tx, recordId: string): Promise<{ pullId: string; businessDate: string } | undefined> {
+  const [row] = await tx
+    .select({ pullId: posUsagePulls.id, businessDate: salesDays.businessDate })
+    .from(posUsagePullLines)
+    .innerJoin(posUsagePulls, eq(posUsagePulls.id, posUsagePullLines.pullId))
+    .innerJoin(salesDays, eq(salesDays.id, posUsagePulls.salesDayId))
+    .where(and(eq(posUsagePullLines.usageRecordId, recordId), ne(posUsagePulls.status, 'void')))
+    .limit(1);
+  return row;
 }

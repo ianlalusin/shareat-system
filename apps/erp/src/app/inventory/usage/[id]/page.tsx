@@ -6,6 +6,7 @@ import { usageRecordDetail } from '../lib';
 import { wastageReasonLabel } from '@shareat/domain';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Usage record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -36,11 +37,11 @@ export default async function UsageRecordPage({
   const { actor } = await requireSession(`/inventory/usage/${id}`);
   const detail = await usageRecordDetail(actor.orgId, id);
   if (!detail) notFound();
-  const { record, locationName, lines } = detail;
+  const { record, locationName, lines, fromLivePull } = detail;
 
   const canPost = record.status === 'draft';
   const canDeleteDraft = record.status === 'draft';
-  const canVoid = record.status === 'posted';
+  const canVoid = record.status === 'posted' && !fromLivePull;
 
   return (
     <Page density="table">
@@ -140,6 +141,15 @@ export default async function UsageRecordPage({
             </>
           )}
         </dl>
+      )}
+
+      {record.status === 'posted' && fromLivePull && (
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          This usage came from a POS pull, so it is voided with the pull.{' '}
+          <Link href={`/inventory/pos-usage?store=${record.storeId}`} className={ACTION_LINK}>
+            Void it under Inventory › POS usage →
+          </Link>
+        </p>
       )}
 
       {canVoid && (

@@ -30,9 +30,11 @@ import { authorize, type Actor } from '@shareat/auth';
 import { env } from '@shareat/core/env';
 import { posMappingRepo, salesDaysRepo, type Tx } from '@shareat/db';
 import { postUsage, saveUsageDraft } from '../stock/usage-records';
+import { voidPullUsageRecord } from '../stock/void-pull-usage-record';
+import { closedStockPeriodSentence } from '../stock/period-guard';
 import { lockLiveSalesDay } from '../sales-days/live-day';
-import { RefusalError, humanDate } from '../shared/refusal';
-import type { BusinessDate } from '@shareat/core/datetime';
+import { RefusalError, gone, humanDate, internalFault, refuse } from '../shared/refusal';
+import { toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { compareQuantity, quantity, ZERO_QUANTITY } from '../stock/quantity';
 import { explodePosSales, type PlanLine, type PlanSection } from './plan';
 
@@ -141,6 +143,16 @@ export type BuildPlanOutcome =
   | { readonly ok: true; readonly pullId: string; readonly lines: readonly PlanLine[]; readonly snapshotTakenAt: Date }
   | { readonly ok: false; readonly reason: string };
 
+/**
+ * T-374 S7 (audit 1): a rebuild of a partly finalized pull refreshes the snapshot and rewrites only the sections that
+ * are NOT finalized. A finalized section's lines, and the pull -> usage-record links on them, are never touched.
+ */
+const finalizedSectionsOf = (p: { directFinalizedAt: Date | null; recipeFinalizedAt: Date | null; orphanFinalizedAt: Date | null }): PlanSection[] => [
+  ...(p.directFinalizedAt ? (['direct'] as const) : []),
+  ...(p.recipeFinalizedAt ? (['recipe'] as const) : []),
+  ...(p.orphanFinalizedAt ? (['orphan'] as const) : []),
+];
+
 export async function buildPlan(
   tx: Tx,
   actor: Actor,
@@ -177,6 +189,17 @@ export async function buildPlan(
   // T-373 S1 R1/R2: lock the live day after the fetch, before the first write.
   const refused = await lockDayOutcome(tx, input.orgId, input.salesDayId, input.storeId);
   if (refused) return refused;
+  let finalizedSections: PlanSection[] = [];
+  // T-374 S7 (audit 2): the pull's own lock (same FOR UPDATE as void / finalize), then re-check under it. A void
+  // that committed first leaves the pull `void`; a finalize that committed first leaves a section stamped.
+  if (existing) {
+    const locked = await posMappingRepo.getPullForUpdate(tx, existing.id);
+    if (!locked || locked.status === 'void') {
+      return { ok: false, reason: "This POS usage pull was voided, so its plan can't be rebuilt. Build the day again." };
+    }
+    if (locked.status !== 'planned') return { ok: false, reason: `this day's pull is already ${locked.status} — invariant 12: only one live pull per (store, sales day)` };
+    finalizedSections = finalizedSectionsOf(locked);
+  }
   const now = new Date();
 
   const pullId = existing
@@ -199,6 +222,7 @@ export async function buildPlan(
       quantity: l.quantity,
       blocked: l.blocked ? { reason: l.blockReason ?? 'blocked' } : null,
     })),
+    finalizedSections,
   );
 
   return { ok: true, pullId, lines, snapshotTakenAt: now };
@@ -249,6 +273,14 @@ export async function finalizeSections(
   // T-373 S1 (DEF-552): a voided day posts nothing. Before the section loop so a refused day marks no section finalized.
   const refused = await lockDayOutcome(tx, pull.orgId, pull.salesDayId, pull.storeId);
   if (refused) return refused;
+
+  // T-374 S7 (R9): the pull's own lock, taken AFTER the POS fetch (never held across HTTP). A void that got
+  // here first has committed by the time this returns, so re-read `void` and each section's finalized stamp
+  // from the LOCKED row, not from the unlocked read above.
+  const locked = await posMappingRepo.getPullForUpdate(tx, pull.id);
+  if (!locked) throw internalFault(`finalizeSections: pull ${pull.id} no longer exists`);
+  if (locked.status === 'void') return { ok: false, reason: 'this pull has been voided' };
+
   const freshKeys = new Set(freshLines.map((l) => l.key));
   const confirmedSet = new Set(input.confirmedKeys);
 
@@ -261,9 +293,9 @@ export async function finalizeSections(
   }
 
   const alreadyFinalized: Record<PlanSection, Date | null> = {
-    direct: pull.directFinalizedAt,
-    recipe: pull.recipeFinalizedAt,
-    orphan: pull.orphanFinalizedAt,
+    direct: locked.directFinalizedAt,
+    recipe: locked.recipeFinalizedAt,
+    orphan: locked.orphanFinalizedAt,
   };
 
   const results: SectionOutcome[] = [];
@@ -344,4 +376,70 @@ export async function finalizeSections(
   }
 
   return { ok: true, sections: results };
+}
+
+// -----------------------------------------------------------------------------------------
+// voidPosUsagePull - T-374 S7 (DEF-578)
+// -----------------------------------------------------------------------------------------
+/**
+ * Void a POS usage pull AS A DOCUMENT: every usage record it made is reversed and the pull goes `void` with
+ * who, when and why, all in the caller's transaction, or none of it. Nothing outside the pull is touched.
+ *
+ * - R7  All or none. Every refusal THROWS (a `RefusalError` with a plain sentence), so the caller's transaction
+ *       unwinds any record already reversed. Planned, partly finalized and finalized pulls are all voidable; a
+ *       planned pull reverses nothing. Returns `{ ok: true, reversedRecordCount }` or throws.
+ * - R8  Capability `void_usage_record`, authorized ONCE on the pull's store (a pull's records are its store's).
+ *       Each record then reverses through the actor-less `voidPullUsageRecord`, which is what lets R10 stop a
+ *       record being voided on its own.
+ * - R9  Lock order: `authorize` -> pull `FOR UPDATE` -> status checks -> record voids. `finalizeSections` takes
+ *       the same lock after its POS fetch, so a void and a finalize serialize.
+ * - R10 (see `voidUsage`) a pull-made record cannot be voided alone.
+ * - R11 A void pull frees its date: the unique index and `findLivePullOnVoidedDayForDate` count only non-void pulls.
+ * - R12 The reversal is dated on the pull's sales day when that stock month is open, else today. The CHOSEN date
+ *       is tested once, before any write, so a closed month refuses the whole void and never half of it.
+ * - R13 `voided_at / voided_by / void_reason` and `pos_usage_pulls_void_shape_check` (migration 0181).
+ */
+export async function voidPosUsagePull(
+  tx: Tx,
+  actor: Actor,
+  input: { readonly pullId: string; readonly reason: string },
+): Promise<{ readonly ok: true; readonly reversedRecordCount: number }> {
+  const raw = `voidPosUsagePull: pull ${input.pullId}`;
+  const found = await posMappingRepo.getPull(tx, input.pullId);
+  // No existence oracle: a missing pull is judged by the same capability gate first, so someone who may not void
+  // gets the same AuthorizationError whether or not the pull exists.
+  if (!found) {
+    await authorize(tx, actor, 'void_usage_record');
+    throw gone(`${raw} does not exist`, 'POS usage pull');
+  }
+  await authorize(tx, actor, 'void_usage_record', { storeId: found.storeId });
+
+  const pull = await posMappingRepo.getPullForUpdate(tx, input.pullId);
+  if (!pull) throw gone(`${raw} does not exist`, 'POS usage pull');
+  if (pull.status === 'void') throw refuse(`${raw} is already void`, 'This POS usage pull was already voided.');
+
+  const reason = input.reason.trim();
+  if (!reason) throw refuse(`${raw}: blank reason`, 'Say why this pull is being voided.');
+
+  const salesDay = await salesDaysRepo.getById(tx, pull.orgId, pull.salesDayId);
+  if (!salesDay) throw internalFault(`${raw}: sales day ${pull.salesDayId} no longer exists`);
+
+  // R12: the sales day's date when its stock month is open, else today.
+  const dayDate = salesDay.businessDate as BusinessDate;
+  // R7 (review): the CHOSEN date is tested once, before any write.
+  const dayClosed = await closedStockPeriodSentence(tx, pull.orgId, dayDate, 'voided');
+  const voidedOn = dayClosed === null ? dayDate : toBusinessDate();
+  const closed = dayClosed === null ? null : await closedStockPeriodSentence(tx, pull.orgId, voidedOn, 'voided');
+  if (closed) throw refuse(`${raw}: stock month closed for ${voidedOn}`, closed);
+
+  const recordIds = await posMappingRepo.postedUsageRecordIdsForPull(tx, pull.id);
+  for (const recordId of recordIds) {
+    const result = await voidPullUsageRecord(tx, { recordId, reason, voidedOn, voidedBy: actor.personId });
+    // After the checks above a refusal here is not a person's mistake (its text carries record ids): fail
+    // the whole void so the records already reversed unwind.
+    if (!result.ok) throw internalFault(`${raw}: record ${recordId} could not be voided: ${result.reason}`);
+  }
+
+  await posMappingRepo.markPullVoid(tx, pull.id, actor.personId, reason);
+  return { ok: true, reversedRecordCount: recordIds.length };
 }
