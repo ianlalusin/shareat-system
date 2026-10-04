@@ -46,6 +46,7 @@ import type {
   SupplierStatus,
   SupplierVatStatus,
 } from '@shareat/db/schema';
+import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { add, compare, formatMoney, isZero, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { addDays, parseBusinessDate, type BusinessDate } from '@shareat/core/datetime';
@@ -654,12 +655,19 @@ export async function setInvoiceLines(
  * see the failure and fix the coding, so the error is left to name the offending expense (it
  * always does: every `approveExpense` failure message includes the expense id) rather than being
  * swallowed and retried.
+ *
+ * ## T-376 S1 — a closed month is posted through the override
+ *
+ * `options.periodOverride` is passed to `approveExpense` for EVERY draft (one `period_overrides` row per entry).
+ * `approveExpense` forwards it only when that draft's month is `closed`; `postEntry` authorises
+ * `override_period_lock` against `actor`. Without the override a closed month refuses in `approveExpense`'s words.
  */
 export async function verifyInvoice(
   tx: Tx | null,
   actor: Actor,
   invoiceId: string,
   attestation: VerifyInvoiceAttestation,
+  options?: { periodOverride?: { reason: PeriodOverrideReason; note?: string | null } },
 ): Promise<void> {
   const run = async (trx: Tx) => {
     const invoice = await apRepo.getSupplierInvoiceById(trx, actor.orgId, invoiceId);
@@ -742,7 +750,7 @@ export async function verifyInvoice(
     const drafts = live.filter((e) => e.status === 'draft');
     for (const d of drafts) {
       try {
-        await approveExpense(trx, actor, d.id, { noPeriodOverride: true });
+        await approveExpense(trx, actor, d.id, { periodOverride: options?.periodOverride });
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         const innerUserMessage = err instanceof Error ? (err as { userMessage?: unknown }).userMessage : undefined;
@@ -852,6 +860,8 @@ export interface RecordExpenseForInvoiceInput {
   ownerId?: string | null;
   particulars: string;
   payments: CreateExpensePaymentInput[];
+  /** T-376 S1: post into a CLOSED month. Authorised inside `postEntry` against `actor`; ignored for an open month. */
+  periodOverride?: { reason: PeriodOverrideReason; note?: string | null };
 }
 
 export interface RecordExpenseForInvoiceResult extends ApproveExpenseResult {
@@ -884,7 +894,7 @@ export async function recordExpenseForInvoice(
       particulars: input.particulars,
       payments: input.payments,
     });
-    const approved = await approveExpense(trx, actor, expenseId, { noPeriodOverride: true });
+    const approved = await approveExpense(trx, actor, expenseId, { periodOverride: input.periodOverride });
     return { expenseId, ...approved };
   };
   if (tx) return run(tx);

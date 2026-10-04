@@ -40,11 +40,6 @@ export interface ApproveExpenseResult {
 /** T-369 S5b (DEF-314): post this one approval into a CLOSED month. Authorised inside `postEntry` against `actor`. */
 interface ApproveExpenseOptions {
   periodOverride?: { reason: PeriodOverrideReason; note?: string | null };
-  /**
-   * The caller is a path that CANNOT carry an override (verifying a bill posts its draft expenses). A closed or
-   * locked month is then refused with a sentence that names only what that person can actually do.
-   */
-  noPeriodOverride?: boolean;
 }
 
 /** "January 2026" - the month a fiscal period covers, for a sentence a person reads. */
@@ -257,17 +252,13 @@ async function runApproveExpense(
     if (period?.status === 'locked') {
       throw refuse(
         `approveExpense: the fiscal period covering ${expense.businessDate} is locked.`,
-        options?.noPeriodOverride
-          ? `${monthLabel(period.startsOn)} is locked, so this bill's expense can't be posted into it. Nothing was saved.`
-          : `${monthLabel(period.startsOn)} is locked. Nothing can be posted into it, not even with the closed-month override.`,
+        `${monthLabel(period.startsOn)} is locked. Nothing can be posted into it, not even with the closed-month override.`,
       );
     }
     if (period?.status === 'closed' && !options?.periodOverride) {
       throw refuse(
         `approveExpense: the fiscal period covering ${expense.businessDate} is closed and no periodOverride was given.`,
-        options?.noPeriodOverride
-          ? `${monthLabel(period.startsOn)} is closed, and a bill's expense can't be posted into a closed month from the bills screen yet. Nothing was saved.`
-          : `${monthLabel(period.startsOn)} is closed. Ask an administrator to post this one entry into it.`,
+        `${monthLabel(period.startsOn)} is closed. Ask an administrator to post this one entry into it.`,
       );
     }
   }

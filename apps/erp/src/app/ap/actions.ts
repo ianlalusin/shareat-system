@@ -26,7 +26,9 @@ import {
   suggestPaymentAllocation,
 } from '@shareat/domain';
 import { withOrgPrincipal, INVOICE_LINE_ROWS } from './lib';
+import { authorize } from '@shareat/auth';
 import { requireActor } from '../../lib/session';
+import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '@/lib/period-override';
 import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
@@ -238,13 +240,37 @@ export async function verifyInvoiceAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'invoiceId');
   try {
+    // T-376 S1 (DEF-581), R5. T-364 order: nothing about the bill's month is said until the actor has proven
+    // `verify_supplier_invoice` at the bill's store. The bill's date is read here, never from the form. The override
+    // is forwarded ONLY for a closed month (an open one would ignore it; dropping it keeps the call honest).
+    // Nothing ticked: no override to judge, so no extra read; the domain gates and posts as before.
+    let periodOverride: ReturnType<typeof readPeriodOverride>;
+    if (formData.get('periodOverrideConfirm') === 'on') {
+      const invoice = await withOrgPrincipal(actor.orgId, async (tx) => {
+        const found = await apRepo.getSupplierInvoiceById(tx, actor.orgId, id);
+        if (found) await authorize(tx, actor, 'verify_supplier_invoice', { storeId: found.storeId });
+        return found;
+      });
+      const inClosedMonth = !!invoice && !!closedMonthOf(await closedMonths(actor.orgId), invoice.invoiceDate);
+      if (inClosedMonth) {
+        const problem = periodOverrideProblem(formData);
+        if (problem) throw new Error(problem);
+        periodOverride = readPeriodOverride(formData);
+      }
+    }
     await withOrgPrincipal(actor.orgId, (tx) =>
-      verifyInvoice(tx, actor, id, {
-        supplier: formData.get('attestSupplier') === 'on',
-        invoice: formData.get('attestInvoice') === 'on',
-        items: formData.get('attestItems') === 'on',
-        price: formData.get('attestPrice') === 'on',
-      }),
+      verifyInvoice(
+        tx,
+        actor,
+        id,
+        {
+          supplier: formData.get('attestSupplier') === 'on',
+          invoice: formData.get('attestInvoice') === 'on',
+          items: formData.get('attestItems') === 'on',
+          price: formData.get('attestPrice') === 'on',
+        },
+        periodOverride ? { periodOverride } : undefined,
+      ),
     );
   } catch (err) {
     back(`/ap/invoices/${id}`, { error: errorMessage(err) });

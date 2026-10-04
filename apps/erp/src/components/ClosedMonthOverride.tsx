@@ -34,12 +34,16 @@ export function ClosedMonthOverride({
   closedMonths,
   dateFieldName,
   initialDate,
+  count = 1,
 }: {
   closedMonths: ClosedMonthOption[];
   /** The `name` of the date input in the same form. */
   dateFieldName: string;
   initialDate: string;
+  /** How many entries this form posts (the bills screen: one per draft). 1 keeps the original copy. */
+  count?: number;
 }) {
+  const many = count > 1;
   const ref = useRef<HTMLDetailsElement>(null);
   const [date, setDate] = useState(initialDate);
 
@@ -61,11 +65,11 @@ export function ClosedMonthOverride({
   return (
     <details ref={ref} data-closed-month-override="" hidden={!month} className="sm:col-span-2 rounded-md border border-amber-300 p-3 dark:border-amber-800">
       <summary className="inline-flex min-h-[44px] cursor-pointer items-center text-sm font-medium">
-        {month ? `${month.label} is closed — post this one entry anyway` : 'Post into a closed month'}
+        {month ? `${month.label} is closed — post ${many ? `these ${count} expenses` : 'this one entry'} anyway` : 'Post into a closed month'}
       </summary>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
         <p className="text-xs text-neutral-600 dark:text-neutral-400 sm:col-span-2">
-          {month ? `${month.label} is closed.` : 'This month is closed.'} You can post this one entry into it. It will be
+          {month ? `${month.label} is closed.` : 'This month is closed.'} {many ? `You can post these ${count} expenses into it. Each will be` : 'You can post this one entry into it. It will be'}{' '}
           recorded against your name with the reason below.
         </p>
         <label className="flex flex-col gap-1">

@@ -20,7 +20,7 @@ const repoRoot = path.resolve(__dirname, '../..');
 const SRC = path.join(repoRoot, 'apps/erp/src');
 const APP = path.join(SRC, 'app');
 const COMPONENT = path.join(SRC, 'components', 'ClosedMonthOverride.tsx');
-const ALLOWED_IMPORTERS = new Set(['app/expenses/reimbursements/page.tsx', 'app/expenses/[id]/page.tsx']);
+const ALLOWED_IMPORTERS = new Set(['app/expenses/reimbursements/page.tsx', 'app/expenses/[id]/page.tsx', 'app/ap/invoices/[id]/page.tsx']);
 const STOCK_DIRS = ['inventory', 'commissary', 'trade'];
 
 function walk(dir: string): string[] {
@@ -46,7 +46,7 @@ const rel = (p: string) => path.relative(SRC, p).split(path.sep).join('/');
 const allFiles = walk(SRC).filter((f) => f !== COMPONENT);
 const importers = allFiles.filter((f) => /\bClosedMonthOverride\b/.test(codeOnly(readFileSync(f, 'utf8')))).map(rel);
 
-describe('T8 (I5) — the override control is on an allowlist of exactly two pages', () => {
+describe('T8 (I5) — the override control is on an allowlist of exactly three pages', () => {
   it('ClosedMonthOverride exists (apps/erp/src/components/ClosedMonthOverride.tsx) — red until S5a', () => {
     expect(existsSync(COMPONENT), 'the component file does not exist yet').toBe(true);
   });
@@ -57,6 +57,10 @@ describe('T8 (I5) — the override control is on an allowlist of exactly two pag
 
   it('the expense page IMPORTS it too (S5b - the second allowlisted page)', () => {
     expect(importers).toContain('app/expenses/[id]/page.tsx');
+  });
+
+  it('the bills page IMPORTS it (T-376 S1 - the third allowlisted page; the widened allowlist keeps its "must be present" half)', () => {
+    expect(importers).toContain('app/ap/invoices/[id]/page.tsx');
   });
 
   it('nothing outside the allowlist imports it', () => {

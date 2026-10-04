@@ -9,6 +9,9 @@ import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction, voidPaym
 import { recordExpenseForInvoiceAction } from '../../../expenses/actions';
 import { getInvoice, getSupplier, listCategoriesGrouped, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
 import { withOrgPrincipal } from '../../../expenses/lib';
+import { canOverrideClosedMonth } from '../../../expenses/reimbursements/lib';
+import { closedMonthOf, closedMonths } from '../../../../lib/period-override';
+import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { MoneyLines } from '@/components/money/MoneyLines';
 import { Page } from '@/components/shell/Page';
@@ -72,6 +75,14 @@ export default async function InvoiceDetailPage({
     .filter((e) => e.status === 'draft')
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   const categoryById = new Map(categories.map((c) => [c.id, c]));
+
+  // T-376 S1 (DEF-581), R6 - the closed-month override, for a holder only, and only where it would be used: the
+  // verify form (pending, with at least one draft to post) and the record form (canRecord). One lookup.
+  const needsOverride = (invoice.status === 'pending' && draftExpenses.length > 0) || canRecord;
+  const closedMonth =
+    needsOverride && (await canOverrideClosedMonth(actor))
+      ? closedMonthOf(await closedMonths(orgId), invoice.invoiceDate)
+      : undefined;
 
   // T-369 S0 (DEF-550) - the payments that paid this bill, and where the viewer may void them. The
   // domain re-checks everything on submit; this only decides what is OFFERED (bible row 262: a
@@ -361,6 +372,17 @@ return (
               </label>
             ))}
           </div>
+          {closedMonth && draftExpenses.length > 0 && (
+            <>
+              <input type="hidden" name="invoiceDate" value={invoice.invoiceDate} />
+              <ClosedMonthOverride
+                closedMonths={[closedMonth]}
+                dateFieldName="invoiceDate"
+                initialDate={invoice.invoiceDate}
+                count={draftExpenses.length}
+              />
+            </>
+          )}
           <button
             type="submit"
             className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
@@ -509,6 +531,12 @@ return (
                 initialLines={initialLines}
               />
             </div>
+            {closedMonth && (
+              <>
+                <input type="hidden" name="invoiceDate" value={invoice.invoiceDate} />
+                <ClosedMonthOverride closedMonths={[closedMonth]} dateFieldName="invoiceDate" initialDate={invoice.invoiceDate} />
+              </>
+            )}
             <button type="submit" className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900">
               Record expense
             </button>

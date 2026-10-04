@@ -344,12 +344,12 @@ describe('T7 (S5b) — an override sent for an OPEN month is simply ignored', ()
 });
 
 // -----------------------------------------------------------------------------------------------
-// Audit follow-up: verifying a PENDING bill posts its draft expenses, and that path cannot carry an override.
-// A draft dated in a CLOSED month must be refused with a sentence that names only what that person can do -
-// not "Ask an administrator to post this one entry into it" (nobody can, there) - and unwind the verification.
+// Audit follow-up: verifying a PENDING bill posts its draft expenses. T-376 S1 (R2): that path now carries the
+// closed-month override too, so a verifier WITHOUT it gets approveExpense's ordinary sentence - the bill sentence
+// ("...from the bills screen yet") is retired - and the verification unwinds.
 // -----------------------------------------------------------------------------------------------
 describe('verifyInvoice — a pending bill whose draft expense is dated in a closed month', () => {
-  it('refuses with the bill sentence (names the month, no override advice), leaves the bill pending and the draft a draft', async () => {
+  it('refuses with the ordinary closed-month sentence (T-376 S1 R2), leaves the bill pending and the draft a draft, and writes no override row', async () => {
     const { verifyInvoice } = await import('@shareat/domain');
     const code = uid('t369s5v');
     const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
@@ -390,10 +390,10 @@ describe('verifyInvoice — a pending bill whose draft expense is dated in a clo
       asOrg(orgId, (tx) => verifyInvoice(tx, actor(orgId, managerId), inv!.id, { supplier: true, invoice: true, items: true, price: true })),
       'verifying a bill whose draft expense is in a closed month',
     );
-    expect(refused.userMessage).toContain('January 2026 is closed');
-    expect(refused.userMessage).not.toMatch(/post this one entry/i);
+    expect(refused.userMessage).toBe('January 2026 is closed. Ask an administrator to post this one entry into it.');
     expect(refused.userMessage).not.toMatch(UUID);
     expect((await sql<{ status: string }[]>`select status from supplier_invoices where id = ${inv!.id}`)[0]!.status).toBe('pending');
     expect(await statusOf(made.id)).toBe('draft');
+    expect(await overrideRows(orgId), 'a refused verification must leave no period_overrides row (T-376 X-5)').toHaveLength(0);
   });
 });

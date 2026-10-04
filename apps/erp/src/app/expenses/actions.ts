@@ -278,6 +278,19 @@ export async function recordExpenseForInvoiceAction(formData: FormData): Promise
 
   let newId: string;
   try {
+    // T-376 S1 (DEF-581), R5: `parseExpenseForm` already proved create_expense + approve_expense. The bill's date is
+    // read on the server; the override is forwarded only when it falls in a CLOSED month.
+    let periodOverride: ReturnType<typeof readPeriodOverride>;
+    if (formData.get('periodOverrideConfirm') === 'on') {
+      const invoice = await withOrgPrincipal(actor.orgId, (tx) =>
+        apRepo.getSupplierInvoiceById(tx, actor.orgId, parsed.supplierInvoiceId),
+      );
+      if (invoice && closedMonthOf(await closedMonths(actor.orgId), invoice.invoiceDate)) {
+        const problem = periodOverrideProblem(formData);
+        if (problem) throw new Error(problem);
+        periodOverride = readPeriodOverride(formData);
+      }
+    }
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       recordExpenseForInvoice(tx, actor, {
         storeId: parsed.storeId,
@@ -286,6 +299,7 @@ export async function recordExpenseForInvoiceAction(formData: FormData): Promise
         categoryId: parsed.categoryId,
         particulars: parsed.particulars,
         payments: parsed.payments,
+        ...(periodOverride ? { periodOverride } : {}),
       }),
     );
     newId = result.expenseId;
