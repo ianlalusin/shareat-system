@@ -1,6 +1,6 @@
 # T-367: AP/AR money — DEF-201, DEF-396, DEF-420, DEF-499, DEF-500, DEF-395, DEF-508, DEF-054
 
-**Status:** **S3 DONE 2026-10-02 (DEF-420, 499, 500; audited twice; smoke on 9008); S4 DONE 2026-10-02 (pin tests only, DEF-395 overdraftLimit leg); S2 DONE 2026-10-01 (DEF-396, 508, 518, 519; migration 0176; ⛔ prod P2-P4 with Ian before the push; DEF-550 = no void-payment screen); S1 DONE 2026-10-01 (DEF-201, 517, 520 + DEF-546; migration 0173 — ⛔ prod duplicate count with Ian before the push, docs/ops)** — ⭐ allocation 2026-10-01 (orchestrator): T-367 S1 = 0173, T-368 S0 = 0174, T-372 S2 = 0175; supersedes the order on line 11 — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
+**Status:** **S0 RAN 2026-10-04: gate FAILED (1,841 `ar_collection` legs, ₱739,985.33, none a SYSTEM Platform Fee doc); Amendment A1 drafted, awaiting Ian (S0b capture + QA1–QA3); S5/S6 wait on A1 approval + S0b.** **S3 DONE 2026-10-02 (DEF-420, 499, 500; audited twice; smoke on 9008); S4 DONE 2026-10-02 (pin tests only, DEF-395 overdraftLimit leg); S2 DONE 2026-10-01 (DEF-396, 508, 518, 519; migration 0176; ⛔ prod P2-P4 with Ian before the push; DEF-550 = no void-payment screen); S1 DONE 2026-10-01 (DEF-201, 517, 520 + DEF-546; migration 0173 — ⛔ prod duplicate count with Ian before the push, docs/ops)** — ⭐ allocation 2026-10-01 (orchestrator): T-367 S1 = 0173, T-368 S0 = 0174, T-372 S2 = 0175; supersedes the order on line 11 — APPROVED 2026-09-30 (orchestrator, after independent Opus review; Q4/Q5 defaults ship). Review changes
 1–7 and the minors applied. Spec by the Opus planner, 2026-09-30. Batch B of the money-defect
 push (Ian, 2026-09-30: *"close all open money defects in v2"*), `docs/plans/money-defects-2026-09-30.md`.
 **Model:** Sonnet for each slice, tester first and then builder. One lane runs the slices in order.
@@ -227,6 +227,122 @@ from p where pay->>'method' in ('other','ar_collection') group by 1,2,3,4 order 
   no v2 form has offered `other` since 2026-09-11. If S0 confirms a handful of `other` rows, the recommendation is to land
   them in suspense as ruled and NOT build a new voucher-asset method until someone needs one. Ian ruled "yes";
   this is only the utilisation number he should see before S6 is built.
+
+---
+
+## Amendment A1 (S0 results, 2026-10-04) — DRAFT, awaiting Ian (S0b capture + QA1–QA3)
+
+**Verdict: AMEND, do not re-plan.** S5's domain and migration halves stand as written. What changes is the
+ETL rule (R10) and the size of S6. The S0 gate failed because R10 described the wrong v1 writer, not because
+the plan is wrong. `[read]` = cited from source. `[inferred]` = not yet checked against data.
+
+### S0 numbers (fresh capture, 2026-10-04: 9,036 expense docs, 4 stores)
+| Population | Legs / docs | ₱ |
+|---|---:|---:|
+| `ar_collection`, category `Online Order Expenses`, supplier ≠ SYSTEM, no `sourceId`, posted | 1,841 / 1,841 | 739,985.33 |
+| SYSTEM `Platform Fee` doc (R10's four markers), matched to its `arCollections` doc | 1 / 1 | — |
+| `other` / `other` | 322 / 322 | 170,957.12 |
+| `other` / `rebate` | 1 | 220.00 |
+| `other` / `store_credit` | 1 | 266.00 |
+| SYSTEM docs with category `Online Order Expenses` but no `ar_collection` leg | 2 | — |
+| `Platform Fee` docs with a non-SYSTEM supplier | 3 | — |
+
+### 1. What the 1,841 are in v1 [read]
+**v1 goal:** *Show each Grab/Foodpanda payout deduction (commission, ads, VAT, tax withheld, penalty, variance)
+as its own line in the expense reports, because v1's income statement reads expense documents and not the
+journal.*
+- Written by `recordChannelSettlementAction`, one doc per deduction (`ERP-rebuild/src/lib/actions/channel-settlement.actions.ts:331-360`):
+  `payments:[{method:'ar_collection'}]`, `supplierId: channel_<id>`, `category:'Online Order Expenses'`,
+  `createdVia:'channel_settlement'`, `settlementId`, `projectionState:'applied'`. **No `sourceId`**, which is why R10 missed them.
+- The journal posting lives in the SETTLEMENT, not in the expense doc: `fees_expense` → `expense__online_order_expenses`,
+  paid out of `clearing__<platform>` (`channel-settlement/posting.ts:85-86`). The doc posts no leg of its own:
+  `ar_collection` resolves to null (`accounts/account-resolver.ts:49-53`) and system docs never go through
+  `buildExpenseJournalEntries` (callers: `expense.actions.ts:297,1024`, `recurring-expense.actions.ts:50` only).
+- Same settlement writes `arCollections/{settlementId}` with `platformFee` = all deductions and `feeBreakdown`
+  (`:366-390`), so **the fee is counted three times in v1's data**: settlement journal, collection doc, expense docs.
+  Each v1 report reads only one of them, so v1 itself does not double-count. A converter that books two of them
+  would.
+- Second writer, `recordChannelAdjustmentAction` (`channel-settlement-batch.actions.ts:330-360`): refunds and
+  Appendix-B charges, `createdVia:'channel_adjustment'`. ⚠️ Here the money really left the bank
+  (`online__<dest>` OUT, `:327`), and the record of that is `channelSettlements/{adjId}`, **which S0 did not capture.**
+- **What it does to v1's books:** it reduces nothing and creates nothing. It is a report-only copy of fee lines
+  whose ledger effect is inside the settlement.
+
+### 2. What the 322 `other` legs are in v1 [read; split by population is inferred]
+**v1 goal:** *A sentinel for "no money left any tracked account". Staff could pick a sub-type by hand, and v1's
+own non-cash postings (depreciation, amortisation, asset write-off) used it so those charges would show in
+the expense reports.*
+- **System writers use exactly `otherType:'other'`:** depreciation (`depreciation.actions.ts:179`, category
+  `Depreciation`, `sourceType:'depreciation'`), amortisation (`amortization.actions.ts:188`), and asset write-off
+  (`asset.actions.ts:444`, `Loss on Disposal`). All are `supplierName:'System'` with a `sourceId`, and the real posting
+  is in their own journal builders. They have the same shape as the 1,841: a report-only copy.
+- **Staff-entered:** `PaymentSplitEditor.tsx:254-270` offers the sub-types. `expense.builder.ts:79-90` posts one
+  leg OUT of `others__<type>`, an account marked "labels only … no running balance" (`account-defs.ts:83-87`).
+  The expense hits the P&L and the money comes from nowhere. Nobody can tell what the payment was.
+- ⚠️ **[inferred] Most of the 322 are probably the system copies**, because those are monthly, per asset, every
+  month. S0 did not group by `category`/`sourceType`/`supplierName`, so this is unproven. S0b (below) settles it.
+
+### 3. What v2 does today [read]
+- v2 books platform fees once, inside its own settlement (T-150, `packages/domain/src/channel-settlements/index.ts:9-11`,
+  `POSTING-PATTERNS.md` `channel_settlement.plain`). v2 has no fee expense document at all. **The domain half of S5
+  (retire the method, NOT VALID CHECK) is unaffected.**
+- ⛔ **R10's premise is false.** It says *"the collection's own conversion already books the 6400 leg (leg-mapping.ts:450-456)"*.
+  `leg-mapping.ts` is a classification table, not a converter. The ETL converts only `salesDay` and `expense`
+  (`packages/etl/src/convert.ts:597-599`), and `channel.settlement` is an UNSUPPORTED class (`:570`). F1's
+  "converting C1 gives Dr cash/Dr 6400/Cr 1210" has no converter to test.
+- The ETL quarantines `other` and `ar_collection` together (`convert.ts:435-445`). Categories `Online Order Expenses`
+  → 6410, `Depreciation` → 6700, `Amortization` → 6750, `Loss on Disposal` → 7400 are mapped (`leg-mapping.ts:143,154,155,165`).
+  Converting these docs as ordinary expenses would therefore post a second 6410/6700/6750/7400 charge, the
+  ₱198,148.29 defect shape.
+- ⚠️ `POSTING-PATTERNS.md:949` points at an `expense.channel_fee` trap that does not exist (dangling reference).
+- Stakes [read: bible rows 83, 105, 108]: the cutover opening balance is balance-sheet only and typed per party, and
+  2026 history is never loaded as real. These rules decide ETL audit/pilot output, **not the 2027 books.** That argues
+  for the smallest correct rule and against new accounts.
+
+### 4. Recommended v2 treatment
+| Population | Treatment | Pattern |
+|---|---|---|
+| (a) 1,841 `channel_settlement` docs | **SKIP**, reason `fee_carried_by_channel_settlement:<settlementId>`. Exact markers: `createdVia='channel_settlement'`, `settlementId` present, category `Online Order Expenses`, the ONLY payment is `ar_collection`. Cross-check: Σ docs per `settlementId` = `arCollections/{settlementId}.platformFee` (± variance, both in `feeBreakdown`). A mismatch is quarantined, never skipped | `channel_settlement.plain` (the fee lives there, once) |
+| (a′) `channel_adjustment` docs (count unknown) | **SKIP**, reason `carried_by_channel_adjustment:<adjId>`, cross-checked against a landed `channelSettlements/{adjId}.expenseId`. Until that collection is captured: QUARANTINE | none needed: the bank outflow belongs to the settlement converter (unsupported today) |
+| SYSTEM `Platform Fee` (1) | R10's existing skip, unchanged | `ar_collection.with-platform-fee` |
+| (b1) `other/other` system copies (`supplierName='System'` AND `sourceType ∈ {depreciation, amortization, asset_disposal}` AND `sourceId`) | **SKIP**, reason `carried_by_<sourceType>:<sourceId>` | `amortization.monthly`; depreciation/disposal by their own builders |
+| (b2) `other/other` residue (staff-entered) | Lands Dr category / **Cr new suspense account** with a finding per row, as ruled (q3b "add new") | **none, new row needed** (Q7-style sign-off) |
+| (c) rebate ₱220, store credit ₱266 | QUARANTINE and show Ian (q6 "show me"). No new method | `supplier.credit-applied` covers spending a credit. Arising is unwritten |
+| 2 SYSTEM OOE without `ar_collection`; 3 non-SYSTEM `Platform Fee` | QUARANTINE and list for Ian. The 3 are the shape of the ₱198k manual double-count [inferred] | — |
+- **The voucher/points/gift asset account is NOT built.** Ian answered q2 "only if the count shows more than a handful".
+  The count is voucher 0, points 0, gift 0, store_credit 1.
+
+### 5. Slice changes
+- **S0b (new, read-only, before S5's ETL half):** on the same scratch DB if it still exists; otherwise recapture with
+  Ian's okay (PII). Add `--collection channelSettlements` per store. Report (i) the 1,841 grouped by `createdVia` and by
+  whether `settlementId` is present, plus the per-settlement Σ vs `platformFee` match/mismatch counts; (ii) the 322
+  grouped by `category`, `sourceType`, `supplierName`, `createdVia`, with ₱; (iii) the 7 singletons listed row by row.
+- **S5:** the domain, action and migration parts are unchanged (migration unchanged). ETL part rewritten:
+  - F1 drops the "convert C1" half. It becomes "fee doc skipped; zero entries; skip reason carries the settlement id".
+  - Add F1b (channel_settlement skip plus Σ cross-check, and a mismatch → quarantined) and F1c (adjustment → quarantined
+    until a channelSettlements doc is landed).
+  - F2's controls extend to one marker missing at a time for the new keys.
+  - `convert.ts:437-441`'s comment and R10's text are corrected.
+- **S6:** shrinks to (b1) system-copy skip + (b2) suspense landing. Needs ONE new COA leaf (next to 2900, e.g.
+  "Unclassified payments (from old system)", liability/credit, active). [inferred] This needs a seed row plus a
+  backfill for existing orgs; the builder confirms the mechanism, and it is migration-or-seed per ADR-012. One new
+  POSTING-PATTERNS row (`expense.v1_unclassified`) for Ian's sign-off. No voucher method, no new expense method,
+  `UNMAPPED_PAYMENT_METHODS` stays `{'other'}` in the domain.
+- Fix the dangling `expense.channel_fee` reference (POSTING-PATTERNS.md:949) in S5's doc pass.
+
+### Questions only Ian can answer
+- **QA1. When staff paid an expense with "Other", what was usually going on?** Example: a ₱1,500 "Other" payment
+  for LPG. Was it (a) you or a partner paying from your own pocket, (b) a supplier giving it free or offsetting it,
+  or (c) nobody knows? The answer decides where those rows go after they leave the holding account.
+  **Recommended:** wait for the S0b list (it shows how many are really staff-entered) and park them in the holding
+  account until then. Nothing is lost by waiting.
+- **QA2. The ₱220 rebate and ₱266 store credit from the old system: fix by hand?** **Recommended:** yes. We show you the
+  two rows and you tell us which supplier's credit they are, or that they are used up. Building a tool for two rows
+  costs more than the rows.
+- **QA3 (confirm only). Three manual "Platform Fee" expenses look like the old double-counted fee.** Example: a
+  ₱300 Grab fee typed in by hand when the payout had already taken it. **Recommended:** we list them under your
+  "show me" ruling; nothing changes without you.
+- (Not a question: per your q2 answer, the voucher/points/gift account is NOT built. The count found zero of each.)
 
 ---
 
