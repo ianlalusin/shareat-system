@@ -1,6 +1,6 @@
 # T-375: POS v1 day feed — sales days derived, locked, never typed
 
-**Status:** APPROVED 2026-10-04 after three independent Opus reviews (✎V, ✎W, ✎Y); S1 SHIPPED `2c9b0f2` (migration 0183); S2 next; migrations 0183/0185 (S4). Earlier: SPEC WRITTEN 2026-10-04 (Opus planner, plan mode). Amended the same day three times: an independent Opus
+**Status:** APPROVED 2026-10-04 after three independent Opus reviews (✎V, ✎W, ✎Y); S1 SHIPPED `2c9b0f2` (migration 0183); S2 SHIPPED `88bd16d` (tender master + POS v1 method resolver); S3 next (import + derived sales day); migrations 0183/0185 (S4). Earlier: SPEC WRITTEN 2026-10-04 (Opus planner, plan mode). Amended the same day three times: an independent Opus
 review (✎V1–✎V13), the orchestrator's per-store ruling (✎V2b), and a second-pass review (✎W1–✎W11). **This text is
 consolidated: every slice, test and table line below already carries the amendments, and the Review log at the end
 says where each one landed.** Not approved; not started. Fixes DEF-586 store by store. Proposes one new section-E defect
@@ -545,6 +545,8 @@ refused. Screenshots.
 ## S3: the derivation, the import, the typed path gated by the link, the fake POS
 **Goal:** a linked store gets its days only by importing from POS (re-import while unverified); an unlinked store keeps
 the typed path, labelled, without the "From POS" checkbox.
+
+> ✎ 2026-10-05 (from the S2 audit): the import must re-check that each wallet tender's money account is still ACTIVE at import time (`resolvePosV1Methods` is pure and does not), refusing by name; and `resolvePosV1Methods` gets its production caller here. Orchestrator note (S2 audit): tender management is org-scoped by the `manage_chart_of_accounts` capability (an admin scoped to one store can manage another store's tenders), consistent with the chart of accounts; recorded, not changed.
 
 **BUILDER:**
 - `packages/domain/src/pos/v1-derive.ts` (pure): `deriveSalesDay(payload, { channelId, taxType, tenders })` → figures

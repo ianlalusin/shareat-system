@@ -141,11 +141,11 @@
     <div class="counts">
       <div class="count money"><div class="n">0</div><div class="l">open money defects (push closed)</div></div>
       <div class="count struct"><div class="n">21</div><div class="l">roadmap items still to build</div></div>
-      <div class="count"><div class="n">7</div><div class="l">roadmap items in progress or partly done</div></div>
-      <div class="count you"><div class="n">6</div><div class="l">things only you can do</div></div>
-      <div class="count done"><div class="n">242</div><div class="l">roadmap tasks done</div></div>
+      <div class="count"><div class="n">9</div><div class="l">roadmap items in progress or partly done</div></div>
+      <div class="count you"><div class="n">8</div><div class="l">things only you can do</div></div>
+      <div class="count done"><div class="n">243</div><div class="l">roadmap tasks done</div></div>
     </div>
-    <p class="src">main at 2c9b0f2 (migration 0183) &middot; production at migration 0181 (deployed 4 Oct) &middot; next free migration 0186 (0184 reserved by T-316, 0185 by T-375 S4) &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+    <p class="src">main at 040e572 (migration 0184; pushed to wrapup/2026-10-05, not main) &middot; production at migration 0181 (deployed 4 Oct) &middot; next free migration 0186 (0185 reserved by T-375 S4) &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
   </header>
 
   <div class="dates">
@@ -164,8 +164,8 @@
         <div class="k">Now</div>
         <h3>Sales days from POS, and the bill override</h3>
         <ul>
-          <li>T-375: POS v1 day feed, ERP sales days from POS, before 15 Nov (S1 done, S2-S6 left)</li>
-          <li>T-376: DEF-582/583 (S1, the DEF-581 bill override, done in dde37cb)</li>
+          <li>T-375: POS v1 day feed, ERP sales days from POS, before 15 Nov (S1-S2 done, S3-S6 left)</li>
+          <li>T-376: DEF-583 (S1, the DEF-581 bill override, done in dde37cb; S2, DEF-582, done in 13d61fb)</li>
         </ul>
       </div>
       <div class="step">
@@ -206,7 +206,7 @@
     <p class="lede">Found while fixing money. None posts a wrong amount today; each is small.</p>
     <div class="items">
       <div class="item"><div class="id">DEF-575</div><div>Resolving a discrepancy into a closed month shows a raw error page instead of a sentence.</div></div>
-      <div class="item"><div class="id">DEF-582, 583, 592</div><div>A successful supplier return, and a customer return, show no message; the remittance banner shows the old count until a reload.</div></div>
+      <div class="item"><div class="id">DEF-583, 592</div><div>A customer return shows no message (the supplier-return half, DEF-582, is fixed in 13d61fb); the remittance banner shows the old count until a reload.</div></div>
       <div class="item s"><div class="id">DEF-591</div><div><b>v2&rsquo;s POS pulls send v2&rsquo;s own store id</b>, which POS does not recognise, so the usage pull plans empty days and the sales-pull screen finds nothing. Fixed by T-375 S1 (store link).</div></div>
       <div class="item y"><div class="id">DEF-585</div><div><b>Production has no fiscal period before October 2026</b>; cutover postings dated earlier would be refused. The timer is armed and seeded Oct 2026&ndash;Sep 2027.</div></div>
       <div class="item"><div class="id">DEF-476</div><div>Typed amounts and reasons travel in page addresses. <span class="pill y">you said fix before launch</span></div></div>
@@ -225,7 +225,7 @@
       <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
       <div class="item"><div class="id">T-338</div><div>Store readiness warns when a store has no manager.</div></div>
       <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
-      <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). Approved and next, the Phase 2 closer (migration 0184). Production has no 1115 accounts, so nothing to move there.</div></div>
+      <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). S1-S2 done (040e572, migration 0184); S3 (detector + T-375 guard) is the Phase 2 closer and S1-S2 must not deploy without it. Production has no float targets, so nothing to move there.</div></div>
       <div class="item"><div class="id">T-320</div><div>Access that does not come from a position. Number reserved.</div></div>
       <div class="item"><div class="id">T-334</div><div>Inputs, buttons and one shared dropdown across the remaining screens; brand red and a dark-mode toggle.</div></div>
       <div class="item"><div class="id">Phase 7</div><div>Activity-log viewer &middot; memos, performance, checklists, infractions &middot; onboarding as one gated track &middot; cookbook &middot; remaining settings screens &middot; tutorials (count first).</div></div>
@@ -244,7 +244,9 @@
       <div class="item y"><div class="id">HR data</div><div><b>SSS, PhilHealth, Pag-IBIG and TIN for 126 staff.</b> None on file. <span class="pill y">due 31 Oct</span></div></div>
       <div class="item y"><div class="id">Question</div><div><b>On an edit screen, does a blank box keep the stored figure?</b> T-371 builds the recommended answer (blank keeps it; type 0 to zero it) unless you say otherwise.</div></div>
       <div class="item y"><div class="id">Question</div><div><b>Who may void a day&rsquo;s POS usage pull?</b> Built with the recommended answer: the managers and admins who can already void a usage record. Re-checked against your answer.</div></div>
-      <div class="item y"><div class="id">DEF-054 P5</div><div><b>Production check before the next push:</b> posted expense payments using &lsquo;other&rsquo; or &lsquo;ar_collection&rsquo; must be 0 (docs/ops). A push deploys 0182.</div></div>
+      <div class="item y"><div class="id">DEF-054 P5</div><div><b>Production check before the next push:</b> posted expense payments using &lsquo;other&rsquo; or &lsquo;ar_collection&rsquo; must be 0 (docs/ops). A push to main deploys 0182.</div></div>
+      <div class="item y"><div class="id">Push to main</div><div><b>Main is held on wrapup/2026-10-05.</b> Push after P5 (0182), the 0184 re-run and T-316 S3 (docs/ops).</div></div>
+      <div class="item y"><div class="id">T-316</div><div><b>Questions t316-early-handover</b> (built as (a)) and <b>t316-overspend-refill</b>.</div></div>
       <div class="item y"><div class="id">T-375</div><div><b>Questions t375-q1 to t375-q4</b> on the POS v1 day feed.</div></div>
       <div class="item y"><div class="id">Question</div><div><b>firebase-exit-scope</b>: how much of Firebase leaves with the shared backend.</div></div>
     </div>

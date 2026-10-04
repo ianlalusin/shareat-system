@@ -173,11 +173,11 @@
     </p>
     <div class="facts">
       <div class="fact done"><span class="n">243</span><span class="l">tasks done</span></div>
-      <div class="fact active"><span class="n">8</span><span class="l">in progress or partly done</span></div>
-      <div class="fact"><span class="n">22</span><span class="l">still to build</span></div>
+      <div class="fact active"><span class="n">9</span><span class="l">in progress or partly done</span></div>
+      <div class="fact"><span class="n">21</span><span class="l">still to build</span></div>
       <div class="fact crit"><span class="n">0</span><span class="l">open money defects (push closed; 2 deferred by your ruling)</span></div>
     </div>
-    <div class="asat">As at <b>4 October 2026</b> &middot; <code>main</code> at <b>2c9b0f2</b> &middot; production at migration <b>0181</b> (deployed 4 Oct), code on <code>main</code> through <b>0183</b> &middot; next free migration <b>0186</b> (0184 reserved by T-316, 0185 by T-375 S4)</div>
+    <div class="asat">As at <b>5 October 2026</b> &middot; <code>main</code> at <b>040e572</b> (pushed to wrapup/2026-10-05, not main) &middot; production at migration <b>0181</b> (deployed 4 Oct), code on <code>main</code> through <b>0184</b> &middot; next free migration <b>0186</b> (0185 reserved by T-375 S4)</div>
   </header>
 
   <section>
@@ -224,8 +224,8 @@
         <span class="step-k">Now</span>
         <h3>Sales days from POS, and the bill override</h3>
         <ul>
-          <li>T-375: POS v1 day feed, ERP sales days from POS, before 15 Nov (S1 done, S2-S6 left)</li>
-          <li>T-376: DEF-582, 583 (S1, DEF-581 bill override, done in dde37cb)</li>
+          <li>T-375: POS v1 day feed, ERP sales days from POS, before 15 Nov (S1-S2 done, S3-S6 left)</li>
+          <li>T-376: DEF-583 (S1, DEF-581 bill override, done in dde37cb; S2, DEF-582, in 13d61fb)</li>
         </ul>
       </div>
       <div class="step next">
@@ -413,8 +413,8 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-371</div><div class="task-what">NaN sweep: every money comparison parses its input first</div><div class="task-note">Shipped 4 Oct (3558e52): DEF-382 and DEF-395 fixed</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-373</div><div class="task-what">Money follow-ups: open variances after a reversal, sales-day locks, stock day boundary, inter-store watch</div><div class="task-note">Shipped 4 Oct: DEF-547, 552, 555, 559 fixed (migration 0180)</div></div>
         <div class="task t-active"><div class="task-id"><span class="dot"></span>T-374</div><div class="task-what">Money-push follow-ups: Manila dates everywhere, wastage date, reversal chains, branch recount screen, voiding a POS usage pull</div><div class="task-note">S1-S7 shipped 4 Oct (migration 0181; S5 = DEF-579, 584); 9008 screen smoke for S5-S7 left</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-375</div><div class="task-what">POS v1 day feed: ERP sales days come from POS, not typed (DEF-586, 591)</div><div class="task-note">Approved 4 Oct after three Opus reviews; S1 done (2c9b0f2, migration 0183); S2-S6 left; migration 0185 reserved for S4; before 15 Nov</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-376</div><div class="task-what">AP late-bill override (DEF-581, fixed) and two screen nits (DEF-582, 583)</div><div class="task-note">Approved 4 Oct after Opus review; S1 done (dde37cb, DEF-581 fixed); S2 (DEF-582) and S3 (DEF-583) left; no migration</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-375</div><div class="task-what">POS v1 day feed: ERP sales days come from POS, not typed (DEF-586, 591)</div><div class="task-note">Approved 4 Oct after three Opus reviews; S1 done (2c9b0f2, migration 0183); S2 done (88bd16d, tender master + method resolver); S3-S6 left; migration 0185 reserved for S4; before 15 Nov</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-376</div><div class="task-what">AP late-bill override (DEF-581, fixed) and two screen nits (DEF-582, 583)</div><div class="task-note">Approved 4 Oct after Opus review; S1 done (dde37cb, DEF-581 fixed); S2 done (13d61fb, DEF-582 fixed); S3 (DEF-583) left; no migration</div></div>
       </div>
     </div>
   </section>
@@ -618,7 +618,7 @@
         <div class="task"><div class="task-id"><span class="dot"></span>ADR-015</div><div class="task-what">POS &amp; CUSTOMER on the shared backend</div><div class="task-note">Planned phase: copied POS after 1 Jan 2027</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-338</div><div class="task-what">Store readiness warns when a store has no manager</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-315</div><div class="task-what">Store access for staff hired before the fix (admin-reviewed list)</div><div class="task-note">You chose option 2 (30 Sep); spec next</div></div>
-        <div class="task"><div class="task-id"><span class="dot"></span>T-316</div><div class="task-what">The maintaining balance moves onto the cashier&rsquo;s own drawer</div><div class="task-note">Approved, next (Phase 2 closer), migration 0184; you ruled count-first (30 Sep); production 1115 balance is 0 rows</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-316</div><div class="task-what">The maintaining balance moves onto the cashier&rsquo;s own drawer</div><div class="task-note">S1-S2 done (040e572, migration 0184); S3 (detector + T-375 guard, the Phase 2 closer) left, and S1-S2 must not deploy without it; you ruled count-first (30 Sep); production 1115 balance is 0 rows</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-320</div><div class="task-what">Access that does not come from a position</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-334 S3</div><div class="task-what">Inputs, buttons and one shared dropdown across the remaining screens</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-334</div><div class="task-what">Brand red and a manual dark-mode toggle</div></div>
