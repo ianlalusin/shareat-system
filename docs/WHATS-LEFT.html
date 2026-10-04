@@ -134,18 +134,18 @@
     <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 4 October 2026 &middot; not launched</p>
     <h1>What's Left</h1>
     <p class="answer">
-      <b>Ten money defects stand between v2 and a clean ledger</b>, and the work closing them is under way.
+      <b>Eight money defects stand between v2 and a clean ledger</b>, and the work closing them is under way.
       After that come the remaining admin screens, the last two payroll tasks once the statutory data arrives,
       and the cutover itself. <b>The finish line is 1 January 2027.</b>
     </p>
     <div class="counts">
-      <div class="count money"><div class="n">10</div><div class="l">open money defects, each owned by a task</div></div>
-      <div class="count struct"><div class="n">22</div><div class="l">roadmap items still to build</div></div>
+      <div class="count money"><div class="n">8</div><div class="l">open money defects, each owned by a task</div></div>
+      <div class="count struct"><div class="n">21</div><div class="l">roadmap items still to build</div></div>
       <div class="count"><div class="n">8</div><div class="l">roadmap items in progress or partly done</div></div>
       <div class="count you"><div class="n">3</div><div class="l">things only you can do</div></div>
-      <div class="count done"><div class="n">239</div><div class="l">roadmap tasks done</div></div>
+      <div class="count done"><div class="n">240</div><div class="l">roadmap tasks done</div></div>
     </div>
-    <p class="src">main at 2438d05 &middot; production at migration 0176, main through 0179 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+    <p class="src">main at 3558e52 &middot; production at migration 0176, main through 0179 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
   </header>
 
   <div class="dates">
@@ -162,29 +162,26 @@
     <div class="order">
       <div class="step now">
         <div class="k">Now</div>
-        <h3>T-371 &middot; NaN sweep</h3>
+        <h3>T-373 &middot; money follow-ups</h3>
         <ol>
-          <li>Restore branch <code>wip/2026-10-03b</code></li>
-          <li>Re-run 3 writer groups (till-fiscal, statutory-discounts, ledger)</li>
-          <li>S4: 10 callers, exact helpers, stray <code>?? ZERO</code></li>
-          <li>Audit, full suite, smoke, one green commit set</li>
+          <li>Four parallel slices: DEF-547, 552, 555, 559</li>
+          <li>S3 is migration 0180, gated on the full suite</li>
         </ol>
       </div>
       <div class="step">
         <div class="k">Next</div>
-        <h3>T-373 &middot; money follow-ups</h3>
+        <h3>Last money rows</h3>
         <ul>
-          <li>Four parallel slices: DEF-547, 552, 555, 559</li>
-          <li>S3 is migration 0180, gated on the full suite</li>
+          <li>T-369 S5b/S6b (DEF-198, 291, 314)</li>
+          <li>T-367 S5/S6 (DEF-054) after the production count with you</li>
         </ul>
       </div>
       <div class="step">
         <div class="k">Then</div>
-        <h3>Last money rows</h3>
+        <h3>Follow-ups</h3>
         <ul>
-          <li>T-367 S5/S6 (DEF-054) after the production count with you</li>
-          <li>T-369 S5b/S6b (DEF-198, 291, 314)</li>
-          <li>Follow-ups DEF-574, 577, 578</li>
+          <li>DEF-574, 577, 578, 579</li>
+          <li>Then Phase 7 screens</li>
         </ul>
       </div>
     </div>
@@ -197,12 +194,10 @@
       <table>
         <thead><tr><th>Defect</th><th>What is wrong</th><th>Fixed by</th><th>State</th></tr></thead>
         <tbody>
-          <tr><td class="n">DEF-382</td><td>A <code>NaN</code> amount passes every comparison guard; the database is the only backstop</td><td class="n">T-371</td><td><span class="pill s">in progress</span></td></tr>
-          <tr><td class="n">DEF-395</td><td>Some typed values reach a guarded money column with nothing parsing them first</td><td class="n">T-371</td><td><span class="pill s">in progress</span></td></tr>
-          <tr><td class="n">DEF-547</td><td>Reversing a remittance leaves its uncharged variance open with no way to resolve it</td><td class="n">T-373</td><td><span class="pill">next</span></td></tr>
-          <tr><td class="n">DEF-552</td><td>Usage pulls and wastage can attach to a sales day that is being withdrawn or voided</td><td class="n">T-373</td><td><span class="pill">next</span></td></tr>
-          <tr><td class="n">DEF-555</td><td>The closed-month stock check uses the UTC day, so stock moved before 8 a.m. on the 1st is judged against last month</td><td class="n">T-373 S3</td><td><span class="pill">next &middot; migration 0180</span></td></tr>
-          <tr><td class="n">DEF-559</td><td>Nothing watches what each store pair owes the other; opposite imbalances cancel and stay silent</td><td class="n">T-373</td><td><span class="pill">next</span></td></tr>
+          <tr><td class="n">DEF-547</td><td>Reversing a remittance leaves its uncharged variance open with no way to resolve it</td><td class="n">T-373</td><td><span class="pill s">in progress</span></td></tr>
+          <tr><td class="n">DEF-552</td><td>Usage pulls and wastage can attach to a sales day that is being withdrawn or voided</td><td class="n">T-373</td><td><span class="pill s">in progress</span></td></tr>
+          <tr><td class="n">DEF-555</td><td>The closed-month stock check uses the UTC day, so stock moved before 8 a.m. on the 1st is judged against last month</td><td class="n">T-373 S3</td><td><span class="pill s">in progress &middot; migration 0180</span></td></tr>
+          <tr><td class="n">DEF-559</td><td>Nothing watches what each store pair owes the other; opposite imbalances cancel and stay silent</td><td class="n">T-373</td><td><span class="pill s">in progress</span></td></tr>
           <tr><td class="n">DEF-054</td><td>The old &ldquo;other&rdquo; and &ldquo;AR collection&rdquo; payment methods have no correct posting yet</td><td class="n">T-367 S5/S6</td><td><span class="pill y">needs production count</span></td></tr>
           <tr><td class="n">DEF-198</td><td>Part left: some money functions still have no screen caller</td><td class="n">T-369 S5b</td><td><span class="pill">after T-367</span></td></tr>
           <tr><td class="n">DEF-291</td><td>Part left: the expense screen cannot yet offer another branch&rsquo;s accounts in the folded group you approved</td><td class="n">T-369 S6b</td><td><span class="pill">after T-367</span></td></tr>
@@ -222,6 +217,7 @@
       <div class="item s"><div class="id">DEF-574</div><div><b>A branch manager cannot reach the recount return</b> on an over-receipt; the list is keyed by the dispatching store.</div></div>
       <div class="item"><div class="id">DEF-575</div><div>Resolving a discrepancy into a closed month shows a raw error page instead of a sentence.</div></div>
       <div class="item"><div class="id">DEF-576</div><div>Order wastage accepts a date different from its sales day&rsquo;s date.</div></div>
+      <div class="item"><div class="id">DEF-579</div><div>An integer form field can still substitute a default for an unreadable value (split out of DEF-395).</div></div>
       <div class="item"><div class="id">DEF-476</div><div>Typed amounts and reasons travel in page addresses. <span class="pill y">you said fix before launch</span></div></div>
       <div class="item"><div class="id">DEF-373</div><div>The deploy gate checks that keys exist, not that they are the production keys.</div></div>
       <div class="item"><div class="id">DEF-548</div><div>The app role can still delete branch orders (an unused grant).</div></div>
@@ -275,7 +271,7 @@
 
   <section>
     <h2>Closed in the money push</h2>
-    <p class="lede">Since your 30 September instruction: 34 open at the census, more found while fixing, 10 left.</p>
+    <p class="lede">Since your 30 September instruction: 34 open at the census, more found while fixing, 8 left.</p>
     <div class="tblwrap">
       <table>
         <thead><tr><th>Task</th><th>What it fixed</th><th>Defects closed</th></tr></thead>
@@ -287,6 +283,7 @@
           <tr><td class="n">T-368</td><td>No close over a missing month; failed runs stay flagged; asset terms correctable</td><td class="n">424, 426, 433, 434, 435, 436, 441, 442</td></tr>
           <tr><td class="n">T-369 S0&ndash;S9</td><td>Money functions get screens; cross-store money with inter-store balances and settlement</td><td class="n">302, 479, 550, 551, 556, 557, 558, 560, 573</td></tr>
           <tr><td class="n">T-370</td><td>Owner drawing cap; 15th/30th paydays; two pay days for twice-monthly stores</td><td class="n">108, 409, 494, 516, 541, 553</td></tr>
+          <tr><td class="n">T-371</td><td>NaN can no longer reach a money column or a money comparison; exact rounding replaces float math</td><td class="n">382, 395</td></tr>
           <tr><td class="n">T-372</td><td>Prepared orders stay prepared; internal freight at receipt; over- and under-receipts</td><td class="n">127, 511, 512, 513</td></tr>
         </tbody>
       </table>
