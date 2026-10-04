@@ -418,6 +418,13 @@ export async function markReversed(
 }
 
 /**
+ * T-373 R6 / DEF-547: "open" is DERIVED — the variance is `open` AND its remittance is still
+ * `posted`. A reversal is terminal, so a variance on a reversed handover can never be open again;
+ * no status is rewritten (the reversal's own rule: derived rather than repaired).
+ */
+const liveOpenVariance = () => and(eq(remittanceVariances.status, 'open'), eq(remittances.status, 'posted'));
+
+/**
  * ⭐ Open variances — the list that must not hide (Ian, row 147). Optionally scoped to one store
  * (T-366 S3 audit finding 5 — the page follows its own store selector, like every other list on
  * it), joined against `remittances` for `storeId` — the variance row itself carries none.
@@ -427,7 +434,8 @@ export async function listVariances(tx: Tx, orgId: string, status?: VarianceStat
   // script or owner connection (which bypasses RLS) would otherwise join across orgs through a
   // malformed or hand-inserted row.
   const conditions = [eq(remittanceVariances.orgId, orgId), eq(remittances.orgId, orgId)];
-  if (status) conditions.push(eq(remittanceVariances.status, status));
+  if (status === 'open') conditions.push(liveOpenVariance()!);
+  else if (status) conditions.push(eq(remittanceVariances.status, status));
   if (storeId) conditions.push(eq(remittances.storeId, storeId));
   return tx
     .select({
@@ -465,7 +473,7 @@ export async function countOpenVariances(tx: Tx, orgId: string): Promise<number>
     .from(remittanceVariances)
     .innerJoin(remittances, eq(remittances.id, remittanceVariances.remittanceId))
     .where(
-      and(eq(remittanceVariances.orgId, orgId), eq(remittances.orgId, orgId), eq(remittanceVariances.status, 'open')),
+      and(eq(remittanceVariances.orgId, orgId), eq(remittances.orgId, orgId), liveOpenVariance()),
     );
   return row?.n ?? 0;
 }

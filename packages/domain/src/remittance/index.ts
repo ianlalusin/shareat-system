@@ -422,7 +422,8 @@ async function runCreate(
 /**
  * ⛔ Reverse, never delete. Each line's transfer is reversed through `reverseEntry`, and the
  * allocations stop counting because the remittance is no longer `posted` — so the days it settled
- * become unsettled again, derived rather than repaired.
+ * become unsettled again, derived rather than repaired. An OPEN variance closes the same way
+ * (T-373 R6: open = status open AND remittance posted); a charged one has its entry reversed.
  */
 export async function reverseRemittance(
   tx: Tx | null,
@@ -432,7 +433,7 @@ export async function reverseRemittance(
   const run = async (trx: Tx) => {
     const remittance = await remittanceRepo.getById(trx, actor.orgId, input.remittanceId);
     if (!remittance) {
-      throw new Error(`reverseRemittance: remittance ${input.remittanceId} does not exist.`);
+      throw gone(`reverseRemittance: remittance ${input.remittanceId} does not exist.`, 'remittance');
     }
     await authorize(trx, actor, 'accept_remittance', { storeId: remittance.storeId });
     // ⛔ T-366 S1 / DEF-374 — lock, then RE-READ: the status read above is stale once we have
@@ -446,9 +447,12 @@ export async function reverseRemittance(
     }
 
     const reason = input.reason.trim();
-    if (!reason) throw new Error('reverseRemittance: a reason is required.');
+    if (!reason) throw refuse('reverseRemittance: a reason is required.', 'Say why this handover is being reversed.');
     if (locked.status !== 'posted') {
-      throw new Error(`reverseRemittance: this remittance is already ${locked.status}.`);
+      throw refuse(
+        `reverseRemittance: this remittance is already ${locked.status}.`,
+        'This handover was already reversed.',
+      );
     }
 
     for (const line of await remittanceRepo.linesFor(trx, remittance.id)) {
