@@ -14,7 +14,7 @@
  *
  * | | Compares | Who answers |
  * |---|---|---|
- * | `tillFloatOffTarget` (T-153) | **ledger** vs target | ⛔ nobody — the office replenishes |
+ * | `tillFloatOffTarget` (T-153) | **books' float position** vs target | ⛔ nobody — the office replenishes |
  * | **here** | **physical count** vs ledger | ⭐ the cashier |
  * | `remittance_variances` (T-143) | **batch** vs owed | whoever held the pool |
  */
@@ -43,7 +43,7 @@ export interface OpenShiftInput {
 export interface CountInput {
   shiftId: string;
   moment: 'open' | 'close';
-  /** One entry per cash account counted. The float pot and the takings drawer are separate rows. */
+  /** One entry per cash account counted. T-316: the float is a target on the single cashier drawer (1110), not a separate pot, so there is one cash row. */
   counts: { moneyAccountId: string; counted: string; notes?: string | null }[];
 }
 

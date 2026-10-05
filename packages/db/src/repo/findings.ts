@@ -16,9 +16,9 @@ import { findingAcknowledgements } from '../../schema/findings';
 import { CADENCE_DAYS } from '../../schema/stores';
 import { ZERO, add, compare, formatMoney, isZero, money, negate, subtract, type Money } from '@shareat/core/money';
 // ⛔ T-218 — the ONE definition of "today" for the repo layer. Never bare `current_date`.
-import { MANILA_TODAY, daysBetweenDates } from './sql-time';
+import { MANILA_TODAY, daysBetweenDates, manilaToday } from './sql-time';
 import { isPreOpeningSql } from './stores';
-import { notCustodySourceType } from './remittance';
+import { notCustodySourceType, tillFloorPosition } from './remittance';
 import { periodBounds } from './fiscal-periods';
 
 /**
@@ -735,99 +735,78 @@ export async function remittanceOverdue(tx: Tx, orgId: string): Promise<Detected
 }
 
 /**
- * ⭐ **T-153 — a till float that is not holding its configured amount.**
+ * ⭐ **T-153 / T-316 S3 — a till float that is not holding its configured amount.**
  *
  * > **Ian, 2026-08-29:** *"the staff just makes sure if the configured budget is 20k, every day
  * > opening and closing it is 20k."*
  *
- * ⭐ **This is the imprest self-check, and it is why the float got its own account.** The pot's
- * balance should ALWAYS equal its target, so the discrepancy is two figures compared — not a
- * history to reconstruct. The control is arithmetic rather than diligence.
+ * ⭐ **T-316: the float is no longer a separate pot — it lives on the cashier's drawer.** So the
+ * detector never reads a raw account balance. For each float-carrying store it asks
+ * `tillFloorPosition` (never re-derived here) for `floatPosition` at Manila's today, and the
+ * drift is `floatPosition − floatTarget`. `floatPosition` is the cashier balance less cash that is
+ * merely on loan to an open day and less what closed days still owe, so **ordinary trading cannot
+ * move it** — an unremitted ₱5,000 of takings is not a finding.
  *
- * ⚠️ **Below target and above target are both findings, and they are different accidents.**
- * Below means the float was spent and not topped back up. Above means something was paid INTO the
- * pot that belongs in the takings drawer — which quietly removes money from what must be
- * remitted, so it is the more expensive of the two to leave alone.
+ * ⚠️ **Short and over are different accidents.** Short: money was paid out of the till and not put
+ * back — the office tops it up, and nobody is charged. Over: the office sent more than the target,
+ * or an overage was booked (7350) instead of being settled against the day it came from.
  *
- * ⛔ **What this CANNOT catch, stated so nobody assumes it does:** a cashier counting ₱19,500
- * some morning. That is a physical count against the ledger, and v2 has no shift record to hold
- * one (CAPABILITY-GAPS, 2026-08-29). This compares the LEDGER to the target, which catches a float
- * spent, never funded, or overfunded — not one quietly short in the drawer.
+ * ⛔ **What this CANNOT catch:** a cashier counting ₱19,500 some morning. That is a physical count
+ * against the books — `tillCountVarianceOpen` below, T-186's chargeable one. This compares the
+ * BOOKS to the target, which catches a float spent or overfunded, not one quietly short in the drawer.
+ * Reading this finding as "the cashier owes this" would charge somebody for a legitimate expense,
+ * which is why the message says in as many words that it is not a counted shortage.
  *
- * ## ⛔ And the distinction is not academic — it decides whether somebody gets charged
- *
- * > **Ian, 2026-08-29:** *"charge to cashier, then office will replenish on the day it is counted
- * > as short."*
- *
- * That rule is about a **counted** shortage: cash that should be in the pocket and is not.
- * **A ledger shortfall is a different event with the same shape** — the float was spent on a
- * delivery, posted correctly, and simply not topped back up. Nobody is answerable for that.
- *
- * ⚠️ **Reading this finding as "the cashier owes this" would charge somebody for a legitimate
- * expense**, which is why the message says which kind it is in as many words. The chargeable
- * version is `tillCountVarianceOpen` below — T-186 built the shift count this one lacked, so
- * the two now sit side by side on the same page and the wording is what keeps them apart.
+ * Suppression (T-346 R1.6/R6.1, unchanged): a store still pre-opening by BOTH measures AND with a
+ * cashier balance of exactly zero says nothing; any non-zero balance still fires.
  */
 export async function tillFloatOffTarget(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  // T-316 S3 — one row per float-carrying store; the figure itself comes from `tillFloorPosition`
+  // (never re-derived here). The query only names the pot, the store, and the pre-opening signal.
   const rows = (await tx.execute(sql`
     select ma.id::text                                          as account_id,
-           ma.name                                               as name,
            ma.store_id::text                                     as store_id,
-           ma.float_target::text                                 as target,
-           coalesce(sum(jl.debit - jl.credit), 0)::text           as balance,
+           st.name                                               as store_name,
            -- T-346 S3 (DEF-428), §3.5 / R1.6 / R6.1 -- BOTH signals must say "not yet open": the
            -- store's own stated opening_date (isPreOpeningSql -- an explicit past opening_date
            -- means open, no matter what) AND store_first_trading_date (never re-derived from
-           -- opening_date alone -- a store that genuinely trades with no opening_date recorded is
-           -- not pre-opening for this purpose either). Suppressing on either signal ALONE is wrong
-           -- in a different direction: opening_date alone wrongly suppresses a trading, undated
-           -- store; first_trading_date alone wrongly suppresses a store an admin already marked
-           -- open on paper, before its first real sale.
+           -- opening_date alone). Suppressing on either signal ALONE is wrong in a different direction.
            (${isPreOpeningSql(sql`st.opening_date`)}
              and store_first_trading_date(ma.store_id) is null)::text as still_pre_opening
     from money_accounts ma
-    -- Scoped by (gl code, store), mirroring balanceOf exactly. A float pot is NOT
-    -- requires_party, so its lines carry no money-account party and a party join would read
-    -- zero for every pot. One pot per store (unique index) is what keeps this unambiguous.
-    left join accounts a
-      on a.org_id = ma.org_id and a.code = ma.gl_account_code
-    left join journal_lines jl
-      on jl.account_id = a.id and jl.store_id = ma.store_id
-    left join journal_entries je
-      on je.id = jl.entry_id and je.status <> 'draft'
     left join stores st
       on st.id = ma.store_id
     where ma.org_id = ${orgId} and ma.float_target is not null and ma.is_active
-      and (jl.id is null or je.id is not null)
-    group by ma.id, ma.name, ma.store_id, ma.float_target, st.opening_date
+    order by ma.id
   `)) as unknown as Record<string, string>[];
 
+  const today = await manilaToday(tx);
   const out: DetectedFinding[] = [];
   for (const r of rows) {
-    const target = money(r.target!);
-    const balance = money(r.balance!);
-    const drift = subtract(balance, target);
+    const pos = await tillFloorPosition(tx, orgId, { storeId: String(r.store_id), upTo: today });
+    if (pos.floatTarget === null) continue;
+    const target = money(pos.floatTarget);
+    const floatPosition = money(pos.floatPosition);
+    const drift = subtract(floatPosition, target);
     if (isZero(drift)) continue;
     // R1.6/R6.1 — suppressed ONLY when the store is still pre-opening by BOTH measures AND the
-    // balance itself is exactly zero (nothing has ever touched this pot yet). Any non-zero
-    // balance still fires regardless — that is evidence something was posted where it should not
-    // have been.
-    if (r.still_pre_opening === 'true' && isZero(balance)) continue;
+    // cashier balance itself is exactly zero (nothing has ever touched the till yet).
+    if (r.still_pre_opening === 'true' && isZero(money(pos.cashierBalance))) continue;
+    const lead =
+      `${r.store_name}'s till float stands at ${peso(floatPosition)} on the books ` +
+      `against a target of ${peso(target)} —`;
     out.push({
       kind: 'tillFloatOffTarget',
       key: `tillFloatOffTarget:${r.account_id}`,
       storeId: String(r.store_id),
       severity: 'soft',
       detail:
-        `${r.name} holds ${peso(balance)} against a float of ${peso(target)} — ` +
-        (compare(drift, ZERO) < 0
-          ? `${peso(negate(drift))} short in the LEDGER. The float was spent and not topped back up; ` +
-            'the office replenishes it. ⛔ This is NOT a counted shortage and must not be charged ' +
-            'to a cashier — it is money that was legitimately paid out and posted.'
-          : `${peso(drift)} over in the LEDGER. Something was posted INTO the float that belongs ` +
-            'in the takings drawer, which quietly removes it from what has to be remitted. ' +
-            '⚠️ Not a counted overage: a physical over goes to the tip box and never reaches the ' +
-            'books at all.'),
+        compare(drift, ZERO) < 0
+          ? `${lead} ${peso(negate(drift))} short. Money was paid out of the till and not put back. ` +
+            'The office tops it up. ⛔ This is NOT a counted shortage and must not be charged to a cashier.'
+          : `${lead} ${peso(drift)} over. Either the office sent more than the target, or an overage was ` +
+            'booked (7350) instead of being settled against the day it came from. Send the surplus ' +
+            'back to the office by transfer, or correct the overage.',
     });
   }
   return out;
@@ -1500,7 +1479,7 @@ export async function inventoryControlDoesNotMatchValuation(tx: Tx, orgId: strin
  * ⭐ T-186's question: a CLOSED shift whose closing count did not match the ledger.
  *
  * ⛔ **This is the COUNTED variance, and it is the one that DOES name a person.** Its sibling
- * `tillFloatOffTarget` compares the LEDGER to a target and means the office should replenish;
+ * `tillFloatOffTarget` compares the BOOKS' float position to a target and means the office should replenish;
  * this compares a PHYSICAL COUNT to the ledger and means cash is missing from the pocket.
  * T-153 §13.4 exists because reading one as the other charges somebody for a delivery they paid
  * for correctly — so both messages say which kind they are, in as many words.

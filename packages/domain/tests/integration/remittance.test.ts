@@ -734,7 +734,7 @@ describe('cash arriving by transfer is custody, and never becomes a day’s taki
 // T-153 — the till float: a side pocket with its own target
 // =====================================================================================
 
-describe('T-153 — the till float pot', () => {
+describe('T-153 — the till float (a target on the cashier drawer, T-316)', () => {
   const potFor = async (f: Fixture, target: string) =>
     asOrg(f.orgId, (tx) => setTillFloat(tx, f.admin, { storeId: f.storeId, target }));
 
@@ -745,12 +745,12 @@ describe('T-153 — the till float pot', () => {
       moneyAccountsRepo.getById(tx, f.orgId, moneyAccountId),
     );
     expect(acct!.glAccountCode).toBe('1110'); // T-316 S1 (was '1115')
-    expect(acct!.isFoundation).toBe(true); // the existing Cashier cash, not a new pot
+    expect(acct!.isFoundation).toBe(true); // the existing Cashier cash, not a new account
     expect(acct!.custodian).toBe('cashier');
     expect(Number(acct!.floatTarget)).toBe(20000);
 
-    // ⛔ Deliberate: a target is not money. The pot is ₱20,000 short until the office funds it,
-    // and the books must not pretend a side pocket has cash in it.
+    // ⛔ Deliberate: a target is not money. The drawer is ₱20,000 short of its float until the office
+    // funds it, and the books must not pretend any cash is there that was never transferred in.
     const found = await asOrg(f.orgId, (tx) => findingsRepo.tillFloatOffTarget(tx, f.orgId));
     expect(found).toHaveLength(1);
     expect(found[0]!.detail).toMatch(/short/);

@@ -358,7 +358,7 @@ export async function nextShiftNo(
   return (row?.n ?? 0) + 1;
 }
 
-/** The cash money accounts a till is counted against — the float pot and the takings drawer. */
+/** The cash money accounts a till is counted against. T-316: the float is a target on the single cashier drawer, not a separate pot. */
 export async function countableAccounts(
   tx: Tx,
   orgId: string,

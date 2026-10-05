@@ -263,7 +263,7 @@ export async function renameMoneyAccount(
 }
 
 // -------------------------------------------------------------------------------------
-// T-153 — the till float pot
+// T-153 / T-316 — the till float (a target on the cashier drawer, not a separate pot)
 // -------------------------------------------------------------------------------------
 
 /**

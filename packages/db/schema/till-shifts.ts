@@ -29,7 +29,7 @@
  *
  * | Compares | Means | Who answers |
  * |---|---|---|
- * | `tillFloatOffTarget` — **ledger** vs target | the pot was spent down, correctly posted | ⛔ nobody; the office replenishes |
+ * | `tillFloatOffTarget` — **books' float position** vs target | the float was spent down and not put back, correctly posted | ⛔ nobody; the office replenishes |
  * | **this table** — **count** vs ledger | cash that should be in the pocket is not | ⭐ the cashier |
  * | `remittance_variances` — **batch** vs owed | a loss after the counts reconciled | whoever held the pool |
  */

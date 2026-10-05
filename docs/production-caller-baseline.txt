@@ -102,7 +102,6 @@ sumTender
 summarizeConversions
 tablesWithScope
 tilesTheMonth
-tillFloorPosition
 totalOf
 unclosedShiftCount
 undeclareSupplierItem

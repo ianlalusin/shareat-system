@@ -167,7 +167,7 @@ export async function listFindings(
     // T-366 S5 / DEF-406 — a control account (2160, 2130, 2120) itself in an impossible state,
     // beside the ageing guard above that asks a different question (was it discharged in time).
     ...(await findingsRepo.controlAccountNegative(tx, orgId)),
-    // T-153 — a till float not holding its configured amount.
+    // T-153 / T-316 S3 — the till float (`tillFloorPosition`) not standing at its configured target.
     ...(await findingsRepo.tillFloatOffTarget(tx, orgId)),
     // T-346 S3 (DEF-428), §3.5 — a store's stated opening date contradicted by when it actually
     // first traded, and an active asset still waiting on its store to open.

@@ -77,7 +77,7 @@ export interface InsertMoneyAccountInput {
   glAccountCode: string;
   custodian: Custodian;
   notes?: string | null;
-  /** ⭐ T-153 — set to make this a till float pot. See {@link MoneyAccountRow.floatTarget}. */
+  /** ⭐ T-153 / T-316 — the float target on the cashier drawer (not a separate pot). See {@link MoneyAccountRow.floatTarget}. */
   floatTarget?: Money | null;
 }
 
