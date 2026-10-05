@@ -131,7 +131,7 @@
 <div class="wrap">
 
   <header class="mast">
-    <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 5 October 2026 &middot; not launched</p>
+    <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 6 October 2026 &middot; not launched</p>
     <h1>What's Left</h1>
     <p class="answer">
       <b>The money push is closed:</b> no open money defects. Phase 2 is closed (T-316 done). Now the POS day feed: sales days from POS, before 15 November.
@@ -145,7 +145,7 @@
       <div class="count you"><div class="n">4</div><div class="l">things only you can do</div></div>
       <div class="count done"><div class="n">243</div><div class="l">roadmap tasks done</div></div>
     </div>
-    <p class="src">main at c0704d1 locally (migration 0184; not pushed to main) &middot; production at migration 0181 (deployed 4 Oct) &middot; next free migration 0186 (0185 reserved by T-375 S4) &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+    <p class="src">main at 543661f locally (migration 0185; pushed to wrapup/2026-10-06, not main) &middot; production at migration 0181 (deployed 4 Oct) &middot; next free migration 0186 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
   </header>
 
   <div class="dates">
@@ -164,7 +164,7 @@
         <div class="k">Now</div>
         <h3>Sales days from POS, and the bill override</h3>
         <ul>
-          <li>T-375: POS v1 day feed, ERP sales days from POS, before 15 Nov (S1-S3 done and smoked; S4 next; S5 waits for the pull redesign)</li>
+          <li>T-375: POS v1 day feed, ERP sales days from POS, before 15 Nov (S1-S6 built; the POS key and linking each store are what is left)</li>
         </ul>
       </div>
       <div class="step">
@@ -206,7 +206,6 @@
     <div class="items">
       <div class="item"><div class="id">DEF-575</div><div>Resolving a discrepancy into a closed month shows a raw error page instead of a sentence.</div></div>
       <div class="item"><div class="id">DEF-592</div><div>A customer return shows no message (the supplier-return half, DEF-582, is fixed in 13d61fb).</div></div>
-      <div class="item s"><div class="id">DEF-591</div><div><b>v2&rsquo;s POS pulls send v2&rsquo;s own store id</b>, which POS does not recognise, so the usage pull plans empty days and the sales-pull screen finds nothing. Fixed by T-375 S1 (store link).</div></div>
       <div class="item y"><div class="id">DEF-585</div><div><b>Production has no fiscal period before October 2026</b>; cutover postings dated earlier would be refused. The timer is armed and seeded Oct 2026&ndash;Sep 2027.</div></div>
       <div class="item"><div class="id">DEF-476</div><div>Typed amounts and reasons travel in page addresses. <span class="pill y">you said fix before launch</span></div></div>
       <div class="item"><div class="id">DEF-373</div><div>The deploy gate checks that keys exist, not that they are the production keys.</div></div>
@@ -222,7 +221,7 @@
     <div class="items">
       <div class="item"><div class="id">ADR-015</div><div><b>POS &amp; CUSTOMER on the shared backend:</b> copied POS after 1 Jan 2027. Planned phase.</div></div>
       <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
-      <div class="item s"><div class="id">POS pulls</div><div><b>Redesign the POS sales and usage pulls</b> (your t374-q1): proposal written (docs/discovery/pos-pull-redesign-proposal.md). No pull at the end state; until then S4 and S6 as written plus a small S5. You answered its four questions; S5 is being re-specced as S5-lite.</div></div>
+      <div class="item"><div class="id">POS pulls</div><div>Interim pulls rebuilt per your redesign (T-375 S5-lite, S6). At the shared backend (ADR-015 P2) the pull goes away: usage posts after verify, and refunded or voided items wait for a manager decision (your answers, bible row 282).</div></div>
       <div class="item"><div class="id">T-338</div><div>Store readiness warns when a store has no manager.</div></div>
       <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
       <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). Done and smoked on 9008 (040e572, c5b0eac; migration 0184); ships in the next push. Production has no float targets, so nothing to move there.</div></div>
