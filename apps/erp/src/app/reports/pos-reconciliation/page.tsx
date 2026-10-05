@@ -1,5 +1,7 @@
-import { getPosDayReconciliation, fetchPosSalesLive } from '@shareat/domain';
+import { authorize, AuthorizationError } from '@shareat/auth';
+import { getPosDayReconciliation } from '@shareat/domain';
 import { reportScope, runReport } from '../lib';
+import { recheckPosDayAction } from '../../sales-days/actions';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { PosReconciliationCard } from '@/components/reports/PosReconciliationCard';
 import { Page } from '@/components/shell/Page';
@@ -39,17 +41,30 @@ export default async function PosReconciliationPage({
 
   const result = storeId
     ? await runReport(orgId, (tx) =>
-        getPosDayReconciliation(tx, fetchPosSalesLive, { orgId, storeId, businessDate }),
+        getPosDayReconciliation(tx, { orgId, storeId, businessDate }),
       )
     : null;
+  // The button is offered to someone who may use it (the domain re-checks on submit), and only for a POS-sourced day.
+  const canRecheck =
+    storeId && result?.salesDayId && result.ledger.exists && result.ledger.source === 'pos_v1_day_feed'
+      ? await runReport(orgId, async (tx) => {
+          try {
+            await authorize(tx, scope.actor, 'verify_sales_day', { storeId });
+            return true;
+          } catch (err) {
+            if (err instanceof AuthorizationError) return false;
+            throw err;
+          }
+        })
+      : false;
 
   return (
     <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">POS Reconciliation</h1>
         <PageDescription>
-          POS&apos;s live day-level sales figure beside Shareat System&apos;s own sales-day
-          record, so the reconciliation is rendered rather than left to goodwill.
+          What POS said about the day, from the feeds this system stored, beside Shareat System&apos;s own
+          sales-day record. Nothing here calls POS: the check button below stores a fresh reading.
         </PageDescription>
       </div>
 
@@ -84,7 +99,19 @@ export default async function PosReconciliationPage({
             {' · '}
             {businessDate}
           </p>
-          <PosReconciliationCard pos={result.pos} ledger={result.ledger} matches={result.matches} delta={result.delta} />
+          <PosReconciliationCard atImport={result.atImport} latest={result.latest} ledger={result.ledger} matches={result.matches} delta={result.delta} />
+          {canRecheck && result.salesDayId && (
+            <form action={recheckPosDayAction} className="text-sm">
+              <input type="hidden" name="salesDayId" value={result.salesDayId} />
+              <input type="hidden" name="returnTo" value={`/reports/pos-reconciliation?store=${storeId}&date=${businessDate}`} />
+              <button
+                type="submit"
+                className="inline-flex min-h-[44px] items-center rounded border border-neutral-300 px-4 py-1.5 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+              >
+                Check POS again
+              </button>
+            </form>
+          )}
         </>
       ) : (
         <p className="text-sm text-neutral-500">No store available to report on.</p>

@@ -1,22 +1,23 @@
 /**
- * getPosDayReconciliation — T-210. Shows POS's live day-level sales figure beside Shareat
- * System's own `sales_days` record for the same store/date, so the reconciliation is rendered
- * rather than left to goodwill (phase-6 plan §4.1). Takes `Tx`, not `Executor` — it calls
- * `salesDaysRepo` directly (same reasoning as `ap-aging.ts`/`ar-aging.ts`, T-209b).
+ * getPosDayReconciliation - T-210, converted by T-375 S6. `docs/tasks/375-pos-v1-day-feed.md` S6.
  *
- * `POS_API_URL`/`POS_API_KEY` are declared optional (`@shareat/core/env`) — nothing else in this
- * codebase requires POS to be reachable to do its own job, and this screen must not either. Every
- * outcome POS or the fetch itself can produce is a named, non-throwing result state.
+ * Shows what POS said when the day was imported ("At import": the day's BASIS feed, R10) beside what the latest stored
+ * check says ("Latest check"), and the sales day's own total beside them. **Nothing is fetched at render**: both sides
+ * are stored feeds, so the screen works with POS down and never lets a slow POS hold a page. A fresh check is the
+ * **Check POS again** button (`recheckPosDay`), which stores a batch the next render reads.
+ *
+ * Takes `Tx`, not `Executor` - it calls repos directly (same reasoning as `ap-aging.ts`/`ar-aging.ts`, T-209b).
+ * Every outcome is a named, non-throwing result state.
  */
-import { salesDaysRepo, type Tx } from '@shareat/db';
-import { equals, money, subtract, type Money } from '@shareat/core/money';
-import type { FetchPosDaySales } from '../pos/sales-pull';
+import { posV1Repo, salesDaysRepo, POS_V1_SALES_FIELDS as S, type Tx } from '@shareat/db';
+import { equals, fromCentavos, money, subtract, type Money } from '@shareat/core/money';
+import { toCentavos } from '../pos/v1-methods';
 
+/** One stored `sales` feed read for display. `none`: no feed is stored; `not_found`: POS answered "no data" (or unreadably). */
 export type PosSide =
-  | { status: 'ok'; totalSales: Money; totalSessions: number }
-  | { status: 'not_found'; message: string }
-  | { status: 'not_configured'; message: string }
-  | { status: 'unreachable'; message: string };
+  | { status: 'ok'; paidTotal: Money; receiptCount: number }
+  | { status: 'not_found' }
+  | { status: 'none' };
 
 export type LedgerSide =
   | { exists: true; status: salesDaysRepo.SalesDayStatus; totalSales: Money; posSourced: boolean; source: salesDaysRepo.SalesDayRow['source'] }
@@ -29,39 +30,44 @@ export interface PosDayReconciliationBasis {
 }
 
 export interface PosDayReconciliationResult {
-  pos: PosSide;
+  /** The day's basis feed: what was posted (the import, or the latest correction's feed). */
+  atImport: PosSide;
+  /** The latest stored `sales` feed of the date. */
+  latest: PosSide;
   ledger: LedgerSide;
-  /** Only set when both sides are 'ok'/exist — null otherwise, never a misleading zero. */
+  /** The date's live sales day (the Check POS again button names it); null when there is none. */
+  salesDayId: string | null;
+  /** `latest - atImport`; null unless both sides are 'ok' - never a misleading zero. */
   delta: Money | null;
+  /** The two paid totals are equal; null unless both sides are 'ok'. */
   matches: boolean | null;
   basis: PosDayReconciliationBasis;
 }
 
-async function fetchPosSide(fetchPosSales: FetchPosDaySales, input: { storeId: string; businessDate: string }): Promise<PosSide> {
-  try {
-    const snap = await fetchPosSales(input);
-    if (!snap.found) {
-      return { status: 'not_found', message: `No POS analytics for this store on ${input.businessDate}.` };
-    }
-    return { status: 'ok', totalSales: money(snap.totalSales), totalSessions: snap.totalSessions };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message.includes('not configured')) {
-      return { status: 'not_configured', message };
-    }
-    return { status: 'unreachable', message };
-  }
+function sideOf(feed: { payload: unknown } | undefined): PosSide {
+  if (!feed) return { status: 'none' };
+  const p = feed.payload;
+  if (typeof p !== 'object' || p === null || Array.isArray(p)) return { status: 'not_found' };
+  const body = p as Record<string, unknown>;
+  if (body[S.found] !== true) return { status: 'not_found' };
+  const paid = typeof body[S.paidTotal] === 'number' ? toCentavos(body[S.paidTotal] as number) : null;
+  if (paid === null) return { status: 'not_found' };
+  const receipts = body[S.receiptCount];
+  return {
+    status: 'ok',
+    paidTotal: money(fromCentavos(paid)),
+    receiptCount: typeof receipts === 'number' && Number.isInteger(receipts) ? receipts : 0,
+  };
 }
 
-export async function getPosDayReconciliation(
-  tx: Tx,
-  fetchPosSales: FetchPosDaySales,
-  input: PosDayReconciliationBasis,
-): Promise<PosDayReconciliationResult> {
-  const [pos, salesDay] = await Promise.all([
-    fetchPosSide(fetchPosSales, input),
-    salesDaysRepo.findByBusinessDate(tx, input.orgId, input.storeId, input.businessDate),
+export async function getPosDayReconciliation(tx: Tx, input: PosDayReconciliationBasis): Promise<PosDayReconciliationResult> {
+  const salesDay = await salesDaysRepo.findByBusinessDate(tx, input.orgId, input.storeId, input.businessDate);
+  const [basisFeed, latestFeed] = await Promise.all([
+    salesDay ? posV1Repo.basisFor(tx, input.orgId, salesDay.id) : Promise.resolve(undefined),
+    posV1Repo.latestForDay(tx, input.orgId, input.storeId, input.businessDate, 'sales'),
   ]);
+  const atImport = sideOf(basisFeed);
+  const latest = sideOf(latestFeed);
 
   const ledger: LedgerSide = salesDay
     ? { exists: true, status: salesDay.status, totalSales: money(salesDay.totalSales), posSourced: salesDay.posSourced, source: salesDay.source }
@@ -69,10 +75,9 @@ export async function getPosDayReconciliation(
 
   let delta: Money | null = null;
   let matches: boolean | null = null;
-  if (pos.status === 'ok' && ledger.exists) {
-    delta = subtract(pos.totalSales, ledger.totalSales);
-    matches = equals(pos.totalSales, ledger.totalSales);
+  if (atImport.status === 'ok' && latest.status === 'ok') {
+    delta = subtract(latest.paidTotal, atImport.paidTotal);
+    matches = equals(latest.paidTotal, atImport.paidTotal);
   }
-
-  return { pos, ledger, delta, matches, basis: input };
+  return { atImport, latest, ledger, salesDayId: salesDay?.id ?? null, delta, matches, basis: input };
 }

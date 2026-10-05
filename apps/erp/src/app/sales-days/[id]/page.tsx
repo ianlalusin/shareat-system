@@ -3,10 +3,10 @@ import { authorize, AuthorizationError } from '@shareat/auth';
 import { salesDaysRepo, journalRepo, posV1Repo } from '@shareat/db';
 import { packageCapExcess } from '@shareat/domain';
 import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
-import { formatBusinessDateTime } from '@shareat/core/datetime';
+import { formatBusinessDateTime, toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listActingPersons, getStoreLink } from '../lib';
 import { requireSession } from '../../../lib/session';
-import { reimportSalesDayAction, setPlatformSalesAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
+import { postPosCorrectionAction, recheckPosDayAction, reimportSalesDayAction, setPlatformSalesAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -73,6 +73,7 @@ export default async function SalesDayDetailPage({
     return {
       edit: await probe(day.status === 'submitted' ? 'verify_sales_day' : 'submit_sales_day'),
       void: await probe('void_sales_day'),
+      verify: await probe('verify_sales_day'),
     };
   });
   const unverified = day.status === 'open' || day.status === 'submitted';
@@ -99,6 +100,17 @@ export default async function SalesDayDetailPage({
           (c) => !c.isRemittedDaily,
         )
       : [];
+
+  // T-375 S6 (R10): a verified feed day's corrections, and whether POS has changed it since it was posted. The drift
+  // is the same question the posDayFeedDrift finding asks (one repo function), so the two can never disagree.
+  const corrections =
+    isFeedDay
+      ? await withOrgPrincipal(orgId, (tx) => posV1Repo.listCorrectionsForDay(tx, orgId, day.id))
+      : [];
+  const drift =
+    isFeedDay && day.status === 'verified'
+      ? (await withOrgPrincipal(orgId, (tx) => posV1Repo.feedDrift(tx, orgId, day.id)))[0]
+      : undefined;
 
   const personName = (pid: string | null) =>
     pid ? (persons.find((p) => p.id === pid)?.displayName ?? pid) : '—';
@@ -275,6 +287,86 @@ export default async function SalesDayDetailPage({
             </div>
           )}
         </section>
+      )}
+
+      {isFeedDay && day.status === 'verified' && (corrections.length > 0 || drift) && (
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+          <h2 className="font-medium">Corrections</h2>
+          {corrections.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
+                    <th className="px-3 py-2 font-medium">Dated</th>
+                    <th className="px-3 py-2 font-medium">Reason</th>
+                    <th className="px-3 py-2 font-medium">Posted by</th>
+                    <th className="px-3 py-2 font-medium">Entry</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {corrections.map((c) => (
+                    <tr key={c.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                      <td className="px-3 py-2">{c.entryDate}</td>
+                      <td className="px-3 py-2">{c.reason}</td>
+                      <td className="px-3 py-2">{personName(c.postedBy)}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-neutral-500 dark:text-neutral-400">{c.journalEntryId}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {drift && (
+            <p className="text-neutral-700 dark:text-neutral-300">
+              POS now reports {formatMoney(money(drift.paidNow))} paid for this day; it was {formatMoney(money(drift.paidThen))} when the
+              day was posted. The ledger still holds the old figures.
+            </p>
+          )}
+          {drift && can.verify && (
+            <form action={postPosCorrectionAction} className="flex flex-wrap items-end gap-3">
+              {hiddenIds}
+              <input type="hidden" name="feedId" value={drift.latestFeedId} />
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Dated</span>
+                <input
+                  type="date"
+                  name="entryDate"
+                  required
+                  min={day.businessDate}
+                  defaultValue={toBusinessDate().localeCompare(day.businessDate) < 0 ? day.businessDate : toBusinessDate()}
+                  className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
+                />
+              </label>
+              <label className="flex min-w-[16rem] flex-1 flex-col gap-1">
+                <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Reason</span>
+                <input
+                  name="reason"
+                  required
+                  placeholder="What changed in POS?"
+                  className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
+                />
+              </label>
+              <button type="submit" className="rounded bg-neutral-900 px-4 py-1.5 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300">
+                Post correction
+              </button>
+            </form>
+          )}
+        </section>
+      )}
+
+      {isFeedDay && day.status !== 'voided' && can.verify && (
+        <form action={recheckPosDayAction} className="space-y-2 text-sm">
+          {hiddenIds}
+          <button
+            type="submit"
+            className="inline-flex min-h-[44px] items-center rounded border border-neutral-300 px-4 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+          >
+            Check POS again
+          </button>
+          <p className="text-neutral-600 dark:text-neutral-400">
+            Asks POS what it says about this day now and stores the answer. Nothing is posted by checking.
+          </p>
+        </form>
       )}
 
       {unverified && can.edit && isFeedDay && (

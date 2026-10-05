@@ -354,7 +354,11 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // form (`sales-days/[id]/page.tsx`) renders one row per non-remitted channel from a single `.map` template: an amount
     // input, a "no sales" checkbox (+1 UNRESOLVED baseline entry, touch-target-baseline.json) and the Save platform sales
     // button. Verified by running the census (1125).
-    expect(results.length).toBe(1125);
+    // 1125 -> 1130, T-375 S6, 2026-10-05. +5, read from the page source: the "Check POS again" button on the T-210 page
+    // (`reports/pos-reconciliation/page.tsx`) and on the day page, and the Post correction form on the day page (the
+    // date `<input>`, the reason `<input>` and its submit `<button>`); the hidden inputs are not controls. Nothing else.
+    // Verified by running the census (1130).
+    expect(results.length).toBe(1130);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

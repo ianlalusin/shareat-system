@@ -141,9 +141,8 @@ describe('S7 audit D — the POS reconciliation over a withdrawn date', () => {
     const f = await fixture('auditD');
     const { id: first } = await create(f, f.staff);
     await withdraw(f, first);
-    const fetchPos = async () => ({ found: false as const });
     const recon = () =>
-      asOrg(f.orgId, (tx) => D.getPosDayReconciliation(tx, fetchPos as never, { orgId: f.orgId, storeId: f.storeId, businessDate: DATE }));
+      asOrg(f.orgId, (tx) => D.getPosDayReconciliation(tx, { orgId: f.orgId, storeId: f.storeId, businessDate: DATE }));
 
     const over = await recon();
     expect(over.ledger, 'a withdrawn day was read as the date\'s ledger day').toEqual({ exists: false });

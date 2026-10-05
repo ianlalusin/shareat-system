@@ -13,7 +13,11 @@
  * could claim to be anyone. **The segregation only became real when this line changed.**
  */
 import { redirect } from 'next/navigation';
-import { createSalesDay, editSalesDay, importSalesDay, reimportSalesDay, setPlatformSales, submitSalesDay, verifySalesDay, voidSalesDay } from '@shareat/domain';
+import {
+  createSalesDay, editSalesDay, importSalesDay, postPosCorrection, recheckPosDay, recheckRecentDays, reimportSalesDay,
+  setPlatformSales, submitSalesDay, verifySalesDay, voidSalesDay,
+} from '@shareat/domain';
+import { logger } from '@shareat/core/logger';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -130,7 +134,56 @@ export async function importSalesDayAction(formData: FormData): Promise<void> {
   } catch (err) {
     redirect(`/sales-days/new?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }
+  // T-375 S6 (R10, V4): POS changes past days (voids, closed-receipt edits), so the 7 days before this one are
+  // checked again - AFTER the import has committed, with nothing held across POS. A failure is logged, never shown.
+  try {
+    await recheckRecentDays(actor, storeId, str(formData, 'businessDate'));
+  } catch (err) {
+    logger.error({ storeId, businessDate: str(formData, 'businessDate'), err: err instanceof Error ? err.message : String(err) }, 'importSalesDayAction: the prior-days recheck failed');
+  }
   redirect(`/sales-days/${dayId}?${qs}`);
+}
+
+/**
+ * T-375 S6: **Check POS again** (the day page and the T-210 screen). Reads `salesDayId`; stores a recheck batch of what
+ * POS says now. `returnTo` may name the reconciliation screen; anything else returns to the day's own page.
+ */
+export async function recheckPosDayAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const id = str(formData, 'salesDayId');
+  const qs = carryQs(formData);
+  const returnTo = str(formData, 'returnTo');
+  const base = returnTo.startsWith('/reports/pos-reconciliation?') ? returnTo : `/sales-days/${id}?${qs}`;
+  const withError = (message: string) => `${base}${base.includes('?') ? '&' : '?'}error=${encodeURIComponent(message)}`;
+  try {
+    await recheckPosDay(actor, { salesDayId: id });
+  } catch (err) {
+    redirect(withError(errorMessage(err)));
+  }
+  redirect(base);
+}
+
+/**
+ * T-375 S6: **Post correction** on a verified feed day POS changed. Reads `salesDayId`, `feedId`, `entryDate`, `reason`.
+ * Every outcome returns to the day's page; the domain owns every rule and sentence.
+ */
+export async function postPosCorrectionAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const id = str(formData, 'salesDayId');
+  const qs = carryQs(formData);
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      postPosCorrection(tx, actor, {
+        salesDayId: id,
+        feedId: str(formData, 'feedId'),
+        entryDate: str(formData, 'entryDate'),
+        reason: str(formData, 'reason'),
+      }),
+    );
+  } catch (err) {
+    redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+  }
+  redirect(`/sales-days/${id}?${qs}`);
 }
 
 /**

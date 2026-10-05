@@ -14,12 +14,14 @@ import { findingAcknowledgements } from '../../schema/findings';
 // ⛔ The ONE definition of how long each cadence allows. A private copy here would be a second
 // source of truth for a number the screen also shows — bible §6.3.
 import { CADENCE_DAYS } from '../../schema/stores';
-import { ZERO, add, compare, formatMoney, isZero, money, negate, subtract, type Money } from '@shareat/core/money';
+import { ZERO, add, compare, equals, formatMoney, isZero, money, negate, subtract, type Money } from '@shareat/core/money';
 // ⛔ T-218 — the ONE definition of "today" for the repo layer. Never bare `current_date`.
 import { MANILA_TODAY, daysBetweenDates, manilaToday } from './sql-time';
 import { isPreOpeningSql } from './stores';
 import { notCustodySourceType, tillFloorPosition } from './remittance';
 import { periodBounds } from './fiscal-periods';
+import * as posV1Repo from './pos-v1';
+import { businessDayRange, formatBusinessDateTime, parseBusinessDate } from '@shareat/core/datetime';
 
 /**
  * ⛔ **Never interpolate the symbol by hand.** A hand-rolled peso plus `toFixed(2)` renders a
@@ -1920,6 +1922,51 @@ export async function posUsagePullNotRun(tx: Tx, orgId: string): Promise<Detecte
       `usage pull, the oldest from ${r.oldest}. Stock that was sold but never consumed here means ` +
       'its cost never reached COGS, so gross margin looks better than it is until the next ' +
       'physical count explains the gap as shrinkage.',
+  }));
+}
+
+/**
+ * Same words as the domain's `humanDate` ("Jan 10, 2027"): a repo may not import the domain (ADR-004), so this applies
+ * the very formatter `humanDate` wraps (`@shareat/core/datetime`'s `formatBusinessDateTime`, `dateStyle: 'medium'`
+ * over the date's own Manila midnight) - one formatter, not a copy. Money is `peso` above (`@shareat/core/money`).
+ */
+function humanDay(businessDate: string): string {
+  return formatBusinessDateTime(businessDayRange(parseBusinessDate(businessDate)).start, { dateStyle: 'medium' });
+}
+
+/**
+ * T-375 S6 (R10): a VERIFIED feed day whose latest `sales` feed is newer than its basis and differs in the money
+ * projection (P, K, D, C, the methods map), not merely the hash. Fixed by a correction posted from the day's page.
+ */
+export async function posDayFeedDrift(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = await posV1Repo.feedDrift(tx, orgId);
+  return rows.map((r) => ({
+    kind: 'posDayFeedDrift',
+    key: `posDayFeedDrift:${r.salesDayId}`,
+    storeId: r.storeId,
+    severity: 'hard' as const,
+    detail: equals(money(r.paidThen), money(r.paidNow))
+      ? `${r.storeName}'s POS payment methods for ${humanDay(r.businessDate)} changed after the day was posted ` +
+        `(${peso(money(r.paidNow))} in total either way). Post a correction from the day's page.`
+      : `${r.storeName}'s POS figures for ${humanDay(r.businessDate)} changed after the day was posted: ` +
+        `${peso(money(r.paidThen))} paid then, ${peso(money(r.paidNow))} now. Post a correction from the day's page.`,
+  }));
+}
+
+/**
+ * T-375 S6 (R10, S5L-R): a usage pull with ANY finalized section whose pinned sold items are older than a newer
+ * `sold_items` feed that differs in the items projection. Fixed by voiding the pull and pulling again, never by a correction.
+ */
+export async function posDaySoldItemsDrift(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = await posV1Repo.soldItemsDrift(tx, orgId);
+  return rows.map((r) => ({
+    kind: 'posDaySoldItemsDrift',
+    key: `posDaySoldItemsDrift:${r.pullId}`,
+    storeId: r.storeId,
+    severity: 'hard' as const,
+    detail:
+      `${r.storeName}: POS's sold items for ${humanDay(r.businessDate)} changed after usage was posted. ` +
+      'Void the POS usage pull and pull it again; the new pull reads the latest check.',
   }));
 }
 

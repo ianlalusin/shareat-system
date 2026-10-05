@@ -1,14 +1,23 @@
 import { config } from 'dotenv';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
-import { sql as dsql } from 'drizzle-orm';
 
 /**
- * T-210 — docs/tasks/210-sales-reporting-over-the-ledger.md.
+ * T-210, converted by T-375 S6 - `docs/tasks/210-sales-reporting-over-the-ledger.md`,
+ * `docs/tasks/375-pos-v1-day-feed.md` S6 ("At import" beside "Latest check", no HTTP at render; `pos/sales-pull.ts`
+ * deleted).
  *
- * Every outcome POS or the fetch itself can produce must be a named, non-throwing result state —
- * this file is the proof, using an injected fetcher rather than a live POS (POS_API_URL/KEY are
- * unset in this dev environment, matching T-177's own live pull).
+ * `getPosDayReconciliation` no longer takes a fetcher: it reads the day's STORED feeds. Every old outcome is still a
+ * named, non-throwing result state, except the two that only existed because render called POS (`not_configured`,
+ * `unreachable`): they are gone, and a global `fetch` that throws proves nothing is called at all.
+ *
+ * ## The converted shape (pinned by the tester; the spec says only "At import (basis) beside Latest check (stored),
+ *    the delta"). `getPosDayReconciliation(tx, { orgId, storeId, businessDate })` returns
+ *      { atImport: Side, latest: Side, ledger, delta, matches, basis }
+ *    with Side = { status: 'ok', paidTotal, receiptCount } | { status: 'not_found' } | { status: 'none' };
+ *    `atImport` is the day's BASIS feed (R10), `latest` the latest stored `sales` feed; `paidTotal` is POS's paid total;
+ *    `delta` = latest - atImport (null unless both are 'ok'); `matches` = the two paid totals are equal (null unless
+ *    both are 'ok'). `ledger` is unchanged: `{ exists: true, status, totalSales, posSourced, source } | { exists: false }`.
  */
 config({ path: '.env.local' });
 
@@ -18,133 +27,122 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — name must contain "_test".`);
 }
 
-import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
-import type { Actor } from '@shareat/auth';
-import { createSalesDay, verifySalesDay, getPosDayReconciliation, type FetchPosDaySales } from '@shareat/domain';
+import { closeDb, type Tx } from '@shareat/db';
+import * as D from '@shareat/domain';
+import { D1_FIGURES, importTestDay } from './_fixtures/pos-day';
+import { asOrgOn, DAY, insertSalesRecheck, R1_FIGURES, s6Fixture, type S6F } from './_fixtures/pos-s6';
+
+type Side = { status: 'ok'; paidTotal: string; receiptCount: number } | { status: 'not_found' } | { status: 'none' };
+interface Recon {
+  atImport: Side;
+  latest: Side;
+  ledger: { exists: true; status: string; totalSales: string; posSourced: boolean; source: string } | { exists: false };
+  delta: string | null;
+  matches: boolean | null;
+  basis: { orgId: string; storeId: string; businessDate: string };
+}
+const getRecon = D.getPosDayReconciliation as unknown as (tx: Tx, input: { orgId: string; storeId: string; businessDate: string }) => Promise<Recon>;
 
 const sql = postgres(url, { max: 5 });
-let seq = 0;
-const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
-
-async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return transaction(async (tx) => {
-    await tx.execute(dsql.raw(`set local role ${APP_ROLE}`));
-    await tx.execute(dsql`select set_config('app.principal_kind', 'staff', true)`);
-    await tx.execute(dsql`select set_config('app.org_id', ${orgId}, true)`);
-    return fn(tx);
-  });
-}
-
-async function fixture(hint: string) {
-  const code = uid(`posrecon-${hint}`);
-  const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
-  const orgId = org!.id;
-  await seedChartOfAccounts(sql, orgId);
-  const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}) returning id`;
-  const storeId = store!.id;
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2026-01-01', '2026-01-31', 'open')`;
-  const [manager] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Manager') returning id`;
-  await sql`insert into person_roles (person_id, org_id, role) values (${manager!.id}, ${orgId}, 'manager')`;
-  await sql`insert into person_store_scope (person_id, store_id) values (${manager!.id}, ${storeId})`;
-  const [walkIn] = await sql<{ id: string }[]>`
-    insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${orgId}, ${storeId}, 'Walk-in', true) returning id`;
-
-  return { orgId, storeId, manager: { personId: manager!.id, orgId } as Actor, walkInChannelId: walkIn!.id };
-}
-type Fixture = Awaited<ReturnType<typeof fixture>>;
-
-async function postVerifiedDay(f: Fixture, businessDate: string, totalSales: string) {
-  const day = await asOrg(f.orgId, (tx) =>
-    createSalesDay(tx, f.manager, {
-      storeId: f.storeId,
-      businessDate,
-      totalSales,
-      unliSales: '0.00',
-      alaCarteSales: totalSales,
-      cashCollected: totalSales,
-      channels: [{ channelId: f.walkInChannelId, amount: totalSales }],
-    }),
-  );
-  await asOrg(f.orgId, (tx) => verifySalesDay(tx, f.manager, day.id));
-  return day.id;
-}
-
-beforeAll(async () => {
-  await sql`select 1`;
+const fetchSpy = vi.fn(async (..._a: unknown[]) => {
+  throw new Error('LIVE POS FETCH: the reconciliation reads stored feeds, never POS');
+});
+beforeEach(() => {
+  fetchSpy.mockClear();
+  vi.stubGlobal('fetch', fetchSpy);
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 afterAll(async () => {
   await closeDb();
   await sql.end({ timeout: 5 });
 });
 
+const reconcile = (f: S6F, date = DAY) => asOrgOn(f.orgId, (tx) => getRecon(tx, { orgId: f.orgId, storeId: f.storeId, businessDate: date }));
+async function importVerified(f: S6F, date = DAY): Promise<string> {
+  const { id } = await asOrgOn(f.orgId, (tx) => importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: date }));
+  await asOrgOn(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, id));
+  return id;
+}
+const recheck = (f: S6F, figures: Parameters<typeof insertSalesRecheck>[1]['figures']) =>
+  asOrgOn(f.orgId, (tx) =>
+    insertSalesRecheck(tx, { orgId: f.orgId, storeId: f.storeId, businessDate: DAY, posStoreId: f.posStoreId, fetchedBy: f.managerId, figures }),
+  );
+
 describe('getPosDayReconciliation', () => {
-  it('matches when POS and the ledger agree', async () => {
-    const f = await fixture('match');
-    await postVerifiedDay(f, '2026-01-10', '1000.00');
-    const fetchPos: FetchPosDaySales = async () => ({ found: true, totalSales: '1000.00', totalSessions: 42 });
+  it('matches when the latest check agrees with the day as imported (no POS call)', async () => {
+    const f = await s6Fixture(sql, 'match');
+    await importVerified(f);
 
-    const result = await asOrg(f.orgId, (tx) => getPosDayReconciliation(tx, fetchPos, { orgId: f.orgId, storeId: f.storeId, businessDate: '2026-01-10' }));
+    const result = await reconcile(f);
 
-    expect(result.pos).toEqual({ status: 'ok', totalSales: '1000.00', totalSessions: 42 });
-    expect(result.ledger).toMatchObject({ exists: true, status: 'verified', totalSales: '1000.00' });
+    expect(result.atImport).toMatchObject({ status: 'ok', paidTotal: '1050.00', receiptCount: 20 });
+    expect(result.latest).toMatchObject({ status: 'ok', paidTotal: '1050.00', receiptCount: 20 });
+    expect(result.ledger).toMatchObject({ exists: true, status: 'verified', totalSales: '1100.00', posSourced: true, source: 'pos_v1_day_feed' });
     expect(result.matches).toBe(true);
     expect(result.delta).toBe('0.00');
+    expect(fetchSpy, 'rendering never calls POS').toHaveBeenCalledTimes(0);
   });
 
-  it('reports a mismatch with a signed delta when POS and the ledger disagree', async () => {
-    const f = await fixture('mismatch');
-    await postVerifiedDay(f, '2026-01-10', '1000.00');
-    const fetchPos: FetchPosDaySales = async () => ({ found: true, totalSales: '1200.00', totalSessions: 50 });
+  it('reports a mismatch with a signed delta (latest minus at import) when a recheck found a different paid total', async () => {
+    const f = await s6Fixture(sql, 'mismatch');
+    await importVerified(f);
+    await recheck(f, R1_FIGURES);
 
-    const result = await asOrg(f.orgId, (tx) => getPosDayReconciliation(tx, fetchPos, { orgId: f.orgId, storeId: f.storeId, businessDate: '2026-01-10' }));
+    const result = await reconcile(f);
 
+    expect(result.atImport).toMatchObject({ status: 'ok', paidTotal: '1050.00' });
+    expect(result.latest).toMatchObject({ status: 'ok', paidTotal: '1000.00' });
     expect(result.matches).toBe(false);
-    expect(result.delta).toBe('200.00');
+    expect(result.delta).toBe('-50.00');
+    expect(fetchSpy).toHaveBeenCalledTimes(0);
   });
 
-  it('POS found:false becomes not_found, never a crash', async () => {
-    const f = await fixture('not-found');
-    const fetchPos: FetchPosDaySales = async () => ({ found: false, totalSales: '0', totalSessions: 0 });
+  it('a stored POS "found: false" check becomes not_found, never a crash', async () => {
+    const f = await s6Fixture(sql, 'not-found');
+    await importVerified(f);
+    await recheck(f, { found: false });
 
-    const result = await asOrg(f.orgId, (tx) => getPosDayReconciliation(tx, fetchPos, { orgId: f.orgId, storeId: f.storeId, businessDate: '2026-01-10' }));
+    const result = await reconcile(f);
 
-    expect(result.pos.status).toBe('not_found');
+    expect(result.atImport).toMatchObject({ status: 'ok', paidTotal: '1050.00' });
+    expect(result.latest).toEqual({ status: 'not_found' });
+    expect(result.matches).toBeNull();
+    expect(result.delta).toBeNull();
+  });
+
+  it('a date with no sales day and no stored feed is "none" on both sides, the ledger side absent', async () => {
+    const f = await s6Fixture(sql, 'no-ledger-row');
+
+    const result = await reconcile(f, '2027-01-15');
+
+    expect(result.atImport).toEqual({ status: 'none' });
+    expect(result.latest).toEqual({ status: 'none' });
     expect(result.ledger).toEqual({ exists: false });
     expect(result.matches).toBeNull();
     expect(result.delta).toBeNull();
   });
 
-  it('a fetcher throwing the "not configured" error becomes posStatus not_configured, never a crash', async () => {
-    const f = await fixture('not-configured');
-    const fetchPos: FetchPosDaySales = async () => {
-      throw new Error('fetchPosSalesLive: POS_API_URL or POS_API_KEY is not configured — see .env.example');
-    };
+  it('a TYPED day on a store that was never linked has no stored feed: "none" on both sides, the ledger side present and typed', async () => {
+    const f = await s6Fixture(sql, 'typed');
+    const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${f.orgId}, ${`ty-${Date.now()}`}, 'Batangas') returning id`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${f.managerId}, ${store!.id})`;
+    const [ch] = await sql<{ id: string }[]>`
+      insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${f.orgId}, ${store!.id}, 'Walk-in', true) returning id`;
+    const day = await asOrgOn(f.orgId, (tx) =>
+      D.createSalesDay(tx, f.manager, {
+        storeId: store!.id, businessDate: DAY, totalSales: '1000.00', unliSales: '0.00', alaCarteSales: '1000.00',
+        cashCollected: '1000.00', channels: [{ channelId: ch!.id, amount: '1000.00' }],
+      }),
+    );
+    await asOrgOn(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, day.id));
 
-    const result = await asOrg(f.orgId, (tx) => getPosDayReconciliation(tx, fetchPos, { orgId: f.orgId, storeId: f.storeId, businessDate: '2026-01-10' }));
+    const result = await asOrgOn(f.orgId, (tx) => getRecon(tx, { orgId: f.orgId, storeId: store!.id, businessDate: DAY }));
 
-    expect(result.pos.status).toBe('not_configured');
-  });
-
-  it('a fetcher rejecting with a network error becomes unreachable, never a crash', async () => {
-    const f = await fixture('unreachable');
-    const fetchPos: FetchPosDaySales = async () => {
-      throw new Error('fetch failed: ECONNREFUSED');
-    };
-
-    const result = await asOrg(f.orgId, (tx) => getPosDayReconciliation(tx, fetchPos, { orgId: f.orgId, storeId: f.storeId, businessDate: '2026-01-10' }));
-
-    expect(result.pos.status).toBe('unreachable');
-  });
-
-  it('no Shareat System sales day for that store/date still renders the POS side alone', async () => {
-    const f = await fixture('no-ledger-row');
-    const fetchPos: FetchPosDaySales = async () => ({ found: true, totalSales: '500.00', totalSessions: 10 });
-
-    const result = await asOrg(f.orgId, (tx) => getPosDayReconciliation(tx, fetchPos, { orgId: f.orgId, storeId: f.storeId, businessDate: '2026-01-10' }));
-
-    expect(result.pos).toEqual({ status: 'ok', totalSales: '500.00', totalSessions: 10 });
-    expect(result.ledger).toEqual({ exists: false });
+    expect(result.atImport).toEqual({ status: 'none' });
+    expect(result.latest).toEqual({ status: 'none' });
+    expect(result.ledger).toMatchObject({ exists: true, status: 'verified', totalSales: '1000.00', source: 'legacy_typed' });
     expect(result.matches).toBeNull();
     expect(result.delta).toBeNull();
   });

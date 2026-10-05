@@ -224,6 +224,17 @@ async function runVoid(
     reversedBy: actor.personId,
   });
 
+  // T-375 S6 (R10, V3): a corrected day's correction entries are reversed too, newest first, in this transaction. The
+  // correction rows stay (append-only); each reversal keeps the sale source and the correction's own source id.
+  const corrections = await posV1Repo.listCorrectionsForDay(tx, actor.orgId, salesDayId);
+  for (const c of [...corrections].reverse()) {
+    await reverseEntry(tx, {
+      entryId: c.journalEntryId,
+      reason: `Sales day ${day.businessDate} voided: ${trimmed} (POS correction)`,
+      reversedBy: actor.personId,
+    });
+  }
+
   await salesDaysRepo.markVoided(tx, actor.orgId, salesDayId, {
     voidedBy: actor.personId,
     voidReason: trimmed,

@@ -205,6 +205,9 @@ export async function listFindings(
     ...(await findingsRepo.posUsagePullNotRun(tx, orgId)),
     // T-213 — OIL wave 2, the operational detectors Phases 2-5 made computable.
     ...(await findingsRepo.salesDayUnposted(tx, orgId)),
+    // T-375 S6 (R10) — POS changed a day after it was posted / after usage was pulled from it.
+    ...(await findingsRepo.posDayFeedDrift(tx, orgId)),
+    ...(await findingsRepo.posDaySoldItemsDrift(tx, orgId)),
     ...(await findingsRepo.expenseCategoryUnpostable(tx, orgId)),
     ...(await findingsRepo.expenseInvoiceVoidedAfterLink(tx, orgId)),
     ...(await findingsRepo.receiptPriceSpike(tx, orgId)),

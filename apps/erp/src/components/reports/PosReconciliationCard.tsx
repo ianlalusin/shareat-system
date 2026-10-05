@@ -1,31 +1,49 @@
 import { formatMoney, type Money } from '@shareat/core/money';
 
 export type PosSideView =
-  | { status: 'ok'; totalSales: Money; totalSessions: number }
-  | { status: 'not_found' | 'not_configured' | 'unreachable'; message: string };
+  | { status: 'ok'; paidTotal: Money; receiptCount: number }
+  | { status: 'not_found' }
+  | { status: 'none' };
 
 export type LedgerSideView =
   | { exists: true; status: string; totalSales: Money; source: 'legacy_typed' | 'pos_v1_day_feed' }
   | { exists: false };
 
-const POS_STATUS_LABEL: Record<string, string> = {
-  not_found: 'No POS analytics for this store/date',
-  not_configured: 'POS is not configured on this deployment',
-  unreachable: 'POS could not be reached',
+const SIDE_LABEL: Record<'not_found' | 'none', string> = {
+  not_found: 'POS had no analytics for this store/date',
+  none: 'Nothing stored for this store/date',
 };
 
+function Side({ title, side }: { title: string; side: PosSideView }) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">{title}</p>
+      {side.status === 'ok' ? (
+        <>
+          <p className="text-xl font-semibold tabular-nums">{formatMoney(side.paidTotal)}</p>
+          <p className="text-xs text-neutral-500">{side.receiptCount} receipt(s)</p>
+        </>
+      ) : (
+        <p className="text-sm text-neutral-500">{SIDE_LABEL[side.status]}</p>
+      )}
+    </div>
+  );
+}
+
 /**
- * The POS-day ↔ ledger reconciliation card — T-210. Every POS outcome is rendered as an
- * informational state, never an error page — `not_configured`/`unreachable` are expected,
- * first-class results (`POS_API_URL`/`POS_API_KEY` are optional), not failures.
+ * The POS-day reconciliation card - T-210, converted by T-375 S6. Both POS columns are STORED feeds (nothing is fetched
+ * at render): "At import" is what the day was posted from, "Latest check" is the newest stored check. The sales day's
+ * own total follows. `Check POS again` is the page's form, not this card's.
  */
 export function PosReconciliationCard({
-  pos,
+  atImport,
+  latest,
   ledger,
   matches,
   delta,
 }: {
-  pos: PosSideView;
+  atImport: PosSideView;
+  latest: PosSideView;
   ledger: LedgerSideView;
   matches: boolean | null;
   delta: Money | null;
@@ -47,18 +65,9 @@ export function PosReconciliationCard({
         <p className="text-sm font-medium text-neutral-600 dark:text-neutral-400">Not comparable</p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">POS</p>
-          {pos.status === 'ok' ? (
-            <>
-              <p className="text-xl font-semibold tabular-nums">{formatMoney(pos.totalSales)}</p>
-              <p className="text-xs text-neutral-500">{pos.totalSessions} session(s)</p>
-            </>
-          ) : (
-            <p className="text-sm text-neutral-500">{POS_STATUS_LABEL[pos.status] ?? pos.message}</p>
-          )}
-        </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Side title="At import" side={atImport} />
+        <Side title="Latest check" side={latest} />
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">Shareat System</p>
           {ledger.exists ? (
@@ -76,7 +85,7 @@ export function PosReconciliationCard({
 
       {delta !== null ? (
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Delta (POS − Shareat System): <span className="font-mono tabular-nums">{formatMoney(delta)}</span>
+          Delta (latest check − at import): <span className="font-mono tabular-nums">{formatMoney(delta)}</span>
         </p>
       ) : null}
     </div>

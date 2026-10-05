@@ -359,6 +359,24 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       '(the revenue side). A sales day that fails either quarantines rather than posting a ' +
       'guessed entry (T-113 §3 rule 1 — never guess a mapping).',
   },
+  {
+    id: 'sale.pos-correction',
+    sourceType: 'sale',
+    title: 'POS changed a verified day afterwards — a correcting entry (T-375 S6)',
+    narrative: 'v2-only. A verified D1 day was posted at ₱1,050 paid; POS later shows a voided ₱50 cash ' +
+      'receipt (₱1,000 paid, package figure ₱550). The posted day entry and figures never change; a manager ' +
+      'posts the checked feed lines minus what the ledger already holds, netted per account and party: ' +
+      'Dr 4100 ₱50, Cr 1110 ₱50.',
+    input: { paidThen: 1050.0, paidNow: 1000.0, unliThen: 600.0, unliNow: 550.0, cashThen: 700.0, cashNow: 650.0 },
+    expect: [
+      D('4100', '50.00'),
+      C('1110', '50.00'),
+    ],
+    entryDate: '2026-01-20',
+    trap: '"New" must use the SAME composition as verify (routeInputForDay) and "old" must come from the ' +
+      'ledger, not from re-deriving the old feed with current tenders, or a platform day, a refund day ' +
+      'or a remapped tender produces phantom lines.',
+  },
 
   // =========================================================================================
   // salary_advance — 1,488 legs. leg-mapping.ts FINDING: disbursement and repayment (the
