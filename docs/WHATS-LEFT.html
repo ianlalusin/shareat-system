@@ -164,8 +164,7 @@
         <div class="k">Now</div>
         <h3>Sales days from POS, and the bill override</h3>
         <ul>
-          <li>T-375: POS v1 day feed, ERP sales days from POS, before 15 Nov (S1-S2 done, S3-S6 left)</li>
-          <li>T-376: DEF-583 (S1, the DEF-581 bill override, done in dde37cb; S2, DEF-582, done in 13d61fb)</li>
+          <li>T-375: POS v1 day feed, ERP sales days from POS, before 15 Nov (S1-S3 done, S3 screen smoke next; S4-S6 left)</li>
         </ul>
       </div>
       <div class="step">
@@ -206,7 +205,7 @@
     <p class="lede">Found while fixing money. None posts a wrong amount today; each is small.</p>
     <div class="items">
       <div class="item"><div class="id">DEF-575</div><div>Resolving a discrepancy into a closed month shows a raw error page instead of a sentence.</div></div>
-      <div class="item"><div class="id">DEF-583, 592</div><div>A customer return shows no message (the supplier-return half, DEF-582, is fixed in 13d61fb); the remittance banner shows the old count until a reload.</div></div>
+      <div class="item"><div class="id">DEF-592</div><div>A customer return shows no message (the supplier-return half, DEF-582, is fixed in 13d61fb).</div></div>
       <div class="item s"><div class="id">DEF-591</div><div><b>v2&rsquo;s POS pulls send v2&rsquo;s own store id</b>, which POS does not recognise, so the usage pull plans empty days and the sales-pull screen finds nothing. Fixed by T-375 S1 (store link).</div></div>
       <div class="item y"><div class="id">DEF-585</div><div><b>Production has no fiscal period before October 2026</b>; cutover postings dated earlier would be refused. The timer is armed and seeded Oct 2026&ndash;Sep 2027.</div></div>
       <div class="item"><div class="id">DEF-476</div><div>Typed amounts and reasons travel in page addresses. <span class="pill y">you said fix before launch</span></div></div>
