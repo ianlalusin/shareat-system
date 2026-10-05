@@ -1,6 +1,6 @@
 # T-375: POS v1 day feed — sales days derived, locked, never typed
 
-**Status:** APPROVED 2026-10-04 after three independent Opus reviews (✎V, ✎W, ✎Y); S1 SHIPPED `2c9b0f2` (migration 0183); S2 SHIPPED `88bd16d` (tender master + POS v1 method resolver); S3 next (import + derived sales day); migrations 0183/0185 (S4). Earlier: SPEC WRITTEN 2026-10-04 (Opus planner, plan mode). Amended the same day three times: an independent Opus
+**Status:** APPROVED 2026-10-04 after three independent Opus reviews (✎V, ✎W, ✎Y); S1 SHIPPED `2c9b0f2` (migration 0183); S2 SHIPPED `88bd16d` (tender master + POS v1 method resolver); **S3 SHIPPED `7a33eea` 2026-10-05 (import + derived sales day; 11/11 mutants; FULL integration 5178/5178) and smoked on 9008 with the dev fake POS (typed form on an unlinked store; Import D1 → figures and "Imported from POS"; refund day → Dr 4950 on verify; linked edit refused). On screen not driven: re-import with changed figures (I2) and the not-configured sentence (W1)**; S4 next (0185); **S5 waits for the POS-pull redesign proposal (bible row 281)**; migrations 0183/0185 (S4). Earlier: SPEC WRITTEN 2026-10-04 (Opus planner, plan mode). Amended the same day three times: an independent Opus
 review (✎V1–✎V13), the orchestrator's per-store ruling (✎V2b), and a second-pass review (✎W1–✎W11). **This text is
 consolidated: every slice, test and table line below already carries the amendments, and the Review log at the end
 says where each one landed.** Not approved; not started. Fixes DEF-586 store by store. Proposes one new section-E defect
