@@ -748,7 +748,7 @@ the lock error. An unlinked store's typed day still edits. Screenshots.
 ---
 
 ## S5: usage reads stored sold items
-> ✎ 2026-10-05 (bible row 281): Ian asked for the POS pulls to be **redesigned** for the unified backend, planned with `/research-evaluate-propose`. **Do not build S5 until that proposal is written and approved**; it may change or drop this slice.
+> ✎ 2026-10-05 (bible row 281): Ian asked for the POS pulls to be **redesigned** for the unified backend, planned with `/research-evaluate-propose`. **Do not build S5 until that proposal is written and approved**; it may change or drop this slice. ✎ 2026-10-05 later: proposal written (`docs/discovery/pos-pull-redesign-proposal.md`) and Ian answered its questions (bible row 282): **S5 becomes S5-lite** — reads the sold items the import already stores, no capture path, no live call, typed days refused (Q-D a), void rule unchanged (Q-C a). **The S5-lite amendment is written in plan mode (Opus) before building.**
 
 **Goal:** the usage pull plans and finalizes from stored `sold_items` feeds, calling POS with the link's POS store id
 (✎N1 fixed for usage).

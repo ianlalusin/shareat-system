@@ -217,6 +217,8 @@ the end state removes the routine reasons to void, the remaining voids are rare 
 
 ## 9. Questions for Ian (for the Open Questions page)
 
+> **✎ 2026-10-05 — ANSWERED (bible row 282):** Q-A **(a)** usage posts by itself after verify. Q-B **Ian's own answer**: refunded and voided receipts put their items in a pending state; a manager or admin decides each item (no automatic restock). Q-C **(a)** managers, admins, super admins. Q-D **(a)** typed days refused. T-375 S5 is replaced by S5-lite; its spec amendment is written in plan mode before building.
+
 - **Q-A (medium; end state). When should a day's stock usage post once POS writes receipts into our database?**
   Example: Lipa's 12 March sales day is verified at 10 pm. (a) **Recommended:** usage posts by itself right after
   verify. If the meat room is being counted, that room's usage waits and posts with one click after the count.
