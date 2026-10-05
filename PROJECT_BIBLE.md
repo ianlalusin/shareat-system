@@ -65,35 +65,35 @@
 - `1210–1244` 10. Phase plan
 - `1245–1261` 11. Migration & ETL rules
 - `1262–1326` 12. Inherited landmines — do not repeat these
-- `1327–1612` 13. Decision log
-- `1613–1632` 14. Amendment protocol
-- `1633–1637` 15. Engineering standards — the industry practices this project follows
-  - `1638–1643` 15.1 Build order: walking skeleton first
-  - `1644–1655` 15.2 Golden-master testing — the most important practice here
-  - `1656–1664` 15.3 Strangler Fig, not big-bang cutover
-  - `1665–1669` 15.4 No dual-write
-  - `1670–1678` 15.5 Expand/contract migrations
-  - `1679–1687` 15.6 Observability from day zero, not later
-  - `1688–1692` 15.7 CI gates
-  - `1693–1697` 15.8 Backups and a tested restore
-  - `1698–1702` 15.9 Twelve-Factor config
-  - `1703–1710` 15.10 Append-only ledgers — but not event sourcing
-  - `1711–1715` 15.11 Defence in depth
-  - `1716–1744` 15.12 Skills are lenses, not assurance
-  - `1745–1751` 15.13 Reconciliation is a permanent feature
-- `1752–1756` 16. The accounting spine
-  - `1757–1788` 16.0 What we are actually fixing — the diagnosis
-  - `1789–1832` 16.1 The ten invariants — non-negotiable
-  - `1833–1847` 16.2 The oracle: how "correct" is tested
-  - `1848–1869` 16.3 The model — header + lines, not legs
-  - `1870–1889` 16.4 Deliberately simpler than ERPNext
-  - `1890–1956` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1957–1981` 16.6 What v1 already gets right — preserve the intent
-  - `1982–2003` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2004–2018` 16.8 What v1's accounting already gets right
-  - `2019–2062` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2063–2113` 16.10 Posting patterns — one canonical pattern per business event
-  - `2114–2145` 16.11 Inventory's accounting integration
+- `1327–1614` 13. Decision log
+- `1615–1634` 14. Amendment protocol
+- `1635–1639` 15. Engineering standards — the industry practices this project follows
+  - `1640–1645` 15.1 Build order: walking skeleton first
+  - `1646–1657` 15.2 Golden-master testing — the most important practice here
+  - `1658–1666` 15.3 Strangler Fig, not big-bang cutover
+  - `1667–1671` 15.4 No dual-write
+  - `1672–1680` 15.5 Expand/contract migrations
+  - `1681–1689` 15.6 Observability from day zero, not later
+  - `1690–1694` 15.7 CI gates
+  - `1695–1699` 15.8 Backups and a tested restore
+  - `1700–1704` 15.9 Twelve-Factor config
+  - `1705–1712` 15.10 Append-only ledgers — but not event sourcing
+  - `1713–1717` 15.11 Defence in depth
+  - `1718–1746` 15.12 Skills are lenses, not assurance
+  - `1747–1753` 15.13 Reconciliation is a permanent feature
+- `1754–1758` 16. The accounting spine
+  - `1759–1790` 16.0 What we are actually fixing — the diagnosis
+  - `1791–1834` 16.1 The ten invariants — non-negotiable
+  - `1835–1849` 16.2 The oracle: how "correct" is tested
+  - `1850–1871` 16.3 The model — header + lines, not legs
+  - `1872–1891` 16.4 Deliberately simpler than ERPNext
+  - `1892–1958` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1959–1983` 16.6 What v1 already gets right — preserve the intent
+  - `1984–2005` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2006–2020` 16.8 What v1's accounting already gets right
+  - `2021–2064` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2065–2115` 16.10 Posting patterns — one canonical pattern per business event
+  - `2116–2147` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1604,10 +1604,12 @@ just a patch.**
 | 272 | 2026-10-04 | **A CLOSED RECEIPT IS IMMUTABLE: THE POS COPY REMOVES EDIT AND VOID OF CLOSED RECEIPTS IN P0; MISTAKES ARE REFUNDED (pos-q5 (a)).** Ian, 2026-10-04. A refund is a new receipt with `parent_receipt_id`, dated the day it happens. | We now own the copy, so the fix is in the code, not a staff policy. Industry standard: refunds are reversing documents; nobody edits a closed sale | Yes — a manager-only audited void could be added later |
 | 273 | 2026-10-04 | **ONE LOYALTY PROGRAMME ACROSS ALL ORGS; POINTS ARE A LIABILITY OF THE ISSUING ORG, SETTLED BETWEEN ORGS (Q-C (a)).** Ian, 2026-10-04. A diner is a `person` with a `phone` identity, never an AR customer and never a Firebase Auth user (DEF-343); a `diner` principal is needed (`persons.org_id` is NOT NULL today). Points redeemed post to 4910. Built at P3. | A diner earns at Lipa (own books) and redeems at Padre Garcia (franchise, separate books, ADR-008); one programme keeps the diner's experience, the issuing-org liability keeps each set of books honest | Yes, before P3 |
 | 274 | 2026-10-04 | ⭐ **ONE POSTGRES. NO HOT/COLD SPLIT, NO ARCHIVE DATABASE, NO REPLICA NOW. A STANDBY, A READ REPLICA OR PARTITIONING IS ADDED ONLY ON A MEASURED TRIGGER** — standby when POS P2 goes live and failover in minutes is wanted; replica when reports pass ~30% CPU; partitioning when one table passes 50M rows. A nightly off-cluster dump with a rehearsed restore is required (§15.8). **Firebase is NOT the system of record** (§2 rule 3 restated). Ian, 2026-10-04, from `docs/discovery/pos-offline-and-data-tiers-proposal.md` §2. | Estimated POS load is under 1.5M rows and ~1 GB a year; through 2028 about 2–4 GB in total. A second database breaks the ledger's single history and puts a cross-database join in every report | Yes — each layer is additive |
-| 275 | 2026-10-04 | ⚠️ **PROVISIONAL — PENDING IAN'S CONFIRMATION. FIREBASE EXIT SCOPE, WORKING DEFAULT (b): OFF FIREBASE AS DATABASE AND AUTH; KEEP ONLY FCM PUSH FOR THE CUSTOMER APP; THE CLOCK TERMINAL MOVES TO THE SAME ON-DEVICE OFFLINE APPROACH AS POS.** Ian named "getting off Firebase" as a driver (row 269) but has **not** picked the scope; this is the orchestrator's working default so planning can proceed. If confirmed: the §5 Lane A/B **rules** stay, but their carrier becomes the device's own outbox posting to the shared backend instead of Firestore; Firebase Auth stops being a credential kind. Until confirmed, nothing beyond P0 is built on either answer (ADR-015 §6). **Would supersede:** rows 2, 4, 10, 11, §5.2's Firestore move, and the target of row 202 (all marked ⚠️ provisionally in place). | Driver (c); one fewer vendor holding business state; the clock and the till should not run two different offline mechanisms | Yes — it is provisional |
+| 275 | 2026-10-04 | ⛔ **SUPERSEDED BY ROW 280 (Ian, 2026-10-05).** ⚠️ **WAS PROVISIONAL — PENDING IAN'S CONFIRMATION. FIREBASE EXIT SCOPE, WORKING DEFAULT (b): OFF FIREBASE AS DATABASE AND AUTH; KEEP ONLY FCM PUSH FOR THE CUSTOMER APP; THE CLOCK TERMINAL MOVES TO THE SAME ON-DEVICE OFFLINE APPROACH AS POS.** Ian named "getting off Firebase" as a driver (row 269) but has **not** picked the scope; this is the orchestrator's working default so planning can proceed. If confirmed: the §5 Lane A/B **rules** stay, but their carrier becomes the device's own outbox posting to the shared backend instead of Firestore; Firebase Auth stops being a credential kind. Until confirmed, nothing beyond P0 is built on either answer (ADR-015 §6). **Would supersede:** rows 2, 4, 10, 11, §5.2's Firestore move, and the target of row 202 (all marked ⚠️ provisionally in place). | Driver (c); one fewer vendor holding business state; the clock and the till should not run two different offline mechanisms | Yes — it is provisional |
 | 276 | 2026-10-04 | ⭐ **POS SELLS OFFLINE FOR 24 HOURS (BASIC ORDERING AND BILLING), PER DEVICE, ON THE TABLET'S OWN STORAGE. WIDENS ROW 77.** Ian, 2026-10-04: *"pos needs to be offline resilient like it can be used in basic billing and order taking for 24hrs"*; *"since we are making pos as apk can we use device storage as temp storage in offline setting?"* Rules (ADR-015 §5): offline, a table is billed only on the device that opened it (other devices send refills and kitchen tickets); the outbox and the receipt sequence live in IndexedDB (SQLite if the soak fails), never localStorage; receipt numbers are `(store, terminal_no, seq)`, continuous and never reset (DEF-587); every offline sale prints paper, and an X-reading slip prints every 4 offline hours; the device RECORDS a sale and the server recomputes and compares (§5.4 rule-1 carve-out); offline PIN sign-in against a device-only verifier (P1). **Acceptance gate: a 24-hour soak on two real tablets, zero loss, zero duplicates.** No LAN hub and no local database per store; the hub is reconsidered at P3 only if two devices must bill one table offline. **Supersedes:** row 77's 10-minute-to-1-hour tolerance and its pre-allocated-block numbering option; §5.3's closed list for POS (entries added at P1 per ADR-015). | Industry standard (Square, Toast): store-and-forward on each device. The real limit is not storage but that two tablets cannot see each other with the internet down; the owner rule handles it without hardware. Per-device continuous numbering matches BIR's per-machine series | Hard after P0 |
 | 277 | 2026-10-04 | **`other` AND `ar_collection` ARE RETIRED AS v2 EXPENSE PAYMENT METHODS (T-367 Amendment A1 FINAL, DEF-054, migration 0182).** Ian, 2026-10-04 (QA1): *"i dont want others as payment now its ambigious"*. v1's 322 `other` rows were all system-written (depreciation 297, amortization 23, disposal 2) and 0 were staff vouchers, which v2 already models natively (T-124, T-125). The QA2/QA3 rows (one rebate, one store credit, 2 online-order-expense docs, 3 manual platform fees) are decided by Ian by hand at the cutover audit, with no tool. Supplier vouchers get their own home: a CAPABILITY-GAPS row (Ian: they *"should have a home now"*). **Supersedes** row 258's split of v1 `other` into rebate/voucher methods and its suspense landing: nothing lands in suspense. | One method, one meaning. The cutover is opening-balance only (rows 83, 105, 109), so no v1 expense document reaches the v2 ledger and an ETL skip rule would protect nothing (`docs/tasks/367-ap-ar-money.md` A1) | Yes — a method can be re-added by migration |
 | 278 | 2026-10-04 | ⛔ **A PUSH TO `main` IS A PRODUCTION DEPLOY.** `ci.yml` runs on push; `deploy.yml` runs on its successful `workflow_run` and ships to `159.223.46.224`. Therefore every read-only precheck for a migration not yet on production runs **BEFORE** the push, never after (`docs/ops/README.md`, Deploy gate). Recorded 2026-10-04 because only the ops README and `deploy.yml`'s header said it; no decision row did. | Ian's T-205 decision to auto-deploy every green push. Row 228 (push only at wrap-up) is the cadence; this row is the consequence: the wrap-up push is the deploy | Yes — `deploy.yml` could be made manual |
+| 279 | 2026-10-05 | **IAN'S RULINGS ON T-316 AND T-375 (Open Questions page, 2026-10-05).** (t316-early-handover **a**) at a float store a handover may take only what verified days owe; today's cash waits for verification — as built in S2. (t316-overspend-refill **transfer**) the office tops an overspent float back up by transfer — as built; sales do not refill it. (t375-q1 **new key**) a new store-scoped POS API key is made on POS's side for v2 and the same value placed on our server; v1's key is not reused (Ian needs the steps; an ops task, blocks linking a store on production, not building). (t375-q2 **income**) POS "charges" post to other income 4500; no store bills a staff service charge through POS. (t375-q3 **a**) every POS v1 refund is treated as paid from the cash drawer; the till count shows it if it went back by another method. (t375-q4) Ian: *"we include vat to final price and for now VAT is only a label the vat remittance computation is handled manually and separately. pos only send out bill not invoice"* — no store is VAT-exclusive; no output-VAT liability is posted from the feed (row 75 stands); T-375's VAT-exclusive refusal stays as a guard that should never fire. | Answers typed on the Open Questions page (row 252) are Ian's rulings. q1–q3 match the recommended defaults already built or specced; q4 confirms row 75 | Yes |
+| 280 | 2026-10-05 | ⭐ **FIREBASE EXIT: COMPLETELY OFF FIREBASE — DATABASE, SIGN-IN, AND PUSH. THE CUSTOMER APP SENDS NO PUSH NOTIFICATIONS; THE CLOCK TERMINAL MOVES TO THE SAME ON-DEVICE OFFLINE APPROACH AS POS. SUPERSEDES ROW 275.** Ian, 2026-10-05 (firebase-exit-scope), answering the option that kept only FCM push: *"no need for this once ready it will just be served — we do not complicate things here; furthermore most customers are assumed to not pay much attention on app while dining, they just use that when ordering and asking for assistance."* Read as: the one thing (b) kept (an "order ready" push) is not wanted, so nothing in Firebase stays. Hosting and file storage follow the same rule ("do not complicate") and move with the apps; their replacement is planning detail for the phase that moves them. Rows 2, 4, 10, 11, §5.2's Firestore move and row 202's target, marked ⚠️ under row 275, are superseded on this answer when the phase that replaces them is planned; nothing beyond P0 changes today. | Driver (c) of row 269; one fewer vendor holding business state; the diner uses the app to order and call for help, not to wait for alerts | Yes |
 
 
 ## 14. Amendment protocol

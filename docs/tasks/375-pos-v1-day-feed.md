@@ -883,6 +883,8 @@ entries reversed. Screenshots.
   board; reports bible row 271's line citation (✎V13).
 
 ## Questions for Ian (Open Questions page)
+> **✎ 2026-10-05 — ALL FOUR ANSWERED (bible row 279).** Q1 **new store-scoped key** (ops step; Ian needs the steps before a production link). Q2 **(a) other income 4500**. Q3 **(a) refunds from the cash drawer**. Q4 **no store is VAT-exclusive; VAT is a label only, remitted manually (row 75)** — the VAT-exclusive refusal stays as a never-firing guard. Defaults built so far all stand; nothing to change.
+
 - **Q1 (high; blocks linking any store on production, not building).** v2 reads POS the way v1 does, over POS's
   key-protected API. Does production (`/srv/shareat-shared/.env.local`) already hold `POS_API_URL` and `POS_API_KEY`?
   If not, a new key is needed: a scoped entry in POS's `POS_EXTERNAL_API_KEYS_JSON` listing the store ids, and the same
