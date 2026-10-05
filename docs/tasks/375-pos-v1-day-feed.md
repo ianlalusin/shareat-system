@@ -1,6 +1,6 @@
 # T-375: POS v1 day feed — sales days derived, locked, never typed
 
-**Status:** APPROVED 2026-10-04 after three independent Opus reviews (✎V, ✎W, ✎Y); S1 SHIPPED `2c9b0f2` (migration 0183); S2 SHIPPED `88bd16d` (tender master + POS v1 method resolver); **S3 SHIPPED `7a33eea` 2026-10-05 (import + derived sales day; 11/11 mutants; FULL integration 5178/5178) and smoked on 9008 with the dev fake POS (typed form on an unlinked store; Import D1 → figures and "Imported from POS"; refund day → Dr 4950 on verify; linked edit refused). On screen not driven: re-import with changed figures (I2) and the not-configured sentence (W1)**; S4 next (0185); **S5 waits for the POS-pull redesign proposal (bible row 281)**; migrations 0183/0185 (S4). Earlier: SPEC WRITTEN 2026-10-04 (Opus planner, plan mode). Amended the same day three times: an independent Opus
+**Status:** APPROVED 2026-10-04 after three independent Opus reviews (✎V, ✎W, ✎Y); S1 SHIPPED `2c9b0f2` (migration 0183); S2 SHIPPED `88bd16d` (tender master + POS v1 method resolver); **S3 SHIPPED `7a33eea` 2026-10-05 (import + derived sales day; 11/11 mutants; FULL integration 5178/5178) and smoked on 9008 with the dev fake POS (typed form on an unlinked store; Import D1 → figures and "Imported from POS"; refund day → Dr 4950 on verify; linked edit refused). On screen not driven: re-import with changed figures (I2) and the not-configured sentence (W1)**; S4 in build (0185); **S5 replaced by S5-lite (bible rows 281-282), APPROVED 2026-10-05 after an independent Opus review (two HIGH holes fixed, ✎S5L-R) and a confirming pass; build note: the ₱0 check re-reads totalSales after the day lock is held**; migrations 0183/0185 (S4). Earlier: SPEC WRITTEN 2026-10-04 (Opus planner, plan mode). Amended the same day three times: an independent Opus
 review (✎V1–✎V13), the orchestrator's per-store ruling (✎V2b), and a second-pass review (✎W1–✎W11). **This text is
 consolidated: every slice, test and table line below already carries the amendments, and the Review log at the end
 says where each one landed.** Not approved; not started. Fixes DEF-586 store by store. Proposes one new section-E defect
@@ -320,7 +320,8 @@ parent's discounts.
     one, so relinking a store never redirects an old day.
   - **Finding `posDayFeedDrift`:** a verified feed day whose latest `sales` feed is newer than its basis and differs in
     the MONEY projection (P, K, D, C, the methods map), not merely the hash. Key `posDayFeedDrift:{salesDayId}`, hard.
-  - **Finding `posDaySoldItemsDrift`:** a FINALIZED pull whose pinned feed is older than a `sold_items` feed for the day
+  - **Finding `posDaySoldItemsDrift`:** a pull with ANY finalized section (✎S5L-R; status `finalized`, or `planned` with a
+    section stamped) whose pinned feed is older than a `sold_items` feed for the day
     that differs in the items projection. Fixed by voiding the pull and pulling again (T-374 S7), never by a correction.
   - **Correction** `postPosCorrection(tx, actor, { salesDayId, feedId, entryDate, reason })`: `authorize
     ('verify_sales_day')`; day `FOR UPDATE`; verified and feed-sourced; the feed is this day's `sales` feed, newer
@@ -747,39 +748,273 @@ the lock error. An unlinked store's typed day still edits. Screenshots.
 
 ---
 
-## S5: usage reads stored sold items
-> ✎ 2026-10-05 (bible row 281): Ian asked for the POS pulls to be **redesigned** for the unified backend, planned with `/research-evaluate-propose`. **Do not build S5 until that proposal is written and approved**; it may change or drop this slice. ✎ 2026-10-05 later: proposal written (`docs/discovery/pos-pull-redesign-proposal.md`) and Ian answered its questions (bible row 282): **S5 becomes S5-lite** — reads the sold items the import already stores, no capture path, no live call, typed days refused (Q-D a), void rule unchanged (Q-C a). **The S5-lite amendment is written in plan mode (Opus) before building.**
+## S5 (S5-lite, ✎ 2026-10-05): usage reads the sold items the import stored
+> ✎ 2026-10-05 (bible row 281): Ian asked for the POS pulls to be **redesigned** for the unified backend, planned with `/research-evaluate-propose`. ✎ 2026-10-05 later: proposal written (`docs/discovery/pos-pull-redesign-proposal.md`) and answered (bible row 282). **This section is the S5-lite amendment, written in plan mode by the Opus planner; it replaces the earlier S5 text entirely.** Rulings honoured: Q-C (a) the void stays as built; Q-D (a) a typed day gets no POS usage pull; no live POS call; no migration (0186 stays free).
+> **Where this section and R9 differ, this section wins.** R9's capture path (`purpose = 'usage'`, a fetch for typed days), the parallel-plan row's file list and the Goal's "usage pull reads the stored POS snapshot" bullet are superseded by the text below; so is I5's "`found` false → a sentence" **for usage only** (✎S5L-R: a stored `found: false` sold-items feed plans empty only on a ₱0 day, below). R10's drift scope is widened to a partly finalized pull (✎S5L-R). Nothing else in R1–R14 or the Invariants changes.
 
-**Goal:** the usage pull plans and finalizes from stored `sold_items` feeds, calling POS with the link's POS store id
-(✎N1 fixed for usage).
+**Goal:** a day's POS usage pull plans and finalizes from the `sold_items` feed that the day's import (or a later S6
+recheck) already stored. Nothing is fetched. A typed day and an unlinked store refuse in a sentence. Finalize, the
+pull void and the permissions are unchanged.
+
+**What the code does today (read at HEAD `9c42734`):**
+- Plan and finalize each call POS live: `rebuildLines` calls `fetchSnapshot` (`packages/domain/src/pos/usage-pull.ts:98-99`),
+  from `buildPlan` (`:187`) and again from `finalizeSections` (`:272`); both default to `fetchPosSoldItemsLive`
+  (`:160`, `:254`).
+- `fetchPosSoldItemsLive` sends the v2 `stores.id` as `?storeId=` (`:70-71`); POS answers `found: false` and the plan is
+  silently empty (`:79`). This is ✎N1. v2 production has never produced a non-empty plan (proposal §6).
+- The import already stores both kinds in one batch: `fetchBoth` (`packages/domain/src/sales-days/import.ts:113-123`)
+  calls POS with the LINK's `pos_store_id` (`:167`), and `insertBatch` writes the `sales` and `sold_items` rows with
+  `purpose 'import'` and that `pos_store_id` (`:200-212`).
+- `posV1Repo.latestForDay(tx, orgId, storeId, businessDate, kind)` already exists, unused (`packages/db/src/repo/pos-v1.ts:275-296`),
+  ordered `fetched_at desc, id desc` (`:293`) and served by `pos_v1_day_feeds_store_day_kind_fetched_idx`
+  (`packages/db/schema/pos-v1.ts:128`). `getFeedById` (`repo/pos-v1.ts:265`).
+- `pos_usage_pulls.pos_v1_day_feed_id` already exists, nullable (`packages/db/schema/pos-mapping.ts:190`, migration 0183),
+  but `pullColumns` does not select it (`packages/db/src/repo/pos-mapping.ts:268-279`) and `insertPull` /
+  `refreshPlannedPull` do not write it (`:329-351`).
+- The day lock is `lockLiveSalesDay` → `getByIdForShare` (`packages/domain/src/sales-days/live-day.ts:15-20`); a re-import
+  holds the same day `FOR UPDATE` (`import.ts:195`) before it inserts its batch (`:200`). The two serialize.
+- Finalize skips a quantity ≤ 0 (`usage-pull.ts:329`) and posts each location in a savepoint (`:340`).
+
+**Decisions (planner):**
+- **"Latest" means** the day's newest stored `sold_items` feed: the row of `pos_v1_day_feeds` with this org, store and
+  business date and `kind = 'sold_items'` that has the greatest `(fetched_at, id)` (`latestForDay`, unchanged). In
+  practice that is the import's row or a later S6 recheck's row: after S5-lite nothing writes `purpose = 'usage'`
+  (the CHECK still allows it, harmlessly; R1). A re-import of an open day adds a newer import row, so "latest" follows
+  it. Feeds are keyed by (store, date), not by sales day, so a replacement day re-imported after a void reads its own
+  newer batch. S6 needs no extra "import or recheck" lookup (proposal §7b's one-liner): `latestForDay` already is it.
+  **Newest fetch, not newest commit (✎S5L-R):** an import's `fetched_at` is the app clock taken right after the fetch
+  returns (`import.ts:168-169`), and a tie falls to the larger uuidv7 `id`. Two concurrent re-imports of one day can
+  therefore leave the day's figures from one fetch while usage pins the other's `sold_items` row. Rare (two people
+  re-importing the same open day at once); no code change.
+- **✎N1 disappears for usage because nothing is fetched.** The only POS call left is the import's (and S6's recheck),
+  which uses the link's (or the basis feed's) POS store id and stores it on the row. `fetchPosSoldItemsLive`
+  (`usage-pull.ts:63-85`) is deleted, and with it the line that sent the v2 uuid.
+- **The live-fetch path is removed, not kept for unlinked stores.** (1) It has never worked in v2 (✎N1), so there is no
+  behaviour to keep. (2) A POS call needs POS's store id, and only the link has one; an unlinked store has none by
+  definition. (3) Every day of an unlinked store is typed (R13), and Q-D refuses typed days. (4) Row 282: no live call.
+  So an unlinked store refuses with R9's sentence. **Effect on production today (told, not asked):** every store is
+  unlinked (no production key yet, row 279), so the v2 POS usage pull refuses on every store with that sentence,
+  where it used to plan an empty day in silence. v1 still records usage for the business until a store is linked.
+- **`SNAPSHOT_MAX_AGE_MS` stays (`usage-pull.ts:88`, `:264-267`), unlike proposal §7b.** The stored feed no longer goes
+  stale, but finalize still rebuilds against CURRENT maps and recipes and posts the confirmed keys at the rebuilt
+  quantities; the hour bounds how far a mapping or recipe change can move a confirmed line. `PLAN_CHANGED` stays.
+  Both keep their existing tests.
+- **Finalize refuses on a newer DIFFERENT feed, not on any newer feed** (R9, ✎W5, kept): a re-import or recheck whose
+  items projection (item key → physical quantity) equals the pinned one posts; one that differs refuses. After
+  finalize, a differing recheck is S6's `posDaySoldItemsDrift`.
+- **The newer-feed check runs under the day lock.** With no HTTP left, both functions take the day lock (`FOR SHARE`) and
+  the pull lock FIRST, then read the feeds. A concurrent re-import (day `FOR UPDATE`) therefore either committed
+  before the read (seen) or waits for the pull to commit. A recheck (S6) does not lock the day; a recheck that lands
+  between the read and the commit is caught by `posDaySoldItemsDrift`, which (✎S5L-R) watches any pull with a finalized
+  section, not only a fully finalized one.
+- **A partly finalized pull never moves its pin (✎S5L-R).** Rebuilding a pull with a finalized section (T-374 S7 audit 1,
+  `usage-pull.ts:195-207`: only unfinalized sections are rewritten) reads the pin from the LOCKED row. Latest = pin, or
+  latest's items projection equals the pin's → the pin is KEPT and the unfinalized sections are rebuilt from the pinned
+  feed. Latest differs (or is unreadable) → refused: re-pinning would leave one pull claiming F3 while its posted
+  section came from F1, and nothing would flag it. A partly finalized pull with no pin (made before S5-lite) is refused
+  too. The fix is the void (T-374 S7) and a fresh build.
+- **A `found: false` sold-items feed plans empty only on a ₱0 day (✎S5L-R, I5).** POS answers `found: false` for a day
+  with no receipts; an empty plan is right only when the day's own `total_sales` is 0. On a day with sales it is the
+  ✎N1 shape again (silent empty usage), so it refuses. The parser stays pure; `buildPlan` makes the call.
+- **A pull made before S5-lite** (`pos_v1_day_feed_id` null) is refused at finalize and fixed by building the plan
+  again. Production holds only empty pulls, if any.
+- **The void (T-374 S7) is unchanged** (`voidPosUsagePull`, `usage-pull.ts:402-445`): it reads no feed. A void frees the
+  date (R11, the partial unique index `pos_usage_pulls_store_day_live_key`), and the next plan reads and pins the
+  latest feed.
+- **Permissions unchanged:** plan `record_stock_movement` (`usage-pull.ts:162`), finalize `finalize_pos_usage_pull`
+  (`:258`), void `void_usage_record` (`:415`). No new capability (I2).
+- **Told, not asked (DEF-595 and POS v1's refunds):** POS v1's sold items count add-on lines only
+  (`POS/src/lib/analytics/sold-items-core.ts:113`), so this pull never depletes what a package (unli) table eats; that
+  stock is measured by counts (DEF-595; fixed at ADR-015 P1/P2, when every menu item carries a depletion rule). **Refunds
+  and voids (✎S5L-R, corrected):** POS drops voided receipts (`sold-items-core.ts:102`) and nets every refund receipt
+  with sign −1 against the sold items of the REFUND's date (`:106-134`). So a refunded item that also sold that day
+  silently reduces that day's usage: an automatic put-back, contrary to Ian's Q-B ruling (bible row 282: a manager or
+  admin decides each refunded item; nothing is restocked automatically). Only when the refunds exceed that day's sales
+  of the item does the quantity go negative; the plan shows it and finalize skips it (`usage-pull.ts:329`). This is an
+  interim limitation of POS v1's report, not fixed here: the next count shows the difference as variance, and P2's
+  pending-restock queue (one decision per refunded or voided receipt line) replaces it.
 
 **BUILDER:**
-- `packages/domain/src/pos/usage-pull.ts` per R9: `rebuildLines` reads items from a feed id (`POS_V1_SOLD_ITEMS_FIELDS`);
-  `buildPlan` pins the day's latest `sold_items` feed, or captures one (`usage`, the link's `pos_store_id`, before any
-  lock); `finalizeSections` re-reads the pinned feed and refuses only on a newer feed with a DIFFERENT items projection.
-  The 4th parameter becomes `fetchSoldItems: FetchPosV1Day` (capture only). `fetchPosSoldItemsLive` deleted.
-- `repo/pos-mapping.ts`: `insertPull` / `refreshPlannedPull` take the feed id; `latestSoldItemsFeed(day)`.
-- `apps/erp/src/app/inventory/pos-usage/{lib,actions,page}.ts(x)`: no live fetch at render; the plan says "From POS's
-  sold items fetched at {time}".
+- `packages/domain/src/pos/v1-sold-items.ts` (new, pure, no I/O). Reads fields only through `POS_V1_SOLD_ITEMS_FIELDS`
+  (`packages/db/src/pos-v1/wire.ts:41-52`, R12):
+  - `soldItemsFromFeed(payload: unknown): { ok: true; items: PosSoldItemInput[] } | { ok: false; raw: string }`.
+    `found === false` → `{ ok: true, items: [], found: false }` (every ok result carries `found`; the ₱0 rule is
+    `buildPlan`'s, not the parser's). Otherwise
+    `items` must be an array; each entry needs a non-empty string item key and a finite JSON **number** physical
+    quantity exact to 3 dp (`quantity()`, `packages/domain/src/stock/quantity.ts:54`; negatives accepted, see above);
+    the name is the item's string name, else the key. Two entries with one key are summed. Anything else →
+    `{ ok: false, raw }` naming the failing field and index. Returns `PosSoldItemInput` (`plan.ts:48`).
+  - `sameItemsProjection(a: readonly PosSoldItemInput[], b: readonly PosSoldItemInput[]): boolean`: true iff both have
+    the same set of item keys with equal quantities (compared with `compareQuantity`); names, order and every other
+    field are ignored.
+- `packages/domain/src/pos/usage-pull.ts`:
+  - Delete `PosSoldItemSnapshot`, `FetchPosSnapshot`, `fetchPosSoldItemsLive` (`:44-85`), the `env` import (`:30`), and
+    the 4th parameter of `buildPlan` (`:160`) and `finalizeSections` (`:254`). `rebuildLines` (`:90-113`) takes
+    `posItems: readonly PosSoldItemInput[]` in place of `fetchSnapshot` and reads only maps and recipes. Rewrite the
+    header's "re-fetches POS live" paragraph (`:9-14`) to "re-reads the pinned stored feed"; T-373 R2's "after the
+    fetch" comments (`:115-119`, `:189`, `:277-279`) say "first, then read".
+  - `buildPlan` order: `authorize('record_stock_movement')` (unchanged) → the day read and its existing refusals
+    (`:164-171`, unchanged) → **the link** (`posV1Repo.getLinkByStore`; none → the unlinked sentence) → **the source**
+    (`legacy_typed` → the typed-day sentence) → the existing live-pull checks (`:173-185`, unchanged) →
+    `lockDayOutcome` → the pull lock and its re-checks (`:195-202`, unchanged) → `latestForDay(…, 'sold_items')`
+    (none → `internalFault`: unreachable, the import writes both kinds, `import.ts:200-212`) → **when the locked pull
+    has a finalized section** (`finalizedSections.length > 0`, `:201`): read the pin from the LOCKED row
+    (`getPullForUpdate`); pin null → the no-pin partly-posted sentence; latest ≠ pin and (latest unreadable or a
+    different items projection) → the partly-posted sentence; nothing written either way; otherwise the feed used
+    below is the PIN and the pin is kept → `soldItemsFromFeed` (refused → the unreadable sentence) → `found: false`
+    and the day's `totalSales` ≠ 0 → the no-items sentence (`found: false` on a ₱0 day → zero lines, `ok`) →
+    `rebuildLines` → `insertPull` / `refreshPlannedPull` with `posV1DayFeedId` = that feed's id → `replacePullLines`
+    (unchanged). The ok outcome gains
+    `soldItemsFeed: { id: string; fetchedAt: Date; purpose: PosV1FeedPurpose }`.
+  - `finalizeSections` order: `getPull` → `authorize('finalize_pos_usage_pull')` → void and `SNAPSHOT_STALE` checks
+    (`:260-267`, unchanged) → the day read → `lockDayOutcome` → the pull lock and void re-check (`:280-282`) →
+    **the pin is read from the LOCKED row** (`getPullForUpdate`, `:280`), never from the unlocked `getPull` (`:256`) →
+    pin null → the rebuild sentence → `getFeedById(pin)`; defence in depth (no mutant claimed): the pinned row must be
+    `kind = 'sold_items'` with the pull's store and the sales day's business date, else `internalFault` →
+    `soldItemsFromFeed(pin)` (refused → the unreadable sentence) → `latestForDay(…, 'sold_items')`; if the latest is
+    not the pinned row: latest unreadable → the unreadable sentence (✎S5L-R: never "no change"), else
+    `!sameItemsProjection(latest, pin)` → the changed sentence; either way nothing posted, no section stamped →
+    the pin's items → `rebuildLines` → **from `PLAN_CHANGED` (`:284`) to
+    the end (`:379`) unchanged.**
+  - Every refusal stays a `{ ok: false, reason }` Outcome (this module's convention). Sentences, word for word
+    (`{Store}` = the store's name; dates via `humanDate`):
+    - unlinked: *"{Store} isn't linked to a POS store yet, so its usage can't be pulled. An admin links it under
+      Settings › POS link."*
+    - typed day (Q-D): *"{Store}'s sales for {d MMM YYYY} were typed in before it was linked to POS, so there are no
+      POS sold items to pull. Record that day's usage by hand under Inventory › Usage & wastage."*
+    - changed: *"POS's sold items for {d MMM YYYY} changed after this plan was built. Build the plan again."*
+    - pre-S5-lite pull: *"This plan was built before usage read POS's stored sold items. Build the plan again."*
+    - partly posted, feed changed (✎S5L-R): *"POS's sold items for {d MMM YYYY} changed after part of this pull was
+      posted. Void the pull and build the day again."*
+    - partly posted, no pin (✎S5L-R): *"Part of this pull was posted before usage read POS's stored sold items. Void
+      the pull and build the day again."*
+    - no items on a day with sales (✎S5L-R, I5): *"POS sent no sold items for {d MMM YYYY}, but the day has ₱{total}
+      in sales, so usage can't be pulled. Tell the office."* (`₱{total}` formatted through `@shareat/core/money`)
+    - unreadable: *"POS's stored sold items for {d MMM YYYY} can't be read, so usage can't be pulled. Tell the
+      office."* (the raw half, logged, names the feed id and `raw`).
+  - `voidPosUsagePull` (`:402-445`): no change.
+- `packages/db/src/repo/pos-mapping.ts`: `pullColumns` (`:268-279`) and `PosUsagePullRow` gain `posV1DayFeedId`;
+  `insertPull` (`:329`) and `refreshPlannedPull` (`:346`) take and write `posV1DayFeedId: string`. No other change.
+- `packages/db/src/repo/pos-v1.ts`: **no change** (`latestForDay`, `getFeedById` are used as they are).
+- `apps/erp/src/app/inventory/pos-usage/lib.ts`: `PullView` gains `soldItemsFeed: { fetchedAt: Date; purpose:
+  PosV1FeedPurpose } | null`, read in `pullView` (`:71-112`) with `posV1Repo.getFeedById`. `buildPlanForDay` (`:39-45`)
+  unchanged (it never passed a fetcher).
+- `apps/erp/src/app/inventory/pos-usage/page.tsx:254-256`: the snapshot line becomes *"Built {time} from POS's sold
+  items fetched {time} (at import)."* or *"… (at a later check)."* for `recheck`, followed by *"A plan older than an
+  hour is refused at finalize."*; with no feed: *"Built before usage read POS's stored sold items — build the plan
+  again before finalizing."* Times via `formatBusinessDateTime`. `actions.ts`: no change.
+- `packages/domain/src/index.ts:98` (`export * from './pos/usage-pull'`): no change; the three deleted names simply stop
+  being exported. `v1-sold-items.ts` is not exported. `pos/sales-pull.ts`'s comment naming `fetchPosSoldItemsLive`
+  is left for S6, which deletes that file.
 
-**TESTER:** `packages/domain/tests/integration/t375-s5-usage-from-feed.test.ts` (new). The existing usage tests
-(`pos-usage-pull`, `t374-s7-void-pos-usage-pull`, `t373-s1-voided-day-writers`, and the apps
-`t373-s1-pos-usage-picker`, `t374-s7-pos-usage-void-action`) link their store and seed `soldItems` through
-`importTestDay` (their typed days would otherwise need a capture); assertions stay. Report each.
+**TESTER (first; builder after):**
+- New: `packages/domain/tests/unit/t375-s5-sold-items.test.ts`, `packages/domain/tests/integration/t375-s5-usage-from-feed.test.ts`,
+  `apps/erp/tests/integration/t375-s5-pos-usage-page.test.ts`, `tests/unit/t375-s5-no-live-usage-fetch.test.ts`, and the
+  helper file `packages/domain/tests/integration/_fixtures/pos-sold-items.ts`:
+  `insertRecheckBatch(tx, { orgId, storeId, businessDate, posStoreId, fetchedBy, soldItems, fetchedAt? })`, which writes
+  a `recheck` batch holding BOTH kinds (✎V11; the `sales` body copied from the day's basis feed) through
+  `posV1Repo.insertBatch`. **`_fixtures/pos-day.ts` is not edited** (S4's tester owns it now; S4 and S5-lite stay
+  file-disjoint); its `linkTestStore` and `importTestDay(…, { soldItems })` are used as they are.
+- Convert (assertions stay; every changed file and assertion reported): `packages/domain/tests/integration/pos-usage-pull.test.ts`,
+  `t374-s7-void-pos-usage-pull.test.ts`; `apps/erp/tests/integration/t373-s1-pos-usage-picker.test.ts`,
+  `t374-s7-pos-usage-void-action.test.ts`; and **only the usage legs** of `t373-s1-voided-day-writers.test.ts` (✎S5L-R:
+  T4 `:318-341`, T5 `:343-382`, T8 `:430-452`, T10's buildPlan leg `:494`, T12 `:507-581`), moved onto a SECOND,
+  LINKED store in that file; its typed-path wastage, withdraw and race legs (T1–T3, T6, T7, T9, T10's wastage leg) stay
+  exactly as they are. Each converted file links its store with `linkTestStore` and makes its day with
+  `importTestDay(…, { soldItems })` in place of `createSalesDay` + an injected snapshot. A leg that changed the snapshot
+  between plan and finalize to make `PLAN_CHANGED` now changes the MAPPING instead (a changed snapshot hits the
+  changed sentence first). A leg that voided the day from inside the injected fetcher (there is no fetcher) is recast
+  as the day voided before the call. `SNAPSHOT_STALE` legs (`pos-usage-pull.test.ts:333-346`,
+  `t374-s7-void-pos-usage-pull.test.ts:757`) stay.
+- `apps/erp/tests/t343-s7-wrapper-refusals.test.ts` mocks `buildPlanForDay` / `finalizeSections`: expected unchanged;
+  report if not.
 
-**Tests:**
-- U1 (red on HEAD): a feed day with sold items {A: 3, B: 2} → plan lines from those; zero fetches; the pull's feed id =
-  the day's `sold_items` feed.
-- U2 (red, ✎W5): plan; then a newer `sold_items` feed with {A: 4} → finalize → the R9 sentence; nothing posted.
-  Control: a newer feed with IDENTICAL items {A: 3, B: 2} → finalize posts. Control: rebuild after the change → posts A 4.
-- U3 (red): a `legacy_typed` day of a linked store → the fetcher receives the LINK's `pos_store_id` (not the v2 uuid);
-  a `usage` feed is stored and pinned. Unlinked store → the R9 sentence.
-- U4: void the pull (T-374 S7) and plan again → reads the latest stored feed, zero fetches.
-- Mutants: pass `storeId` to the fetcher → U3; finalize fetching live → a zero-fetch finalize leg; refuse on any newer
-  feed → U2's identical-items control; skip the check → U2.
+**Tests.** Fixture for U-tests unless stated: a linked store; maps `A` → item Cheese direct ×1, `B` → item Buns direct
+×0.5; day D imported with sold items {A: 3, B: 2} (the import's `sold_items` row = F1); `fetch` stubbed with
+`vi.stubGlobal` to a spy that records calls and throws; `POS_API_URL` unset.
+- SI1 (unit): `{ found: true, items: [{ key a, name 'A', physicalQty 3 }, { key b, no name, physicalQty 2.5 }] }` →
+  `[a 'A' 3, b 'b' 2.5]`. Two entries for `a` (1, 2) → one `a` 3. `physicalQty −2` → accepted as −2 (control for SI3).
+- SI2 (unit): `found: false` → `ok`, `[]`, `found: false`. Control: SI1's result carries `found: true`.
+- SI3 (unit; positive control SI1): refused, each naming its field: payload `null`; `items` not an array; an empty key;
+  `physicalQty` `"3"` (a string); `physicalQty` 1.2345 (not exact to 3 dp).
+- SI4 (unit): `sameItemsProjection` true for {A 3, B 2} vs {B 2, A 3} with different names and billable quantities;
+  false for {A 4, B 2}; false for {A 3} vs {A 3, B 0} (key sets differ).
+- U1 (red on HEAD): `buildPlan` on D → lines direct:A 3, direct:B 1.000; the pull's `pos_v1_day_feed_id` = F1;
+  `soldItemsFeed` = { F1, F1's `fetched_at`, `import` }; the fetch spy recorded **0** calls. `finalizeSections`
+  (direct, both keys) → one usage record at the pull's location, Cheese 3 and Buns 1.000, dated D; 0 fetch calls.
+- U2 (red): a recheck batch for D with {A: 4, B: 2} inserted after F1 (row F2) → `buildPlan` pins F2 and plans A 4.
+  Control: with no recheck, U1's pin is F1.
+- U3 (red, ✎W5): plan on D (pinned F1); then re-import D with {A: 4, B: 2} (row F3) → `finalizeSections` → the changed
+  sentence; 0 usage records; no section stamped. Control 1: re-import with IDENTICAL items {B 2, A 3} (row F3′) →
+  finalize posts Cheese 3. Control 2: after F3, build again (pin = F3, the refresh rewrites the pin) → finalize posts
+  Cheese 4.
+- U4: finalize U1's pull, void it (`voidPosUsagePull`, a manager, a reason) → both records reversed (as built); then a
+  recheck F2 {A 5, B 2} and `buildPlan` → a NEW pull pinned to F2, A 5; 0 fetch calls. The voided pull keeps F1.
+- U5 (red; Q-D): a store with a VERIFIED typed day (created and verified while unlinked, then `linkTestStore`) →
+  `buildPlan` → the typed-day sentence; no pull row. Control: the same store's imported day D′ → plans.
+- U6 (red; R9): an unlinked store's typed open day → the unlinked sentence; no pull row; 0 fetch calls. Control: U1.
+- U7 (red): a planned pull with `pos_v1_day_feed_id` null (made by raw SQL as the test's own fixture: a pre-S5 pull) →
+  `finalizeSections` → the pre-S5-lite sentence; nothing posted. Control: `buildPlan` again → pinned F1 → finalize posts.
+- U8 (red; lock order): plan on open day D (pin F1). Connection B: begin; `reimportSalesDay` with {A: 4, B: 2},
+  uncommitted (it holds D `FOR UPDATE`). Connection A: start `finalizeSections`; wait until `pg_stat_activity` shows A
+  waiting on a lock; commit B → A returns the changed sentence; 0 usage records.
+- U9: a `sold_items` row for D whose `physicalQty` is `"x"` (inserted through `posV1Repo.insertBatch` as a recheck) →
+  `buildPlan` → the unreadable sentence; no pull row. Control: U1.
+- U10 (✎S5L-R, I5): a ₱0 imported day (sales P 0, no methods) whose `sold_items` row is `found: false` → `buildPlan` →
+  `ok`, zero lines, pinned to it. Negative: day D (₱1,100.00 in sales) with a later `found: false` recheck → the
+  no-items sentence naming ₱1,100.00; no pull row.
+- U12 (✎S5L-R, red): plan D (pin F1); finalize Direct (Cheese 3 posted); re-import D with {A: 4, B: 2} (F3); Recipe
+  finalize → the changed sentence; `buildPlan` again → the partly-posted sentence; the pin is still F1; no line
+  rewritten. Positive control: re-import with IDENTICAL items (F3′) → `buildPlan` → `ok`, the pin stays F1 (not F3′),
+  the Direct lines and their usage-record links untouched (T-374 S7 T13's invariant), and Recipe then finalizes.
+  Leg b: a partly finalized pull with a null pin (raw SQL fixture) → the no-pin partly-posted sentence.
+- U13 (✎S5L-R): plan D (pin F1); then a recheck whose `physicalQty` is `"x"` → `finalizeSections` → the unreadable
+  sentence; 0 usage records; no section stamped. Control: a readable identical recheck → finalize posts.
+- U11 (I1, I2): a person without `record_stock_movement` on an UNLINKED store → `AuthorizationError` (not the unlinked
+  sentence); without it on D → `AuthorizationError`, no pull row. With `record_stock_movement` but not
+  `finalize_pos_usage_pull` → finalize ✗; control: the manager posts (U1). Void ✗ without `void_usage_record`
+  stays in the converted `t374-s7-void-pos-usage-pull.test.ts`.
+- W1 (apps, `t375-s5-pos-usage-page.test.ts`): with `fetch` stubbed to a recording spy, `buildPlanAction` on D redirects
+  with "Plan built"; the page for the pull shows *"from POS's sold items fetched"* and *"(at import)"*; after a recheck
+  and rebuild, *"(at a later check)"*; 0 fetch calls throughout. Negative: an unlinked store → the redirect carries the
+  unlinked sentence.
+- G5 (red on HEAD; unit, pure `fs`): `packages/domain/src/pos/usage-pull.ts` contains no `fetch(`, no
+  `@shareat/core/env` import, no `fetchPosV1Day`, no `POS_API_URL`. Positive control: the scanner flags a fixture
+  string `await fetch(` and `import { env } from '@shareat/core/env'`.
 
-**Migration:** none. **Smoke (9008):** `/inventory/pos-usage` on a fake-POS feed day: plan shows the items with the
-fetch time; finalize posts; void and re-plan. Screenshots.
+**Mutants (each killed by the named test):**
+- Plan pins the day's IMPORT feed only (ignores rechecks) → U2.
+- Finalize skips the newer-feed check → U3.
+- Finalize refuses on any newer feed (no projection) → U3 control 1.
+- `refreshPlannedPull` keeps the old pin → U3 control 2.
+- The newer-feed read moved before `lockDayOutcome` → U8.
+- Typed-day check removed → U5 (reaches the `internalFault`, not the sentence).
+- Link check removed → U6 (the typed-day sentence instead of the unlinked one).
+- Link check before `authorize` → U11's first leg.
+- A null pin falls back to `latestForDay` → U7.
+- `found: false` treated as unreadable → SI2, U10's positive leg.
+- `found: false` plans empty whatever the day's sales → U10's negative leg.
+- A rebuild of a partly finalized pull re-pins to latest → U12 (the pin stays F1 in its control).
+- A partly finalized rebuild refuses even on identical items → U12's positive control.
+- An unreadable newer feed at finalize treated as "no change" → U13.
+- Quantities rounded instead of refused → SI3 (1.2345).
+- Projection compares names → SI4's first leg.
+- A live fetch reintroduced in plan or finalize → U1's zero-call legs and G5.
+
+**Migration:** none. Proved not needed: the pin column exists (`schema/pos-mapping.ts:190`, 0183), the feed rows are
+already written by every import (`import.ts:200-212`), the lookup and its index exist (`repo/pos-v1.ts:275`,
+`schema/pos-v1.ts:128`), and no CHECK or trigger changes (`purpose = 'usage'` stays allowed and unwritten). **0186 stays
+free.** Gate: typecheck, unit, and the usage-pull and `t375-*` integration files on a fresh lane DB; the FULL suite is
+not required (no migration), and S5-lite is frozen while S4's full-suite gate runs.
+
+**Smoke (9008, the dev fake POS from S3: `POS_FAKE_ENABLED=1`, `POS_API_URL=http://localhost:9008/api/dev/fake-pos`,
+`apps/erp/dev-fixtures/pos-v1/fake-lipa/`):** with Fake Lipa linked and `item-a` mapped direct, import 2026-10-05
+(`2026-10-05.sold-items.json`: item-a 3). `/inventory/pos-usage` → Build plan → item-a 3 and *"fetched … (at import)"*;
+the dev server log shows **no** `/api/dev/fake-pos` request during Build plan or Finalize. Before finalizing,
+edit the JSON to 4 and Re-import the (open) day; Finalize the old plan → the changed sentence; Build again → 4;
+Finalize direct → one usage record of 4. Void the pull → Build again → a new pull from the newest feed. Set
+`POS_FAKE_ENABLED=0`: Build plan on an imported day still works (nothing is fetched). An unlinked store's typed day →
+the unlinked sentence. Screenshots.
 
 ---
 
@@ -930,3 +1165,5 @@ entries reversed. Screenshots.
 | ✎Y3 | K12 asserts 0 rows; NULL-org guard is defence in depth, no mutant | R6, S4 K12 |
 | ✎Y4 | `FOR KEY SHARE` kept as defence in depth; why the trigger cannot backstop; no mutant claimed | R13, S1 L5, S3 mutants |
 | ✎Y-minor | fixture owned by the tester; K10 links by raw SQL; explicit REVOKE in 0183; rounding-band limit | plan table, S4 K10, S1 builder, R4 |
+| ✎S5L | S5 replaced by S5-lite (rows 281/282): usage reads the latest stored `sold_items` feed (import or recheck), pinned; nothing fetched (live path deleted, ✎N1 gone for usage); typed day and unlinked store refused; finalize refuses only a newer DIFFERENT feed, read under the day lock; `SNAPSHOT_MAX_AGE_MS` and `PLAN_CHANGED` kept; void and permissions unchanged; no migration (0186 free); DEF-595 and later-day refunds told | S5 (supersedes R9, the plan-table S5 row and the Goal's usage bullet where they differ) |
+| ✎S5L-R | Independent Opus review of S5-lite (APPROVE WITH CHANGES): (1) a partly finalized pull never re-pins; refuse on a changed feed (U12, mutant); R10 drift widened to any finalized section; (2) `found: false` plans empty only on a ₱0 day, else refused (U10 recast; I5 named in the supersede list); (3) an unreadable newer feed at finalize refuses (U13); (4) pin read from the locked row, pinned row's kind/store/date asserted (internalFault, no mutant); (5) only t373-s1's usage legs converted, onto a second linked store; (6) refunds note corrected: POS nets refunds against the refund date's sales, an automatic put-back contrary to Q-B, interim, caught by counts; (7) "latest" = newest fetch (app clock, uuidv7 tie), concurrent re-import caveat | S5 (Decisions, BUILDER, TESTER, Tests, Mutants), R10 |
