@@ -2,7 +2,8 @@
  * Server-only reads for the daily POS usage pull screen — T-177.
  */
 import { eq, inArray } from 'drizzle-orm';
-import { posMappingRepo, salesDaysRepo, schema, stockUsageRepo } from '@shareat/db';
+import { posMappingRepo, posV1Repo, salesDaysRepo, schema, stockUsageRepo } from '@shareat/db';
+import type { PosV1FeedPurpose } from '@shareat/db/schema';
 import { buildPlan } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
@@ -60,6 +61,8 @@ export interface PullView {
   readonly status: string;
   readonly salesDayId: string;
   readonly snapshotTakenAt: Date;
+  /** T-375 S5: the stored sold-items feed the plan was built from; null on a pull made before S5-lite. */
+  readonly soldItemsFeed: { readonly fetchedAt: Date; readonly purpose: PosV1FeedPurpose } | null;
   readonly directFinalizedAt: Date | null;
   readonly recipeFinalizedAt: Date | null;
   readonly orphanFinalizedAt: Date | null;
@@ -73,6 +76,7 @@ export async function pullView(orgId: string, pullId: string): Promise<PullView 
     const pull = await posMappingRepo.getPull(tx, pullId);
     if (!pull) return null;
     const lines = await posMappingRepo.listPullLines(tx, pullId);
+    const feed = pull.posV1DayFeedId ? await posV1Repo.getFeedById(tx, orgId, pull.posV1DayFeedId) : undefined;
 
     const itemIds = [...new Set(lines.map((l) => l.itemId).filter((v): v is string => !!v))];
     const locationIds = [...new Set(lines.map((l) => l.locationId).filter((v): v is string => !!v))];
@@ -101,6 +105,7 @@ export async function pullView(orgId: string, pullId: string): Promise<PullView 
       status: pull.status,
       salesDayId: pull.salesDayId,
       snapshotTakenAt: pull.snapshotTakenAt,
+      soldItemsFeed: feed ? { fetchedAt: feed.fetchedAt, purpose: feed.purpose } : null,
       directFinalizedAt: pull.directFinalizedAt,
       recipeFinalizedAt: pull.recipeFinalizedAt,
       orphanFinalizedAt: pull.orphanFinalizedAt,

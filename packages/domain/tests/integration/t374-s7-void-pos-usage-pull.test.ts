@@ -21,7 +21,9 @@ import { sql as dsql } from 'drizzle-orm';
  *    (the same latitude T-373 S1's T12 gave R7).
  *
  * ## Fixture
- * `pos-usage-pull.test.ts` (an injected `fetchSnapshot`, never the live POS) and
+ * T-375 S5 (S5-lite): the store is LINKED to POS and each day is IMPORTED (`importTestDay`), so `buildPlan` /
+ * `finalizeSections` read the stored `sold_items` feed; there is no injected snapshot and no live POS call.
+ * `pos-usage-pull.test.ts` and
  * `t373-s1-voided-day-writers.test.ts` (fresh org per test, the gated two-connection harness).
  * Two meat items (5110 / 1310) in two operating rooms, so a finalized pull makes TWO usage records, one per room.
  * The sales day is in a past month (D); today's month is created beside it, so "the sales day's month"
@@ -42,6 +44,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import * as D from '@shareat/domain';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
+import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
 import { closedStockPeriodSentence } from '../../src/stock/period-guard';
 import { humanDate } from '../../src/shared/refusal-leaf';
 import type { LocationLike } from '../../src/stock-locations/rules';
@@ -170,6 +173,12 @@ async function fixture(hint: string) {
     insert into sales_channels (org_id, store_id, name, is_remitted_daily, wastage_type_mode)
     values (${orgId}, ${storeId}, 'Walk-in', true, 'tracked') returning id`;
   const walkIn = ch!.id;
+  // T-375 S5: linked to POS, with the tenders D1's methods resolve to.
+  const [gcash] = await sql<{ id: string }[]>`
+    insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+    values (${orgId}, ${storeId}, 'GCash - Lipa', 'ewallet', '1140', 'cashier') returning id`;
+  await linkTestStore(sql, { orgId, storeId, channelId: walkIn, createdBy: managerId });
+  await seedTestTenders(sql, { orgId, storeId, walletAccountId: gcash!.id });
 
   const [type] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${orgId}, 'STK', 'Stockroom') returning id`;
   const mkRoom = async (c: string, name: string, isDefault: boolean) =>
@@ -218,26 +227,22 @@ async function fixture(hint: string) {
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
 /** cheese 4 (kitchen), rice 3 (display), plus an unmapped item so the orphan section is real. */
-const snap: D.FetchPosSnapshot = async () => [
-  { posItemKey: 'cheese', posItemName: 'Cheese', physicalQty: '4' },
-  { posItemKey: 'rice', posItemName: 'Rice', physicalQty: '3' },
-  { posItemKey: 'mystery', posItemName: 'Mystery', physicalQty: '1' },
+const SOLD = [
+  { key: 'cheese', name: 'Cheese', physicalQty: 4 },
+  { key: 'rice', name: 'Rice', physicalQty: 3 },
+  { key: 'mystery', name: 'Mystery', physicalQty: 1 },
 ];
 
+/** A day IMPORTED from POS (its `sold_items` feed is what the plan reads); was a typed `createSalesDay`. */
 async function mkDay(f: Fixture, date: string, opts: { verify?: boolean } = {}): Promise<string> {
-  const { id } = await asOrg(f.orgId, (tx) =>
-    D.createSalesDay(tx, f.manager, {
-      storeId: f.storeId, businessDate: date, totalSales: '1000.00', unliSales: '1000.00', alaCarteSales: '0.00',
-      cashCollected: '1000.00', channels: [{ channelId: f.walkIn, amount: '1000.00' }],
-    }),
-  );
+  const { id } = await asOrg(f.orgId, (tx) => importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: date, soldItems: SOLD }));
   if (opts.verify) await asOrg(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, id));
   return id;
 }
 const plan = (f: Fixture, salesDayId: string, who: Actor = f.manager) =>
-  asOrg(f.orgId, (tx) => D.buildPlan(tx, who, { orgId: f.orgId, storeId: f.storeId, salesDayId, locationId: f.kitchen }, snap));
+  asOrg(f.orgId, (tx) => D.buildPlan(tx, who, { orgId: f.orgId, storeId: f.storeId, salesDayId, locationId: f.kitchen }));
 const finalize = (f: Fixture, pullId: string, keys: string[], sections: ('direct' | 'recipe' | 'orphan')[] = ['direct', 'recipe', 'orphan']) =>
-  asOrg(f.orgId, (tx) => D.finalizeSections(tx, f.manager, { pullId, sections, confirmedKeys: keys }, snap));
+  asOrg(f.orgId, (tx) => D.finalizeSections(tx, f.manager, { pullId, sections, confirmedKeys: keys }));
 
 /** A pull on a fresh day. `all` finalizes every section (pull -> finalized); `direct` only the direct one (pull stays planned). */
 async function pulled(f: Fixture, mode: 'none' | 'direct' | 'all', opts: { date?: string; verify?: boolean } = {}) {
@@ -700,7 +705,7 @@ describe('T10 - A voids the pull (uncommitted), B finalizes the same pull', () =
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
       (tx) => voidFn()(tx, f.manager, { pullId: p.pullId, reason: REASON }),
-      (tx) => D.finalizeSections(tx, f.manager, { pullId: p.pullId, sections: ['direct'], confirmedKeys: p.keys }, snap),
+      (tx) => D.finalizeSections(tx, f.manager, { pullId: p.pullId, sections: ['direct'], confirmedKeys: p.keys }),
       ROW_LOCK,
     );
     expect(aResult.status, aResult.status === 'rejected' ? String((aResult.reason as Error).message) : '').toBe('fulfilled');

@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./schema/index.ts",
+    "./pos-v1/wire": "./src/pos-v1/wire.ts",
     "./client": "./src/client.ts"
   },
   "scripts": {

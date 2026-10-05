@@ -7,6 +7,7 @@
       "@shareat/core": ["../../packages/core/src/index.ts"],
       "@shareat/core/*": ["../../packages/core/src/*"],
       "@shareat/db": ["../../packages/db/src/index.ts"],
+      "@shareat/db/pos-v1/wire": ["../../packages/db/src/pos-v1/wire.ts"],
       "@shareat/db/schema": ["../../packages/db/schema/index.ts"],
       "@shareat/db/client": ["../../packages/db/src/client.ts"],
       "@shareat/domain/money-lines": ["../../packages/domain/src/shared/money-lines.ts"],

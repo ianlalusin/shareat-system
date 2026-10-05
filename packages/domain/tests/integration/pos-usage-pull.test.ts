@@ -1,30 +1,31 @@
 import { config } from 'dotenv';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
   buildPlan,
-  createSalesDay,
   decideMapRequest,
   finalizeSections,
   requestMap,
   upsertPosItemMap,
-  type FetchPosSnapshot,
 } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import type { LocationLike } from '../../src/stock-locations/rules';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
+import type { PosV1SoldItemInput } from '../../../db/src/pos-v1/fixtures';
 
 /**
  * T-177 — buildPlan/finalizeSections, plus the item-map/request workflow they depend on.
  *
- * ⭐ `fetchSnapshot` is injected on every call — never the real `fetchPosSoldItemsLive` — so this
- * suite runs with no network access and no live POS credentials, per §9.3 (integration tests run
- * against real Postgres, never a mock of Postgres itself — the HTTP boundary is a different axis).
+ * ⭐ T-375 S5 (S5-lite): usage no longer fetches POS at all. Each day is IMPORTED from the stub fetchers
+ * (`importTestDay(…, { soldItems })`) on a store LINKED to POS, and `buildPlan` / `finalizeSections` read the
+ * `sold_items` feed the import stored. `fetch` is a spy that throws, so any live call is a red test, and the suite
+ * still runs with no network and no POS credentials (§9.3).
  */
 config({ path: '.env.local' });
 
@@ -47,7 +48,7 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   });
 }
 
-let orgA: string, storeA: string, staffId: string, managerId: string;
+let orgA: string, storeA: string, staffId: string, managerId: string, walkInA: string;
 let kitchen: string, display: string, stockroom: string;
 let itemCoke: string, itemCheese: string, itemSauce: string, itemMeat: string;
 let recipeId: string;
@@ -90,14 +91,21 @@ async function stockUp(itemId: string, loc: string, qty: string, cost: string, d
   );
 }
 
-async function makeSalesDay(businessDate: string): Promise<string> {
-  const { id } = await asOrg(orgA, (tx) => createSalesDay(tx, staffActor, { storeId: storeA, businessDate, totalSales: '0', unliSales: '0', alaCarteSales: '0' }));
-  return id;
+/** A PHP 0 day with no receipts: POS answers `found: false` for it, and an empty plan is right only then (S5 I5). */
+const ZERO_FIGURES = { paidTotal: 0, receiptCount: 0, packageOnly: 0, discounts: 0, charges: 0, methods: {} };
+
+/** The sold items of a day, in the shape the test payload builder takes. Was the injected live-POS snapshot. */
+function sold(items: { posItemKey: string; posItemName: string; physicalQty: string }[]): PosV1SoldItemInput[] {
+  return items.map((i) => ({ key: i.posItemKey, name: i.posItemName, physicalQty: Number(i.physicalQty) }));
 }
 
-/** A canned live-POS response — no network, no credentials. */
-function snapshot(items: { posItemKey: string; posItemName: string; physicalQty: string }[]): FetchPosSnapshot {
-  return async () => items;
+/** A day IMPORTED from POS on the LINKED store: its `sold_items` feed is what the usage plan reads. An empty list is a
+ *  PHP 0 day (`found: false`), because a day with sales and no sold items is refused. */
+async function makeSalesDay(businessDate: string, soldItems: PosV1SoldItemInput[]): Promise<string> {
+  const { id } = await asOrg(orgA, (tx) =>
+    importTestDay(tx, staffActor, { storeId: storeA, businessDate, soldItems, ...(soldItems.length === 0 ? { figures: ZERO_FIGURES } : {}) }),
+  );
+  return id;
 }
 
 async function freezeKitchen(): Promise<string> {
@@ -108,7 +116,16 @@ async function freezeKitchen(): Promise<string> {
   return s!.id;
 }
 
+const fetchSpy = vi.fn(async (..._args: unknown[]) => {
+  throw new Error('LIVE POS FETCH: usage must read the stored feed, never call POS');
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 beforeEach(async () => {
+  fetchSpy.mockClear();
+  vi.stubGlobal('fetch', fetchSpy);
   await sql`
     truncate table pos_usage_pull_lines, pos_usage_pulls, pos_map_requests, pos_item_maps,
       production_record_lines, production_records, production_recipe_lines, production_recipes,
@@ -159,6 +176,16 @@ beforeEach(async () => {
   await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgA}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') m`;
   await seedChartOfAccounts(sql, orgA);
 
+  // T-375 S5: the store is LINKED to POS, with the tenders D1's methods resolve to; days are imported, never typed.
+  const [ch] = await sql<{ id: string }[]>`
+    insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${orgA}, ${storeA}, 'Walk-in', true) returning id`;
+  walkInA = ch!.id;
+  const [gcash] = await sql<{ id: string }[]>`
+    insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+    values (${orgA}, ${storeA}, 'GCash - A One', 'ewallet', '1140', 'cashier') returning id`;
+  await linkTestStore(sql, { orgId: orgA, storeId: storeA, channelId: walkInA, createdBy: managerId });
+  await seedTestTenders(sql, { orgId: orgA, storeId: storeA, walletAccountId: gcash!.id });
+
   const [staffEmployment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
     values (${orgA}, ${storeA}, ${staffId}, 'SE-001', 'regular', '2025-01-01')
@@ -177,19 +204,18 @@ afterAll(async () => {
 describe('T-177 — 1. physical quantity: POS already nets sold+comped-voided, never recomputed', () => {
   it('⭐ physicalQty 11 (from 10 sold, 2 comped, 1 voided) → 11 consumed, not 10 and not 12', async () => {
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
-    const dayId = await makeSalesDay('2026-08-20');
+    const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]));
     await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1',
     }));
 
-    const fetchSnapshot = snapshot([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]);
-    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
     expect(plan.lines.find((l) => l.posItemKey === 'coke')?.quantity).toBe('11.000');
 
     const result = await asOrg(orgA, (tx) =>
-      finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [plan.lines[0]!.key] }, fetchSnapshot),
+      finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [plan.lines[0]!.key] }),
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -201,13 +227,12 @@ describe('T-177 — 1. physical quantity: POS already nets sold+comped-voided, n
 describe('T-177 — 2. a recipe map explodes; an unconvertible unit blocks that line, not the pull', () => {
   it('cheese line converts and finalizes; sauce line is blocked and never offered as confirmable', async () => {
     await stockUp(itemCheese, kitchen, '10', '50.0000', '2026-08-01');
-    const dayId = await makeSalesDay('2026-08-20');
+    const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'samgyup', posItemName: 'Samgyup Box', physicalQty: '5' }]));
     await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'samgyup', posItemName: 'Samgyup Box', mode: 'recipe', recipeId,
     }));
 
-    const fetchSnapshot = snapshot([{ posItemKey: 'samgyup', posItemName: 'Samgyup Box', physicalQty: '5' }]);
-    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
     expect(plan.lines).toHaveLength(2);
@@ -218,7 +243,7 @@ describe('T-177 — 2. a recipe map explodes; an unconvertible unit blocks that 
 
     // Only the cheese key is confirmable/confirmed — the sauce line was never offered.
     const result = await asOrg(orgA, (tx) =>
-      finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['recipe'], confirmedKeys: [cheeseLine.key] }, fetchSnapshot),
+      finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['recipe'], confirmedKeys: [cheeseLine.key] }),
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -230,12 +255,11 @@ describe('T-177 — 2. a recipe map explodes; an unconvertible unit blocks that 
 
 describe('T-177 — 3. a no_stock map consumes nothing and does not appear in the orphan section', () => {
   it('produces no plan line at all', async () => {
-    const dayId = await makeSalesDay('2026-08-20');
+    const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'delivery-fee', posItemName: 'Delivery Fee', physicalQty: '3' }]));
     await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'delivery-fee', posItemName: 'Delivery Fee', mode: 'no_stock',
     }));
-    const fetchSnapshot = snapshot([{ posItemKey: 'delivery-fee', posItemName: 'Delivery Fee', physicalQty: '3' }]);
-    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
     expect(plan.lines).toHaveLength(0);
@@ -244,9 +268,8 @@ describe('T-177 — 3. a no_stock map consumes nothing and does not appear in th
 
 describe('T-177 — 4. an unmapped item is an orphan; request/approve/reject workflow', () => {
   it('requesting writes a request and moves no stock; approving silences it; rejecting returns it to unmapped', async () => {
-    const dayId = await makeSalesDay('2026-08-20');
-    const fetchSnapshot = snapshot([{ posItemKey: 'mystery', posItemName: 'Mystery Item', physicalQty: '2' }]);
-    const plan1 = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'mystery', posItemName: 'Mystery Item', physicalQty: '2' }]));
+    const plan1 = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan1.ok).toBe(true);
     if (!plan1.ok) return;
     expect(plan1.lines[0]).toMatchObject({ section: 'orphan', posItemKey: 'mystery' });
@@ -263,22 +286,21 @@ describe('T-177 — 4. an unmapped item is an orphan; request/approve/reject wor
     expect(decided.ok).toBe(true);
 
     // Approving silences it: re-planning no longer shows it as an orphan.
-    const plan2 = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const plan2 = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan2.ok).toBe(true);
     if (!plan2.ok) return;
     expect(plan2.lines).toHaveLength(0);
   });
 
   it('rejecting returns the item to unmapped — it reappears as an orphan', async () => {
-    const dayId = await makeSalesDay('2026-08-20');
-    const fetchSnapshot = snapshot([{ posItemKey: 'mystery2', posItemName: 'Mystery Item 2', physicalQty: '1' }]);
+    const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'mystery2', posItemName: 'Mystery Item 2', physicalQty: '1' }]));
     const req = await asOrg(orgA, (tx) => requestMap(tx, staffActor, { orgId: orgA, storeId: storeA, posItemKey: 'mystery2', posItemName: 'Mystery Item 2' }));
     expect(req.ok).toBe(true);
     if (!req.ok) return;
     const decided = await asOrg(orgA, (tx) => decideMapRequest(tx, managerActor, { requestId: req.requestId, decision: 'rejected' }));
     expect(decided.ok).toBe(true);
 
-    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
     expect(plan.lines[0]).toMatchObject({ section: 'orphan', posItemKey: 'mystery2' });
@@ -286,23 +308,27 @@ describe('T-177 — 4. an unmapped item is an orphan; request/approve/reject wor
 });
 
 describe('T-177 — 5/6. PLAN_CHANGED: the confirm-what-you-saw write contract', () => {
-  it('⭐ mutating the underlying POS data between plan and finalize refuses the finalize, and nothing is written', async () => {
+  it('⭐ changing the MAPPING between plan and finalize refuses the finalize, and nothing is written', async () => {
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
-    const dayId = await makeSalesDay('2026-08-20');
+    const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]));
     await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1',
     }));
 
     const plan = await asOrg(orgA, (tx) =>
-      buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, snapshot([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }])),
+      buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }),
     );
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
     const confirmedKey = plan.lines[0]!.key;
 
-    // Between plan and finalize, the POS item stops selling entirely (e.g. every receipt voided).
-    const staleFetch = snapshot([]);
-    const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [confirmedKey] }, staleFetch));
+    // T-375 S5: usage reads a STORED feed, so the POS data cannot change under a plan (a changed feed hits the
+    // "changed" sentence first, U3). What can still move is the mapping: coke stops being a stock item, so the
+    // rebuild no longer produces the confirmed key.
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
+      orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'no_stock',
+    }));
+    const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [confirmedKey] }));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toMatch(/PLAN_CHANGED/);
@@ -312,17 +338,16 @@ describe('T-177 — 5/6. PLAN_CHANGED: the confirm-what-you-saw write contract',
   it('⭐ a rebuild key absent from the confirmed list is not written — a naive implementation passes only the other direction', async () => {
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
     await stockUp(itemCheese, kitchen, '10', '50.0000', '2026-08-01');
-    const dayId = await makeSalesDay('2026-08-20');
+    const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]));
     await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1',
     }));
-    const fetchSnapshot = snapshot([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]);
-    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
 
     // Confirm NOTHING — the client saw the plan but ticked no boxes.
-    const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [] }, fetchSnapshot));
+    const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [] }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.sections[0]).toMatchObject({ ok: true, postedLineCount: 0 });
@@ -332,15 +357,14 @@ describe('T-177 — 5/6. PLAN_CHANGED: the confirm-what-you-saw write contract',
 
 describe('T-177 — 7. SNAPSHOT_STALE: a 61-minute-old snapshot is refused', () => {
   it('refuses finalize outright, before any live re-fetch', async () => {
-    const dayId = await makeSalesDay('2026-08-20');
-    const fetchSnapshot = snapshot([]);
-    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const dayId = await makeSalesDay('2026-08-20', sold([]));
+    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
 
     await sql`update pos_usage_pulls set snapshot_taken_at = now() - interval '61 minutes' where id = ${plan.pullId}`;
 
-    const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [] }, fetchSnapshot));
+    const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [] }));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toMatch(/SNAPSHOT_STALE/);
@@ -351,21 +375,20 @@ describe('T-177 — 8. finalizing one section leaves the others open; a second f
   it('finalizing direct does not touch recipe/orphan; finalizing direct again is refused', async () => {
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
     await stockUp(itemCheese, kitchen, '10', '50.0000', '2026-08-01');
-    const dayId = await makeSalesDay('2026-08-20');
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }));
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'samgyup', posItemName: 'Samgyup Box', mode: 'recipe', recipeId }));
-
-    const fetchSnapshot = snapshot([
+    const dayId = await makeSalesDay('2026-08-20', sold([
       { posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' },
       { posItemKey: 'samgyup', posItemName: 'Samgyup Box', physicalQty: '5' },
       { posItemKey: 'mystery', posItemName: 'Mystery Item', physicalQty: '1' },
-    ]);
-    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    ]));
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }));
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'samgyup', posItemName: 'Samgyup Box', mode: 'recipe', recipeId }));
+
+    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
     const directKey = plan.lines.find((l) => l.section === 'direct')!.key;
 
-    const first = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [directKey] }, fetchSnapshot));
+    const first = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [directKey] }));
     expect(first.ok).toBe(true);
     if (!first.ok) return;
     expect(first.sections[0]!.ok).toBe(true);
@@ -378,7 +401,7 @@ describe('T-177 — 8. finalizing one section leaves the others open; a second f
     expect(row!.orphan).toBeNull();
     expect(row!.status).toBe('planned');
 
-    const second = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [directKey] }, fetchSnapshot));
+    const second = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [directKey] }));
     expect(second.ok).toBe(true);
     if (!second.ok) return;
     expect(second.sections[0]).toMatchObject({ ok: false, reason: expect.stringMatching(/already finalized/) });
@@ -390,14 +413,13 @@ describe('T-177 — 8. finalizing one section leaves the others open; a second f
 describe('T-177 — 9. finalizing posts through T-164 — cost asserted', () => {
   it('raw_material -> food -> 5100, FIFO cost = 11 @ 10.00', async () => {
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
-    const dayId = await makeSalesDay('2026-08-20');
+    const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]));
     await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }));
-    const fetchSnapshot = snapshot([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]);
-    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
 
-    const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [plan.lines[0]!.key] }, fetchSnapshot));
+    const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [plan.lines[0]!.key] }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -415,23 +437,22 @@ describe('T-177 — 10. a frozen location refuses its lines; the rest of the pul
   it('kitchen frozen, display not — the display line posts, the kitchen line stays unfinalized', async () => {
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
     await stockUp(itemCheese, display, '10', '50.0000', '2026-08-01');
-    const dayId = await makeSalesDay('2026-08-20');
+    const dayId = await makeSalesDay('2026-08-20', sold([
+      { posItemKey: 'coke', posItemName: 'Coke', physicalQty: '5' },
+      { posItemKey: 'cheese-direct', posItemName: 'Cheese Direct', physicalQty: '2' },
+    ]));
     // Coke resolves to kitchen (no override); cheese-as-direct resolves to display (its own override).
     await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }));
     await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'cheese-direct', posItemName: 'Cheese Direct', mode: 'direct', itemId: itemCheese, quantityPerSale: '1', locationId: display }));
 
     await freezeKitchen();
 
-    const fetchSnapshot = snapshot([
-      { posItemKey: 'coke', posItemName: 'Coke', physicalQty: '5' },
-      { posItemKey: 'cheese-direct', posItemName: 'Cheese Direct', physicalQty: '2' },
-    ]);
-    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
     const keys = plan.lines.map((l) => l.key);
 
-    const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: keys }, fetchSnapshot));
+    const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: keys }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.sections[0]).toMatchObject({ ok: true, postedLineCount: 1, blockedLineCount: 1 });
@@ -444,19 +465,18 @@ describe('T-177 — 10. a frozen location refuses its lines; the rest of the pul
 describe('T-177 — 11. ⭐ meat maps and pulls normally — the carve-out is gone (§4)', () => {
   it('a meat_slab item maps direct and finalizes exactly like any other kind', async () => {
     await stockUp(itemMeat, kitchen, '20', '300.0000', '2026-08-01');
-    const dayId = await makeSalesDay('2026-08-20');
+    const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'pork-skewers', posItemName: 'Pork Skewers', physicalQty: '10' }]));
     const upserted = await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'pork-skewers', posItemName: 'Pork Skewers', mode: 'direct', itemId: itemMeat, quantityPerSale: '0.5',
     }));
     expect(upserted.ok).toBe(true);
 
-    const fetchSnapshot = snapshot([{ posItemKey: 'pork-skewers', posItemName: 'Pork Skewers', physicalQty: '10' }]);
-    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
     expect(plan.lines[0]).toMatchObject({ itemId: itemMeat, quantity: '5.000', blocked: false });
 
-    const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [plan.lines[0]!.key] }, fetchSnapshot));
+    const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [plan.lines[0]!.key] }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.sections[0]).toMatchObject({ ok: true, postedLineCount: 1 });
@@ -505,32 +525,30 @@ describe('T-177 — the authorize() boundary', () => {
   });
 
   it('⛔ staff may NOT finalize_pos_usage_pull', async () => {
-    const dayId = await makeSalesDay('2026-08-20');
-    const fetchSnapshot = snapshot([]);
-    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const dayId = await makeSalesDay('2026-08-20', sold([]));
+    const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
     await expect(
-      asOrg(orgA, (tx) => finalizeSections(tx, staffActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [] }, fetchSnapshot)),
+      asOrg(orgA, (tx) => finalizeSections(tx, staffActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [] })),
     ).rejects.toThrow(/may not 'finalize_pos_usage_pull'/);
   });
 });
 
 describe('T-177 invariant 12 — one live pull per (store, sales day)', () => {
   it('a second plan for a day already planned refreshes it rather than erroring, but a FINALIZED day refuses a new one', async () => {
-    const dayId = await makeSalesDay('2026-08-20');
-    const fetchSnapshot = snapshot([]);
-    const plan1 = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const dayId = await makeSalesDay('2026-08-20', sold([]));
+    const plan1 = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan1.ok).toBe(true);
     if (!plan1.ok) return;
-    const plan2 = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: display }, fetchSnapshot));
+    const plan2 = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: display }));
     expect(plan2.ok).toBe(true);
     if (!plan2.ok) return;
     expect(plan2.pullId).toBe(plan1.pullId);
 
-    await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan1.pullId, sections: ['direct', 'recipe', 'orphan'], confirmedKeys: [] }, fetchSnapshot));
+    await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan1.pullId, sections: ['direct', 'recipe', 'orphan'], confirmedKeys: [] }));
 
-    const plan3 = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }, fetchSnapshot));
+    const plan3 = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan3.ok).toBe(false);
   });
 });

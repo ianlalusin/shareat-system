@@ -1,6 +1,6 @@
 # T-375: POS v1 day feed — sales days derived, locked, never typed
 
-**Status:** APPROVED 2026-10-04 after three independent Opus reviews (✎V, ✎W, ✎Y); S1 SHIPPED `2c9b0f2` (migration 0183); S2 SHIPPED `88bd16d` (tender master + POS v1 method resolver); **S3 SHIPPED `7a33eea` 2026-10-05 (import + derived sales day; 11/11 mutants; FULL integration 5178/5178) and smoked on 9008 with the dev fake POS (typed form on an unlinked store; Import D1 → figures and "Imported from POS"; refund day → Dr 4950 on verify; linked edit refused). On screen not driven: re-import with changed figures (I2) and the not-configured sentence (W1)**; S4 in build (0185); **S5 replaced by S5-lite (bible rows 281-282), APPROVED 2026-10-05 after an independent Opus review (two HIGH holes fixed, ✎S5L-R) and a confirming pass; build note: the ₱0 check re-reads totalSales after the day lock is held**; migrations 0183/0185 (S4). Earlier: SPEC WRITTEN 2026-10-04 (Opus planner, plan mode). Amended the same day three times: an independent Opus
+**Status:** APPROVED 2026-10-04 after three independent Opus reviews (✎V, ✎W, ✎Y); S1 SHIPPED `2c9b0f2` (migration 0183); S2 SHIPPED `88bd16d` (tender master + POS v1 method resolver); **S3 SHIPPED `7a33eea` 2026-10-05 (import + derived sales day; 11/11 mutants; FULL integration 5178/5178) and smoked on 9008 with the dev fake POS (typed form on an unlinked store; Import D1 → figures and "Imported from POS"; refund day → Dr 4950 on verify; linked edit refused). On screen not driven: re-import with changed figures (I2) and the not-configured sentence (W1)**; **S4 SHIPPED `7de5232` (0185, the figure lock; 17/17 mutants)**; **S5-lite SHIPPED (stored sold items, no live POS call; 17/17 spec mutants; four audit-added race guards X1-X4 are review-verified only, no test can force the interleaving)**; S6 next. S5 replaced by S5-lite (bible rows 281-282), APPROVED 2026-10-05 after an independent Opus review (two HIGH holes fixed, ✎S5L-R) and a confirming pass; build note: the ₱0 check re-reads totalSales after the day lock is held**; migrations 0183/0185 (S4). Earlier: SPEC WRITTEN 2026-10-04 (Opus planner, plan mode). Amended the same day three times: an independent Opus
 review (✎V1–✎V13), the orchestrator's per-store ruling (✎V2b), and a second-pass review (✎W1–✎W11). **This text is
 consolidated: every slice, test and table line below already carries the amendments, and the Review log at the end
 says where each one landed.** Not approved; not started. Fixes DEF-586 store by store. Proposes one new section-E defect
@@ -749,6 +749,8 @@ the lock error. An unlinked store's typed day still edits. Screenshots.
 ---
 
 ## S5 (S5-lite, ✎ 2026-10-05): usage reads the sold items the import stored
+> ✎ 2026-10-05 (S5 audit, orchestrator): finalize's "changed" refusal on a pull that already has a finalized section uses the partly-posted sentence ("… Void the pull and build the day again."), since buildPlan would refuse a plain rebuild there; a pull with no finalized section keeps "Build the plan again.". The pinned-feed guard (kind, store, date) runs in buildPlan as well as finalize.
+
 > ✎ 2026-10-05 (bible row 281): Ian asked for the POS pulls to be **redesigned** for the unified backend, planned with `/research-evaluate-propose`. ✎ 2026-10-05 later: proposal written (`docs/discovery/pos-pull-redesign-proposal.md`) and answered (bible row 282). **This section is the S5-lite amendment, written in plan mode by the Opus planner; it replaces the earlier S5 text entirely.** Rulings honoured: Q-C (a) the void stays as built; Q-D (a) a typed day gets no POS usage pull; no live POS call; no migration (0186 stays free).
 > **Where this section and R9 differ, this section wins.** R9's capture path (`purpose = 'usage'`, a fetch for typed days), the parallel-plan row's file list and the Goal's "usage pull reads the stored POS snapshot" bullet are superseded by the text below; so is I5's "`found` false → a sentence" **for usage only** (✎S5L-R: a stored `found: false` sold-items feed plans empty only on a ₱0 day, below). R10's drift scope is widened to a partly finalized pull (✎S5L-R). Nothing else in R1–R14 or the Invariants changes.
 
@@ -1019,6 +1021,8 @@ the unlinked sentence. Screenshots.
 ---
 
 ## S6: rechecks, drift findings, the correction, the corrected-day void, T-210
+> ✎ 2026-10-05 (from the S5-lite audit): **the recheck's feed insert must hold the day FOR UPDATE, as the import does (`import.ts:195`).** S5-lite's U3/U8 serialization relies on every feed insert taking the day lock; a recheck that does not can commit a feed between usage's `latestForDay` read and its post, unseen. Add a test that a recheck waits on a held day lock.
+
 **Goal:** a POS change after verify is visible as a finding and fixable by a correcting entry in an open month; usage
 drift is visible and fixed by a pull void; voids and reports stay right.
 

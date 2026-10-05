@@ -30,6 +30,7 @@ import * as D from '@shareat/domain';
 import { recordOrderWastage } from '../../src/wastage/orders';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
+import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
 import { humanDate } from '../../src/shared/refusal-leaf';
 import type { LocationLike } from '../../src/stock-locations/rules';
 
@@ -195,12 +196,51 @@ async function fixture(hint: string, opts: { instant?: boolean } = {}) {
   await asOrg(orgId, (tx) =>
     D.upsertPosItemMap(tx, manager, { orgId, storeId, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }),
   );
-  return { orgId, storeId, storeId2, walkIn, foodpanda, managerId, nobodyId, kitchen, itemCoke, manager, nobody: actor(orgId, nobodyId) };
+
+  // T-375 S5 (S5-lite): the USAGE legs run on a second store LINKED to POS, whose days are imported (usage reads the
+  // stored sold items). The typed store above keeps the wastage, withdraw and race legs exactly as they were.
+  const storeL = await mkStore(`${hint}-linked`);
+  for (const pid of [managerId, nobodyId]) await sql`insert into person_store_scope (person_id, store_id) values (${pid}, ${storeL})`;
+  const [chL] = await sql<{ id: string }[]>`
+    insert into sales_channels (org_id, store_id, name, is_remitted_daily, wastage_type_mode)
+    values (${orgId}, ${storeL}, 'Walk-in', true, 'tracked') returning id`;
+  const [gcashL] = await sql<{ id: string }[]>`
+    insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+    values (${orgId}, ${storeL}, 'GCash - linked', 'ewallet', '1140', 'cashier') returning id`;
+  await linkTestStore(sql, { orgId, storeId: storeL, channelId: chL!.id, createdBy: managerId });
+  await seedTestTenders(sql, { orgId, storeId: storeL, walletAccountId: gcashL!.id });
+  const [kitL] = await sql<{ id: string }[]>`
+    insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
+    values (${orgId}, ${storeL}, 'KIT', 'Kitchen', ${type!.id}, 'operating', true, ${managerId}) returning id`;
+  const kitchenL = kitL!.id;
+  const [fileL] = await sql<{ id: string }[]>`
+    insert into stored_files (org_id, storage_path, content_type, byte_size, checksum, purpose, uploaded_by)
+    values (${orgId}, ${`orgs/${orgId}/p-${uid('f')}.jpg`}, 'image/jpeg', 10, 'x', 'receipt_photo', ${managerId}) returning id`;
+  const [delL] = await sql<{ id: string }[]>`
+    insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
+    values (${orgId}, ${storeL}, 'purchase', ${STOCK_DAY}, ${fileL!.id}, ${managerId}) returning id`;
+  await asOrg(orgId, (tx) =>
+    receiveDelivery(tx, {
+      orgId, storeId: storeL, deliveryId: delL!.id, deliveredOn: STOCK_DAY, receivedBy: managerId,
+      locations: [{ id: kitchenL, role: 'operating', purpose: 'normal', isDefault: true, status: 'active' }],
+      lines: [{ lineId: '1', itemId: itemCoke, itemKind: 'retail', receivedQuantity: quantity('50'), conversionFactor: '1', unitCost: '10.0000', locationId: kitchenL }],
+    }),
+  );
+  await asOrg(orgId, (tx) =>
+    D.upsertPosItemMap(tx, manager, { orgId, storeId: storeL, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }),
+  );
+  return { orgId, storeId, storeL, kitchenL, storeId2, walkIn, foodpanda, managerId, nobodyId, kitchen, itemCoke, manager, nobody: actor(orgId, nobodyId) };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
-const coke = (qty = '4'): D.FetchPosSnapshot => async () => [{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: qty }];
-const empty: D.FetchPosSnapshot = async () => [];
+/** A day IMPORTED on the linked store; its stored sold items (coke 4) are what the usage plan reads. */
+async function mkUsageDay(f: Fixture, date: string, opts: { verify?: boolean } = {}): Promise<string> {
+  const { id } = await asOrg(f.orgId, (tx) =>
+    importTestDay(tx, f.manager, { storeId: f.storeL, businessDate: date, soldItems: [{ key: 'coke', name: 'Coke', physicalQty: 4 }] }),
+  );
+  if (opts.verify) await asOrg(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, id));
+  return id;
+}
 
 async function mkDay(f: Fixture, date: string, opts: { verify?: boolean } = {}): Promise<string> {
   const { id } = await asOrg(f.orgId, (tx) =>
@@ -223,10 +263,10 @@ const wastage = (f: Fixture, salesDayId: string, extra: Record<string, unknown> 
   asOrg(f.orgId, wastageOp(f, who, salesDayId, extra));
 const instant = { disposition: 'absorbed' };
 
-const plan = (f: Fixture, salesDayId: string, fetch: D.FetchPosSnapshot = coke(), who: Actor = f.manager) =>
-  asOrg(f.orgId, (tx) => D.buildPlan(tx, who, { orgId: f.orgId, storeId: f.storeId, salesDayId, locationId: f.kitchen }, fetch));
-const finalize = (f: Fixture, pullId: string, keys: string[], fetch: D.FetchPosSnapshot = coke()) =>
-  asOrg(f.orgId, (tx) => D.finalizeSections(tx, f.manager, { pullId, sections: ['direct'], confirmedKeys: keys }, fetch));
+const plan = (f: Fixture, salesDayId: string, who: Actor = f.manager) =>
+  asOrg(f.orgId, (tx) => D.buildPlan(tx, who, { orgId: f.orgId, storeId: f.storeL, salesDayId, locationId: f.kitchenL }));
+const finalize = (f: Fixture, pullId: string, keys: string[]) =>
+  asOrg(f.orgId, (tx) => D.finalizeSections(tx, f.manager, { pullId, sections: ['direct'], confirmedKeys: keys }));
 
 async function rejection(p: Promise<unknown>, what: string): Promise<{ message: string; userMessage?: string; err: unknown }> {
   try {
@@ -318,7 +358,7 @@ describe("T3 - another store's day", () => {
 describe('T4 - buildPlan on a withdrawn day', () => {
   it('returns { ok: false } with the voided sentence ("usage"); zero pulls', async () => {
     const f = await fixture('t4');
-    const id = await mkDay(f, D1);
+    const id = await mkUsageDay(f, D1);
     await voidDay(f, id);
     const out = await plan(f, id);
     expect(out.ok).toBe(false);
@@ -330,7 +370,7 @@ describe('T4 - buildPlan on a withdrawn day', () => {
 
   it('control: an open day builds', async () => {
     const f = await fixture('t4c');
-    const id = await mkDay(f, D1);
+    const id = await mkUsageDay(f, D1);
     const out = await plan(f, id);
     expect(out.ok).toBe(true);
     expect(await pullRows(f)).toBe(1);
@@ -343,7 +383,7 @@ describe('T4 - buildPlan on a withdrawn day', () => {
 describe('T5 - finalizeSections after the day is voided', () => {
   it('refused with the sentence; no usage record, no movement, no entry, no section marked finalized', async () => {
     const f = await fixture('t5');
-    const id = await mkDay(f, D1, { verify: true });
+    const id = await mkUsageDay(f, D1, { verify: true });
     const built = await plan(f, id);
     expect(built.ok).toBe(true);
     if (!built.ok) return;
@@ -367,7 +407,7 @@ describe('T5 - finalizeSections after the day is voided', () => {
 
   it('control: the same pull on a live day finalizes and posts usage', async () => {
     const f = await fixture('t5c');
-    const id = await mkDay(f, D1, { verify: true });
+    const id = await mkUsageDay(f, D1, { verify: true });
     const built = await plan(f, id);
     expect(built.ok).toBe(true);
     if (!built.ok) return;
@@ -416,7 +456,7 @@ describe('T7 - A records wastage (uncommitted), B withdraws the day', () => {
     expect(bWaited, 'B never waited: the withdraw did not queue behind the writer').toBe(true);
     expect(bResult.status).toBe('rejected');
     expect((bResult as { reason: { userMessage?: string } }).reason.userMessage).toBe(
-      "Wastage is recorded against this day, so it can't be withdrawn - edit its figures instead.".replace(' - ', ' — '),
+      "Wastage is recorded against this day, so it can't be withdrawn. Edit its figures instead.", // T-375 S4 (V13): typed day, unlinked store
     );
     const [day] = await sql<{ status: string }[]>`select status from sales_days where id = ${id}`;
     expect(day!.status).toBe('open');
@@ -430,11 +470,11 @@ describe('T7 - A records wastage (uncommitted), B withdraws the day', () => {
 describe('T8 - A withdraws (uncommitted), B builds a plan', () => {
   it('B waits, then gets { ok: false } with the voided sentence ("usage"); no pull row', async () => {
     const f = await fixture('t8');
-    const id = await mkDay(f, D1);
+    const id = await mkUsageDay(f, D1);
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
       (tx) => D.voidSalesDay(tx, f.manager, id, 'Typed wrong'),
-      (tx) => D.buildPlan(tx, f.manager, { orgId: f.orgId, storeId: f.storeId, salesDayId: id, locationId: f.kitchen }, empty),
+      (tx) => D.buildPlan(tx, f.manager, { orgId: f.orgId, storeId: f.storeL, salesDayId: id, locationId: f.kitchenL }),
       ROW_LOCK,
     );
     expect(aResult.status).toBe('fulfilled');
@@ -493,9 +533,9 @@ describe('T10 - the capability check comes first', () => {
 
   it('buildPlan without record_stock_movement on a VOIDED day -> AuthorizationError', async () => {
     const f = await fixture('t10b');
-    const id = await mkDay(f, D1);
+    const id = await mkUsageDay(f, D1);
     await voidDay(f, id);
-    const r = await rejection(plan(f, id, coke(), f.nobody), 'an unauthorised plan on a voided day');
+    const r = await rejection(plan(f, id, f.nobody), 'an unauthorised plan on a voided day');
     expect(r.err).toBeInstanceOf(AuthorizationError);
     expect(await pullRows(f)).toBe(0);
   });
@@ -509,14 +549,14 @@ describe('T12 - the same date cannot be pulled twice across a void', () => {
 
   it('D1 verified + finalized pull, voided; replacement D2 same date -> { ok: false } with the R7 sentence; nothing new written', async () => {
     const f = await fixture('t12');
-    const d1 = await mkDay(f, D1, { verify: true });
+    const d1 = await mkUsageDay(f, D1, { verify: true });
     const built = await plan(f, d1);
     expect(built.ok).toBe(true);
     if (!built.ok) return;
     const fin = await finalize(f, built.pullId, built.lines.map((l) => l.key));
     expect(fin.ok).toBe(true); // usage posted on D1
     await voidDay(f, d1);
-    const d2 = await mkDay(f, D1); // 0177 freed the date
+    const d2 = await mkUsageDay(f, D1); // 0177 freed the date
 
     const pulls = await pullRows(f);
     const usage = await usageRows(f);
@@ -537,18 +577,18 @@ describe('T12 - the same date cannot be pulled twice across a void', () => {
 
   it('(a) voided D1 with a merely PLANNED pull (nothing posted) does not block the replacement D2', async () => {
     const f = await fixture('t12a');
-    const d1 = await mkDay(f, D1, { verify: true });
+    const d1 = await mkUsageDay(f, D1, { verify: true });
     const built = await plan(f, d1);
     expect(built.ok).toBe(true);
     await voidDay(f, d1);
-    const d2 = await mkDay(f, D1);
+    const d2 = await mkUsageDay(f, D1);
     const out = await plan(f, d2);
     expect(out.ok, `reason: ${out.ok ? '' : out.reason}`).toBe(true);
   });
 
   it('(b) voided D1 with ONE section finalized (pull status still planned) refuses D2 with the R7 sentence', async () => {
     const f = await fixture('t12b');
-    const d1 = await mkDay(f, D1, { verify: true });
+    const d1 = await mkUsageDay(f, D1, { verify: true });
     const built = await plan(f, d1);
     expect(built.ok).toBe(true);
     if (!built.ok) return;
@@ -556,7 +596,7 @@ describe('T12 - the same date cannot be pulled twice across a void', () => {
     const [p] = await sql<{ status: string }[]>`select status from pos_usage_pulls where id = ${built.pullId}`;
     expect(p!.status).toBe('planned');
     await voidDay(f, d1);
-    const d2 = await mkDay(f, D1);
+    const d2 = await mkUsageDay(f, D1);
     const out = await plan(f, d2);
     expect(out.ok).toBe(false);
     if (out.ok) return;
@@ -565,21 +605,21 @@ describe('T12 - the same date cannot be pulled twice across a void', () => {
 
   it('control: D1 withdrawn while it had NO pull -> a replacement D2 for the same date builds', async () => {
     const f = await fixture('t12c1');
-    const d1 = await mkDay(f, D1);
+    const d1 = await mkUsageDay(f, D1);
     await voidDay(f, d1);
-    const d2 = await mkDay(f, D1);
+    const d2 = await mkUsageDay(f, D1);
     const out = await plan(f, d2);
     expect(out.ok).toBe(true);
   });
 
   it('control: another date at the same store builds even though a voided day carries a pull', async () => {
     const f = await fixture('t12c2');
-    const d1 = await mkDay(f, D1, { verify: true });
+    const d1 = await mkUsageDay(f, D1, { verify: true });
     const built = await plan(f, d1);
     expect(built.ok).toBe(true);
     if (!built.ok) return;
     await voidDay(f, d1);
-    const other = await mkDay(f, D2);
+    const other = await mkUsageDay(f, D2);
     const out = await plan(f, other);
     expect(out.ok).toBe(true);
   });

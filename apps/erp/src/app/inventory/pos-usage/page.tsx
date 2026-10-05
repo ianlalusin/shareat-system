@@ -252,7 +252,9 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
           </form>
           {pull && (
             <p className="mt-2 text-xs text-neutral-500">
-              Snapshot taken {formatBusinessDateTime(pull.snapshotTakenAt)} — a plan older than an hour is refused at finalize.
+              {pull.soldItemsFeed
+                ? `Built ${formatBusinessDateTime(pull.snapshotTakenAt)} from POS's sold items fetched ${formatBusinessDateTime(pull.soldItemsFeed.fetchedAt)} (${pull.soldItemsFeed.purpose === 'recheck' ? 'at a later check' : 'at import'}). A plan older than an hour is refused at finalize.`
+                : "Built before usage read POS's stored sold items — build the plan again before finalizing."}
             </p>
           )}
         </section>

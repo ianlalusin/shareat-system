@@ -49,10 +49,11 @@ vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/con
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { buildPlan, createSalesDay, finalizeSections, upsertPosItemMap, type FetchPosSnapshot } from '@shareat/domain';
+import { buildPlan, finalizeSections, upsertPosItemMap } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { receiveDelivery } from '../../../../packages/domain/src/deliveries/receive';
 import { quantity } from '../../../../packages/domain/src/stock/quantity';
+import { importTestDay, linkTestStore, seedTestTenders } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -60,7 +61,8 @@ const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 const actor = (orgId: string, personId: string): Actor => ({ personId, orgId });
 const DAY = '2026-05-20';
-const snap: FetchPosSnapshot = async () => [{ posItemKey: 'cheese', posItemName: 'Cheese', physicalQty: '4' }];
+// T-375 S5 (S5-lite): the day is IMPORTED on a LINKED store; the plan reads its stored sold items (cheese 4).
+const SOLD = [{ key: 'cheese', name: 'Cheese', physicalQty: 4 }];
 
 afterAll(async () => {
   const { closeDb } = await import('@shareat/db');
@@ -99,6 +101,11 @@ async function fixture(hint: string) {
   const nobodyId = await mkPerson('Nobody', null);
   const [ch] = await sql<{ id: string }[]>`
     insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${orgId}, ${storeId}, 'Walk-in', true) returning id`;
+  const [gcash] = await sql<{ id: string }[]>`
+    insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+    values (${orgId}, ${storeId}, 'GCash - Lipa', 'ewallet', '1140', 'cashier') returning id`;
+  await linkTestStore(sql, { orgId, storeId, channelId: ch!.id, createdBy: managerId });
+  await seedTestTenders(sql, { orgId, storeId, walletAccountId: gcash!.id });
   const [type] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${orgId}, 'STK', 'Stockroom') returning id`;
   const [loc] = await sql<{ id: string }[]>`
     insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
@@ -123,16 +130,11 @@ async function fixture(hint: string) {
   await asOrg(orgId, (tx) =>
     upsertPosItemMap(tx, manager, { orgId, storeId, posItemKey: 'cheese', posItemName: 'Cheese', mode: 'direct', itemId: it!.id, quantityPerSale: '1' }),
   );
-  const { id: dayId } = await asOrg(orgId, (tx) =>
-    createSalesDay(tx, manager, {
-      storeId, businessDate: DAY, totalSales: '1000.00', unliSales: '1000.00', alaCarteSales: '0.00',
-      cashCollected: '1000.00', channels: [{ channelId: ch!.id, amount: '1000.00' }],
-    }),
-  );
-  const built = await asOrg(orgId, (tx) => buildPlan(tx, manager, { orgId, storeId, salesDayId: dayId, locationId: kitchen }, snap));
+  const { id: dayId } = await asOrg(orgId, (tx) => importTestDay(tx, manager, { storeId, businessDate: DAY, soldItems: SOLD }));
+  const built = await asOrg(orgId, (tx) => buildPlan(tx, manager, { orgId, storeId, salesDayId: dayId, locationId: kitchen }));
   if (!built.ok) throw new Error(`fixture: ${built.reason}`);
   const fin = await asOrg(orgId, (tx) =>
-    finalizeSections(tx, manager, { pullId: built.pullId, sections: ['direct', 'recipe', 'orphan'], confirmedKeys: built.lines.map((l) => l.key) }, snap),
+    finalizeSections(tx, manager, { pullId: built.pullId, sections: ['direct', 'recipe', 'orphan'], confirmedKeys: built.lines.map((l) => l.key) }),
   );
   if (!fin.ok) throw new Error(`fixture: ${fin.reason}`);
   return { orgId, storeId, dayId, pullId: built.pullId, manager, nobody: actor(orgId, nobodyId), managerId };

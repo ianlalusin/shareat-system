@@ -263,6 +263,8 @@ export interface PosUsagePullRow {
   readonly directFinalizedAt: Date | null;
   readonly recipeFinalizedAt: Date | null;
   readonly orphanFinalizedAt: Date | null;
+  /** T-375 S5: the stored `sold_items` feed this plan was built from; null on a pull made before S5-lite. */
+  readonly posV1DayFeedId: string | null;
 }
 
 const pullColumns = {
@@ -276,6 +278,7 @@ const pullColumns = {
   directFinalizedAt: posUsagePulls.directFinalizedAt,
   recipeFinalizedAt: posUsagePulls.recipeFinalizedAt,
   orphanFinalizedAt: posUsagePulls.orphanFinalizedAt,
+  posV1DayFeedId: posUsagePulls.posV1DayFeedId,
 };
 
 /** Any pull that is not void — the uniqueness this repo enforces (pos-mapping.ts schema header). */
@@ -328,7 +331,7 @@ export async function getPull(tx: Tx, id: string): Promise<PosUsagePullRow | und
 
 export async function insertPull(
   tx: Tx,
-  input: { orgId: string; storeId: string; salesDayId: string; locationId: string; snapshotTakenAt: Date },
+  input: { orgId: string; storeId: string; salesDayId: string; locationId: string; snapshotTakenAt: Date; posV1DayFeedId: string },
 ): Promise<{ id: string }> {
   const [row] = await tx
     .insert(posUsagePulls)
@@ -338,15 +341,16 @@ export async function insertPull(
       salesDayId: input.salesDayId,
       locationId: input.locationId,
       snapshotTakenAt: input.snapshotTakenAt,
+      posV1DayFeedId: input.posV1DayFeedId,
     })
     .returning({ id: posUsagePulls.id });
   return row!;
 }
 
-export async function refreshPlannedPull(tx: Tx, id: string, input: { locationId: string; snapshotTakenAt: Date }): Promise<void> {
+export async function refreshPlannedPull(tx: Tx, id: string, input: { locationId: string; snapshotTakenAt: Date; posV1DayFeedId: string }): Promise<void> {
   await tx
     .update(posUsagePulls)
-    .set({ locationId: input.locationId, snapshotTakenAt: input.snapshotTakenAt })
+    .set({ locationId: input.locationId, snapshotTakenAt: input.snapshotTakenAt, posV1DayFeedId: input.posV1DayFeedId })
     .where(and(eq(posUsagePulls.id, id), eq(posUsagePulls.status, 'planned')));
 }
 

@@ -10,6 +10,9 @@ import { sql as dsql } from 'drizzle-orm';
  * must drop a voided day from the picker UNLESS the day carries a live (non-void) pull; that day stays
  * listed and is flagged view-only. Open and verified days stay, unflagged.
  *
+ * T-375 S5 (S5-lite): the store is LINKED to POS, so its days are IMPORTED (`importTestDay`), never typed; the
+ * assertions are unchanged.
+ *
  * ## What the spec leaves open, pinned so the builder has one reading
  * The spec says "flagged view-only" and labels it "(voided - view only)" but names no field. This file
  * reads the flag as a boolean `viewOnly` on the `SalesDayOption` row (true for the kept voided day,
@@ -36,8 +39,9 @@ vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
-import { createSalesDay, verifySalesDay, voidSalesDay } from '@shareat/domain';
+import { verifySalesDay, voidSalesDay } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { importTestDay, linkTestStore, seedTestTenders } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -71,18 +75,18 @@ async function fixture(hint: string) {
   await sql`insert into person_store_scope (person_id, store_id) values (${mgr!.id}, ${storeId})`;
   const [ch] = await sql<{ id: string }[]>`
     insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${orgId}, ${storeId}, 'Walk-in', true) returning id`;
+  const [gcash] = await sql<{ id: string }[]>`
+    insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+    values (${orgId}, ${storeId}, 'GCash - Lipa', 'ewallet', '1140', 'cashier') returning id`;
+  await linkTestStore(sql, { orgId, storeId, channelId: ch!.id, createdBy: mgr!.id });
+  await seedTestTenders(sql, { orgId, storeId, walletAccountId: gcash!.id });
   const [type] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${orgId}, 'STK', 'Stockroom') returning id`;
   const [loc] = await sql<{ id: string }[]>`
     insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
     values (${orgId}, ${storeId}, 'KIT', 'Kitchen', ${type!.id}, 'operating', true, ${mgr!.id}) returning id`;
   const manager: Actor = { personId: mgr!.id, orgId };
   const mk = async (date: string, opts: { verify?: boolean } = {}) => {
-    const { id } = await asOrg(orgId, (tx) =>
-      createSalesDay(tx, manager, {
-        storeId, businessDate: date, totalSales: '1000.00', unliSales: '1000.00', alaCarteSales: '0.00',
-        cashCollected: '1000.00', channels: [{ channelId: ch!.id, amount: '1000.00' }],
-      }),
-    );
+    const { id } = await asOrg(orgId, (tx) => importTestDay(tx, manager, { storeId, businessDate: date }));
     if (opts.verify) await asOrg(orgId, (tx) => verifySalesDay(tx, manager, id));
     return id;
   };

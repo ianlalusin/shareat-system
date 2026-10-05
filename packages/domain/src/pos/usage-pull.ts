@@ -8,7 +8,8 @@
  *
  * ⭐ **The server rebuilds the plan at finalize time** (invariant 2) — it does not trust the STORED
  * `pos_usage_pull_lines` rows written at plan time as the source of truth for what to write. It
- * re-fetches POS live and re-runs `plan.ts`'s pure explosion against CURRENT mappings/recipes, then
+ * re-reads the pinned stored `sold_items` feed (T-375 S5-lite: nothing is fetched from POS here) and
+ * re-runs `plan.ts`'s pure explosion against CURRENT mappings/recipes, then
  * writes only the intersection of that fresh result and what the caller says it confirmed. A
  * confirmed key the rebuild no longer produces refuses the whole call (`PLAN_CHANGED`); a rebuilt
  * key the caller never confirmed is silently excluded, never written.
@@ -27,8 +28,10 @@
  * location is not retried by calling finalize again; that section is done either way.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { env } from '@shareat/core/env';
-import { posMappingRepo, salesDaysRepo, type Tx } from '@shareat/db';
+import { logger } from '@shareat/core/logger';
+import { formatMoney, isZero, money } from '@shareat/core/money';
+import { posMappingRepo, posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
+import type { PosV1FeedPurpose } from '@shareat/db/schema';
 import { postUsage, saveUsageDraft } from '../stock/usage-records';
 import { voidPullUsageRecord } from '../stock/void-pull-usage-record';
 import { closedStockPeriodSentence } from '../stock/period-guard';
@@ -36,54 +39,12 @@ import { lockLiveSalesDay } from '../sales-days/live-day';
 import { RefusalError, gone, humanDate, internalFault, refuse } from '../shared/refusal';
 import { toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { compareQuantity, quantity, ZERO_QUANTITY } from '../stock/quantity';
-import { explodePosSales, type PlanLine, type PlanSection } from './plan';
+import { explodePosSales, type PlanLine, type PlanSection, type PosSoldItemInput } from './plan';
+import { sameItemsProjection, soldItemsFromFeed } from './v1-sold-items';
 
 // -----------------------------------------------------------------------------------------
-// The live POS fetch
+// The stored feed (T-375 S5-lite): usage never calls POS. The day's import (or a recheck) stored the sold items.
 // -----------------------------------------------------------------------------------------
-export interface PosSoldItemSnapshot {
-  readonly posItemKey: string;
-  readonly posItemName: string;
-  readonly physicalQty: string;
-}
-
-export type FetchPosSnapshot = (input: { storeId: string; businessDate: string }) => Promise<readonly PosSoldItemSnapshot[]>;
-
-/**
- * `GET {POS_API_URL}/api/external/sold-items?storeId=&date=` — the exact route and shape v1's
- * `fetchPosSoldItems` (`ERP-rebuild/src/lib/server/pos-api.ts`) already calls, verified at source
- * against `POS/src/app/api/external/sold-items/route.ts`: `x-api-key` auth, and a `physicalQty`
- * field POS already nets to sold + comped − voided (invariant 1) — never recomputed here.
- *
- * ⚠️ `POS_API_URL`/`POS_API_KEY` were added to `@shareat/core/env`'s validated contract for this
- * task — a reasoned, narrow scope extension (bible §3.3) reported in the task's own completion
- * report, since a live HTTP dependency reading raw `process.env` would be exactly the ad hoc
- * fallback bible §7 rule 9 forbids.
- */
-export async function fetchPosSoldItemsLive(input: { storeId: string; businessDate: string }): Promise<readonly PosSoldItemSnapshot[]> {
-  const { POS_API_URL, POS_API_KEY } = env();
-  const url = POS_API_URL;
-  const key = POS_API_KEY;
-  if (!url || !key) {
-    throw new Error('fetchPosSoldItemsLive: POS_API_URL or POS_API_KEY is not configured — see .env.example');
-  }
-  const res = await fetch(
-    `${url}/api/external/sold-items?storeId=${encodeURIComponent(input.storeId)}&date=${encodeURIComponent(input.businessDate)}`,
-    { headers: { 'x-api-key': key }, cache: 'no-store' },
-  );
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}) as Record<string, unknown>);
-    throw new Error(typeof body.error === 'string' ? body.error : `POS API returned ${res.status}`);
-  }
-  const data = (await res.json()) as { found: boolean; items?: readonly Record<string, unknown>[] };
-  if (!data.found) return [];
-  return (data.items ?? []).map((it) => ({
-    posItemKey: String(it.posItemId ?? ''),
-    posItemName: String(it.name ?? it.posItemId ?? ''),
-    physicalQty: String(it.physicalQty ?? '0'),
-  }));
-}
-
 /** Invariant 3 — named with its reason, never inlined. */
 export const SNAPSHOT_MAX_AGE_MS = 60 * 60 * 1000;
 
@@ -91,14 +52,10 @@ async function rebuildLines(
   tx: Tx,
   orgId: string,
   storeId: string,
-  businessDate: string,
   defaultLocationId: string,
-  fetchSnapshot: FetchPosSnapshot,
+  posItems: readonly PosSoldItemInput[],
 ): Promise<PlanLine[]> {
-  const [posItems, maps] = await Promise.all([
-    fetchSnapshot({ storeId, businessDate }),
-    posMappingRepo.listActiveMaps(tx, storeId),
-  ]);
+  const maps = await posMappingRepo.listActiveMaps(tx, storeId);
   const recipeIds = [...new Set(maps.filter((m) => m.mode === 'recipe' && m.recipeId).map((m) => m.recipeId!))];
   const recipeRows = await posMappingRepo.getRecipesForExplosion(tx, orgId, recipeIds);
   const recipesById = new Map(
@@ -113,18 +70,66 @@ async function rebuildLines(
 }
 
 /**
- * T-373 S1 (R2): lock the day and re-check it AFTER the POS fetch, never across it. The date cannot
- * change in between (an edit never changes the date), so the fetched lines stay valid; only status and
- * store are re-checked. This module returns Outcomes, so the refusal becomes its sentence.
+ * T-373 S1 (R2): lock the day first, then read. T-375 S5-lite: nothing is fetched, so the day lock (FOR SHARE) and
+ * the pull lock come BEFORE the feed read, and a concurrent re-import (day FOR UPDATE) is either seen or waited for.
+ * Returns the LOCKED day row (its `totalSales` is read from here, not from an earlier unlocked read). This module
+ * returns Outcomes, so the refusal becomes its sentence.
  */
-async function lockDayOutcome(tx: Tx, orgId: string, salesDayId: string, storeId: string): Promise<{ ok: false; reason: string } | null> {
+async function lockDayOutcome(
+  tx: Tx,
+  orgId: string,
+  salesDayId: string,
+  storeId: string,
+): Promise<{ ok: false; reason: string } | { ok: true; day: { totalSales: string; source: string } }> {
   try {
-    await lockLiveSalesDay(tx, orgId, { salesDayId, storeId, doing: 'usage' });
-    return null;
+    const day = await lockLiveSalesDay(tx, orgId, { salesDayId, storeId, doing: 'usage' });
+    return { ok: true, day };
   } catch (err) {
     if (err instanceof RefusalError) return { ok: false, reason: err.userMessage };
     throw err;
   }
+}
+
+// -----------------------------------------------------------------------------------------
+// Sentences (T-375 S5-lite, word for word)
+// -----------------------------------------------------------------------------------------
+const when = (businessDate: string): string => humanDate(businessDate as BusinessDate);
+const SENTENCES = {
+  unlinked: (store: string) => `${store} isn't linked to a POS store yet, so its usage can't be pulled. An admin links it under Settings › POS link.`,
+  typed: (store: string, d: string) =>
+    `${store}'s sales for ${d} were typed in before it was linked to POS, so there are no POS sold items to pull. Record that day's usage by hand under Inventory › Usage & wastage.`,
+  changed: (d: string) => `POS's sold items for ${d} changed after this plan was built. Build the plan again.`,
+  preS5: "This plan was built before usage read POS's stored sold items. Build the plan again.",
+  partlyChanged: (d: string) => `POS's sold items for ${d} changed after part of this pull was posted. Void the pull and build the day again.`,
+  partlyNoPin: "Part of this pull was posted before usage read POS's stored sold items. Void the pull and build the day again.",
+  noItems: (d: string, total: string) => `POS sent no sold items for ${d}, but the day has ${total} in sales, so usage can't be pulled. Tell the office.`,
+  unreadable: (d: string) => `POS's stored sold items for ${d} can't be read, so usage can't be pulled. Tell the office.`,
+} as const;
+
+/** The pinned feed of a pull, which must be the sold_items feed of the pull's own store and day, else an internal fault. */
+async function loadPinnedFeed(tx: Tx, orgId: string, pullId: string, feedId: string, storeId: string, businessDate: string) {
+  const pinned = await posV1Repo.getFeedById(tx, orgId, feedId);
+  if (!pinned || pinned.kind !== 'sold_items' || pinned.storeId !== storeId || pinned.businessDate !== businessDate) {
+    throw internalFault(`usage-pull: pinned feed ${feedId} of pull ${pullId} is not this day's sold_items feed`);
+  }
+  return pinned;
+}
+
+const fail = (reason: string): { ok: false; reason: string } => ({ ok: false, reason });
+
+async function storeNameOf(tx: Tx, orgId: string, storeId: string): Promise<string> {
+  return (await storesRepo.getById(tx, orgId, storeId))?.name ?? 'This store';
+}
+
+/** Parse a stored feed; a refusal is logged with the feed id and the raw reason and becomes the unreadable sentence. */
+function readFeed(
+  feed: { id: string; payload: unknown },
+  businessDate: string,
+): { ok: true; found: boolean; items: PosSoldItemInput[] } | { ok: false; reason: string } {
+  const parsed = soldItemsFromFeed(feed.payload);
+  if (parsed.ok) return parsed;
+  logger.warn({ feedId: feed.id, raw: parsed.raw }, `usage-pull: stored sold items unreadable: ${parsed.raw}`);
+  return fail(SENTENCES.unreadable(when(businessDate)));
 }
 
 // -----------------------------------------------------------------------------------------
@@ -140,7 +145,13 @@ export interface BuildPlanInput {
 }
 
 export type BuildPlanOutcome =
-  | { readonly ok: true; readonly pullId: string; readonly lines: readonly PlanLine[]; readonly snapshotTakenAt: Date }
+  | {
+      readonly ok: true;
+      readonly pullId: string;
+      readonly lines: readonly PlanLine[];
+      readonly snapshotTakenAt: Date;
+      readonly soldItemsFeed: { readonly id: string; readonly fetchedAt: Date; readonly purpose: PosV1FeedPurpose };
+    }
   | { readonly ok: false; readonly reason: string };
 
 /**
@@ -153,21 +164,24 @@ const finalizedSectionsOf = (p: { directFinalizedAt: Date | null; recipeFinalize
   ...(p.orphanFinalizedAt ? (['orphan'] as const) : []),
 ];
 
-export async function buildPlan(
-  tx: Tx,
-  actor: Actor,
-  input: BuildPlanInput,
-  fetchSnapshot: FetchPosSnapshot = fetchPosSoldItemsLive,
-): Promise<BuildPlanOutcome> {
+export async function buildPlan(tx: Tx, actor: Actor, input: BuildPlanInput): Promise<BuildPlanOutcome> {
   await authorize(tx, actor, 'record_stock_movement', { storeId: input.storeId });
 
   const salesDay = await salesDaysRepo.getById(tx, input.orgId, input.salesDayId);
   if (!salesDay) return { ok: false, reason: `sales day ${input.salesDayId} does not exist` };
   if (salesDay.storeId !== input.storeId) return { ok: false, reason: 'that sales day does not belong to this store' };
 
-  // T-373 S1: refuse a voided day from the plain read, before the POS fetch (re-checked under the lock after it).
+  // T-373 S1: refuse a voided day from the plain read (re-checked under the lock below).
   if (salesDay.status === 'voided') {
     return { ok: false, reason: `The sales day for ${humanDate(salesDay.businessDate as BusinessDate)} has been voided, so usage can't be recorded against it.` };
+  }
+
+  // T-375 S5-lite: the link, then the day's source. An unlinked store has no POS store id, and a typed day has no
+  // stored sold items (Q-D); neither is fetched live.
+  const link = await posV1Repo.getLinkByStore(tx, input.orgId, input.storeId);
+  if (!link) return fail(SENTENCES.unlinked(await storeNameOf(tx, input.orgId, input.storeId)));
+  if (salesDay.source === 'legacy_typed') {
+    return fail(SENTENCES.typed(await storeNameOf(tx, input.orgId, input.storeId), when(salesDay.businessDate)));
   }
 
   const existing = await posMappingRepo.findLivePullForDay(tx, input.storeId, input.salesDayId);
@@ -184,12 +198,15 @@ export async function buildPlan(
     };
   }
 
-  const lines = await rebuildLines(tx, input.orgId, input.storeId, salesDay.businessDate, input.locationId, fetchSnapshot);
-
-  // T-373 S1 R1/R2: lock the live day after the fetch, before the first write.
-  const refused = await lockDayOutcome(tx, input.orgId, input.salesDayId, input.storeId);
-  if (refused) return refused;
+  // T-373 S1 R1/R2: the day lock and the pull lock FIRST, then read (nothing is fetched).
+  const lockedDay = await lockDayOutcome(tx, input.orgId, input.salesDayId, input.storeId);
+  if (!lockedDay.ok) return lockedDay;
+  // Q-D again, against the LOCKED day (the early refusal above read it unlocked).
+  if (lockedDay.day.source === 'legacy_typed') {
+    return fail(SENTENCES.typed(await storeNameOf(tx, input.orgId, input.storeId), when(salesDay.businessDate)));
+  }
   let finalizedSections: PlanSection[] = [];
+  let lockedPull: NonNullable<Awaited<ReturnType<typeof posMappingRepo.getPullForUpdate>>> | undefined;
   // T-374 S7 (audit 2): the pull's own lock (same FOR UPDATE as void / finalize), then re-check under it. A void
   // that committed first leaves the pull `void`; a finalize that committed first leaves a section stamped.
   if (existing) {
@@ -199,15 +216,55 @@ export async function buildPlan(
     }
     if (locked.status !== 'planned') return { ok: false, reason: `this day's pull is already ${locked.status} — invariant 12: only one live pull per (store, sales day)` };
     finalizedSections = finalizedSectionsOf(locked);
+    lockedPull = locked;
   }
+
+  const latest = await posV1Repo.latestForDay(tx, input.orgId, input.storeId, salesDay.businessDate, 'sold_items');
+  if (!latest) throw internalFault(`buildPlan: no sold_items feed for sales day ${input.salesDayId} (the import writes both kinds)`);
+
+  // A partly finalized pull never moves its pin (S5L-R): the unfinalized sections are rebuilt from the PINNED feed.
+  let feed = latest;
+  if (lockedPull && finalizedSections.length > 0) {
+    const d = when(salesDay.businessDate);
+    if (!lockedPull.posV1DayFeedId) return fail(SENTENCES.partlyNoPin);
+    if (lockedPull.posV1DayFeedId !== latest.id) {
+      const pinned = await loadPinnedFeed(tx, input.orgId, lockedPull.id, lockedPull.posV1DayFeedId, input.storeId, salesDay.businessDate);
+      const pinItems = soldItemsFromFeed(pinned.payload);
+      const latestItems = soldItemsFromFeed(latest.payload);
+      if (!pinItems.ok) {
+        logger.warn({ feedId: pinned.id, raw: pinItems.raw }, `usage-pull: pinned sold items unreadable: ${pinItems.raw}`);
+        return fail(SENTENCES.partlyChanged(d));
+      }
+      if (!latestItems.ok || !sameItemsProjection(latestItems.items, pinItems.items)) return fail(SENTENCES.partlyChanged(d));
+      feed = pinned;
+    }
+  }
+
+  const read = readFeed(feed, salesDay.businessDate);
+  if (!read.ok) return read;
+  // S5L-R (I5): `found: false` plans empty only on a PHP 0 day, judged from the LOCKED day row.
+  if (!read.found && !isZero(money(lockedDay.day.totalSales))) {
+    return fail(SENTENCES.noItems(when(salesDay.businessDate), formatMoney(money(lockedDay.day.totalSales))));
+  }
+
+  const lines = await rebuildLines(tx, input.orgId, input.storeId, input.locationId, read.items);
   const now = new Date();
 
   const pullId = existing
     ? await (async () => {
-        await posMappingRepo.refreshPlannedPull(tx, existing.id, { locationId: input.locationId, snapshotTakenAt: now });
+        await posMappingRepo.refreshPlannedPull(tx, existing.id, { locationId: input.locationId, snapshotTakenAt: now, posV1DayFeedId: feed.id });
         return existing.id;
       })()
-    : (await posMappingRepo.insertPull(tx, { orgId: input.orgId, storeId: input.storeId, salesDayId: input.salesDayId, locationId: input.locationId, snapshotTakenAt: now })).id;
+    : (
+        await posMappingRepo.insertPull(tx, {
+          orgId: input.orgId,
+          storeId: input.storeId,
+          salesDayId: input.salesDayId,
+          locationId: input.locationId,
+          snapshotTakenAt: now,
+          posV1DayFeedId: feed.id,
+        })
+      ).id;
 
   await posMappingRepo.replacePullLines(
     tx,
@@ -225,7 +282,7 @@ export async function buildPlan(
     finalizedSections,
   );
 
-  return { ok: true, pullId, lines, snapshotTakenAt: now };
+  return { ok: true, pullId, lines, snapshotTakenAt: now, soldItemsFeed: { id: feed.id, fetchedAt: feed.fetchedAt, purpose: feed.purpose } };
 }
 
 // -----------------------------------------------------------------------------------------
@@ -247,19 +304,14 @@ export interface SectionOutcome {
 
 export type FinalizeResult = { readonly ok: true; readonly sections: readonly SectionOutcome[] } | { readonly ok: false; readonly reason: string };
 
-export async function finalizeSections(
-  tx: Tx,
-  actor: Actor,
-  input: FinalizeSectionsInput,
-  fetchSnapshot: FetchPosSnapshot = fetchPosSoldItemsLive,
-): Promise<FinalizeResult> {
+export async function finalizeSections(tx: Tx, actor: Actor, input: FinalizeSectionsInput): Promise<FinalizeResult> {
   const pull = await posMappingRepo.getPull(tx, input.pullId);
   if (!pull) return { ok: false, reason: `pull ${input.pullId} does not exist` };
   await authorize(tx, actor, 'finalize_pos_usage_pull', { storeId: pull.storeId });
 
   if (pull.status === 'void') return { ok: false, reason: 'this pull has been voided' };
 
-  // Invariant 3, checked BEFORE any live re-fetch — a stale snapshot is refused outright, exactly
+  // Invariant 3, checked first — a stale snapshot is refused outright, exactly
   // as v1's own comment states: "the post path refuses anything this old."
   const ageMs = Date.now() - pull.snapshotTakenAt.getTime();
   if (ageMs > SNAPSHOT_MAX_AGE_MS) {
@@ -269,17 +321,29 @@ export async function finalizeSections(
   const salesDay = await salesDaysRepo.getById(tx, pull.orgId, pull.salesDayId);
   if (!salesDay) throw new Error(`finalizeSections: sales day ${pull.salesDayId} no longer exists`);
 
-  const freshLines = await rebuildLines(tx, pull.orgId, pull.storeId, salesDay.businessDate, pull.locationId, fetchSnapshot);
+  // T-375 S5-lite: the day lock, then the pull lock, THEN the feed reads (nothing is fetched, so no HTTP to wait out).
   // T-373 S1 (DEF-552): a voided day posts nothing. Before the section loop so a refused day marks no section finalized.
-  const refused = await lockDayOutcome(tx, pull.orgId, pull.salesDayId, pull.storeId);
-  if (refused) return refused;
+  const lockedDay = await lockDayOutcome(tx, pull.orgId, pull.salesDayId, pull.storeId);
+  if (!lockedDay.ok) return lockedDay;
 
-  // T-374 S7 (R9): the pull's own lock, taken AFTER the POS fetch (never held across HTTP). A void that got
-  // here first has committed by the time this returns, so re-read `void` and each section's finalized stamp
-  // from the LOCKED row, not from the unlocked read above.
+  // T-374 S7 (R9): the pull's own lock. A void that got here first has committed by the time this returns, so
+  // re-read `void`, each section's finalized stamp and the PIN from the LOCKED row, not from the unlocked read above.
   const locked = await posMappingRepo.getPullForUpdate(tx, pull.id);
   if (!locked) throw internalFault(`finalizeSections: pull ${pull.id} no longer exists`);
   if (locked.status === 'void') return { ok: false, reason: 'this pull has been voided' };
+
+  const d = when(salesDay.businessDate);
+  if (!locked.posV1DayFeedId) return fail(SENTENCES.preS5);
+  const pinned = await loadPinnedFeed(tx, pull.orgId, pull.id, locked.posV1DayFeedId, pull.storeId, salesDay.businessDate);
+  const pinRead = readFeed(pinned, salesDay.businessDate);
+  if (!pinRead.ok) return pinRead;
+  const latest = await posV1Repo.latestForDay(tx, pull.orgId, pull.storeId, salesDay.businessDate, 'sold_items');
+  if (latest && latest.id !== pinned.id) {
+    const latestRead = readFeed(latest, salesDay.businessDate);
+    if (!latestRead.ok) return latestRead;
+    if (!sameItemsProjection(latestRead.items, pinRead.items)) return fail(finalizedSectionsOf(locked).length > 0 ? SENTENCES.partlyChanged(d) : SENTENCES.changed(d));
+  }
+  const freshLines = await rebuildLines(tx, pull.orgId, pull.storeId, locked.locationId, pinRead.items);
 
   const freshKeys = new Set(freshLines.map((l) => l.key));
   const confirmedSet = new Set(input.confirmedKeys);
@@ -392,7 +456,7 @@ export async function finalizeSections(
  *       Each record then reverses through the actor-less `voidPullUsageRecord`, which is what lets R10 stop a
  *       record being voided on its own.
  * - R9  Lock order: `authorize` -> pull `FOR UPDATE` -> status checks -> record voids. `finalizeSections` takes
- *       the same lock after its POS fetch, so a void and a finalize serialize.
+ *       the same lock, so a void and a finalize serialize.
  * - R10 (see `voidUsage`) a pull-made record cannot be voided alone.
  * - R11 A void pull frees its date: the unique index and `findLivePullOnVoidedDayForDate` count only non-void pulls.
  * - R12 The reversal is dated on the pull's sales day when that stock month is open, else today. The CHOSEN date
