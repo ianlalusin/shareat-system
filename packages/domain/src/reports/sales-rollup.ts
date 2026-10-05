@@ -23,7 +23,8 @@ export interface SalesPeriodLine {
 }
 
 export interface SalesChannelLine {
-  channelId: string;
+  /** Null only on the synthetic "POS corrections" line (T-375 R14). */
+  channelId: string | null;
   channelName: string;
   isRemittedDaily: boolean;
   total: Money;

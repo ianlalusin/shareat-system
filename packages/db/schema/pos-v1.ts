@@ -86,7 +86,7 @@ export const posV1StoreLinks = pgTable(
     check('pos_v1_store_links_pos_store_id_not_blank_check', sql`btrim(${t.posStoreId}) <> ''`),
     check('pos_v1_store_links_pos_store_name_not_blank_check', sql`btrim(${t.posStoreName}) <> ''`),
     // NOTE: a BEFORE UPDATE trigger refusing a change of store_id (pos_v1_store_links_store_fixed) is
-    // hand-added in migration 0184 (S4), not here.
+    // hand-added in migration 0185 (T-375 S4), not here.
   ],
 );
 

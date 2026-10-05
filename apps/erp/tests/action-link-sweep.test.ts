@@ -204,8 +204,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 151 FAIL / 57 UNRESOLVED', () => {
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 57 });
+  it('accepted-baseline totals: 151 FAIL / 58 UNRESOLVED', () => {
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 58 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -350,7 +350,11 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // `SalesDayForm.tsx` is gone (-1, one UNRESOLVED baseline entry removed from touch-target-baseline.json); the new
     // Import from POS button and date input (`sales-days/new/page.tsx`) and the Re-import button
     // (`sales-days/[id]/page.tsx`) are +3 PASS. Verified by running the census (1122).
-    expect(results.length).toBe(1122);
+    // 1122 -> 1125, T-375 S4, 2026-10-05. +3 PASS/UNRESOLVED, FAIL unmoved at 151; UNRESOLVED 57 -> 58. The Platform sales
+    // form (`sales-days/[id]/page.tsx`) renders one row per non-remitted channel from a single `.map` template: an amount
+    // input, a "no sales" checkbox (+1 UNRESOLVED baseline entry, touch-target-baseline.json) and the Save platform sales
+    // button. Verified by running the census (1125).
+    expect(results.length).toBe(1125);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

@@ -501,7 +501,7 @@ describe('T11 (R3) — withdraw refused while a dependent hangs off the day; the
     {
       name: '(ii) an order_wastages row',
       arrange: (f, id) => addWastage(f, id),
-      sentence: "Wastage is recorded against this day, so it can't be withdrawn — edit its figures instead.",
+      sentence: "Wastage is recorded against this day, so it can't be withdrawn. Edit its figures instead.", // T-375 S4 (V13): typed day, unlinked store
       controlName: 'no dependent: the withdraw succeeds',
       control: async () => undefined,
     },

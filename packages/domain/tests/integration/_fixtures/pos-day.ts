@@ -143,3 +143,55 @@ export async function importTestDay(
   const result = await importSalesDay(tx, actor, { storeId: o.storeId, businessDate: o.businessDate }, o.fetchers ?? stub.fetchers);
   return { ...result, calls: stub.calls, bodies: stub.bodies };
 }
+
+/**
+ * T-375 S4 - a feed-sourced sales day inserted by RAW SQL on a LINKED store, the way the 0185 lock lets only the
+ * derivation write one: the transaction-local flag `app.sales_day_derivation` is turned on for the insert and off
+ * after it (the same on-success-only shape as `withSalesDayDerivation`). On HEAD (no trigger) the flag is inert and
+ * the insert simply works, so tests that use this helper stay green until a leg asserts a refusal.
+ *
+ * Pass a postgres.js TRANSACTION to run inside the caller's transaction; pass the pool and the helper opens its own
+ * (a `set_config(..., true)` outside a transaction would not outlive its statement). A feed row is inserted for the
+ * day unless `feedId` is given. Figures default to the spec's D1 day (total 1,100.00 = unli 600.00 + a la carte 500.00).
+ * Returns `{ id, feedId }`.
+ */
+export async function insertDerivedSalesDayRow(
+  tx: postgres.Sql | postgres.TransactionSql,
+  row: {
+    orgId: string;
+    storeId: string;
+    businessDate: string;
+    createdBy: string;
+    feedId?: string;
+    posStoreId?: string;
+    status?: 'open' | 'submitted' | 'verified' | 'voided';
+    figures?: Partial<Record<'total_sales' | 'unli_sales' | 'ala_carte_sales' | 'other_discount' | 'other_charges' | 'refunds' | 'cash_collected' | 'online_collected', string>>;
+  },
+): Promise<{ id: string; feedId: string }> {
+  const run = async (t: postgres.Sql | postgres.TransactionSql) => {
+    let feedId = row.feedId;
+    if (!feedId) {
+      const [feed] = await t<{ id: string }[]>`
+        insert into pos_v1_day_feeds (org_id, store_id, business_date, kind, purpose, batch_id, pos_store_id, body, payload, content_hash, fetched_at, fetched_by)
+        values (${row.orgId}, ${row.storeId}, ${row.businessDate}, 'sales', 'import', ${crypto.randomUUID()}, ${row.posStoreId ?? 'pos-fixture'},
+                '{"found":true}', '{"found":true}'::jsonb, ${sha256(uid('feed'))}, now(), ${row.createdBy})
+        returning id`;
+      feedId = feed!.id;
+    }
+    const f = { total_sales: '1100.00', unli_sales: '600.00', ala_carte_sales: '500.00', other_discount: '100.00', other_charges: '50.00', refunds: '0.00', cash_collected: '700.00', online_collected: '350.00', ...row.figures };
+    const status = row.status ?? 'open';
+    await t`select set_config('app.sales_day_derivation', 'on', true)`;
+    const [day] = await t<{ id: string }[]>`
+      insert into sales_days (org_id, store_id, business_date, status, total_sales, unli_sales, ala_carte_sales, other_discount, other_charges,
+                              refunds, cash_collected, online_collected, source, pos_v1_day_feed_id, pos_sourced, pos_sourced_at, created_by,
+                              verified_by, verified_at)
+      values (${row.orgId}, ${row.storeId}, ${row.businessDate}, ${status}, ${f.total_sales}, ${f.unli_sales}, ${f.ala_carte_sales}, ${f.other_discount}, ${f.other_charges},
+              ${f.refunds}, ${f.cash_collected}, ${f.online_collected}, 'pos_v1_day_feed', ${feedId}, true, now(), ${row.createdBy},
+              ${status === 'verified' ? row.createdBy : null}, ${status === 'verified' ? new Date().toISOString() : null})
+      returning id`;
+    await t`select set_config('app.sales_day_derivation', 'off', true)`;
+    return { id: day!.id, feedId };
+  };
+  const begin = (tx as postgres.Sql).begin;
+  return typeof begin === 'function' ? (tx as postgres.Sql).begin((t) => run(t)) as Promise<{ id: string; feedId: string }> : run(tx);
+}

@@ -5,3 +5,5 @@ export * from './edit';
 export * from './verify';
 export * from './live-day';
 export * from './import';
+export * from './compose';
+export * from './platform';

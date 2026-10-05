@@ -227,10 +227,30 @@ describe('M4 - sales_days: source, feed id, refunds', () => {
     expect(row).toEqual({ source: 'legacy_typed', feed: null, refunds: '0.00' });
   });
 
-  it('control: a well-formed feed-sourced row (feed id, pos_sourced true) is accepted', async () => {
+  it('control: a well-formed feed-sourced row (feed id, pos_sourced true) is accepted ON A LINKED STORE (T-375 S4: a feed day needs a link; the derivation flag is on for the insert)', async () => {
     const f = await fixture('m4c');
+    const [ch] = await sql<{ id: string }[]>`
+      insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${f.orgId}, ${f.storeId}, 'Walk-in', true) returning id`;
+    await sql`insert into pos_v1_store_links (org_id, store_id, pos_store_id, pos_store_name, sales_channel_id, pos_tax_type, created_by)
+      values (${f.orgId}, ${f.storeId}, ${uid('pos')}, 'POS store', ${ch!.id}, 'vat_inclusive', ${f.personId})`;
     const [feed] = await insertFeed(f);
-    await expect(insertDay(f, '2027-01-06', { source: 'pos_v1_day_feed', feed: feed!.id, posSourced: true, refunds: '10.00' })).resolves.toBeDefined();
+    await expect(
+      sql.begin(async (t) => {
+        await t`select set_config('app.sales_day_derivation', 'on', true)`;
+        await t`
+          insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by, source, pos_v1_day_feed_id, pos_sourced, pos_sourced_at, refunds)
+          values (${f.orgId}, ${f.storeId}, '2027-01-06', 0, 0, 0, ${f.personId}, 'pos_v1_day_feed', ${feed!.id}, true, now(), '10.00')`;
+      }),
+    ).resolves.not.toThrow();
+    const [n] = await sql<{ n: number }[]>`select count(*)::int as n from sales_days where store_id = ${f.storeId} and source = 'pos_v1_day_feed'`;
+    expect(n!.n).toBe(1);
+  });
+
+  it('T-375 S4: the same feed-sourced row on an UNLINKED store is refused (sales_days_figures_locked, 23514), flag on or off', async () => {
+    const f = await fixture('m4u');
+    const [feed] = await insertFeed(f);
+    const err = await insertDay(f, '2027-01-06', { source: 'pos_v1_day_feed', feed: feed!.id, posSourced: true, refunds: '10.00' }).catch((e) => e);
+    expect({ code: sqlstate(err), constraint: (err as { constraint_name?: string }).constraint_name }).toEqual({ code: '23514', constraint: 'sales_days_figures_locked' });
   });
 
   it('control: legacy_typed with refunds 0 is accepted (the default shape)', async () => {

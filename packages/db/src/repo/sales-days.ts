@@ -20,7 +20,7 @@ import {
 } from '../../schema/sales-days';
 import { moneyAccounts } from '../../schema/money-accounts';
 import { stores } from '../../schema/stores';
-import type { Money } from '@shareat/core/money';
+import { isZero, type Money } from '@shareat/core/money';
 import type { SafeInsert } from './numeric-input';
 
 export type SalesDayStatus = 'open' | 'submitted' | 'verified' | 'voided';
@@ -862,4 +862,35 @@ export async function replaceTenders(
     amount: r.amount,
   }));
   await tx.insert(salesDayTenders).values(values);
+}
+
+// -------------------------------------------------------------------------------------
+// T-375 S4 (R8) - platform sales: the typed, removable seam. A platform row is a `sales_day_channels` row for a
+// NON-remitted channel of a feed day; the 0185 trigger lets it be written without the derivation flag while the day
+// is open or submitted. `domain/sales-days/platform.ts` is the only caller.
+// -------------------------------------------------------------------------------------
+
+/** The day's channel rows for the given channels, as they stand. */
+export async function getChannelRowsFor(tx: Tx, salesDayId: string, channelIds: string[]): Promise<{ channelId: string; amount: string; noSales: boolean }[]> {
+  if (channelIds.length === 0) return [];
+  return tx
+    .select({ channelId: salesDayChannels.channelId, amount: salesDayChannels.amount, noSales: salesDayChannels.noSales })
+    .from(salesDayChannels)
+    .where(and(eq(salesDayChannels.salesDayId, salesDayId), inArray(salesDayChannels.channelId, channelIds)));
+}
+
+/**
+ * Replaces the day's rows for exactly these (non-remitted) channels: each listed channel's row is deleted, then
+ * written again unless it carries nothing (a zero that is not a confirmed "no sales" clears the row). Other channel
+ * rows are never touched.
+ */
+export async function replacePlatformChannelRows(tx: Tx, salesDayId: string, rows: InsertChannelInput[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx
+    .delete(salesDayChannels)
+    .where(and(eq(salesDayChannels.salesDayId, salesDayId), inArray(salesDayChannels.channelId, rows.map((r) => r.channelId))));
+  const values: (SafeInsert<typeof salesDayChannels> & { amount: Money })[] = rows
+    .filter((r) => r.noSales || !isZero(r.amount))
+    .map((r) => ({ salesDayId, channelId: r.channelId, amount: r.amount, noSales: r.noSales }));
+  if (values.length > 0) await tx.insert(salesDayChannels).values(values);
 }

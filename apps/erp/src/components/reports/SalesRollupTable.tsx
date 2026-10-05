@@ -8,7 +8,7 @@ export interface SalesPeriodRow {
 }
 
 export interface SalesChannelRow {
-  channelId: string;
+  channelId: string | null;
   channelName: string;
   isRemittedDaily: boolean;
   total: Money;
@@ -97,7 +97,7 @@ export function SalesChannelTable({ rows, total }: { rows: SalesChannelRow[]; to
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.channelId} className="border-t border-neutral-200 dark:border-neutral-800">
+            <tr key={r.channelId ?? "pos-corrections"} className="border-t border-neutral-200 dark:border-neutral-800">
               <td className="px-3 py-1.5">{r.channelName}</td>
               <td className="px-3 py-1.5 text-xs text-neutral-500">{r.isRemittedDaily ? 'Yes' : 'No — receivable'}</td>
               <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(r.total)}</td>

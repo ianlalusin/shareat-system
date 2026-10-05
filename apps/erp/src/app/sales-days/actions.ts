@@ -13,7 +13,7 @@
  * could claim to be anyone. **The segregation only became real when this line changed.**
  */
 import { redirect } from 'next/navigation';
-import { createSalesDay, editSalesDay, importSalesDay, reimportSalesDay, submitSalesDay, verifySalesDay, voidSalesDay } from '@shareat/domain';
+import { createSalesDay, editSalesDay, importSalesDay, reimportSalesDay, setPlatformSales, submitSalesDay, verifySalesDay, voidSalesDay } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -200,6 +200,32 @@ export async function voidSalesDayAction(formData: FormData): Promise<void> {
     await withOrgPrincipal(actor.orgId, (tx) => voidSalesDay(tx, actor, id, str(formData, 'reason')));
   } catch (err) {
     redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+  }
+  redirect(`/sales-days/${id}?${qs}`);
+}
+
+/**
+ * T-375 S4 (R8): the **Platform sales** section of a feed day. Rows arrive as channel_<id> / nosales_<id> pairs (the
+ * channel id is in the field name, as on the typed form). A blank box clears that channel's row; the domain refuses a
+ * remitted channel, a negative amount and a day that is verified. Every outcome returns to the day's own page.
+ */
+export async function setPlatformSalesAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const id = str(formData, 'salesDayId');
+  const qs = carryQs(formData);
+  const back = (error: string) => redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(error)}`);
+
+  const rows: { channelId: string; amount: string; noSales: boolean }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith('channel_') || typeof value !== 'string') continue;
+    const channelId = key.slice('channel_'.length);
+    // Passed on as typed: the domain parses it in words after authorize().
+    rows.push({ channelId, amount: value.trim(), noSales: formData.get(`nosales_${channelId}`) === 'on' });
+  }
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => setPlatformSales(tx, actor, { salesDayId: id, rows }));
+  } catch (err) {
+    return back(errorMessage(err));
   }
   redirect(`/sales-days/${id}?${qs}`);
 }

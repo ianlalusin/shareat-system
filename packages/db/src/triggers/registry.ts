@@ -446,4 +446,30 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: 'Useful life, interval, salvage value and cost freeze once depreciation posts (0174, DEF-436) — reads the CURRENT journal.',
   },
+  // T-375 S4 (0185): the link-aware lock. Origin validators: they read ANOTHER row's CURRENT state (the store's link,
+  // the day's status) and the transaction-local flag, so a replay of historic rows must not re-run them.
+  sales_days_figure_lock: {
+    table: 'sales_days',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "A linked store's day figures change only inside the derivation (0185, T-375 R6) - reads the store's CURRENT link and the flag.",
+  },
+  sales_day_tenders_lock: {
+    table: 'sales_day_tenders',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "A linked store's tender rows change only inside the derivation (0185) - reads the day's source, status and the store's link.",
+  },
+  sales_day_channels_lock: {
+    table: 'sales_day_channels',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "A feed day's remitted channel rows change only inside the derivation; platform rows only while the day is unverified (0185).",
+  },
+  pos_v1_store_links_store_fixed: {
+    table: 'pos_v1_store_links',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "A POS link's store never changes (0185, T-375 R6).",
+  },
 } as const;

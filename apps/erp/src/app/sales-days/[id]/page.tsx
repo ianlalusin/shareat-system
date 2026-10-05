@@ -6,7 +6,7 @@ import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { listStores, listActingPersons, getStoreLink } from '../lib';
 import { requireSession } from '../../../lib/session';
-import { reimportSalesDayAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
+import { reimportSalesDayAction, setPlatformSalesAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -90,6 +90,15 @@ export default async function SalesDayDetailPage({
           money(day.unliSales),
         )
       : ZERO;
+
+  // T-375 S4 (R8): platform sales are the one thing typed on a feed day - the store's NON-remitted channels, while the
+  // day is unverified. A remitted channel comes from POS and is never offered here.
+  const platformChannels =
+    isFeedDay && unverified && can.edit
+      ? (await withOrgPrincipal(orgId, (tx) => salesDaysRepo.listChannels(tx, orgId, day.storeId, { activeOnly: true }))).filter(
+          (c) => !c.isRemittedDaily,
+        )
+      : [];
 
   const personName = (pid: string | null) =>
     pid ? (persons.find((p) => p.id === pid)?.displayName ?? pid) : '—';
@@ -292,6 +301,43 @@ export default async function SalesDayDetailPage({
             Edit this day
           </a>
         </div>
+      )}
+
+      {platformChannels.length > 0 && (
+        <form action={setPlatformSalesAction} className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+          {hiddenIds}
+          <h2 className="font-medium">Platform sales</h2>
+          <p className="text-neutral-600 dark:text-neutral-400">
+            Orders that were not rung through POS. They are added to this day when it is verified. Leave a box blank for
+            none, or tick &quot;no sales&quot; to confirm there were none.
+          </p>
+          <div className="space-y-2">
+            {platformChannels.map((c) => {
+              const row = channels.find((r) => r.channelId === c.id);
+              return (
+                <div key={c.id} className="flex flex-wrap items-center gap-3">
+                  <label htmlFor={`channel_${c.id}`} className="w-40">
+                    {c.name}
+                  </label>
+                  <input
+                    id={`channel_${c.id}`}
+                    name={`channel_${c.id}`}
+                    inputMode="decimal"
+                    defaultValue={row && !row.noSales ? row.amount : ''}
+                    className="w-36 rounded border border-neutral-300 bg-white px-2 py-1 text-right tabular-nums dark:border-neutral-700 dark:bg-neutral-950"
+                  />
+                  <label className="flex items-center gap-1 text-neutral-600 dark:text-neutral-400">
+                    <input type="checkbox" name={`nosales_${c.id}`} defaultChecked={row?.noSales ?? false} />
+                    no sales
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+          <button type="submit" className="rounded border border-neutral-300 px-4 py-1.5 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+            Save platform sales
+          </button>
+        </form>
       )}
 
       <section className="grid gap-4 md:grid-cols-2">

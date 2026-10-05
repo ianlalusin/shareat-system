@@ -29,6 +29,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { CONSTRAINT_MESSAGES, errorMessage } from '../../src/lib/constraint-messages';
+import { insertDerivedSalesDayRow } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -360,10 +361,69 @@ describe('T-271 — sales_channels', () => {
   });
 });
 
+// T-375 S4 (0185) — the four lock constraints, provoked for real on a store LINKED to POS (raw SQL, no derivation flag).
+describe('T-375 S4 — the sales-day lock', () => {
+  const LOCK_SENTENCE = "Sales figures for this store come only from POS and can't be changed here. A wrong sale is refunded on the POS.";
+  async function linkedStore() {
+    const code = uid('t375s4-lock');
+    const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
+    const orgId = org!.id;
+    await seedChartOfAccounts(sql, orgId);
+    const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('store')}, 'Lipa') returning id`;
+    const [store2] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('store')}, 'Batangas') returning id`;
+    const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
+    const [ch] = await sql<{ id: string }[]>`insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${orgId}, ${store!.id}, 'Walk-in', true) returning id`;
+    const [wallet] = await sql<{ id: string }[]>`
+      insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian) values (${orgId}, ${store!.id}, 'GCash', 'ewallet', '1140', 'cashier') returning id`;
+    await sql`insert into pos_v1_store_links (org_id, store_id, pos_store_id, pos_store_name, sales_channel_id, pos_tax_type, created_by)
+      values (${orgId}, ${store!.id}, ${uid('pos')}, 'POS store', ${ch!.id}, 'vat_inclusive', ${person!.id})`;
+    return { orgId, storeId: store!.id, store2Id: store2!.id, personId: person!.id, channelId: ch!.id, walletId: wallet!.id };
+  }
+  const check = (key: string, err: unknown) => {
+    const row = record(key, err);
+    expect(row.constraintName).toBe(key);
+    expect(row.message).toBe(LOCK_SENTENCE);
+    expect(row.message).toBe(CONSTRAINT_MESSAGES[key]);
+  };
+
+  it('sales_days_figures_locked', async () => {
+    const f = await linkedStore();
+    const err = await provoke(
+      () => sql`insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by)
+                values (${f.orgId}, ${f.storeId}, '2027-01-10', 1, 0, 1, ${f.personId})`,
+    );
+    check('sales_days_figures_locked', err);
+  });
+
+  it('sales_day_tenders_locked', async () => {
+    const f = await linkedStore();
+    const day = await insertDerivedSalesDayRow(sql, { orgId: f.orgId, storeId: f.storeId, businessDate: '2027-01-10', createdBy: f.personId });
+    const err = await provoke(
+      () => sql`insert into sales_day_tenders (sales_day_id, money_account_id, amount) values (${day.id}, ${f.walletId}, '10.00')`,
+    );
+    check('sales_day_tenders_locked', err);
+  });
+
+  it('sales_day_channels_locked', async () => {
+    const f = await linkedStore();
+    const day = await insertDerivedSalesDayRow(sql, { orgId: f.orgId, storeId: f.storeId, businessDate: '2027-01-10', createdBy: f.personId });
+    const err = await provoke(
+      () => sql`insert into sales_day_channels (sales_day_id, channel_id, amount) values (${day.id}, ${f.channelId}, '10.00')`,
+    );
+    check('sales_day_channels_locked', err);
+  });
+
+  it('pos_v1_store_links_store_fixed', async () => {
+    const f = await linkedStore();
+    const err = await provoke(() => sql`update pos_v1_store_links set store_id = ${f.store2Id} where store_id = ${f.storeId}`);
+    check('pos_v1_store_links_store_fixed', err);
+  });
+});
+
 it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   const exercised = new Set(rows.map((r) => r.key));
   const missing = Object.keys(CONSTRAINT_MESSAGES).filter((k) => !exercised.has(k));
   expect(missing).toEqual([]);
-  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key = 28 rows provoked above.
-  expect(rows.length).toBe(28);
+  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys = 32 rows provoked above.
+  expect(rows.length).toBe(32);
 });

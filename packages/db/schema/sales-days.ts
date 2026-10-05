@@ -329,6 +329,7 @@ export const salesDays = pgTable(
     check('sales_days_cash_collected_finite_check', sql`${t.cashCollected} > '-Infinity'::numeric and ${t.cashCollected} < 'Infinity'::numeric`),
     check('sales_days_online_collected_finite_check', sql`${t.onlineCollected} > '-Infinity'::numeric and ${t.onlineCollected} < 'Infinity'::numeric`),
     check('sales_days_credit_sales_finite_check', sql`${t.creditSales} > '-Infinity'::numeric and ${t.creditSales} < 'Infinity'::numeric`),
+    // NOTE: the sales_days_figure_lock trigger (BEFORE INSERT OR UPDATE; derivation flag owned by repo/sales-days.ts withSalesDayDerivation; errors sales_days_figures_locked) is hand-added in migration 0185 (T-375 S4, R6) - the link-aware lock, not expressible here.
   ],
 );
 
@@ -368,6 +369,7 @@ export const salesDayChannels = pgTable(
     /** A "confirmed no sales" row carrying money is a contradiction. */
     check('sales_day_channels_no_sales_is_zero_check', sql`${t.noSales} = false or ${t.amount} = 0`),
     check('sales_day_channels_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    // NOTE: the sales_day_channels_lock trigger (errors sales_day_channels_locked) is hand-added in migration 0185 (T-375 S4, R6) - the link-aware lock, not expressible here.
   ],
 );
 
@@ -425,5 +427,6 @@ export const salesDayTenders = pgTable(
      *  the row simply should not exist. */
     check('sales_day_tenders_amount_positive_check', sql`${t.amount} > 0`),
     check('sales_day_tenders_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    // NOTE: the sales_day_tenders_lock trigger (errors sales_day_tenders_locked) is hand-added in migration 0185 (T-375 S4, R6) - the link-aware lock, not expressible here.
   ],
 );

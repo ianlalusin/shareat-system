@@ -23,6 +23,7 @@ import {
   vIncomeStatement,
   vTrialBalance,
 } from '../../schema';
+import { add, isZero, money } from '@shareat/core/money';
 import type { Executor } from '../client';
 
 export interface DateRangeFilter {
@@ -351,7 +352,8 @@ export async function getSalesByPeriod(
 }
 
 export interface SalesChannelRollupRow {
-  channelId: string;
+  /** Null only on the synthetic "POS corrections" line (T-375 R14). */
+  channelId: string | null;
   channelName: string;
   isRemittedDaily: boolean;
   total: string;
@@ -406,12 +408,49 @@ export async function getSalesByChannelAndMode(
       .where(and(...conditions)),
   ]);
 
+  // T-375 S4 (R14). A FEED day's platform sales are typed channel rows composed into the day at verify (R8), so
+  // they are in the ledger's 4150 but not in the day's own a la carte figure: add them to that mode. A POS correction
+  // (S6) posts a delta to 4100/4150 under its own source id, and so does the reversal of a corrected day; both are
+  // already in the ledger total, so they enter the modes (per account) and the channels (one synthetic line).
+  // Refunds post to 4950, outside 4100/4150, so they enter neither side.
+  const platformRows = await ex
+    .select({ total: sql<string>`coalesce(sum(${salesDayChannels.amount}), 0)::numeric(14,2)` })
+    .from(salesDayChannels)
+    .innerJoin(salesDays, eq(salesDayChannels.salesDayId, salesDays.id))
+    .innerJoin(salesChannels, eq(salesDayChannels.channelId, salesChannels.id))
+    .where(and(...conditions, eq(salesDays.source, 'pos_v1_day_feed' as const), eq(salesChannels.isRemittedDaily, false)));
+  const corrections = (await ex.execute(sql`
+    select a.code as code, coalesce(sum(jl.credit - jl.debit), 0)::numeric(14,2)::text as total
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${filter.orgId}
+      and je.source_type = 'sale'
+      and je.status in ('posted', 'reversed')
+      and je.entry_date >= ${filter.fromDate} and je.entry_date <= ${filter.toDate}
+      and a.code in ('4100', '4150')
+      and je.source_id in (select c.id::text from sales_day_pos_corrections c where c.org_id = ${filter.orgId})
+      ${filter.storeId ? sql`and jl.store_id = ${filter.storeId}` : sql``}
+    group by a.code
+  `)) as unknown as { code: string; total: string }[];
+  const correctionOf = (code: string) => money(corrections.find((r) => r.code === code)?.total ?? '0');
+  const unliCorrection = correctionOf('4100');
+  const alaCorrection = correctionOf('4150');
+
   const modeRow = modeRows[0];
+  const channels = channelRows as SalesChannelRollupRow[];
+  const correctionTotal = add(unliCorrection, alaCorrection);
+  if (!isZero(correctionTotal)) {
+    channels.push({ channelId: null, channelName: 'POS corrections', isRemittedDaily: false, total: String(correctionTotal) });
+  }
   return {
-    channels: channelRows as SalesChannelRollupRow[],
+    channels,
     modes: [
-      { mode: 'unli', total: modeRow?.unliSales ?? '0.00' },
-      { mode: 'ala_carte', total: modeRow?.alaCarteSales ?? '0.00' },
+      { mode: 'unli', total: String(add(money(modeRow?.unliSales ?? '0'), unliCorrection)) },
+      {
+        mode: 'ala_carte',
+        total: String(add(money(modeRow?.alaCarteSales ?? '0'), money(platformRows[0]?.total ?? '0'), alaCorrection)),
+      },
     ],
   };
 }

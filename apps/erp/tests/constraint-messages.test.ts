@@ -170,8 +170,8 @@ describe('§B3 did not widen the /setup security allowlist', () => {
   // written for a person that names no record, so widening the /setup allowlist by one is intended.
   // T-370 S3: 27 -> 28, DELIBERATELY. The semi-monthly two-days key maps to a sentence written for a person that names no
   // record, so widening the /setup allowlist by one more is intended.
-  it('CONSTRAINT_MESSAGES has exactly 28 keys — the count WRITTEN_FOR_A_PERSON is built from (26 plus the T-369 S7 sales-day unique sentence plus the T-370 S3 semi-monthly two-days sentence)', () => {
-    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(28);
+  it('CONSTRAINT_MESSAGES has exactly 32 keys — the count WRITTEN_FOR_A_PERSON is built from (26 plus the T-369 S7 sales-day unique sentence plus the T-370 S3 semi-monthly two-days sentence plus the four T-375 S4 sales-lock keys)', () => {
+    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(32);
   });
 
   it('none of the 8 locally-mapped names were promoted into CONSTRAINT_MESSAGES', () => {

@@ -388,6 +388,9 @@
     "app/sales-days/page.tsx": [
       "ancestry truncated — no font size resolvable"
     ],
+    "app/sales-days/[id]/page.tsx": [
+      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
+    ],
     "app/settings/attendance/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],

@@ -17,7 +17,15 @@ import { recordConstraintRefusal } from '@shareat/domain';
 import { logger } from '@shareat/core/logger';
 import { containsIdentifier, hasStringCode, isPresentable, looksLikeADump, UUID_SHAPE } from './error-shape';
 
+const SALES_LOCKED_SENTENCE =
+  "Sales figures for this store come only from POS and can't be changed here. A wrong sale is refunded on the POS.";
+
 export const CONSTRAINT_MESSAGES: Record<string, string> = {
+  // T-375 S4 (R6): the 0185 lock on a linked store's sales figures, tender rows and channel rows, and the link's store.
+  sales_days_figures_locked: SALES_LOCKED_SENTENCE,
+  sales_day_tenders_locked: SALES_LOCKED_SENTENCE,
+  sales_day_channels_locked: SALES_LOCKED_SENTENCE,
+  pos_v1_store_links_store_fixed: SALES_LOCKED_SENTENCE,
   // T-369 S7: with a voided day freeing its date, two managers can race to re-enter it and the loser meets
   // the unique index (now partial, migration 0177).
   sales_days_org_id_store_id_business_date_unique:

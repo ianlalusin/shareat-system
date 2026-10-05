@@ -35,6 +35,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, findingsRepo, remittanceRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { type Actor } from '@shareat/auth';
 import { createMoneyTransfer, createRemittance, setTillFloat } from '@shareat/domain';
+import { insertDerivedSalesDayRow } from './_fixtures/pos-day';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -109,7 +110,20 @@ const spend = (f: F, date: string, amount: string) => post(f, date, `-${amount}`
 const fund = (f: F, date: string, amount: string) => post(f, date, amount, 'transfer', '1130');
 const setTarget = (f: F, target: string) => sql`update money_accounts set float_target = ${target} where id = ${f.till}`;
 
+/**
+ * A sales day for `date`. T-375 S4 (0185): a LINKED store's days are feed days written only through the derivation, a
+ * typed day only exists on an UNLINKED store, so the helper picks the path from the store's link row. The figures are
+ * the same either way (cash `cash`, nothing else), so every assertion keeps its meaning.
+ */
 async function day(f: F, date: string, status: 'verified' | 'open', cash = '0.00') {
+  const [linked] = await sql<{ n: number }[]>`select count(*)::int as n from pos_v1_store_links where store_id = ${f.storeId}`;
+  if (linked!.n > 0) {
+    await insertDerivedSalesDayRow(sql, {
+      orgId: f.orgId, storeId: f.storeId, businessDate: date, createdBy: f.adminId, status,
+      figures: { total_sales: cash, unli_sales: '0', ala_carte_sales: cash, cash_collected: cash, other_discount: '0', other_charges: '0', online_collected: '0', refunds: '0' },
+    });
+    return;
+  }
   await sql`insert into sales_days (org_id, store_id, business_date, status, total_sales, unli_sales, ala_carte_sales, cash_collected, created_by)
     values (${f.orgId}, ${f.storeId}, ${date}, ${status}, ${cash}, '0', ${cash}, ${cash}, ${f.adminId})`;
 }
@@ -123,17 +137,12 @@ async function link(f: F) {
     values (${f.orgId}, ${f.storeId}, ${uid('pos')}, 'POS store', ${c!.id}, 'vat_inclusive', ${f.adminId})`;
 }
 
-/** A feed-sourced OPEN day (`source = 'pos_v1_day_feed'`, A5) for `date` with `cash` imported. */
+/** A feed-sourced OPEN day (`source = 'pos_v1_day_feed'`, A5) for `date` with `cash` imported (linked store only). */
 async function feedDay(f: F, date: string, cash: string) {
-  const hash = 'a'.repeat(64);
-  const [feed] = await sql<{ id: string }[]>`
-    insert into pos_v1_day_feeds (org_id, store_id, business_date, kind, purpose, batch_id, pos_store_id, body, payload, content_hash, fetched_at, fetched_by)
-    values (${f.orgId}, ${f.storeId}, ${date}, 'sales', 'import', ${crypto.randomUUID()}, 'pos-x', '{"found":true}', '{"found":true}'::jsonb, ${hash}, now(), ${f.adminId})
-    returning id`;
-  await sql`insert into sales_days (org_id, store_id, business_date, status, total_sales, unli_sales, ala_carte_sales, cash_collected,
-                                    source, pos_v1_day_feed_id, pos_sourced, pos_sourced_at, created_by)
-    values (${f.orgId}, ${f.storeId}, ${date}, 'open', ${cash}, '0', ${cash}, ${cash},
-            'pos_v1_day_feed', ${feed!.id}, true, now(), ${f.adminId})`;
+  await insertDerivedSalesDayRow(sql, {
+    orgId: f.orgId, storeId: f.storeId, businessDate: date, createdBy: f.adminId, status: 'open',
+    figures: { total_sales: cash, unli_sales: '0', ala_carte_sales: cash, cash_collected: cash, other_discount: '0', other_charges: '0', online_collected: '0', refunds: '0' },
+  });
 }
 
 /** Opening cash in the office safe (1130), so a transfer to the till has something to move. */

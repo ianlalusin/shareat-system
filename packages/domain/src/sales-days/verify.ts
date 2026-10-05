@@ -16,10 +16,10 @@
  * four-role `signoff` block shows the business already knows it.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { salesDaysRepo, transaction, type Tx } from '@shareat/db';
-import { money } from '@shareat/core/money';
+import { posV1Repo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
+import { routeInputForDay } from './compose';
 import { routeSalesDay } from './routing';
 import { refuse, gone, internalFault } from '../shared/refusal';
 
@@ -93,31 +93,8 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
   const channels = await salesDaysRepo.getChannelsForDay(tx, salesDayId);
   const tenders = await salesDaysRepo.getTendersForDay(tx, salesDayId);
 
-  const routed = routeSalesDay({
-    totalSales: money(day.totalSales),
-    unliSales: money(day.unliSales),
-    alaCarteSales: money(day.alaCarteSales),
-    seniorDiscount: money(day.seniorDiscount),
-    pwdDiscount: money(day.pwdDiscount),
-    otherDiscount: money(day.otherDiscount),
-    comps: money(day.comps),
-    serviceCharge: money(day.serviceCharge),
-    otherCharges: money(day.otherCharges),
-    cashCollected: money(day.cashCollected),
-    onlineCollected: money(day.onlineCollected),
-    creditSales: money(day.creditSales),
-    // T-375 (W11): a feed day's refunds post to 4950 beside its cash net of them; a typed day has none.
-    refunds: money(day.refunds),
-    tenders: tenders.map((t) => ({ moneyAccountId: t.moneyAccountId, amount: money(t.amount) })),
-    channels: channels.map((c) => ({
-      channelId: c.channelId,
-      channelName: c.channelName,
-      isRemittedDaily: c.isRemittedDaily,
-      receivableAccountCode: c.receivableAccountCode,
-      amount: money(c.amount),
-      noSales: c.noSales,
-    })),
-  });
+  // T-375 S4 (R8): `routeInputForDay` composes a feed day's platform sales; a typed day routes as it always did.
+  const routed = routeSalesDay(routeInputForDay(day, channels, tenders));
 
   if (!routed.ok) {
     // ⚠️ The day is UNCHANGED — still open or submitted, fixable and re-verifiable. A day that
@@ -212,7 +189,12 @@ async function runVoid(
     if (blockers.wastage) {
       throw refuse(
         `voidSalesDay: sales day ${salesDayId} has order wastage recorded against it`,
-        "Wastage is recorded against this day, so it can't be withdrawn — edit its figures instead.",
+        "Wastage is recorded against this day, so it can't be withdrawn." +
+          (day.source === 'pos_v1_day_feed'
+            ? ' Re-import it from POS instead.'
+            : (await posV1Repo.getLinkByStore(tx, actor.orgId, day.storeId))
+              ? ''
+              : ' Edit its figures instead.'),
       );
     }
     if (blockers.remittance) {
