@@ -22,7 +22,6 @@ export interface SalesDayDefaults {
   channels?: Record<string, { amount: string; noSales: boolean }>;
   /** Money account id -> the amount the day landed there. */
   tenders?: Record<string, string>;
-  posSourced?: boolean;
 }
 
 export interface SalesDayFormProps {
@@ -233,13 +232,6 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
           </ul>
         </section>
       )}
-
-      <label className="flex items-center gap-2">
-        <input type="checkbox" name="posSourced" defaultChecked={defaults?.posSourced ?? false} />
-        <span className="text-neutral-600 dark:text-neutral-400">
-          Figures pulled from POS (rather than typed by hand)
-        </span>
-      </label>
 
       <button
         type="submit"

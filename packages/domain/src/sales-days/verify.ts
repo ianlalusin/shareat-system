@@ -106,6 +106,8 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
     cashCollected: money(day.cashCollected),
     onlineCollected: money(day.onlineCollected),
     creditSales: money(day.creditSales),
+    // T-375 (W11): a feed day's refunds post to 4950 beside its cash net of them; a typed day has none.
+    refunds: money(day.refunds),
     tenders: tenders.map((t) => ({ moneyAccountId: t.moneyAccountId, amount: money(t.amount) })),
     channels: channels.map((c) => ({
       channelId: c.channelId,

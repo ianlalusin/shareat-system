@@ -19,6 +19,7 @@ import {
   salesDays,
 } from '../../schema/sales-days';
 import { moneyAccounts } from '../../schema/money-accounts';
+import { stores } from '../../schema/stores';
 import type { Money } from '@shareat/core/money';
 import type { SafeInsert } from './numeric-input';
 
@@ -38,6 +39,12 @@ export interface SalesDayRow {
   status: SalesDayStatus;
   posSourced: boolean;
   posSourcedAt: Date | null;
+  /** T-375: `legacy_typed` (a typed day) or `pos_v1_day_feed` (derived from a stored POS response). */
+  source: 'legacy_typed' | 'pos_v1_day_feed';
+  /** The `sales` feed a feed day was derived from; null on a typed day. */
+  posV1DayFeedId: string | null;
+  /** POS refunds of a feed day (posts to 4950); always 0.00 on a typed day. */
+  refunds: string;
   totalSales: string;
   unliSales: string;
   alaCarteSales: string;
@@ -70,6 +77,9 @@ const COLUMNS = {
   status: salesDays.status,
   posSourced: salesDays.posSourced,
   posSourcedAt: salesDays.posSourcedAt,
+  source: salesDays.source,
+  posV1DayFeedId: salesDays.posV1DayFeedId,
+  refunds: salesDays.refunds,
   totalSales: salesDays.totalSales,
   unliSales: salesDays.unliSales,
   alaCarteSales: salesDays.alaCarteSales,
@@ -307,6 +317,10 @@ export type InsertSalesDayInput = Pick<
 > & {
   posSourced: boolean;
   posSourcedAt: Date | null;
+  /** T-375: absent = `legacy_typed`. A feed day names its `sales` feed and carries its refunds (W11). */
+  source?: 'legacy_typed' | 'pos_v1_day_feed';
+  posV1DayFeedId?: string | null;
+  refunds?: Money;
   totalSales: Money;
   unliSales: Money;
   alaCarteSales: Money;
@@ -468,10 +482,12 @@ export async function listSalesDays(tx: Tx, input: ListSalesDaysInput): Promise<
     .limit(input.limit ?? 100);
 }
 
-/** T-371 C2 — a figure, when present, is a `Money` brand; an absent one is left unchanged (✎R13). */
+/**
+ * T-371 C2 — a figure, when present, is a `Money` brand; an absent one is left unchanged (✎R13).
+ * T-375 S3: provenance (`posSourced`) is no longer written here - a typed day is never POS-sourced, and a feed day's
+ * figures go through `updateDerivedFigures` inside `withSalesDayDerivation`.
+ */
 export interface UpdateDraftInput {
-  posSourced?: boolean;
-  posSourcedAt?: Date | null;
   totalSales?: Money;
   unliSales?: Money;
   alaCarteSales?: Money;
@@ -512,6 +528,101 @@ export async function updateDraft(tx: Tx, orgId: string, id: string, patch: Upda
       'open or submitted',
     );
   }
+}
+
+// -------------------------------------------------------------------------------------
+// T-375 S3 - the derivation seam (R6). A feed day's figures, remitted channel rows and tender rows are written only
+// inside `withSalesDayDerivation`; the 0185 triggers refuse the same writes without the flag. `import.ts` is the
+// only caller of `updateDerivedFigures` / `replaceRemittedChannels` (guard G1).
+// -------------------------------------------------------------------------------------
+
+/**
+ * Runs `fn` with the transaction-local flag `app.sales_day_derivation` on, then sets it off - ON SUCCESS ONLY.
+ * After an error the transaction is already aborted: another statement would raise 25P02 and hide the real
+ * constraint name, and the rollback discards the flag anyway.
+ */
+export async function withSalesDayDerivation<T>(tx: Tx, fn: () => Promise<T>): Promise<T> {
+  await tx.execute(sql`select set_config('app.sales_day_derivation', 'on', true)`);
+  const result = await fn();
+  await tx.execute(sql`select set_config('app.sales_day_derivation', 'off', true)`);
+  return result;
+}
+
+/** What a re-import replaces on a feed day: the figures, their provenance and the refunds. */
+export interface DerivedFiguresPatch {
+  posV1DayFeedId: string;
+  posSourcedAt: Date;
+  totalSales: Money;
+  unliSales: Money;
+  alaCarteSales: Money;
+  seniorDiscount: Money;
+  pwdDiscount: Money;
+  otherDiscount: Money;
+  comps: Money;
+  serviceCharge: Money;
+  otherCharges: Money;
+  cashCollected: Money;
+  onlineCollected: Money;
+  creditSales: Money;
+  refunds: Money;
+}
+
+/** Replaces the figures of an OPEN or SUBMITTED feed day (the status predicate is repeated in the WHERE, as
+ *  `updateDraft` does). Status, sign-off and journal columns are not touched. */
+export async function updateDerivedFigures(tx: Tx, orgId: string, id: string, patch: DerivedFiguresPatch): Promise<void> {
+  const updated = await tx
+    .update(salesDays)
+    .set({ ...patch, posSourced: true, updatedAt: sql`now()` })
+    .where(
+      and(
+        eq(salesDays.id, id),
+        eq(salesDays.orgId, orgId),
+        eq(salesDays.source, 'pos_v1_day_feed'),
+        inArray(salesDays.status, [...UNVERIFIED_STATUSES]),
+      ),
+    )
+    .returning({ id: salesDays.id });
+  if (updated.length === 0) {
+    throw recordGone(
+      `updateDerivedFigures: sales day ${id} does not exist in org ${orgId}, or is not an open/submitted feed day`,
+      'sales day',
+      'open or submitted',
+    );
+  }
+}
+
+/**
+ * Replaces the day's rows for channels REMITTED DAILY (what POS's till money lands in) and leaves every other channel
+ * row (platform sales, R8) exactly as it is.
+ */
+export async function replaceRemittedChannels(tx: Tx, orgId: string, salesDayId: string, rows: InsertChannelInput[]): Promise<void> {
+  await tx.execute(sql`
+    delete from sales_day_channels
+     where sales_day_id = ${salesDayId}
+       and channel_id in (select id from sales_channels where org_id = ${orgId} and is_remitted_daily)`);
+  if (rows.length === 0) return;
+  const values: (SafeInsert<typeof salesDayChannels> & { amount: Money })[] = rows.map((r) => ({
+    salesDayId,
+    channelId: r.channelId,
+    amount: r.amount,
+    noSales: r.noSales,
+  }));
+  await tx.insert(salesDayChannels).values(values);
+}
+
+/**
+ * The store row under `FOR KEY SHARE` (R13). A typed create or edit takes it before it reads the store's link:
+ * `linkStoreToPos` holds the same row `FOR UPDATE`, which conflicts, so a typed write and a link of the one store
+ * serialize. Returns the store's name (for the refusal sentence).
+ */
+export async function lockStoreKeyShare(tx: Tx, orgId: string, storeId: string): Promise<{ id: string; name: string } | undefined> {
+  const [row] = await tx
+    .select({ id: stores.id, name: stores.name })
+    .from(stores)
+    .where(and(eq(stores.orgId, orgId), eq(stores.id, storeId)))
+    .limit(1)
+    .for('key share');
+  return row;
 }
 
 export async function markSubmitted(tx: Tx, orgId: string, id: string, submittedBy: string): Promise<void> {

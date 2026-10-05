@@ -102,6 +102,7 @@ export * from './pos/sales-pull';
 export * from './pos/v1-feed';
 export * from './pos/store-link';
 export * from './pos/tenders';
+export { packageCapExcess } from './pos/v1-derive';
 export { normalizePosV1Alias, resolvePosV1Methods, type ResolvedMethods, type ResolverTender } from './pos/v1-methods';
 // T-178 — order/channel wastage disposition.
 export * from './wastage/orders';

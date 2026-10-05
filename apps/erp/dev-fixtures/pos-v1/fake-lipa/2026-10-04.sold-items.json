@@ -1,0 +1,7 @@
+{
+  "found": true,
+  "receiptCount": 20,
+  "items": [
+    { "posItemId": "item-a", "name": "Item A", "physicalQty": 3, "billableQty": 3, "freeQty": 0, "voidedQty": 0, "grossAmount": 300 }
+  ]
+}

@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { authorize, AuthorizationError } from '@shareat/auth';
 import { isZero, money } from '@shareat/core/money';
 import { salesDaysRepo } from '@shareat/db';
-import { listStores, listChannels, listStoreMoneyAccounts, withOrgPrincipal, type ChannelOption } from '../../lib';
+import { listStores, listChannels, listStoreMoneyAccounts, getStoreLink, withOrgPrincipal, type ChannelOption } from '../../lib';
 import { requireSession } from '../../../../lib/session';
 import { editSalesDayAction } from '../../actions';
 import { SalesDayForm, type SalesDayDefaults } from '../../SalesDayForm';
@@ -42,6 +42,10 @@ export default async function EditSalesDayPage({
 
   const unverified = day.status === 'open' || day.status === 'submitted';
 
+  // T-375 S3 (R13): a feed day, or any day of a store linked to POS, is imported, never edited by hand.
+  const link = await getStoreLink(orgId, day.storeId);
+  const storeName = (await listStores(orgId)).find((s) => s.id === day.storeId)?.name ?? 'This store';
+
   // Only offered where it can be used: an open day is the submitter's, a submitted one the verifier's
   // (the domain applies exactly this split). The domain re-checks on save.
   const canEdit = unverified
@@ -68,7 +72,9 @@ export default async function EditSalesDayPage({
     </a>
   );
 
-  if (!unverified || !canEdit) {
+  // T-375 S3 (R13): the linked-store refusal shares this block (and its one PageDescription) with the status refusals.
+  const takesFromPos = link !== null || day.source === 'pos_v1_day_feed';
+  if (takesFromPos || !unverified || !canEdit) {
     return (
       <Page density="table">
         <div>
@@ -77,9 +83,11 @@ export default async function EditSalesDayPage({
           <PageDescription>{day.businessDate}</PageDescription>
         </div>
         <p className={NOT_EDITABLE}>
-          {unverified
-            ? "You can't edit this day."
-            : `Only an unverified sales day can be edited — this one is ${day.status}.`}
+          {takesFromPos
+            ? `${storeName} takes its sales from POS. Import the day instead.`
+            : unverified
+              ? "You can't edit this day."
+              : `Only an unverified sales day can be edited — this one is ${day.status}.`}
         </p>
       </Page>
     );
@@ -128,7 +136,6 @@ export default async function EditSalesDayPage({
     },
     channels: Object.fromEntries(ownChannels.map((c) => [c.channelId, { amount: c.amount, noSales: c.noSales }])),
     tenders: Object.fromEntries(tenders.map((t) => [t.moneyAccountId, t.amount])),
-    posSourced: day.posSourced,
   };
 
   const store = stores.find((s) => s.id === day.storeId);

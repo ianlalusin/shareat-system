@@ -26,26 +26,15 @@
  * exemption. ⚠️ **Do not "restore" the stricter version** on the strength of reading the first
  * commit — the exemption is the newer decision.
  */
-import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
-import { moneyAccountsRepo, salesDaysRepo, tradeDiscrepanciesRepo, transaction, type Tx } from '@shareat/db';
+import { authorize, type Actor } from '@shareat/auth';
+import { moneyAccountsRepo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
 import { add, compare, isZero, ZERO, type Money } from '@shareat/core/money';
-import { parseBusinessDate } from '@shareat/core/datetime';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
-import { refuse, humanDate, RefusalError } from '../shared/refusal';
+import { refuse } from '../shared/refusal';
+import { assertCanOpenDay, assertStoreTakesTypedDays, safeHumanDate } from './create-block';
 
-/**
- * A refusal message builder must never itself throw (code-review item 7, 2026-09-26):
- * `input.businessDate` is caller-supplied and `parseBusinessDate` rejects anything not strictly
- * `YYYY-MM-DD` (e.g. `2026-1-10`, unpadded) — a malformed date must fall back to the raw string
- * rather than crash the refusal it is naming.
- */
-function safeHumanDate(rawBusinessDate: string): string {
-  try {
-    return humanDate(parseBusinessDate(rawBusinessDate));
-  } catch {
-    return rawBusinessDate;
-  }
-}
+// T-375 S3: the create-block moved to `create-block.ts`; its names stay importable from here.
+export { SalesDayBlockedError, TransitShortfallBlockedError, canBypassBlock } from './create-block';
 
 export interface CreateSalesDayChannelInput {
   channelId: string;
@@ -64,7 +53,6 @@ export interface CreateSalesDayTenderInput {
 export interface CreateSalesDayInput {
   storeId: string;
   businessDate: string;
-  posSourced?: boolean;
   totalSales: string;
   unliSales: string;
   alaCarteSales: string;
@@ -84,40 +72,6 @@ export interface CreateSalesDayInput {
   tenders?: CreateSalesDayTenderInput[];
 }
 
-/**
- * ⭐ T-174. Thrown when an unresolved transit shortfall blocks a new day at the COMMISSARY.
- *
- * ⚠️ v1's reason is exactly right and worth keeping in the code: *forces resolution before revenue
- * can be understated further.* A commissary whose dispatched goods are unaccounted for is a
- * commissary whose cost of sales is wrong, and every day it opens on top of that makes the figure
- * worse and harder to unpick.
- */
-export class TransitShortfallBlockedError extends Error {
-  constructor(
-    message: string,
-    readonly discrepancyIds: readonly string[],
-  ) {
-    super(message);
-    this.name = 'TransitShortfallBlockedError';
-  }
-}
-
-/** Thrown when an older unverified day blocks this one. A named type, not a bare Error, because
- *  a caller has a genuinely useful thing to do with it: send the user to that day. It is a
- *  `RefusalError`, so the screen shows `userMessage` (a plain sentence naming the date) and never the
- *  developer text in `message`. */
-export class SalesDayBlockedError extends RefusalError {
-  constructor(
-    message: string,
-    userMessage: string,
-    readonly blockingDayId: string,
-    readonly blockingBusinessDate: string,
-  ) {
-    super(message, userMessage);
-    this.name = 'SalesDayBlockedError';
-  }
-}
-
 export async function createSalesDay(
   tx: Tx | null,
   actor: Actor,
@@ -129,6 +83,8 @@ export async function createSalesDay(
 
 async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Promise<{ id: string }> {
   await authorize(tx, actor, 'submit_sales_day', { storeId: input.storeId });
+  // T-375 S3 (R13): a LINKED store takes its sales from POS - the typed path refuses (store row FOR KEY SHARE first).
+  await assertStoreTakesTypedDays(tx, actor, input.storeId, 'createSalesDay');
 
   const existing = await salesDaysRepo.findByBusinessDate(tx, actor.orgId, input.storeId, input.businessDate);
   if (existing) {
@@ -140,74 +96,9 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
     );
   }
 
-  // T-369 S7 (Ian Q1): a VOIDED day frees its date, but only a manager may enter it again - never staff.
-  // The same capability that lets someone withdraw a day lets them re-enter its date. Asked only when a
-  // voided day really is on this date, so an ordinary create never pays for it.
-  if (await salesDaysRepo.hasVoidedOn(tx, actor.orgId, input.storeId, input.businessDate)) {
-    try {
-      await authorize(tx, actor, 'void_sales_day', { storeId: input.storeId });
-    } catch (err) {
-      if (!(err instanceof AuthorizationError)) throw err;
-      throw refuse(
-        `createSalesDay: ${input.businessDate} at store ${input.storeId} was voided and re-entering it needs void_sales_day`,
-        `${safeHumanDate(input.businessDate)} was withdrawn earlier. Only a manager can enter that date again — ask one to do it.`,
-      );
-    }
-    // Cash handed over and counted against this date has to be reversed before the date is entered again.
-    if (await salesDaysRepo.hasPostedHandoverOn(tx, actor.orgId, input.storeId, input.businessDate)) {
-      throw refuse(
-        `createSalesDay: ${input.businessDate} at store ${input.storeId} has a posted remittance allocation`,
-        'Cash handed over has been counted against this date. Reverse that handover first.',
-      );
-    }
-  }
-
-  // ── The create-block ────────────────────────────────────────────────────────────────
-  // Admins bypass. Checked by asking whether this actor could close a period — the closest
-  // existing capability that only admins and org-wide managers hold — rather than reading a
-  // role name here, so the matrix stays the single source of who may do what.
-  const isAdmin = await canBypassBlock(tx, actor, input.storeId);
-  if (!isAdmin) {
-    const blocking = await salesDaysRepo.findOldestUnverifiedBefore(
-      tx,
-      actor.orgId,
-      input.storeId,
-      input.businessDate,
-    );
-    if (blocking) {
-      throw new SalesDayBlockedError(
-        `createSalesDay: ${blocking.businessDate} is still ${blocking.status} and must be verified ` +
-          `before a newer day can be created. You can still edit that day, or backfill an even ` +
-          `older one`,
-        `${safeHumanDate(blocking.businessDate)} is still ${blocking.status} — verify or edit it before entering a newer day.`,
-        blocking.id,
-        blocking.businessDate,
-      );
-    }
-
-    // ── T-174: the transit-shortfall block ────────────────────────────────────────────
-    // ⭐ Everything `open`, plus everything `deferred` whose date has ARRIVED — a deferral is a
-    // promise to decide by a date, not an exemption. ⛔ Derived from the rows every time, never a
-    // counter (DEF-075), and it is the SAME query the discrepancy screen lists from: one source,
-    // two consumers, so the block can never refuse a day over something the screen does not show.
-    const shortfalls = await tradeDiscrepanciesRepo.blocking(
-      tx,
-      actor.orgId,
-      input.storeId,
-      input.businessDate,
-    );
-    if (shortfalls.length > 0) {
-      const first = shortfalls[0]!;
-      throw new TransitShortfallBlockedError(
-        `createSalesDay: ${shortfalls.length} dispatched shipment` +
-          `${shortfalls.length === 1 ? ' has' : 's have'} goods unaccounted for — ` +
-          `${first.quantity} units worth ₱${first.value} and ` +
-          `${shortfalls.length - 1} other${shortfalls.length === 2 ? '' : 's'}. ` +
-          `Decide what happened to them before opening a new day`,
-        shortfalls.map((d) => d.id),
-      );
-    }
-  }
+  // T-375 S3: the voided-date rule, the create-block and the transit-shortfall block live in `create-block.ts`,
+  // shared with `importSalesDay` (the one copy).
+  await assertCanOpenDay(tx, actor, input, 'createSalesDay');
 
   // T-371 R5/R6: parsed after authorize(), and a blank follows its column — the three revenue figures
   // (NOT NULL, no default) are refused in words; the defaulted ones fall back to the column default.
@@ -215,14 +106,15 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
   // The defaulted figures stay optional: `insertSalesDay` omits a blank one, so the column's own DEFAULT applies (R13).
   const figures = parsed;
 
-  const posSourced = input.posSourced ?? false;
   const { id } = await salesDaysRepo.insertSalesDay(tx, {
     orgId: actor.orgId,
     storeId: input.storeId,
     businessDate: input.businessDate,
-    posSourced,
-    // Provenance is a pair or neither — a CHECK constraint enforces it too.
-    posSourcedAt: posSourced ? new Date() : null,
+    // T-375 S3: a typed day is never POS-sourced (the "From POS" box is gone); an old `posSourced` input is ignored.
+    source: 'legacy_typed',
+    posV1DayFeedId: null,
+    posSourced: false,
+    posSourcedAt: null,
     totalSales: figures.totalSales,
     unliSales: figures.unliSales,
     alaCarteSales: figures.alaCarteSales,
@@ -289,25 +181,6 @@ export async function writeChannels(
   });
 
   await salesDaysRepo.replaceChannels(tx, salesDayId, rows);
-}
-
-/**
- * Whether this actor bypasses the create-block.
- *
- * ⚠️ Deliberately expressed as a CAPABILITY question, not a role check. `close_period` is held by
- * admins and by managers whose scope covers the whole org (bible row 123) — the same population
- * that v1's `isAdmin` bypass was reaching for, and asking it this way means the capability matrix
- * stays the one place that decides who may do what. A `role === 'admin'` here would be a second,
- * competing authority (bible row 120).
- */
-async function canBypassBlock(tx: Tx, actor: Actor, storeId: string): Promise<boolean> {
-  try {
-    await authorize(tx, actor, 'close_period', { storeId });
-    return true;
-  } catch (err) {
-    if (err instanceof AuthorizationError) return false;
-    throw err;
-  }
 }
 
 /** Sum of a day's figures, for callers that want to show a total before writing. Pure. */

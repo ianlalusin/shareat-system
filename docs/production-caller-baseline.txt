@@ -30,7 +30,6 @@ editPostedProductionAction
 elevateManager
 endShift
 expectedAccumulated
-fetchPosV1Day
 findCurrentDocument
 findLiveOfKind
 findPostedSettlementForChannelDay
@@ -38,11 +37,9 @@ formatConversionSummary
 formatCoverageReport
 getAllocationsForPayment
 getItemForProduction
-getLinkByStore
 getRecipe
 hasFingerprint
 hasOtherActiveAdmin
-insertBatch
 isConvertibleUnit
 isHeaderCode
 isStartDecisionMaterial
@@ -84,7 +81,6 @@ remainingFor
 remainingOf
 removeUsageLine
 resolveFingerprintMatchToken
-resolvePosV1Methods
 returnableQuantity
 reverseOwnerEntry
 revokeRoleById

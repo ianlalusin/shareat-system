@@ -28,6 +28,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, findingsRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { postEntry } from '../../src/ledger/post-entry';
+import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -115,6 +116,29 @@ async function proofFile(f: Fixture): Promise<string> {
   return file!.id;
 }
 
+/**
+ * T-375 S3: a POS-sourced day is a FEED day. The old legs wrote `pos_sourced = true` by raw INSERT, which the new
+ * shape no longer allows without a link (and `createSalesDay` can no longer set it at all), so the day is seeded the
+ * way production makes one: link the store, give it tenders, import a day through the helper. The importer is the
+ * fixture's admin, given the role and the store scope an import's `authorize()` needs.
+ */
+async function feedDay(f: Fixture, status: 'open' | 'verified'): Promise<string> {
+  await sql`insert into person_roles (person_id, org_id, role) values (${f.adminId}, ${f.orgId}, 'admin')`;
+  await sql`insert into person_store_scope (person_id, store_id) values (${f.adminId}, ${f.storeId})`;
+  const [channel] = await sql<{ id: string }[]>`
+    insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${f.orgId}, ${f.storeId}, 'Walk-in', true) returning id`;
+  const [wallet] = await sql<{ id: string }[]>`
+    insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+    values (${f.orgId}, ${f.storeId}, 'GCash', 'ewallet', '1140', 'cashier') returning id`;
+  await linkTestStore(sql, { orgId: f.orgId, storeId: f.storeId, channelId: channel!.id, createdBy: f.adminId });
+  await seedTestTenders(sql, { orgId: f.orgId, storeId: f.storeId, walletAccountId: wallet!.id });
+  const { id } = await asOrg(f.orgId, (tx) =>
+    importTestDay(tx, { personId: f.adminId, orgId: f.orgId }, { storeId: f.storeId, businessDate: '2026-01-01' }),
+  );
+  if (status === 'verified') await sql`update sales_days set status = 'verified' where id = ${id}`;
+  return id;
+}
+
 afterAll(async () => {
   await closeDb();
   await sql.end({ timeout: 5 });
@@ -124,22 +148,14 @@ afterAll(async () => {
 describe('T-213 salesDayUnposted', () => {
   it('fires on a POS-sourced day still open past the threshold', async () => {
     const f = await fixture('sdu-fire');
-    await sql`
-      insert into sales_days
-        (org_id, store_id, business_date, status, pos_sourced, pos_sourced_at,
-         total_sales, unli_sales, ala_carte_sales, created_by)
-      values (${f.orgId}, ${f.storeId}, '2026-01-01', 'open', true, now(), '100.00', '100.00', '0.00', ${f.staffId})`;
+    await feedDay(f, 'open');
     const found = await asOrg(f.orgId, (tx) => findingsRepo.salesDayUnposted(tx, f.orgId));
     expect(found.map((r) => r.kind)).toContain('salesDayUnposted');
   });
 
   it('stays silent once the day is verified', async () => {
     const f = await fixture('sdu-quiet');
-    await sql`
-      insert into sales_days
-        (org_id, store_id, business_date, status, pos_sourced, pos_sourced_at,
-         total_sales, unli_sales, ala_carte_sales, created_by)
-      values (${f.orgId}, ${f.storeId}, '2026-01-01', 'verified', true, now(), '100.00', '100.00', '0.00', ${f.staffId})`;
+    await feedDay(f, 'verified');
     const found = await asOrg(f.orgId, (tx) => findingsRepo.salesDayUnposted(tx, f.orgId));
     expect(found).toHaveLength(0);
   });

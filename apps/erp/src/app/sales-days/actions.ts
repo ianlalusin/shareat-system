@@ -13,7 +13,7 @@
  * could claim to be anyone. **The segregation only became real when this line changed.**
  */
 import { redirect } from 'next/navigation';
-import { createSalesDay, editSalesDay, submitSalesDay, verifySalesDay, voidSalesDay } from '@shareat/domain';
+import { createSalesDay, editSalesDay, importSalesDay, reimportSalesDay, submitSalesDay, verifySalesDay, voidSalesDay } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -71,7 +71,6 @@ function parseDayFigures(formData: FormData) {
   }
 
   return {
-    posSourced: formData.get('posSourced') === 'on',
     totalSales: amount(formData, 'totalSales'),
     unliSales: amount(formData, 'unliSales'),
     alaCarteSales: amount(formData, 'alaCarteSales'),
@@ -109,6 +108,45 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
     redirect(`/sales-days/new?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }
   redirect(`/sales-days/${newId}?${qs}`);
+}
+
+/**
+ * T-375 S3: a LINKED store's day comes from POS. Reads `storeId` and `businessDate`; success goes to the new day,
+ * a refusal back to the new-day page with its sentence. Everything else (the link, the fetch, the derivation, the
+ * block) is `importSalesDay`'s.
+ */
+export async function importSalesDayAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const storeId = str(formData, 'storeId');
+  const qs = carryQs(formData);
+
+  let dayId: string;
+  try {
+    if (!storeId) throw new Error('Choose a store.');
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      importSalesDay(tx, actor, { storeId, businessDate: str(formData, 'businessDate') }),
+    );
+    dayId = result.id;
+  } catch (err) {
+    redirect(`/sales-days/new?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+  }
+  redirect(`/sales-days/${dayId}?${qs}`);
+}
+
+/**
+ * T-375 S3: **Re-import from POS** on an open or submitted feed day. Reads `salesDayId`; the store and date are the
+ * day's own. Every outcome returns to the day's page (the domain re-checks who may and whether it is verified).
+ */
+export async function reimportSalesDayAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const id = str(formData, 'salesDayId');
+  const qs = carryQs(formData);
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => reimportSalesDay(tx, actor, { salesDayId: id }));
+  } catch (err) {
+    redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+  }
+  redirect(`/sales-days/${id}?${qs}`);
 }
 
 /**

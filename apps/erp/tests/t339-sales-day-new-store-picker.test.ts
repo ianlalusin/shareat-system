@@ -119,3 +119,44 @@ describe('/sales-days/new does not offer another store\'s wallets either (DEF-14
     expect(walletsIdentifier).toBe(hiddenIdentifier);
   });
 });
+
+/**
+ * T-375 S3 - the same page, LINKED vs UNLINKED (source-structure legs; the rendered legs are
+ * `tests/integration/t375-s3-import-web.test.ts`). The existing assertions above are unchanged: the typed POST form
+ * stays for an unlinked store with its hidden `storeId`, so slice 4's guarantees still hold for it.
+ */
+describe('T-375 S3 - /sales-days/new follows the store\'s link', () => {
+  /** JSX writes an apostrophe as `&apos;` or `&#39;`; read the sentence as a person does. */
+  const plain = source.replace(/&apos;|&#39;|&#x27;/g, "'");
+
+  function importFormSlice(src: string): string {
+    const start = src.indexOf('<form action={importSalesDayAction}');
+    if (start === -1) throw new Error('importSalesDayAction form not found - a linked store needs an Import from POS form.');
+    const end = src.indexOf('</form>', start);
+    if (end === -1) throw new Error('no closing </form> found after the importSalesDayAction form.');
+    return src.slice(start, end + '</form>'.length);
+  }
+
+  it('red: the page has an Import from POS form posting importSalesDayAction', () => {
+    expect(source).toContain('importSalesDayAction');
+    expect(source).toContain('Import from POS');
+  });
+
+  it('the import form carries the SAME hidden storeId identifier and a businessDate, and no figure input', () => {
+    const form = importFormSlice(source);
+    const hidden = /<input[^>]*\bname="storeId"[^>]*\bvalue=\{\s*(\w+)\s*\}/.exec(form);
+    expect(hidden, 'hidden storeId with a value={...} binding').not.toBeNull();
+    expect(hidden![1]).toBe(/<input[^>]*\bname="storeId"[^>]*\bvalue=\{\s*(\w+)\s*\}/.exec(postFormSlice(source))![1]);
+    expect(form).toMatch(/\bname="businessDate"/);
+    expect(form).not.toMatch(/\bname="(totalSales|unliSales|alaCarteSales|cashCollected|onlineCollected)"/);
+  });
+
+  it('the typed form is labelled for an unlinked store, and neither form mentions posSourced', () => {
+    expect(plain).toContain("Typed — this store isn't linked to POS yet.");
+    expect(source).not.toContain('posSourced');
+  });
+
+  it('control: the typed POST form is still there (an unlinked store keeps typing)', () => {
+    expect(() => postFormSlice(source)).not.toThrow();
+  });
+});

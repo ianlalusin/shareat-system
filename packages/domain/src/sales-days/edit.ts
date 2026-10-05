@@ -22,6 +22,7 @@ import { auditLogRepo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
 import { money, type Money } from '@shareat/core/money';
 import { parseSalesDayFigures, writeChannels, writeTenders, type CreateSalesDayInput } from './create';
+import { assertStoreTakesTypedDays } from './create-block';
 
 export interface EditSalesDayInput extends Omit<CreateSalesDayInput, 'storeId' | 'businessDate'> {
   salesDayId: string;
@@ -38,6 +39,10 @@ async function runEdit(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<
   if (!day) throw gone(`editSalesDay: sales day ${input.salesDayId} does not exist in org ${actor.orgId}`, 'sales day');
 
   await authorize(tx, actor, day.status === 'submitted' ? 'verify_sales_day' : 'submit_sales_day', { storeId: day.storeId });
+
+  // T-375 S3 (R13): a store linked to POS since the day was typed has its days imported, never edited here. Asked
+  // BEFORE the status rule, so a verified typed day gets the same sentence as an open one.
+  await assertStoreTakesTypedDays(tx, actor, day.storeId, 'editSalesDay');
 
   if (day.status !== 'open' && day.status !== 'submitted') {
     throw refuse(
@@ -75,16 +80,11 @@ async function runEdit(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<
     }
   }
 
-  await salesDaysRepo.updateDraft(tx, actor.orgId, day.id, {
-    ...figures,
-    ...(input.posSourced === undefined
-      ? {}
-      : { posSourced: input.posSourced, posSourcedAt: input.posSourced ? (day.posSourcedAt ?? new Date()) : null }),
-  });
+  await salesDaysRepo.updateDraft(tx, actor.orgId, day.id, figures);
 
   // Audited in the table that already exists, same transaction: this changes what the ledger will be
   // told at verify (the figures a verifier signs off), so who changed what, and from what, is kept.
-  const after = await snapshot(tx, { ...day, ...figures, ...(input.posSourced === undefined ? {} : { posSourced: input.posSourced }) });
+  const after = await snapshot(tx, { ...day, ...figures });
   // An edit that changed nothing leaves nothing to audit: a trail of non-changes is noise that hides the real ones.
   if (JSON.stringify(before) === JSON.stringify(after)) return { id: day.id };
   await auditLogRepo.append(tx, actor.orgId, {

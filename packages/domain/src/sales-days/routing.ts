@@ -104,6 +104,8 @@ export const SALES_DAY_ACCOUNTS = {
   /** ⚠️ Comps post HERE, not to 4900 and never to a marketing expense. Ian confirmed directly:
    *  comps are revenue foregone, not a cost incurred (bible row 74). */
   COMPS: '4950',
+  /** T-375 (W11): POS refunds of a day - contra-revenue, the account comps use, never comps themselves. */
+  REFUNDS: '4950',
   /** ⭐ A FLOAT, not revenue and not AP. It fills on collection and empties when payroll
    *  distributes it, and touches the P&L at neither end (bible row 135). */
   SERVICE_CHARGE_FLOAT: '2160',
@@ -136,6 +138,11 @@ export interface RouteSalesDayInput {
   cashCollected: Money;
   onlineCollected: Money;
   creditSales: Money;
+  /**
+   * T-375 (R4, W11): POS refunds of the day, paid out of the cash drawer. On the COLLECTED side of check 3 (cash
+   * collected is already net of them) and posted as a `Dr 4950` line. Absent = 0: a legacy typed day never has any.
+   */
+  refunds?: Money;
   /** Every channel row on the day, remitted and not. */
   channels: SalesDayChannelInput[];
   /** ⭐ WHERE the online money landed — one row per money account (DEF-068, bible row 148).
@@ -233,6 +240,7 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
   // ⚠️ Charges sit on the RIGHT because they are amounts the customer additionally owed — the
   // service charge on behalf of the staff, the other charges on the business's own account.
   const discountsTotal = add(input.seniorDiscount, input.pwdDiscount, input.otherDiscount);
+  const refunds = input.refunds ?? money('0');
   const collectedSide = add(
     input.cashCollected,
     input.onlineCollected,
@@ -240,6 +248,7 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
     nonRemittedTotal,
     discountsTotal,
     input.comps,
+    refunds,
   );
   const earnedSide = add(input.totalSales, input.serviceCharge, input.otherCharges);
   if (!isZero(subtract(collectedSide, earnedSide))) {
@@ -248,7 +257,7 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
       reason:
         `the day does not reconcile: collected ${input.cashCollected} cash + ` +
         `${input.onlineCollected} online + ${input.creditSales} credit + ${nonRemittedTotal} ` +
-        `non-remitted, plus ${discountsTotal} discounts + ${input.comps} comps = ${collectedSide}; ` +
+        `non-remitted, plus ${discountsTotal} discounts + ${input.comps} comps + ${refunds} refunds = ${collectedSide}; ` +
         `but gross sales ${input.totalSales} + service charge ${input.serviceCharge} + other ` +
         `charges ${input.otherCharges} = ${earnedSide}`,
     };
@@ -309,6 +318,9 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
   }
   if (!isZero(input.comps)) {
     lines.push({ accountCode: SALES_DAY_ACCOUNTS.COMPS, side: 'debit', amount: input.comps, lineMemo: 'comps' });
+  }
+  if (!isZero(refunds)) {
+    lines.push({ accountCode: SALES_DAY_ACCOUNTS.REFUNDS, side: 'debit', amount: refunds, lineMemo: 'refunds (POS)' });
   }
 
   if (!isZero(input.unliSales)) {

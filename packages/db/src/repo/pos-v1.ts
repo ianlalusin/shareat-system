@@ -223,13 +223,15 @@ export interface InsertFeedBatchInput {
   /** POS's own id actually called (W9). */
   readonly posStoreId: string;
   readonly fetchedBy: string;
+  /** When the responses arrived (one value for the whole batch). Absent = the database's `now()`. */
+  readonly fetchedAt?: Date;
   /** One entry per kind captured together: an import/recheck batch holds BOTH kinds, a usage batch sold_items only. */
   readonly rows: readonly { readonly kind: PosV1FeedKind; readonly body: string; readonly payload: unknown }[];
 }
 
 /**
  * Insert one batch (one `batch_id`, one row per kind), in the order given. `fetched_at` is the database's `now()`:
- * every row of a batch shares the transaction's clock. Returns the ids by kind.
+ * every row of a batch shares one `fetchedAt` (the caller's, or the transaction's clock). Returns the ids by kind.
  */
 export async function insertBatch(
   tx: Tx,
@@ -252,6 +254,7 @@ export async function insertBatch(
         payload: r.payload,
         contentHash: contentHashOf(r.body),
         fetchedBy: input.fetchedBy,
+        ...(input.fetchedAt ? { fetchedAt: input.fetchedAt } : {}),
       })
       .returning({ id: posV1DayFeeds.id });
     ids[r.kind] = row!.id;

@@ -1,10 +1,12 @@
 import { notFound } from 'next/navigation';
 import { authorize, AuthorizationError } from '@shareat/auth';
-import { salesDaysRepo, journalRepo } from '@shareat/db';
+import { salesDaysRepo, journalRepo, posV1Repo } from '@shareat/db';
+import { packageCapExcess } from '@shareat/domain';
 import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
-import { listStores, listActingPersons } from '../lib';
+import { formatBusinessDateTime } from '@shareat/core/datetime';
+import { listStores, listActingPersons, getStoreLink } from '../lib';
 import { requireSession } from '../../../lib/session';
-import { submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
+import { reimportSalesDayAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -75,6 +77,20 @@ export default async function SalesDayDetailPage({
   });
   const unverified = day.status === 'open' || day.status === 'submitted';
 
+  // T-375 S3: where the figures came from. A feed day is imported (and re-imported while unverified); a typed day
+  // belongs to a store that was not linked to POS when it was typed, and is the only kind that is edited by hand.
+  const isFeedDay = day.source === 'pos_v1_day_feed';
+  const storeLink = await getStoreLink(orgId, day.storeId);
+  // W1: POS's package figure can exceed the day's sales; the difference is not booked. Computed from the stored
+  // feed on read (no column).
+  const capExcess =
+    isFeedDay && day.posV1DayFeedId
+      ? packageCapExcess(
+          (await withOrgPrincipal(orgId, (tx) => posV1Repo.getFeedById(tx, orgId, day.posV1DayFeedId!)))?.payload,
+          money(day.unliSales),
+        )
+      : ZERO;
+
   const personName = (pid: string | null) =>
     pid ? (persons.find((p) => p.id === pid)?.displayName ?? pid) : '—';
   const storeName = stores.find((s) => s.id === day.storeId)?.name ?? day.storeId;
@@ -109,7 +125,10 @@ export default async function SalesDayDetailPage({
           </a>
           <h1 className="mt-1 text-2xl font-semibold">{day.businessDate}</h1>
           <PageDescription>
-            {storeName} · figures {day.posSourced ? 'pulled from POS' : 'entered by hand'}
+            {storeName} ·{' '}
+            {isFeedDay
+              ? `Imported from POS at ${day.posSourcedAt ? formatBusinessDateTime(day.posSourcedAt) : 'an unknown time'}`
+              : 'Typed — store not linked to POS'}
           </PageDescription>
         </div>
         <div className="text-right">
@@ -131,6 +150,13 @@ export default async function SalesDayDetailPage({
         </div>
       )}
 
+      {compare(capExcess, ZERO) > 0 && (
+        <div className="rounded-lg border border-neutral-300 bg-neutral-50 p-4 text-sm text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
+          POS&apos;s package figure was {formatMoney(capExcess)} higher than the day&apos;s sales; the difference is not
+          booked.
+        </div>
+      )}
+
       <section className="grid gap-4 md:grid-cols-2">
         <Panel title="Revenue">
           <Row label="Unlimited → 4100" value={formatMoney(money(day.unliSales))} />
@@ -149,6 +175,7 @@ export default async function SalesDayDetailPage({
           )}
           <Row label="Discounts → 4900" value={formatMoney(discountsTotal)} />
           <Row label="Comps → 4950" value={formatMoney(money(day.comps))} />
+          {isPositive(day.refunds) && <Row label="Refunds (POS) → 4950" value={formatMoney(money(day.refunds))} />}
           {isPositive(day.otherCharges) && (
             <Row label="Other charges → 4500" value={formatMoney(money(day.otherCharges))} />
           )}
@@ -241,7 +268,22 @@ export default async function SalesDayDetailPage({
         </section>
       )}
 
-      {unverified && can.edit && (
+      {unverified && can.edit && isFeedDay && (
+        <form action={reimportSalesDayAction} className="space-y-2 text-sm">
+          {hiddenIds}
+          <button
+            type="submit"
+            className="inline-flex min-h-[44px] items-center rounded border border-neutral-300 px-4 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+          >
+            Re-import from POS
+          </button>
+          <p className="text-neutral-600 dark:text-neutral-400">
+            Brings in whatever POS says now. Platform sales you entered stay as they are.
+          </p>
+        </form>
+      )}
+
+      {unverified && can.edit && !isFeedDay && !storeLink && (
         <div>
           <a
             href={`/sales-days/${day.id}/edit?${carry.toString()}`}

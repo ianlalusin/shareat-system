@@ -1,0 +1,9 @@
+{
+  "found": true,
+  "totalSales": 1050,
+  "totalSessions": 20,
+  "dineInSales": 600,
+  "paymentsByMethod": { "Cash": 700, "GCash": 350 },
+  "discountsTotal": 100,
+  "chargesTotal": 50
+}

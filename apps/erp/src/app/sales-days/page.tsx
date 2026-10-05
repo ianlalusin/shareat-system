@@ -146,7 +146,7 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
                       trustworthy, and a reader that cannot tell them apart treats them as if
                       they were. */}
                   <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400">
-                    {d.posSourced ? 'POS' : 'manual'}
+                    {d.source === 'pos_v1_day_feed' ? 'POS' : 'Typed'}
                   </td>
                   <td className="px-3 py-2">
                     <StatusBadge status={d.status} />

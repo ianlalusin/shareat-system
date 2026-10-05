@@ -31,7 +31,7 @@
  * export now HAS a caller also fails** — that row must be deleted. The second is what stops the list
  * calcifying, and it is the pattern `tests/unit/no-client-supplied-actor.test.ts` already uses.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { appProductionSource, codeOnly, isCalledInSource, trackedFiles } from './lib/document-facts';
@@ -116,6 +116,16 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — `createSalesDay` and `editSalesDay` call it (`sales-days/create.ts`, `sales-days/edit.ts`) ' +
     'to write the per-wallet tender rows a sales day owns. Exported (T-369 S3) so the edit path shares the ' +
     'same validation, not as an entry point.',
+
+  canBypassBlock:
+    'INTERNAL — `assertCanOpenDay` calls it (`sales-days/create-block.ts:124`) to decide whether an actor skips the ' +
+    'create-block; re-exported from `sales-days/create.ts`. A gate inside the create/import paths, not a human boundary.',
+  assertCanOpenDay:
+    'INTERNAL — `createSalesDay` (`sales-days/create.ts:101`) and `importSalesDay` (`sales-days/import.ts:123`, `:155`) ' +
+    'call it: the create-block moved out of create.ts (T-375 S3) so both paths share it. Not a screen entry point.',
+  assertStoreTakesTypedDays:
+    'INTERNAL — `createSalesDay` (`sales-days/create.ts:87`) and `editSalesDay` (`sales-days/edit.ts:45`) call it (T-375 S3, R13) ' +
+    'to refuse typed figures on a store linked to POS. A gate inside those two, not a human boundary of its own.',
 
   // ---- 4. unwired: nothing calls it, and that is the gap -------------------------------------
   //
@@ -260,5 +270,29 @@ describe('T-227 — every action-shaped domain export is reachable from a screen
       .map(([name]) => `${name} — the reason must open with INTERNAL/WRAPPER/JOB/UNWIRED and say why`)
       .sort();
     expect(weak).toEqual([]);
+  });
+});
+
+/**
+ * T-375 S3 - the sales-day entry points, by name. `importSalesDay` is how a LINKED store gets a day and gains its
+ * caller here (`importSalesDayAction`); `createSalesDay` and `editSalesDay` stay for UNLINKED stores and keep theirs.
+ * Nothing in EXEMPT changes. Read from the file (not `git ls-files`) so an unstaged `import.ts` is still seen.
+ */
+describe('T-375 S3 - the day entry points keep or gain an apps/ caller', () => {
+  const appSource = appProductionSource();
+  const called = (name: string) => isCalledInSource(appSource, name);
+  const importFile = path.join(repoRoot, 'packages/domain/src/sales-days/import.ts');
+
+  it('importSalesDay is an actor-shaped export of sales-days/import.ts and an app action calls it', () => {
+    expect(existsSync(importFile), 'packages/domain/src/sales-days/import.ts must exist').toBe(true);
+    const src = codeOnly(readFileSync(importFile, 'utf8'));
+    expect(/^export (?:async )?function importSalesDay\s*\(/m.test(src), 'importSalesDay must be exported from import.ts').toBe(true);
+    expect(called('importSalesDay'), 'no file under apps/ calls importSalesDay').toBe(true);
+    expect(EXEMPT.importSalesDay, 'importSalesDay needs no exemption: it has a caller').toBeUndefined();
+  });
+
+  it('control: createSalesDay and editSalesDay still have their callers', () => {
+    expect(called('createSalesDay')).toBe(true);
+    expect(called('editSalesDay')).toBe(true);
   });
 });

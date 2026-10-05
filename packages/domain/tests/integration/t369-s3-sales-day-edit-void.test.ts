@@ -717,14 +717,17 @@ describe('AUDIT D (re-audit) — what the edit audit records', () => {
     expect(await editRows(id)).toHaveLength(1);
   });
 
-  it('the audit snapshot carries posSourced (a figure that changes what the day means): before posSourced true -> after false', async () => {
+  it('T-375 S3: the retired posSourced input changes nothing - create and edit leave pos_sourced false on a typed day, and the audit shows no provenance change', async () => {
     const f = await fixture('auditD-pos');
-    const { id } = await asOrg(f.orgId, (tx) => D.createSalesDay(tx, f.staff, { storeId: f.storeId, businessDate: D1, posSourced: true, ...figures(f, '1000.00') }));
-    await edit(f, f.manager, id, { ...figures(f, '1000.00'), posSourced: false });
+    // `posSourced` is no longer an input (the "From POS" box is gone): even if an old caller still passes it, it is ignored.
+    const { id } = await asOrg(f.orgId, (tx) => D.createSalesDay(tx, f.staff, { storeId: f.storeId, businessDate: D1, posSourced: true, ...figures(f, '1000.00') } as never));
+    await edit(f, f.manager, id, { ...figures(f, '1200.00', { totalSales: '1200.00', unliSales: '1200.00', cashCollected: '1200.00' }), posSourced: true } as never);
 
+    const [day] = await sql<{ pos_sourced: boolean; source: string }[]>`select pos_sourced, source from sales_days where id = ${id}`;
+    expect(day, 'a typed day is never POS-sourced').toEqual({ pos_sourced: false, source: 'legacy_typed' });
     const rows = await editRows(id);
-    expect(rows, 'no audit row for the edit').toHaveLength(1);
-    expect(rows[0]!.before, 'the before snapshot has no posSourced').toHaveProperty('posSourced', true);
-    expect(rows[0]!.after, 'the after snapshot has no posSourced').toHaveProperty('posSourced', false);
+    expect(rows, 'the real figure change is audited').toHaveLength(1);
+    // Whether or not the snapshot still names the column, it must not claim a provenance change.
+    expect((rows[0]!.before as Record<string, unknown>).posSourced ?? false).toBe((rows[0]!.after as Record<string, unknown>).posSourced ?? false);
   });
 });

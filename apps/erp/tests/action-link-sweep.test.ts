@@ -204,8 +204,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 151 FAIL / 58 UNRESOLVED', () => {
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 58 });
+  it('accepted-baseline totals: 151 FAIL / 57 UNRESOLVED', () => {
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 57 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -346,7 +346,11 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // undersized or unresolved outside the accepted baseline' test both stay green). The Tenders section of
     // `/settings/pos-link` (`app/settings/pos-link/page.tsx`); a static census counts the source elements regardless of
     // branch. Verified by running the census (1120).
-    expect(results.length).toBe(1120);
+    // 1120 -> 1122, T-375 S3, 2026-10-05. +2 net, UNRESOLVED 58 -> 57 (FAIL unmoved at 151). The "From POS" checkbox in
+    // `SalesDayForm.tsx` is gone (-1, one UNRESOLVED baseline entry removed from touch-target-baseline.json); the new
+    // Import from POS button and date input (`sales-days/new/page.tsx`) and the Re-import button
+    // (`sales-days/[id]/page.tsx`) are +3 PASS. Verified by running the census (1122).
+    expect(results.length).toBe(1122);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

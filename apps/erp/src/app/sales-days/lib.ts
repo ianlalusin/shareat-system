@@ -10,7 +10,7 @@
  * Those helpers are imported rather than duplicated: two copies of an auth stand-in is two places
  * to forget when the real bridge lands.
  */
-import { moneyAccountsRepo, salesDaysRepo } from '@shareat/db';
+import { moneyAccountsRepo, posV1Repo, salesDaysRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export {
@@ -63,4 +63,13 @@ export async function listStoreMoneyAccounts(
     moneyAccountsRepo.listMoneyAccounts(tx, orgId, { storeId, ...(opts.includeRetired ? { activeOnly: false } : {}) }),
   );
   return rows.map((r) => ({ id: r.id, name: r.name, storeId: r.storeId, custodian: r.custodian, isActive: r.isActive }));
+}
+
+/**
+ * T-375 S3 (R13): a store's POS link, or null. The link row IS the store's switch: linked, its days are imported
+ * from POS and never typed; unlinked, the typed form stays (labelled).
+ */
+export async function getStoreLink(orgId: string, storeId: string): Promise<{ posStoreName: string } | null> {
+  const link = await withOrgPrincipal(orgId, (tx) => posV1Repo.getLinkByStore(tx, orgId, storeId));
+  return link ? { posStoreName: link.posStoreName } : null;
 }

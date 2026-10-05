@@ -19,7 +19,7 @@ export type PosSide =
   | { status: 'unreachable'; message: string };
 
 export type LedgerSide =
-  | { exists: true; status: salesDaysRepo.SalesDayStatus; totalSales: Money; posSourced: boolean }
+  | { exists: true; status: salesDaysRepo.SalesDayStatus; totalSales: Money; posSourced: boolean; source: salesDaysRepo.SalesDayRow['source'] }
   | { exists: false };
 
 export interface PosDayReconciliationBasis {
@@ -64,7 +64,7 @@ export async function getPosDayReconciliation(
   ]);
 
   const ledger: LedgerSide = salesDay
-    ? { exists: true, status: salesDay.status, totalSales: money(salesDay.totalSales), posSourced: salesDay.posSourced }
+    ? { exists: true, status: salesDay.status, totalSales: money(salesDay.totalSales), posSourced: salesDay.posSourced, source: salesDay.source }
     : { exists: false };
 
   let delta: Money | null = null;
