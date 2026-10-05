@@ -748,6 +748,8 @@ the lock error. An unlinked store's typed day still edits. Screenshots.
 ---
 
 ## S5: usage reads stored sold items
+> ✎ 2026-10-05 (bible row 281): Ian asked for the POS pulls to be **redesigned** for the unified backend, planned with `/research-evaluate-propose`. **Do not build S5 until that proposal is written and approved**; it may change or drop this slice.
+
 **Goal:** the usage pull plans and finalizes from stored `sold_items` feeds, calling POS with the link's POS store id
 (✎N1 fixed for usage).
 

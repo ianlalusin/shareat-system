@@ -131,10 +131,10 @@
 <div class="wrap">
 
   <header class="mast">
-    <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 4 October 2026 &middot; not launched</p>
+    <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 5 October 2026 &middot; not launched</p>
     <h1>What's Left</h1>
     <p class="answer">
-      <b>The money push is closed:</b> no open money defects. Now the POS day feed (sales days from POS, before 15 November) and the closed-month bill fix.
+      <b>The money push is closed:</b> no open money defects. Phase 2 is closed (T-316 done). Now the POS day feed: sales days from POS, before 15 November.
       After that come the remaining admin screens, the last two payroll tasks once the statutory data arrives,
       and the cutover itself. <b>The finish line is 1 January 2027.</b>
     </p>
@@ -142,10 +142,10 @@
       <div class="count money"><div class="n">0</div><div class="l">open money defects (push closed)</div></div>
       <div class="count struct"><div class="n">21</div><div class="l">roadmap items still to build</div></div>
       <div class="count"><div class="n">9</div><div class="l">roadmap items in progress or partly done</div></div>
-      <div class="count you"><div class="n">8</div><div class="l">things only you can do</div></div>
+      <div class="count you"><div class="n">4</div><div class="l">things only you can do</div></div>
       <div class="count done"><div class="n">243</div><div class="l">roadmap tasks done</div></div>
     </div>
-    <p class="src">main at 040e572 (migration 0184; pushed to wrapup/2026-10-05, not main) &middot; production at migration 0181 (deployed 4 Oct) &middot; next free migration 0186 (0185 reserved by T-375 S4) &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+    <p class="src">main at c0704d1 locally (migration 0184; not pushed to main) &middot; production at migration 0181 (deployed 4 Oct) &middot; next free migration 0186 (0185 reserved by T-375 S4) &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
   </header>
 
   <div class="dates">
@@ -222,6 +222,7 @@
     <div class="items">
       <div class="item"><div class="id">ADR-015</div><div><b>POS &amp; CUSTOMER on the shared backend:</b> copied POS after 1 Jan 2027. Planned phase.</div></div>
       <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
+      <div class="item s"><div class="id">POS pulls</div><div><b>Redesign the POS sales and usage pulls for the shared backend</b> (your answer to t374-q1). A research-evaluate-propose write-up comes first; T-375 S5 waits for it.</div></div>
       <div class="item"><div class="id">T-338</div><div>Store readiness warns when a store has no manager.</div></div>
       <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
       <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). Done and smoked on 9008 (040e572, c5b0eac; migration 0184); ships in the next push. Production has no float targets, so nothing to move there.</div></div>
@@ -238,11 +239,9 @@
 
   <section>
     <h2>Waiting on you</h2>
-    <p class="lede">Each holds work still. Everything else on the Open Questions page is answered.</p>
+    <p class="lede">Each holds work still. Every question on the Open Questions page is answered.</p>
     <div class="items">
       <div class="item y"><div class="id">HR data</div><div><b>SSS, PhilHealth, Pag-IBIG and TIN for 126 staff.</b> None on file. <span class="pill y">due 31 Oct</span></div></div>
-      <div class="item y"><div class="id">Question</div><div><b>On an edit screen, does a blank box keep the stored figure?</b> T-371 builds the recommended answer (blank keeps it; type 0 to zero it) unless you say otherwise.</div></div>
-      <div class="item y"><div class="id">Question</div><div><b>Who may void a day&rsquo;s POS usage pull?</b> Built with the recommended answer: the managers and admins who can already void a usage record. Re-checked against your answer.</div></div>
       <div class="item y"><div class="id">DEF-054 P5</div><div><b>Production check before the next push:</b> posted expense payments using &lsquo;other&rsquo; or &lsquo;ar_collection&rsquo; must be 0 (docs/ops). A push to main deploys 0182.</div></div>
       <div class="item y"><div class="id">Push to main</div><div><b>Main is held on wrapup/2026-10-05.</b> Push after P5 (0182) and the 0184 re-run (docs/ops). T-316 S3 is built.</div></div>
       <div class="item y"><div class="id">T-375</div><div><b>A new POS key for v2</b> (you chose a new store-scoped key). I give you the steps before a store is linked on production.</div></div>

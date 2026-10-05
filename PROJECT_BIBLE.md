@@ -65,35 +65,35 @@
 - `1210–1244` 10. Phase plan
 - `1245–1261` 11. Migration & ETL rules
 - `1262–1326` 12. Inherited landmines — do not repeat these
-- `1327–1614` 13. Decision log
-- `1615–1634` 14. Amendment protocol
-- `1635–1639` 15. Engineering standards — the industry practices this project follows
-  - `1640–1645` 15.1 Build order: walking skeleton first
-  - `1646–1657` 15.2 Golden-master testing — the most important practice here
-  - `1658–1666` 15.3 Strangler Fig, not big-bang cutover
-  - `1667–1671` 15.4 No dual-write
-  - `1672–1680` 15.5 Expand/contract migrations
-  - `1681–1689` 15.6 Observability from day zero, not later
-  - `1690–1694` 15.7 CI gates
-  - `1695–1699` 15.8 Backups and a tested restore
-  - `1700–1704` 15.9 Twelve-Factor config
-  - `1705–1712` 15.10 Append-only ledgers — but not event sourcing
-  - `1713–1717` 15.11 Defence in depth
-  - `1718–1746` 15.12 Skills are lenses, not assurance
-  - `1747–1753` 15.13 Reconciliation is a permanent feature
-- `1754–1758` 16. The accounting spine
-  - `1759–1790` 16.0 What we are actually fixing — the diagnosis
-  - `1791–1834` 16.1 The ten invariants — non-negotiable
-  - `1835–1849` 16.2 The oracle: how "correct" is tested
-  - `1850–1871` 16.3 The model — header + lines, not legs
-  - `1872–1891` 16.4 Deliberately simpler than ERPNext
-  - `1892–1958` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1959–1983` 16.6 What v1 already gets right — preserve the intent
-  - `1984–2005` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2006–2020` 16.8 What v1's accounting already gets right
-  - `2021–2064` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2065–2115` 16.10 Posting patterns — one canonical pattern per business event
-  - `2116–2147` 16.11 Inventory's accounting integration
+- `1327–1615` 13. Decision log
+- `1616–1635` 14. Amendment protocol
+- `1636–1640` 15. Engineering standards — the industry practices this project follows
+  - `1641–1646` 15.1 Build order: walking skeleton first
+  - `1647–1658` 15.2 Golden-master testing — the most important practice here
+  - `1659–1667` 15.3 Strangler Fig, not big-bang cutover
+  - `1668–1672` 15.4 No dual-write
+  - `1673–1681` 15.5 Expand/contract migrations
+  - `1682–1690` 15.6 Observability from day zero, not later
+  - `1691–1695` 15.7 CI gates
+  - `1696–1700` 15.8 Backups and a tested restore
+  - `1701–1705` 15.9 Twelve-Factor config
+  - `1706–1713` 15.10 Append-only ledgers — but not event sourcing
+  - `1714–1718` 15.11 Defence in depth
+  - `1719–1747` 15.12 Skills are lenses, not assurance
+  - `1748–1754` 15.13 Reconciliation is a permanent feature
+- `1755–1759` 16. The accounting spine
+  - `1760–1791` 16.0 What we are actually fixing — the diagnosis
+  - `1792–1835` 16.1 The ten invariants — non-negotiable
+  - `1836–1850` 16.2 The oracle: how "correct" is tested
+  - `1851–1872` 16.3 The model — header + lines, not legs
+  - `1873–1892` 16.4 Deliberately simpler than ERPNext
+  - `1893–1959` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1960–1984` 16.6 What v1 already gets right — preserve the intent
+  - `1985–2006` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2007–2021` 16.8 What v1's accounting already gets right
+  - `2022–2065` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2066–2116` 16.10 Posting patterns — one canonical pattern per business event
+  - `2117–2148` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1610,6 +1610,7 @@ just a patch.**
 | 278 | 2026-10-04 | ⛔ **A PUSH TO `main` IS A PRODUCTION DEPLOY.** `ci.yml` runs on push; `deploy.yml` runs on its successful `workflow_run` and ships to `159.223.46.224`. Therefore every read-only precheck for a migration not yet on production runs **BEFORE** the push, never after (`docs/ops/README.md`, Deploy gate). Recorded 2026-10-04 because only the ops README and `deploy.yml`'s header said it; no decision row did. | Ian's T-205 decision to auto-deploy every green push. Row 228 (push only at wrap-up) is the cadence; this row is the consequence: the wrap-up push is the deploy | Yes — `deploy.yml` could be made manual |
 | 279 | 2026-10-05 | **IAN'S RULINGS ON T-316 AND T-375 (Open Questions page, 2026-10-05).** (t316-early-handover **a**) at a float store a handover may take only what verified days owe; today's cash waits for verification — as built in S2. (t316-overspend-refill **transfer**) the office tops an overspent float back up by transfer — as built; sales do not refill it. (t375-q1 **new key**) a new store-scoped POS API key is made on POS's side for v2 and the same value placed on our server; v1's key is not reused (Ian needs the steps; an ops task, blocks linking a store on production, not building). (t375-q2 **income**) POS "charges" post to other income 4500; no store bills a staff service charge through POS. (t375-q3 **a**) every POS v1 refund is treated as paid from the cash drawer; the till count shows it if it went back by another method. (t375-q4) Ian: *"we include vat to final price and for now VAT is only a label the vat remittance computation is handled manually and separately. pos only send out bill not invoice"* — no store is VAT-exclusive; no output-VAT liability is posted from the feed (row 75 stands); T-375's VAT-exclusive refusal stays as a guard that should never fire. | Answers typed on the Open Questions page (row 252) are Ian's rulings. q1–q3 match the recommended defaults already built or specced; q4 confirms row 75 | Yes |
 | 280 | 2026-10-05 | ⭐ **FIREBASE EXIT: COMPLETELY OFF FIREBASE — DATABASE, SIGN-IN, AND PUSH. THE CUSTOMER APP SENDS NO PUSH NOTIFICATIONS; THE CLOCK TERMINAL MOVES TO THE SAME ON-DEVICE OFFLINE APPROACH AS POS. SUPERSEDES ROW 275.** Ian, 2026-10-05 (firebase-exit-scope), answering the option that kept only FCM push: *"no need for this once ready it will just be served — we do not complicate things here; furthermore most customers are assumed to not pay much attention on app while dining, they just use that when ordering and asking for assistance."* Read as: the one thing (b) kept (an "order ready" push) is not wanted, so nothing in Firebase stays. Hosting and file storage follow the same rule ("do not complicate") and move with the apps; their replacement is planning detail for the phase that moves them. Rows 2, 4, 10, 11, §5.2's Firestore move and row 202's target, marked ⚠️ under row 275, are superseded on this answer when the phase that replaces them is planned; nothing beyond P0 changes today. | Driver (c) of row 269; one fewer vendor holding business state; the diner uses the app to order and call for help, not to wait for alerts | Yes |
+| 281 | 2026-10-05 | **THE POS USAGE PULL (AND THE SALES PULL) ARE TO BE REDESIGNED FOR THE UNIFIED BACKEND, NOT POLISHED. PLAN IT WITH `/research-evaluate-propose` BEFORE T-375 S5 IS BUILT; UNTIL THEN THE BUILT T-374 VOID RULE (a) STANDS.** Ian (t374-q1-pull-void-who, answered on the Open Questions page; found unrecorded and recorded 2026-10-05): *"need to redesign this pull from pos. this sales and inventory/usage pull from pos exist because v1 backend are separate/different now in v2 we have unified backend so this can be improved, changed, replaced with. plan this and suggest using research evaluate propose skill"*. Interim (POS v1 still separate) is T-375's day feed and S5's stored `sold_items`; the end state (ADR-015, one Postgres) has POS receipts written where the ERP reads them, so no pull exists. The proposal must say which pieces survive into the interim and which are built only to be thrown away. | v1 pulled because its backends were separate; v2 will not be (rows 269, 274). A pull redesigned once beats one polished twice | Yes |
 
 
 ## 14. Amendment protocol

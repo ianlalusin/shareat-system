@@ -726,6 +726,7 @@ two clicks and keeps each step auditable.
 
 ## Questions only Ian can answer
 - **Q1 (t374-q1-pull-void-who): Who may void a day's POS usage pull?**
+  - ✎ **ANSWERED (Ian, Open Questions page; recorded 2026-10-05, bible row 281):** *"need to redesign this pull from pos. this sales and inventory/usage pull from pos exist because v1 backend are separate/different now in v2 we have unified backend so this can be improved, changed, replaced with. plan this and suggest using research evaluate propose skill"*. The built default (a) stands until the redesign lands; the redesign is planned through `/research-evaluate-propose` before T-375 S5 is built.
   - Example: Lipa's 28 September usage (₱8,000 of meat) was pulled from POS and posted. Then POS corrected two
     receipts. Voiding the pull puts the ₱8,000 of stock back and reverses its cost, so the day can be pulled again
     with the right figures.
