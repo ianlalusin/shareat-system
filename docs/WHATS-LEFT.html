@@ -225,7 +225,7 @@
       <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
       <div class="item"><div class="id">T-338</div><div>Store readiness warns when a store has no manager.</div></div>
       <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
-      <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). S1-S2 done (040e572, migration 0184); S3 (detector + T-375 guard) is the Phase 2 closer and S1-S2 must not deploy without it. Production has no float targets, so nothing to move there.</div></div>
+      <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). S1-S3 built (040e572, c5b0eac; migration 0184); screen smoke on 9008 in progress. Production has no float targets, so nothing to move there.</div></div>
       <div class="item"><div class="id">T-320</div><div>Access that does not come from a position. Number reserved.</div></div>
       <div class="item"><div class="id">T-334</div><div>Inputs, buttons and one shared dropdown across the remaining screens; brand red and a dark-mode toggle.</div></div>
       <div class="item"><div class="id">Phase 7</div><div>Activity-log viewer &middot; memos, performance, checklists, infractions &middot; onboarding as one gated track &middot; cookbook &middot; remaining settings screens &middot; tutorials (count first).</div></div>
@@ -245,10 +245,8 @@
       <div class="item y"><div class="id">Question</div><div><b>On an edit screen, does a blank box keep the stored figure?</b> T-371 builds the recommended answer (blank keeps it; type 0 to zero it) unless you say otherwise.</div></div>
       <div class="item y"><div class="id">Question</div><div><b>Who may void a day&rsquo;s POS usage pull?</b> Built with the recommended answer: the managers and admins who can already void a usage record. Re-checked against your answer.</div></div>
       <div class="item y"><div class="id">DEF-054 P5</div><div><b>Production check before the next push:</b> posted expense payments using &lsquo;other&rsquo; or &lsquo;ar_collection&rsquo; must be 0 (docs/ops). A push to main deploys 0182.</div></div>
-      <div class="item y"><div class="id">Push to main</div><div><b>Main is held on wrapup/2026-10-05.</b> Push after P5 (0182), the 0184 re-run and T-316 S3 (docs/ops).</div></div>
-      <div class="item y"><div class="id">T-316</div><div><b>Questions t316-early-handover</b> (built as (a)) and <b>t316-overspend-refill</b>.</div></div>
-      <div class="item y"><div class="id">T-375</div><div><b>Questions t375-q1 to t375-q4</b> on the POS v1 day feed.</div></div>
-      <div class="item y"><div class="id">Question</div><div><b>firebase-exit-scope</b>: how much of Firebase leaves with the shared backend.</div></div>
+      <div class="item y"><div class="id">Push to main</div><div><b>Main is held on wrapup/2026-10-05.</b> Push after P5 (0182) and the 0184 re-run (docs/ops). T-316 S3 is built.</div></div>
+      <div class="item y"><div class="id">T-375</div><div><b>A new POS key for v2</b> (you chose a new store-scoped key). I give you the steps before a store is linked on production.</div></div>
     </div>
   </section>
 
