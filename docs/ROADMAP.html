@@ -168,7 +168,7 @@
     <h1>The road to 1 January 2027</h1>
     <p class="standfirst">
       Nine phases, ordered so the riskiest work was proven first. The accounting spine, inventory,
-      attendance and reporting are done. The money push is closed. The work now is the POS day feed and the closed-month bill fix, finishing
+      attendance and reporting are done. The money push is closed. Phase 2 is closed and the POS day feed is built; the work now is the push to production and linking stores, finishing
       payroll once the statutory data arrives, the remaining admin screens, and then the cutover itself.
     </p>
     <div class="facts">
@@ -412,7 +412,7 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-371</div><div class="task-what">NaN sweep: every money comparison parses its input first</div><div class="task-note">Shipped 4 Oct (3558e52): DEF-382 and DEF-395 fixed</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-373</div><div class="task-what">Money follow-ups: open variances after a reversal, sales-day locks, stock day boundary, inter-store watch</div><div class="task-note">Shipped 4 Oct: DEF-547, 552, 555, 559 fixed (migration 0180)</div></div>
         <div class="task t-active"><div class="task-id"><span class="dot"></span>T-374</div><div class="task-what">Money-push follow-ups: Manila dates everywhere, wastage date, reversal chains, branch recount screen, voiding a POS usage pull</div><div class="task-note">S1-S7 shipped 4 Oct (migration 0181; S5 = DEF-579, 584); 9008 screen smoke for S5-S7 left</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-375</div><div class="task-what">POS v1 day feed: ERP sales days come from POS, not typed (DEF-586, 591)</div><div class="task-note">Approved 4 Oct after three Opus reviews; S1 done (2c9b0f2, migration 0183); S2 done (88bd16d, tender master + method resolver); S3 done (7a33eea); S4 done (7de5232, migration 0185); S5-lite done (cad42a6, after your pull redesign); S6 done (543661f); left: linking stores on production (needs the new POS key)</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-375</div><div class="task-what">POS v1 day feed: ERP sales days come from POS, not typed (DEF-586, 591)</div><div class="task-note">Approved 4 Oct after three Opus reviews; S1 done (2c9b0f2, migration 0183); S2 done (88bd16d, tender master + method resolver); S3 done (7a33eea); S4 done (7de5232, migration 0185); S5-lite done (cad42a6, after your pull redesign); S6 done (543661f); left: linking stores on production (needs the new POS key)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-376</div><div class="task-what">AP late-bill override (DEF-581, fixed) and two screen nits (DEF-582, 583)</div><div class="task-note">Approved 4 Oct after Opus review; S1 done (dde37cb, DEF-581 fixed); S2 done (13d61fb, DEF-582 fixed); DONE: S3 closed without a build — DEF-583 did not reproduce in dev or production builds (R7); no migration</div></div>
       </div>
     </div>
@@ -617,7 +617,7 @@
         <div class="task"><div class="task-id"><span class="dot"></span>ADR-015</div><div class="task-what">POS &amp; CUSTOMER on the shared backend</div><div class="task-note">Planned phase: copied POS after 1 Jan 2027</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-338</div><div class="task-what">Store readiness warns when a store has no manager</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-315</div><div class="task-what">Store access for staff hired before the fix (admin-reviewed list)</div><div class="task-note">You chose option 2 (30 Sep); spec next</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-316</div><div class="task-what">The maintaining balance moves onto the cashier&rsquo;s own drawer</div><div class="task-note">DONE: S1-S3 built (040e572, c5b0eac; migration 0184) and smoked on 9008; ships in the next push; your answers (a) and transfer match the build; production 1115 balance is 0 rows</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-316</div><div class="task-what">The maintaining balance moves onto the cashier&rsquo;s own drawer</div><div class="task-note">DONE: S1-S3 built (040e572, c5b0eac; migration 0184) and smoked on 9008; ships in the next push; your answers (a) and transfer match the build; production 1115 balance is 0 rows</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-320</div><div class="task-what">Access that does not come from a position</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-334 S3</div><div class="task-what">Inputs, buttons and one shared dropdown across the remaining screens</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-334</div><div class="task-what">Brand red and a manual dark-mode toggle</div></div>
