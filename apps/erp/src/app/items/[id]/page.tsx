@@ -1,9 +1,14 @@
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
-import { getItem, itemPrices, peso, sellabilityByStore, soldAsLabel } from '../lib';
+import { getItem, itemPrices, peso, sellabilityByStore, soldAsLabel, unitHistoryExists } from '../lib';
 import { whoSells } from '../../ap/lib';
-import { clearStoreSellabilityAction, setStoreSellabilityAction, updateItemFlagsAction } from '../actions';
-import { itemKindLabel } from '@shareat/db';
+import {
+  changeItemUnitAction,
+  clearStoreSellabilityAction,
+  setStoreSellabilityAction,
+  updateItemFlagsAction,
+} from '../actions';
+import { BASE_UNITS, itemKindLabel } from '@shareat/db';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Item — Shareat System' };
@@ -48,10 +53,11 @@ export default async function ItemDetailPage({
   const item = await getItem(actor.orgId, id);
   if (!item) notFound();
 
-  const [{ history, movement, bySupplier }, sellers, byStore] = await Promise.all([
+  const [{ history, movement, bySupplier }, sellers, byStore, unitLocked] = await Promise.all([
     itemPrices(actor.orgId, id),
     whoSells(actor.orgId, id),
     sellabilityByStore(actor.orgId, id),
+    unitHistoryExists(actor.orgId, id),
   ]);
   const peak = movement.reduce((m, r) => Math.max(m, Number(r.maxPrice)), 0);
 
@@ -84,6 +90,31 @@ export default async function ItemDetailPage({
           {sp.ok}
         </div>
       )}
+
+      {/* T-378 R2/R4. The form shows only while the database says the item has no history; the trigger is the rule. */}
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Measured in</h2>
+        {unitLocked ? (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            {"This item's unit can no longer change: it already has stock, counts, invoices, recipes, prices or orders recorded in its current unit, and changing it would re-read every one of them in the new unit."}{' '}
+            It is measured in {item.baseUnit}.
+          </p>
+        ) : (
+          <form action={changeItemUnitAction} className="flex flex-wrap items-center gap-3 text-sm">
+            <input type="hidden" name="itemId" value={item.id} />
+            <select name="baseUnit" required defaultValue={item.baseUnit} className={SELECT}>
+              {BASE_UNITS.map((u) => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
+            <button type="submit" className={BTN}>Change unit</button>
+            <p className="w-full text-xs text-neutral-500 dark:text-neutral-400">
+              Only a super-admin can change it, and only until the item has stock, counts, invoices,
+              recipes, prices or orders.
+            </p>
+          </form>
+        )}
+      </section>
 
       {/*
         ⭐ DEF-130 / T-149. Three independent facts, and TWO layers: the organisation's answer,

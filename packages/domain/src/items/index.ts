@@ -10,6 +10,7 @@
  * like after a year.
  */
 import {
+  auditLogRepo,
   itemsRepo,
   transaction,
   type InvoiceLineInput,
@@ -26,7 +27,7 @@ import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { parseQuantityInput } from '../shared/quantity-input';
 import { isPositiveQuantity, toThousandths, type Quantity } from '../stock/quantity';
 import { parseFourDecimalCost } from '../commissary/catalogue';
-import { refuse } from '../shared/refusal';
+import { gone, refuse } from '../shared/refusal';
 
 export interface CreateItemInput {
   code: string;
@@ -87,7 +88,6 @@ export async function updateItem(
     code: string;
     name: string;
     kind: ItemKind;
-    baseUnit: BaseUnit;
     notes: string | null;
     isPurchasable: boolean;
     sellableRetail: boolean;
@@ -96,9 +96,46 @@ export async function updateItem(
 ): Promise<void> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_items', {});
+    // T-378 R4: one audited path for the unit. A caller that still passes it (the type no longer admits it) is told where to go.
+    if ('baseUnit' in values) {
+      const sentence = "Change the unit with Change unit on the item's page.";
+      throw refuse(sentence, sentence);
+    }
     const item = await itemsRepo.getItemById(trx, actor.orgId, itemId);
     if (!item) throw new Error(`updateItem: item ${itemId} does not exist.`);
     await itemsRepo.updateItem(trx, actor.orgId, itemId, values);
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⭐ T-378 R4/R6. Correct an item's unit. Super-admin only (`approve_item`): the unit is part of the identity
+ * a super-admin approved. "Has history" is decided once, by the database (`items_base_unit_fixed`); this
+ * function does not re-implement it, so a refused change surfaces as the trigger's own constraint error and
+ * writes no audit row (the append comes after the UPDATE, in the same transaction).
+ */
+export async function changeItemBaseUnit(
+  tx: Tx | null,
+  actor: Actor,
+  input: { itemId: string; baseUnit: BaseUnit },
+): Promise<{ changed: boolean }> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'approve_item', {});
+    const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
+    if (!item) throw gone(`changeItemBaseUnit: item ${input.itemId} does not exist.`, 'item');
+    if (item.baseUnit === input.baseUnit) return { changed: false };
+    await itemsRepo.updateItem(trx, actor.orgId, input.itemId, { baseUnit: input.baseUnit });
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'change_item_base_unit',
+      entity: 'items',
+      entityId: input.itemId,
+      before: { baseUnit: item.baseUnit },
+      after: { baseUnit: input.baseUnit },
+      source: 'web',
+    });
+    return { changed: true };
   };
   if (tx) return run(tx);
   return transaction(run);
@@ -477,6 +514,10 @@ export interface RequestItemInput {
   kind: ItemKind;
   baseUnit: BaseUnit;
   reason?: string | null;
+  /** ⭐ T-378 R7 (DEF-599). Omitted means the DB default: purchasable, sold to nobody. */
+  isPurchasable?: boolean;
+  sellableRetail?: boolean;
+  sellableWholesale?: boolean;
 }
 
 export interface RequestItemResult {
@@ -514,6 +555,9 @@ export async function requestItem(
       code,
       kind: input.kind,
       baseUnit: input.baseUnit,
+      isPurchasable: input.isPurchasable,
+      sellableRetail: input.sellableRetail,
+      sellableWholesale: input.sellableWholesale,
       reason: input.reason?.trim() || null,
       similarWarning,
       requestedBy: actor.personId,
@@ -531,7 +575,15 @@ export async function requestItem(
 export async function approveItemRequest(
   tx: Tx | null,
   actor: Actor,
-  input: { requestId: string; note?: string | null },
+  input: {
+    requestId: string;
+    note?: string | null;
+    /** ⭐ T-378 R5/REV-11. `undefined` falls back to the request's (`??`); a blank string is NOT absent and the CHECK refuses it. */
+    baseUnit?: BaseUnit;
+    isPurchasable?: boolean;
+    sellableRetail?: boolean;
+    sellableWholesale?: boolean;
+  },
 ): Promise<{ itemId: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_item', {});
@@ -545,9 +597,12 @@ export async function approveItemRequest(
       code: req.code,
       name: req.name,
       kind: req.kind,
-      baseUnit: req.baseUnit,
+      baseUnit: input.baseUnit ?? req.baseUnit,
       notes: `Approved from item request ${req.id}.`,
       createdBy: actor.personId,
+      isPurchasable: input.isPurchasable ?? req.isPurchasable,
+      sellableRetail: input.sellableRetail ?? req.sellableRetail,
+      sellableWholesale: input.sellableWholesale ?? req.sellableWholesale,
     });
     await itemsRepo.decideItemRequest(trx, actor.orgId, req.id, {
       status: 'approved',

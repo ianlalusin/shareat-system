@@ -127,7 +127,7 @@ export default async function ItemsPage({
                   {r.name} <span className="font-mono text-xs text-neutral-500">{r.code}</span>
                 </div>
                 <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                  {itemKindLabel(r.kind)} · measured in {r.baseUnit}
+                  {itemKindLabel(r.kind)} · measured in {r.baseUnit} · {soldAsLabel(r)}
                   {r.reason ? ` · ${r.reason}` : ''}
                 </div>
                 {r.similarWarning && (
@@ -138,6 +138,27 @@ export default async function ItemsPage({
                 <div className="mt-2 flex flex-wrap items-end gap-2">
                   <form action={approveItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
                     <input type="hidden" name="requestId" value={r.id} />
+                    {/* T-378 R5: the approver confirms the unit (pre-selected to the requester's choice) and the three ticks. */}
+                    <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                      Measured in
+                      <select name="baseUnit" required defaultValue={r.baseUnit} className={INPUT}>
+                        {BASE_UNITS.map((u) => (
+                          <option key={u} value={u}>{u}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-1 text-xs">
+                      <input type="checkbox" name="isPurchasable" defaultChecked={r.isPurchasable} className="h-4 w-4" />
+                      Bought
+                    </label>
+                    <label className="flex items-center gap-1 text-xs">
+                      <input type="checkbox" name="sellableRetail" defaultChecked={r.sellableRetail} className="h-4 w-4" />
+                      Sold à la carte
+                    </label>
+                    <label className="flex items-center gap-1 text-xs">
+                      <input type="checkbox" name="sellableWholesale" defaultChecked={r.sellableWholesale} className="h-4 w-4" />
+                      Sold wholesale
+                    </label>
                     <button type="submit" className={BTN}>Approve</button>
                   </form>
                   <form action={rejectItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
@@ -260,10 +281,9 @@ export default async function ItemsPage({
             </div>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               Three independent facts — Milkis is all three, a bento box is retail-only and made
-              here, charcoal is bought and sold to nobody. ⚠️ Applied when a super-admin{' '}
-              <strong>adds directly</strong>; a request carries only name, kind and unit, so set
-              these on the item&rsquo;s page once it is approved. A store that differs from the
-              organisation says so there too.
+              here, charcoal is bought and sold to nobody. These apply to a request too: the
+              super-admin sees them when approving and can correct them. A store that differs from
+              the organisation says so on the item&rsquo;s page.
             </p>
           </fieldset>
           <div className="flex flex-wrap gap-2">

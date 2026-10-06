@@ -16,6 +16,7 @@
 import { redirect } from 'next/navigation';
 import {
   approveItemRequest,
+  changeItemBaseUnit,
   clearStoreSellability,
   createItem,
   mergeItems,
@@ -83,6 +84,10 @@ export async function requestItemAction(formData: FormData): Promise<void> {
         kind: str(formData, 'kind') as ItemKind,
         baseUnit: str(formData, 'baseUnit') as BaseUnit,
         reason: str(formData, 'reason') || null,
+        // T-378 R7 (DEF-599): the ticks travel with the request, so approval can carry them to the item.
+        isPurchasable: flag(formData, 'isPurchasable'),
+        sellableRetail: flag(formData, 'sellableRetail'),
+        sellableWholesale: flag(formData, 'sellableWholesale'),
       }),
     );
     warning = result.similarWarning ?? '';
@@ -198,13 +203,37 @@ export async function clearStoreSellabilityAction(formData: FormData): Promise<v
   backToItem(itemId, { ok: message });
 }
 
+/** ⛔ T-378 R4. Super-admin only (`approve_item`), and only while the item has no history (the database decides). */
+export async function changeItemUnitAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const itemId = str(formData, 'itemId');
+  const baseUnit = str(formData, 'baseUnit') as BaseUnit;
+  let message = '';
+  try {
+    const { changed } = await withOrgPrincipal(actor.orgId, (tx) =>
+      changeItemBaseUnit(tx, actor, { itemId, baseUnit }),
+    );
+    message = changed ? `Unit changed to ${baseUnit}.` : `The unit is already ${baseUnit}.`;
+  } catch (err) {
+    backToItem(itemId, { error: errorMessage(err) });
+  }
+  backToItem(itemId, { ok: message });
+}
+
 export async function approveItemRequestAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
+  // T-378 R5 / REV-11: the approve form always submits `baseUnit`. Absent field -> undefined (the request's
+  // value); a blank submitted field stays '' and the CHECK refuses it.
+  const confirmed = formData.has('baseUnit');
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
       approveItemRequest(tx, actor, {
         requestId: str(formData, 'requestId'),
         note: str(formData, 'note') || null,
+        baseUnit: confirmed ? (str(formData, 'baseUnit') as BaseUnit) : undefined,
+        isPurchasable: confirmed ? flag(formData, 'isPurchasable') : undefined,
+        sellableRetail: confirmed ? flag(formData, 'sellableRetail') : undefined,
+        sellableWholesale: confirmed ? flag(formData, 'sellableWholesale') : undefined,
       }),
     );
   } catch (err) {

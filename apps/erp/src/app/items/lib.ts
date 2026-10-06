@@ -56,6 +56,11 @@ export async function listItems(orgId: string, includeInactive = true): Promise<
   return withOrgPrincipal(orgId, (tx) => itemsRepo.listItems(tx, orgId, { includeInactive }));
 }
 
+/** T-378 R2: the page's courtesy read of the database's one definition of "has history". */
+export async function unitHistoryExists(orgId: string, itemId: string): Promise<boolean> {
+  return withOrgPrincipal(orgId, (tx) => itemsRepo.unitHistoryExists(tx, itemId));
+}
+
 export async function getItem(orgId: string, id: string): Promise<ItemRow | undefined> {
   return withOrgPrincipal(orgId, (tx) => itemsRepo.getItemById(tx, orgId, id));
 }
