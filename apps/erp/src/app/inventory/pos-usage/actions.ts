@@ -49,12 +49,24 @@ export async function finalizeSectionAction(fd: FormData): Promise<void> {
   const storeId = str(fd, 'storeId');
   const salesDayId = str(fd, 'salesDayId');
   const pullId = str(fd, 'pullId');
-  const section = str(fd, 'section') as 'direct' | 'recipe' | 'orphan';
+  const finish = str(fd, 'finish') === '1';
+  const rawSection = str(fd, 'section');
   const confirmedKeys = strs(fd, 'confirmedKeys');
+
+  // T-377 S2 (REV-3): the finish button sends no section and no keys; only the empty-section sweep can run.
+  let sections: ('direct' | 'recipe' | 'orphan')[] = [];
+  if (!finish) {
+    if (rawSection !== 'direct' && rawSection !== 'recipe' && rawSection !== 'orphan') {
+      back(storeId, { day: salesDayId, pull: pullId, error: 'Unknown section. Nothing was finalized.' });
+    }
+    sections = [rawSection as 'direct' | 'recipe' | 'orphan'];
+  }
 
   let result: Awaited<ReturnType<typeof finalizeSections>> | undefined;
   try {
-    result = await withOrgPrincipal(actor.orgId, (tx) => finalizeSections(tx, actor, { pullId, sections: [section], confirmedKeys }));
+    result = await withOrgPrincipal(actor.orgId, (tx) =>
+      finalizeSections(tx, actor, { pullId, sections, confirmedKeys: finish ? [] : confirmedKeys }),
+    );
   } catch (err) {
     back(storeId, { day: salesDayId, pull: pullId, error: errorMessage(err) });
   }
@@ -62,8 +74,20 @@ export async function finalizeSectionAction(fd: FormData): Promise<void> {
     back(storeId, { day: salesDayId, pull: pullId, error: result!.reason });
   }
 
-  const outcome = result!.sections[0];
   revalidatePath('/inventory/pos-usage');
+  if (finish) {
+    if (result!.pullFinalized) {
+      back(storeId, { day: salesDayId, pull: pullId, ok: 'Pull finished — nothing left to post.' });
+    }
+    back(storeId, {
+      day: salesDayId,
+      pull: pullId,
+      error: 'Something new turned up in this pull. Build the plan again and review it.',
+    });
+  }
+
+  const section = sections[0]!;
+  const outcome = result!.sections[0];
   if (!outcome || !outcome.ok) {
     back(storeId, { day: salesDayId, pull: pullId, error: outcome?.reason ?? 'Finalize refused.' });
   }

@@ -26,6 +26,9 @@
  * the `*_finalized_at` columns this task adds (see `pos-mapping.ts` schema header), independent of
  * whether every individual line in that section actually posted. A line skipped for a frozen
  * location is not retried by calling finalize again; that section is done either way.
+ *
+ * T-377 S2 (DEF-597): when every unstamped section is empty (stored plan and fresh rebuild both), any successful
+ * finalize call stamps them all, all or none. So a pull whose only non-empty section was just finalized completes.
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
@@ -302,7 +305,9 @@ export interface SectionOutcome {
   readonly blockedLineCount: number;
 }
 
-export type FinalizeResult = { readonly ok: true; readonly sections: readonly SectionOutcome[] } | { readonly ok: false; readonly reason: string };
+export type FinalizeResult =
+  | { readonly ok: true; readonly sections: readonly SectionOutcome[]; readonly pullFinalized: boolean }
+  | { readonly ok: false; readonly reason: string };
 
 export async function finalizeSections(tx: Tx, actor: Actor, input: FinalizeSectionsInput): Promise<FinalizeResult> {
   const pull = await posMappingRepo.getPull(tx, input.pullId);
@@ -434,12 +439,30 @@ export async function finalizeSections(tx: Tx, actor: Actor, input: FinalizeSect
     results.push({ section, ok: true, postedLineCount, blockedLineCount });
   }
 
-  const refreshed = await posMappingRepo.getPull(tx, pull.id);
-  if (refreshed?.directFinalizedAt && refreshed.recipeFinalizedAt && refreshed.orphanFinalizedAt) {
-    await posMappingRepo.markPullFinalized(tx, pull.id, actor.personId);
+  // T-377 S2 (DEF-597, R2/R3): ALL OR NONE. When EVERY unstamped section is empty in BOTH the stored plan (read after
+  // the pull lock) and the fresh rebuild, there is nothing left for a person to review, so stamp them all. Any line in
+  // any unstamped section (blocked or not) stamps nothing. Runs only after every refusal above; adds no `results` row.
+  const open = (['direct', 'recipe', 'orphan'] as const).filter((s) => !alreadyFinalized[s]);
+  if (open.length > 0) {
+    const storedLines = await posMappingRepo.listPullLines(tx, pull.id);
+    const hasLine = (section: PlanSection): boolean =>
+      storedLines.some((l) => l.section === section) || freshLines.some((l) => l.section === section);
+    if (!open.some(hasLine)) {
+      for (const section of open) {
+        await posMappingRepo.markSectionFinalized(tx, pull.id, section);
+        alreadyFinalized[section] = new Date();
+      }
+    }
   }
 
-  return { ok: true, sections: results };
+  const refreshed = await posMappingRepo.getPull(tx, pull.id);
+  let pullFinalized = false;
+  if (refreshed?.directFinalizedAt && refreshed.recipeFinalizedAt && refreshed.orphanFinalizedAt) {
+    await posMappingRepo.markPullFinalized(tx, pull.id, actor.personId);
+    pullFinalized = true;
+  }
+
+  return { ok: true, sections: results, pullFinalized };
 }
 
 // -----------------------------------------------------------------------------------------

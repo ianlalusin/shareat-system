@@ -62,7 +62,7 @@ import * as D from '@shareat/domain';
 import { importTestDay, linkTestStore, seedTestTenders } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
 import { insertRecheckBatch } from '../../../../packages/domain/tests/integration/_fixtures/pos-sold-items';
 import PosUsagePage from '../../src/app/inventory/pos-usage/page';
-import { buildPlanAction } from '../../src/app/inventory/pos-usage/actions';
+import { buildPlanAction, finalizeSectionAction } from '../../src/app/inventory/pos-usage/actions';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -231,5 +231,150 @@ describe('W1 - the POS usage screen reads the stored feed and never calls POS', 
     expect(r.q.get('pull')).toBeNull();
     expect(r.q.get('error')).toBe("Batangas isn't linked to a POS store yet, so its usage can't be pulled. An admin links it under Settings › POS link.");
     expect(fetchSpy).toHaveBeenCalledTimes(0);
+  });
+});
+
+// =====================================================================================================
+// T-377 S2 (DEF-597) W1-W3 - the "Finish this pull" button. `docs/tasks/377-pos-smoke-follow-ups.md` section S2.
+// TESTER only. A "stuck" pull (direct stamped, recipe and orphan empty, status planned) is made by raw SQL, the state
+// a pull reached before the fix; the domain half is `packages/domain/tests/integration/t377-s2-empty-sections.test.ts`.
+//
+// Mutants: the button condition ignores the stamps (checks only "all sections empty") -> W1 first leg red;
+//          drop the `viewOnly` guard -> W2 red; the `finish` branch sends [firstUnstampedSection] -> W3 E10 leg red.
+// =====================================================================================================
+const ZERO_FIGURES = { paidTotal: 0, receiptCount: 0, packageOnly: 0, discounts: 0, charges: 0, methods: {} };
+const FINISH = 'Finish this pull — nothing left to post';
+
+/** The <form> that carries the finish button, or null. */
+const finishForm = (html: string): string | null =>
+  html.match(/<form[^>]*>(?:(?!<\/form>)[\s\S])*Finish this pull(?:(?!<\/form>)[\s\S])*<\/form>/)?.[0] ?? null;
+const HIDDEN_FINISH = /name="finish"[^>]*value="1"|value="1"[^>]*name="finish"/;
+
+type PullState = { status: string; direct: Date | null; recipe: Date | null; orphan: Date | null };
+const pullState = async (id: string): Promise<PullState> =>
+  (
+    await sql<PullState[]>`select status, direct_finalized_at as direct, recipe_finalized_at as recipe, orphan_finalized_at as orphan from pos_usage_pulls where id = ${id}`
+  )[0]!;
+
+/** Builds the plan through the real action and returns the pull id. */
+async function built(f: F, dayId: string): Promise<string> {
+  const r = await build(f, f.storeId, dayId, f.kitchen);
+  expect(r.q.get('ok') ?? '', 'fixture: the plan builds').toMatch(/^Plan built/);
+  return r.q.get('pull')!;
+}
+/** A pull stuck the old way: direct stamped, nothing else, still planned. */
+async function stuck(pullId: string) {
+  await sql`update pos_usage_pulls set direct_finalized_at = now() where id = ${pullId}`;
+}
+async function setItemAMap(f: F, mode: 'direct' | 'no_stock') {
+  const [m] = await sql<{ id: string }[]>`select id from pos_item_maps where store_id = ${f.storeId} and pos_item_key = 'item-a' and status = 'active'`;
+  const [cheese] = await sql<{ id: string }[]>`select id from items where org_id = ${f.orgId} and code = 'CHEESE'`;
+  const base = { orgId: f.orgId, storeId: f.storeId, posItemKey: 'item-a', posItemName: 'item-a', editMapId: m!.id };
+  const out = await asOrg(f.orgId, (tx) =>
+    D.upsertPosItemMap(tx, f.admin, mode === 'direct' ? { ...base, mode, itemId: cheese!.id, quantityPerSale: '1' } : { ...base, mode }),
+  );
+  if (!out.ok) throw new Error(`fixture: map edit refused: ${'reason' in out ? out.reason : ''}`);
+}
+async function finalizeVia(f: F, fields: Record<string, string>): Promise<{ q: URLSearchParams }> {
+  h.actor = f.admin;
+  try {
+    await finalizeSectionAction(form(fields));
+  } catch (err) {
+    if (err instanceof RedirectSignal) return { q: new URL(err.to, 'http://x').searchParams };
+    throw err;
+  }
+  throw new Error('finalizeSectionAction returned without redirecting');
+}
+
+describe('T-377 S2 W1 - the finish button shows for a pull with nothing left to review', () => {
+  it('direct stamped, recipe and orphan empty -> the button, in a form with hidden finish=1 and NO section input', async () => {
+    const f = await fixture('t377w1a');
+    const { id: dayId } = await importDay(f, D10);
+    const pullId = await built(f, dayId);
+    await stuck(pullId);
+
+    const html = await renderPage(f, { store: f.storeId, day: dayId, pull: pullId });
+    const form1 = finishForm(html);
+    expect(form1, `the page carries "${FINISH}"`).not.toBeNull();
+    expect(form1).toContain(FINISH);
+    expect(form1).toMatch(HIDDEN_FINISH);
+    expect(form1, 'no section input (REV-3)').not.toMatch(/name="section"/);
+    expect(form1).not.toMatch(/name="confirmedKeys"/);
+  });
+
+  it('a PHP 0 day (all three sections empty and unstamped) -> the same button', async () => {
+    const f = await fixture('t377w1b');
+    const { id: dayId } = await asOrg(f.orgId, (tx) => importTestDay(tx, f.admin, { storeId: f.storeId, businessDate: D9, soldItems: [], figures: ZERO_FIGURES }));
+    const pullId = await built(f, dayId);
+    const form1 = finishForm(await renderPage(f, { store: f.storeId, day: dayId, pull: pullId }));
+    expect(form1).not.toBeNull();
+    expect(form1).toMatch(HIDDEN_FINISH);
+    expect(form1).not.toMatch(/name="section"/);
+  });
+});
+
+describe('T-377 S2 W2 - the finish button is absent when it must be', () => {
+  it('an unstamped non-empty section; a view-only (voided) day; a finalized pull. Positive control: the same stuck pull shows it first', async () => {
+    const f = await fixture('t377w2');
+    const { id: dayId } = await importDay(f, D10);
+    const pullId = await built(f, dayId);
+
+    // (a) direct still has a line and is unstamped: nothing to finish
+    expect(finishForm(await renderPage(f, { store: f.storeId, day: dayId, pull: pullId })), '(a) an unstamped non-empty section').toBeNull();
+
+    // positive control: stuck -> the button shows (W1)
+    await stuck(pullId);
+    expect(finishForm(await renderPage(f, { store: f.storeId, day: dayId, pull: pullId })), 'control: the stuck pull shows the button').not.toBeNull();
+
+    // (c) the same pull on a voided (view-only) day
+    await sql`update sales_days set status = 'voided', voided_by = ${f.adminId}, voided_at = now(), void_reason = 'Entered wrong' where id = ${dayId}`;
+    expect(finishForm(await renderPage(f, { store: f.storeId, day: dayId, pull: pullId })), '(c) view only').toBeNull();
+    await sql`update sales_days set status = 'open', voided_by = null, voided_at = null, void_reason = null where id = ${dayId}`;
+
+    // (b) a finalized pull (all three stamps, status finalized)
+    await sql`update pos_usage_pulls set recipe_finalized_at = now(), orphan_finalized_at = now(), status = 'finalized', finalized_at = now(), finalized_by = ${f.adminId} where id = ${pullId}`;
+    expect(finishForm(await renderPage(f, { store: f.storeId, day: dayId, pull: pullId })), '(b) a finalized pull').toBeNull();
+  });
+});
+
+describe('T-377 S2 W3 - finalizeSectionAction with finish', () => {
+  it('finish=1 on the stuck pull -> ok "Pull finished — nothing left to post." and the pull is finalized', async () => {
+    const f = await fixture('t377w3a');
+    const { id: dayId } = await importDay(f, D10);
+    const pullId = await built(f, dayId);
+    await stuck(pullId);
+
+    const r = await finalizeVia(f, { storeId: f.storeId, salesDayId: dayId, pullId, finish: '1' });
+    expect(r.q.get('error'), 'no error').toBeNull();
+    expect(r.q.get('ok')).toBe('Pull finished — nothing left to post.');
+    expect((await pullState(pullId)).status).toBe('finalized');
+  });
+
+  it('E10 on the button: the map changed to direct after the page rendered -> error "Something new turned up", nothing stamped', async () => {
+    const f = await fixture('t377w3b');
+    await setItemAMap(f, 'no_stock');
+    const { id: dayId } = await importDay(f, D10);
+    const pullId = await built(f, dayId); // all three sections empty at build
+    await setItemAMap(f, 'direct');
+
+    const r = await finalizeVia(f, { storeId: f.storeId, salesDayId: dayId, pullId, finish: '1' });
+    expect(r.q.get('ok')).toBeNull();
+    expect(r.q.get('error') ?? '').toMatch(/^Something new turned up/);
+    const st = await pullState(pullId);
+    expect([st.direct, st.recipe, st.orphan], 'nothing stamped').toEqual([null, null, null]);
+    expect(st.status).toBe('planned');
+  });
+
+  it('a section outside direct/recipe/orphan, without finish -> refused, nothing stamped', async () => {
+    const f = await fixture('t377w3c');
+    const { id: dayId } = await importDay(f, D10);
+    const pullId = await built(f, dayId);
+
+    const r = await finalizeVia(f, { storeId: f.storeId, salesDayId: dayId, pullId, section: 'bogus', confirmedKeys: 'direct:item-a' });
+    expect(r.q.get('ok')).toBeNull();
+    expect(r.q.get('error'), 'refused with a sentence').toBeTruthy();
+    const st = await pullState(pullId);
+    expect([st.direct, st.recipe, st.orphan]).toEqual([null, null, null]);
+    expect(st.status).toBe('planned');
   });
 });

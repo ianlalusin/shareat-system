@@ -169,6 +169,17 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
   }
   const pull = pullId ? await pullView(actor.orgId, pullId) : null;
 
+  // T-377 S2 (R5): one button when every unstamped section is empty on this page's own view of the pull.
+  const unstamped = pull
+    ? [
+        { lines: pull.direct, at: pull.directFinalizedAt },
+        { lines: pull.recipe, at: pull.recipeFinalizedAt },
+        { lines: pull.orphan, at: pull.orphanFinalizedAt },
+      ].filter((x) => !x.at)
+    : [];
+  const canFinish =
+    pull !== null && pull.status === 'planned' && !viewOnly && unstamped.length > 0 && unstamped.every((x) => x.lines.length === 0);
+
   return (
     <Page density="table" className="space-y-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
@@ -295,6 +306,19 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
             showQuantity={false}
             viewOnly={viewOnly}
           />
+          {canFinish && (
+            <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+              <form action={finalizeSectionAction} className="space-y-2">
+                <input type="hidden" name="storeId" value={storeId} />
+                <input type="hidden" name="salesDayId" value={pull.salesDayId} />
+                <input type="hidden" name="pullId" value={pull.id} />
+                <input type="hidden" name="finish" value="1" />
+                <button type="submit" className={BTN_SM}>
+                  Finish this pull — nothing left to post
+                </button>
+              </form>
+            </section>
+          )}
           {pull.status !== 'void' && (
             <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
               <h2 className="text-sm font-medium">Void this pull</h2>
