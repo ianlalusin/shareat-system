@@ -560,6 +560,9 @@ export interface ItemRequestRow {
   code: string;
   kind: ItemKind;
   baseUnit: BaseUnit;
+  isPurchasable: boolean;
+  sellableRetail: boolean;
+  sellableWholesale: boolean;
   reason: string | null;
   status: ItemRequestStatus;
   similarWarning: string | null;
@@ -579,6 +582,10 @@ export async function insertItemRequest(
     code: string;
     kind: ItemKind;
     baseUnit: BaseUnit;
+    /** T-378 R7: omitted means the DB default (true / false / false). */
+    isPurchasable?: boolean;
+    sellableRetail?: boolean;
+    sellableWholesale?: boolean;
     reason: string | null;
     similarWarning: string | null;
     requestedBy: string;
@@ -586,6 +593,12 @@ export async function insertItemRequest(
 ): Promise<{ id: string }> {
   const [row] = await tx.insert(itemRequests).values(input).returning({ id: itemRequests.id });
   return row!;
+}
+
+/** T-378 R2: the one definition of "has history" lives in the database; this is the page's courtesy read of it. */
+export async function unitHistoryExists(tx: Tx, itemId: string): Promise<boolean> {
+  const rows = await tx.execute(sql`select items_unit_history_exists(${itemId}::uuid) as h`);
+  return (rows as unknown as { h: boolean }[])[0]?.h === true;
 }
 
 export async function getItemRequestById(tx: Tx, orgId: string, id: string): Promise<ItemRequestRow | undefined> {

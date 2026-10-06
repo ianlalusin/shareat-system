@@ -130,7 +130,9 @@ describe('T-271 — mechanism proof: a DEF-279 trigger name can now be mapped', 
     // T-369 S7: 26 -> 27, deliberately — the sales-day unique sentence is written for a person.
     // T-370 S3: 27 -> 28, deliberately — the semi-monthly two-days sentence is written for a person too.
     // T-375 S4: 28 -> 32, deliberately: the four sales-lock constraints.
-    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(32);
+    // T-378 S1: 32 -> 36, deliberately: the four items/item_requests unit and kind CHECK keys.
+    // T-378 S2: 36 -> 37, deliberately: items_base_unit_fixed.
+    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(37);
 
     // And the allowlist reads the same after restore as before the mutation ever happened.
     expect(isUnfitForAStranger(err, TEST_SENTENCE)).toBe(true);

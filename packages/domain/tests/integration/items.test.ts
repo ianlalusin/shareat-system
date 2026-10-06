@@ -192,8 +192,8 @@ describe('price history — the question this task exists to answer', () => {
     const before = await asOrg(f.orgId, (tx) => itemsRepo.priceHistory(tx, f.orgId, item));
     expect(before[0]!.basePrice).toBe('290.0000');
 
-    // The supplier changes their case size; someone renames the item and corrects its unit.
-    await sql`update items set name = ${`Pork belly (renamed) ${uid('r')}`}, base_unit = 'g' where id = ${item}`;
+    // The supplier changes their case size; someone renames the item. (T-378/0186: the unit is fixed once an item has an invoice line, so only the name changes.)
+    await sql`update items set name = ${`Pork belly (renamed) ${uid('r')}`} where id = ${item}`;
 
     const after = await asOrg(f.orgId, (tx) => itemsRepo.priceHistory(tx, f.orgId, item));
     expect(

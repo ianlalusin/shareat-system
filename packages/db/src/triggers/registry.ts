@@ -371,6 +371,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: 'A slab item cannot be recategorised while slices reference it (0125) — reads the CURRENT slice set.',
   },
+  items_base_unit_fixed: {
+    table: 'items',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "An item's unit cannot change once it has history (0186, T-378) - reads other tables' CURRENT rows, so it must stay silent on a replica-mode restore.",
+  },
   items_check_parent_slab_unit_trg: {
     table: 'items',
     mode: 'origin',

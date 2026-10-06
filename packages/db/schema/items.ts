@@ -96,6 +96,7 @@ export const items = pgTable(
     name: text('name').notNull(),
     kind: text('kind', { enum: ITEM_KINDS }).notNull(),
     /** ⭐ The canonical unit every price is normalised to before it is compared. */
+    // NOTE: base_unit history guard (items_unit_history_exists + items_base_unit_fixed) hand-added in migration 0186
     baseUnit: text('base_unit', { enum: BASE_UNITS }).notNull(),
     status: text('status', { enum: ITEM_STATUSES }).notNull().default('active'),
     /**
@@ -132,7 +133,8 @@ export const items = pgTable(
      * self-referencing convention as `mergedIntoId` above; the FK, the `kind = 'meat_sliced'`
      * CHECK, and the two database-level refusals (an item may not recategorise away from
      * `meat_slab` while a child points at it; a child's `base_unit` must match its slab's) all
-     * live in migration `0125_t176_production.sql`, not here.
+     * live in migration `0125_t176_production.sql`, not here. The PARENT side of invariant 7 (a slab with
+     * children cannot change unit) is `items_base_unit_fixed`, migration `0186` (T-378).
      */
     parentSlabItemId: uuid('parent_slab_item_id'),
     notes: text('notes'),
@@ -212,6 +214,10 @@ export const itemRequests = pgTable(
     code: text('code').notNull(),
     kind: text('kind', { enum: ITEM_KINDS }).notNull(),
     baseUnit: text('base_unit', { enum: BASE_UNITS }).notNull(),
+    /** T-378 R7: what the requester ticked; copied to the item at approval (the approver may override). */
+    isPurchasable: boolean('is_purchasable').notNull().default(true),
+    sellableRetail: boolean('sellable_retail').notNull().default(false),
+    sellableWholesale: boolean('sellable_wholesale').notNull().default(false),
     reason: text('reason'),
     status: text('status', { enum: ITEM_REQUEST_STATUSES }).notNull().default('requested'),
     /** ⚠️ Frozen at request time. Recomputing at approval would answer a different question — the

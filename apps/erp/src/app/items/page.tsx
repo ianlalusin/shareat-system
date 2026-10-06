@@ -7,7 +7,7 @@ import {
   requestItemAction,
 } from './actions';
 import { listItems, pendingRequests, duplicateCandidates, soldAsLabel } from './lib';
-import { ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
+import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 
@@ -18,7 +18,6 @@ const INPUT =
   'rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const BTN =
   'rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900';
-const UNITS = ['pcs', 'kg', 'g', 'ltr', 'ml', 'roll'];
 
 export default async function ItemsPage({
   searchParams,
@@ -213,7 +212,8 @@ export default async function ItemsPage({
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>
-              <select name="kind" required defaultValue="raw_material" className={INPUT}>
+              <select name="kind" required defaultValue="" className={INPUT}>
+                <option value="">Choose a kind</option>
                 {ITEM_KINDS.map((k) => (
                   <option key={k} value={k}>{ITEM_KIND_LABEL[k]}</option>
                 ))}
@@ -221,8 +221,9 @@ export default async function ItemsPage({
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Measured in</span>
-              <select name="baseUnit" required defaultValue="kg" className={INPUT}>
-                {UNITS.map((u) => (
+              <select name="baseUnit" required defaultValue="" className={INPUT}>
+                <option value="">Choose a unit</option>
+                {BASE_UNITS.map((u) => (
                   <option key={u} value={u}>{u}</option>
                 ))}
               </select>

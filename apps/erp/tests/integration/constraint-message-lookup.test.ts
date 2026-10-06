@@ -420,10 +420,76 @@ describe('T-375 S4 — the sales-day lock', () => {
   });
 });
 
+// T-378 S1 - the four item unit/kind CHECKs, provoked for real (raw SQL, an out-of-list value).
+describe('T-378 S1 - item unit and kind CHECKs', () => {
+  const UNIT = 'Choose the unit this item is measured in: pcs, kg, g, ltr, ml or roll.';
+  const KIND = 'Choose what kind of item this is.';
+  async function org() {
+    const code = uid('t378s1-lookup');
+    const [o] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${o!.id}, 'Requester') returning id`;
+    return { orgId: o!.id, personId: p!.id };
+  }
+  const check = (key: string, sentence: string, err: unknown) => {
+    const row = record(key, err);
+    expect(row.constraintName).toBe(key);
+    expect(row.message).toBe(sentence);
+    expect(row.message).toBe(CONSTRAINT_MESSAGES[key]);
+  };
+
+  it('items_base_unit_check', async () => {
+    const f = await org();
+    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('C')}, ${uid('n')}, 'retail', 'box', ${f.personId})`);
+    check('items_base_unit_check', UNIT, err);
+  });
+  it('item_requests_base_unit_check', async () => {
+    const f = await org();
+    const err = await provoke(() => sql`insert into item_requests (org_id, name, code, kind, base_unit, requested_by) values (${f.orgId}, ${uid('n')}, ${uid('C')}, 'retail', 'box', ${f.personId})`);
+    check('item_requests_base_unit_check', UNIT, err);
+  });
+  it('items_kind_check', async () => {
+    const f = await org();
+    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('C')}, ${uid('n')}, 'bogus', 'pcs', ${f.personId})`);
+    check('items_kind_check', KIND, err);
+  });
+  it('item_requests_kind_check', async () => {
+    const f = await org();
+    const err = await provoke(() => sql`insert into item_requests (org_id, name, code, kind, base_unit, requested_by) values (${f.orgId}, ${uid('n')}, ${uid('C')}, 'bogus', 'pcs', ${f.personId})`);
+    check('item_requests_kind_check', KIND, err);
+  });
+});
+
+// T-378 S2 (0186) - the item-unit history guard, provoked for real: an item with one stock movement, then a unit change.
+describe('T-378 S2 - the item unit is fixed once it has history', () => {
+  const FIXED_SENTENCE =
+    "This item's unit can no longer change: it already has stock, counts, invoices, recipes, prices or orders recorded in its current unit, and changing it would re-read every one of them in the new unit.";
+  it('items_base_unit_fixed', async () => {
+    const orgCode = uid('t378s2-lock');
+    const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${orgCode}`}, ${orgCode}) returning id`;
+    const orgId = org!.id;
+    const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, stock_model) values (${orgId}, ${uid('store')}, 'Store', 'multi_room') returning id`;
+    const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
+    const [lt] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${orgId}, 'STK', 'Stockroom') returning id`;
+    const [loc] = await sql<{ id: string }[]>`
+      insert into stock_locations (org_id, store_id, code, name, type_id, created_by) values (${orgId}, ${store!.id}, 'MAIN', 'Main', ${lt!.id}, ${person!.id}) returning id`;
+    const itemCode = uid('itm');
+    const [item] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${itemCode}, ${itemCode}, 'raw_material', 'kg', ${person!.id}) returning id`;
+    await sql`
+      insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
+      values (${orgId}, ${store!.id}, ${loc!.id}, ${item!.id}, '2026-01-20T02:00:00Z', '10', 'receipt', 'delivery', ${crypto.randomUUID()}, ${person!.id})`;
+    const err = await provoke(() => sql`update items set base_unit = 'pcs' where id = ${item!.id}`);
+    const row = record('items_base_unit_fixed', err);
+    expect(row.constraintName).toBe('items_base_unit_fixed');
+    expect(row.message).toBe(FIXED_SENTENCE);
+    expect(row.message).toBe(CONSTRAINT_MESSAGES.items_base_unit_fixed);
+  });
+});
+
 it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   const exercised = new Set(rows.map((r) => r.key));
   const missing = Object.keys(CONSTRAINT_MESSAGES).filter((k) => !exercised.has(k));
   expect(missing).toEqual([]);
-  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys = 32 rows provoked above.
-  expect(rows.length).toBe(32);
+  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed = 37 rows provoked above.
+  expect(rows.length).toBe(37);
 });

@@ -1163,6 +1163,13 @@
       "when": 1802057507084,
       "tag": "0185_t375_s4_sales_day_figure_lock",
       "breakpoints": true
+    },
+    {
+      "idx": 186,
+      "version": "7",
+      "when": 1802143907084,
+      "tag": "0186_t378_item_unit_fixed_and_request_flags",
+      "breakpoints": true
     }
   ]
 }
