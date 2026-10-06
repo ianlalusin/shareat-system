@@ -145,7 +145,7 @@
       <div class="count you"><div class="n">4</div><div class="l">things only you can do</div></div>
       <div class="count done"><div class="n">243</div><div class="l">roadmap tasks done</div></div>
     </div>
-    <p class="src">main at 543661f locally (migration 0185; pushed to wrapup/2026-10-06, not main) &middot; production at migration 0181 (deployed 4 Oct) &middot; next free migration 0186 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+    <p class="src">main pushed and deployed 6 Oct (aefdb2f) &middot; production at migration 0185 &middot; local main ahead with T-377 and docs, unpushed &middot; next free migration 0186 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
   </header>
 
   <div class="dates">
@@ -241,9 +241,7 @@
     <p class="lede">Each holds work still. Every question on the Open Questions page is answered.</p>
     <div class="items">
       <div class="item y"><div class="id">HR data</div><div><b>SSS, PhilHealth, Pag-IBIG and TIN for 126 staff.</b> None on file. <span class="pill y">due 31 Oct</span></div></div>
-      <div class="item y"><div class="id">DEF-054 P5</div><div><b>Production check before the next push:</b> posted expense payments using &lsquo;other&rsquo; or &lsquo;ar_collection&rsquo; must be 0 (docs/ops). A push to main deploys 0182.</div></div>
-      <div class="item y"><div class="id">Push to main</div><div><b>Main is held on wrapup/2026-10-05.</b> Push after P5 (0182) and the 0184 re-run (docs/ops). T-316 S3 is built.</div></div>
-      <div class="item y"><div class="id">T-375</div><div><b>A new POS key for v2</b> (you chose a new store-scoped key). I give you the steps before a store is linked on production.</div></div>
+      <div class="item y"><div class="id">T-375</div><div><b>A new POS key for v2</b> (store-scoped). Your steps are in docs/ops/pos-v1-key.md; nothing links on production until it works.</div></div>
     </div>
   </section>
 
@@ -280,13 +278,14 @@
           <tr><td class="n">T-369 S5b, S6b</td><td>Closed-month override on expense approval; other branches' accounts in the money lines</td><td class="n">198, 291, 314</td></tr>
           <tr><td class="n">T-374</td><td>Manila dates on every screen and default; wastage on its sales day; reversal chains; branch recount screen; voiding a POS usage pull (0181); whole-number fields refuse a bad entry</td><td class="n">574, 576, 577, 578, 579, 580, 584</td></tr>
           <tr><td class="n">T-372</td><td>Prepared orders stay prepared; internal freight at receipt; over- and under-receipts</td><td class="n">127, 511, 512, 513</td></tr>
+          <tr><td class="n">T-377</td><td>The POS reconciliation column says &ldquo;Posted basis&rdquo;; a POS usage pull with nothing left to post is finished, so the &ldquo;no usage pull&rdquo; finding clears</td><td class="n">596, 597</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
   <footer>
-    Counted 4 October 2026 from <code>docs/DEFECTS-REGISTER.md</code> (recounted against git on 3 October), the task status lines,
+    Counted 4 October 2026, updated 6 October, from <code>docs/DEFECTS-REGISTER.md</code> (recounted against git on 3 October), the task status lines,
     <code>docs/ROADMAP.html</code> and the Open Questions page. A defect counts as closed only when its register row says fixed.
   </footer>
 

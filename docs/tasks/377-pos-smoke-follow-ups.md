@@ -1,6 +1,6 @@
 # T-377: two follow-ups from the T-375 screen smoke — DEF-596, DEF-597
 
-**Status:** SPEC 2026-10-06 (Opus planner). Written at HEAD `fb082de`. ✎REV 2026-10-06: independent review, REV-1/2/3/5/6/8 inline; ready after them.
+**Status:** SPEC 2026-10-06 (Opus planner). Written at HEAD `fb082de`. ✎REV 2026-10-06: independent review, REV-1/2/3/5/6/8 inline; ready after them. **DONE 2026-10-06:** S1 `5ee87c9` (mutants 4/4), S2 `53e0020` (mutants 13/13; two extra auditor mutants on the page's void-pull guard survive, harmless: the server refuses a void pull). Smoked on 9008, both ✅. Out of scope N1–N3 not yet filed.
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
 **Migration:** none. (If one turns out to be needed, the next free number is **0186**, and any migration is gated on the
 FULL suite on a fresh gate DB. Stop and report first: it would be a spec defect.)
