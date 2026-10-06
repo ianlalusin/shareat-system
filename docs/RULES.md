@@ -64,6 +64,7 @@ defect.* — §9
 
 | Rule | § |
 |---|---|
+| ⭐ **v1 owns the GOAL, never the method; a better way is welcome (Ian, 2026-10-06).** Every v2 design pass invokes **`/research-evaluate-propose`** first. Redesign, screens included, is allowed wherever it is more user-friendly; no v1 capability is silently dropped; a redesigned POS screen goes to Ian as a mock-up first | §13 row 283 |
 | **Read them as REQUIREMENTS, not as design.** Every feature exists because the business needed it and staff use it daily. The code may be wrong; the *need* is proven. **Authoritative about WHAT, never about HOW** | §1.2b · row 84 |
 | ⭐ **UI/UX is a third authority.** A screen should be familiar-but-upgraded, never reinvented — same record workflow, better presentation. One uniform, reusable pattern set across screens. `apps/erp`/`pos`/`customer` are one visual family. **POS, not ERP-rebuild, is today's presentation-quality benchmark** where the two disagree | §1.2c · row 171 |
 | ⭐ **v1 is the flawed version; v2 is the improved one — and discovery has a METHOD, in this order.** Study v1 at source → **write down the GOAL** it was built to achieve (an unwritten goal can only be copied, never improved on) → **count the live data**: populated, consistent, and actually consumed by anything downstream? → design v2 against that goal, the bar being *more accurate, more correct, more effective, more efficient*, not merely *not-flawed*. ⛔ **Bad data downgrades v1 from proven practice to evidence of the NEED only** — then the v2 rule is designed, not ported | §1.2d · row 172 |

@@ -17,83 +17,83 @@
   - ` 231–255  ` 1.2 The four verbs — the editorial doctrine
   - ` 256–267  ` 1.2a Reference repos — hands off, ALL of them
   - ` 268–313  ` 1.2b How to read the reference repos — intent is authoritative, implementation is not
-  - ` 314–350  ` 1.2c UI/UX — one family, upgraded, not reinvented
-  - ` 351–410  ` 1.2d The discovery method — synthesize the goal, weigh the live data, then build it better
-  - ` 411–441  ` 1.3 The parity contract — what is fixed, what is free
-  - ` 442–456  ` 1.4 The migration is the audit
-  - ` 457–477  ` 1.5 The three tests for data-layer decisions
-  - ` 478–486  ` Why re-platform at all
-  - ` 487–495  ` What is explicitly NOT in scope
-- ` 496–535  ` 2. Non-negotiables
-- ` 536–537  ` 3. Execution model — how work gets done
-  - ` 538–547  ` 3.1 The division of labour
-  - ` 548–583  ` 3.1a Which model, and why — Ian, 2026-08-23
-  - ` 584–595  ` 3.2 The work loop
-  - ` 596–608  ` 3.3 Task spec format (docs/tasks/NNN-<slug>.md)
-  - ` 609–626  ` 3.4 Subagent rules
-  - ` 627–648  ` 3.4a Report a spec defect; never work around it silently
-  - ` 649–664  ` 3.5 Reporting to Ian
-  - ` 665–682  ` 3.6 Research before planning — Ian, 2026-08-23
-  - ` 683–690  ` When it applies
-  - ` 691–709  ` Four guards, or this degrades into delay
-- ` 710–711  ` 4. Architecture — the relational core
-  - ` 712–728  ` 4.1 Stack
-  - ` 729–770  ` 4.2 Schema principles
-  - ` 771–791  ` 4.3 Application layering
-  - ` 792–821  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
-- ` 822–826  ` 5. Architecture — the Firebase hot lane
-  - ` 827–859  ` 5.1 The two-lane contract
-  - ` 860–890  ` 5.2 What v1 actually does offline — and why v2 changes it
-  - ` 891–943  ` 5.3 The hot set — closed list
-  - ` 944–945  ` 5.4 Offline write-back rules
-  - ` 946–956  ` 5.3 Offline write-back rules
-- ` 957–958  ` 6. Data conventions
-  - ` 959–966  ` Money
-  - ` 967–977  ` Dates & time
-  - ` 978–983  ` Identifiers
-  - ` 984–988  ` Naming
-  - ` 989–994  ` Nulls
-- ` 995–1040 ` 7. Security model
-  - `1041–1071 ` 7.1 Identity — the v1 mess, and the v2 rule
-- `1072–1073 ` 8. Repo & environment
-  - `1074–1108` Layout
-  - `1109–1119` Ports — reserved, never shared
-  - `1120–1164` Build discipline — two rules, both absolute
-  - `1165–1175` Git
-- `1176–1201` 9. Definition of done
-  - `1202–1209` Parity gate
-- `1210–1244` 10. Phase plan
-- `1245–1261` 11. Migration & ETL rules
-- `1262–1326` 12. Inherited landmines — do not repeat these
-- `1327–1616` 13. Decision log
-- `1617–1636` 14. Amendment protocol
-- `1637–1641` 15. Engineering standards — the industry practices this project follows
-  - `1642–1647` 15.1 Build order: walking skeleton first
-  - `1648–1659` 15.2 Golden-master testing — the most important practice here
-  - `1660–1668` 15.3 Strangler Fig, not big-bang cutover
-  - `1669–1673` 15.4 No dual-write
-  - `1674–1682` 15.5 Expand/contract migrations
-  - `1683–1691` 15.6 Observability from day zero, not later
-  - `1692–1696` 15.7 CI gates
-  - `1697–1701` 15.8 Backups and a tested restore
-  - `1702–1706` 15.9 Twelve-Factor config
-  - `1707–1714` 15.10 Append-only ledgers — but not event sourcing
-  - `1715–1719` 15.11 Defence in depth
-  - `1720–1748` 15.12 Skills are lenses, not assurance
-  - `1749–1755` 15.13 Reconciliation is a permanent feature
-- `1756–1760` 16. The accounting spine
-  - `1761–1792` 16.0 What we are actually fixing — the diagnosis
-  - `1793–1836` 16.1 The ten invariants — non-negotiable
-  - `1837–1851` 16.2 The oracle: how "correct" is tested
-  - `1852–1873` 16.3 The model — header + lines, not legs
-  - `1874–1893` 16.4 Deliberately simpler than ERPNext
-  - `1894–1960` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1961–1985` 16.6 What v1 already gets right — preserve the intent
-  - `1986–2007` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2008–2022` 16.8 What v1's accounting already gets right
-  - `2023–2066` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2067–2117` 16.10 Posting patterns — one canonical pattern per business event
-  - `2118–2149` 16.11 Inventory's accounting integration
+  - ` 314–352  ` 1.2c UI/UX — one family, upgraded, not reinvented
+  - ` 353–412  ` 1.2d The discovery method — synthesize the goal, weigh the live data, then build it better
+  - ` 413–443  ` 1.3 The parity contract — what is fixed, what is free
+  - ` 444–458  ` 1.4 The migration is the audit
+  - ` 459–479  ` 1.5 The three tests for data-layer decisions
+  - ` 480–488  ` Why re-platform at all
+  - ` 489–497  ` What is explicitly NOT in scope
+- ` 498–537  ` 2. Non-negotiables
+- ` 538–539  ` 3. Execution model — how work gets done
+  - ` 540–549  ` 3.1 The division of labour
+  - ` 550–585  ` 3.1a Which model, and why — Ian, 2026-08-23
+  - ` 586–597  ` 3.2 The work loop
+  - ` 598–610  ` 3.3 Task spec format (docs/tasks/NNN-<slug>.md)
+  - ` 611–628  ` 3.4 Subagent rules
+  - ` 629–650  ` 3.4a Report a spec defect; never work around it silently
+  - ` 651–666  ` 3.5 Reporting to Ian
+  - ` 667–684  ` 3.6 Research before planning — Ian, 2026-08-23
+  - ` 685–692  ` When it applies
+  - ` 693–711  ` Four guards, or this degrades into delay
+- ` 712–713  ` 4. Architecture — the relational core
+  - ` 714–730  ` 4.1 Stack
+  - ` 731–772  ` 4.2 Schema principles
+  - ` 773–793  ` 4.3 Application layering
+  - ` 794–823  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
+- ` 824–828  ` 5. Architecture — the Firebase hot lane
+  - ` 829–861  ` 5.1 The two-lane contract
+  - ` 862–892  ` 5.2 What v1 actually does offline — and why v2 changes it
+  - ` 893–945  ` 5.3 The hot set — closed list
+  - ` 946–947  ` 5.4 Offline write-back rules
+  - ` 948–958  ` 5.3 Offline write-back rules
+- ` 959–960  ` 6. Data conventions
+  - ` 961–968  ` Money
+  - ` 969–979  ` Dates & time
+  - ` 980–985  ` Identifiers
+  - ` 986–990  ` Naming
+  - ` 991–996  ` Nulls
+- ` 997–1042 ` 7. Security model
+  - `1043–1073 ` 7.1 Identity — the v1 mess, and the v2 rule
+- `1074–1075 ` 8. Repo & environment
+  - `1076–1110` Layout
+  - `1111–1121` Ports — reserved, never shared
+  - `1122–1166` Build discipline — two rules, both absolute
+  - `1167–1177` Git
+- `1178–1203` 9. Definition of done
+  - `1204–1211` Parity gate
+- `1212–1246` 10. Phase plan
+- `1247–1263` 11. Migration & ETL rules
+- `1264–1328` 12. Inherited landmines — do not repeat these
+- `1329–1619` 13. Decision log
+- `1620–1639` 14. Amendment protocol
+- `1640–1644` 15. Engineering standards — the industry practices this project follows
+  - `1645–1650` 15.1 Build order: walking skeleton first
+  - `1651–1662` 15.2 Golden-master testing — the most important practice here
+  - `1663–1671` 15.3 Strangler Fig, not big-bang cutover
+  - `1672–1676` 15.4 No dual-write
+  - `1677–1685` 15.5 Expand/contract migrations
+  - `1686–1694` 15.6 Observability from day zero, not later
+  - `1695–1699` 15.7 CI gates
+  - `1700–1704` 15.8 Backups and a tested restore
+  - `1705–1709` 15.9 Twelve-Factor config
+  - `1710–1717` 15.10 Append-only ledgers — but not event sourcing
+  - `1718–1722` 15.11 Defence in depth
+  - `1723–1751` 15.12 Skills are lenses, not assurance
+  - `1752–1758` 15.13 Reconciliation is a permanent feature
+- `1759–1763` 16. The accounting spine
+  - `1764–1795` 16.0 What we are actually fixing — the diagnosis
+  - `1796–1839` 16.1 The ten invariants — non-negotiable
+  - `1840–1854` 16.2 The oracle: how "correct" is tested
+  - `1855–1876` 16.3 The model — header + lines, not legs
+  - `1877–1896` 16.4 Deliberately simpler than ERPNext
+  - `1897–1963` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1964–1988` 16.6 What v1 already gets right — preserve the intent
+  - `1989–2010` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2011–2025` 16.8 What v1's accounting already gets right
+  - `2026–2069` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2070–2120` 16.10 Posting patterns — one canonical pattern per business event
+  - `2121–2152` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -312,6 +312,8 @@ written by the person who runs the business, for the business he runs.
 execution was poor.
 
 ### 1.2c UI/UX — one family, upgraded, not reinvented
+
+> ⭐ **Loosened by §13 row 283 (Ian, 2026-10-06):** redesign is allowed wherever it is more user-friendly; familiarity is one input to that, not the floor. One visual family still holds.
 
 *Ian, 2026-09-05: "the ui/ux design of this app must be an upgraded version of v1. i want it to
 be uniform flexible across screens and respect the workflow of records like v1. all in all i
@@ -1613,6 +1615,7 @@ just a patch.**
 | 281 | 2026-10-05 | **THE POS USAGE PULL (AND THE SALES PULL) ARE TO BE REDESIGNED FOR THE UNIFIED BACKEND, NOT POLISHED. PLAN IT WITH `/research-evaluate-propose` BEFORE T-375 S5 IS BUILT; UNTIL THEN THE BUILT T-374 VOID RULE (a) STANDS.** Ian (t374-q1-pull-void-who, answered on the Open Questions page; found unrecorded and recorded 2026-10-05): *"need to redesign this pull from pos. this sales and inventory/usage pull from pos exist because v1 backend are separate/different now in v2 we have unified backend so this can be improved, changed, replaced with. plan this and suggest using research evaluate propose skill"*. Interim (POS v1 still separate) is T-375's day feed and S5's stored `sold_items`; the end state (ADR-015, one Postgres) has POS receipts written where the ERP reads them, so no pull exists. The proposal must say which pieces survive into the interim and which are built only to be thrown away. | v1 pulled because its backends were separate; v2 will not be (rows 269, 274). A pull redesigned once beats one polished twice | Yes |
 | 282 | 2026-10-05 | **IAN'S RULINGS ON THE POS PULL REDESIGN (pull-qa..qd, Open Questions page): (Q-A a) AT THE END STATE A DAY'S STOCK USAGE POSTS BY ITSELF RIGHT AFTER VERIFY; A ROOM UNDER COUNT WAITS AND POSTS WITH ONE CLICK AFTER THE COUNT. (Q-B, Ian's own answer) A REFUNDED OR VOIDED RECEIPT'S ITEMS GO INTO A PENDING ("FLOATING") STATE, AND A MANAGER OR ADMIN DECIDES EACH ITEM — BACK TO STOCK OR NOT; NOTHING IS RESTOCKED AUTOMATICALLY. (Q-C a) MANAGERS, ADMINS AND SUPER ADMINS MAY VOID A DAY'S USAGE AND REDO IT, IN BOTH PHASES (AS BUILT). (Q-D a) A DAY TYPED BEFORE ITS STORE WAS LINKED GETS NO POS USAGE PULL; ITS USAGE IS RECORDED BY HAND.** Ian, verbatim on Q-B: *"refund and voided receipts will float affected stocks and amanger and admin has to decide on them individually"*. Consequences: T-375 S5 becomes the proposal's S5-lite (stored sold items only, no capture path, typed days refused); the P2 spec carries a pending-restock queue per refunded/voided receipt line with a manager/admin decision and an audit row. | Answers typed on the Open Questions page are rulings (row 252). Q-B chooses a decision queue over either blanket rule: food made is usually waste, a sealed item usually is not, and only a person at the store knows which | Yes |
 
+| 283 | 2026-10-06 | ⭐ **v1 OWNS THE GOAL, NEVER THE METHOD — AND v2 MAY REDESIGN, SCREENS INCLUDED, WHEREVER THE RESULT IS MORE USER-FRIENDLY. EVERY v2 DESIGN RUNS `/research-evaluate-propose` FIRST.** Ian, 2026-10-06: *"in designing v2 employ /research-evaluate-propose , build it in premise that when i build v1 i know what the goal is but i dont know how will it be achieved so my ways and techniques in v1 can always be improved corrected provided it will give the user desired result at most efficient and effective way. redesigning is allowed just make it user friendly"*; and: *"meaning if there is better way to do things its welcome"*. **Three rules.** (1) **Every v2 design pass (discovery doc, task spec, phase plan) invokes the `research-evaluate-propose` skill** before planning: the goal written down, the effort weighed against the payoff in numbers, the industry pattern and existing solutions researched (row 163, §1.2d). (2) **v1's ways and techniques are never a constraint**, only evidence of the goal: the bar is the user's desired result, delivered most efficiently and effectively (strengthens §1.2b and §1.2d step 4). (3) ⭐ **Redesign is allowed, including screens and interaction, judged by user-friendliness for the staff who use it.** This LOOSENS §1.2c's *"familiar, not reinvented"* and row 269's *"UI and interaction are copied"* for POS/CUSTOMER: familiarity becomes one input to user-friendliness, not the floor. Unchanged: §1.2d's completeness guarantee (no v1 capability silently dropped; removing one is still Ian's call), one visual family across the apps (§1.2c), and correct accounting (§1.3). ⚠️ Orchestrator's caveat, raised once: at the till, staff fluency IS user-friendliness during a rush, so a redesigned POS screen states what it saves the cashier and goes before Ian as a mock-up before it is built. | Ian's premise: he built v1 knowing the goal but not the best way to reach it, so v1's methods are a first attempt, not a spec | Yes — a redesigned screen already built can be redesigned again on the same test |
 
 ## 14. Amendment protocol
 
