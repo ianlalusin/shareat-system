@@ -207,14 +207,14 @@ describe('W1 - the T-210 page: stored feeds, no POS call at render, Check POS ag
       .replace(/\s+/g, ' ');
   const render = async (f: S6F) =>
     text(renderToStaticMarkup(await PosReconciliationPage({ searchParams: Promise.resolve({ store: f.storeId, date: DAY }) })));
-  /** The words between "At import" and "Latest check", and from "Latest check" on. */
+  /** The words between "Posted basis" and "Latest check", and from "Latest check" on. */
   const columns = (page: string) => {
-    const a = page.indexOf('At import');
+    const a = page.indexOf('Posted basis');
     const l = page.indexOf('Latest check');
     return { a, l, atImport: a >= 0 && l > a ? page.slice(a, l) : '', latest: l >= 0 ? page.slice(l) : '' };
   };
 
-  it('"At import" and "Latest check" both show the stored paid total with 0 POS calls; Check POS again stores a batch (2 calls, the link\'s POS id and the date) and the page then shows the new figures and the delta', async () => {
+  it('"Posted basis" and "Latest check" both show the stored paid total with 0 POS calls; Check POS again stores a batch (2 calls, the link\'s POS id and the date) and the page then shows the new figures and the delta', async () => {
     const f = await s6Fixture(sql, 'w1');
     const dayId = await importVerified(f, DAY);
     h.actor = f.admin;
@@ -224,7 +224,7 @@ describe('W1 - the T-210 page: stored feeds, no POS call at render, Check POS ag
     const before = await render(f);
     expect(fetchSpy, 'rendering never calls POS').toHaveBeenCalledTimes(0);
     const c0 = columns(before);
-    expect(c0.a, 'the page says "At import"').toBeGreaterThanOrEqual(0);
+    expect(c0.a, 'the page says "Posted basis"').toBeGreaterThanOrEqual(0);
     expect(c0.l, 'then "Latest check"').toBeGreaterThan(c0.a);
     expect(c0.atImport).toContain('₱1,050.00');
     expect(c0.latest).toContain('₱1,050.00');
@@ -247,5 +247,43 @@ describe('W1 - the T-210 page: stored feeds, no POS call at render, Check POS ag
     expect(c1.atImport).not.toContain('₱1,000.00');
     expect(c1.latest, 'the new figures').toContain('₱1,000.00');
     expect(after).toMatch(/Delta[^₱]*-₱50\.00/);
+  });
+});
+
+// =====================================================================================================
+describe('W1 (T-377 S1, DEF-596) - the page after a posted correction says "Posted basis" and shows the corrected figure', () => {
+  const text = (html: string): string =>
+    html
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&#x27;/g, "'").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&gt;/g, '>').replace(/&lt;/g, '<')
+      .replace(/\s+/g, ' ');
+
+  it('"Posted basis" and its sub-line, no "At import"; the first column is 1,000.00 not 1,050.00; "Matches"', async () => {
+    const f = await s6Fixture(sql, 't377-w1');
+    const dayId = await importVerified(f, DAY);
+    const { insertSalesRecheck } = await import('../../../../packages/domain/tests/integration/_fixtures/pos-s6');
+    const feedId = (
+      await asOrgOn(f.orgId, (tx) =>
+        insertSalesRecheck(tx, { orgId: f.orgId, storeId: f.storeId, businessDate: DAY, posStoreId: f.posStoreId, fetchedBy: f.managerId, figures: R1_FIGURES }),
+      )
+    ).ids.sales!;
+    const { postPosCorrection } = await import('../../../../packages/domain/src/sales-days/correction');
+    await asOrgOn(f.orgId, (tx) =>
+      postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2027-01-20', reason: 'POS voided a cash receipt' }),
+    );
+    h.actor = f.admin;
+
+    const page = text(renderToStaticMarkup(await PosReconciliationPage({ searchParams: Promise.resolve({ store: f.storeId, date: DAY }) })));
+
+    expect(page).toContain('Posted basis');
+    expect(page).toContain('What the ledger holds: the import, or the latest correction.');
+    expect(page).not.toContain('At import');
+    const a = page.indexOf('Posted basis');
+    const l = page.indexOf('Latest check');
+    expect(l, 'then "Latest check"').toBeGreaterThan(a);
+    const first = page.slice(a, l);
+    expect(first).toContain('₱1,000.00');
+    expect(first).not.toContain('₱1,050.00');
+    expect(page).toContain('Matches');
   });
 });

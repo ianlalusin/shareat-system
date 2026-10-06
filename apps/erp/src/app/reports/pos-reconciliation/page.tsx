@@ -99,7 +99,7 @@ export default async function PosReconciliationPage({
             {' · '}
             {businessDate}
           </p>
-          <PosReconciliationCard atImport={result.atImport} latest={result.latest} ledger={result.ledger} matches={result.matches} delta={result.delta} />
+          <PosReconciliationCard postedBasis={result.postedBasis} latest={result.latest} ledger={result.ledger} matches={result.matches} delta={result.delta} />
           {canRecheck && result.salesDayId && (
             <form action={recheckPosDayAction} className="text-sm">
               <input type="hidden" name="salesDayId" value={result.salesDayId} />

@@ -1,7 +1,7 @@
 /**
  * getPosDayReconciliation - T-210, converted by T-375 S6. `docs/tasks/375-pos-v1-day-feed.md` S6.
  *
- * Shows what POS said when the day was imported ("At import": the day's BASIS feed, R10) beside what the latest stored
+ * Shows what POS said when the day was imported ("Posted basis": the day's BASIS feed, R10) beside what the latest stored
  * check says ("Latest check"), and the sales day's own total beside them. **Nothing is fetched at render**: both sides
  * are stored feeds, so the screen works with POS down and never lets a slow POS hold a page. A fresh check is the
  * **Check POS again** button (`recheckPosDay`), which stores a batch the next render reads.
@@ -31,13 +31,13 @@ export interface PosDayReconciliationBasis {
 
 export interface PosDayReconciliationResult {
   /** The day's basis feed: what was posted (the import, or the latest correction's feed). */
-  atImport: PosSide;
+  postedBasis: PosSide;
   /** The latest stored `sales` feed of the date. */
   latest: PosSide;
   ledger: LedgerSide;
   /** The date's live sales day (the Check POS again button names it); null when there is none. */
   salesDayId: string | null;
-  /** `latest - atImport`; null unless both sides are 'ok' - never a misleading zero. */
+  /** `latest - postedBasis`; null unless both sides are 'ok' - never a misleading zero. */
   delta: Money | null;
   /** The two paid totals are equal; null unless both sides are 'ok'. */
   matches: boolean | null;
@@ -66,7 +66,7 @@ export async function getPosDayReconciliation(tx: Tx, input: PosDayReconciliatio
     salesDay ? posV1Repo.basisFor(tx, input.orgId, salesDay.id) : Promise.resolve(undefined),
     posV1Repo.latestForDay(tx, input.orgId, input.storeId, input.businessDate, 'sales'),
   ]);
-  const atImport = sideOf(basisFeed);
+  const postedBasis = sideOf(basisFeed);
   const latest = sideOf(latestFeed);
 
   const ledger: LedgerSide = salesDay
@@ -75,9 +75,9 @@ export async function getPosDayReconciliation(tx: Tx, input: PosDayReconciliatio
 
   let delta: Money | null = null;
   let matches: boolean | null = null;
-  if (atImport.status === 'ok' && latest.status === 'ok') {
-    delta = subtract(latest.paidTotal, atImport.paidTotal);
-    matches = equals(latest.paidTotal, atImport.paidTotal);
+  if (postedBasis.status === 'ok' && latest.status === 'ok') {
+    delta = subtract(latest.paidTotal, postedBasis.paidTotal);
+    matches = equals(latest.paidTotal, postedBasis.paidTotal);
   }
-  return { atImport, latest, ledger, salesDayId: salesDay?.id ?? null, delta, matches, basis: input };
+  return { postedBasis, latest, ledger, salesDayId: salesDay?.id ?? null, delta, matches, basis: input };
 }

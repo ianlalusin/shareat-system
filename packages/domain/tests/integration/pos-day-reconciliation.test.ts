@@ -13,10 +13,10 @@ import postgres from 'postgres';
  *
  * ## The converted shape (pinned by the tester; the spec says only "At import (basis) beside Latest check (stored),
  *    the delta"). `getPosDayReconciliation(tx, { orgId, storeId, businessDate })` returns
- *      { atImport: Side, latest: Side, ledger, delta, matches, basis }
+ *      { postedBasis: Side, latest: Side, ledger, delta, matches, basis }
  *    with Side = { status: 'ok', paidTotal, receiptCount } | { status: 'not_found' } | { status: 'none' };
- *    `atImport` is the day's BASIS feed (R10), `latest` the latest stored `sales` feed; `paidTotal` is POS's paid total;
- *    `delta` = latest - atImport (null unless both are 'ok'); `matches` = the two paid totals are equal (null unless
+ *    `postedBasis` is the day's BASIS feed (R10), `latest` the latest stored `sales` feed; `paidTotal` is POS's paid total;
+ *    `delta` = latest - postedBasis (null unless both are 'ok'); `matches` = the two paid totals are equal (null unless
  *    both are 'ok'). `ledger` is unchanged: `{ exists: true, status, totalSales, posSourced, source } | { exists: false }`.
  */
 config({ path: '.env.local' });
@@ -34,7 +34,7 @@ import { asOrgOn, DAY, insertSalesRecheck, R1_FIGURES, s6Fixture, type S6F } fro
 
 type Side = { status: 'ok'; paidTotal: string; receiptCount: number } | { status: 'not_found' } | { status: 'none' };
 interface Recon {
-  atImport: Side;
+  postedBasis: Side;
   latest: Side;
   ledger: { exists: true; status: string; totalSales: string; posSourced: boolean; source: string } | { exists: false };
   delta: string | null;
@@ -77,7 +77,7 @@ describe('getPosDayReconciliation', () => {
 
     const result = await reconcile(f);
 
-    expect(result.atImport).toMatchObject({ status: 'ok', paidTotal: '1050.00', receiptCount: 20 });
+    expect(result.postedBasis).toMatchObject({ status: 'ok', paidTotal: '1050.00', receiptCount: 20 });
     expect(result.latest).toMatchObject({ status: 'ok', paidTotal: '1050.00', receiptCount: 20 });
     expect(result.ledger).toMatchObject({ exists: true, status: 'verified', totalSales: '1100.00', posSourced: true, source: 'pos_v1_day_feed' });
     expect(result.matches).toBe(true);
@@ -92,11 +92,27 @@ describe('getPosDayReconciliation', () => {
 
     const result = await reconcile(f);
 
-    expect(result.atImport).toMatchObject({ status: 'ok', paidTotal: '1050.00' });
+    expect(result.postedBasis).toMatchObject({ status: 'ok', paidTotal: '1050.00' });
     expect(result.latest).toMatchObject({ status: 'ok', paidTotal: '1000.00' });
     expect(result.matches).toBe(false);
     expect(result.delta).toBe('-50.00');
     expect(fetchSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it('P1 (T-377 S1, DEF-596): after a posted correction the first column is the POSTED BASIS (the corrected figure) and matches', async () => {
+    const f = await s6Fixture(sql, 'p1-basis');
+    const dayId = await importVerified(f);
+    const feedId = (await recheck(f, R1_FIGURES)).ids.sales!;
+    await asOrgOn(f.orgId, (tx) =>
+      D.postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2027-01-20', reason: 'POS voided a cash receipt' }),
+    );
+
+    const result = await reconcile(f);
+
+    expect(result.postedBasis).toMatchObject({ status: 'ok', paidTotal: '1000.00' });
+    expect(result.latest).toMatchObject({ status: 'ok', paidTotal: '1000.00' });
+    expect(result.matches).toBe(true);
+    expect(result.delta).toBe('0.00');
   });
 
   it('a stored POS "found: false" check becomes not_found, never a crash', async () => {
@@ -106,7 +122,7 @@ describe('getPosDayReconciliation', () => {
 
     const result = await reconcile(f);
 
-    expect(result.atImport).toMatchObject({ status: 'ok', paidTotal: '1050.00' });
+    expect(result.postedBasis).toMatchObject({ status: 'ok', paidTotal: '1050.00' });
     expect(result.latest).toEqual({ status: 'not_found' });
     expect(result.matches).toBeNull();
     expect(result.delta).toBeNull();
@@ -117,7 +133,7 @@ describe('getPosDayReconciliation', () => {
 
     const result = await reconcile(f, '2027-01-15');
 
-    expect(result.atImport).toEqual({ status: 'none' });
+    expect(result.postedBasis).toEqual({ status: 'none' });
     expect(result.latest).toEqual({ status: 'none' });
     expect(result.ledger).toEqual({ exists: false });
     expect(result.matches).toBeNull();
@@ -140,7 +156,7 @@ describe('getPosDayReconciliation', () => {
 
     const result = await asOrgOn(f.orgId, (tx) => getRecon(tx, { orgId: f.orgId, storeId: store!.id, businessDate: DAY }));
 
-    expect(result.atImport).toEqual({ status: 'none' });
+    expect(result.postedBasis).toEqual({ status: 'none' });
     expect(result.latest).toEqual({ status: 'none' });
     expect(result.ledger).toMatchObject({ exists: true, status: 'verified', totalSales: '1000.00', source: 'legacy_typed' });
     expect(result.matches).toBeNull();

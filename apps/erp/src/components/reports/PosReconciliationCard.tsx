@@ -14,10 +14,11 @@ const SIDE_LABEL: Record<'not_found' | 'none', string> = {
   none: 'Nothing stored for this store/date',
 };
 
-function Side({ title, side }: { title: string; side: PosSideView }) {
+function Side({ title, subtitle, side }: { title: string; subtitle?: string; side: PosSideView }) {
   return (
     <div>
       <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">{title}</p>
+      {subtitle ? <p className="text-xs text-neutral-500">{subtitle}</p> : null}
       {side.status === 'ok' ? (
         <>
           <p className="text-xl font-semibold tabular-nums">{formatMoney(side.paidTotal)}</p>
@@ -32,17 +33,17 @@ function Side({ title, side }: { title: string; side: PosSideView }) {
 
 /**
  * The POS-day reconciliation card - T-210, converted by T-375 S6. Both POS columns are STORED feeds (nothing is fetched
- * at render): "At import" is what the day was posted from, "Latest check" is the newest stored check. The sales day's
+ * at render): "Posted basis" is what the ledger holds (the import, or the latest correction), "Latest check" is the newest stored check. The sales day's
  * own total follows. `Check POS again` is the page's form, not this card's.
  */
 export function PosReconciliationCard({
-  atImport,
+  postedBasis,
   latest,
   ledger,
   matches,
   delta,
 }: {
-  atImport: PosSideView;
+  postedBasis: PosSideView;
   latest: PosSideView;
   ledger: LedgerSideView;
   matches: boolean | null;
@@ -66,7 +67,7 @@ export function PosReconciliationCard({
       )}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Side title="At import" side={atImport} />
+        <Side title="Posted basis" subtitle="What the ledger holds: the import, or the latest correction." side={postedBasis} />
         <Side title="Latest check" side={latest} />
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">Shareat System</p>
@@ -85,7 +86,7 @@ export function PosReconciliationCard({
 
       {delta !== null ? (
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Delta (latest check − at import): <span className="font-mono tabular-nums">{formatMoney(delta)}</span>
+          Delta (latest check − posted basis): <span className="font-mono tabular-nums">{formatMoney(delta)}</span>
         </p>
       ) : null}
     </div>
