@@ -581,6 +581,8 @@ Screenshots of each at 375 px.
 - **W-S5.** Staff "add position" with a typed name → the name is not in the URL.
 - **G-S5** as G-S2.
 
+- ✎S5-N1 (S5 audit, 2026-10-08): `wastage/actions.ts`: a malformed hidden `id` makes `isSameAppPath` throw inside the `try` and again in the `catch`, so the person gets a 500 instead of a banner (tampered input only; pre-existing, not a T-380 regression).
+
 **Smoke (9008):** a refused and an accepted wastage record; a refused count line; a pos-usage finalize refusal.
 
 ---
