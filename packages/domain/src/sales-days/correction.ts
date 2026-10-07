@@ -127,6 +127,14 @@ export async function postPosCorrection(tx: Tx, actor: Actor, input: PostPosCorr
       `${store?.name ?? 'This store'} isn't linked to a POS store, so its POS figures can't be read.`,
     );
   }
+  // T-382 R9a (REV-2, I6): a day imported under an earlier link is never re-derived under this one. After an unlink and
+  // a relink, the live link may name another POS store, or carry a tax type or tenders the day was never sold under.
+  if (basis.posStoreId !== link.posStoreId || (link.updatedAt !== null && basis.fetchedAt.getTime() < link.updatedAt.getTime())) {
+    throw refuse(
+      `postPosCorrection: day ${day.id} was imported under an earlier link of store ${day.storeId}`,
+      `${store?.name ?? 'This store'} isn't linked to a POS store, so its POS figures can't be read.`,
+    );
+  }
   const tenders = await posV1Repo.listTendersByStore(tx, orgId, day.storeId);
   const dayChannels = await salesDaysRepo.getChannelsForDay(tx, day.id);
   // The DAY's own remitted channel row, not the link's current channel: a link channel change after verify must not

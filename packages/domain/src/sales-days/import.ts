@@ -168,6 +168,25 @@ async function runImport(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetch
   // One instant, taken as the responses arrive: the feed rows' `fetched_at` and the day's `pos_sourced_at`.
   const fetchedAt = new Date();
 
+  // T-382 R5: lock order is store, then day. The store `FOR KEY SHARE` conflicts with a link or unlink (`FOR UPDATE`),
+  // so after it is held the link cannot change until this transaction ends. Re-read it: the unlink, or a relink to
+  // another POS store or with another channel or tax type, that committed during the fetch is seen here, and the
+  // import saves nothing. (`editSalesDay` takes the day and then the store KEY SHARE; KEY SHARE does not conflict with
+  // KEY SHARE and nothing that takes the store FOR UPDATE locks a day, so there is no cycle: REV-8.)
+  await salesDaysRepo.lockStoreKeyShare(tx, orgId, input.storeId);
+  const linkNow = await posV1Repo.getLinkByStore(tx, orgId, input.storeId);
+  if (
+    !linkNow ||
+    linkNow.id !== link.id ||
+    linkNow.posStoreId !== link.posStoreId ||
+    (linkNow.updatedAt?.getTime() ?? null) !== (link.updatedAt?.getTime() ?? null)
+  ) {
+    throw refuse(
+      `importSalesDay: the POS link of store ${input.storeId} changed during the fetch`,
+      `${store.name}'s POS link changed while ${when} was being imported. Nothing was saved. Try again.`,
+    );
+  }
+
   const derived = deriveSalesDay(fetched.sales.payload, {
     channelId: link.salesChannelId,
     taxType: link.posTaxType,
