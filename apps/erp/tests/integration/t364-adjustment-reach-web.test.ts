@@ -169,10 +169,13 @@ describe('W1 — staff session, oracle pair', () => {
     ACTOR_HOLDER.sessionId = f.staffSessionId;
     const { setStartAnchorAction } = await import('../../src/app/attendance/[dayId]/actions');
 
+    // one jar slot: read each redirect as it happens (T-380)
     const toReal = await expectRedirectTo(() => setStartAnchorAction(dayFormData(f)));
+    const errReal = errorOf(toReal);
     const toFake = await expectRedirectTo(() => setStartAnchorAction(dayFormData(f, { employmentId: randomUUID() })));
-    expect(errorOf(toReal), `redirect URL was: ${toReal}`).toBe(O);
-    expect(errorOf(toFake), `redirect URL was: ${toFake}`).toBe(O);
+    const errFake = errorOf(toFake);
+    expect(errReal, `redirect URL was: ${toReal}`).toBe(O);
+    expect(errFake, `redirect URL was: ${toFake}`).toBe(O);
   });
 });
 
@@ -201,14 +204,17 @@ describe('W2 — otherManager session, scoped-out holder', () => {
     ACTOR_HOLDER.sessionId = f.otherManagerSessionId;
     const { setStartAnchorAction } = await import('../../src/app/attendance/[dayId]/actions');
 
+    // one jar slot: read each redirect as it happens (T-380)
     const toReal = await expectRedirectTo(() => setStartAnchorAction(dayFormData(f)));
+    const errReal = errorOf(toReal);
     const toFake = await expectRedirectTo(() => setStartAnchorAction(dayFormData(f, { employmentId: randomUUID() })));
-    expect(errorOf(toReal), `redirect URL was: ${toReal}`).toBe(O);
-    expect(errorOf(toFake), `redirect URL was: ${toFake}`).toBe(O);
+    const errFake = errorOf(toFake);
+    expect(errReal, `redirect URL was: ${toReal}`).toBe(O);
+    expect(errFake, `redirect URL was: ${toFake}`).toBe(O);
     // Mutant: the action/recordAdjustment redirects with authorize()'s store-naming sentence instead of O -> red.
-    for (const to of [toReal, toFake]) {
-      expect(errorOf(to) ?? '').not.toContain(f.storeName);
-      expect(errorOf(to) ?? '').not.toContain(f.storeCode);
+    for (const err of [errReal, errFake]) {
+      expect(err ?? '').not.toContain(f.storeName);
+      expect(err ?? '').not.toContain(f.storeCode);
     }
   });
 });
