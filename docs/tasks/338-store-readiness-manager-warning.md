@@ -1,6 +1,6 @@
 # T-338: store readiness warns when a store has no manager
 
-**Status:** SPEC 2026-10-08 (Opus planner). Written at HEAD `9e89a0b`. Reserved 2026-09-24, queued after T-336 (done).
+**Status:** SPEC 2026-10-08 (Opus planner). Written at HEAD `9e89a0b`. Reserved 2026-09-24, queued after T-336 (done). **DONE 2026-10-08:** spec `1b3c96e`, tests `935a814`, build `d8c6252`; audited; merged `70157e3`; smoked on 9008.
 **Model:** Sonnet for the slice, tester first, then builder. Any amendment is written in plan mode (Opus).
 **Migration:** none. No table, no column, no capability. (If one turns out to be needed, it is a spec defect: stop and
 report. Do not number it; the next number is reserved by another lane.)

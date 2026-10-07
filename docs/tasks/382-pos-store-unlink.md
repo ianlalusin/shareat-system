@@ -1,6 +1,6 @@
 # T-382: a guarded POS unlink — super-admin only, with a reason, audited; imported days stay as they are
 
-**Status:** SPEC 2026-10-08 (Opus planner). Written at HEAD `9e89a0b`, lane `lane/t382-unlink`. ✎REV 2026-10-08: independently reviewed, APPROVE WITH CHANGES (see "Independent review"
+**Status:** SPEC 2026-10-08 (Opus planner). Written at HEAD `9e89a0b`, lane `lane/t382-unlink`. ✎REV 2026-10-08: independently reviewed, APPROVE WITH CHANGES (see "Independent review" **DONE 2026-10-08:** S1 `9ab0889` (0187), S2 `de5f13d`, S3 `213bef9`, ✎AMEND-2 `b806aec` (R10/DEF-607, R9a DB clock); Opus review + audit; merged `ba922e5`. Smoked on 9008 2026-10-08. 0187 prechecks P0187a–c wait for Ian before the push.
 below; REV-1 to REV-7 bind the builder). ✎AMEND 2026-10-08: orchestrator rulings on REV-1..10 applied inline (marked ✎AMEND).
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
 **Migration:** **0187**, hand-authored per ADR-012 §5, gated on the FULL suite on a fresh gate DB (memory: a CHECK /

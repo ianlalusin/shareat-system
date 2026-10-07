@@ -1,6 +1,6 @@
 # T-380: no typed values in page addresses (DEF-476)
 
-**Status:** SPEC 2026-10-07 (Opus planner). Written at HEAD `c04198a`. ✎REV 2026-10-07: independent review, REV-1..13
+**Status:** SPEC 2026-10-07 (Opus planner). Written at HEAD `c04198a`. ✎REV 2026-10-07: independent review, REV-1..13 **DONE 2026-10-08:** S1a `fe67577`, S1b `74dcd72`, S2+S3 `9e89a0b`, S4 (merged `3e06b35`), S5 (merged `cf98057`), S6 `2b9f0d8` (+items, pos-link; ✎S6-R1/R2). Guard PENDING empty. Full gate 12 on `2b9f0d8` (integration 5584/5586, the 2 fixed in `3682fb2`; unit flakes pass alone); smoked on 9008 2026-10-08.
 (see "Review" at the end). Build-blocking: REV-1, REV-2, REV-3, REV-5. Apply them before S1a starts.
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
 **Migration:** none. No table, no capability, no new action. (If one turns out to be needed, stop and report: it
