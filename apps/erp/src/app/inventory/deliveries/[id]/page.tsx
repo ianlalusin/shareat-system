@@ -9,6 +9,7 @@ import { deliveryDetail } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Delivery — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -45,7 +46,7 @@ export default async function DeliveryPage({
   searchParams: Promise<{ error?: string; ok?: string; warning?: string }>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/inventory/deliveries/${id}`);
   const detail = await deliveryDetail(actor.orgId, id);
   if (!detail) notFound();

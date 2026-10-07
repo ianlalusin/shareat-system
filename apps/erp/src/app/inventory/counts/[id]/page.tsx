@@ -6,6 +6,7 @@ import { advanceCountAction, cancelCountAction, commitCountAction, recordCountAc
 import { requireSession } from '../../../../lib/session';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Count sheet — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -92,7 +93,7 @@ export default async function CountSessionPage({
   searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/inventory/counts/${id}`);
   const detail = await getCountSessionDetail(actor.orgId, id);
   if (!detail) notFound();

@@ -75,7 +75,7 @@ function form(entries: Record<string, string>): FormData {
   return fd;
 }
 const RETURN_FORM = {
-  storeId: 'store-9',
+  storeId: '019a0000-0000-7000-8000-000000000009',
   supplierId: 'sup-1',
   itemId: 'item-1',
   itemKind: 'raw_material',
@@ -83,7 +83,7 @@ const RETURN_FORM = {
   quantity: '2',
   reason: 'Spoiled',
 };
-const REFUND_FORM = { storeId: 'store-9', supplierId: 'sup-1', moneyAccountId: 'acct-1', amount: '100.00' };
+const REFUND_FORM = { storeId: '019a0000-0000-7000-8000-000000000009', supplierId: 'sup-1', moneyAccountId: 'acct-1', amount: '100.00' };
 
 async function outcomeOf(run: () => Promise<unknown>): Promise<{ redirect: string | null; thrown: Error | null }> {
   try {
@@ -116,7 +116,7 @@ describe.each(ACTIONS)('%s', (actionName, domainFn, formData, okSentence) => {
     expect(out.redirect, 'no redirect on success (the screen stays silent)').not.toBeNull();
     expect(out.redirect!.startsWith('/inventory/returns?'), `redirect: ${out.redirect}`).toBe(true);
     expect(param(out.redirect, 'ok'), `redirect: ${out.redirect}`).toBe(okSentence);
-    expect(param(out.redirect, 'store'), `store lost (redirect: ${out.redirect})`).toBe('store-9');
+    expect(param(out.redirect, 'store'), `store lost (redirect: ${out.redirect})`).toBe('019a0000-0000-7000-8000-000000000009');
     expect(param(out.redirect, 'error'), `redirect: ${out.redirect}`).toBeNull();
   });
 
@@ -136,7 +136,7 @@ describe.each(ACTIONS)('%s', (actionName, domainFn, formData, okSentence) => {
     const out = await run();
     expect(out.thrown, `the action threw (a production build shows a digest): ${out.thrown?.message}`).toBeNull();
     expect(param(out.redirect, 'error'), `redirect: ${out.redirect}`).toBe(reason);
-    expect(param(out.redirect, 'store'), `store lost (redirect: ${out.redirect})`).toBe('store-9');
+    expect(param(out.redirect, 'store'), `store lost (redirect: ${out.redirect})`).toBe('019a0000-0000-7000-8000-000000000009');
     expect(param(out.redirect, 'ok'), `redirect: ${out.redirect}`).toBeNull();
   });
 
@@ -159,7 +159,7 @@ describe.each(ACTIONS)('%s', (actionName, domainFn, formData, okSentence) => {
     const out = await run();
     expect(out.thrown, `the action threw (a digest in production): ${out.thrown?.message}`).toBeNull();
     expect(param(out.redirect, 'error'), `redirect: ${out.redirect}`).toBe(sentence);
-    expect(param(out.redirect, 'store'), `store lost (redirect: ${out.redirect})`).toBe('store-9');
+    expect(param(out.redirect, 'store'), `store lost (redirect: ${out.redirect})`).toBe('019a0000-0000-7000-8000-000000000009');
   });
 
   it('a refused call never shows the ok banner', async () => {
@@ -205,7 +205,7 @@ describe.each(ACTIONS)('%s', (actionName, domainFn, formData, okSentence) => {
 
     domain().mockResolvedValue({ ok: true });
     const keepOut = await outcomeOf(() => actions[actionName](form(formData)));
-    expect(param(keepOut.redirect, 'store'), `control redirect: ${keepOut.redirect}`).toBe('store-9');
+    expect(param(keepOut.redirect, 'store'), `control redirect: ${keepOut.redirect}`).toBe('019a0000-0000-7000-8000-000000000009');
   });
 });
 
@@ -213,12 +213,12 @@ describe('control - voidReturnAction is untouched', () => {
   it('success still redirects with its own ok sentence; a refusal still redirects with ?error=', async () => {
     const { voidReturnAction } = await import('../src/app/inventory/returns/actions');
     mocks.voidReturn.mockResolvedValue({ ok: true });
-    const okOut = await outcomeOf(() => voidReturnAction(form({ returnId: 'r-1', reason: 'Typed wrong', store: 'store-9' })));
+    const okOut = await outcomeOf(() => voidReturnAction(form({ returnId: 'r-1', reason: 'Typed wrong', store: '019a0000-0000-7000-8000-000000000009' })));
     expect(param(okOut.redirect, 'ok'), `redirect: ${okOut.redirect}`).toBe(
       'Return voided. The stock is given back and the credit it held is reversed.',
     );
     mocks.voidReturn.mockResolvedValue({ ok: false, reason: 'closed' });
-    const badOut = await outcomeOf(() => voidReturnAction(form({ returnId: 'r-1', reason: 'Typed wrong', store: 'store-9' })));
+    const badOut = await outcomeOf(() => voidReturnAction(form({ returnId: 'r-1', reason: 'Typed wrong', store: '019a0000-0000-7000-8000-000000000009' })));
     expect(param(badOut.redirect, 'error'), `redirect: ${badOut.redirect}`).toBe('closed');
   });
 });

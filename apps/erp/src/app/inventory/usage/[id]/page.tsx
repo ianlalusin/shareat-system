@@ -7,6 +7,7 @@ import { wastageReasonLabel } from '@shareat/domain';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Usage record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,7 @@ export default async function UsageRecordPage({
   searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/inventory/usage/${id}`);
   const detail = await usageRecordDetail(actor.orgId, id);
   if (!detail) notFound();

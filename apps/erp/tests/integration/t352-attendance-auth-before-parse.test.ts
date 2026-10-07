@@ -168,10 +168,10 @@ async function assertSameAuthRefusal(
   ACTOR_HOLDER.actor = f.staff;
   const before = await configRowCount(f.storeId);
 
+  // T-380: the flash cookie is one jar slot, so each redirect is read the moment it happens.
   const toValid = await expectRedirectTo(() => updateAttendanceConfigAction(attendanceFormData(f, baselineOverrides)));
-  const toMalformed = await expectRedirectTo(() => updateAttendanceConfigAction(attendanceFormData(f, malformedOverrides)));
-
   const baseline = errorOf(toValid);
+  const toMalformed = await expectRedirectTo(() => updateAttendanceConfigAction(attendanceFormData(f, malformedOverrides)));
   const malformed = errorOf(toMalformed);
   // Audit F7 — without this, a baseline/malformed pair that are BOTH null (e.g. the auth gate
   // silently stopped firing and both submissions "succeeded") would still satisfy `malformed ===
@@ -340,10 +340,10 @@ async function assertSameAuthRefusalForDay(
   ACTOR_HOLDER.sessionId = f.staffSessionId;
   const before = await adjustmentCountFor(f, kind);
 
+  // T-380: the flash cookie is one jar slot, so each redirect is read the moment it happens.
   const toValid = await expectRedirectTo(() => action(dayFormData(f, { [field]: baselineValue })));
-  const toMalformed = await expectRedirectTo(() => action(dayFormData(f, { [field]: malformedValue })));
-
   const baseline = errorOf(toValid);
+  const toMalformed = await expectRedirectTo(() => action(dayFormData(f, { [field]: malformedValue })));
   const malformed = errorOf(toMalformed);
   // Same F7 risk as the config-side helper: a baseline/malformed pair that are BOTH null would
   // still satisfy equality and pass green.

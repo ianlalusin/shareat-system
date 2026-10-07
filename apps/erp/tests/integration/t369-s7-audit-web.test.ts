@@ -116,7 +116,7 @@ async function banner(run: () => Promise<unknown>): Promise<string> {
   try {
     await run();
   } catch (err) {
-    if (err instanceof RedirectSignal) return param(err.to, 'error') ?? `(no error param) ${err.to}`;
+    if (err instanceof RedirectSignal) return param(err.to, 'error') ?? `(no error param) ${param(err.to, 'ok') ?? ''} ${err.to}`;
     throw err;
   }
   throw new Error('expected the action to redirect');

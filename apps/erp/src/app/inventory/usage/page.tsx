@@ -8,6 +8,7 @@ import { NewUsageForm } from './NewUsageForm';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Usage & wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,7 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export default async function UsagePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/inventory/usage');
   const stores = await listStores(actor.orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;

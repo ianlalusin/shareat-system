@@ -16,7 +16,7 @@
  * holding the result only in the caller's React state (`ProvisionForm.tsx`, `RepairButton.tsx`,
  * `TokenReveal.tsx`) means the token never touches a URL, a cookie, or anything a refresh replays.
  */
-import { redirect } from 'next/navigation';
+import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import { createFirestoreTerminalDriver } from '@shareat/sync-firestore';
 import { mintTerminalToken, provisionTerminal, revokeTerminal } from '@shareat/domain';
@@ -29,11 +29,6 @@ const RETURN_TO = '/attendance/terminals';
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(storeId: string, extra: Record<string, string>): never {
-  const params = new URLSearchParams({ store: storeId, ...extra });
-  redirect(`${RETURN_TO}?${params.toString()}`);
 }
 
 export type ProvisionActionResult =
@@ -97,10 +92,8 @@ export async function revokeTerminalAction(formData: FormData): Promise<void> {
       revokeTerminal(tx, actor, createFirestoreTerminalDriver(), { terminalId, reason }),
     );
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash(RETURN_TO, { store: storeId }, { error: errorMessage(err) });
   }
   revalidatePath(RETURN_TO);
-  back(storeId, {
-    ok: 'Terminal revoked — it can no longer punch. It also stops appearing in the list below, which only shows live terminals; provision a new one rather than trying to revive it.',
-  });
+  return await redirectWithFlash(RETURN_TO, { store: storeId }, { ok: 'Terminal revoked — it can no longer punch. It also stops appearing in the list below, which only shows live terminals; provision a new one rather than trying to revive it.' });
 }

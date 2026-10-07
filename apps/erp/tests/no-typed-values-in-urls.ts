@@ -73,20 +73,6 @@ export const PENDING: readonly string[] = [
   'app/settings/sales-channels/page.tsx', 'app/settings/wastage-monitor/page.tsx', 'app/commissary/catalogue/page.tsx',
   'app/commissary/discrepancies/page.tsx', 'app/commissary/orders/page.tsx', 'app/commissary/orders/[id]/page.tsx',
   'app/trade/orders/page.tsx', 'app/trade/orders/[id]/page.tsx', 'app/trade/returns/page.tsx',
-  // S5
-  'app/inventory/counts/actions.ts', 'app/inventory/deliveries/actions.ts', 'app/inventory/locations/actions.ts',
-  'app/inventory/low-stock/actions.ts', 'app/inventory/pos-map/actions.ts', 'app/inventory/pos-usage/actions.ts',
-  'app/inventory/production/actions.ts', 'app/inventory/returns/actions.ts', 'app/inventory/usage/actions.ts',
-  'app/attendance/lane/actions.ts', 'app/attendance/terminals/actions.ts', 'app/attendance/[dayId]/actions.ts',
-  'app/staff/actions.ts', 'app/staff/[employmentId]/credentials/actions.ts', 'app/wastage/actions.ts',
-  'app/inventory/counts/page.tsx', 'app/inventory/counts/[id]/page.tsx', 'app/inventory/deliveries/page.tsx',
-  'app/inventory/deliveries/[id]/page.tsx', 'app/inventory/locations/page.tsx', 'app/inventory/low-stock/page.tsx',
-  'app/inventory/pos-map/page.tsx', 'app/inventory/pos-usage/page.tsx', 'app/inventory/production/page.tsx',
-  'app/inventory/production/[id]/page.tsx', 'app/inventory/returns/page.tsx', 'app/inventory/usage/page.tsx',
-  'app/inventory/usage/[id]/page.tsx', 'app/attendance/[dayId]/page.tsx', 'app/attendance/lane/page.tsx',
-  'app/attendance/terminals/page.tsx', 'app/staff/page.tsx', 'app/staff/hire/page.tsx',
-  'app/staff/[employmentId]/page.tsx', 'app/staff/[employmentId]/credentials/page.tsx', 'app/wastage/page.tsx',
-  'app/wastage/[id]/page.tsx',
   // N1: another lane
   'app/items/**',
 ];
@@ -178,7 +164,31 @@ function aliasReferences(sf: ts.SourceFile, b: Bindings, exportName: string[]): 
 // ------------------------------------------------------------------------------------------------
 // G1a
 
+/** G1a on `redirectWithFlash(path, ...)`: the path must carry no query. A `+` concatenation, a template whose static
+ *  text holds `?` (or `&` after a dynamic part), or a literal with `?` builds a query by hand. */
+function g1aFlashPath(sf: ts.SourceFile, file: string, out: Finding[]): void {
+  const fl = bindingsFor(sf, (s) => FLASH_MODULE.test(s), ['redirectWithFlash']);
+  if (fl.names.size === 0 && fl.namespaces.size === 0) return;
+  const visit = (n: ts.Node): void => {
+    if (ts.isCallExpression(n) && isBoundCallee(n.expression, fl, ['redirectWithFlash']) && n.arguments[0]) {
+      const arg = unwrap(n.arguments[0]);
+      const line = lineOf(sf, n);
+      if (ts.isBinaryExpression(arg) && arg.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+        out.push({ rule: 'G1a', file, line, detail: 'redirectWithFlash path is a `+` concatenation (builds a query by hand)' });
+      } else if (ts.isTemplateExpression(arg)) {
+        const hasQ = arg.head.text.includes('?') || arg.templateSpans.some((sp) => sp.literal.text.includes('?') || sp.literal.text.includes('&'));
+        if (hasQ) out.push({ rule: 'G1a', file, line, detail: 'redirectWithFlash path is a template that builds a query string' });
+      } else if (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg)) {
+        if (arg.text.includes('?')) out.push({ rule: 'G1a', file, line, detail: 'redirectWithFlash path carries a query string' });
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+}
+
 function g1a(sf: ts.SourceFile, file: string, out: Finding[]): void {
+  g1aFlashPath(sf, file, out);
   const nav = bindingsFor(sf, (s) => s === 'next/navigation', ['redirect', 'permanentRedirect']);
   if (nav.names.size === 0 && nav.namespaces.size === 0) return;
   const exportNames = ['redirect', 'permanentRedirect'];

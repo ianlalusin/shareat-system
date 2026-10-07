@@ -6,6 +6,7 @@ import { endEmploymentAction, issuePinAction, setPositionsAction } from '../acti
 import { employmentDetail, livePinFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { Input } from '@/components/ui';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Employment — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,7 @@ export default async function EmploymentDetailPage({
   searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   const { employmentId } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/staff/${employmentId}`);
   const detail = await employmentDetail(actor.orgId, employmentId);
   if (!detail) notFound();

@@ -10,7 +10,7 @@
  * mutation runs under the org's RLS principal (`withOrgPrincipal`), the same shape
  * `commissary/catalogue/actions.ts` established.
  */
-import { redirect } from 'next/navigation';
+import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import {
   createLocation,
@@ -71,11 +71,6 @@ function errorMessage(err: unknown): string {
   return sharedErrorMessage(err);
 }
 
-function back(storeId: string, extra: Record<string, string>): never {
-  const params = new URLSearchParams({ store: storeId, ...extra });
-  redirect(`/inventory/locations?${params.toString()}`);
-}
-
 export async function setupRoomsAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/locations');
   const storeId = str(fd, 'storeId');
@@ -91,10 +86,10 @@ export async function setupRoomsAction(fd: FormData): Promise<void> {
         ? `Rooms set up: ${result.created.map((c) => c.code).join(', ')}.`
         : 'This store already has its rooms — nothing to add.';
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/inventory/locations', { store: storeId }, { error: errorMessage(err) });
   }
   revalidatePath('/inventory/locations');
-  back(storeId, { ok: message });
+  return await redirectWithFlash('/inventory/locations', { store: storeId }, { ok: message });
 }
 
 export async function createLocationAction(fd: FormData): Promise<void> {
@@ -116,10 +111,10 @@ export async function createLocationAction(fd: FormData): Promise<void> {
     );
     message = 'Room created.';
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/inventory/locations', { store: storeId }, { error: errorMessage(err) });
   }
   revalidatePath('/inventory/locations');
-  back(storeId, { ok: message });
+  return await redirectWithFlash('/inventory/locations', { store: storeId }, { ok: message });
 }
 
 export async function updateLocationAction(fd: FormData): Promise<void> {
@@ -142,10 +137,10 @@ export async function updateLocationAction(fd: FormData): Promise<void> {
     );
     message = 'Room updated.';
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/inventory/locations', { store: storeId }, { error: errorMessage(err) });
   }
   revalidatePath('/inventory/locations');
-  back(storeId, { ok: message });
+  return await redirectWithFlash('/inventory/locations', { store: storeId }, { ok: message });
 }
 
 export async function setDefaultAction(fd: FormData): Promise<void> {
@@ -158,10 +153,10 @@ export async function setDefaultAction(fd: FormData): Promise<void> {
     await withOrgPrincipal(actor.orgId, (tx) => setDefaultLocation(tx, actor, { id }));
     message = 'Default room updated.';
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/inventory/locations', { store: storeId }, { error: errorMessage(err) });
   }
   revalidatePath('/inventory/locations');
-  back(storeId, { ok: message });
+  return await redirectWithFlash('/inventory/locations', { store: storeId }, { ok: message });
 }
 
 export async function deactivateLocationAction(fd: FormData): Promise<void> {
@@ -174,10 +169,10 @@ export async function deactivateLocationAction(fd: FormData): Promise<void> {
     await withOrgPrincipal(actor.orgId, (tx) => deactivateLocation(tx, actor, { id }));
     message = 'Room deactivated.';
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/inventory/locations', { store: storeId }, { error: errorMessage(err) });
   }
   revalidatePath('/inventory/locations');
-  back(storeId, { ok: message });
+  return await redirectWithFlash('/inventory/locations', { store: storeId }, { ok: message });
 }
 
 export async function reactivateLocationAction(fd: FormData): Promise<void> {
@@ -190,8 +185,8 @@ export async function reactivateLocationAction(fd: FormData): Promise<void> {
     await withOrgPrincipal(actor.orgId, (tx) => reactivateLocation(tx, actor, { id }));
     message = 'Room reactivated.';
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/inventory/locations', { store: storeId }, { error: errorMessage(err) });
   }
   revalidatePath('/inventory/locations');
-  back(storeId, { ok: message });
+  return await redirectWithFlash('/inventory/locations', { store: storeId }, { ok: message });
 }

@@ -10,7 +10,7 @@
  * scheduler job calls indirectly through `runOrderWastageBackstop`, so the authorisation belongs
  * with the rule, not scattered across every caller.
  */
-import { redirect } from 'next/navigation';
+import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import { salesDaysRepo, type OrderWastageDisposition } from '@shareat/db';
 import { toBusinessDate } from '@shareat/core/datetime';
@@ -63,20 +63,6 @@ function errorMessageOf(err: unknown): string {
   return sharedErrorMessage(err);
 }
 
-function backToList(storeId: string, error?: string, ok?: string): never {
-  const qs = new URLSearchParams({ store: storeId });
-  if (error) qs.set('error', error);
-  if (ok) qs.set('ok', ok);
-  redirect(`/wastage?${qs.toString()}`);
-}
-
-function backToDetail(id: string, error?: string, ok?: string): never {
-  const qs = new URLSearchParams();
-  if (error) qs.set('error', error);
-  if (ok) qs.set('ok', ok);
-  redirect(`/wastage/${id}${qs.toString() ? `?${qs.toString()}` : ''}`);
-}
-
 /** The "record" form on the list screen. */
 export async function recordOrderWastageAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/wastage');
@@ -98,7 +84,7 @@ export async function recordOrderWastageAction(fd: FormData): Promise<void> {
       salesDaysRepo.findByBusinessDate(tx, actor.orgId, storeId, businessDate),
     );
     if (!salesDay) {
-      backToList(storeId, `No sales day exists for ${businessDate} at this store yet — record one first. If that day was withdrawn, only a manager can enter the date again, so ask a manager.`);
+      return await redirectWithFlash('/wastage', { store: storeId }, { error: `No sales day exists for ${businessDate} at this store yet — record one first. If that day was withdrawn, only a manager can enter the date again, so ask a manager.` });
     }
 
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
@@ -115,10 +101,10 @@ export async function recordOrderWastageAction(fd: FormData): Promise<void> {
       }),
     );
     revalidatePath('/wastage');
-    backToList(storeId, undefined, `Recorded — ${result.status === 'resolved' ? 'posted immediately' : 'awaiting disposition'}.`);
+    return await redirectWithFlash('/wastage', { store: storeId }, { ok: `Recorded — ${result.status === 'resolved' ? 'posted immediately' : 'awaiting disposition'}.` });
   } catch (err) {
     if (isRedirectSignal(err)) throw err;
-    backToList(storeId, errorMessageOf(err));
+    return await redirectWithFlash('/wastage', { store: storeId }, { error: errorMessageOf(err) });
   }
 }
 
@@ -128,13 +114,13 @@ export async function disputeOrderWastageAction(fd: FormData): Promise<void> {
   const storeId = str(fd, 'storeId');
   try {
     const result = await withOrgPrincipal(actor.orgId, (tx) => disputeOrderWastage(tx, actor, { wastageId: id, storeId }));
-    if (!result.ok) backToDetail(id, result.reason);
+    if (!result.ok) return await redirectWithFlash(`/wastage/${id}`, {}, { error: result.reason });
     revalidatePath('/wastage');
     revalidatePath(`/wastage/${id}`);
-    backToDetail(id, undefined, 'Marked disputed. The 15-day backstop clock is unaffected.');
+    return await redirectWithFlash(`/wastage/${id}`, {}, { ok: 'Marked disputed. The 15-day backstop clock is unaffected.' });
   } catch (err) {
     if (isRedirectSignal(err)) throw err;
-    backToDetail(id, errorMessageOf(err));
+    return await redirectWithFlash(`/wastage/${id}`, {}, { error: errorMessageOf(err) });
   }
 }
 
@@ -159,13 +145,13 @@ export async function resolveOrderWastageAction(fd: FormData): Promise<void> {
         resolvedOn: str(fd, 'resolvedOn') || toBusinessDate(),
       }),
     );
-    if (!result.ok) backToDetail(id, result.reason);
+    if (!result.ok) return await redirectWithFlash(`/wastage/${id}`, {}, { error: result.reason });
     revalidatePath('/wastage');
     revalidatePath(`/wastage/${id}`);
-    backToDetail(id, undefined, `Resolved as ${disposition}.`);
+    return await redirectWithFlash(`/wastage/${id}`, {}, { ok: `Resolved as ${disposition}.` });
   } catch (err) {
     if (isRedirectSignal(err)) throw err;
-    backToDetail(id, errorMessageOf(err));
+    return await redirectWithFlash(`/wastage/${id}`, {}, { error: errorMessageOf(err) });
   }
 }
 
@@ -186,13 +172,13 @@ export async function confirmSettlementMatchAction(fd: FormData): Promise<void> 
         resolvedOn: toBusinessDate(),
       }),
     );
-    if (!result.ok) backToDetail(id, result.reason);
+    if (!result.ok) return await redirectWithFlash(`/wastage/${id}`, {}, { error: result.reason });
     revalidatePath('/wastage');
     revalidatePath(`/wastage/${id}`);
-    backToDetail(id, undefined, 'Marked paid by the platform. Nothing further posts here.');
+    return await redirectWithFlash(`/wastage/${id}`, {}, { ok: 'Marked paid by the platform. Nothing further posts here.' });
   } catch (err) {
     if (isRedirectSignal(err)) throw err;
-    backToDetail(id, errorMessageOf(err));
+    return await redirectWithFlash(`/wastage/${id}`, {}, { error: errorMessageOf(err) });
   }
 }
 
@@ -206,12 +192,12 @@ export async function reverseAutoChargeAction(fd: FormData): Promise<void> {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       reverseAutoCharge(tx, actor, { wastageId: id, storeId, reason, reversedOn: toBusinessDate() }),
     );
-    if (!result.ok) backToDetail(id, result.reason);
+    if (!result.ok) return await redirectWithFlash(`/wastage/${id}`, {}, { error: result.reason });
     revalidatePath('/wastage');
     revalidatePath(`/wastage/${id}`);
-    backToDetail(id, undefined, 'Auto-charge reversed. Resolve it again with the correct disposition.');
+    return await redirectWithFlash(`/wastage/${id}`, {}, { ok: 'Auto-charge reversed. Resolve it again with the correct disposition.' });
   } catch (err) {
     if (isRedirectSignal(err)) throw err;
-    backToDetail(id, errorMessageOf(err));
+    return await redirectWithFlash(`/wastage/${id}`, {}, { error: errorMessageOf(err) });
   }
 }

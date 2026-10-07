@@ -13,7 +13,7 @@
  * `recordInvoiceAction`. Upload and the delivery insert share ONE transaction, so a delivery can
  * never reference a file that was not actually written.
  */
-import { redirect } from 'next/navigation';
+import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import { createDeliveryDocument, receiveDeliveryDocument, uploadFile } from '@shareat/domain';
 import type { ShortageReason } from '@shareat/db/schema';
@@ -106,10 +106,6 @@ function errorMessage(err: unknown): string {
   return sharedErrorMessage(err);
 }
 
-function back(path: string, params: Record<string, string>): never {
-  redirect(`${path}?${new URLSearchParams(params).toString()}`);
-}
-
 export async function createDeliveryAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/deliveries');
   const storeId = str(fd, 'storeId');
@@ -176,12 +172,13 @@ export async function createDeliveryAction(fd: FormData): Promise<void> {
     deliveryId = result.deliveryId;
     warning = result.warnings.map((w) => w.message).join(' ');
   } catch (err) {
-    back('/inventory/deliveries', { store: storeId, error: errorMessage(err) });
+    return await redirectWithFlash('/inventory/deliveries', { store: storeId }, { error: errorMessage(err) });
   }
 
   revalidatePath('/inventory/deliveries');
-  back(
+  return await redirectWithFlash(
     `/inventory/deliveries/${deliveryId}`,
+    {},
     warning
       ? { ok: 'Delivery drafted. Nothing has moved or posted yet — receiving is that step.', warning }
       : { ok: 'Delivery drafted. Nothing has moved or posted yet — receiving is that step.' },
@@ -221,10 +218,10 @@ export async function receiveDeliveryAction(fd: FormData): Promise<void> {
     );
     message = `Received. Posted at ${peso(result.totalValue)} — journal ${result.entryId}.`;
   } catch (err) {
-    back(`/inventory/deliveries/${deliveryId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/inventory/deliveries/${deliveryId}`, {}, { error: errorMessage(err) });
   }
 
   revalidatePath('/inventory/deliveries');
   revalidatePath(`/inventory/deliveries/${deliveryId}`);
-  back(`/inventory/deliveries/${deliveryId}`, { ok: message });
+  return await redirectWithFlash(`/inventory/deliveries/${deliveryId}`, {}, { ok: message });
 }

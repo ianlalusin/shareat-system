@@ -7,7 +7,7 @@
  * the session, never the form** (T-138) — `tests/unit/no-client-supplied-actor.test.ts` fails the
  * build if that ever changes.
  */
-import { redirect } from 'next/navigation';
+import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import { authorize } from '@shareat/auth';
 import { lowStockRepo } from '@shareat/db';
@@ -58,7 +58,7 @@ export async function setThresholdAction(fd: FormData): Promise<void> {
     failure = errorMessage(err);
   }
   if (failure !== null) {
-    redirect(`/inventory/low-stock?${new URLSearchParams({ store: storeId, error: failure }).toString()}`);
+    return await redirectWithFlash('/inventory/low-stock', { store: storeId }, { error: failure });
   }
 
   revalidatePath('/inventory/low-stock');

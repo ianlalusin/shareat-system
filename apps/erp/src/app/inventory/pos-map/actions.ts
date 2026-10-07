@@ -6,7 +6,7 @@
  * Thin adapters: parse `FormData`, call the domain, redirect with a message. The actor comes from
  * the session (T-138), never the form — `upsertPosItemMap`/`decideMapRequest` own authorization.
  */
-import { redirect } from 'next/navigation';
+import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import { decideMapRequest, upsertPosItemMap } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
@@ -16,10 +16,6 @@ import { errorMessage } from '@/lib/constraint-messages';
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(storeId: string, params: Record<string, string>): never {
-  redirect(`/inventory/pos-map?${new URLSearchParams({ store: storeId, ...params }).toString()}`);
 }
 
 export async function upsertPosItemMapAction(fd: FormData): Promise<void> {
@@ -45,14 +41,14 @@ export async function upsertPosItemMapAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/inventory/pos-map', { store: storeId }, { error: errorMessage(err) });
   }
-  if (!result!.ok) {
-    back(storeId, { error: result!.reason, ...(result!.needsConfirmation ? { needsConfirmation: '1' } : {}) });
+  if (!result.ok) {
+    return await redirectWithFlash('/inventory/pos-map', { store: storeId }, { error: result.reason, ...(result.needsConfirmation ? { needsConfirmation: '1' } : {}) });
   }
 
   revalidatePath('/inventory/pos-map');
-  back(storeId, { ok: 'Mapping saved.' });
+  return await redirectWithFlash('/inventory/pos-map', { store: storeId }, { ok: 'Mapping saved.' });
 }
 
 export async function decideMapRequestAction(fd: FormData): Promise<void> {
@@ -67,14 +63,14 @@ export async function decideMapRequestAction(fd: FormData): Promise<void> {
       decideMapRequest(tx, actor, { requestId, decision, note: str(fd, 'note') || null }),
     );
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/inventory/pos-map', { store: storeId }, { error: errorMessage(err) });
   }
-  if (!result!.ok) {
-    back(storeId, { error: result!.reason });
+  if (!result.ok) {
+    return await redirectWithFlash('/inventory/pos-map', { store: storeId }, { error: result.reason });
   }
 
   revalidatePath('/inventory/pos-map');
-  back(storeId, {
+  return await redirectWithFlash('/inventory/pos-map', { store: storeId }, {
     ok: decision === 'approved' ? 'Request approved — recorded as "sells, consumes no stock."' : 'Request rejected — item returns to unmapped.',
   });
 }

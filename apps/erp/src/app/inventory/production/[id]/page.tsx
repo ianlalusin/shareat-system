@@ -5,6 +5,7 @@ import { postProductionAction, voidProductionAction } from '../actions';
 import { productionRecordDetail } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Production record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,7 @@ export default async function ProductionRecordPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/inventory/production/${id}`);
   const detail = await productionRecordDetail(actor.orgId, id);
   if (!detail) notFound();
