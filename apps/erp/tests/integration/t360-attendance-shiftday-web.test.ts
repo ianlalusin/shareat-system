@@ -199,10 +199,10 @@ describe('W3 (green, guard; the ordering leg) — approveOvertimeAction, staff n
     const before = await totalAdjustmentCountFor(f.employment.id);
 
     const toValid = await expectRedirectTo(() => approveOvertimeAction(dayFormData(f, { approvedOtMinutes: '30' })));
+    const baseline = errorOf(toValid); // one jar slot: read each redirect as it happens (T-380)
     const toMalformed = await expectRedirectTo(() =>
       approveOvertimeAction(dayFormData(f, { shiftDay: 'not-a-date', approvedOtMinutes: '30' })),
     );
-    const baseline = errorOf(toValid);
     const malformed = errorOf(toMalformed);
     expect(baseline, `no error at all on the baseline submission — redirect URL was: ${toValid}`).not.toBeNull();
     expect(malformed, `redirect URL was: ${toMalformed}`).toBe(baseline);
@@ -220,10 +220,10 @@ describe('W4 (green, guard; the ordering leg) — setStartAnchorAction, staff, s
     const before = await totalAdjustmentCountFor(f.employment.id);
 
     const toValid = await expectRedirectTo(() => setStartAnchorAction(dayFormData(f, { chosenAnchorMinute: '60' })));
+    const baseline = errorOf(toValid); // one jar slot: read each redirect as it happens (T-380)
     const toMalformed = await expectRedirectTo(() =>
       setStartAnchorAction(dayFormData(f, { shiftDay: '2026-02-30', chosenAnchorMinute: '60' })),
     );
-    const baseline = errorOf(toValid);
     const malformed = errorOf(toMalformed);
     expect(baseline, `no error at all on the baseline submission — redirect URL was: ${toValid}`).not.toBeNull();
     expect(malformed, `redirect URL was: ${toMalformed}`).toBe(baseline);
