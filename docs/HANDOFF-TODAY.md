@@ -1,56 +1,60 @@
-# Handoff — 2026-10-06 (orchestrator; Phase 2 closed; T-375 built through S6)
+# Handoff — 2026-10-08 (orchestrator; T-377..T-382 and T-338 built; push to main waits on Ian)
 
 ## Where things stand
-**Phase 2 is closed** (T-316 done) and **T-376 is done**. **T-375 (the POS v1 day feed) is built end to end**:
-S3 import, S4 the database figure lock (migration **0185**), S5-lite usage from stored POS data (Ian's pull
-redesign), S6 rechecks, drift findings and the correcting entry. All of it is committed **locally on `main`**
-and pushed to branch **`wrapup/2026-10-06`**, **not to `main`** — a push to `main` deploys to production (row 278),
-and production is still at **0181**. Next free migration **0186**.
+**Production (`159.223.46.224`, erp2.shareat.net) is at migration 0186** (deployed 7 Oct, `d79e754`). Everything since —
+T-379, T-380, T-381, T-382 (migration **0187**), T-338, DEF-600 — is committed on local `main` and pushed to branch
+**`wrapup/2026-10-08`, NOT to `main`** (a push to `main` deploys; Ian was away). Two LIVE production holes close only with
+that push: **DEF-601** (voided supplier bills still set branch prices) and **DEF-605** (the sign-in `next` check lets a
+tab through — open redirect). **Lipa links to POS on Monday 12 Oct** (bible row 284); it passed its 90-day check.
+Next free migration **0188**.
 
-## Gates at 543661f (code; docs-only commits since)
-typecheck **0** · unit **4248/4253** in the loaded run (1 skipped; the three failing files pass alone: glossary
-trap names, committed secrets, position-defaults callers — load timeouts) · integration **FULL on fresh
-`shareat_test_orch_gate8`: 320 files, 5297/5297** · build **0**.
-Screen smoke (§9.4) on 9008: T-316 ✅, T-375 S3 ✅, **S4–S6 ✅** (fake POS: platform sales posted 1220/4150; usage planned from the stored feed with no POS call; drift finding → correction Dr 4150 / Cr 1110 ₱50 → finding cleared; void reversed day and correction).
+## Gates (full gate 12, fresh `shareat_test_orch_gate12`, at `2b9f0d8`)
+typecheck **0** · build **0** · integration **5584/5586** — the 2 were T-382's two new CHECK keys not yet provoked, fixed
+in `3682fb2` (42/42 on a fresh DB) · unit **4585/4592**: the 6 failures (glossary-trap-names, no-committed-secrets,
+position-defaults-callers, t336, t375-no-typed-sales G1e, no-typed-values G3) all **pass alone** (53/53) — load flakes.
+Since `2b9f0d8`: one test commit and docs only. Screen smoke on 9008 (2026-10-08): every proof ✅ (forged session —
+screens, not sign-in).
 
-## What happened (since 77cbd81)
-- **Ian's rulings, all recorded:** row 279 (T-316 (a) + transfer, as built; T-375 new POS key, charges → 4500,
-  refunds from cash, VAT a label only); row 280 (**Firebase: completely off**, incl. push — supersedes 275; my
-  reading of his free-text answer, flagged to him); row 281 (t374-q1 was answered but unrecorded: **redesign the
-  POS pulls**); row 282 (pull-qa..qd: usage posts after verify; **refunded/voided items float for a manager
-  decision**; void as built; typed days refused).
-- **T-316 S3** (`c5b0eac`): the float detector reads the books' float position. Smoked. **T-316 DONE.**
-- **T-376 S3**: DEF-583 did **not reproduce** in dev or production builds → closed, nothing built (R7).
-- **T-375 S3** (`7a33eea`), **S4** (`7de5232`, 0185), **S5-lite** (`cad42a6`), **S6** (`543661f`). Every slice:
-  tester-first, audited, mutants **run** (S3 11/11, S4 17/17, S5 17/17 + 4 race guards review-verified only,
-  S6 18/18). Orchestrator rulings recorded in the spec (✎S5L-R, ✎S6-A). A builder renamed a parameter to dodge a
-  guard (`actor` → `who`); reverted and exempted honestly.
-- **POS pull redesign** (`docs/discovery/pos-pull-redesign-proposal.md`): no pull at the end state; S5-lite for now.
-- **Defects:** DEF-583 closed (not reproduced); **DEF-591 fixed**; **DEF-595 logged** (POS v1 never depletes what a
-  package table eats); **DEF-596, 597 logged** from the smoke.
+## What happened (since 17bd484)
+- **Deploys:** 0182–0185 (6 Oct) and 0186 (7 Oct) with Ian, prechecks recorded in `docs/ops/README.md`.
+- **POS:** the v2 store-scoped key works for Lipa (`docs/ops/pos-v1-key.md`); T-375 S0 census script built; **Lipa GATE
+  PASS** (90/90 days; methods Bank Transfer, Cash, Gcash, QRPH). Runbook for Monday: `docs/ops/lipa-pos-link-runbook.md`.
+- **T-377** DEF-596/597 · **T-378** item unit (0186), DEF-598/599/600 · **T-379** DEF-564, 568–572, 575, 592, 601, 602 ·
+  **T-380** no typed values or banner text in any URL (signed one-minute flash cookie; every screen; DEF-476, 603, 604,
+  605) · **T-381** DEF-606 · **T-382** guarded unlink (0187; DEF-607) · **T-338** manager readiness warning.
+- **Ian's rulings, recorded:** row 283 (v1 owns the goal, never the method; research-evaluate-propose on every design;
+  redesign allowed if more user-friendly), row 284 (Lipa links Mon 12 Oct), row 285 (the unlink, answer "a" on the Open
+  Questions page), row 286 (T-338's 2026-09-24 manager ruling). Open Questions: `t378-q1-unit-history` (convert an item's
+  history to a new unit? recommended: keep it locked) is still open.
+- **Defects logged and open:** DEF-608 (returns refusal says "delivery line [hidden]"), DEF-609 ("Check POS again"
+  shows after unlink; refuses safely).
 
 ## Pick up here
-1. **The push to `main`, with Ian** — the checklist in `docs/ops/README.md` (Deploy gate): P5 (0182) on
-   production, re-run T-316 §5's query (0184), then 0185 goes too. Prechecks BEFORE the push.
-2. **The new POS key** (Ian chose a store-scoped key, row 279): give Ian the steps; nothing can be linked on
-   production without it. Then link stores one by one (DEF-586 closes store by store).
-3. Small follow-ups from the smoke: **DEF-596** (T-210 "At import" shows the corrected basis) and **DEF-597** (posUsagePullNotRun fires after a fully handled day). Then T-374 / T-367 screen smoke.
+1. **With Ian: the push to `main`.** First the three READ-ONLY 0187 prechecks as `doadmin` (`docs/ops/README.md` deploy
+   gate, P0187a–c; **P0187b lists who receives the new `unlink_store_from_pos` grant — it should be only Ian**). Then
+   push, watch CI and the deploy, confirm 167 rows in `drizzle.__drizzle_migrations`. CI has been flaky on timing tests
+   (A19 fixed by T-381); if CI fails, read the log before re-running.
+2. **Monday 12 Oct with Ian:** link Lipa per the runbook (map 4 methods → money accounts, verify/void any open typed
+   day, then Link). First import the morning after.
+3. Small: DEF-608, DEF-609; T-374/T-367 screen smoke; T-343 S5.4/S8/S9.
 
 ## Do not decide these alone — they are Ian's
-- The Open Questions page is clear. Tell Ian (told-not-asked): remapping a tender to a **different** money account
-  after a day is verified makes the next correction move that wallet's whole amount (✎S6-A).
-- T-136 §2 (revolving fund) phase; tender management is org-scoped (ask if he wants store-scoped).
+- `t378-q1-unit-history` (recommended: keep a used item's unit locked; retire and recreate if wrong).
+- Told, not asked (tell Ian): after unlink a manager can still withdraw an imported day and type it again; an unlinked
+  store keeps its POS store id, so only the same store can relink to it; an unlink waits until every imported day is
+  verified or withdrawn; on stores with >10 affected assets the store-opening confirm names 10 then "and N more".
 
 ## Traps that bit this session
-- **Tests written after the fix are never red** — only a real mutant run proves them. Two vacuous tests were caught
-  only that way (T-316 MX, T-375 S4 K11: postgres.js reports a transaction's FIRST error, hiding a 25P02).
-- Mutant agents can stall mid-run: hash files before, log after every mutant, sha-check after.
-- Subagents' tools can truncate a file (S5 usage-pull.ts rebuilt from memory; audited against HEAD).
-- `next build` rewrites `apps/erp/next-env.d.ts` — restore it, never commit it.
-- Smoke: forge the session cookie with stdout straight into a scratch file; Playwright reads it (Ian approved).
+- **Two agents mutating/testing the same file at once** produces phantom failures (S3a, S6) — one mutant run per file.
+- **Agent tools write CRLF and even 0x08 bytes** into files: byte-check with python, never `grep $'\r'` in a loop.
+- Shell pastes in Git Bash: `<>'draft'` creates a file; Ctrl+V doesn't paste (Shift+Insert).
+- The laptop sleeps mid-gate unless keep-awake is requested; a slept gate shows absurd durations.
+- `run-with-db.mjs` vitest runs hang without `< /dev/null` when backgrounded.
+- Lane worktrees: node_modules are JUNCTIONS — delete them with `[IO.Directory]::Delete(path,$false)`, never recursively.
 
-## Lane DBs
-Drop when convenient: `shareat_test_t316*`, `shareat_test_t375*`, `shareat_test_t376*`, `shareat_test_orch_gate5..8`.
+## Lane DBs (drop when convenient)
+`shareat_test_t377*`, `t378*`, `t379*`, `t380*`, `t381`, `t382*`, `t338`, `cmk`, `smoke1008`, `t378smoke`, `t379smoke`,
+`orch_gate9..12`, `fix378`, `t382s1x`.
 
 ## The paste-ready prompt
 ```
@@ -58,14 +62,12 @@ You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-syst
 /orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all) and docs/RULES.md. Read the
 Open Questions page (bible row 252) with ArtifactData before building anything gated on Ian. GREP the
 register and bible, never Read them whole.
-State: Phase 2 closed; T-375 built S1-S6 (migration 0185); local main is pushed to wrapup/2026-10-06, NOT
-to main (a push to main deploys; production is at 0181). Next: the push to main with Ian per the
-docs/ops/README.md deploy gate, then the POS key steps for Ian. Next free migration 0186.
-STANDING: lanes are Sonnet subagents in this session (tester/builder/auditor separate, each its own _test
-DB); Opus only via subagents for specs and judgement; independent Opus review for every money spec; RUN
-mutants (a test written after its fix proves nothing until a mutant turns it red); commit slices locally;
-never push to main without Ian; scan every changed file for CRLF before committing; republish the What's
-Left board (docs/WHATS-LEFT.html) after every commit that closes a DEF. Gate any migration on the FULL
-suite on a fresh gate DB; freeze edits during gates. Messages are short. Ian runs this terminal on Opus
-5.5 at medium effort; do not ask him to switch.
+State: production at 0186; local main (pushed to wrapup/2026-10-08, NOT main) carries T-379..T-382 + T-338,
+migration 0187. Next: with Ian, the 0187 prechecks then the push to main (closes live DEF-601, DEF-605);
+Monday 12 Oct link Lipa per docs/ops/lipa-pos-link-runbook.md. Next free migration 0188.
+STANDING: lanes are Sonnet subagents (tester/builder/auditor separate, own _test DB, git worktrees for
+parallel lanes); Opus only for specs, reviews and money audits; RUN mutants; commit slices locally; never
+push to main without Ian; byte-check every changed file for \r and \x08 before committing; republish
+docs/WHATS-LEFT.html after every commit that closes a DEF; FULL suite on a fresh gate DB before any push;
+no edits while a gate runs; request keep-awake for long gates. Messages are short.
 ```
