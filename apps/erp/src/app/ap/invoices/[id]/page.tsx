@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
+import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { expensesRepo, apRepo } from '@shareat/db';
 import { canViewPhoto } from '../../../../lib/photo-link';
 import { peso } from '../../../../lib/format';
@@ -121,6 +122,10 @@ export default async function InvoiceDetailPage({
   // ⭐ T-147: what this supplier has billed before comes first in the picker.
   const picker = await itemPickerFor(orgId, invoice.supplierId);
   const existingLines = await invoiceLines(orgId, invoice.id);
+  // T-379 S3b (DEF-569) - the lines are checked against the GOODS: the total less both fees, in exact money.
+  const deliveryFee = money(invoice.deliveryFee ?? '0');
+  const otherFees = money(invoice.otherFees ?? '0');
+  const goodsTotal = subtract(subtract(money(invoice.totalAmount), deliveryFee), otherFees);
 
 return (
     <Page density="table">
@@ -140,6 +145,12 @@ return (
         <div className="text-right">
           <StatusBadge status={invoice.status} />
           <p className="mt-2 text-2xl font-semibold tabular-nums">{peso(invoice.totalAmount)}</p>
+          {(compare(deliveryFee, ZERO) !== 0 || compare(otherFees, ZERO) !== 0) && (
+            <dl className="mt-1 space-y-0.5 text-sm text-neutral-500 dark:text-neutral-400">
+              {compare(deliveryFee, ZERO) !== 0 && <Row label="Delivery fee" value={peso(deliveryFee)} />}
+              {compare(otherFees, ZERO) !== 0 && <Row label="Other fees" value={peso(otherFees)} />}
+            </dl>
+          )}
         </div>
       </div>
 
@@ -192,7 +203,11 @@ return (
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Itemise it before verifying &mdash; ticking &ldquo;right items, right price&rdquo; only
             means something if the items are on the record. Lines must add up to{' '}
-            <strong>{peso(invoice.totalAmount)}</strong>. Leave them blank for a bill with no
+            <strong>{peso(goodsTotal)}</strong>
+            {compare(deliveryFee, ZERO) !== 0 || compare(otherFees, ZERO) !== 0
+              ? ' (the total less the delivery and other fees, which are not lines)'
+              : ''}
+            . Leave them blank for a bill with no
             itemised detail (a utility bill), and the invoice still works.
           </p>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">

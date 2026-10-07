@@ -219,6 +219,19 @@ function pesos(centavos: bigint): string {
   return `${centavos < 0n ? '-' : ''}${abs / 100n}.${(abs % 100n).toString().padStart(2, '0')}`;
 }
 
+/** T-379 S3b (DEF-568) — `pesos` with the whole-peso part grouped in thousands, for the refusal SENTENCES only.
+ *  ⛔ `lineTotalFromParts` keeps the ungrouped `pesos`: its result is a `Money` string a column parses. */
+function groupedPesos(centavos: bigint): string {
+  return groupWhole(pesos(centavos));
+}
+
+/** Groups the whole-peso digits of a plain decimal; the decimals are left exactly as typed (a unit price keeps its 4). */
+function groupWhole(text: string): string {
+  const neg = text.startsWith('-');
+  const [whole = '', frac] = (neg ? text.slice(1) : text).split('.');
+  return `${neg ? '-' : ''}${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${frac === undefined ? '' : `.${frac}`}`;
+}
+
 /**
  * ⭐ T-367 S3 (DEF-420) — a line's total from its parts, as the `Money` string `validateInvoiceLines` demands:
  * the SAME half-up centavo rounding it compares against, so a form that computes the total for the person
@@ -400,9 +413,9 @@ export async function validateInvoiceLines(
     if (totalCentavos !== computedCentavos) {
       throw refuse(
         `validateInvoiceLines: line ${i + 1} (${item.name}) does not add up — ${l.quantity} × ` +
-          `₱${l.unitPrice} is ₱${pesos(computedCentavos)}, not ₱${l.lineTotal}.`,
+          `₱${groupWhole(l.unitPrice.trim())} is ₱${groupedPesos(computedCentavos)}, not ₱${groupedPesos(totalCentavos)}.`,
         `Line ${i + 1} (${item.name}) does not add up — ${l.quantity} × ` +
-          `₱${l.unitPrice} is ₱${pesos(computedCentavos)}, not ₱${l.lineTotal}.`,
+          `₱${groupWhole(l.unitPrice.trim())} is ₱${groupedPesos(computedCentavos)}, not ₱${groupedPesos(totalCentavos)}.`,
       );
     }
     sumCentavos += totalCentavos;
@@ -426,10 +439,10 @@ export async function validateInvoiceLines(
   // T-367 S3 (DEF-420) — exact, in centavos: no epsilon, no float.
   if (sumCentavos !== invoiceCentavos) {
     throw refuse(
-      `validateInvoiceLines: the lines total ₱${pesos(sumCentavos)}, but the invoice says ` +
-        `₱${invoiceTotal}. Either the lines are incomplete or the total is wrong — both are worth ` +
+      `validateInvoiceLines: the lines total ₱${groupedPesos(sumCentavos)}, but the goods on this bill come to ` +
+        `₱${groupedPesos(invoiceCentavos)}. Either the lines are incomplete or the total is wrong — both are worth ` +
         'fixing before this becomes a price everyone trusts.',
-      `The lines total ₱${pesos(sumCentavos)}, but the invoice says ₱${invoiceTotal}. Either the lines are incomplete or ` +
+      `The lines total ₱${groupedPesos(sumCentavos)}, but the goods on this bill come to ₱${groupedPesos(invoiceCentavos)}. Either the lines are incomplete or ` +
         'the total is wrong — both are worth fixing before this becomes a price everyone trusts.',
     );
   }

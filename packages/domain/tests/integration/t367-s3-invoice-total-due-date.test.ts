@@ -141,7 +141,7 @@ describe('T2 — the goods total is total − delivery − other fees, exactly',
 
     const before = await invoiceRows(f.orgId);
     const refused = await rejection(invoice(f, { totalAmount: '1000.00', deliveryFee: '100.00', lines: [line(f, '900.01')] }), 'lines that exceed the goods total by a centavo');
-    expect(refused.userMessage, `the written sentence is the target; raw: ${refused.message}`).toBe('The lines total ₱900.01, but the invoice says ₱900.00. Either the lines are incomplete or the total is wrong — both are worth fixing before this becomes a price everyone trusts.');
+    expect(refused.userMessage, `the written sentence is the target; raw: ${refused.message}`).toBe('The lines total ₱900.01, but the goods on this bill come to ₱900.00. Either the lines are incomplete or the total is wrong — both are worth fixing before this becomes a price everyone trusts.');
     expect(refused.userMessage ?? "").not.toMatch(UUID);
     expect(await invoiceRows(f.orgId), 'a refused invoice left a row').toBe(before);
   });
@@ -153,7 +153,7 @@ describe('T2 — the goods total is total − delivery − other fees, exactly',
 
     const before = await invoiceRows(f.orgId);
     const refused = await rejection(invoice(f, { totalAmount: '900.00', lines: [line(f, '900.01')], invoiceNo: 'EX-BAD' }), 'lines 900.01 against a goods total of 900.00');
-    expect(refused.userMessage, `the written sentence is the target; raw: ${refused.message}`).toBe('The lines total ₱900.01, but the invoice says ₱900.00. Either the lines are incomplete or the total is wrong — both are worth fixing before this becomes a price everyone trusts.');
+    expect(refused.userMessage, `the written sentence is the target; raw: ${refused.message}`).toBe('The lines total ₱900.01, but the goods on this bill come to ₱900.00. Either the lines are incomplete or the total is wrong — both are worth fixing before this becomes a price everyone trusts.');
     expect(refused.userMessage ?? "").not.toMatch(UUID);
     expect(await invoiceRows(f.orgId), 'a refused invoice left a row').toBe(before);
   });
@@ -290,7 +290,7 @@ describe('T2 — the goods total is total − delivery − other fees, exactly',
     expect(Number(kept)).toBe(1);
 
     const refused = await rejection(asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.manager, id, [line(f, '899.99')] as never)), 'lines short of the goods total by a centavo');
-    expect(refused.userMessage, `the written sentence is the target; raw: ${refused.message}`).toBe('The lines total ₱899.99, but the invoice says ₱900.00. Either the lines are incomplete or the total is wrong — both are worth fixing before this becomes a price everyone trusts.');
+    expect(refused.userMessage, `the written sentence is the target; raw: ${refused.message}`).toBe('The lines total ₱899.99, but the goods on this bill come to ₱900.00. Either the lines are incomplete or the total is wrong — both are worth fixing before this becomes a price everyone trusts.');
     expect(refused.userMessage ?? "").not.toMatch(UUID);
     const amount = (await sql<{ amount: string }[]>`select line_total::text as amount from supplier_invoice_lines where supplier_invoice_id = ${id}`)[0]?.amount;
     expect(amount, 'the refused edit changed the saved line').toBe('900.00');

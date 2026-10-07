@@ -180,6 +180,9 @@ export async function recordInvoiceAction(formData: FormData): Promise<void> {
         invoiceDate: str(formData, 'invoiceDate'),
         dueDate: str(formData, 'dueDate') || null,
         totalAmount: str(formData, 'totalAmount'),
+        // T-379 S3b (DEF-569) - both fees ride with the bill; blank is 'no fee' and the domain parses and refuses.
+        deliveryFee: str(formData, 'deliveryFee') || null,
+        otherFees: str(formData, 'otherFees') || null,
         notes: str(formData, 'notes') || null,
         receiptFileId,
       });

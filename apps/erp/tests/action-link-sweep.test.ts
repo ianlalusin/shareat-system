@@ -363,7 +363,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // retail, wholesale; +3 UNRESOLVED baseline entries, touch-target-baseline.json); the item detail page
     // (`items/[id]/page.tsx`) gains the Change-unit `<select>` and its submit `<button>`; the POS usage pull page
     // (`inventory/pos-usage/page.tsx`) gains the "Finish this pull" submit `<button>` (T-377 S2). Verified by running the census (1137).
-    expect(results.length).toBe(1137);
+    // 1137 -> 1139, T-379 S3b, 2026-10-07. +2: the `deliveryFee` and `otherFees` inputs on the log-a-bill form (`ap/page.tsx`).
+    expect(results.length).toBe(1139);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

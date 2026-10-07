@@ -159,6 +159,15 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               <Field label="Total amount">
                 <input name="totalAmount" required placeholder="0.00" className={INPUT} />
               </Field>
+              <Field label="Delivery fee" hint="Optional.">
+                <input name="deliveryFee" inputMode="decimal" placeholder="0.00" className={INPUT} />
+              </Field>
+              <Field label="Other fees" hint="Optional.">
+                <input name="otherFees" inputMode="decimal" placeholder="0.00" className={INPUT} />
+              </Field>
+              <p className="col-span-2 text-xs text-neutral-500 dark:text-neutral-500">
+                Part of the total above. Both are added to the items&apos; cost; neither is a line.
+              </p>
               <Field label="Invoice date">
                 <input type="date" name="invoiceDate" required defaultValue={today()} className={INPUT} />
               </Field>

@@ -253,7 +253,7 @@ describe('the rules a line must satisfy before it becomes a price', () => {
       invoiceWithLines(f, '2026-01-10', '5000.00', [
         { itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '290', lineTotal: '2900.00' },
       ]),
-    ).rejects.toThrow(/lines total ₱2900\.00, but the invoice says ₱5000\.00/);
+    ).rejects.toThrow(/lines total ₱2,900\.00, but the goods on this bill come to ₱5,000\.00/);
   });
 
   it('⛔ a line whose own arithmetic does not close is refused', async () => {
