@@ -5,9 +5,9 @@
  * write gate is `linkStoreToPos`'s own `authorize()`. Plain reads here carry no second gate, the house rule of
  * `/settings/sales-channels/lib.ts`.
  */
-import { moneyAccountsRepo, posV1Repo } from '@shareat/db';
+import { moneyAccountsRepo, personsRepo, posV1Repo } from '@shareat/db';
 import { fetchPosV1PaymentMethods, fetchPosV1Stores, normalizePosV1Alias, type PosV1StoreOption } from '@shareat/domain';
-import type { Actor } from '@shareat/auth';
+import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { channelsForStore, type SalesChannelAdminRow } from '../sales-channels/lib';
 
@@ -22,8 +22,30 @@ export interface PosLinkStoreRow {
     readonly salesChannelId: string;
     readonly posTaxType: 'vat_inclusive' | 'vat_exclusive' | 'non_vat';
   } | null;
+  /** T-382: set when the store WAS linked and was unlinked (it is typed again; `link` is null). Who, when, why. */
+  readonly unlinked: { readonly at: Date; readonly byName: string | null; readonly reason: string } | null;
+  /** T-382 R13: verified imported days (the confirm sentence's count) and R3's open or submitted ones (block the unlink). */
+  readonly importedDays: number;
+  readonly unverifiedImportedDates: readonly string[];
   /** Active channels whose money is remitted daily: the only kind a link may name. */
   readonly channels: readonly Pick<SalesChannelAdminRow, 'id' | 'name'>[];
+}
+
+/**
+ * T-382 R13: does this viewer hold `unlink_store_from_pos` (super admin only)? One `authorize` probe, caught to a
+ * boolean, the house pattern of the other settings loaders. It only decides whether the section is SHOWN; the action
+ * and `unlinkStoreFromPos` authorize again.
+ */
+export async function canUnlink(actor: Actor): Promise<boolean> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    try {
+      await authorize(tx, actor, 'unlink_store_from_pos', {});
+      return true;
+    } catch (err) {
+      if (err instanceof AuthorizationError) return false;
+      throw err;
+    }
+  });
 }
 
 export async function posLinkRows(actor: Actor, stores: readonly { id: string; name: string }[]): Promise<PosLinkStoreRow[]> {
@@ -33,12 +55,21 @@ export async function posLinkRows(actor: Actor, stores: readonly { id: string; n
   for (const s of stores) {
     const channels = await channelsForStore(actor, s.id);
     const l = byStore.get(s.id);
+    const live = l && !l.unlinkedAt ? l : undefined;
+    const extra = await withOrgPrincipal(actor.orgId, async (tx) => ({
+      byName: l?.unlinkedBy ? ((await personsRepo.getPersonById(tx, actor.orgId, l.unlinkedBy))?.displayName ?? null) : null,
+      importedDays: live ? await posV1Repo.countVerifiedFeedDays(tx, actor.orgId, s.id) : 0,
+      unverified: live ? await posV1Repo.unverifiedFeedDates(tx, actor.orgId, s.id) : [],
+    }));
     out.push({
       storeId: s.id,
       storeName: s.name,
-      link: l
-        ? { posStoreId: l.posStoreId, posStoreName: l.posStoreName, salesChannelId: l.salesChannelId, posTaxType: l.posTaxType }
+      link: live
+        ? { posStoreId: live.posStoreId, posStoreName: live.posStoreName, salesChannelId: live.salesChannelId, posTaxType: live.posTaxType }
         : null,
+      unlinked: l && l.unlinkedAt ? { at: l.unlinkedAt, byName: extra.byName, reason: l.unlinkReason ?? '' } : null,
+      importedDays: extra.importedDays,
+      unverifiedImportedDates: extra.unverified,
       channels: channels.filter((c) => c.isActive && c.isRemittedDaily).map((c) => ({ id: c.id, name: c.name })),
     });
   }

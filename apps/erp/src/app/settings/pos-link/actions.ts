@@ -7,12 +7,13 @@
  * its own first statement and owns every refusal sentence (channel, POS store, unverified typed days); this action
  * only reads the form, calls it, and shows whatever sentence comes back.
  */
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { authorize } from '@shareat/auth';
-import { createTender, linkStoreToPos, setTenderActive, updateTender } from '@shareat/domain';
+import { storesRepo } from '@shareat/db';
+import { createTender, linkStoreToPos, setTenderActive, unlinkStoreFromPos, updateTender } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
+import { redirectWithFlash } from '../../../lib/flash';
 import { posStoreOptions, withOrgPrincipal } from './lib';
 
 function str(fd: FormData, key: string): string {
@@ -20,8 +21,13 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
-function back(params: Record<string, string>): never {
-  redirect(`/settings/pos-link?${new URLSearchParams(params).toString()}`);
+/**
+ * T-382 (carved out of T-380 S4): every outcome goes back through the flash cookie, so no banner and no typed value
+ * (the unlink reason) travels in the address bar (DEF-476). `store` is a nav key (a UUID), kept so the page can scroll to it.
+ * Always `return await` it.
+ */
+function back(storeId: string, flash: { ok?: string; error?: string }): Promise<never> {
+  return redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, flash);
 }
 
 const TAX_TYPES = ['vat_inclusive', 'vat_exclusive', 'non_vat'] as const;
@@ -59,10 +65,10 @@ export async function linkStoreToPosAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back({ error: errorMessage(err), store: storeId });
+    return await back(storeId, { error: errorMessage(err) });
   }
   revalidatePath('/settings/pos-link');
-  back({ ok: `${storeName || 'The store'} is linked to POS.`, store: storeId });
+  return await back(storeId, { ok: `${storeName || 'The store'} is linked to POS.` });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -84,10 +90,10 @@ export async function createTenderAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back({ error: errorMessage(err), store: storeId });
+    return await back(storeId, { error: errorMessage(err) });
   }
   revalidatePath('/settings/pos-link');
-  back({ ok: 'Tender added.', store: storeId });
+  return await back(storeId, { ok: 'Tender added.' });
 }
 
 export async function updateTenderAction(fd: FormData): Promise<void> {
@@ -104,10 +110,10 @@ export async function updateTenderAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back({ error: errorMessage(err), store: storeId });
+    return await back(storeId, { error: errorMessage(err) });
   }
   revalidatePath('/settings/pos-link');
-  back({ ok: 'Tender saved.', store: storeId });
+  return await back(storeId, { ok: 'Tender saved.' });
 }
 
 export async function setTenderActiveAction(fd: FormData): Promise<void> {
@@ -117,8 +123,33 @@ export async function setTenderActiveAction(fd: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) => setTenderActive(tx, actor, { tenderId: str(fd, 'tenderId'), isActive }));
   } catch (err) {
-    back({ error: errorMessage(err), store: storeId });
+    return await back(storeId, { error: errorMessage(err) });
   }
   revalidatePath('/settings/pos-link');
-  back({ ok: isActive ? 'Tender restored.' : 'Tender retired.', store: storeId });
+  return await back(storeId, { ok: isActive ? 'Tender restored.' : 'Tender retired.' });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Unlink (T-382, R11/R13). `unlinkStoreFromPos` calls authorize(tx, actor, 'unlink_store_from_pos', ...) first and owns
+// every refusal sentence (blank reason, not linked, unverified imported days). This action reads the form, refuses an
+// unticked box, calls it, and goes back through the flash: the reason is never in the address.
+// ---------------------------------------------------------------------------------------------
+export async function unlinkStoreFromPosAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/settings/pos-link');
+  const storeId = str(fd, 'storeId');
+  let storeName = 'The store';
+  try {
+    // The reason is kept exactly as typed (the domain trims it); only the box is judged here, AFTER authorize (I1).
+    const reason = typeof fd.get('reason') === 'string' ? (fd.get('reason') as string) : '';
+    storeName = await withOrgPrincipal(actor.orgId, async (tx) => {
+      await authorize(tx, actor, 'unlink_store_from_pos', {});
+      if (fd.get('confirm') !== 'on') throw new Error('Tick the box to confirm.');
+      await unlinkStoreFromPos(tx, actor, { storeId, reason });
+      return (await storesRepo.getById(tx, actor.orgId, storeId))?.name ?? storeName;
+    });
+  } catch (err) {
+    return await back(storeId, { error: errorMessage(err) });
+  }
+  revalidatePath('/settings/pos-link');
+  return await back(storeId, { ok: `${storeName} is unlinked from POS. Its sales days are typed from now on.` });
 }
