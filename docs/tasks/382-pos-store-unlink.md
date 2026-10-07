@@ -581,3 +581,18 @@ the store again later."*
 | 2026-10-07 | Ian | `t375-unlink-safety` **a**: guarded unlink, super-admin, reason, audit; imported days stay as they are |
 | 2026-10-08 | Opus planner | R1-R13 above |
 | 2026-10-08 | Orchestrator, on the independent review | ✎AMEND: REV-1 (R9 dropped, full UNIQUE kept), REV-2 (R9a), REV-3 (RLS-safe backfill, admin role, P0187b by name), REV-4, REV-5 (D0), REV-6, REV-7, REV-9 (told Ian), REV-10 (A3, A4). S3 stays in this task |
+
+## ✎AMEND-2 (orchestrator, 2026-10-08) — from the T-382 audit (commit e735bb1)
+- **R10 (DEF-607, money, predates T-382).** A POS store id whose sales were ever imported for one store can never be
+  linked to a DIFFERENT store. `linkStoreToPos` refuses when any `pos_v1_day_feeds` row for that POS store id belongs to
+  another store of the org (live link or not, relinked away or not): *"That POS store's sales were already imported for
+  {Store}, so it can't be linked to another store."* Closes: A relinked P1→P2 frees P1; B links P1 and imports dates A
+  booked under P1 (double count). Read through the repo (SQL only there); same transaction and store lock as the link.
+  Tests R10-a (relink-away then another store links the old id → refused; nothing written), R10-b (a never-imported POS id
+  freed by relink CAN be linked elsewhere — control), R10-c (the same store relinking back to its own old id is allowed).
+  Mutants: drop the check; check only live links; check other orgs too (must not leak across orgs).
+- **R9a clock (LOW).** Compare `link.updated_at` with a DATABASE-stamped time on the basis feed (the column's
+  `default now()` or a `created_at`), never the app clock; if the feed's `fetched_at` is written from the app, write it
+  from the database instead. Test: a basis feed stamped strictly before the relink by the DB is refused; one after is not.
+- **Bible row 285** gains R4 (0185 hardened for unlinked stores) and R5 (the import re-checks the link under the store
+  lock) and R10, and its "a POS id stays held" sentence is made exact.
