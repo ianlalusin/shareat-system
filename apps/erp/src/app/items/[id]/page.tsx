@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
-import { getItem, itemPrices, peso, sellabilityByStore, soldAsLabel, unitHistoryExists } from '../lib';
+import { authorize, AuthorizationError } from '@shareat/auth';
+import { getItem, itemPrices, peso, sellabilityByStore, soldAsLabel, unitHistoryExists, withOrgPrincipal } from '../lib';
 import { whoSells } from '../../ap/lib';
 import {
   changeItemUnitAction,
@@ -59,6 +60,17 @@ export default async function ItemDetailPage({
     sellabilityByStore(actor.orgId, id),
     unitHistoryExists(actor.orgId, id),
   ]);
+  // T-378 S4 (DEF-600). Presentation aid only: the same gate the action uses, asked here so the form is drawn only for
+  // who may use it. `changeItemBaseUnit` stays the enforcement. Pattern: channel-settlements/page.tsx.
+  const mayChangeUnit = await withOrgPrincipal(actor.orgId, async (tx) => {
+    try {
+      await authorize(tx, actor, 'approve_item', {});
+      return true;
+    } catch (err) {
+      if (err instanceof AuthorizationError) return false;
+      throw err;
+    }
+  });
   const peak = movement.reduce((m, r) => Math.max(m, Number(r.maxPrice)), 0);
 
   const FLAGS = [
@@ -98,6 +110,10 @@ export default async function ItemDetailPage({
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
             {"This item's unit can no longer change: it already has stock, counts, invoices, recipes, prices or orders recorded in its current unit, and changing it would re-read every one of them in the new unit."}{' '}
             It is measured in {item.baseUnit}.
+          </p>
+        ) : !mayChangeUnit ? (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            Only a super-admin can change an item&apos;s unit. It is measured in {item.baseUnit}.
           </p>
         ) : (
           <form action={changeItemUnitAction} className="flex flex-wrap items-center gap-3 text-sm">

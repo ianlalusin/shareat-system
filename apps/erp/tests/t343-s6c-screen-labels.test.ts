@@ -234,7 +234,15 @@ vi.mock('../src/app/items/lib', async (importOriginal) => {
     itemPrices: (...a: unknown[]) => itemPricesMock(...a),
     sellabilityByStore: (...a: unknown[]) => sellabilityByStoreMock(...a),
     unitHistoryExists: (...a: unknown[]) => unitHistoryExistsMock(...a),
+    // T-378 S4 (DEF-600): the item page now asks the approve_item gate (withOrgPrincipal + authorize).
+    // I2 proves only a label, so the gate is stubbed to allow.
+    withOrgPrincipal: async (_orgId: string, fn: (tx: unknown) => unknown) => fn({}),
   };
+});
+
+vi.mock('@shareat/auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@shareat/auth')>();
+  return { ...actual, authorize: vi.fn(async () => undefined) };
 });
 
 vi.mock('../src/app/items/actions', () => ({
@@ -340,6 +348,30 @@ describe('I2 — item detail: a raw_material item shows "Raw material" (exact ca
     const visibleText = stripTags(html);
     expect(visibleText).toContain('Raw material');
     expect(visibleText).not.toContain('raw material');
+  });
+});
+
+// T-378 S4 G5 (DEF-600): the item page's gate must not swallow a non-authorization error. A DB fault
+// while asking approve_item must fail the render, not show "Only a super-admin can change an item's unit."
+// Killing mutant: the gate's catch returns false for every error (instead of rethrowing a non-AuthorizationError).
+describe('G5 — item detail: a non-authorization error from the unit gate rejects the render', () => {
+  it('rejects with the original error and never renders the super-admin sentence', async () => {
+    getItemMock.mockResolvedValueOnce({
+      id: 'item-1', orgId: 'org-1', code: 'RAW-1', name: 'White onion', kind: 'raw_material', baseUnit: 'kg',
+      status: 'active', costBasisItemId: null, isPurchasable: true, sellableRetail: false, sellableWholesale: false,
+      notes: null, createdBy: 'actor-1', createdAt: new Date('2026-01-01T00:00:00Z'),
+    });
+    itemPricesMock.mockResolvedValueOnce({ history: [], movement: [], bySupplier: [] });
+    whoSellsMock.mockResolvedValueOnce([]);
+    sellabilityByStoreMock.mockResolvedValueOnce([]);
+    unitHistoryExistsMock.mockResolvedValueOnce(false);
+    const { authorize } = await import('@shareat/auth');
+    vi.mocked(authorize).mockRejectedValueOnce(new Error('boom'));
+
+    const { default: ItemDetailPage } = await import('../src/app/items/[id]/page');
+    await expect(
+      ItemDetailPage({ params: Promise.resolve({ id: 'item-1' }), searchParams: Promise.resolve({}) }),
+    ).rejects.toThrow('boom');
   });
 });
 

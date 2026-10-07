@@ -25,6 +25,7 @@ import {
   setStoreSellability,
   updateItem,
 } from '@shareat/domain';
+import { AuthorizationError } from '@shareat/auth';
 import type { BaseUnit, ItemKind } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
@@ -215,6 +216,8 @@ export async function changeItemUnitAction(formData: FormData): Promise<void> {
     );
     message = changed ? `Unit changed to ${baseUnit}.` : `The unit is already ${baseUnit}.`;
   } catch (err) {
+    // T-378 S4-R2 (DEF-600): the generic approve_item sentence names the wrong verb; say the real reason.
+    if (err instanceof AuthorizationError) backToItem(itemId, { error: "Only a super-admin can change an item's unit." });
     backToItem(itemId, { error: errorMessage(err) });
   }
   backToItem(itemId, { ok: message });

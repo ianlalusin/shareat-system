@@ -222,25 +222,14 @@ describe('W2 - changeItemUnitAction', () => {
   );
 
   it(
-    'manager -> the authorize sentence (same as a manager refused createItem, an approve_item gate), unit unchanged. Killing mutant: authorize(..., "manage_items"). Red today: the action does not exist',
+    'manager -> the super-admin sentence (T-378 S4 S4-R2 supersedes the generic approve_item sentence), unit unchanged. Killing mutant: authorize(..., "manage_items") or the AuthorizationError mapping dropped. Red today: the action does not exist',
     async () => {
       const f = await fixture('w2d');
       const id = await insertItem(f, 'kg');
       ACTOR_HOLDER.actor = f.manager;
-      // The sentence a manager gets for the approve_item capability, taken from the real gate.
-      const { createItem } = await import('@shareat/domain');
-      const { withOrgPrincipal } = await import('@shareat/db');
-      let expected = '';
-      try {
-        await withOrgPrincipal(f.orgId, (tx) =>
-          createItem(tx, f.manager, { code: uid('X'), name: uid('X'), kind: 'raw_material', baseUnit: 'kg' }),
-        );
-      } catch (err) {
-        expected = errorMessage(err);
-      }
-      expect(expected).not.toBe('');
+      // T-378 S4 (DEF-600): was the generic "Your role (Manager) can't approve a new item..." sentence.
       const to = await redirectOf(() => actions.changeItemUnitAction(form({ itemId: id, baseUnit: 'pcs' })));
-      expect(param(to, 'error')).toBe(expected);
+      expect(param(to, 'error')).toBe("Only a super-admin can change an item's unit.");
       expect(await unitOf(id)).toBe('kg');
     },
     60_000,
