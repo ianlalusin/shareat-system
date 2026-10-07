@@ -228,9 +228,10 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // Having to edit this number is the guard WORKING: a capability cannot be slipped
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
-    // ⛔ RED until the builder adds the row — today's document still has 97 rows.
+    // ⭐ 99 -> 100 (T-382 S1, A3): `unlink_store_from_pos`. ORG-scoped, super_admin only, audited — Ian,
+    // 2026-10-07 (`t375-unlink-safety`). ⛔ RED until the builder adds the row: today's document has 99.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(99);
+    expect(rows.length).toBe(100);
   });
 
   it('has no duplicate capability names', () => {
@@ -301,11 +302,11 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 99 capabilities', () => {
-    // ⛔ T-345 RED — today these are 97 until `book_missed_month` lands.
-    expect(CAPABILITIES.length).toBe(99);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(99);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(99);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 100 capabilities', () => {
+    // ⭐ 99 -> 100 (T-382 S1, A3): `unlink_store_from_pos`. ⛔ RED until the builder adds it to capabilities.ts.
+    expect(CAPABILITIES.length).toBe(100);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(100);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(100);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -442,5 +443,31 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
     for (const c of ['post_journal_entry', 'cross_org_access', 'view_franchise_sales'] satisfies Capability[]) {
       expect(ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER).not.toContain(c);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// T-382 S1 — A1 and A3: `unlink_store_from_pos`, the fifth super_admin-only capability.
+// `docs/tasks/382-pos-store-unlink.md` R6. ⛔ RED until the builder adds the code row and the document row.
+// ---------------------------------------------------------------------------------------------------------------
+describe('T-382 A1/A3 — unlink_store_from_pos: org scope, super_admin only, and the document says the same', () => {
+  const CAP = 'unlink_store_from_pos' as string as Capability;
+
+  it('A1: the typed matrix — super_admin yes, admin no, manager no, staff no; org scope; not conditional', () => {
+    expect(CAPABILITIES as readonly string[]).toContain(CAP);
+    expect(CAPABILITY_MATRIX[CAP]).toEqual({ super_admin: true, admin: false, manager: false, staff: false });
+    expect(CAPABILITY_SCOPE[CAP]).toBe('org');
+    expect(CONDITIONAL_CAPABILITIES.has(CAP)).toBe(false);
+    // admin lacks it, so the adminless-manager fallback (the admin-minus-manager delta) cannot hand it to a manager either
+    expect(ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER as readonly string[]).not.toContain(CAP);
+  });
+
+  it('A3: the document row exists exactly once and matches the code row (parsed, not hand-compared)', () => {
+    const { rows } = parseCapabilityMatrixDoc();
+    const mine = rows.filter((r) => r.capability === CAP);
+    expect(mine.length, 'CAPABILITY-MATRIX.md carries exactly one unlink_store_from_pos row').toBe(1);
+    expect(mine[0]!.scope).toBe('org');
+    expect(mine[0]!.cells).toEqual([true, false, false, false]);
+    expect(mine[0]!.conditionalManager).toBe(false);
   });
 });
