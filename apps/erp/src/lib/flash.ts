@@ -258,8 +258,11 @@ export async function redirectWithFlash(path: string, nav: Nav, flash?: Flash): 
  * flash first. Uses the flash only when signature, expiry and token all hold; otherwise it is as if
  * none existed. Never sets or deletes a cookie (a Server Component cannot).
  */
-export async function withFlash<T extends object>(searchParams: Promise<T>): Promise<T & FlashFields> {
-  const sp = await searchParams;
+export async function withFlash<T extends object>(
+  searchParams: Promise<T>,
+  opts?: { getKeys?: readonly string[] },
+): Promise<T & FlashFields> {
+  const sp = stripFlashKeys(await searchParams, opts?.getKeys ?? []);
   const f = (sp as Record<string, unknown>).f;
   if (typeof f !== 'string' || !f) return sp as T & FlashFields;
   const raw = (await cookies()).get(flashCookieName())?.value;
@@ -267,6 +270,24 @@ export async function withFlash<T extends object>(searchParams: Promise<T>): Pro
   const payload = decodeFlash(raw);
   if (!payload || payload.exp <= Date.now() || payload.n !== f) return sp as T & FlashFields;
   return { ...sp, ...payload.msg, ...payload.keep } as T & FlashFields;
+}
+
+/**
+ * R9 (T-380 S6): a flash or keep key that arrives in the URL is never honoured. A crafted `?error=` link must not
+ * paint a banner and `?reason=` must not fill a box; only the signed cookie can. Everything else (nav keys, GET-filter
+ * keys, `f`) passes through untouched.
+ */
+function stripFlashKeys<T extends object>(sp: T, allow: readonly string[]): T {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(sp)) {
+    if (allow.includes(k)) {
+      out[k] = v;
+      continue;
+    }
+    if ((FLASH_KEYS as readonly string[]).includes(k) || (KEEP_KEYS as readonly string[]).includes(k)) continue;
+    out[k] = v;
+  }
+  return out as T;
 }
 
 /**

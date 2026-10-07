@@ -13,7 +13,6 @@
  * refused by `createTradeOrder`'s own gate. The per-store override actions below are the "Lipa
  * makes it, another branch buys it" half of the same task.
  */
-import { redirect } from 'next/navigation';
 import {
   approveItemRequest,
   changeItemBaseUnit,
@@ -29,6 +28,7 @@ import { AuthorizationError } from '@shareat/auth';
 import type { BaseUnit, ItemKind } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../lib/error-shape';
 
@@ -65,14 +65,6 @@ function errorMessage(err: unknown): string {
   return sharedErrorMessage(err);
 }
 
-function back(params: Record<string, string>): never {
-  redirect(`/items?${new URLSearchParams(params).toString()}`);
-}
-
-function backToItem(itemId: string, params: Record<string, string>): never {
-  redirect(`/items/${itemId}?${new URLSearchParams(params).toString()}`);
-}
-
 /** ⭐ Manager and admin ask. The similarity warning is returned to them immediately. */
 export async function requestItemAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
@@ -93,9 +85,11 @@ export async function requestItemAction(formData: FormData): Promise<void> {
     );
     warning = result.similarWarning ?? '';
   } catch (err) {
-    back({ error: errorMessage(err) });
+    return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
   }
-  back(
+  return await redirectWithFlash(
+    '/items',
+    {},
     warning
       ? { ok: 'Request submitted for a super-admin to approve.', warning }
       : { ok: 'Request submitted for a super-admin to approve.' },
@@ -121,9 +115,9 @@ export async function createItemAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back({ error: errorMessage(err) });
+    return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
   }
-  back({ ok: 'Item added.' });
+  return await redirectWithFlash('/items', {}, { ok: 'Item added.' });
 }
 
 /**
@@ -142,9 +136,9 @@ export async function updateItemFlagsAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    backToItem(itemId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err) });
   }
-  backToItem(itemId, { ok: 'Saved. Every store follows this unless it has its own answer below.' });
+  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: 'Saved. Every store follows this unless it has its own answer below.' });
 }
 
 /**
@@ -183,9 +177,9 @@ export async function setStoreSellabilityAction(formData: FormData): Promise<voi
       message = 'Store override saved. Only the answers you set here differ; the rest still track the organisation.';
     }
   } catch (err) {
-    backToItem(itemId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err) });
   }
-  backToItem(itemId, { ok: message });
+  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message });
 }
 
 export async function clearStoreSellabilityAction(formData: FormData): Promise<void> {
@@ -199,9 +193,9 @@ export async function clearStoreSellabilityAction(formData: FormData): Promise<v
     );
     message = cleared ? 'Override cleared — this store follows the organisation again.' : 'This store had no override to clear.';
   } catch (err) {
-    backToItem(itemId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err) });
   }
-  backToItem(itemId, { ok: message });
+  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message });
 }
 
 /** ⛔ T-378 R4. Super-admin only (`approve_item`), and only while the item has no history (the database decides). */
@@ -217,10 +211,12 @@ export async function changeItemUnitAction(formData: FormData): Promise<void> {
     message = changed ? `Unit changed to ${baseUnit}.` : `The unit is already ${baseUnit}.`;
   } catch (err) {
     // T-378 S4-R2 (DEF-600): the generic approve_item sentence names the wrong verb; say the real reason.
-    if (err instanceof AuthorizationError) backToItem(itemId, { error: "Only a super-admin can change an item's unit." });
-    backToItem(itemId, { error: errorMessage(err) });
+    if (err instanceof AuthorizationError) {
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: "Only a super-admin can change an item's unit." });
+    }
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err) });
   }
-  backToItem(itemId, { ok: message });
+  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message });
 }
 
 export async function approveItemRequestAction(formData: FormData): Promise<void> {
@@ -240,9 +236,9 @@ export async function approveItemRequestAction(formData: FormData): Promise<void
       }),
     );
   } catch (err) {
-    back({ error: errorMessage(err) });
+    return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
   }
-  back({ ok: 'Approved — the item exists now and every store can use it.' });
+  return await redirectWithFlash('/items', {}, { ok: 'Approved — the item exists now and every store can use it.' });
 }
 
 export async function rejectItemRequestAction(formData: FormData): Promise<void> {
@@ -255,9 +251,9 @@ export async function rejectItemRequestAction(formData: FormData): Promise<void>
       }),
     );
   } catch (err) {
-    back({ error: errorMessage(err) });
+    return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
   }
-  back({ ok: 'Rejected, with your reason recorded for the requester.' });
+  return await redirectWithFlash('/items', {}, { ok: 'Rejected, with your reason recorded for the requester.' });
 }
 
 /** ⛔ Super-admin only, and effectively irreversible — every reference moves to the winner. */
@@ -275,7 +271,7 @@ export async function mergeItemsAction(formData: FormData): Promise<void> {
       `Merged. Moved ${report.invoiceLines} invoice line(s), ${report.priceListRates} price ` +
       `list rate(s) and ${report.supplierLinks} supplier link(s).`;
   } catch (err) {
-    back({ error: errorMessage(err) });
+    return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
   }
-  back({ ok: summary });
+  return await redirectWithFlash('/items', {}, { ok: summary });
 }

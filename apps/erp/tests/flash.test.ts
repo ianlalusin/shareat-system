@@ -202,12 +202,12 @@ describe('F2 - withFlash returns the flash only for the right cookie, token, tim
     // Mutant: sign flash with derivedKey('setup-identity') -> red.
   });
 
-  it('R5: the flash wins over the same key in the URL; a URL banner still works when there is no flash (S1-S5 order safety)', async () => {
+  it('R5/R9: the flash wins over the same key in the URL; a URL banner is NOT honoured when there is no flash (S6)', async () => {
     const { f } = await post('/p', {}, { error: 'from flash' });
     expect((await read({ f: f!, error: 'from url' })).error).toBe('from flash');
     resetJar();
-    expect((await read({ error: 'from url' })).error).toBe('from url');
-    // Mutant: URL wins -> the first assertion goes red.
+    expect((await read({ error: 'from url' })).error).toBeUndefined();
+    // Mutant: URL wins -> the first assertion goes red. No strip -> the last one goes red.
   });
 });
 

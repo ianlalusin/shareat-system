@@ -21,15 +21,6 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
-/**
- * T-382 (carved out of T-380 S4): every outcome goes back through the flash cookie, so no banner and no typed value
- * (the unlink reason) travels in the address bar (DEF-476). `store` is a nav key (a UUID), kept so the page can scroll to it.
- * Always `return await` it.
- */
-function back(storeId: string, flash: { ok?: string; error?: string }): Promise<never> {
-  return redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, flash);
-}
-
 const TAX_TYPES = ['vat_inclusive', 'vat_exclusive', 'non_vat'] as const;
 
 export async function linkStoreToPosAction(fd: FormData): Promise<void> {
@@ -65,10 +56,10 @@ export async function linkStoreToPosAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) });
   }
   revalidatePath('/settings/pos-link');
-  return await back(storeId, { ok: `${storeName || 'The store'} is linked to POS.` });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${storeName || 'The store'} is linked to POS.` });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -90,10 +81,10 @@ export async function createTenderAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) });
   }
   revalidatePath('/settings/pos-link');
-  return await back(storeId, { ok: 'Tender added.' });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: 'Tender added.' });
 }
 
 export async function updateTenderAction(fd: FormData): Promise<void> {
@@ -110,10 +101,10 @@ export async function updateTenderAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) });
   }
   revalidatePath('/settings/pos-link');
-  return await back(storeId, { ok: 'Tender saved.' });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: 'Tender saved.' });
 }
 
 export async function setTenderActiveAction(fd: FormData): Promise<void> {
@@ -123,10 +114,10 @@ export async function setTenderActiveAction(fd: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) => setTenderActive(tx, actor, { tenderId: str(fd, 'tenderId'), isActive }));
   } catch (err) {
-    return await back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) });
   }
   revalidatePath('/settings/pos-link');
-  return await back(storeId, { ok: isActive ? 'Tender restored.' : 'Tender retired.' });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: isActive ? 'Tender restored.' : 'Tender retired.' });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -148,8 +139,8 @@ export async function unlinkStoreFromPosAction(fd: FormData): Promise<void> {
       return (await storesRepo.getById(tx, actor.orgId, storeId))?.name ?? storeName;
     });
   } catch (err) {
-    return await back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) });
   }
   revalidatePath('/settings/pos-link');
-  return await back(storeId, { ok: `${storeName} is unlinked from POS. Its sales days are typed from now on.` });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${storeName} is unlinked from POS. Its sales days are typed from now on.` });
 }

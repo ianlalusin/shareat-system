@@ -10,6 +10,7 @@ import {
   updateItemFlagsAction,
 } from '../actions';
 import { BASE_UNITS, itemKindLabel } from '@shareat/db';
+import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Item — Shareat System' };
@@ -49,7 +50,7 @@ export default async function ItemDetailPage({
   searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/items/${id}`);
   const item = await getItem(actor.orgId, id);
   if (!item) notFound();

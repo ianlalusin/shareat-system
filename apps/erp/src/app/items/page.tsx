@@ -8,6 +8,7 @@ import {
 } from './actions';
 import { listItems, pendingRequests, duplicateCandidates, soldAsLabel } from './lib';
 import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
+import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 
@@ -24,7 +25,7 @@ export default async function ItemsPage({
 }: {
   searchParams: Promise<{ error?: string; ok?: string; warning?: string }>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/items');
   const [items, requests, dupes] = await Promise.all([
     listItems(actor.orgId),

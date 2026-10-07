@@ -590,6 +590,8 @@ Screenshots of each at 375 px.
 ---
 
 ## S6: close the URL door (R9)
+- ✎S6-R1 (orchestrator, 2026-10-08): S6 also converts `app/items/**` (N1) so DEF-476 closes completely, and inlines `app/settings/pos-link/actions.ts` `back()` into each exported action (REV-10/G1b); PENDING is empty.
+- ✎S6-R2 (orchestrator, 2026-10-08): `withFlash(searchParams, { getKeys })` takes a per-page allow-list of GET input keys never stripped; wired as `['separationDate']` in `payroll/separations/page.tsx`. All other flash/keep keys are still stripped.
 **BUILDER:** `apps/erp/src/lib/flash.ts` (`withFlash` strips flash and keep keys from the URL-side params).
 **TESTER:**
 - `no-typed-values-in-urls.test.ts`: PENDING = `app/items/**` only, and G3 is on.

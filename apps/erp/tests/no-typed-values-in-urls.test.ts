@@ -214,15 +214,23 @@ type Rule2 = 'G1a' | 'G1b' | 'G2';
 
 describe('G3 - stale-entry check (switched on at S6)', () => {
   // S6 sets this to true and cuts PENDING down to `app/items/**`.
-  const G3_ACTIVE = false;
+  const G3_ACTIVE = true;
   it.skipIf(!G3_ACTIVE)('a PENDING action or page with zero findings is red: remove its entry', () => {
     expect(scanTree().stalePending).toEqual([]);
   });
 
-  it('exemption helper: PENDING prefix entries cover their subtree, nothing else', () => {
-    expect(isExempt('app/items/actions.ts')).toBe(true);
-    expect(isExempt('app/items/[id]/page.tsx')).toBe(true);
-    expect(isExempt('app/itemsX/actions.ts')).toBe(false);
+  it('exemption helper: PENDING prefix entries cover their subtree, exact entries only their file, nothing else', () => {
+    const pending = ['app/zz/**', 'app/yy/page.tsx'];
+    const covered = (rel: string): boolean => pending.some((p) => (p.endsWith('/**') ? rel.startsWith(p.slice(0, -2)) : p === rel));
+    expect(covered('app/zz/actions.ts')).toBe(true);
+    expect(covered('app/zz/[id]/page.tsx')).toBe(true);
+    expect(covered('app/zzX/actions.ts')).toBe(false);
+    expect(covered('app/yy/page.tsx')).toBe(true);
+    expect(covered('app/yy/actions.ts')).toBe(false);
+    // The real list is empty at S6: items converted, so nothing is exempt but PRE_SESSION and the helper.
+    expect(PENDING).toEqual([]);
+    expect(isExempt('app/items/actions.ts')).toBe(false);
+    expect(isExempt('app/items/[id]/page.tsx')).toBe(false);
     expect(isExempt('app/zzz/actions.ts')).toBe(false);
     expect(isExempt('app/sign-in/actions.ts')).toBe(true);
   });

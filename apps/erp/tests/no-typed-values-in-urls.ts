@@ -57,12 +57,7 @@ export const PRE_SESSION: readonly string[] = [
  * guard test asserts its files are clean. S6 cuts it down to `app/items/**`. An entry ending in `/**`
  * is a prefix.
  */
-export const PENDING: readonly string[] = [
-  // S4 carve-out (S4-R1): T-382 converts these
-  'app/settings/pos-link/actions.ts', 'app/settings/pos-link/page.tsx',
-  // N1: another lane
-  'app/items/**',
-];
+export const PENDING: readonly string[] = [];
 
 /** The one file that may call `redirect` with a query and re-export nothing. */
 export const FLASH_HELPER = 'lib/flash.ts';

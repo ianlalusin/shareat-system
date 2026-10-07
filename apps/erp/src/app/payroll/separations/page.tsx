@@ -38,7 +38,7 @@ export default async function SeparationsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await withFlash(searchParams);
+  const sp = await withFlash(searchParams, { getKeys: ['separationDate'] });
   const { actor, refusal } = await requirePageAccess('/payroll/separations');
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;

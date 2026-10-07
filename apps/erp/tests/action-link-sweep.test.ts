@@ -204,8 +204,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 151 FAIL / 61 UNRESOLVED', () => {
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 61 });
+  it('accepted-baseline totals: 151 FAIL / 62 UNRESOLVED', () => {
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 62 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -364,7 +364,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // (`items/[id]/page.tsx`) gains the Change-unit `<select>` and its submit `<button>`; the POS usage pull page
     // (`inventory/pos-usage/page.tsx`) gains the "Finish this pull" submit `<button>` (T-377 S2). Verified by running the census (1137).
     // 1137 -> 1139, T-379 S3b, 2026-10-07. +2: the `deliveryFee` and `otherFees` inputs on the log-a-bill form (`ap/page.tsx`).
-    expect(results.length).toBe(1139);
+    // 1139 -> 1142, T-382 S3, 2026-10-08. +3, found by running the census: the "Unlink from POS" form on `settings/pos-link/page.tsx`
+    // gains the reason `<textarea>`, the confirm `<input type="checkbox">` (+1 UNRESOLVED baseline entry, touch-target-baseline.json)
+    // and the "Unlink <store>" submit `<button>`. FAIL unmoved at 151. Verified by running the census (1142).
+    expect(results.length).toBe(1142);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

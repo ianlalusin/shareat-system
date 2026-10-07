@@ -5,10 +5,8 @@
  * banner test to it). It reads the redirect URL for navigation and the flash cookie for banner and
  * refill text.
  *
- * DUAL READ (S1-S5): when the cookie holds no flash for this redirect (absent, or its token does not
- * match the URL's `f`), the URL's own flash/keep keys are used. That keeps every test green while an
- * action has not moved yet. S6 deletes the fallback (`URL_FALLBACK = false`), at which point a test
- * that still depends on a banner in the URL goes red - which is the proof S6 asks for (X2).
+ * S6 (R9): the banner is read ONLY from the flash cookie, matched to the URL's `f` token. There is no
+ * URL fallback: a test that still depends on a banner in the URL goes red, which is the proof (X2).
  *
  * ASSUMPTION about `decodeFlash` (the spec exports it "for the test helper only" without a
  * signature): it takes the raw cookie value and returns the payload object of R3
@@ -60,9 +58,6 @@ export const KEEP_URL_KEYS = [
   'separationDate',
 ] as const;
 
-/** S6 sets this to false. */
-export const URL_FALLBACK = true;
-
 export type FlashSeen = Partial<Record<(typeof FLASH_URL_KEYS)[number] | (typeof KEEP_URL_KEYS)[number], string>>;
 
 export interface Outcome {
@@ -98,22 +93,16 @@ export function outcomeOf(signal: RedirectSignal, jar: JarLike = currentJar()): 
   const usable = payload && f !== null && payload.n === f;
   if (usable) {
     flash = { ...strings(payload.msg), ...strings(payload.keep) } as FlashSeen;
-  } else if (URL_FALLBACK) {
-    const all: string[] = [...FLASH_URL_KEYS, ...KEEP_URL_KEYS];
-    for (const k of all) {
-      const v = u.searchParams.get(k);
-      if (v !== null) (flash as Record<string, string>)[k] = v;
-    }
   }
-  if (URL_FALLBACK) {
-    for (const k of [...FLASH_URL_KEYS, ...KEEP_URL_KEYS]) nav.delete(k);
-  }
+  // S6: a banner is read ONLY from the flash cookie. The URL's own flash/keep keys are never read,
+  // and (R9) are not nav keys either, so they stay out of `nav` and out of `flash`.
+  for (const k of [...FLASH_URL_KEYS, ...KEEP_URL_KEYS]) nav.delete(k);
   return { path: u.pathname, nav, flash, f };
 }
 
 /**
  * T-380 S1b. `outcomeOf` for a test that already holds the redirect target as a string (its own
- * `RedirectSignal` class, or a `to` it pulled off one). Same dual read, same jar default.
+ * `RedirectSignal` class, or a `to` it pulled off one). Same jar default.
  */
 export function outcomeOfUrl(to: string, jar: JarLike = currentJar()): Outcome {
   return outcomeOf(new RedirectSignalClass(to), jar);
