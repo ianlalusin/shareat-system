@@ -5,6 +5,9 @@
 **Migration:** none. If one turns out to be needed, STOP and report: it is a spec defect. Do not number one.
 **Money:** S3 changes a cost basis (DEF-569, see R6), so S3 gets an **independent Opus review** before it is
 built. S1 and S2 post nothing new and change no amount.
+✎S3-AMEND 2026-10-07: the review (✎REV) found DEF-601/602 in the landed-cost SQL. S3 is split. **S3a** fixes
+them in `packages/db/src/repo/items.ts`, ships first, and gets a second Opus review of its diff (R9). **S3b** is
+the screen (DEF-568/569) and ships after S3a.
 **Fenced off:** `packages/domain/src/pos/`, `scripts/`, `packages/db/migrations/` (T-375 S0 and T-380 are live there).
 
 ## Goal
@@ -180,7 +183,8 @@ built. S1 and S2 post nothing new and change no amount.
 |---|---|---|---|---|
 | S1 | 575, 570 | `packages/domain/src/commissary/discrepancy.ts` (`resolveDiscrepancy` only), `apps/erp/src/app/commissary/discrepancies/actions.ts` (`resolveDiscrepancyAction` only), `packages/domain/src/findings/index.ts` (`listFindings` refactor + `listCashCustodyFindings`), `apps/erp/src/app/remittance/lib.ts` (`cashCustodyFindings` only) | lane DB | S2, S3 |
 | S2 | 592 (+564 trade) | `apps/erp/src/app/trade/returns/actions.ts` (`recordReturnAction`, `applyCreditAction`), `apps/erp/src/app/trade/returns/page.tsx` (the hidden `store` input only) | none (unit) | S1, S3 |
-| S3 | 568, 569 | `packages/domain/src/items/index.ts` (`pesos`, the two `validateInvoiceLines` sentences only), `apps/erp/src/app/ap/actions.ts` (`recordInvoiceAction` only), `apps/erp/src/app/ap/page.tsx` (the log-a-bill form only), `apps/erp/src/app/ap/invoices/[id]/page.tsx` (the itemise note only) | lane DB | S1, S2 |
+| ✎S3-AMEND S3a | 601, 602 | `packages/db/src/repo/items.ts` (`priceHistory`, `lastTwoLandedMax` only) | lane DB | S1, S2, S3b (build); ships before S3b |
+| ✎S3-AMEND S3b | 568, 569 | `packages/domain/src/items/index.ts` (`pesos`, the two `validateInvoiceLines` sentences only), `apps/erp/src/app/ap/actions.ts` (`recordInvoiceAction` only), `apps/erp/src/app/ap/page.tsx` (the log-a-bill form only), `apps/erp/src/app/ap/invoices/[id]/page.tsx` (the header fee rows and the itemise note only) | lane DB | S1, S2, S3a (build); ships after S3a |
 
 No two slices share a file, a test file or a lane DB. None touches a migration, `classification.ts`, the RLS
 registry, `POSTING-PATTERNS.md`, `pos/`, or `scripts/`.
@@ -195,6 +199,9 @@ have T-380 list them. This spec adds no amount and no typed text to a URL (R2).
 - I3. `listFindings`' output is byte-identical (S1). `findingsRepo` is not edited.
 - I4. No uuid reaches a URL from a touched action. No success banner carries an amount or a typed reason.
 - I5. S3: `recordInvoice`, `feeOf`, and the line-sum rule are not edited. The domain already owns them.
+- I6 ✎S3-AMEND. S3a edits two SQL expressions and one status literal, nothing else. `costBasisFor`, the
+  `PriceObservation` shape and every caller are unchanged. There is no migration and no backfill; the basis is
+  derived per read.
 
 ---
 
@@ -293,7 +300,7 @@ digest. Take a screenshot of each.
 
 ---
 
-## S3: DEF-568 and DEF-569 — ⚠️ money, Opus review first (R6)
+## S3: DEF-568 and DEF-569 — ⚠️ money, Opus review first (R6). ✎S3-AMEND: REV-1/REV-2 are ruled below. S3 is now S3a + S3b, and the original S3 BUILDER/TESTER/tests are replaced by them.
 
 ### ✎REV — independent Opus review, 2026-10-07: **NOT READY until REV-1/REV-2 are ruled.**
 Verified true: domain fee path (`ap/index.ts:441-459`, blank → `undefined` → column default; `-x` refused; fees > total
@@ -330,53 +337,185 @@ posting reads a supplier fee (only `items.ts:259`, `:996` do), `recordInvoiceAct
   (red on HEAD, REV-1). W8: void the W6 bill, re-log without fee → `costBasisFor(X)` drops to the raw price (red on
   HEAD, REV-2). DEF-568 changes text only: no stored value changes (`pesos` is display-only; the stored `lineTotal`
   is the parsed Money, `items/index.ts:419`) — confirmed.
-**BUILDER:** R4 in `items/index.ts`; R5 in `ap/actions.ts`, `ap/page.tsx`, `ap/invoices/[id]/page.tsx`.
+### ✎S3-AMEND (planner, 2026-10-07): S3 is split into S3a and S3b, and REV-1..REV-8 are all adopted
+- **REV-1 → DEF-602, REV-2 → DEF-601** (logged in `9047488`). Both are fixed in **S3a**, in `packages/db/src/repo/items.ts`.
+  S3a is shippable on its own and ships **before** S3b. The fee fields must not reach a screen while the
+  allocation is wrong (REV-1's "do not ship the form first").
+- REV-3 → W4 is a source assertion (S3b). REV-4 → P3's fixture changes (S3b). REV-5 → R4's sentence changes (S3b).
+  REV-6 → the help line names both fees (S3b). REV-7 → the fee split shows on a bill of any status (S3b). REV-8 →
+  W7/W8 become L1/L4 (S3a).
+- **R7 (DEF-602). The fee share's denominator is the WHOLE bill's lines, computed before filtering to the item.**
+  - In both `priceHistory` (`items.ts:256-260`) and `lastTwoLandedMax` (`:993-997`), replace
+    `sum(l.line_total) over (partition by l.supplier_invoice_id)` with a per-bill goods sum. It must be joined
+    before `l.item_id = ${itemId}` can narrow it. For example:
+    `join (select supplier_invoice_id, sum(line_total) as goods from supplier_invoice_lines where supplier_invoice_id
+    in (select supplier_invoice_id from supplier_invoice_lines where item_id = ${itemId}) group by 1) g on
+    g.supplier_invoice_id = l.supplier_invoice_id`, then `l.line_total / nullif(g.goods, 0)`. The builder may use a
+    CTE instead; the denominator rule is what matters.
+  - Not `si.total_amount − fees`. That equals the line sum only when the bill is itemised under today's rule, and
+    T-151 §4 says "allocated across its lines". Keep the denominator as the lines, so the fee is conserved: the
+    landed line totals of one bill sum to goods + fees.
+  - The landed expression stays one shape in both queries. A bill with no lines yields no row (unchanged).
+- **R8 (DEF-601). `lastTwoLandedMax` excludes `si.status <> 'voided'`**, the schema's value
+  (`packages/db/schema/suppliers.ts:49`), as `priceHistory` already does (`:266`).
+- **R9. S3a is money and gets a second review.** It changes the branch-price basis for every multi-item bill
+  with a fee, and for every item whose last two bills include a voided one. Branch prices default internal
+  trade-order rates, and those rates post. **An independent Opus review reads the S3a diff and L1–L6 before it
+  ships** (the auditor pass, not a re-spec). No data migration: the basis is derived per read (T-151 §3). The first
+  read after deploy is correct. Rates already captured on posted trade orders are not touched, and should not be.
+- ~~N5~~ → **R10** (✎S3-AMEND, orchestrator's ruling: folded into S3a, because L-tests must not pin a basis that
+  is not deterministic).
+- **R10. In `lastTwoLandedMax`, a "receive" is ONE BILL.**
+  - All of the item's lines on one bill combine into one landed price per base unit: Σ landed line totals ÷ Σ base
+    quantities (`l.quantity * l.conversion_factor`), computed with R7's whole-bill denominator. This is a weighted
+    price, not the max or the mean of the lines.
+  - Bills are ordered `si.invoice_date desc, si.created_at desc, si.id desc`, then `limit 2`, then `max`.
+    `created_at` is the transaction's `now()`, so two bills in one transaction tie there and `id` (uuidv7, rising)
+    decides.
+  - `priceHistory` stays per line: it is a list of observations, not a basis.
+  - **What T-151 intended, checked:**
+    - `151-landed-cost-and-branch-price.md:37` says *"max of the last two receives"*; `:106` (invariant 3) says
+      *"`max` of the **last two landed receives**, derived per read"*; `:119` (test 3) says *"a cheap lot after an
+      expensive one keeps the expensive basis"*.
+    - The unit is a receive, which is a lot, and v2 derives it from bills (`:58-60`). So one bill is one receive.
+    - HEAD counts lines. A bill with two X lines fills both slots, and the bill before it (the "expensive lot still
+      in inventory") drops out. That breaks the goal invariant 3 states.
+    - v1's live hook is one `newCost` per receive against the stored prior (`ERP-rebuild/src/lib/financial/commissary/pricing.ts:102-103`).
+      v1's refresh button walks lines (`commissary-item-config.actions.ts:~470-500`, "identical lines collapse"),
+      so v1 is internally inconsistent here.
+    - R10 follows T-151's stated goal, not v1's refresh method. It matches T-151, so planning does not stop.
+- No other N5 remains.
+
+## S3a: DEF-601 and DEF-602 — ⚠️ money, second review before ship (R9) ✎S3-AMEND
+**BUILDER:** `packages/db/src/repo/items.ts`: `priceHistory` (R7) and `lastTwoLandedMax` (R7, R8, R10) only.
+Nothing else in the file. Update `costBasisFor`'s doc comment only if it names lines.
+
+**TESTER:** `packages/domain/tests/integration/t379-s3a-landed-cost.test.ts` (new). Fixture from
+`trade.test.ts:919-956` (T-151's landed-cost tests): an org, a store, a supplier, items X, Y and Z (kg). Bills are
+written through `recordInvoice` with `lines` and `deliveryFee`/`otherFees`, and voided through `voidInvoice`, never
+by raw insert. `trade.test.ts:919-956` stays unedited as the single-item control (L5).
+
+**Tests:**
+- **L1** (red on HEAD; REV-8's W7). One bill: X 10 kg ₱1,000 + Y 10 kg ₱9,000, delivery fee ₱500 (total ₱10,500).
+  `priceHistory(X)` landed = `105.0000`, `priceHistory(Y)` landed = `945.0000`. HEAD gives 150 and 950: each item
+  takes the whole fee.
+- **L2** (red on HEAD). On the L1 fixture: `costBasisFor(X).basis` = 105, and Y = 945. That is the
+  `lastTwoLandedMax` path.
+- **L3** (red on HEAD; conservation). One bill: two X lines of 10 kg at ₱1,000 each, + Y 10 kg ₱8,000, other fees
+  ₱1,000 (total ₱11,000). Expect:
+  - each X line landed 110/kg;
+  - Y landed 900/kg;
+  - Σ (landed × base qty) over the three lines = ₱11,000.00 exactly (goods + fees).
+- **L4** (red on HEAD; REV-8's W8). Bill B1: X 10 kg ₱1,000, delivery fee ₱500 → `costBasisFor(X)` = 150. Void B1.
+  Log B2 the same date: X 10 kg ₱1,000, no fee → `costBasisFor(X)` = 100. HEAD keeps 150 (the voided bill still
+  counts). Control: `priceHistory(X)` has only B2's row (already true on HEAD).
+- **L5** (control, green on HEAD). The T-151 single-item tests (`trade.test.ts:919-956`) pass unchanged. A bill
+  with no fee gives landed = raw base price.
+- **L6.** Add an unrelated bill (Z, ₱50,000, fee ₱2,000) to the L1 fixture. L1's and L2's figures do not move.
+- Mutants:
+  - fix only `priceHistory` → L2 red;
+  - fix only `lastTwoLandedMax` → L1 red;
+  - denominator = `si.total_amount` (includes the fees) → L1, L3 red;
+  - denominator over the item's lines only (HEAD) → L1, L2, L3 red;
+  - denominator summed over all bills (no per-bill grouping) → L6 red;
+  - `'void'` restored → L4 red.
+- **L7** (red on HEAD; R10, one bill is one receive).
+  - Setup: B0 (2026-01-05) X 10 kg ₱3,000, no fee: landed 300/kg. B1 (2026-01-10) has two X lines, 10 kg ₱1,000
+    and 30 kg ₱6,000, delivery fee ₱700 (goods ₱7,000).
+  - Landed: line 1 = (1,000 + 100) / 10 = 110/kg; line 2 = (6,000 + 600) / 30 = 220/kg.
+  - B1 combined = 7,700 / 40 = 192.50/kg.
+  - Expect `costBasisFor(X)` = 300.00: the last two receives are B1 (192.50) and B0 (300).
+  - HEAD gives 220 (B1's two lines fill both slots, so B0 drops out).
+  - Mutants:
+    - per line (HEAD) → red (220);
+    - the bill as the max of its lines, with B0 removed → a second leg without B0 expects 192.50, red (220);
+    - the bill as the plain mean of its line prices → the same leg red (165).
+- **L8** (red on HEAD; R10, a deterministic tie-break).
+  - Setup: three single-line bills of X, all dated 2026-01-10, each recorded in its own transaction, in this order:
+    B1 300/kg, B2 100/kg, B3 50/kg.
+  - Expect `costBasisFor(X)` = 100: the last two are B3 and B2. Run it 5 times; all 5 agree.
+  - Second leg: three bills recorded in ONE transaction, in the same order and at the same prices (equal
+    `created_at`). Expect 100, so `id desc` decides.
+  - HEAD has no tie-break, so the result depends on the plan.
+  - Mutants:
+    - `created_at asc` / `id asc` → red (300);
+    - drop the `id` tie-break → the second leg is not guaranteed; it is pinned by asserting the generated SQL
+      ordering in the repo source (`invoice_date desc, … created_at desc, … id desc`), as a source assertion in the
+      same file.
+
+**Smoke:** none on screen (no UI change). L1–L6 against the lane DB are the evidence. The second review (R9)
+stands in for the smoke.
+
+## S3b: DEF-568 and DEF-569, the screen — ⚠️ money (R6); ships after S3a ✎S3-AMEND
+**BUILDER:** R4 (as amended below) in `packages/domain/src/items/index.ts`. R5 (as amended below) in
+`apps/erp/src/app/ap/actions.ts` (`recordInvoiceAction` only), `apps/erp/src/app/ap/page.tsx` (the log-a-bill form
+only), and `apps/erp/src/app/ap/invoices/[id]/page.tsx` (the header figures and the itemise note only).
+
+**R4/R5 amendments (✎S3-AMEND):**
+- REV-5: the sum refusal (raw and user) reads *"The lines total ₱X, but the goods on this bill come to ₱Y. Either
+  the lines are incomplete or the total is wrong — both are worth fixing before this becomes a price everyone
+  trusts."* `Y` is the figure `validateInvoiceLines` receives, which is goods (= total when there is no fee). The
+  line refusal (`:402-405`) is unchanged apart from R4's grouping.
+- REV-6: the help line is *"Part of the total above. Both are added to the items' cost; neither is a line."*
+- REV-7: the bill page's header shows **Delivery fee** and **Other fees** rows whenever either is non-zero, on a
+  bill of ANY status (not only in the pending itemise section). The itemise note (R5) is unchanged.
+- REV-3: no `Number(` on a fee anywhere in `[id]/page.tsx`. Goods come from `subtract`/`money`
+  (`@shareat/core/money`).
 
 **TESTER:**
-- Edit `packages/domain/tests/integration/items.test.ts:256`: `₱2,900.00`, `₱5,000.00`.
-- `packages/domain/tests/integration/t379-s3-peso-sentences.test.ts` (new). Fixture from
-  `t367-s3-invoice-total-due-date.test.ts`.
-- `apps/erp/tests/integration/t379-s3-ap-fees-web.test.ts` (new). Harness from
-  `t362-supplier-terms-web.test.ts` / `t358-ap-invoice-expense-form.test.ts`.
+- Edit `packages/domain/tests/integration/items.test.ts:256` → `/lines total ₱2,900\.00, but the goods on this
+  bill come to ₱5,000\.00/`.
+- Edit `packages/domain/tests/integration/t367-s3-invoice-total-due-date.test.ts` `:144`, `:156`, `:293`: "but the
+  invoice says" → "but the goods on this bill come to" (the figures do not change). `:177` and `:197` are unchanged.
+- `packages/domain/tests/integration/t379-s3b-peso-sentences.test.ts` (new). Fixture from `t367-s3`.
+- `apps/erp/tests/integration/t379-s3b-ap-fees-web.test.ts` (new). Harness from `t362-supplier-terms-web.test.ts` /
+  `t358-ap-invoice-expense-form.test.ts`.
 
 **Tests (domain):**
 - **P1** (red on HEAD). Lines summing to ₱1,234,567.89 against a total of ₱1,234,567.90 → *"The lines total
-  ₱1,234,567.89, but the invoice says ₱1,234,567.90. …"*.
+  ₱1,234,567.89, but the goods on this bill come to ₱1,234,567.90. …"*.
+- **P1b** (red on HEAD; REV-5). A bill with total ₱10,500 and a fee of ₱500. `setInvoiceLines` with lines of
+  ₱10,500 → *"… ₱10,500.00, but the goods on this bill come to ₱10,000.00. …"*.
 - **P2** (red on HEAD). One line `10 × 1234.5` stated `12345.01` → *"… 10 × ₱1,234.5 is ₱12,345.00, not
   ₱12,345.01."*.
-- **P3** (red on HEAD). A sum past `numeric(14,2)` (two lines of 99,999,999,999.99) → the sentence prints
-  `₱199,999,999,999.98`, and nothing throws a RangeError.
-- **P4.** Negative centavos are grouped after the sign (a direct unit test of `pesos`, if exported for test;
-  otherwise skip).
-- **P5** (control). `t367-s3` `:177` and `:197` stay green unchanged (`₱33.3333`, `₱0.0050`).
+- **P3** (red on HEAD; REV-4's fixture). Two lines of `10 × 9999999999.999`, total `199999999999.99` → the sentence
+  prints `₱199,999,999,999.98` and `₱199,999,999,999.99`. Nothing throws.
+- **P5** (control). `t367-s3` `:177` and `:197` stay green with their text unchanged (`₱33.3333`, `₱0.0050`).
 - Mutants:
-  - grouping only in `pesos` and not in the box-text figures → P1 (the invoice-says leg), P2 (the not-leg) red;
-  - `formatMoney`/`Number` → P3 red, and P5 `₱0.0050` red;
-  - grouping the unit price's decimals → P2 red.
+  - group only `pesos` and not the box-text figures → P1 (the goods leg), P2 (the "not" leg) red;
+  - `formatMoney`/`Number` for the unit price → P5 (`₱0.0050` becomes `₱0.01`) red;
+  - group the unit price's decimals → P2 red;
+  - keep "but the invoice says" → P1, P1b red.
 
 **Tests (web):**
 - **W1** (red on HEAD: fees are ignored). `recordInvoiceAction` with total `10500.00`, deliveryFee `500.00`, otherFees
-  blank → the row has `delivery_fee` = `500.00`, `other_fees` = `0.00`. Then `setInvoiceLinesAction` with lines
-  summing to `10000.00` is accepted, and lines summing to `10500.00` are refused.
-- **W2** (control). A blank fee → `delivery_fee` = `0.00`, and lines must sum to the total (today's behaviour).
-- **W3.** deliveryFee `-5` → `?error=` "The delivery fee can't be less than zero." (the domain's sentence, unchanged).
-  Fees above the total → the `feesTooBig` sentence.
-- **W4** (red on HEAD). The bill page for the W1 invoice says "Lines must add up to ₱10,000.00" and names the ₱500.00
-  delivery fee. The W2 invoice keeps today's sentence.
-- **W5** (red on HEAD). The `/ap` form HTML has inputs `deliveryFee` and `otherFees`, and neither is `required`.
-- **W6** (money). After W1, verify the bill with one line (item X, 10 kg), then read X's price history: the landed
-  base price is 1,050.00 / kg against a raw 1,000.00. This is T-151 test 1 driven from the screen path.
-- Mutants:
-  - the action does not pass `otherFees` → a W1 variant with otherFees `200.00` red;
-  - the page note uses `totalAmount` → W4 red;
-  - goods computed with `Number` → W4 with total `0.30`, fee `0.10` (prints `₱0.20`, never `0.19999…`) red.
+  blank → `delivery_fee` = `500.00`, `other_fees` = `0.00`. `setInvoiceLinesAction` with lines summing to
+  `10000.00` → accepted. Lines summing to `10500.00` → refused. Variant: otherFees `200.00` → `other_fees` =
+  `200.00`. Mutant: the action drops `otherFees` → the variant red.
+- **W2** (control). A blank fee → `delivery_fee` = `0.00`, and the lines must sum to the total.
+- **W3.** deliveryFee `-5` → `?error=` "The delivery fee can't be less than zero."; fees above the total → the
+  `feesTooBig` sentence.
+- **W4** (red on HEAD; REV-3, a render leg plus a source leg).
+  - Render: the W1 bill's page says "Lines must add up to ₱10,000.00" and names the ₱500.00 delivery fee; the W2
+    bill keeps today's sentence.
+  - Source: `[id]/page.tsx` imports `subtract` from `@shareat/core/money` and contains no `Number(` applied to
+    `deliveryFee`/`otherFees`.
+  - Mutant: the note uses `totalAmount` → the render leg red. Mutant: goods via `Number` → the source leg red.
+- **W4b** (red on HEAD; REV-7). The W1 bill, once verified, still shows the Delivery fee ₱500.00 row. A no-fee bill
+  shows no fee rows. Mutant: the rows stay inside the pending-only section → W4b red.
+- **W5** (red on HEAD). The `/ap` form HTML has inputs `deliveryFee` and `otherFees`, neither `required`, and the
+  REV-6 help text. Mutant: the old one-fee text → W5 red.
+- **W6** (money, end to end). After W1, itemise one line (X, 10 kg, ₱10,000) and read X's price history → landed
+  1,050.0000 per kg against a raw 1,000.0000.
+- Multi-item allocation and void-and-relog are proven in S3a (L1–L4) and are not repeated here.
 
-**Smoke (9008):**
-1. Log a bill of ₱10,500 with a ₱500 delivery fee and itemise ₱10,000 → saved. Itemise ₱10,500 → the grouped
-   refusal sentence.
-2. Price history shows the landed price.
+**Smoke (9008, with S3a on the tree):**
+1. Log a bill of ₱10,500 with a ₱500 delivery fee. Itemise ₱10,000 → saved. Itemise ₱10,500 → the grouped sentence
+   "… the goods on this bill come to ₱10,000.00".
+2. Verify it → the header still shows the fee.
+3. Two-item version (X ₱1,000 + Y ₱9,000, fee ₱500): price history shows X and Y each at +5%.
 
-Take screenshots of 1 and 2.
+Take screenshots of 1–3.
 
 ---
 
@@ -392,16 +531,17 @@ Take screenshots of 1 and 2.
 
 ## Done when
 - S1–S3 are green. Each red is shown red on HEAD or against its named mutant before the build.
-- S3's Opus review is recorded in this file (✎REV) before the S3 builder starts.
+- S3's Opus review is recorded in this file (✎REV) before the S3 builder starts. ✎S3-AMEND: done; and S3a's diff
+  gets its own independent Opus review (R9) before it ships. S3b does not ship before S3a.
 - Typecheck is clean. The unit suite passes. The FULL integration suite passes on a fresh gate DB before any push.
   `npm run build` passes with the dev server stopped. Touched files are LF.
 - Each slice's smoke is done on 9008 with screenshots.
 - Each builder touched only its BUILDER paths, and each tester only its TESTER paths.
 - The orchestrator, at wrap-up:
-  - marks DEF-575, 592, 568, 569, 570 fixed with the hashes;
+  - marks DEF-575, 592, 568, 569, 570 fixed with the hashes; ✎S3-AMEND: and DEF-601, 602 with S3a's hash;
   - marks DEF-564 fixed: the inventory half by `13d61fb`, the trade half by S2;
   - closes DEF-572 as not reproduced (census evidence);
-  - files N1–N4.
+  - files N1–N4 (✎S3-AMEND: N5 became R10, built in S3a).
 
 ## Questions only Ian can answer
 None.
@@ -412,3 +552,9 @@ None.
 ## Ruling log
 - 2026-10-07, planner: R1–R6. No migration. DEF-571 dropped (fixed), DEF-572 dropped (not reproduced). S3 flagged
   money (cost basis) for an independent Opus review.
+- 2026-10-07, planner ✎S3-AMEND (orchestrator's ruling after ✎REV): S3 is split into S3a (DEF-601/602,
+  `repo/items.ts`, ships first, second review R9) and S3b (DEF-568/569 screen). R7–R9 added. REV-3..REV-8 adopted.
+  N5 noted.
+- 2026-10-07, planner ✎S3-AMEND: N5 folded into S3a as R10 (one bill = one receive, weighted; a stable tie-break).
+  Checked against T-151 `:37`, `:106`, `:119`: it matches. v1's refresh walks lines; that is the method, not the
+  goal. L7 and L8 added.
