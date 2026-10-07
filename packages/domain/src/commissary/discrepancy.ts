@@ -48,15 +48,17 @@ import {
   stockLedgerRepo,
   stockLocationsRepo,
   tradeDiscrepanciesRepo,
+  journalRepo,
   tradeRepo,
   type Tx,
 } from '@shareat/db';
+import { parseBusinessDate } from '@shareat/core/datetime';
 import { postEntry, type PostEntryLine } from '../ledger/post-entry';
 import { lineCost } from '../stock/layers';
 import { consume } from '../stock/consume';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { quantity, toThousandths } from '../stock/quantity';
-import { internalFault } from '../shared/refusal';
+import { humanDate, internalFault } from '../shared/refusal';
 import type { Outcome } from './outcome';
 import { DUE_FROM_ACCOUNT, DUE_TO_ACCOUNT, IN_TRANSIT_ACCOUNT, TRANSFER_OUT_ACCOUNT } from './transfer';
 
@@ -74,6 +76,34 @@ const SHORT_REFUSES_OVER_DISPOSITIONS =
   'This is a shortage — extra dispatch and return apply only to goods counted over what was sent.';
 const RETURN_NEEDS_NOTE =
   'A return must say what happened — who carried the extra back and when, or that the branch recounted.';
+
+/** "January 2026" - the month a fiscal period covers, for a sentence a person reads. */
+function monthLabel(startsOn: string): string {
+  return new Date(`${startsOn}T00:00:00Z`).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
+/**
+ * T-379 S1 (DEF-575): the words for a posting disposition whose date falls in a closed or locked month, else `null`.
+ * ⛔ A SENTENCE, not the enforcement: RULES section 6 item 3 - `postEntry` and the stock trigger still refuse; this asks the
+ * same source (`findPeriodForDate`, the database's own period state) BEFORE the first write so nothing half-posts and the
+ * manager reads a reason instead of a developer sentence with ids. No period rule is re-implemented: open, uncovered and
+ * malformed dates return `null` and behave as before.
+ */
+async function closedMonthRefusal(tx: Tx, orgId: string, on: string): Promise<{ ok: false; reason: string; userReason: string } | null> {
+  let day: ReturnType<typeof parseBusinessDate>;
+  try {
+    day = parseBusinessDate(on);
+  } catch {
+    return null;
+  }
+  const period = await journalRepo.findPeriodForDate(tx, orgId, on);
+  if (!period || period.status === 'open') return null;
+  return {
+    ok: false,
+    reason: `resolveDiscrepancy: the fiscal period covering ${on} is ${period.status}`,
+    userReason: `${monthLabel(period.startsOn)} is ${period.status}, so this can't be booked on ${humanDate(day)}. Nothing was saved.`,
+  };
+}
 
 export interface ResolveDiscrepancyInput {
   readonly orgId: string;
@@ -138,6 +168,13 @@ export async function resolveDiscrepancy(
   }
   if (input.disposition !== 'charge' && input.chargePersonId) {
     return { ok: false, reason: `a ${input.disposition} disposition cannot name a person to charge` };
+  }
+
+  // ⭐ T-379 S1 (DEF-575): below the direction gate (an over row asking for `loss` still gets that answer), above every write.
+  // `audit`, `late_receipt` and `return` post nothing dated, so a closed month does not stop them.
+  if (input.disposition === 'loss' || input.disposition === 'charge' || input.disposition === 'extra_dispatch') {
+    const closed = await closedMonthRefusal(tx, input.orgId, input.resolvedOn);
+    if (closed) return closed;
   }
 
   const value = money(row.value);

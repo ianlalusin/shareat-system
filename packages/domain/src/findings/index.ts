@@ -248,6 +248,28 @@ export async function listFindings(
     ...(await findingsRepo.attendanceConfigMissing(tx, orgId)),
   ];
 
+  return decorateFindings(tx, orgId, detected);
+}
+
+/**
+ * T-379 S1 (DEF-570) - the three T-152 cash-custody detectors only, decorated exactly as `listFindings` decorates (the same
+ * `decorateFindings`, so acknowledgement status, ages and counts are the same code, not a copy). `/remittance` asks for
+ * this instead of the full feed (about sixty detectors) to show three kinds. `listFindings` is untouched in output.
+ */
+export async function listCashCustodyFindings(tx: Tx, orgId: string): Promise<FindingsFeed> {
+  const detected = [
+    ...(await findingsRepo.unremittedCeilingBreached(tx, orgId)),
+    ...(await findingsRepo.remittanceOverdue(tx, orgId)),
+    ...(await findingsRepo.serviceChargeFloatAgeing(tx, orgId)),
+  ];
+  return decorateFindings(tx, orgId, detected);
+}
+
+async function decorateFindings(
+  tx: Tx,
+  orgId: string,
+  detected: Awaited<ReturnType<typeof findingsRepo.unremittedCeilingBreached>>,
+): Promise<FindingsFeed> {
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);
   const now = Date.now();
 

@@ -8,7 +8,7 @@
 import { toBusinessDate } from '@shareat/core/datetime';
 import { eq } from 'drizzle-orm';
 import { moneyAccountsRepo, remittanceRepo, schema, storesRepo, type EndDayReport } from '@shareat/db';
-import { listFindings, remittanceStateOf } from '@shareat/domain';
+import { listCashCustodyFindings, remittanceStateOf } from '@shareat/domain';
 import { authorize, AuthorizationError, heldCapabilities, type Actor } from '@shareat/auth';
 import { withOrgPrincipal } from '../expenses/lib';
 
@@ -153,9 +153,8 @@ const CASH_CUSTODY_KINDS = new Set([
  * days stuck on `partially_remitted`.
  */
 export async function cashCustodyFindings(orgId: string, storeId: string) {
-  const period = today().slice(0, 7);
   return withOrgPrincipal(orgId, async (tx) => {
-    const feed = await listFindings(tx, orgId, { period });
+    const feed = await listCashCustodyFindings(tx, orgId);
     return feed.findings.filter(
       (f) => CASH_CUSTODY_KINDS.has(f.kind) && (f.storeId === null || f.storeId === storeId),
     );

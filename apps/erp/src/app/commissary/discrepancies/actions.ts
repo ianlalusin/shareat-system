@@ -14,6 +14,7 @@ import { authorize } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { deferDiscrepancy, resolveDiscrepancy, type Disposition } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
+import { errorMessage, outcomeMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from '../../expenses/lib';
 
 function str(fd: FormData, key: string): string {
@@ -33,30 +34,37 @@ export async function resolveDiscrepancyAction(fd: FormData): Promise<void> {
   const disposition = str(fd, 'disposition') as Disposition;
   const chargePersonId = str(fd, 'chargePersonId');
 
-  const result = await withOrgPrincipal(actor.orgId, async (tx) => {
-    await authorize(tx, actor, 'resolve_trade_discrepancy', { storeId });
-    // ⚠️ A charge takes money off a named person. That is a SECOND decision and a second
-    // capability — v1's `canChargeStaff`, and never staff-level.
-    if (disposition === 'charge') {
-      await authorize(tx, actor, 'charge_staff_for_discrepancy', { storeId });
-    }
-    return resolveDiscrepancy(tx, {
-      orgId: actor.orgId,
-      discrepancyId: str(fd, 'id'),
-      commissaryStoreId: storeId,
-      disposition,
-      chargePersonId: disposition === 'charge' ? chargePersonId : null,
-      note: str(fd, 'note') || null,
-      // ⚠️ The business date — a UTC slice would post an evening decision to the previous day.
-      resolvedOn: str(fd, 'resolvedOn') || toBusinessDate(),
-      resolvedBy: actor.personId,
+  let result: Awaited<ReturnType<typeof resolveDiscrepancy>>;
+  try {
+    result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      await authorize(tx, actor, 'resolve_trade_discrepancy', { storeId });
+      // ⚠️ A charge takes money off a named person. That is a SECOND decision and a second
+      // capability — v1's `canChargeStaff`, and never staff-level.
+      if (disposition === 'charge') {
+        await authorize(tx, actor, 'charge_staff_for_discrepancy', { storeId });
+      }
+      return resolveDiscrepancy(tx, {
+        orgId: actor.orgId,
+        discrepancyId: str(fd, 'id'),
+        commissaryStoreId: storeId,
+        disposition,
+        chargePersonId: disposition === 'charge' ? chargePersonId : null,
+        note: str(fd, 'note') || null,
+        // ⚠️ The business date — a UTC slice would post an evening decision to the previous day.
+        resolvedOn: str(fd, 'resolvedOn') || toBusinessDate(),
+        resolvedBy: actor.personId,
+      });
     });
-  });
+  } catch (error) {
+    // T-379 S1 (DEF-575 / DEF-570): a thrown refusal (an authorization, a closed month at the database) is a sentence on
+    // the page, never an error boundary - and through `errorMessage`, so no uuid reaches the URL.
+    back(storeId, errorMessage(error));
+  }
 
   // ⚠️ A refusal is a real answer here, not an exception — *"already resolved as loss"*, *"the
   // branch reports, it does not decide"*. Shown on the page rather than thrown into an error
   // boundary, because the reader's next move depends on which one it was.
-  if (!result.ok) back(storeId, result.reason);
+  if (!result.ok) back(storeId, outcomeMessage(result));
   revalidatePath('/commissary/discrepancies');
   back(storeId);
 }
