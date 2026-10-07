@@ -294,6 +294,42 @@ digest. Take a screenshot of each.
 ---
 
 ## S3: DEF-568 and DEF-569 — ⚠️ money, Opus review first (R6)
+
+### ✎REV — independent Opus review, 2026-10-07: **NOT READY until REV-1/REV-2 are ruled.**
+Verified true: domain fee path (`ap/index.ts:441-459`, blank → `undefined` → column default; `-x` refused; fees > total
+refused), `setInvoiceLines` re-derives goods with `subtract` (`:609-612`) and refuses non-pending (`:601`), no
+posting reads a supplier fee (only `items.ts:259`, `:996` do), `recordInvoiceAction` passes neither fee (`actions.ts:176-185`),
+`authorize` order untouched by R5. Wiring R5 as written is safe. What it switches ON is not:
+- **✎REV-1 (blocker, pre-existing, now reachable).** The landed-cost allocation is wrong for any bill with more than one
+  item. `sum(l.line_total) over (partition by l.supplier_invoice_id)` runs AFTER `where l.item_id = ${itemId}`
+  (`packages/db/src/repo/items.ts:260`+`:266`, `:997`+`:1002`), so the denominator is only THIS item's lines: on a bill of X
+  ₱1,000 + Y ₱9,000 + ₱500 fee, X and Y each absorb the whole ₱500 (₱1,000 of landed fee for a ₱500 fee). T-151 §4
+  says "over the invoice". Every T-151 test buys one item per bill (`trade.test.ts:919-956`), so it has never been
+  caught; W6 below is single-line and would pass with it. Branch prices default from this (`costBasisFor`, `:1022-1040`)
+  and those rates post. Fix = compute the per-invoice sum before filtering (a CTE/subquery over all lines of the
+  invoices that carry the item) in BOTH queries. Outside S3's BUILDER paths → planner rules: widen S3 to
+  `items.ts` (`priceHistory`, `lastTwoLandedMax` only) or block S3 behind a new DEF. Do not ship the form first.
+- **✎REV-2 (high, pre-existing, now reachable).** `lastTwoLandedMax` filters `si.status <> 'void'` (`items.ts:1002`);
+  the status is `'voided'` (`packages/db/schema/suppliers.ts:49`; `priceHistory` uses `'voided'`, `:266`). So voided
+  bills still set the branch-price basis — and N3's only fee correction is "void and re-log", which leaves the wrong
+  fee in the max-of-last-two. One-word fix, same file as REV-1.
+- **✎REV-3 (medium).** W4's `Number` mutant cannot go red: `peso()` rounds to 2 dp (`format.ts:15-27`), so
+  `0.30 − 0.10` prints `₱0.20` either way. Replace with a source assertion on `invoices/[id]/page.tsx` (imports
+  `subtract` from `@shareat/core/money`; no `Number(` on a fee).
+- **✎REV-4 (medium).** P3's fixture is refused before the sum: a unit price of 99,999,999,999.99 has 11 integer digits
+  and `parseFourDecimalCost` refuses >10 (`commissary/catalogue.ts:72-78`). Use two lines of `10 × 9999999999.999`.
+- **✎REV-5 (medium, wording).** On a fee bill the domain refusal says "but the invoice says ₱10,000.00"
+  (`items/index.ts:429-432`; `setInvoiceLines` passes goods as `invoiceTotal`, `ap/index.ts:613`) while the header and
+  the new note say ₱10,500.00 total. Smoke 1 will show exactly this. R4 already edits that sentence: say "the goods on
+  this bill come to ₱X" (one sentence for both cases is fine — goods = total when no fee). No rule change (I5 holds).
+- **✎REV-6 (low).** R5's help line says only the delivery fee is added to cost; the SQL adds BOTH fees
+  (`items.ts:259`, T-151 §4). Text: *"Part of the total above. Both are added to the items' cost; neither is a line."*
+- **✎REV-7 (low).** The split shows only in the pending-only itemise section (`[id]/page.tsx:189`). A verified bill's
+  lines then sum to less than its total with no explanation. Show the two fees in the header when non-zero.
+- **✎REV-8 (tests to add).** W7: one bill, items X ₱1,000 + Y ₱9,000, delivery fee ₱500 → X landed +₱50, Y +₱450
+  (red on HEAD, REV-1). W8: void the W6 bill, re-log without fee → `costBasisFor(X)` drops to the raw price (red on
+  HEAD, REV-2). DEF-568 changes text only: no stored value changes (`pesos` is display-only; the stored `lineTotal`
+  is the parsed Money, `items/index.ts:419`) — confirmed.
 **BUILDER:** R4 in `items/index.ts`; R5 in `ap/actions.ts`, `ap/page.tsx`, `ap/invoices/[id]/page.tsx`.
 
 **TESTER:**
