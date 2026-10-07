@@ -172,8 +172,8 @@ describe('R1 - a recheck after verify is a posDayFeedDrift finding when the mone
 });
 
 // =====================================================================================================
-describe('R3 - a recheck calls POS with the basis feed\'s stored POS store id, never the link\'s current one', () => {
-  it('relink the store to a new POS id, then recheck an old day -> the fetcher receives the OLD id; control: a day imported after the relink is rechecked with the NEW id', async () => {
+describe('R3 - a recheck of a day imported under an earlier link refuses (T-382 R9a); a later day is rechecked with the current link id', () => {
+  it('relink the store to a new POS id, then recheck an old day -> REFUSED with the unlinked sentence and the fetcher is NOT called; control: a day imported after the relink is rechecked with the NEW id', async () => {
     const f = await s6Fixture(sql, 'r3');
     const oldDay = await importVerified(f, DAY);
 
@@ -181,10 +181,13 @@ describe('R3 - a recheck calls POS with the basis feed\'s stored POS store id, n
     await sql`update pos_v1_store_links set pos_store_id = ${newPosId} where store_id = ${f.storeId}`;
 
     const stubOld = stubFetchers({ figures: R1_FIGURES });
-    await recheckDay(f.manager, oldDay, stubOld.fetchers);
-    expect(stubOld.calls).toHaveLength(2);
-    for (const c of stubOld.calls) expect(c.posStoreId, 'the OLD id, from the basis feed').toBe(f.posStoreId);
-    for (const r of await recheckFeeds(f, DAY)) expect(r.pos_store_id).toBe(f.posStoreId);
+    const err = await recheckDay(f.manager, oldDay, stubOld.fetchers).then(() => null, (e) => e);
+    expect(err, 'R9a: the basis came from an earlier link').toBeInstanceOf(Error);
+    expect(String((err as { userMessage?: string }).userMessage ?? (err as Error).message)).toBe(
+      "Lipa isn't linked to a POS store, so its POS figures can't be read.",
+    );
+    expect(stubOld.calls, 'POS is not asked').toHaveLength(0);
+    expect(await recheckFeeds(f, DAY), 'no recheck feed stored').toHaveLength(0);
 
     const day2 = '2027-01-11';
     const newDay = await importVerified(f, day2);

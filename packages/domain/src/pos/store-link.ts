@@ -70,10 +70,28 @@ export async function linkStoreToPos(tx: Tx, actor: Actor, input: LinkStoreToPos
   }
 
   const elsewhere = await posV1Repo.getLinkByPosStoreId(tx, actor.orgId, posStoreId);
+  if (elsewhere && elsewhere.storeId !== input.storeId && elsewhere.unlinkedAt) {
+    // T-382 R8 (REV-1): an unlinked store keeps its POS id, so another store cannot take it (the same sales would be
+    // booked twice). Told by name, with the way out.
+    throw refuse(
+      `linkStoreToPos: pos store ${posStoreId} is held by unlinked store ${elsewhere.storeId}`,
+      `That POS store is still held by ${elsewhere.storeName}, which was unlinked. Link ${elsewhere.storeName} to its own POS store first.`,
+    );
+  }
   if (elsewhere && elsewhere.storeId !== input.storeId) {
     throw refuse(
       `linkStoreToPos: pos store ${posStoreId} already linked to store ${elsewhere.storeId}`,
       `That POS store is already linked to ${elsewhere.storeName}.`,
+    );
+  }
+
+  // T-382 R10 (DEF-607): sales ever imported from this POS store for ANOTHER store stay there: linking it elsewhere
+  // would book the same sales twice. Any feed counts, live link or not. Same transaction, after the store lock.
+  const imported = await posV1Repo.otherStoreImportedFromPos(tx, actor.orgId, posStoreId, input.storeId);
+  if (imported) {
+    throw refuse(
+      `linkStoreToPos: pos store ${posStoreId} already has sales imported for store ${imported.storeId}`,
+      `That POS store's sales were already imported for ${imported.storeName}, so it can't be linked to another store.`,
     );
   }
 
@@ -127,7 +145,14 @@ export async function linkStoreToPos(tx: Tx, actor: Actor, input: LinkStoreToPos
     entity: 'pos_v1_store_links',
     entityId: linkId,
     before: before
-      ? { posStoreId: before.posStoreId, posStoreName: before.posStoreName, salesChannelId: before.salesChannelId, posTaxType: before.posTaxType }
+      ? {
+          posStoreId: before.posStoreId,
+          posStoreName: before.posStoreName,
+          salesChannelId: before.salesChannelId,
+          posTaxType: before.posTaxType,
+          unlinkedAt: before.unlinkedAt ? before.unlinkedAt.toISOString() : null,
+          unlinkReason: before.unlinkReason,
+        }
       : null,
     after: { storeId: input.storeId, posStoreId, posStoreName, salesChannelId: input.salesChannelId, posTaxType: input.posTaxType },
     source: 'web',
@@ -142,4 +167,74 @@ function isPosStoreIdTaken(err: unknown): boolean {
     if (x.code === '23505' && x.constraint_name === 'pos_v1_store_links_pos_store_id_unique') return true;
   }
   return false;
+}
+
+const UNLINK_CAPABILITY = 'unlink_store_from_pos' as const;
+const MAX_REASON = 500;
+
+export interface UnlinkStoreFromPosInput {
+  readonly storeId: string;
+  readonly reason: string;
+}
+
+/**
+ * T-382 R11 - the guarded unlink. Super-admin only (`unlink_store_from_pos`), with a reason, audited. A SOFT unlink: three
+ * columns on the link row; no sales day, tender, channel, feed, correction or journal entry changes (I2). Days already
+ * imported stay as they are; the 0185/0187 lock freezes them.
+ *
+ * Order: authorize FIRST (I1) -> trim and check the reason -> the store `FOR UPDATE` (a concurrent import holds it
+ * `FOR KEY SHARE` from its fetch to its commit, so the two serialize: R5) -> the live link `FOR UPDATE` -> R3 (no
+ * unverified imported day) -> unlink -> audit. Takes no day lock (I4, REV-8).
+ */
+export async function unlinkStoreFromPos(
+  tx: Tx,
+  actor: Actor,
+  input: UnlinkStoreFromPosInput,
+): Promise<{ linkId: string; importedDays: number }> {
+  await authorize(tx, actor, UNLINK_CAPABILITY, {});
+
+  const reason = (input.reason ?? '').trim();
+  if (!reason) throw refuse('unlinkStoreFromPos: reason is blank', 'Say why this store is being unlinked.');
+  if (reason.length > MAX_REASON) throw refuse('unlinkStoreFromPos: reason is too long', `Keep the reason under ${MAX_REASON} characters.`);
+
+  const store = await posV1Repo.lockStoreForUpdate(tx, actor.orgId, input.storeId);
+  if (!store) throw gone(`unlinkStoreFromPos: store ${input.storeId} not in org`, 'store');
+
+  const link = await posV1Repo.getLinkByStoreForUpdate(tx, actor.orgId, input.storeId);
+  if (!link || link.unlinkedAt) {
+    throw refuse(`unlinkStoreFromPos: store ${input.storeId} has no live POS link`, `${store.name} isn't linked to POS.`);
+  }
+
+  // R3: an imported day still open or submitted would need a re-import that can no longer run.
+  const unverified = await posV1Repo.unverifiedFeedDates(tx, actor.orgId, input.storeId);
+  if (unverified.length > 0) {
+    const dates = unverified.map((d) => humanDate(d as BusinessDate)).join(', ');
+    throw refuse(
+      `unlinkStoreFromPos: ${unverified.length} unverified imported sales day(s) on store ${input.storeId}`,
+      `${store.name} has imported sales days that aren't verified yet (${dates}). Verify or withdraw them before unlinking it.`,
+    );
+  }
+
+  const done = await posV1Repo.unlink(tx, actor.orgId, input.storeId, { unlinkedBy: actor.personId, reason });
+  if (!done) throw refuse(`unlinkStoreFromPos: store ${input.storeId} lost its live link under the lock`, `${store.name} isn't linked to POS.`);
+  const importedDays = await posV1Repo.countVerifiedFeedDays(tx, actor.orgId, input.storeId);
+
+  // R12: no figures and no day ids; the days do not change.
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'unlink_store_from_pos',
+    entity: 'pos_v1_store_links',
+    entityId: link.id,
+    before: {
+      storeId: input.storeId,
+      posStoreId: link.posStoreId,
+      posStoreName: link.posStoreName,
+      salesChannelId: link.salesChannelId,
+      posTaxType: link.posTaxType,
+    },
+    after: { unlinkedAt: new Date().toISOString(), unlinkReason: reason },
+    source: 'web',
+  });
+
+  return { linkId: link.id, importedDays };
 }

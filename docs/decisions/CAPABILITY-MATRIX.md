@@ -38,6 +38,7 @@ they need weekly, the boundary is wrong.
 | `transfer_funds` | store | ✅ | ✅ | ✅ | ✗ | Row 150. Moving money between accounts that already exist is RECORDING, not changing what the books can record against — that is `manage_chart_of_accounts` |
 | `record_till_count` | store | ✅ | ✅ | ✅ | ✗ | T-186. ⭐ **Staff-open deliberately** — the person holding the drawer is the cashier, and a till is counted at open and close by whoever holds it. Manager-gating it is how the record stays empty; same reasoning as `record_statutory_discount`. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `resolve_till_variance` | store | ✅ | ✅ | ✅ | **✗** | T-186. ⛔ **The asymmetry with the row above IS the control.** Charging a counted shortage names a person and moves `1230`; a cashier must never be able to charge, forgive or write off their own count. Same shape as `submit_sales_day` / `verify_sales_day` |
+| `unlink_store_from_pos` | org | ✅ | ✗ | ✗ | ✗ | T-382. Ian 2026-10-07: super-admin only, with a reason, audited. Linking stays `manage_chart_of_accounts` |
 
 ## Expenses
 

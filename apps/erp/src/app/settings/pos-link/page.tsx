@@ -1,7 +1,11 @@
+import { formatBusinessDateTime } from '@shareat/core/datetime';
+import type { BusinessDate } from '@shareat/core/datetime';
+import { humanDate } from '@shareat/domain/refusal-leaf';
 import { requirePageAccess } from '../../../lib/page-access';
+import { withFlash } from '../../../lib/flash';
 import { listStores } from '../../expenses/lib';
-import { createTenderAction, linkStoreToPosAction, setTenderActiveAction, updateTenderAction } from './actions';
-import { posLinkRows, posStoreOptions, storeTenders, type PosLinkStoreRow, type StoreTenders } from './lib';
+import { createTenderAction, linkStoreToPosAction, setTenderActiveAction, unlinkStoreFromPosAction, updateTenderAction } from './actions';
+import { canUnlink, posLinkRows, posStoreOptions, storeTenders, type PosLinkStoreRow, type StoreTenders } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
@@ -26,11 +30,11 @@ interface SearchParams {
  * already linked elsewhere, and a store that still has typed sales days that are not verified.
  */
 export default async function PosLinkSettingsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams); // T-380: the banner arrives in the flash cookie, never the address
   const { actor, refusal } = await requirePageAccess('/settings/pos-link');
   if (refusal) return refusal;
   const stores = await listStores(actor.orgId);
-  const [rows, options] = await Promise.all([posLinkRows(actor, stores), posStoreOptions()]);
+  const [rows, options, mayUnlink] = await Promise.all([posLinkRows(actor, stores), posStoreOptions(), canUnlink(actor)]);
 
   return (
     <Page density="form">
@@ -64,7 +68,13 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
 
       {await Promise.all(
         rows.map(async (r) => (
-          <StoreCard key={r.storeId} row={r} options={options} tenders={await storeTenders(actor, r.storeId, r.link?.posStoreId ?? null)} />
+          <StoreCard
+            key={r.storeId}
+            row={r}
+            options={options}
+            canUnlink={mayUnlink}
+            tenders={await storeTenders(actor, r.storeId, r.link?.posStoreId ?? null)}
+          />
         )),
       )}
     </Page>
@@ -75,10 +85,12 @@ function StoreCard({
   row,
   options,
   tenders,
+  canUnlink,
 }: {
   row: PosLinkStoreRow;
   options: { id: string; name: string }[] | null;
   tenders: StoreTenders;
+  canUnlink: boolean;
 }) {
   const link = row.link;
   return (
@@ -161,8 +173,56 @@ function StoreCard({
         </button>
       </form>
 
+      {row.unlinked && !link && (
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          Unlinked {formatBusinessDateTime(row.unlinked.at, { dateStyle: 'medium' })} by {row.unlinked.byName ?? 'someone'}: {row.unlinked.reason}
+        </p>
+      )}
+
+      {link && canUnlink && <UnlinkSection row={row} posStoreName={link.posStoreName} />}
+
       <TendersSection storeId={row.storeId} linked={!!link} t={tenders} />
     </section>
+  );
+}
+
+/**
+ * T-382 R13: the guarded unlink, shown to a super admin on a LINKED store. When R3 would refuse (an imported day still
+ * open or submitted) it shows that sentence instead of the form. The action and `unlinkStoreFromPos` authorize again.
+ */
+function UnlinkSection({ row, posStoreName }: { row: PosLinkStoreRow; posStoreName: string }) {
+  const store = row.storeName;
+  const blocked = row.unverifiedImportedDates;
+  return (
+    <div className="space-y-3 rounded border border-red-200 p-3 text-sm dark:border-red-900">
+      <h3 className="font-medium">Unlink from POS</h3>
+      {blocked.length > 0 ? (
+        <p className="text-neutral-700 dark:text-neutral-300">
+          {store} has imported sales days that aren&apos;t verified yet ({blocked.map((d) => humanDate(d as BusinessDate)).join(', ')}). Verify or
+          withdraw them before unlinking it.
+        </p>
+      ) : (
+        <form action={unlinkStoreFromPosAction} className="space-y-3">
+          <input type="hidden" name="storeId" value={row.storeId} />
+          <p className="text-neutral-700 dark:text-neutral-300">
+            Unlinking {store} from POS store {posStoreName}: from the next sales day you type in, {store}&apos;s sales are typed, not imported. The{' '}
+            {row.importedDays} days already imported from POS stay exactly as they are. They can&apos;t be edited, re-imported or corrected from POS. A
+            manager can still withdraw an imported day and type it again. An admin can link the store again later.
+          </p>
+          <label className="block">
+            <span className="block text-neutral-600 dark:text-neutral-400">Why is {store} being unlinked?</span>
+            <textarea name="reason" required maxLength={500} rows={3} className={`${FIELD} mt-1 w-full max-w-md`} />
+          </label>
+          <label className="flex items-start gap-2">
+            <input type="checkbox" name="confirm" required className="mt-1" />
+            <span>I understand: {store}&apos;s sales will be typed from now on.</span>
+          </label>
+          <button type="submit" className={BTN}>
+            Unlink {store}
+          </button>
+        </form>
+      )}
+    </div>
   );
 }
 

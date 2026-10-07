@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { OFFERABLE_TO_POSITIONS } from '../../packages/domain/src/people/position-defaults';
 import { CAPABILITIES, CAPABILITY_AREA, CAPABILITY_AREAS, type Capability, type CapabilityArea } from '@shareat/auth';
 
 /**
@@ -16,7 +17,7 @@ import { CAPABILITIES, CAPABILITY_AREA, CAPABILITY_AREAS, type Capability, type 
 // watching tsc refuse — a runtime `expect` cannot observe a type error.
 // -------------------------------------------------------------------------------------
 
-describe('U1 — CAPABILITY_AREA is keyed on exactly the 98 capabilities; every area is used', () => {
+describe('U1 — CAPABILITY_AREA is keyed on exactly the 100 capabilities; every area is used', () => {
   it('keys set-equal CAPABILITIES', () => {
     expect([...Object.keys(CAPABILITY_AREA)].sort()).toEqual([...CAPABILITIES].sort());
   });
@@ -56,9 +57,10 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 98 capabilities; every 
     // ⛔ T-345 RED — today CAPABILITY_AREA still has 97 keys, so these are 97/96/98 until the
     // builder adds `book_missed_month`.
     // ⭐ 98 -> 99 (T-350/DEF-477): `set_channel_payout` joins CAPABILITY_AREA.
-    expect(Object.keys(_control).length, 'positive control: unmutated form has all 99 keys').toBe(99);
-    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(98);
-    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(100);
+    // ⭐ 99 -> 100 (T-382 S1, A4): `unlink_store_from_pos` joins CAPABILITY_AREA.
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 100 keys').toBe(100);
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(99);
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(101);
   });
 });
 
@@ -73,6 +75,8 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
     'void_statutory_discount', 'accept_remittance', 'record_till_count', 'resolve_till_variance',
     'transfer_funds', 'record_order_wastage', 'resolve_order_wastage', 'charge_staff_for_wastage',
     'reverse_auto_charge',
+    // ⭐ T-382 S1 (A4): the unlink sits with the other sales-day / POS-link acts, area `sales`.
+    'unlink_store_from_pos',
   ],
   expenses: [
     'create_expense', 'edit_own_expense', 'edit_any_expense', 'void_expense', 'approve_expense',
@@ -122,7 +126,7 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
 };
 
 describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', () => {
-  it('every capability inverts to the oracle\'s area, and the counts match §1 (98 total)', () => {
+  it('every capability inverts to the oracle\'s area, and the counts match §1 (100 total)', () => {
     const inverted: Record<string, string[]> = {};
     for (const [cap, area] of Object.entries(CAPABILITY_AREA)) (inverted[area] ??= []).push(cap);
     const sortedInverted = Object.fromEntries(Object.entries(inverted).map(([k, v]) => [k, [...v].sort()]));
@@ -132,7 +136,7 @@ describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', ()
     // ⛔ T-345 RED — CAPABILITY_AREA still totals 97 until the builder adds `book_missed_month`.
     // ⭐ 98 -> 99 (T-350/DEF-477): `set_channel_payout`.
     const total = Object.values(ORACLE).reduce((sum, caps) => sum + caps.length, 0);
-    expect(total).toBe(99);
+    expect(total).toBe(100);
   });
 
   it('NEGATIVE: the oracle is itself a partition — no capability id appears in two areas', () => {
@@ -184,6 +188,18 @@ function countTokenHits(rel: string, token: string): number {
   const raw = readFileSync(abs, 'utf8');
   return (codeOnly(raw).match(new RegExp(token, 'g')) ?? []).length;
 }
+
+describe('T-382 A4 — unlink_store_from_pos: area sales, and NOT offerable to a position', () => {
+  const CAP = 'unlink_store_from_pos' as string as Capability;
+
+  it('is in area `sales`', () => {
+    expect(CAPABILITY_AREA[CAP]).toBe('sales');
+  });
+
+  it('is NOT offerable to a position (it is super_admin-only, so the derivation excludes it)', () => {
+    expect(OFFERABLE_TO_POSITIONS as readonly string[]).not.toContain(CAP);
+  });
+});
 
 describe('U3 — CAPABILITY_AREA is presentation-only: authorize.ts never references it', () => {
   it('authorize.ts has 0 CAPABILITY_AREA tokens, and the scan actually read bytes (floor)', () => {

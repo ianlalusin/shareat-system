@@ -8,7 +8,7 @@
  * updates or deletes a feed row: the table is append-only by trigger and by grant (I6).
  */
 import { createHash } from 'node:crypto';
-import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { POS_V1_SALES_FIELDS, POS_V1_SOLD_ITEMS_FIELDS } from '../pos-v1/wire';
 import {
@@ -39,6 +39,10 @@ export interface PosV1StoreLinkRow {
   readonly createdBy: string;
   readonly updatedAt: Date | null;
   readonly updatedBy: string | null;
+  /** T-382: set while the link is unlinked (all three or none). */
+  readonly unlinkedAt: Date | null;
+  readonly unlinkedBy: string | null;
+  readonly unlinkReason: string | null;
 }
 
 const linkColumns = {
@@ -53,14 +57,17 @@ const linkColumns = {
   createdBy: posV1StoreLinks.createdBy,
   updatedAt: posV1StoreLinks.updatedAt,
   updatedBy: posV1StoreLinks.updatedBy,
+  unlinkedAt: posV1StoreLinks.unlinkedAt,
+  unlinkedBy: posV1StoreLinks.unlinkedBy,
+  unlinkReason: posV1StoreLinks.unlinkReason,
 };
 
-/** The link of one store, or undefined when the store is not linked (the per-store switch is this row). */
+/** The LIVE link of one store, or undefined when the store is not linked or was unlinked (the per-store switch, T-382). */
 export async function getLinkByStore(tx: Tx, orgId: string, storeId: string): Promise<PosV1StoreLinkRow | undefined> {
   const [row] = await tx
     .select(linkColumns)
     .from(posV1StoreLinks)
-    .where(and(eq(posV1StoreLinks.orgId, orgId), eq(posV1StoreLinks.storeId, storeId)))
+    .where(and(eq(posV1StoreLinks.orgId, orgId), eq(posV1StoreLinks.storeId, storeId), isNull(posV1StoreLinks.unlinkedAt)))
     .limit(1);
   return row;
 }
@@ -76,7 +83,7 @@ export async function getLinkByStoreForUpdate(tx: Tx, orgId: string, storeId: st
   return row;
 }
 
-/** The link that names this POS store, with the v2 store's name (for "already linked to {store}"). */
+/** The link (live OR unlinked: T-382 REV-1, a POS id stays held by its store) that names this POS store, with the v2 store's name (for "already linked to {store}"). */
 export async function getLinkByPosStoreId(
   tx: Tx,
   orgId: string,
@@ -91,12 +98,12 @@ export async function getLinkByPosStoreId(
   return row;
 }
 
-/** The link whose sales channel this is - the channel guard's read (V6). */
+/** The LIVE link whose sales channel this is - the channel guard's read (V6). An unlinked row no longer guards its channel (T-382). */
 export async function getLinkByChannel(tx: Tx, orgId: string, salesChannelId: string): Promise<PosV1StoreLinkRow | undefined> {
   const [row] = await tx
     .select(linkColumns)
     .from(posV1StoreLinks)
-    .where(and(eq(posV1StoreLinks.orgId, orgId), eq(posV1StoreLinks.salesChannelId, salesChannelId)))
+    .where(and(eq(posV1StoreLinks.orgId, orgId), eq(posV1StoreLinks.salesChannelId, salesChannelId), isNull(posV1StoreLinks.unlinkedAt)))
     .limit(1);
   return row;
 }
@@ -128,12 +135,27 @@ export interface UpdateLinkInput {
   readonly updatedBy: string;
 }
 
-/** A relink: never `store_id` (0184 refuses it, and nothing here offers it). */
+/** A relink: never `store_id` (0185 refuses it, and nothing here offers it). T-382 R8: it also clears the unlink. */
 export async function updateLink(tx: Tx, orgId: string, storeId: string, patch: UpdateLinkInput): Promise<void> {
   await tx
     .update(posV1StoreLinks)
-    .set({ ...patch, updatedAt: sql`now()` })
+    .set({ ...patch, updatedAt: sql`now()`, unlinkedAt: null, unlinkedBy: null, unlinkReason: null })
     .where(and(eq(posV1StoreLinks.orgId, orgId), eq(posV1StoreLinks.storeId, storeId)));
+}
+
+/** T-382 R11: unlink the store's LIVE link. Sets the three columns, nothing else. Returns whether a live row was updated. */
+export async function unlink(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  input: { readonly unlinkedBy: string; readonly reason: string },
+): Promise<boolean> {
+  const rows = await tx
+    .update(posV1StoreLinks)
+    .set({ unlinkedAt: sql`now()`, unlinkedBy: input.unlinkedBy, unlinkReason: input.reason })
+    .where(and(eq(posV1StoreLinks.orgId, orgId), eq(posV1StoreLinks.storeId, storeId), isNull(posV1StoreLinks.unlinkedAt)))
+    .returning({ id: posV1StoreLinks.id });
+  return rows.length > 0;
 }
 
 /**
@@ -175,6 +197,39 @@ export async function unverifiedTypedDates(tx: Tx, orgId: string, storeId: strin
     )
     .orderBy(asc(salesDays.businessDate));
   return rows.map((r) => r.businessDate);
+}
+
+/** T-382 R3: business dates of the store's open or submitted IMPORTED days, oldest first (these block an unlink). */
+export async function unverifiedFeedDates(tx: Tx, orgId: string, storeId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ businessDate: salesDays.businessDate })
+    .from(salesDays)
+    .where(
+      and(
+        eq(salesDays.orgId, orgId),
+        eq(salesDays.storeId, storeId),
+        eq(salesDays.source, 'pos_v1_day_feed'),
+        inArray(salesDays.status, ['open', 'submitted']),
+      ),
+    )
+    .orderBy(asc(salesDays.businessDate));
+  return rows.map((r) => r.businessDate);
+}
+
+/** T-382 R11: how many verified imported days the store holds (the unlink banner's count). */
+export async function countVerifiedFeedDays(tx: Tx, orgId: string, storeId: string): Promise<number> {
+  const [row] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(salesDays)
+    .where(
+      and(
+        eq(salesDays.orgId, orgId),
+        eq(salesDays.storeId, storeId),
+        eq(salesDays.source, 'pos_v1_day_feed'),
+        eq(salesDays.status, 'verified'),
+      ),
+    );
+  return row?.n ?? 0;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -238,9 +293,10 @@ export interface InsertFeedBatchInput {
 export async function insertBatch(
   tx: Tx,
   input: InsertFeedBatchInput,
-): Promise<{ batchId: string; ids: Partial<Record<PosV1FeedKind, string>> }> {
+): Promise<{ batchId: string; ids: Partial<Record<PosV1FeedKind, string>>; fetchedAt: Date }> {
   const batchId = crypto.randomUUID();
   const ids: Partial<Record<PosV1FeedKind, string>> = {};
+  let stamped: Date | undefined;
   for (const r of input.rows) {
     const [row] = await tx
       .insert(posV1DayFeeds)
@@ -258,10 +314,30 @@ export async function insertBatch(
         fetchedBy: input.fetchedBy,
         ...(input.fetchedAt ? { fetchedAt: input.fetchedAt } : {}),
       })
-      .returning({ id: posV1DayFeeds.id });
+      .returning({ id: posV1DayFeeds.id, fetchedAt: posV1DayFeeds.fetchedAt });
     ids[r.kind] = row!.id;
+    stamped ??= row!.fetchedAt;
   }
-  return { batchId, ids };
+  return { batchId, ids, fetchedAt: stamped! };
+}
+
+/**
+ * T-382 R10 (DEF-607): the NAME of another store of the org whose feeds were fetched from this POS store id, if any.
+ * Any `pos_v1_day_feeds` row counts (live link or not, relinked away or not): those sales are already booked there.
+ */
+export async function otherStoreImportedFromPos(
+  tx: Tx,
+  orgId: string,
+  posStoreId: string,
+  storeId: string,
+): Promise<{ storeId: string; storeName: string } | undefined> {
+  const [row] = await tx
+    .select({ storeId: posV1DayFeeds.storeId, storeName: stores.name })
+    .from(posV1DayFeeds)
+    .innerJoin(stores, eq(stores.id, posV1DayFeeds.storeId))
+    .where(and(eq(posV1DayFeeds.orgId, orgId), eq(posV1DayFeeds.posStoreId, posStoreId), ne(posV1DayFeeds.storeId, storeId)))
+    .limit(1);
+  return row;
 }
 
 export async function getFeedById(tx: Tx, orgId: string, id: string): Promise<PosV1DayFeedRow | undefined> {

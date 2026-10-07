@@ -120,6 +120,16 @@ async function loadPinnedFeed(tx: Tx, orgId: string, pullId: string, feedId: str
 
 const fail = (reason: string): { ok: false; reason: string } => ({ ok: false, reason });
 
+/**
+ * T-382 R7 (REV-7): a typed day of a store with a LIVE link was typed before the link (`typed`); a typed day of a store
+ * with no live link (never linked, or unlinked) gets the `unlinked` sentence, as before.
+ */
+async function typedDayRefusal(tx: Tx, orgId: string, storeId: string, businessDate: string): Promise<string> {
+  const link = await posV1Repo.getLinkByStore(tx, orgId, storeId);
+  const name = await storeNameOf(tx, orgId, storeId);
+  return link ? SENTENCES.typed(name, when(businessDate)) : SENTENCES.unlinked(name);
+}
+
 async function storeNameOf(tx: Tx, orgId: string, storeId: string): Promise<string> {
   return (await storesRepo.getById(tx, orgId, storeId))?.name ?? 'This store';
 }
@@ -179,13 +189,10 @@ export async function buildPlan(tx: Tx, actor: Actor, input: BuildPlanInput): Pr
     return { ok: false, reason: `The sales day for ${humanDate(salesDay.businessDate as BusinessDate)} has been voided, so usage can't be recorded against it.` };
   }
 
-  // T-375 S5-lite: the link, then the day's source. An unlinked store has no POS store id, and a typed day has no
-  // stored sold items (Q-D); neither is fetched live.
-  const link = await posV1Repo.getLinkByStore(tx, input.orgId, input.storeId);
-  if (!link) return fail(SENTENCES.unlinked(await storeNameOf(tx, input.orgId, input.storeId)));
-  if (salesDay.source === 'legacy_typed') {
-    return fail(SENTENCES.typed(await storeNameOf(tx, input.orgId, input.storeId), when(salesDay.businessDate)));
-  }
+  // T-375 S5-lite: the day's source. A typed day has no stored sold items (Q-D); none is fetched live.
+  // T-382 R7: a feed day uses its STORED sold items whether or not the store is still linked (days imported before an
+  // unlink stay as they are, stock usage included), so the link is no longer read for it.
+  if (salesDay.source === 'legacy_typed') return fail(await typedDayRefusal(tx, input.orgId, input.storeId, salesDay.businessDate));
 
   const existing = await posMappingRepo.findLivePullForDay(tx, input.storeId, input.salesDayId);
   if (existing && existing.status !== 'planned') {
@@ -205,9 +212,7 @@ export async function buildPlan(tx: Tx, actor: Actor, input: BuildPlanInput): Pr
   const lockedDay = await lockDayOutcome(tx, input.orgId, input.salesDayId, input.storeId);
   if (!lockedDay.ok) return lockedDay;
   // Q-D again, against the LOCKED day (the early refusal above read it unlocked).
-  if (lockedDay.day.source === 'legacy_typed') {
-    return fail(SENTENCES.typed(await storeNameOf(tx, input.orgId, input.storeId), when(salesDay.businessDate)));
-  }
+  if (lockedDay.day.source === 'legacy_typed') return fail(await typedDayRefusal(tx, input.orgId, input.storeId, salesDay.businessDate));
   let finalizedSections: PlanSection[] = [];
   let lockedPull: NonNullable<Awaited<ReturnType<typeof posMappingRepo.getPullForUpdate>>> | undefined;
   // T-374 S7 (audit 2): the pull's own lock (same FOR UPDATE as void / finalize), then re-check under it. A void

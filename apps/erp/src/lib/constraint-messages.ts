@@ -26,6 +26,9 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
   sales_day_tenders_locked: SALES_LOCKED_SENTENCE,
   sales_day_channels_locked: SALES_LOCKED_SENTENCE,
   pos_v1_store_links_store_fixed: SALES_LOCKED_SENTENCE,
+  // T-382 (0187): the unlink's two CHECKs. The screen and the domain check first; these are the database's last word.
+  pos_v1_store_links_unlink_shape_check: 'An unlink needs who, when and why together.',
+  pos_v1_store_links_unlink_reason_check: 'Say why this store is being unlinked, in under 500 characters.',
   // T-369 S7: with a voided day freeing its date, two managers can race to re-enter it and the loser meets
   // the unique index (now partial, migration 0177).
   sales_days_org_id_store_id_business_date_unique:
