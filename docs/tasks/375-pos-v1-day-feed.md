@@ -411,6 +411,7 @@ with the largest excess; (d) a non-centavo value; (e) a negative method; (f) dis
 **Gate (per store, before it is linked on production):** (e1), (d), (e) and (e2)'s second count are 0 over 90 days, or
 the planner amends R4. (c) and (r) are reported, not gating (they are capped or booked by rule). (f) is the admin's
 mapping list; (g) feeds Q2. **Needs Q1.** Run locally by whoever holds the key; numbers go in the status line.
+✎S0-A (orchestrator ruling): (n) days with a negative total (P + D + refunds - C < 0; charges exceed sales, the import refuses these) is counted separately, is GATING, and those days are excluded from (c).
 
 ---
 
