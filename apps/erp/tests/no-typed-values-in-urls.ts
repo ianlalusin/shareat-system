@@ -58,21 +58,8 @@ export const PRE_SESSION: readonly string[] = [
  * is a prefix.
  */
 export const PENDING: readonly string[] = [
-  // S4
-  'app/ap/actions.ts', 'app/expenses/actions.ts', 'app/expenses/recurring/actions.ts',
-  'app/expenses/reimbursements/actions.ts', 'app/sales-days/actions.ts', 'app/settings/attendance/actions.ts',
-  'app/settings/expense-categories/actions.ts', 'app/settings/organization/actions.ts',
-  'app/settings/pos-link/actions.ts', 'app/settings/sales-channels/actions.ts', 'app/settings/wastage-monitor/actions.ts',
-  'app/commissary/catalogue/actions.ts', 'app/commissary/orders/actions.ts', 'app/commissary/orders/[id]/actions.ts',
-  'app/commissary/discrepancies/actions.ts', 'app/trade/orders/actions.ts', 'app/trade/returns/actions.ts',
-  'app/ap/page.tsx', 'app/ap/invoices/[id]/page.tsx', 'app/ap/suppliers/page.tsx', 'app/ap/suppliers/[id]/page.tsx',
-  'app/expenses/[id]/page.tsx', 'app/expenses/new/page.tsx', 'app/expenses/recurring/page.tsx',
-  'app/expenses/reimbursements/page.tsx', 'app/sales-days/new/page.tsx', 'app/sales-days/[id]/page.tsx',
-  'app/sales-days/[id]/edit/page.tsx', 'app/reports/pos-reconciliation/page.tsx', 'app/settings/attendance/page.tsx',
-  'app/settings/expense-categories/page.tsx', 'app/settings/organization/page.tsx', 'app/settings/pos-link/page.tsx',
-  'app/settings/sales-channels/page.tsx', 'app/settings/wastage-monitor/page.tsx', 'app/commissary/catalogue/page.tsx',
-  'app/commissary/discrepancies/page.tsx', 'app/commissary/orders/page.tsx', 'app/commissary/orders/[id]/page.tsx',
-  'app/trade/orders/page.tsx', 'app/trade/orders/[id]/page.tsx', 'app/trade/returns/page.tsx',
+  // S4 carve-out (S4-R1): T-382 converts these
+  'app/settings/pos-link/actions.ts', 'app/settings/pos-link/page.tsx',
   // S5
   'app/inventory/counts/actions.ts', 'app/inventory/deliveries/actions.ts', 'app/inventory/locations/actions.ts',
   'app/inventory/low-stock/actions.ts', 'app/inventory/pos-map/actions.ts', 'app/inventory/pos-usage/actions.ts',

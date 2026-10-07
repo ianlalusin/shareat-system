@@ -519,6 +519,8 @@ Screenshots of each at 375 px.
   - ✎REV-9: `ap/actions.ts:399-403` anchors its id checks (REV-4 regex), and `expenses/actions.ts:256,307` go through
     `splitReturnTo` too.
 
+- ✎S4-R1 (orchestrator): `settings/pos-link/*` (actions and page) is carved out of S4. T-382 rewrites them and converts them to the flash; they stay in PENDING.
+
 **TESTER:** `apps/erp/tests/integration/t380-s4-money.test.ts` (new), `apps/erp/tests/t380-s4-guard.test.ts` (new).
 
 **Tests:**
