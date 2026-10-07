@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
 
@@ -640,3 +640,101 @@ describe('U12 - R9a: no correction or recheck of an old imported day after a rel
   // Mutant: the updatedAt check run when updatedAt is NULL (a never-relinked link) -> the control refuses, red.
 });
 
+
+// =====================================================================================================
+// ✎AMEND-2 (commit 6891bd9)
+const S2 = {
+  already: (store: string) => `That POS store's sales were already imported for ${store}, so it can't be linked to another store.`,
+};
+
+describe('R10 (DEF-607) - a POS id with imported sales never links to a DIFFERENT store', () => {
+  /** Lipa imports and verifies a day under its POS id P1, then is relinked to a free P2 (P1 is now free by the UNIQUE). */
+  async function relinkedAway(hint: string) {
+    const f = await fixture(hint);
+    await verifiedDay(f, D1);
+    const p2 = uid('pos-p2');
+    await relink(f, f.admin, { posStoreId: p2 });
+    return { f, p2 };
+  }
+  const batangasLinks = (f: F, posStoreId: string) => relink(f, f.admin, { storeId: f.store2Id, posStoreId, channelId: f.walkIn2Id });
+
+  it('R10-a: Lipa relinked P1 -> P2; Batangas links P1 -> refused with the already-imported sentence; nothing written (RED on HEAD: it links)', async () => {
+    const { f } = await relinkedAway('r10a');
+    expect(await sentenceOf(batangasLinks(f, f.posStoreId))).toBe(S2.already('Lipa'));
+    expect(await linkRow(f.store2Id), 'Batangas got no link').toBeUndefined();
+    expect(await auditOf(f.orgId, 'link_store_to_pos')).toHaveLength(1); // only Lipa's relink
+  });
+
+  it('R10-a (not only live links): Lipa is then UNLINKED too, so no live link holds P1 or its feeds; Batangas is still refused', async () => {
+    const { f } = await relinkedAway('r10a2');
+    await unlink(f, f.superAdmin);
+    expect(await sentenceOf(batangasLinks(f, f.posStoreId))).toBe(S2.already('Lipa'));
+    expect(await linkRow(f.store2Id)).toBeUndefined();
+  });
+
+  it('R10-b (control, GREEN on HEAD): a POS id that was never imported, freed by a relink, CAN be linked to another store', async () => {
+    const f = await fixture('r10b');
+    const p3 = uid('pos-p3');
+    await relink(f, f.admin, { posStoreId: p3 }); // Lipa on P3, no feed ever carries P3
+    await relink(f, f.admin, { posStoreId: uid('pos-p2') }); // frees P3
+    await expect(batangasLinks(f, p3)).resolves.toHaveProperty('linkId');
+    expect((await linkRow(f.store2Id))!.pos_store_id).toBe(p3);
+  });
+
+  it('R10-c (control, GREEN on HEAD): the SAME store relinking back to its own old id is allowed', async () => {
+    const { f } = await relinkedAway('r10c');
+    await relink(f, f.admin, { posStoreId: f.posStoreId });
+    expect((await linkRow(f.storeId))!.pos_store_id).toBe(f.posStoreId);
+  });
+
+  it('cross-org: the imported POS id (freed by its relink) is not refused and its store name is never shown', async () => {
+    const other = await fixture('r10x-other');
+    await verifiedDay(other, D1);
+    await relink(other, other.admin, { posStoreId: uid('pos-away') }); // the other org freed its P1
+    const mine = await fixture('r10x-mine');
+    const out = await relink(mine, mine.admin, { posStoreId: other.posStoreId }).then(() => 'linked', (e) => sentence(e));
+    expect(out, 'RLS and the org filter keep the other org invisible').toBe('linked');
+  });
+  // Mutants: the check dropped -> R10-a legs red. Live links only -> the second R10-a leg red. The check run across orgs
+  // (no org filter / RLS bypass) -> the cross-org leg refuses, red (and would leak "Lipa" of another org).
+});
+
+describe('R9a on the DATABASE clock - the basis is judged by a DB stamp, never the app clock', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  /** Run `fn` with `Date` skewed by `ms` (timers left real), then restore. */
+  async function skewed<T>(ms: number, fn: () => Promise<T>): Promise<T> {
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + ms });
+    try {
+      return await fn();
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+  const pause = () => new Promise((r) => setTimeout(r, 30));
+
+  it('a basis imported (DB time) BEFORE the relink is refused even when the app clock ran an hour ahead (RED on HEAD: fetched_at is the app clock)', async () => {
+    const f = await fixture('clk1');
+    const { id } = await skewed(3_600_000, () => imp(f, D1));
+    await verify(f, id);
+    await pause();
+    await relink(f, f.admin, { posStoreId: f.posStoreId, taxType: 'non_vat' }); // same id: only updated_at moves
+    const stub = stubFetchers();
+    expect(await sentenceOf(D.recheckPosDay(f.manager, { salesDayId: id }, stub.fetchers))).toBe(S.figuresUnreadable('Lipa'));
+    expect(stub.calls, 'POS is not asked').toHaveLength(0);
+  });
+
+  it('a basis imported AFTER the relink is NOT refused even when the app clock ran an hour behind (RED on HEAD: judged by the skewed clock)', async () => {
+    const f = await fixture('clk2');
+    await relink(f, f.admin, { posStoreId: f.posStoreId, taxType: 'non_vat' });
+    await pause();
+    // non_vat imports (vat_exclusive would not); the day is imported and verified with the clock behind
+    const { id } = await skewed(-3_600_000, () => imp(f, D1));
+    await verify(f, id);
+    const stub = stubFetchers();
+    await expect(D.recheckPosDay(f.manager, { salesDayId: id }, stub.fetchers)).resolves.toHaveProperty('salesDayId', id);
+    expect(stub.calls.length, 'POS was asked (both kinds)').toBe(2);
+  });
+  // Mutant: the compare reads the app-written fetched_at (not DB-stamped) -> both legs red.
+});
