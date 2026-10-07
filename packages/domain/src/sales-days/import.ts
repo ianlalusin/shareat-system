@@ -166,7 +166,6 @@ async function runImport(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetch
   // The fetch: no row lock is held across HTTP (T-373 R2). Both kinds, captured together (R1).
   const fetched = await fetchBoth(fetchers, link.posStoreId, input.businessDate, when);
   // One instant, taken as the responses arrive: the feed rows' `fetched_at` and the day's `pos_sourced_at`.
-  const fetchedAt = new Date();
 
   // T-382 R5: lock order is store, then day. The store `FOR KEY SHARE` conflicts with a link or unlink (`FOR UPDATE`),
   // so after it is held the link cannot change until this transaction ends. Re-read it: the unlink, or a relink to
@@ -223,13 +222,14 @@ async function runImport(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetch
     purpose: 'import',
     posStoreId: link.posStoreId,
     fetchedBy: actor.personId,
-    fetchedAt,
+    // T-382 R9a: no fetchedAt: the feed is stamped by the DATABASE clock, the one link.updated_at is stamped by.
     rows: [
       { kind: 'sales', body: fetched.sales.body, payload: fetched.sales.payload },
       { kind: 'sold_items', body: fetched.soldItems.body, payload: fetched.soldItems.payload },
     ],
   });
   const salesFeedId = batch.ids.sales!;
+  const fetchedAt = batch.fetchedAt; // the database's stamp, also the day's pos_sourced_at
 
   const f = derived.figures;
   const channelRows = [{ channelId: derived.channel.channelId, amount: derived.channel.amount, noSales: false }];

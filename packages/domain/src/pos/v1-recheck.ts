@@ -104,8 +104,6 @@ async function runRecheck(
   const call = (f: PosV1DayFetcher, kind: PosV1FeedKind) => f({ posStoreId: target.posStoreId, businessDate: target.businessDate, kind });
   const sales = await call(fetchers.sales, 'sales');
   const soldItems = await call(fetchers.soldItems, 'sold_items');
-  const fetchedAt = new Date();
-
   // POS answering "no data" for a VERIFIED day that has sales is a POS glitch, not a change: storing it would make
   // "latest check" read as not found. Nothing is stored; the warning names the date.
   const salesBody = sales.payload as Record<string, unknown> | null;
@@ -130,7 +128,7 @@ async function runRecheck(
       purpose: 'recheck',
       posStoreId: target.posStoreId,
       fetchedBy: actor.personId,
-      fetchedAt,
+      // T-382 R9a: stamped by the database clock (no app fetchedAt)
       rows: [
         { kind: 'sales', body: sales.body, payload: sales.payload },
         { kind: 'sold_items', body: soldItems.body, payload: soldItems.payload },

@@ -293,9 +293,10 @@ export interface InsertFeedBatchInput {
 export async function insertBatch(
   tx: Tx,
   input: InsertFeedBatchInput,
-): Promise<{ batchId: string; ids: Partial<Record<PosV1FeedKind, string>> }> {
+): Promise<{ batchId: string; ids: Partial<Record<PosV1FeedKind, string>>; fetchedAt: Date }> {
   const batchId = crypto.randomUUID();
   const ids: Partial<Record<PosV1FeedKind, string>> = {};
+  let stamped: Date | undefined;
   for (const r of input.rows) {
     const [row] = await tx
       .insert(posV1DayFeeds)
@@ -313,10 +314,30 @@ export async function insertBatch(
         fetchedBy: input.fetchedBy,
         ...(input.fetchedAt ? { fetchedAt: input.fetchedAt } : {}),
       })
-      .returning({ id: posV1DayFeeds.id });
+      .returning({ id: posV1DayFeeds.id, fetchedAt: posV1DayFeeds.fetchedAt });
     ids[r.kind] = row!.id;
+    stamped ??= row!.fetchedAt;
   }
-  return { batchId, ids };
+  return { batchId, ids, fetchedAt: stamped! };
+}
+
+/**
+ * T-382 R10 (DEF-607): the NAME of another store of the org whose feeds were fetched from this POS store id, if any.
+ * Any `pos_v1_day_feeds` row counts (live link or not, relinked away or not): those sales are already booked there.
+ */
+export async function otherStoreImportedFromPos(
+  tx: Tx,
+  orgId: string,
+  posStoreId: string,
+  storeId: string,
+): Promise<{ storeId: string; storeName: string } | undefined> {
+  const [row] = await tx
+    .select({ storeId: posV1DayFeeds.storeId, storeName: stores.name })
+    .from(posV1DayFeeds)
+    .innerJoin(stores, eq(stores.id, posV1DayFeeds.storeId))
+    .where(and(eq(posV1DayFeeds.orgId, orgId), eq(posV1DayFeeds.posStoreId, posStoreId), ne(posV1DayFeeds.storeId, storeId)))
+    .limit(1);
+  return row;
 }
 
 export async function getFeedById(tx: Tx, orgId: string, id: string): Promise<PosV1DayFeedRow | undefined> {

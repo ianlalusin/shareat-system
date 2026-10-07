@@ -85,6 +85,16 @@ export async function linkStoreToPos(tx: Tx, actor: Actor, input: LinkStoreToPos
     );
   }
 
+  // T-382 R10 (DEF-607): sales ever imported from this POS store for ANOTHER store stay there: linking it elsewhere
+  // would book the same sales twice. Any feed counts, live link or not. Same transaction, after the store lock.
+  const imported = await posV1Repo.otherStoreImportedFromPos(tx, actor.orgId, posStoreId, input.storeId);
+  if (imported) {
+    throw refuse(
+      `linkStoreToPos: pos store ${posStoreId} already has sales imported for store ${imported.storeId}`,
+      `That POS store's sales were already imported for ${imported.storeName}, so it can't be linked to another store.`,
+    );
+  }
+
   // W6: no typed day may be left half-way on a linked store.
   const typed = await posV1Repo.unverifiedTypedDates(tx, actor.orgId, input.storeId);
   if (typed.length > 0) {
