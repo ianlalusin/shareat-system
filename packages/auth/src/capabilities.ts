@@ -280,6 +280,7 @@ export type Capability =
   /** T-177 invariant 5. ⛔ Manager+, same asymmetry as `post_usage`/`post_production` — finalizing
    *  is the step that writes real usage records and posts through the ledger. */
   | 'finalize_pos_usage_pull'
+  | 'unlink_store_from_pos'
   // Platform — super-admin only
   | 'cross_org_access'
   | 'view_franchise_sales';
@@ -382,6 +383,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'request_pos_map',
   'decide_pos_map_request',
   'finalize_pos_usage_pull',
+  'unlink_store_from_pos',
   'cross_org_access',
   'view_franchise_sales',
 ];
@@ -565,6 +567,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   request_pos_map: 'store',
   decide_pos_map_request: 'store',
   finalize_pos_usage_pull: 'store',
+  unlink_store_from_pos: 'org',
 
   cross_org_access: 'platform',
   view_franchise_sales: 'platform',
@@ -658,6 +661,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   request_pos_map: 'production',
   decide_pos_map_request: 'production',
   finalize_pos_usage_pull: 'production',
+  unlink_store_from_pos: 'sales',
 
   confirm_receipt: 'commissary',
   resolve_trade_discrepancy: 'commissary',
@@ -972,6 +976,7 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   request_pos_map: { super_admin: true, admin: true, manager: true, staff: false },
   decide_pos_map_request: { super_admin: true, admin: true, manager: true, staff: false },
   finalize_pos_usage_pull: { super_admin: true, admin: true, manager: true, staff: false },
+  unlink_store_from_pos: { super_admin: true, admin: false, manager: false, staff: false },
 
   cross_org_access: { super_admin: true, admin: false, manager: false, staff: false },
   view_franchise_sales: { super_admin: true, admin: false, manager: false, staff: false },
@@ -999,7 +1004,7 @@ export const ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER: readonly Capability[] = CAPA
 
 /**
  * ⭐ **Exactly the capabilities `super_admin` holds that `admin` does not — DERIVED, never
- * listed.** Today it is four: `approve_item`, `post_journal_entry`, `cross_org_access`,
+ * listed.** Today it is five: `approve_item`, `post_journal_entry`, `cross_org_access`, `unlink_store_from_pos` (T-382, backfilled by 0187),
  * `view_franchise_sales`.
  *
  * Same discipline and same reason as `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` above: computed from
@@ -1158,6 +1163,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   request_pos_map: 'request a POS item mapping',
   decide_pos_map_request: 'decide a POS mapping request',
   finalize_pos_usage_pull: "finalise the day's POS usage figures",
+  unlink_store_from_pos: 'unlink a store from POS',
   cross_org_access: 'access another organisation (break-glass)',
   view_franchise_sales: 'view franchise sales',
 };

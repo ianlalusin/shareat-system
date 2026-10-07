@@ -4,8 +4,8 @@
  * A sales day for a store LINKED to POS is a closing DERIVED from what POS v1 reported (bible row 270). These
  * four tables are the structure behind that; enforcement (the link-aware triggers) is 0184.
  *
- *  - `pos_v1_store_links`        one row per linked store. ITS EXISTENCE IS THE PER-STORE SWITCH (I10): there is
- *                                no flag column and no env var. Never deleted (no DELETE grant).
+ *  - `pos_v1_store_links`        one row per linked store. ITS LIVE ROW IS THE PER-STORE SWITCH (I10; T-382: live means
+ *                                not unlinked): no flag column, no env var. Never deleted (no DELETE grant).
  *  - `pos_v1_day_feeds`          the stored, immutable copy of one POS HTTP response. Append-only: no dedupe, each
  *                                fetch is a fact.
  *  - `tenders`                   the store-scoped tender master (S2). NOT `sales_day_tenders`, which is a day's
@@ -76,6 +76,10 @@ export const posV1StoreLinks = pgTable(
       .references(() => persons.id, { onDelete: 'restrict' }),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
     updatedBy: uuid('updated_by').references(() => persons.id, { onDelete: 'restrict' }),
+    /** T-382 (0187): a soft unlink. All three NULL on a live link; set together (R10 CHECK). A store is LINKED when its row is LIVE. */
+    unlinkedAt: timestamp('unlinked_at', { withTimezone: true }),
+    unlinkedBy: uuid('unlinked_by').references(() => persons.id, { onDelete: 'restrict' }),
+    unlinkReason: text('unlink_reason'),
   },
   (t) => [
     unique('pos_v1_store_links_store_id_unique').on(t.storeId),
@@ -85,6 +89,16 @@ export const posV1StoreLinks = pgTable(
     check('pos_v1_store_links_pos_tax_type_check', sql`${t.posTaxType} in ('vat_inclusive', 'vat_exclusive', 'non_vat')`),
     check('pos_v1_store_links_pos_store_id_not_blank_check', sql`btrim(${t.posStoreId}) <> ''`),
     check('pos_v1_store_links_pos_store_name_not_blank_check', sql`btrim(${t.posStoreName}) <> ''`),
+    check(
+      'pos_v1_store_links_unlink_shape_check',
+      sql`(${t.unlinkedAt} is null) = (${t.unlinkedBy} is null) and (${t.unlinkedAt} is null) = (${t.unlinkReason} is null)`,
+    ),
+    check(
+      'pos_v1_store_links_unlink_reason_check',
+      sql`${t.unlinkReason} is null or (btrim(${t.unlinkReason}) <> '' and char_length(${t.unlinkReason}) <= 500)`,
+    ),
+    // NOTE: from migration 0187 (T-382) "linked" means a LIVE row (unlinked_at is null); 0185's header says "has a row".
+    // sales_day_store_is_linked was replaced there (hand-added: Drizzle cannot say a function).
     // NOTE: a BEFORE UPDATE trigger refusing a change of store_id (pos_v1_store_links_store_fixed) is
     // hand-added in migration 0185 (T-375 S4), not here.
   ],

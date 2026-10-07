@@ -396,7 +396,7 @@ parent's discounts.
   (`toBusinessDate`). `tests/unit/t343-throw-ratchet.test.ts` keeps `packages/domain/src/sales-days` at 0 bare throws.
 - I9. **On a linked store** no figure is typed: no screen offers a figure input, and nothing outside
   `withSalesDayDerivation` writes one (G1, S3; trigger, S4). **On an unlinked store** the typed path stays, labelled.
-- I10. A store's switch is its link row, nothing else (no flag column, no env var).
+- I10. A store's switch is its link row, nothing else (no flag column, no env var). ✎T-382: the LIVE link row (`unlinked_at IS NULL`).
 
 ---
 

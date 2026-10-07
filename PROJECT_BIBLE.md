@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1620` 13. Decision log
-- `1621–1640` 14. Amendment protocol
-- `1641–1645` 15. Engineering standards — the industry practices this project follows
-  - `1646–1651` 15.1 Build order: walking skeleton first
-  - `1652–1663` 15.2 Golden-master testing — the most important practice here
-  - `1664–1672` 15.3 Strangler Fig, not big-bang cutover
-  - `1673–1677` 15.4 No dual-write
-  - `1678–1686` 15.5 Expand/contract migrations
-  - `1687–1695` 15.6 Observability from day zero, not later
-  - `1696–1700` 15.7 CI gates
-  - `1701–1705` 15.8 Backups and a tested restore
-  - `1706–1710` 15.9 Twelve-Factor config
-  - `1711–1718` 15.10 Append-only ledgers — but not event sourcing
-  - `1719–1723` 15.11 Defence in depth
-  - `1724–1752` 15.12 Skills are lenses, not assurance
-  - `1753–1759` 15.13 Reconciliation is a permanent feature
-- `1760–1764` 16. The accounting spine
-  - `1765–1796` 16.0 What we are actually fixing — the diagnosis
-  - `1797–1840` 16.1 The ten invariants — non-negotiable
-  - `1841–1855` 16.2 The oracle: how "correct" is tested
-  - `1856–1877` 16.3 The model — header + lines, not legs
-  - `1878–1897` 16.4 Deliberately simpler than ERPNext
-  - `1898–1964` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1965–1989` 16.6 What v1 already gets right — preserve the intent
-  - `1990–2011` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2012–2026` 16.8 What v1's accounting already gets right
-  - `2027–2070` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2071–2121` 16.10 Posting patterns — one canonical pattern per business event
-  - `2122–2153` 16.11 Inventory's accounting integration
+- `1329–1621` 13. Decision log
+- `1622–1641` 14. Amendment protocol
+- `1642–1646` 15. Engineering standards — the industry practices this project follows
+  - `1647–1652` 15.1 Build order: walking skeleton first
+  - `1653–1664` 15.2 Golden-master testing — the most important practice here
+  - `1665–1673` 15.3 Strangler Fig, not big-bang cutover
+  - `1674–1678` 15.4 No dual-write
+  - `1679–1687` 15.5 Expand/contract migrations
+  - `1688–1696` 15.6 Observability from day zero, not later
+  - `1697–1701` 15.7 CI gates
+  - `1702–1706` 15.8 Backups and a tested restore
+  - `1707–1711` 15.9 Twelve-Factor config
+  - `1712–1719` 15.10 Append-only ledgers — but not event sourcing
+  - `1720–1724` 15.11 Defence in depth
+  - `1725–1753` 15.12 Skills are lenses, not assurance
+  - `1754–1760` 15.13 Reconciliation is a permanent feature
+- `1761–1765` 16. The accounting spine
+  - `1766–1797` 16.0 What we are actually fixing — the diagnosis
+  - `1798–1841` 16.1 The ten invariants — non-negotiable
+  - `1842–1856` 16.2 The oracle: how "correct" is tested
+  - `1857–1878` 16.3 The model — header + lines, not legs
+  - `1879–1898` 16.4 Deliberately simpler than ERPNext
+  - `1899–1965` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1966–1990` 16.6 What v1 already gets right — preserve the intent
+  - `1991–2012` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2013–2027` 16.8 What v1's accounting already gets right
+  - `2028–2071` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2072–2122` 16.10 Posting patterns — one canonical pattern per business event
+  - `2123–2154` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1617,6 +1617,7 @@ just a patch.**
 
 | 283 | 2026-10-06 | ⭐ **v1 OWNS THE GOAL, NEVER THE METHOD — AND v2 MAY REDESIGN, SCREENS INCLUDED, WHEREVER THE RESULT IS MORE USER-FRIENDLY. EVERY v2 DESIGN RUNS `/research-evaluate-propose` FIRST.** Ian, 2026-10-06: *"in designing v2 employ /research-evaluate-propose , build it in premise that when i build v1 i know what the goal is but i dont know how will it be achieved so my ways and techniques in v1 can always be improved corrected provided it will give the user desired result at most efficient and effective way. redesigning is allowed just make it user friendly"*; and: *"meaning if there is better way to do things its welcome"*. **Three rules.** (1) **Every v2 design pass (discovery doc, task spec, phase plan) invokes the `research-evaluate-propose` skill** before planning: the goal written down, the effort weighed against the payoff in numbers, the industry pattern and existing solutions researched (row 163, §1.2d). (2) **v1's ways and techniques are never a constraint**, only evidence of the goal: the bar is the user's desired result, delivered most efficiently and effectively (strengthens §1.2b and §1.2d step 4). (3) ⭐ **Redesign is allowed, including screens and interaction, judged by user-friendliness for the staff who use it.** This LOOSENS §1.2c's *"familiar, not reinvented"* and row 269's *"UI and interaction are copied"* for POS/CUSTOMER: familiarity becomes one input to user-friendliness, not the floor. Unchanged: §1.2d's completeness guarantee (no v1 capability silently dropped; removing one is still Ian's call), one visual family across the apps (§1.2c), and correct accounting (§1.3). ⚠️ Orchestrator's caveat, raised once: at the till, staff fluency IS user-friendliness during a rush, so a redesigned POS screen states what it saves the cashier and goes before Ian as a mock-up before it is built. | Ian's premise: he built v1 knowing the goal but not the best way to reach it, so v1's methods are a first attempt, not a spec | Yes — a redesigned screen already built can be redesigned again on the same test |
 | 284 | 2026-10-07 | **LIPA IS LINKED TO POS v1 ON MONDAY 12 OCTOBER 2026 (T-375, the first production link).** Ian, 2026-10-07: *"link lipa on monday"*, after Lipa's 90-day census returned GATE PASS (T-375 S0: 90/90 days, every refusal count 0; methods Bank Transfer, Cash, Gcash, QRPH; charges on 64 days). Before the link: the push carrying T-379/T-380 S1a lands on production, and Lipa's four POS payment methods are mapped to money accounts on erp2 with Ian. From that business date Lipa's sales days come only from the POS import (0185's lock); earlier days stay typed. | A Monday start keeps a sales week from coming from two sources | Yes — linking is per store, and a store can be re-planned before the link is made |
+| 285 | 2026-10-08 | **A GUARDED POS UNLINK (T-382, migration 0187).** R1 soft unlink: three columns on the link row, never a delete. R3 an unlink refuses while the store has an unverified imported day. R6 new capability `unlink_store_from_pos`, super-admin only, backfilled to existing owners (R6a, 0166 pattern). R7 a usage pull on an imported day no longer needs a live link. R8 relink is an UPDATE of the same row. R9 DROPPED (a POS id stays held by an unlinked store: freeing it would let another store book the same sales twice). R9a a correction or recheck on a day imported under an earlier link refuses after a relink. "Linked" now means a LIVE link row | Delete the link row plus an audit row (needs a DELETE grant 0183 left out and loses who/when/why on the screen); partial UNIQUE on live links (double import) | docs/tasks/382-pos-store-unlink.md; Ian, `t375-unlink-safety`, 2026-10-07 |
 
 ## 14. Amendment protocol
 
