@@ -52,8 +52,8 @@ async function untilRedirect(run: () => Promise<unknown>) {
 async function runAll() {
   await untilRedirect(() => supplier.recordReturnAction(fd({ storeId: 's', supplierId: 'x', itemId: 'i', itemKind: 'raw_material', locationId: 'l', quantity: '1', reason: 'r' })));
   await untilRedirect(() => supplier.refundCreditAction(fd({ storeId: 's', supplierId: 'x', moneyAccountId: 'm', amount: '1.00' })));
-  await customer.recordReturnAction(fd({ tradeOrderId: 't', tradeOrderLineId: 'l', quantity: '1', reason: 'r' }));
-  await customer.applyCreditAction(fd({ tradeOrderId: 't', moneyAccountId: 'm', amount: '1.00' }));
+  await untilRedirect(() => customer.recordReturnAction(fd({ tradeOrderId: 't', tradeOrderLineId: 'l', quantity: '1', reason: 'r' })));
+  await untilRedirect(() => customer.applyCreditAction(fd({ tradeOrderId: 't', moneyAccountId: 'm', amount: '1.00' })));
 }
 
 beforeEach(() => {

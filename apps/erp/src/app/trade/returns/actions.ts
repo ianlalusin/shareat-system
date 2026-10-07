@@ -24,6 +24,14 @@ function back(params: Record<string, string>): never {
   redirect(`/trade/returns?${new URLSearchParams(params).toString()}`);
 }
 
+const RETURN_OK: Record<string, string> = {
+  cash_refund: 'Return recorded. The refund was paid out.',
+  reduce_ar: 'Return recorded. It comes off what the customer owes.',
+  store_credit: 'Return recorded. The customer has it as store credit.',
+  mixed: 'Return recorded. Part comes off what the customer owes; the rest is store credit.',
+  reverse_transfer: 'Return recorded. The transfer to the branch is reversed.',
+};
+
 export async function recordReturnAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/trade/returns');
   const tradeOrderId = str(fd, 'tradeOrderId');
@@ -34,20 +42,28 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
   const refund = str(fd, 'refund') === 'true';
   const moneyAccountId = str(fd, 'moneyAccountId') || null;
 
-  const result = await withOrgPrincipal(actor.orgId, (tx) =>
-    recordCustomerReturn(tx, {
-      tradeOrderId,
-      returnedOn: toBusinessDate(),
-      reason,
-      lines: [{ tradeOrderLineId, quantity: qty, saleable }],
-      refund,
-      moneyAccountId,
-      actor,
-    }),
-  );
-  if (!result.ok) throw new Error(result.reason);
+  const store = str(fd, 'store');
+  const keep: Record<string, string> = store ? { store } : {};
+  let result: Awaited<ReturnType<typeof recordCustomerReturn>>;
+  try {
+    result = await withOrgPrincipal(actor.orgId, (tx) =>
+      recordCustomerReturn(tx, {
+        tradeOrderId,
+        returnedOn: toBusinessDate(),
+        reason,
+        lines: [{ tradeOrderLineId, quantity: qty, saleable }],
+        refund,
+        moneyAccountId,
+        actor,
+      }),
+    );
+  } catch (err) {
+    back({ ...keep, error: errorMessage(err) });
+  }
+  if (!result!.ok) back({ ...keep, error: errorMessage(new Error(result!.reason)) });
 
   revalidatePath('/trade/returns');
+  back({ ...keep, ok: RETURN_OK[result!.settlement] ?? 'Return recorded.' });
 }
 
 export async function voidReturnAction(fd: FormData): Promise<void> {
@@ -78,15 +94,23 @@ export async function applyCreditAction(fd: FormData): Promise<void> {
   const moneyAccountId = str(fd, 'moneyAccountId');
   const amount = str(fd, 'amount');
 
-  const result = await withOrgPrincipal(actor.orgId, (tx) =>
-    applyCredit(tx, actor, {
-      tradeOrderId,
-      amount,
-      collectionDate: toBusinessDate(),
-      moneyAccountId,
-    }),
-  );
-  if (!result.ok) throw new Error(result.reason ?? 'credit application refused');
+  const store = str(fd, 'store');
+  const keep: Record<string, string> = store ? { store } : {};
+  let result: Awaited<ReturnType<typeof applyCredit>>;
+  try {
+    result = await withOrgPrincipal(actor.orgId, (tx) =>
+      applyCredit(tx, actor, {
+        tradeOrderId,
+        amount,
+        collectionDate: toBusinessDate(),
+        moneyAccountId,
+      }),
+    );
+  } catch (err) {
+    back({ ...keep, error: errorMessage(err) });
+  }
+  if (!result!.ok) back({ ...keep, error: errorMessage(new Error(result!.reason ?? 'The credit could not be applied.')) });
 
   revalidatePath('/trade/returns');
+  back({ ...keep, ok: 'Credit applied to the order.' });
 }
