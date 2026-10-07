@@ -131,7 +131,7 @@
 <div class="wrap">
 
   <header class="mast">
-    <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 6 October 2026 &middot; not launched</p>
+    <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 8 October 2026 &middot; not launched</p>
     <h1>What's Left</h1>
     <p class="answer">
       <b>The money push is closed:</b> no open money defects. Phase 2 is closed (T-316 done). Now the POS day feed: sales days from POS, before 15 November.
@@ -142,10 +142,10 @@
       <div class="count money"><div class="n">0</div><div class="l">open money defects (push closed)</div></div>
       <div class="count struct"><div class="n">21</div><div class="l">roadmap items still to build</div></div>
       <div class="count"><div class="n">9</div><div class="l">roadmap items in progress or partly done</div></div>
-      <div class="count you"><div class="n">1</div><div class="l">things only you can do</div></div>
+      <div class="count you"><div class="n">3</div><div class="l">things only you can do</div></div>
       <div class="count done"><div class="n">243</div><div class="l">roadmap tasks done</div></div>
     </div>
-    <p class="src">main pushed and deployed 6 Oct (aefdb2f) &middot; production at migration 0186 (deployed 7 Oct, d79e754) &middot; local main ahead with DEF-600 and docs &middot; next free migration 0187 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+    <p class="src">production at migration 0186 (deployed 7 Oct, d79e754) &middot; local main ahead with T-379, T-380, T-381, T-382 (migration 0187), T-338, DEF-600, pushed to wrapup/2026-10-08, NOT to main &middot; next free migration 0188 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
   </header>
 
   <div class="dates">
@@ -205,7 +205,7 @@
     <p class="lede">Found while fixing money. None posts a wrong amount today; each is small.</p>
     <div class="items">
       <div class="item y"><div class="id">DEF-585</div><div><b>Production has no fiscal period before October 2026</b>; cutover postings dated earlier would be refused. The timer is armed and seeded Oct 2026&ndash;Sep 2027.</div></div>
-      <div class="item"><div class="id">DEF-476</div><div>Typed amounts and reasons travel in page addresses. <span class="pill y">you said fix before launch</span></div></div>
+      <div class="item"><div class="id">DEF-608, 609</div><div>A supplier-return refusal says &ldquo;delivery line [hidden]&rdquo;; &ldquo;Check POS again&rdquo; still shows after a store is unlinked (it refuses safely).</div></div>
       <div class="item"><div class="id">DEF-373</div><div>The deploy gate checks that keys exist, not that they are the production keys.</div></div>
       <div class="item"><div class="id">DEF-548</div><div>The app role can still delete branch orders (an unused grant).</div></div>
       <div class="item"><div class="id">DEF-549</div><div>Commissary receipt entries have no reversal path (latent).</div></div>
@@ -219,7 +219,6 @@
       <div class="item"><div class="id">ADR-015</div><div><b>POS &amp; CUSTOMER on the shared backend:</b> copied POS after 1 Jan 2027. Planned phase.</div></div>
       <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
       <div class="item"><div class="id">POS pulls</div><div>Interim pulls rebuilt per your redesign (T-375 S5-lite, S6). At the shared backend (ADR-015 P2) the pull goes away: usage posts after verify, and refunded or voided items wait for a manager decision (your answers, bible row 282).</div></div>
-      <div class="item"><div class="id">T-338</div><div>Store readiness warns when a store has no manager.</div></div>
       <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
       <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). Done and smoked on 9008 (040e572, c5b0eac; migration 0184); on production since 6 October. Production has no float targets, so nothing to move there.</div></div>
       <div class="item"><div class="id">T-320</div><div>Access that does not come from a position. Number reserved.</div></div>
@@ -237,6 +236,8 @@
     <h2>Waiting on you</h2>
     <p class="lede">Each holds work still. Every question on the Open Questions page is answered.</p>
     <div class="items">
+      <div class="item y"><div class="id">Push to main</div><div><b>Everything since 7 Oct waits on main</b>, including the live fixes DEF-601 (voided bills set branch prices) and DEF-605 (sign-in redirect hole). Before it: migration 0187&rsquo;s three read-only checks with you (P0187b shows who gets the new unlink permission; it should be only you).</div></div>
+      <div class="item y"><div class="id">Mon 12 Oct</div><div><b>Link Lipa to POS</b> (runbook docs/ops/lipa-pos-link-runbook.md): map its four payment methods, then press Link. The unlink switch is the way back.</div></div>
       <div class="item y"><div class="id">HR data</div><div><b>SSS, PhilHealth, Pag-IBIG and TIN for 126 staff.</b> None on file. <span class="pill y">due 31 Oct</span></div></div>
     </div>
   </section>
@@ -277,6 +278,9 @@
           <tr><td class="n">T-377</td><td>The POS reconciliation column says &ldquo;Posted basis&rdquo;; a POS usage pull with nothing left to post is finished, so the &ldquo;no usage pull&rdquo; finding clears</td><td class="n">596, 597</td></tr>
           <tr><td class="n">T-378</td><td>A new item has no preselected unit; a super-admin can correct the unit until the item has records, then the database locks it (0186); &ldquo;sold &agrave; la carte / wholesale / bought&rdquo; survive approval</td><td class="n">598, 599, 600</td></tr>
           <tr><td class="n">T-379</td><td>A closed month refuses a discrepancy in words; customer returns answer in words; remittance runs its three checks; bills take delivery and other fees; voided bills and shared fees no longer distort branch prices</td><td class="n">564, 568&ndash;572, 575, 592, 601, 602</td></tr>
+          <tr><td class="n">T-380</td><td>No typed amount, reason or banner text in any page address: one signed one-minute message cookie, every screen converted, crafted links show nothing</td><td class="n">476, 603, 604, 605</td></tr>
+          <tr><td class="n">T-381</td><td>Two people booking the same missed month take turns; the second gets a sentence</td><td class="n">606</td></tr>
+          <tr><td class="n">T-382</td><td>A guarded unlink from POS (super-admin, reason, audit; 0187); a POS store with imported sales never links to another store</td><td class="n">607</td></tr>
         </tbody>
       </table>
     </div>
