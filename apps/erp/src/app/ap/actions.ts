@@ -5,7 +5,6 @@
  *
  * ⛔ The gates live in the services, not here — same discipline as liabilities/actions.ts.
  */
-import { redirect } from 'next/navigation';
 import { apRepo } from '@shareat/db';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 import { logger } from '@shareat/core/logger';
@@ -30,14 +29,11 @@ import { authorize } from '@shareat/auth';
 import { requireActor } from '../../lib/session';
 import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '@/lib/period-override';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(path: string, params: Record<string, string>): never {
-  redirect(`${path}?${new URLSearchParams(params).toString()}`);
 }
 
 /**
@@ -118,9 +114,9 @@ export async function editSupplierAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back(path, { error: errorMessage(err) });
+    return await redirectWithFlash(path, {}, { error: errorMessage(err) });
   }
-  back(path, { ok: 'Supplier updated.' });
+  return await redirectWithFlash(path, {}, { ok: 'Supplier updated.' });
 }
 
 export async function createSupplierAction(formData: FormData): Promise<void> {
@@ -138,9 +134,9 @@ export async function createSupplierAction(formData: FormData): Promise<void> {
     );
     id = created.id;
   } catch (err) {
-    back('/ap', { error: errorMessage(err) });
+    return await redirectWithFlash('/ap', {}, { error: errorMessage(err) });
   }
-  back('/ap', { ok: `Supplier recorded.`, supplier: id });
+  return await redirectWithFlash('/ap', { supplier: id }, { ok: `Supplier recorded.` });
 }
 
 /**
@@ -190,9 +186,9 @@ export async function recordInvoiceAction(formData: FormData): Promise<void> {
     id = result.id;
     warning = result.duplicateWarning ?? '';
   } catch (err) {
-    back('/ap', { error: errorMessage(err) });
+    return await redirectWithFlash('/ap', {}, { error: errorMessage(err) });
   }
-  back(`/ap/invoices/${id}`, warning ? { ok: 'Invoice logged.', warning } : { ok: 'Invoice logged.' });
+  return await redirectWithFlash(`/ap/invoices/${id}`, {}, warning ? { ok: 'Invoice logged.', warning } : { ok: 'Invoice logged.' });
 }
 
 /**
@@ -234,9 +230,9 @@ export async function setInvoiceLinesAction(formData: FormData): Promise<void> {
     }
     await withOrgPrincipal(actor.orgId, (tx) => setInvoiceLines(tx, actor, invoiceId, lines));
   } catch (err) {
-    back(`/ap/invoices/${invoiceId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/ap/invoices/${invoiceId}`, {}, { error: errorMessage(err) });
   }
-  back(`/ap/invoices/${invoiceId}`, { ok: 'Lines saved. Prices now feed the item history.' });
+  return await redirectWithFlash(`/ap/invoices/${invoiceId}`, {}, { ok: 'Lines saved. Prices now feed the item history.' });
 }
 
 export async function verifyInvoiceAction(formData: FormData): Promise<void> {
@@ -276,9 +272,9 @@ export async function verifyInvoiceAction(formData: FormData): Promise<void> {
       ),
     );
   } catch (err) {
-    back(`/ap/invoices/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/ap/invoices/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/ap/invoices/${id}`, { ok: 'Verified. Expenses can now be recorded against it.' });
+  return await redirectWithFlash(`/ap/invoices/${id}`, {}, { ok: 'Verified. Expenses can now be recorded against it.' });
 }
 
 export async function voidInvoiceAction(formData: FormData): Promise<void> {
@@ -289,9 +285,9 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
     if (!reason) throw new Error('Say why this invoice is being voided.');
     await withOrgPrincipal(actor.orgId, (tx) => voidInvoice(tx, actor, { invoiceId: id, reason }));
   } catch (err) {
-    back(`/ap/invoices/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/ap/invoices/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/ap/invoices/${id}`, { ok: 'Voided — every linked expense was reversed with it.' });
+  return await redirectWithFlash(`/ap/invoices/${id}`, {}, { ok: 'Voided — every linked expense was reversed with it.' });
 }
 
 export interface AutoAllocateRequest {
@@ -382,9 +378,9 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
     message = `Paid. ₱${result.allocated} allocated${compare(money(result.unallocated), ZERO) > 0 ? `, ₱${result.unallocated} to supplier advance (overpayment)` : ''}.`;
     if (result.warning) message += ` ⚠️ ${result.warning}`;
   } catch (err) {
-    back(`/ap/suppliers/${supplierId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/ap/suppliers/${supplierId}`, {}, { error: errorMessage(err) });
   }
-  back(`/ap/suppliers/${supplierId}`, { ok: message });
+  return await redirectWithFlash(`/ap/suppliers/${supplierId}`, {}, { ok: message });
 }
 
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -418,7 +414,7 @@ export async function voidPaymentAction(formData: FormData): Promise<void> {
     });
     message = `Payment${voided ? ` of ${formatMoney(money(voided))}` : ''} voided — reversed, not deleted. The bills it paid are owed again.`;
   } catch (err) {
-    back(returnTo, { error: errorMessage(err) });
+    return await redirectWithFlash(returnTo, {}, { error: errorMessage(err) });
   }
-  back(returnTo, { ok: message });
+  return await redirectWithFlash(returnTo, {}, { ok: message });
 }

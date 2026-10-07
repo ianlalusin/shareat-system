@@ -10,6 +10,7 @@ import { postPosCorrectionAction, recheckPosDayAction, reimportSalesDayAction, s
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,7 @@ export default async function SalesDayDetailPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
 
   const { actor } = await requireSession(`/sales-days/${id}`);
   const orgId = actor.orgId;

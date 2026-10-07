@@ -8,7 +8,6 @@
  * `settings/attendance/actions.ts:6-9` already states: a gate here would protect only this one
  * caller, and the screen would be one new form away from a hole.
  */
-import { redirect } from 'next/navigation';
 import {
   createCategory,
   renameCategory,
@@ -18,14 +17,11 @@ import {
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(params: Record<string, string>): never {
-  redirect(`/settings/expense-categories?${new URLSearchParams(params).toString()}`);
 }
 
 export async function setCategoryAccountAction(formData: FormData): Promise<void> {
@@ -44,9 +40,9 @@ export async function setCategoryAccountAction(formData: FormData): Promise<void
       setCategoryAccount(tx, actor, { categoryId, accountCode }),
     );
   } catch (err) {
-    back({ error: errorMessage(err) });
+    return await redirectWithFlash('/settings/expense-categories', {}, { error: errorMessage(err) });
   }
-  back({
+  return await redirectWithFlash('/settings/expense-categories', {}, {
     ok:
       accountCode === null
         ? `${label} is now unmapped — expenses in it will not post until an account is set.`
@@ -72,9 +68,9 @@ export async function createCategoryAction(formData: FormData): Promise<void> {
       createCategory(tx, actor, { group, category: name, accountCode: raw === '' ? null : raw }),
     );
   } catch (err) {
-    back({ error: errorMessage(err) });
+    return await redirectWithFlash('/settings/expense-categories', {}, { error: errorMessage(err) });
   }
-  back({
+  return await redirectWithFlash('/settings/expense-categories', {}, {
     ok:
       raw === ''
         ? `"${name}" added. It has no account yet, so expenses in it will not post until one is set.`
@@ -91,10 +87,10 @@ export async function renameCategoryAction(formData: FormData): Promise<void> {
       renameCategory(tx, actor, { categoryId, category: name }),
     );
   } catch (err) {
-    back({ error: errorMessage(err) });
+    return await redirectWithFlash('/settings/expense-categories', {}, { error: errorMessage(err) });
   }
   // ⚠️ Stated plainly: a rename does not touch history, because `expenses.category_id` is an id.
-  back({ ok: `Renamed to "${name}". Everything already recorded in it stays where it is.` });
+  return await redirectWithFlash('/settings/expense-categories', {}, { ok: `Renamed to "${name}". Everything already recorded in it stays where it is.` });
 }
 
 export async function setCategoryActiveAction(formData: FormData): Promise<void> {
@@ -107,9 +103,9 @@ export async function setCategoryActiveAction(formData: FormData): Promise<void>
       setCategoryActive(tx, actor, { categoryId, isActive }),
     );
   } catch (err) {
-    back({ error: errorMessage(err) });
+    return await redirectWithFlash('/settings/expense-categories', {}, { error: errorMessage(err) });
   }
-  back({
+  return await redirectWithFlash('/settings/expense-categories', {}, {
     ok: isActive
       ? `${label} is available again.`
       : `${label} is retired. It stays on every expense already recorded in it, and stops being offered for new ones.`,

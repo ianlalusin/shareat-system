@@ -6,6 +6,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { PosReconciliationCard } from '@/components/reports/PosReconciliationCard';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'POS Reconciliation — Shareat System' };
 
@@ -27,7 +28,7 @@ export default async function PosReconciliationPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
 
   const scope = await reportScope('/reports/pos-reconciliation', 'view_financial_reports', sp.store);
   const orgId = scope.actor.orgId;
@@ -67,6 +68,13 @@ export default async function PosReconciliationPage({
           sales-day record. Nothing here calls POS: the check button below stores a fresh reading.
         </PageDescription>
       </div>
+
+      {/* DEF-604: a refused recheck comes back to this page; its sentence arrives in the flash. */}
+      {sp.error && (
+        <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          <strong className="font-medium">Refused:</strong> {sp.error}
+        </div>
+      )}
 
       <form
         method="GET"

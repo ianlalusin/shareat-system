@@ -7,8 +7,8 @@
  * decide (the commissary, never the branch), that resolution is terminal, and that a charge must
  * name a person; the DATABASE owns defer-once. This file authorises, calls, and reports back.
  */
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { redirectWithFlash } from '@/lib/flash';
 import { authorize } from '@shareat/auth';
 
 import { toBusinessDate } from '@shareat/core/datetime';
@@ -20,12 +20,6 @@ import { withOrgPrincipal } from '../../expenses/lib';
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(storeId: string, error?: string): never {
-  const qs = new URLSearchParams({ store: storeId });
-  if (error) qs.set('error', error);
-  redirect(`/commissary/discrepancies?${qs.toString()}`);
 }
 
 export async function resolveDiscrepancyAction(fd: FormData): Promise<void> {
@@ -58,15 +52,15 @@ export async function resolveDiscrepancyAction(fd: FormData): Promise<void> {
   } catch (error) {
     // T-379 S1 (DEF-575 / DEF-570): a thrown refusal (an authorization, a closed month at the database) is a sentence on
     // the page, never an error boundary - and through `errorMessage`, so no uuid reaches the URL.
-    back(storeId, errorMessage(error));
+    return await redirectWithFlash('/commissary/discrepancies', { store: storeId }, { error: errorMessage(error) });
   }
 
   // ⚠️ A refusal is a real answer here, not an exception — *"already resolved as loss"*, *"the
   // branch reports, it does not decide"*. Shown on the page rather than thrown into an error
   // boundary, because the reader's next move depends on which one it was.
-  if (!result.ok) back(storeId, outcomeMessage(result));
+  if (!result.ok) return await redirectWithFlash('/commissary/discrepancies', { store: storeId }, { error: outcomeMessage(result) });
   revalidatePath('/commissary/discrepancies');
-  back(storeId);
+  return await redirectWithFlash('/commissary/discrepancies', { store: storeId });
 }
 
 export async function deferDiscrepancyAction(fd: FormData): Promise<void> {
@@ -89,10 +83,10 @@ export async function deferDiscrepancyAction(fd: FormData): Promise<void> {
     // rather than a returned reason. Catching it here is what turns v1's rule into a sentence the
     // manager reads instead of a stack trace: *"decide it."*
     const message = error instanceof Error ? error.message : String(error);
-    back(storeId, message.includes('already deferred') ? message : `Could not defer: ${message}`);
+    return await redirectWithFlash('/commissary/discrepancies', { store: storeId }, { error: message.includes('already deferred') ? message : `Could not defer: ${message}` });
   }
 
-  if (!result.ok) back(storeId, result.reason);
+  if (!result.ok) return await redirectWithFlash('/commissary/discrepancies', { store: storeId }, { error: result.reason });
   revalidatePath('/commissary/discrepancies');
-  back(storeId);
+  return await redirectWithFlash('/commissary/discrepancies', { store: storeId });
 }

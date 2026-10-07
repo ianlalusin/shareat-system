@@ -9,6 +9,7 @@ import { SalesDayForm, type SalesDayDefaults } from '../../SalesDayForm';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Edit sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,7 @@ export default async function EditSalesDayPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/sales-days/${id}/edit`);
   const orgId = actor.orgId;
 

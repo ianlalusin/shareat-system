@@ -8,20 +8,16 @@
  * `settings/attendance/actions.ts:6-9` already states: a gate here would protect only this one
  * caller, and the screen would be one new form away from a hole.
  */
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { setWastageMonitor } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(storeId: string, params: Record<string, string>): never {
-  redirect(`/settings/wastage-monitor?${new URLSearchParams({ store: storeId, ...params }).toString()}`);
 }
 
 export async function setWastageMonitorAction(fd: FormData): Promise<void> {
@@ -36,11 +32,11 @@ export async function setWastageMonitorAction(fd: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) => setWastageMonitor(tx, actor, { storeId, personId }));
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/wastage-monitor', { store: storeId }, { error: errorMessage(err) });
   }
   revalidatePath('/settings/wastage-monitor');
   revalidatePath('/wastage');
-  back(storeId, {
+  return await redirectWithFlash('/settings/wastage-monitor', { store: storeId }, {
     ok:
       personId === null
         ? 'Nobody is named now. A wasted order recorded here will have no one answering for it, ' +

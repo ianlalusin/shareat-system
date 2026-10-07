@@ -7,6 +7,7 @@ import { SUPPLIER_CLASSIFICATIONS, SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES } fr
 import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL } from '../../lib';
 import { Page } from '@/components/shell/Page';
 import { AutoAllocatePaymentForm } from './AutoAllocatePaymentForm';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Supplier — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -26,7 +27,7 @@ export default async function SupplierDetailPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/ap/suppliers/${id}`);
   const orgId = actor.orgId;
 

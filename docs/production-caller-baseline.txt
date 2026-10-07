@@ -92,7 +92,6 @@ seedCanonicalPositions
 setCostBasisItem
 setItemPricing
 setTillFloat
-splitReturnTo
 sumTender
 summarizeConversions
 tablesWithScope

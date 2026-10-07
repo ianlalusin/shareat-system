@@ -6,7 +6,6 @@
  * ⛔ The gate is `manage_recurring_expenses`, inside the service. A gate in a server action
  * protects one caller.
  */
-import { redirect } from 'next/navigation';
 import {
   createRecurringTemplate,
   deleteRecurringTemplate,
@@ -17,14 +16,11 @@ import type { RecurringInterval } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(storeId: string, params: Record<string, string>): never {
-  redirect(`/expenses/recurring?${new URLSearchParams({ store: storeId, ...params }).toString()}`);
 }
 
 export async function createTemplateAction(formData: FormData): Promise<void> {
@@ -50,9 +46,9 @@ export async function createTemplateAction(formData: FormData): Promise<void> {
     // that silently starts next month instead of this one is the defect this sentence prevents.
     message = `Template saved. First due ${result.nextDueDate}.`;
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/expenses/recurring', { store: storeId }, { error: errorMessage(err) });
   }
-  back(storeId, { ok: message });
+  return await redirectWithFlash('/expenses/recurring', { store: storeId }, { ok: message });
 }
 
 export async function updateTemplateAction(formData: FormData): Promise<void> {
@@ -75,9 +71,9 @@ export async function updateTemplateAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/expenses/recurring', { store: storeId }, { error: errorMessage(err) });
   }
-  back(storeId, { ok: 'Template updated.' });
+  return await redirectWithFlash('/expenses/recurring', { store: storeId }, { ok: 'Template updated.' });
 }
 
 export async function setTemplateStatusAction(formData: FormData): Promise<void> {
@@ -89,9 +85,9 @@ export async function setTemplateStatusAction(formData: FormData): Promise<void>
       setRecurringTemplateStatus(tx, actor, { templateId: str(formData, 'templateId'), status }),
     );
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/expenses/recurring', { store: storeId }, { error: errorMessage(err) });
   }
-  back(storeId, {
+  return await redirectWithFlash('/expenses/recurring', { store: storeId }, {
     ok:
       status === 'paused'
         ? 'Paused. It keeps its history and stops coming due.'
@@ -107,7 +103,7 @@ export async function deleteTemplateAction(formData: FormData): Promise<void> {
       deleteRecurringTemplate(tx, actor, { templateId: str(formData, 'templateId') }),
     );
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/expenses/recurring', { store: storeId }, { error: errorMessage(err) });
   }
-  back(storeId, { ok: 'Template deleted — it had never produced anything.' });
+  return await redirectWithFlash('/expenses/recurring', { store: storeId }, { ok: 'Template deleted — it had never produced anything.' });
 }

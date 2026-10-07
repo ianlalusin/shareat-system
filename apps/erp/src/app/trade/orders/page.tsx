@@ -6,6 +6,7 @@ import { STATUS_LABEL, listStores, orderFormData, orderRegister, peso, today } f
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Trade orders — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,7 @@ interface SearchParams {
 }
 
 export default async function TradeOrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/trade/orders');
   const stores = await listStores(actor.orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;

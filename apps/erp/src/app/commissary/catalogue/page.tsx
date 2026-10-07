@@ -15,6 +15,7 @@ import { selectDefaultCommissaryStoreId } from './default-store';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Commissary catalogue — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,7 @@ const BTN_SM =
   'rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 export default async function CommissaryCataloguePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const session = await requireSession('/commissary/catalogue');
   const { actor } = session;
   const stores = await listStores(actor.orgId);

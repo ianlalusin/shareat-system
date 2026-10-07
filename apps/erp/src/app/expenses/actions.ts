@@ -16,7 +16,6 @@
  * judged or any row (an invoice, a store's money sources, a supplier) is read; the domain gate
  * inside `createExpense` / `recordExpenseForInvoice` is unchanged and still decides.
  */
-import { redirect } from 'next/navigation';
 import {
   approveExpense,
   createExpense,
@@ -36,6 +35,7 @@ import { loadMoneyLines } from '@/lib/money-lines/load';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { authorize, type Actor, type Capability } from '@shareat/auth';
+import { redirectWithFlash, splitReturnTo, type Nav } from '@/lib/flash';
 
 /**
  * ⭐ Screen-local, deliberately — T-266, migration 0141, and the same reasoning `till/actions.ts`
@@ -74,12 +74,11 @@ function str(fd: FormData, key: string): string {
 /** Every action ends up back on a page carrying `org`/`store`/`as` (the "acting as"
  *  filter state the reports screens already use for org/store) so the picker state
  *  survives the round trip. */
-/** Only filter state travels in the URL now — the org and the person come from the session. */
-function carryQs(fd: FormData): string {
-  const params = new URLSearchParams();
+/** Only filter state travels in the URL now — the org and the person come from the session. `redirectWithFlash`
+ *  keeps the value only if it is a uuid, so a typed `storeId` never reaches the address (T-380). */
+function carryNav(fd: FormData): Nav {
   const store = str(fd, 'storeId');
-  if (store) params.set('store', store);
-  return params.toString();
+  return store ? { store } : {};
 }
 
 interface ParsedExpenseForm {
@@ -89,8 +88,11 @@ interface ParsedExpenseForm {
   categoryId: string;
   particulars: string;
   payments: { method: ExpensePaymentMethod; amount: string; staffId?: string; cashRequestId?: string; moneyAccountId?: string }[];
-  returnTo: string;
-  qs: string;
+  /** The same-app path the form came from (DEF-603: never the raw `returnTo`), and the nav to take back to it. */
+  returnPath: string;
+  returnNav: Nav;
+  /** The success page's nav: the form's own store. */
+  carry: Nav;
 }
 
 /**
@@ -121,12 +123,13 @@ async function parseExpenseForm(
     for (const c of capabilities) await authorize(tx, actor, c, { storeId });
   });
 
-  const qs = carryQs(formData);
+  const carry = carryNav(formData);
   // ⭐ Each form names where it actually lives (`/expenses/new` or `/ap/invoices/[id]`) — a
   // hardcoded error redirect back to one screen silently drops the other caller onto the wrong
   // page with every field wiped (caught in the browser, not by a test: an overdraft rejection
   // while smoketesting the embedded form). `fallbackReturnTo` only covers a form that omitted it.
-  const returnTo = str(formData, 'returnTo') || fallbackReturnTo;
+  // DEF-603: `returnTo` is form-supplied. Only a same-app pathname and uuid-shaped nav keys survive; anything else is the fallback.
+  const returned = splitReturnTo(str(formData, 'returnTo'), fallbackReturnTo);
 
   const categoryId = str(formData, 'categoryId');
   let supplierId = str(formData, 'supplierId');
@@ -212,7 +215,7 @@ async function parseExpenseForm(
     moneyAccountId: l.moneyAccountId || undefined,
   }));
 
-  return { storeId, supplierId, supplierInvoiceId, categoryId, particulars, payments, returnTo, qs };
+  return { storeId, supplierId, supplierInvoiceId, categoryId, particulars, payments, returnPath: returned.path, returnNav: { ...returned.nav, ...carry }, carry };
 }
 
 /**
@@ -233,9 +236,8 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
   try {
     parsed = await parseExpenseForm(formData, actor, '/expenses/new', ['create_expense']);
   } catch (err) {
-    const qs = carryQs(formData);
-    const returnTo = str(formData, 'returnTo') || '/expenses/new';
-    redirect(`${returnTo}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    const returned = splitReturnTo(str(formData, 'returnTo'), '/expenses/new');
+    return await redirectWithFlash(returned.path, { ...returned.nav, ...carryNav(formData) }, { error: errorMessage(err) });
   }
 
   let newId: string;
@@ -253,9 +255,9 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
     );
     newId = result.id;
   } catch (err) {
-    redirect(`${parsed.returnTo}?${parsed.qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(parsed.returnPath, parsed.returnNav, { error: errorMessage(err) });
   }
-  redirect(`/expenses/${newId}?${parsed.qs}`);
+  return await redirectWithFlash(`/expenses/${newId}`, parsed.carry);
 }
 
 /**
@@ -271,9 +273,8 @@ export async function recordExpenseForInvoiceAction(formData: FormData): Promise
   try {
     parsed = await parseExpenseForm(formData, actor, '/ap', ['create_expense', 'approve_expense']);
   } catch (err) {
-    const qs = carryQs(formData);
-    const returnTo = str(formData, 'returnTo') || '/ap';
-    redirect(`${returnTo}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    const returned = splitReturnTo(str(formData, 'returnTo'), '/ap');
+    return await redirectWithFlash(returned.path, { ...returned.nav, ...carryNav(formData) }, { error: errorMessage(err) });
   }
 
   let newId: string;
@@ -304,15 +305,15 @@ export async function recordExpenseForInvoiceAction(formData: FormData): Promise
     );
     newId = result.expenseId;
   } catch (err) {
-    redirect(`${parsed.returnTo}?${parsed.qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(parsed.returnPath, parsed.returnNav, { error: errorMessage(err) });
   }
-  redirect(`/expenses/${newId}?${parsed.qs}`);
+  return await redirectWithFlash(`/expenses/${newId}`, parsed.carry);
 }
 
 export async function approveExpenseAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const expenseId = str(formData, 'expenseId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
 
   try {
     // T-369 S5b (DEF-314): the closed-month override is forwarded only when the EXPENSE's own date (read here,
@@ -333,23 +334,23 @@ export async function approveExpenseAction(formData: FormData): Promise<void> {
       approveExpense(tx, actor, expenseId, periodOverride ? { periodOverride } : undefined),
     );
   } catch (err) {
-    redirect(`/expenses/${expenseId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err) });
   }
-  redirect(`/expenses/${expenseId}?${qs}`);
+  return await redirectWithFlash(`/expenses/${expenseId}`, nav);
 }
 
 export async function voidExpenseAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const expenseId = str(formData, 'expenseId');
   const reason = str(formData, 'reason');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
 
   try {
     await withOrgPrincipal(actor.orgId, (tx) => voidExpense(tx, actor, expenseId, reason));
   } catch (err) {
-    redirect(`/expenses/${expenseId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err) });
   }
-  redirect(`/expenses/${expenseId}?${qs}`);
+  return await redirectWithFlash(`/expenses/${expenseId}`, nav);
 }
 
 /** The one edit surface this UI exposes: category, particulars and the receipt photo —
@@ -361,7 +362,7 @@ export async function voidExpenseAction(formData: FormData): Promise<void> {
 export async function updateDraftAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const expenseId = str(formData, 'expenseId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
 
   const categoryId = str(formData, 'categoryId');
   const particulars = str(formData, 'particulars');
@@ -374,9 +375,9 @@ export async function updateDraftAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    redirect(`/expenses/${expenseId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err) });
   }
-  redirect(`/expenses/${expenseId}?${qs}`);
+  return await redirectWithFlash(`/expenses/${expenseId}`, nav);
 }
 
 /** Deleting a DRAFT — Ian 2026-08-25: "delete for simplicity." Redirects to the LIST, not
@@ -385,12 +386,12 @@ export async function updateDraftAction(formData: FormData): Promise<void> {
 export async function deleteDraftAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const expenseId = str(formData, 'expenseId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
 
   try {
     await withOrgPrincipal(actor.orgId, (tx) => deleteExpenseDraft(tx, actor, expenseId));
   } catch (err) {
-    redirect(`/expenses/${expenseId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err) });
   }
-  redirect(`/expenses?${qs}`);
+  return await redirectWithFlash('/expenses', nav);
 }
