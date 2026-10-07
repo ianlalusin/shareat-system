@@ -1,6 +1,7 @@
 # T-382: a guarded POS unlink — super-admin only, with a reason, audited; imported days stay as they are
 
-**Status:** SPEC 2026-10-08 (Opus planner). Written at HEAD `9e89a0b`, lane `lane/t382-unlink`. Not yet reviewed.
+**Status:** SPEC 2026-10-08 (Opus planner). Written at HEAD `9e89a0b`, lane `lane/t382-unlink`. ✎REV 2026-10-08: independently reviewed, APPROVE WITH CHANGES (see "Independent review"
+below; REV-1 to REV-7 bind the builder).
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
 **Migration:** **0187**, hand-authored per ADR-012 §5, gated on the FULL suite on a fresh gate DB (memory: a CHECK /
 trigger migration is gated on the full suite). Prechecks go in `docs/ops/README.md` before the push.
@@ -97,6 +98,70 @@ No raw SQL anywhere else names the table (grep of `packages/db/src`, `packages/d
 - `/settings/pos-link`: `page.tsx` `StoreCard` (`:74-167`) shows "Not linked — sales are typed" or the link, one link
   form, then tenders. `actions.ts` still uses `?error=`/`?ok=` (`back()`, `:23-25`); **T-380 S4 converts this file**
   to `redirectWithFlash` (`apps/erp/src/lib/flash.ts:208`).
+
+## Independent review, 2026-10-08 (✎REV). Verdict: APPROVE WITH CHANGES; the builder applies REV-1 to REV-7 first
+Ranked. Every file:line was re-read at `0ab632c`.
+- **✎REV-1 (HIGH, money). R9 reopens the double import that 0183:38 exists to stop.** Store A imports and verifies
+  days from `P1`, then is unlinked. Store B links `P1` (R9 allows it), then imports a date A already holds. Nothing in
+  `runImport` (`import.ts:162-198`) looks at another store's days, so the same POS sales are booked twice. The same
+  happens when A relinks to a `P2` that B used before. **Cut for Monday: drop R9.** Keep the full UNIQUE, and keep
+  `getLinkByPosStoreId` UNFILTERED so the refusal names the unlinked store (*"That POS store is still held by {store},
+  which was unlinked. Link {store} to its own POS store first."*). Relinking the same store is an UPDATE, so it is
+  unaffected. D5 then tests that the full UNIQUE holds against an unlinked row. A later R9 needs an import guard:
+  refuse a date when a non-voided feed day of another store came from the same `pos_store_id`.
+- **✎REV-2 (HIGH, money). After a relink, S6 corrections reopen on days imported before the unlink, derived with the
+  NEW link.** `correction.ts:123-135` reads the current link and derives with `taxType: link.posTaxType` and the
+  current tenders. After a relink, the next import runs `recheckRecentDays` (`v1-recheck.ts:142`, every verified
+  feed day, whatever link it came under). If POS changed one of those days, that raises drift, and a manager can
+  correct an imported day under a tax type it was never sold under. That breaks Goal line 15 ("can't be corrected").
+  Fix (S2, `correction.ts` added to S2's files): refuse when the basis feed's `posStoreId` differs from the link's,
+  or when the basis was fetched before the link's last relink (`link.updatedAt`). Use the unlinked sentence. Test
+  U12: unlink, relink to `P2`, then correct an old `P1` day: refused, no entry. Mutant: the guard dropped → red.
+- **✎REV-3 (HIGH, lockout). The R6a backfill runs on a FORCE RLS table.** `person_grants` is FORCE ROW LEVEL
+  SECURITY (0014:84; 0166:55-69 explains). Under any role that does not bypass RLS, the SELECT sees zero rows and
+  grants nobody, with no error. Then every owner fails `holdsSuperAdminAuthority` once the PIN moves to five. Copy
+  0166: put `SET LOCAL row_security = off;` before the block and `SET LOCAL row_security = on;` after it, inside the
+  B0187 markers. B1 also runs the block once as a role RLS filters and expects Postgres's loud RLS error. Mutant: the
+  SET removed → red. **"The exact holdsSuperAdminAuthority set" is not accurate.** `roles.ts:211-218` also requires
+  the ACTIVE ROLE to be `admin`, and `personHasActiveGrant` (`repo/access.ts:889-905`) counts store-scoped rows too.
+  Add `AND EXISTS (an active person_roles row with role = 'admin')`, so a demoted person who still holds stray grants
+  gains nothing. P0187b must run as `doadmin`, join `persons` and `person_roles` (name, role), and drop the
+  `store_id IS NULL` filter so Ian sees every holder.
+- **✎REV-4 (MEDIUM). R5 compares only `posStoreId`.** A relink to the SAME POS id with a new tax type or channel,
+  committed during the fetch, is still derived with the old link (`import.ts:171-173`). Compare `id` and `updatedAt`
+  (`updateLink` sets it) as well as `posStoreId`, and refuse on any difference. U10(d): relink `P1` from
+  `vat_inclusive` to `non_vat` mid-fetch → refused. Mutant: compare only `posStoreId` → red.
+- **✎REV-5 (MEDIUM). R2 does not pin the function's shape, and no test anywhere does.** A grep of every `tests/`
+  finds nothing on `prosecdef` or the no-org refusal. 0187 must keep the TWO-argument signature `(p_store_id uuid,
+  p_constraint text)`. A one-argument version creates an overload, which the three callers ignore. It also keeps
+  LANGUAGE plpgsql, has NO SECURITY DEFINER, and copies the `app_current_org()` fail-closed block verbatim (0185:40-46).
+  D0: `prosecdef = false` for all three functions, and a non-bypass session with no org gets 23514 on a typed insert.
+  Mutants: SECURITY DEFINER → red; the org block dropped → red.
+- **✎REV-6 (MEDIUM, test hole). R4 also covers TENDER rows.** In 0185:129-133 a tender (`p_remitted` NULL) reaches
+  the same `RETURN flag_on AND …` line as a remitted channel row. D3 checks only the channel row, so the mutant "R4
+  only when `p_remitted` IS TRUE" survives. Add to D3: a tender INSERT and UPDATE on the open feed day of the
+  unlinked store, flag on, refused `sales_day_tenders_locked`.
+- **✎REV-7 (LOW, copy regression). R7 makes never-linked stores see the wrong sentence.** That is every store in
+  production today. After R7, the typed day of a store that was never linked gets *"typed in before it was linked to
+  POS"* (`usage-pull.ts:102-103`). Keep the old `unlinked` sentence for a typed day on a store with no LIVE link, and
+  use `typed` only while the store is linked. U11 asserts both.
+- **✎REV-8 (LOW). The lock-order claim in R5 and I4 does not match the code today.** `editSalesDay` takes the DAY
+  `FOR UPDATE` and then the store `FOR KEY SHARE` (`edit.ts:37,45`). It cannot deadlock: KEY SHARE does not conflict
+  with KEY SHARE, and nothing that takes the store `FOR UPDATE` (link, unlink) locks a day. The builder records
+  this and does not "fix" it. The unlink locks no day. Its R3 read is safe because the import keeps the store
+  `FOR KEY SHARE` until it commits.
+- **✎REV-9 (LOW, tell Ian). Void stays open after an unlink.** A manager can void a VERIFIED imported day: the
+  reversal is in `verify.ts` `runVoid`, and status is not locked by 0185. That frees the date, so a typed day can then
+  be entered there (`create-block.ts:101-117`). The imported row itself does not change; this is how a typed store
+  normally works. Say so in the confirm sentence's sense and in U2 (void is allowed, and its figures stay).
+- **✎REV-10 (LOW). Files missing from S1.** `tests/unit/capability-matrix.test.ts:199` (it counts the capability
+  rows) and `tests/unit/t337-capability-areas.test.ts` (area lists) both change when a capability is added.
+- **✎REV-11 (nit). Line numbers have drifted.** In 0185: `:36-50` is 35-49, `:49` is 47, `:102-106` is 98-107,
+  `:118-139` is 117-137. In `import.ts`: `:166` is 167. Every other cited line checks out.
+- **Prechecks:** P0187a-c are read-only and belong in the deploy-gate table of `docs/ops/README.md`, as written (S1).
+  Run them as `doadmin` (REV-3).
+- **Monday fit:** the scope fits about one day with REV-1's cut, which removes the index swap and its double-import
+  risk. S3 must be sequenced after T-380 S4. Smallest safe cut: S1 without R9 + S2 (with REV-2 and REV-4) + S3.
 
 ## Rulings (planner)
 - **R1. Soft unlink: three columns on the row, not a delete.**
