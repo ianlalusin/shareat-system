@@ -164,7 +164,31 @@ function aliasReferences(sf: ts.SourceFile, b: Bindings, exportName: string[]): 
 // ------------------------------------------------------------------------------------------------
 // G1a
 
+/** G1a on `redirectWithFlash(path, ...)`: the path must carry no query. A `+` concatenation, a template whose static
+ *  text holds `?` (or `&` after a dynamic part), or a literal with `?` builds a query by hand. */
+function g1aFlashPath(sf: ts.SourceFile, file: string, out: Finding[]): void {
+  const fl = bindingsFor(sf, (s) => FLASH_MODULE.test(s), ['redirectWithFlash']);
+  if (fl.names.size === 0 && fl.namespaces.size === 0) return;
+  const visit = (n: ts.Node): void => {
+    if (ts.isCallExpression(n) && isBoundCallee(n.expression, fl, ['redirectWithFlash']) && n.arguments[0]) {
+      const arg = unwrap(n.arguments[0]);
+      const line = lineOf(sf, n);
+      if (ts.isBinaryExpression(arg) && arg.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+        out.push({ rule: 'G1a', file, line, detail: 'redirectWithFlash path is a `+` concatenation (builds a query by hand)' });
+      } else if (ts.isTemplateExpression(arg)) {
+        const hasQ = arg.head.text.includes('?') || arg.templateSpans.some((sp) => sp.literal.text.includes('?') || sp.literal.text.includes('&'));
+        if (hasQ) out.push({ rule: 'G1a', file, line, detail: 'redirectWithFlash path is a template that builds a query string' });
+      } else if (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg)) {
+        if (arg.text.includes('?')) out.push({ rule: 'G1a', file, line, detail: 'redirectWithFlash path carries a query string' });
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+}
+
 function g1a(sf: ts.SourceFile, file: string, out: Finding[]): void {
+  g1aFlashPath(sf, file, out);
   const nav = bindingsFor(sf, (s) => s === 'next/navigation', ['redirect', 'permanentRedirect']);
   if (nav.names.size === 0 && nav.namespaces.size === 0) return;
   const exportNames = ['redirect', 'permanentRedirect'];
