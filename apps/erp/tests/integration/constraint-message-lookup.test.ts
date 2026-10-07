@@ -486,10 +486,48 @@ describe('T-378 S2 - the item unit is fixed once it has history', () => {
   });
 });
 
+// T-382 (0187) - the two unlink CHECKs on pos_v1_store_links, provoked for real (raw SQL on a freshly inserted link row).
+describe('T-382 - the unlink CHECKs', () => {
+  async function link() {
+    const code = uid('t382-lookup');
+    const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
+    const orgId = org!.id;
+    const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('store')}, 'Lipa') returning id`;
+    const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
+    const [ch] = await sql<{ id: string }[]>`insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${orgId}, ${store!.id}, 'Walk-in', true) returning id`;
+    const [row] = await sql<{ id: string }[]>`insert into pos_v1_store_links (org_id, store_id, pos_store_id, pos_store_name, sales_channel_id, pos_tax_type, created_by)
+      values (${orgId}, ${store!.id}, ${uid('pos')}, 'POS store', ${ch!.id}, 'vat_inclusive', ${person!.id}) returning id`;
+    return { linkId: row!.id, personId: person!.id };
+  }
+  const check = (key: string, err: unknown) => {
+    const row = record(key, err);
+    expect(row.constraintName).toBe(key);
+    expect(row.message).toBe(CONSTRAINT_MESSAGES[key]);
+    expect(row.message).toBe(
+      key === 'pos_v1_store_links_unlink_shape_check'
+        ? 'An unlink needs who, when and why together.'
+        : 'Say why this store is being unlinked, in under 500 characters.',
+    );
+  };
+
+  it('pos_v1_store_links_unlink_shape_check', async () => {
+    const f = await link();
+    // unlinked_at set while unlinked_by and unlink_reason stay null: the three must be all-or-nothing.
+    const err = await provoke(() => sql`update pos_v1_store_links set unlinked_at = now() where id = ${f.linkId}`);
+    check('pos_v1_store_links_unlink_shape_check', err);
+  });
+  it('pos_v1_store_links_unlink_reason_check', async () => {
+    const f = await link();
+    // all three present (shape holds) but the reason is blank, so only the reason CHECK can fire.
+    const err = await provoke(() => sql`update pos_v1_store_links set unlinked_at = now(), unlinked_by = ${f.personId}, unlink_reason = '   ' where id = ${f.linkId}`);
+    check('pos_v1_store_links_unlink_reason_check', err);
+  });
+});
+
 it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   const exercised = new Set(rows.map((r) => r.key));
   const missing = Object.keys(CONSTRAINT_MESSAGES).filter((k) => !exercised.has(k));
   expect(missing).toEqual([]);
-  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed = 37 rows provoked above.
-  expect(rows.length).toBe(37);
+  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys = 39 rows provoked above.
+  expect(rows.length).toBe(39);
 });
