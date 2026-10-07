@@ -498,6 +498,27 @@ Screenshots of 1–4, at 375px and in dark mode.
 
 ---
 
+## S4: DEF-600, the change-unit form only for those who can use it (orchestrator, 2026-10-07)
+**Found in the T-378 smoke:** `apps/erp/src/app/items/[id]/page.tsx:103-110` draws the "Change unit" form for every
+viewer; a non-super-admin's submit is refused by `changeItemBaseUnit` with the generic approve_item sentence *"Your role
+(Admin) can't approve a new item. Ask an admin…"* (wrong verb; tells an admin to ask an admin).
+**Ruling S4-R1:** the page asks the same gate the action uses, the existing pattern
+(`apps/erp/src/app/channel-settlements/page.tsx:78-89`): inside `withOrgPrincipal`, `authorize(tx, actor, 'approve_item', {})`;
+`AuthorizationError` → false; anything else rethrows. A presentation aid only: the action stays the enforcement (I1).
+Render: history → the locked sentence (unchanged); no history and may change → the form (unchanged); no history and may
+NOT change → *"Only a super-admin can change an item's unit."*, no form.
+**Ruling S4-R2:** `changeItemUnitAction` maps an `AuthorizationError` from `changeItemBaseUnit` to *"Only a super-admin can
+change an item's unit."*; every other error still goes through `errorMessage(err)`.
+**BUILDER files:** `apps/erp/src/app/items/[id]/page.tsx`, `apps/erp/src/app/items/actions.ts` (`changeItemUnitAction`
+only), `apps/erp/src/app/items/lib.ts` (only if a loader is the cleanest home). No domain, DB or capability change.
+**Tests (web, real Postgres; tester first):**
+- G1: a manager (no approve_item) on a no-history item sees no change-unit form and the sentence. Mutant: drop the gate → red.
+- G2 (control): a super-admin on the same item sees the form.
+- G3: the action as an admin without approve_item → error banner equals S4-R2's sentence, unit unchanged. Mutant: drop the
+  mapping → red (generic sentence). Mutant: catch every error → red via G4.
+- G4: a super-admin changing a unit on an item WITH history still gets the `items_base_unit_fixed` sentence (not S4-R2's).
+- Update `apps/erp/tests/action-link-sweep.test.ts` / `t343-s6c` only if the census or render mocks require it, with a dated note.
+
 ## Out of scope
 - **N1. Restating an item's history in a new unit.** This is Q1. Not built until Ian answers.
 - **N2. Editing name, code or kind on screen.** `updateItem` accepts them under `manage_items` with no screen and no
