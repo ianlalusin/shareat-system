@@ -1,6 +1,6 @@
 # T-378: an item's unit is chosen, never defaulted, and correctable until it has history; a request keeps what it is sold as
 
-**Status:** SPEC 2026-10-06 (Opus planner). Written at HEAD `4d9fbf9`. ✎REV-0 Reviewed 2026-10-06 by an independent
+**Status:** SPEC 2026-10-06 (Opus planner). Written at HEAD `4d9fbf9`. ✎REV-0 Reviewed 2026-10-06 by an independent **DONE 2026-10-07:** S1+S2 `3353c72` (0186), S3 `f6403fd`, tests caught up `f8ef329`. Full gate on fresh `shareat_test_orch_gate9`: typecheck 0, build 0, integration 5387/5389 with the 2 failures passing alone (laptop sleep) and 1 real regression fixed in `f8ef329`; unit 240/242 (two load-only flakes pass alone). Smoked on 9008: 5/5. DEF-600 logged.
 reviewer, and amended in place (✎REV-1 to ✎REV-12). Every file:line in §Research and §Census was checked against HEAD
 and holds. The C2 counts are corrected by REV-1.
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
