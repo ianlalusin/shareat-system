@@ -73,20 +73,6 @@ export const PENDING: readonly string[] = [
   'app/settings/sales-channels/page.tsx', 'app/settings/wastage-monitor/page.tsx', 'app/commissary/catalogue/page.tsx',
   'app/commissary/discrepancies/page.tsx', 'app/commissary/orders/page.tsx', 'app/commissary/orders/[id]/page.tsx',
   'app/trade/orders/page.tsx', 'app/trade/orders/[id]/page.tsx', 'app/trade/returns/page.tsx',
-  // S5
-  'app/inventory/counts/actions.ts', 'app/inventory/deliveries/actions.ts', 'app/inventory/locations/actions.ts',
-  'app/inventory/low-stock/actions.ts', 'app/inventory/pos-map/actions.ts', 'app/inventory/pos-usage/actions.ts',
-  'app/inventory/production/actions.ts', 'app/inventory/returns/actions.ts', 'app/inventory/usage/actions.ts',
-  'app/attendance/lane/actions.ts', 'app/attendance/terminals/actions.ts', 'app/attendance/[dayId]/actions.ts',
-  'app/staff/actions.ts', 'app/staff/[employmentId]/credentials/actions.ts', 'app/wastage/actions.ts',
-  'app/inventory/counts/page.tsx', 'app/inventory/counts/[id]/page.tsx', 'app/inventory/deliveries/page.tsx',
-  'app/inventory/deliveries/[id]/page.tsx', 'app/inventory/locations/page.tsx', 'app/inventory/low-stock/page.tsx',
-  'app/inventory/pos-map/page.tsx', 'app/inventory/pos-usage/page.tsx', 'app/inventory/production/page.tsx',
-  'app/inventory/production/[id]/page.tsx', 'app/inventory/returns/page.tsx', 'app/inventory/usage/page.tsx',
-  'app/inventory/usage/[id]/page.tsx', 'app/attendance/[dayId]/page.tsx', 'app/attendance/lane/page.tsx',
-  'app/attendance/terminals/page.tsx', 'app/staff/page.tsx', 'app/staff/hire/page.tsx',
-  'app/staff/[employmentId]/page.tsx', 'app/staff/[employmentId]/credentials/page.tsx', 'app/wastage/page.tsx',
-  'app/wastage/[id]/page.tsx',
   // N1: another lane
   'app/items/**',
 ];
