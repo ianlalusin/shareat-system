@@ -1,5 +1,7 @@
 # The v2 POS key — steps for Ian (row 279, T-375 Q1)
 
+> ✅ **DONE 2026-10-07 by Ian.** Secret `POS_EXTERNAL_API_KEYS_JSON` version 2 holds **Lipa only** (`L5MExycvUOfQ96Y10FqF`); version 1 (the bare key, not JSON) is superseded. POS `apphosting.yaml` declares it and the rollout is green. `POS_API_URL` / `POS_API_KEY` are on `159.223.46.224`. Step 4 returned **200**. Lesson: the first server copy did not match the secret (401); compare SHA-256 prefixes of the two copies, never the keys. To add a store: re-run step 2.2 with the longer list, then roll out POS.
+
 Ian ruled (bible row 279): **a new, store-scoped POS API key for v2**; v1's global key is not reused. Nothing can be
 linked on production until this exists. The key's value never goes in chat, a commit, or a doc.
 
