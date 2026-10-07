@@ -401,6 +401,8 @@ parent's discounts.
 ---
 
 ## S0: census of live POS data (read-only; before any production link)
+> ✅ **RUN 2026-10-07 by Ian, Lipa (`L5MExycvUOfQ96Y10FqF`), 90 days to 2026-10-06: GATE PASS.** (a) 90 days found · (e1) 0 · (e2) 0 refund days · (r) 0 · (c) 0 cap days · (d) 0 · (e) 0 · (n) 0 · (f) 4 methods with sales: Bank Transfer, Cash, Gcash, QRPH (POS lists 5 methods; one had no sales in the window) · (g) 64 days with charges > 0 (post to 4500, row 279). The 4 methods are the admin's mapping list before Lipa is linked.
+
 **Why:** R4's refusals and caps are right only if they rarely fire. T-367 S0 is the precedent.
 **BUILDER:** `scripts/pos-v1-feed-census.ts`: for `--pos-store <id>` (repeatable) and each of the last 90 days,
 `GET /api/external/sales` and `/payment-methods`; counts only, no bodies, no writes, the key never echoed:
