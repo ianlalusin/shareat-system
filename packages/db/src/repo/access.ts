@@ -462,6 +462,40 @@ export async function activeAdminPersonIds(tx: Tx, orgId: string): Promise<strin
 }
 
 /**
+ * T-338. Display names of the people who manage a store: an active `manager` role in this org, an
+ * existing `person_store_scope` row for this store (any source), and an active person. Distinct,
+ * in name order.
+ *
+ * `manager` only, deliberately: an admin scoped here does NOT count. Every active store already has
+ * every admin scoped (the `adminScope` check), so counting admins would make the readiness item
+ * always green. A revoked role, an inactive person, or another org's role never counts.
+ */
+export async function activeManagerNamesAtStore(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+): Promise<string[]> {
+  const rows = await tx
+    .selectDistinct({ name: persons.displayName })
+    .from(personRoles)
+    .innerJoin(
+      personStoreScope,
+      and(eq(personStoreScope.personId, personRoles.personId), eq(personStoreScope.storeId, storeId)),
+    )
+    .innerJoin(persons, eq(persons.id, personRoles.personId))
+    .where(
+      and(
+        eq(personRoles.orgId, orgId),
+        eq(personRoles.role, 'manager'),
+        isNull(personRoles.revokedAt),
+        eq(persons.isActive, true),
+      ),
+    )
+    .orderBy(asc(persons.displayName));
+  return rows.map((r) => r.name);
+}
+
+/**
  * True iff `personId`'s store-scope rows cover EVERY active store in `orgId` — the literal
  * mechanism CAPABILITY-MATRIX.md §Open 2 resolves the row-101/row-114 conflict with:
  * "a manager may close only if their store scope covers the whole org". An org with zero

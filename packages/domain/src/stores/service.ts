@@ -592,6 +592,8 @@ export const READINESS_REMEDY_ROUTE = {
   room: '/inventory/locations',
   salesChannel: '/settings/sales-channels',
   signIn: '/staff',
+  // T-338: a manager is a role plus a store scope, both set on the person's screen.
+  manager: '/admin/users',
 } as const;
 
 /**
@@ -616,6 +618,7 @@ export async function storeReadiness(
   }
   const channels = await storesRepo.countSalesChannels(tx, actor.orgId, store.id);
   const credentials = await storesRepo.countActiveCredentials(tx, store.id);
+  const managers = await accessRepo.activeManagerNamesAtStore(tx, actor.orgId, store.id);
   const today = await manilaToday(tx);
 
   return [
@@ -685,6 +688,21 @@ export async function storeReadiness(
       // ⚠️ No `?store=` — `/staff` takes no store param today; adding one is a behaviour change and
       // is out of scope for T-243.
       remedy: { href: READINESS_REMEDY_ROUTE.signIn, label: 'Issue a PIN from Staff →' },
+    },
+    {
+      // T-338 (Ian, 2026-09-24): manager is a role an admin assigns, never a seeded position, so a
+      // new store has none until someone remembers. A warning on purpose: a store with no manager
+      // still runs (the admin covers it), so this is NON-blocking and stays out of the banner.
+      key: 'manager',
+      label: 'A manager is assigned',
+      ok: managers.length > 0,
+      kind: 'manual',
+      blocking: false,
+      detail:
+        managers.length > 0
+          ? `Managed by ${managers.join(', ')}.`
+          : 'No manager assigned to this store. Give a person the manager role and this store in their scope, under Users and roles.',
+      remedy: { href: READINESS_REMEDY_ROUTE.manager, label: 'Assign a manager in Users and roles →' },
     },
     {
       // ⭐ T-346 S1 (DEF-428). Manual, and deliberately NON-blocking (R2.2): a store not open yet is
