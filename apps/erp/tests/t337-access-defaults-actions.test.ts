@@ -13,6 +13,7 @@
  * `toggleDefaultAction` only.
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { paramsOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -99,7 +100,7 @@ describe('R6 — toggleDefaultAction redirects with cap and pos, on success AND 
     setPositionDefault.mockResolvedValue({ affected: 1, skippedSelf: false, wroteDefault: true });
     const { toggleDefaultAction } = actions;
     const to = await expectRedirectTo(() => toggleDefaultAction(toggleFormData({ capability: 'record_sale', positionId: 'pos-cashier' })));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     // Audit finding 2: `store` must survive too — a redirect that drops it lands the admin on
     // stores[0] instead of the store they were actually working in.
     expect(params.get('store'), `redirect URL was: ${to}`).toBe('store-1');
@@ -111,7 +112,7 @@ describe('R6 — toggleDefaultAction redirects with cap and pos, on success AND 
     setPositionDefault.mockRejectedValue(new Error('may not \'grant_capability\''));
     const { toggleDefaultAction } = actions;
     const to = await expectRedirectTo(() => toggleDefaultAction(toggleFormData({ capability: 'void_sales_day', positionId: 'pos-cook' })));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('store'), `redirect URL was: ${to}`).toBe('store-1');
     expect(params.get('cap'), `redirect URL was: ${to}`).toBe('void_sales_day');
     expect(params.get('pos'), `redirect URL was: ${to}`).toBe('pos-cook');
@@ -124,7 +125,7 @@ describe('R6 — toggleDefaultAction redirects with cap and pos, on success AND 
     fd.set('storeId', 'store-1');
     fd.set('positionId', 'pos-cashier');
     const to = await expectRedirectTo(() => sameForEveryStoreAction(fd));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.has('cap'), `redirect URL was: ${to}`).toBe(false);
     expect(params.has('pos'), `redirect URL was: ${to}`).toBe(false);
   });
@@ -137,7 +138,7 @@ describe('R6 — toggleDefaultAction redirects with cap and pos, on success AND 
     fd.set('storeId', 'store-1');
     fd.set('sourceStoreId', 'store-2');
     const to = await expectRedirectTo(() => copyDefaultsAction(fd));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.has('cap'), `redirect URL was: ${to}`).toBe(false);
     expect(params.has('pos'), `redirect URL was: ${to}`).toBe(false);
   });
@@ -148,7 +149,7 @@ describe('R6 — toggleDefaultAction redirects with cap and pos, on success AND 
     fd.set('storeId', 'store-1');
     fd.set('positionId', 'pos-invented');
     const to = await expectRedirectTo(() => retireStorePositionAction(fd));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.has('cap'), `redirect URL was: ${to}`).toBe(false);
     expect(params.has('pos'), `redirect URL was: ${to}`).toBe(false);
   });

@@ -35,6 +35,7 @@ vi.mock('../../src/lib/session', () => ({
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
 
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -86,7 +87,7 @@ async function submit(f: Fixture, fd: FormData): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 const lives = async (storeId: string) =>
   (await sql<{ u: number }[]>`select useful_life_months as u from fixed_assets where store_id = ${storeId} order by created_at`).map((r) => r.u);
 const sentence = (typed: string) => `The useful life — "${typed}" is not a whole number of months from 1 to 1200.`;

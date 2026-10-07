@@ -13,6 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { paramsOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -92,7 +93,7 @@ async function outcomeOf(run: () => Promise<unknown>): Promise<{ redirect: strin
   }
 }
 const param = (to: string | null, key: string): string | null =>
-  to ? new URLSearchParams(to.split('?')[1] ?? '').get(key) : null;
+  to ? paramsOf(to).get(key) : null;
 const recordRun = async (entries: Record<string, string> = RETURN_FORM) => {
   const a = await import('../src/app/trade/returns/actions');
   return outcomeOf(() => a.recordReturnAction(form(entries)));
@@ -194,7 +195,7 @@ describe('B5 no store in the form', () => {
   it('there is no store param, on success and refusal, for both actions; control: a store is kept', async () => {
     const { store: _s1, ...noStoreReturn } = RETURN_FORM;
     const { store: _s2, ...noStoreCredit } = CREDIT_FORM;
-    const has = (to: string | null) => new URLSearchParams((to ?? '').split('?')[1] ?? '').has('store');
+    const has = (to: string | null) => paramsOf((to ?? '')).has('store');
 
     mocks.recordCustomerReturn.mockResolvedValue({ ok: true, settlement: 'reduce_ar' });
     const a = await recordRun(noStoreReturn);

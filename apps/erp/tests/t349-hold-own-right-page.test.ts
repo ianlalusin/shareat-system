@@ -17,6 +17,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { capabilityTitle } from '../../../packages/auth/src/capabilities';
+import { paramsOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -503,7 +504,7 @@ describe('A1/A2/A2e — the hold banner names the store (was red before T-349 S2
     const to = await expectRedirectTo(() =>
       actions.setCapabilityGrantAction(holdFormData({ positionGrantId: 'grant-position-a' })),
     );
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`${CAP_TITLE} is now held in their own right at SmokeStore.`);
   });
 
@@ -512,7 +513,7 @@ describe('A1/A2/A2e — the hold banner names the store (was red before T-349 S2
     const to = await expectRedirectTo(() =>
       actions.setCapabilityGrantAction(holdFormData({ positionGrantId: 'grant-position-a' })),
     );
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     const ok = params.get('ok');
     expect(ok, `redirect URL was: ${to}`).toBe(`${CAP_TITLE} is now held in their own right.`);
     expect(ok).not.toContain('null');
@@ -523,7 +524,7 @@ describe('A1/A2/A2e — the hold banner names the store (was red before T-349 S2
     const to = await expectRedirectTo(() =>
       actions.setCapabilityGrantAction(holdFormData({ positionGrantId: 'grant-position-a' })),
     );
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`${CAP_TITLE} was already held in their own right at SmokeStore.`);
   });
 
@@ -535,7 +536,7 @@ describe('A1/A2/A2e — the hold banner names the store (was red before T-349 S2
     const to = await expectRedirectTo(() =>
       actions.setCapabilityGrantAction(holdFormData({ positionGrantId: 'grant-position-a' })),
     );
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     const ok = params.get('ok');
     expect(ok, `redirect URL was: ${to}`).toBe(`${CAP_TITLE} was already held in their own right at every store they have access to.`);
     expect(ok).not.toContain('SmokeStore');
@@ -551,7 +552,7 @@ describe('A1/A2/A2e — the hold banner names the store (was red before T-349 S2
     const to = await expectRedirectTo(() =>
       actions.setCapabilityGrantAction(holdFormData({ positionGrantId: 'grant-position-a', capabilities: ['manage_fixed_assets'] })),
     );
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     const ok = params.get('ok');
     expect(ok, `redirect URL was: ${to}`).toBe(`${orgCapTitle} was already held in their own right everywhere.`);
     expect(ok, 'org/platform-scoped must never claim a store axis it does not have').not.toContain('have access to');
@@ -572,7 +573,7 @@ describe('A3 — intent=hold_own_right with no positionGrantId, or two capabilit
   it('no positionGrantId — wanted: error param, grantCapabilityAsActor not called — was red before T-349 S2: it was called anyway (field ignored), an org-wide grant', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(holdFormData()));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('error'), `redirect URL was: ${to}`).toBeTruthy();
     expect(params.has('ok'), `redirect URL was: ${to}`).toBe(false);
     expect(grantCapabilityAsActor, 'wanted: refused before any write — was red before T-349 S2: called once, org-wide').not.toHaveBeenCalled();
@@ -583,7 +584,7 @@ describe('A3 — intent=hold_own_right with no positionGrantId, or two capabilit
     const to = await expectRedirectTo(() =>
       actions.setCapabilityGrantAction(holdFormData({ positionGrantId: 'grant-position-a', capabilities: [CAP, 'record_sale'] })),
     );
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('error'), `redirect URL was: ${to}`).toBeTruthy();
     expect(params.has('ok'), `redirect URL was: ${to}`).toBe(false);
     expect(grantCapabilityAsActor, 'wanted: refused before any write — was red before T-349 S2: called twice, granted').not.toHaveBeenCalled();
@@ -608,7 +609,7 @@ describe('A4 (⛔ green now — a guard) — the ordinary picker grant (no inten
   it('grantCapabilityAsActor is called without a positionGrantId field; banner "Granted: …" names every store they have access to', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(pickerFormData()));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${CAP_TITLE}, at every store they have access to.`);
     expect(grantCapabilityAsActor).toHaveBeenCalledTimes(1);
     const callArg = grantCapabilityAsActor.mock.calls[0]?.[2] as Record<string, unknown>;

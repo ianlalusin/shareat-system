@@ -48,6 +48,7 @@ vi.mock('@shareat/domain', async (orig) => ({ ...(await orig<typeof import('@sha
 
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { linkStoreToPosAction } from '../../src/app/settings/pos-link/actions';
+import { urlOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -99,7 +100,7 @@ async function run(as: { personId: string; orgId: string }, fd: FormData): Promi
   h.actor = as;
   const err = await linkStoreToPosAction(fd).then(() => null, (e) => e);
   expect(err, 'the action ends by redirecting').toBeInstanceOf(Redirected);
-  return new URL((err as Redirected).target, 'http://x').searchParams;
+  return urlOf((err as Redirected).target).searchParams;
 }
 
 const links = (storeId: string) =>

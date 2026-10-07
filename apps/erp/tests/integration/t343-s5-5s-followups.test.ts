@@ -48,6 +48,7 @@ import type { Actor } from '@shareat/auth';
 import { closeDrawingMonth, createCashRequest, createOwner, decideCashRequest, recordChannelSettlement, releaseCashRequest, renameMoneyAccount, settleCashRequest } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -545,7 +546,7 @@ describe('Remittance line amount (DEF-470 item 7) — the comma leg is ALREADY g
     const { createRemittanceAction } = await import('../../src/app/remittance/actions');
 
     const to = await expectRedirectTo(() => createRemittanceAction(remittanceFormData(f, '1,5')));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     const error = params.get('error');
     expect(error, `redirect URL was: ${to}`).toContain('is not a valid amount. Use at most two decimal places.');
     expect(error).toMatch(/^".*": /);
@@ -565,7 +566,7 @@ describe('Remittance line amount (DEF-470 item 7) — a negative amount is silen
 
       const before = await remittanceCountFor(f.orgId);
       const to = await expectRedirectTo(() => createRemittanceAction(remittanceFormData(f, '-500')));
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
       const error = params.get('error');
       expect(error, `redirect URL was: ${to}`).toMatch(/": the amount handed over cannot be negative\.$/);
       expect(await remittanceCountFor(f.orgId), 'nothing should have been recorded').toBe(before);
@@ -945,7 +946,7 @@ describe('lineOverage_0 blank — ALREADY green: actions.ts:77 already maps blan
     const fd = remittanceFormData(f, '100.00');
     // lineOverage_0 left unset — blank, same as fd.set('lineOverage_0', '').
     const to = await expectRedirectTo(() => createRemittanceAction(fd));
-    expect(to, `expected success, got redirect: ${to}`).not.toContain('error=');
+    expect(paramsOf(to).get('error'), `expected success, got redirect: ${to}`).toBeNull();
     const [row] = await sql<{ v: string | null }[]>`
       select rl.declared_overage as v from remittance_lines rl
         join remittances r on r.id = rl.remittance_id

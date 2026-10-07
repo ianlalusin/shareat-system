@@ -31,6 +31,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // so M5 gets the REAL `goneSentence` without dragging in the real `@shareat/db`/RLS module graph
 // this file exists to avoid.
 import { goneSentence } from '../../../packages/db/src/refusal';
+import { urlOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -154,7 +155,7 @@ describe('M4 — postMessageAction decodes to the userReason, never the raw reas
       fd.set('body', 'two crates were short');
 
       const to = await expectRedirectTo(() => postMessageAction(fd));
-      const url = new URL(to, 'http://localhost');
+      const url = urlOf(to);
       const errorParam = url.searchParams.get('error');
 
       expect(errorParam).toBe(GONE_ORDER_SENTENCE);
@@ -176,7 +177,7 @@ describe('M5 — postMessageAction’s OWN order-gone guard (actions.ts:75) matc
       fd.set('body', 'two crates were short');
 
       const to = await expectRedirectTo(() => postMessageAction(fd));
-      const url = new URL(to, 'http://localhost');
+      const url = urlOf(to);
       const errorParam = url.searchParams.get('error');
 
       expect(errorParam).toBe(goneSentence('order'));
@@ -218,7 +219,7 @@ describe('M6 — postMessageAction’s OWN not-a-party guard (actions.ts:93) mat
       fd.set('body', 'two crates were short');
 
       const to = await expectRedirectTo(() => postMessageAction(fd));
-      const url = new URL(to, 'http://localhost');
+      const url = urlOf(to);
       const errorParam = url.searchParams.get('error');
 
       expect(postOrderMessage).not.toHaveBeenCalled();

@@ -56,6 +56,7 @@ import { createCustomer, createItem, createTradeOrder, dispatchTradeOrder, recei
 import { receiveDelivery } from '../../../../packages/domain/src/deliveries/receive';
 import { quantity } from '../../../../packages/domain/src/stock/quantity';
 import { resolveDiscrepancyAction } from '../../src/app/commissary/discrepancies/actions';
+import { urlOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -193,7 +194,7 @@ async function run(f: Fixture, who: Actor, fields: Record<string, string>): Prom
     await resolveDiscrepancyAction(fd);
     return { thrown: new Error('the action returned without redirecting') };
   } catch (e) {
-    if (e instanceof RedirectSignal) return { to: new URL(e.to, 'http://x') };
+    if (e instanceof RedirectSignal) return { to: urlOf(e.to) };
     return { thrown: e };
   }
 }

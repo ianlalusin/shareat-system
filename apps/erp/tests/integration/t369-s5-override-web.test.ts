@@ -62,6 +62,7 @@ import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { postEntry } from '../../../../packages/domain/src/ledger/post-entry';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -148,7 +149,7 @@ async function expectRedirectTo(run: () => Promise<unknown>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 
 function payForm(f: Fixture, o: { on: string; confirm?: boolean; reason?: string; note?: string }): FormData {
   const fd = new FormData();

@@ -75,6 +75,7 @@ import { posV1SalesBody, posV1SoldItemsBody, type PosV1SalesFigures } from '../.
 import { D1_FIGURES, D1_SOLD_ITEMS, linkTestStore, seedTestTenders } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
 import { importSalesDayAction, reimportSalesDayAction } from '../../src/app/sales-days/actions';
 import NewSalesDayPage from '../../src/app/sales-days/new/page';
+import { urlOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -160,7 +161,7 @@ async function run(as: { personId: string; orgId: string }, action: (fd: FormDat
     .then(() => action(fd))
     .then(() => null, (e) => e);
   expect(err, 'the action ends by redirecting').toBeInstanceOf(Redirected);
-  return new URL((err as Redirected).target, 'http://x');
+  return urlOf((err as Redirected).target);
 }
 const days = (storeId: string) =>
   sql<{ id: string; source: string; total_sales: string; status: string }[]>`select id, source, total_sales, status from sales_days where store_id = ${storeId} order by created_at`;

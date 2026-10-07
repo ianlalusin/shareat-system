@@ -11,6 +11,7 @@
  * Harness: `t376-s1-verify-action-drop.test.ts`.
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { paramsOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -67,7 +68,7 @@ async function submit(fields: Record<string, string>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 
 describe('RED-3 - createTenderAction never silently drops a chosen money account', () => {
   it('Kind=Cash with a money account chosen -> an error sentence, no success banner', async () => {

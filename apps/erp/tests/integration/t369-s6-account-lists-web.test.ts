@@ -61,6 +61,7 @@ import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { postEntry } from '../../../../packages/domain/src/ledger/post-entry';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -146,7 +147,7 @@ async function expectRedirectTo(run: () => Promise<unknown>): Promise<string> {
 }
 /** renderToStaticMarkup escapes quotes and ampersands (' becomes &#x27;); a sentence assertion must compare the DECODED text. */
 const decodeEntities = (h: string) => h.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 const transferRows = async (orgId: string) => Number((await sql<{ n: string }[]>`select count(*)::text as n from money_transfers where org_id = ${orgId}`)[0]!.n);
 
 // -----------------------------------------------------------------------------------------------

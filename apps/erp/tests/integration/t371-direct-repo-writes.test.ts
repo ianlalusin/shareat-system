@@ -43,6 +43,7 @@ vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/con
 import { setThresholdAction } from '../../src/app/inventory/low-stock/actions';
 import { updateTermsAction } from '../../src/app/fixed-assets/actions';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { urlOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -77,7 +78,7 @@ async function delivered(run: () => Promise<void>): Promise<{ text: string | nul
     return { text: null, how: 'ok' };
   } catch (err) {
     if (err instanceof RedirectSignal) {
-      const u = new URL(err.to, 'http://localhost');
+      const u = urlOf(err.to);
       const e = u.searchParams.get('error');
       return e ? { text: e, how: 'redirect-error' } : { text: null, how: 'ok' };
     }

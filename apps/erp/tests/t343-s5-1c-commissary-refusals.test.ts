@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { goneSentence } from '../../../packages/db/src/refusal';
+import { urlOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -215,7 +216,7 @@ describe('C4 — postMessageAction catches an AuthorizationError and shows its u
       fd.set('body', 'hello');
 
       const to = await expectRedirectTo(() => postMessageAction(fd));
-      const url = new URL(to, 'http://localhost');
+      const url = urlOf(to);
       expect(url.pathname).toBe('/commissary/orders/order-1');
       expect(url.searchParams.get('error')).toBe(S);
     },
@@ -253,7 +254,7 @@ describe('C6 — DEF-444: a gone order redirects to the LIST, not the dead page'
       fd.set('body', 'hello');
 
       const to = await expectRedirectTo(() => postMessageAction(fd));
-      const url = new URL(to, 'http://localhost');
+      const url = urlOf(to);
       expect(url.pathname).toBe('/commissary/orders');
       expect(url.searchParams.get('error')).toBe(goneSentence('order'));
     },
@@ -273,7 +274,7 @@ describe('C7 (⛔) — not-a-party stays on the order page, never the list', () 
       fd.set('body', 'hello');
 
       const to = await expectRedirectTo(() => postMessageAction(fd));
-      const url = new URL(to, 'http://localhost');
+      const url = urlOf(to);
       expect(url.pathname).toBe('/commissary/orders/order-1');
     },
     30000,
@@ -297,7 +298,7 @@ describe('C8 — createOrderAction (orders/actions.ts) decodes an AuthorizationE
       fd.set('orderDate', '2026-09-27');
 
       const to = await expectRedirectTo(() => createOrderAction(fd));
-      const url = new URL(to, 'http://localhost');
+      const url = urlOf(to);
       expect(url.searchParams.get('error')).toBe(S);
     },
     30000,

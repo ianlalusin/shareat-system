@@ -37,6 +37,7 @@ vi.mock('../../src/lib/session', () => ({
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createSupplier, editSupplier } from '@shareat/domain';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -116,8 +117,8 @@ async function expectRedirectTo(action: () => Promise<void>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const errorOf = (to: string) => new URL(to, 'http://localhost').searchParams.get('error');
-const okOf = (to: string) => new URL(to, 'http://localhost').searchParams.get('ok');
+const errorOf = (to: string) => paramsOf(to).get('error');
+const okOf = (to: string) => paramsOf(to).get('ok');
 
 /** T-365's own full form — real edit forms always post all three bank fields (task doc §TESTER
  * S1's ⚠️ note). `overrides` replaces `supplierId`/`name` when a leg needs to. */
@@ -243,7 +244,7 @@ describe('C1 (green, guard) — createSupplierAction, name only', () => {
     const fd = new FormData();
     fd.set('name', name);
     const to = await expectRedirectTo(() => createSupplierAction(fd));
-    expect(new URL(to, 'http://localhost').searchParams.get('ok'), `redirect URL was: ${to}`).not.toBeNull();
+    expect(paramsOf(to).get('ok'), `redirect URL was: ${to}`).not.toBeNull();
     const [row] = await sql<
       {
         email: string | null;

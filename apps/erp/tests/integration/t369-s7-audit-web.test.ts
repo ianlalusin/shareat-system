@@ -56,6 +56,7 @@ import * as D from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { errorMessage } from '../../src/lib/constraint-messages';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -109,7 +110,7 @@ const figures = (f: Fixture) => ({
 });
 const create = (f: Fixture, who: Actor, date = DATE) => asOrg(f.orgId, (tx) => D.createSalesDay(tx, who, { storeId: f.storeId, businessDate: date, ...figures(f) }));
 const withdraw = (f: Fixture, id: string) => asOrg(f.orgId, (tx) => D.voidSalesDay(tx, f.manager, id, 'Typed wrong'));
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 
 async function banner(run: () => Promise<unknown>): Promise<string> {
   try {

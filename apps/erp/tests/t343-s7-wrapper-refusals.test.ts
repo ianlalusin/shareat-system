@@ -27,6 +27,7 @@
  * `.error` directly for that file's rows.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { paramsOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -178,7 +179,7 @@ async function expectRedirectTo(action: () => Promise<void>): Promise<string> {
 }
 
 function errorOf(to: string): string | null {
-  return new URL(to, 'http://localhost').searchParams.get('error');
+  return paramsOf(to).get('error');
 }
 
 /** A Postgres-shaped error the way `postgres.js` attaches `code`/`constraint` — non-presentable by

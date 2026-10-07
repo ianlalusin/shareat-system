@@ -54,6 +54,7 @@ import type { Actor } from '@shareat/auth';
 import { createCustomer, createItem, createTradeOrder, dispatchTradeOrder, receiveTradeOrder, resolveDiscrepancy } from '@shareat/domain';
 import { receiveDelivery } from '../../../../packages/domain/src/deliveries/receive';
 import { quantity } from '../../../../packages/domain/src/stock/quantity';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -320,7 +321,7 @@ describe('The action — the listed form, posted for real', () => {
     const before = await journalCount(f.orgId);
     ACTOR_HOLDER.actor = f.branchManager;
     const to = await expectRedirectTo(() => resolveDiscrepancyAction(form(f, over.row.id)));
-    expect(new URL(to, 'http://localhost').searchParams.get('error'), `refused: ${to}`).toBeNull();
+    expect(paramsOf(to).get('error'), `refused: ${to}`).toBeNull();
     expect(await rowState(over.row.id)).toMatchObject({ status: 'resolved', disposition: 'return' });
     expect(await journalCount(f.orgId)).toBe(before);
     expect(await branchList(f, f.branchId)).toEqual([]);
@@ -348,7 +349,7 @@ describe('The action — the listed form, posted for real', () => {
     const before = await journalCount(f.orgId);
     ACTOR_HOLDER.actor = f.branchManager;
     const to = await expectRedirectTo(() => resolveDiscrepancyAction(form(f, over.row.id, { disposition: 'extra_dispatch' })));
-    expect(new URL(to, 'http://localhost').searchParams.get('error')).toMatch(/only the dispatching commissary may resolve this/);
+    expect(paramsOf(to).get('error')).toMatch(/only the dispatching commissary may resolve this/);
     expect(await journalCount(f.orgId)).toBe(before);
     expect(await rowState(over.row.id)).toMatchObject({ status: 'open', disposition: null });
   });

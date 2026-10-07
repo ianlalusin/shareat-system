@@ -24,6 +24,7 @@ import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
+import { pageParamsOf, paramsOf as flashParamsOf } from '../helpers/flash-jar';
 
 config({ path: '.env.local' });
 
@@ -144,11 +145,8 @@ function bannerText(html: string): string {
   return raw.replace(/&#x27;/gi, "'").replace(/&quot;/gi, '"').replace(/&amp;/gi, '&');
 }
 
-/** Parses the redirect's search params, exactly as written (order-independent). */
-function paramsOf(redirectTo: string): URLSearchParams {
-  const q = redirectTo.split('?')[1] ?? '';
-  return new URLSearchParams(q);
-}
+/** The redirect's banner + navigation keys, read through `outcomeOf` (T-380 S1b) — the jar is this file's own fake. */
+const paramsOf = (redirectTo: string): URLSearchParams => flashParamsOf(redirectTo, jar);
 
 async function saveAndRender(
   f: Fixture,
@@ -169,7 +167,7 @@ async function saveAndRender(
   const redirectTo = (caught as RedirectSignal).to;
 
   const ChannelSettlementsPage = (await import('../../src/app/channel-settlements/page')).default;
-  const searchParams = Object.fromEntries(paramsOf(redirectTo).entries());
+  const searchParams = pageParamsOf(redirectTo, jar);
   const element = await ChannelSettlementsPage({ searchParams: Promise.resolve(searchParams) });
   const html = renderToStaticMarkup(element as never);
   return { html, redirectTo };

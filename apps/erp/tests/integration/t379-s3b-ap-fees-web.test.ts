@@ -62,6 +62,7 @@ import { createSupplier, recordInvoice, verifyInvoice } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -148,8 +149,8 @@ async function expectRedirectTo(action: () => Promise<void>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const errorOf = (to: string) => new URL(to, 'http://localhost').searchParams.get('error');
-const okOf = (to: string) => new URL(to, 'http://localhost').searchParams.get('ok');
+const errorOf = (to: string) => paramsOf(to).get('error');
+const okOf = (to: string) => paramsOf(to).get('ok');
 
 
 const TEXT = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ');

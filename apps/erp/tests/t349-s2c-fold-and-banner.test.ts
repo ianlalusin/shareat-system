@@ -13,6 +13,7 @@
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { capabilityTitle } from '../../../packages/auth/src/capabilities';
+import { paramsOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -195,14 +196,14 @@ describe('G1-G3 — the picker-grant banner names "at every store they have acce
   it('G1: one store-scoped capability (confirm_receipt) → "Granted: <Title>, at every store they have access to."', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(grantFormData({ capabilities: ['confirm_receipt'] })));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${capabilityTitle('confirm_receipt')}, at every store they have access to.`);
   });
 
   it('G2 (⛔ green today, a guard): one org-scoped capability (manage_fixed_assets) → "Granted: <Title>." with no store phrase', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(grantFormData({ capabilities: ['manage_fixed_assets'] })));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     const ok = params.get('ok');
     expect(ok, `redirect URL was: ${to}`).toBe(`Granted: ${capabilityTitle('manage_fixed_assets')}.`);
     expect(ok, 'org-scoped must never claim a store axis it does not have').not.toContain('every store');
@@ -213,7 +214,7 @@ describe('G1-G3 — the picker-grant banner names "at every store they have acce
     const to = await expectRedirectTo(() =>
       actions.setCapabilityGrantAction(grantFormData({ capabilities: ['confirm_receipt', 'manage_fixed_assets'] })),
     );
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('ok'), `redirect URL was: ${to}`).toBe(
       `Granted 2 capabilities: ${capabilityTitle('confirm_receipt')}, at every store they have access to; ${capabilityTitle('manage_fixed_assets')}.`,
     );

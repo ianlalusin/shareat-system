@@ -76,6 +76,7 @@ import { D1_FIGURES, D1_SOLD_ITEMS, importTestDay } from '../../../../packages/d
 import { asOrgOn, DAY, R1_FIGURES, s6Fixture, type S6F } from '../../../../packages/domain/tests/integration/_fixtures/pos-s6';
 import * as actions from '../../src/app/sales-days/actions';
 import PosReconciliationPage from '../../src/app/reports/pos-reconciliation/page';
+import { urlOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 afterAll(async () => {
@@ -131,7 +132,7 @@ async function run(as: { personId: string; orgId: string }, action: unknown, fd:
     .then(() => (action as (fd: FormData) => Promise<void>)(fd))
     .then(() => null, (e) => e);
   expect(err, `${name} ends by redirecting`).toBeInstanceOf(Redirected);
-  return new URL((err as Redirected).target, 'http://x');
+  return urlOf((err as Redirected).target);
 }
 
 const importVerified = async (f: S6F, date: string): Promise<string> => {

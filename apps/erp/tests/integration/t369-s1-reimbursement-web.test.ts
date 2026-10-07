@@ -62,6 +62,7 @@ import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accou
 import { postEntry } from '../../../../packages/domain/src/ledger/post-entry';
 import { ROUTE_CAPABILITY, capabilityForRoute, navHrefAllowed } from '../../src/lib/route-capability';
 import { GROUPS } from '../../src/components/nav';
+import { paramsOf, seedSearch } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -164,7 +165,7 @@ const loadActions = () => load(() => import('../../src/app/expenses/reimbursemen
 async function renderPage(who: Actor, search: Record<string, string> = {}): Promise<string> {
   ACTOR_HOLDER.actor = who;
   const { default: Page } = await loadPage();
-  const element = await Page({ searchParams: Promise.resolve(search) } as never);
+  const element = await Page({ searchParams: Promise.resolve(await seedSearch(search)) } as never);
   return renderToStaticMarkup(element as never);
 }
 
@@ -177,7 +178,7 @@ async function expectRedirectTo(run: () => Promise<unknown>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 
 function payForm(f: Fixture, o: { storeId?: string; employeeId?: string; amount: string; from: string; payoutId?: string }): FormData {
   const fd = new FormData();

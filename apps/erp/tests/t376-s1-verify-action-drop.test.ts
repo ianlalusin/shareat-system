@@ -15,6 +15,7 @@
  * through the unresolvable `@/` specifier, never a stub).
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { paramsOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -101,7 +102,7 @@ async function submit(invoiceDate: string): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 
 describe('W3b - verifyInvoiceAction forwards the override only for a closed-month bill', () => {
   it('a FEBRUARY (open) bill with a full, ticked override: verifyInvoice is called once with NO options - Mutant: forward unconditionally -> red', async () => {

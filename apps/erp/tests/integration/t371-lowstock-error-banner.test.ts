@@ -32,6 +32,7 @@ vi.mock('../../src/lib/session', () => ({
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
 
 import { setThresholdAction } from '../../src/app/inventory/low-stock/actions';
+import { urlOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 3 });
 let seq = 0;
@@ -64,7 +65,7 @@ async function redirectOf(run: () => Promise<void>): Promise<URL | null> {
     await run();
     return null;
   } catch (err) {
-    if (err instanceof RedirectSignal) return new URL(err.to, 'http://localhost');
+    if (err instanceof RedirectSignal) return urlOf(err.to);
     throw err;
   }
 }

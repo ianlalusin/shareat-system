@@ -48,6 +48,7 @@ vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unk
 vi.mock('@/components/shell/PageDescription', () => ({ PageDescription: () => null }));
 
 import { BASE_UNITS } from '@shareat/db';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -107,7 +108,7 @@ async function redirectOf(action: () => Promise<void>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 const decode = (s: string) => s.replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"');
 
 function form(fields: Record<string, string>): FormData {

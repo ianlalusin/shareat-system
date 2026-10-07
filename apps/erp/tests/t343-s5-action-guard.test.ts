@@ -10,6 +10,7 @@
  * pure unit test — the two are observably identical: `message`/`userMessage`/`name`).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { urlOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -93,7 +94,7 @@ describe('A1 — voidSalesDayAction decodes a refuse(...)-shaped error to its ex
     formData.set('reason', 'wrong day');
 
     const to = await expectRedirectTo(() => voidSalesDayAction(formData));
-    const url = new URL(to, 'http://localhost');
+    const url = urlOf(to);
     const errorParam = url.searchParams.get('error');
 
     expect(errorParam).toBe(VOID_OPEN_DAY_SENTENCE);

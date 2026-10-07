@@ -82,6 +82,7 @@ import { seedExpenseCategories } from '../../../../packages/db/seed/expense-cate
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -228,7 +229,7 @@ async function expectRedirectTo(action: () => Promise<void>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const errorOf = (to: string) => new URL(to, 'http://localhost').searchParams.get('error');
+const errorOf = (to: string) => paramsOf(to).get('error');
 
 function emittedNames(props: {
   sources: Awaited<ReturnType<typeof import('../../src/lib/money-lines/load').loadMoneyLines>>['sources'];

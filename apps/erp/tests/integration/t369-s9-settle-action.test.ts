@@ -45,6 +45,7 @@ import { createMoneyTransfer } from '@shareat/domain';
 import * as actions from '../../src/app/money-transfers/actions';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { postEntry } from '../../../../packages/domain/src/ledger/post-entry';
+import { urlOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -126,7 +127,7 @@ async function submit(who: Actor, fd: FormData): Promise<URL> {
   try {
     await fn(fd);
   } catch (err) {
-    if (err instanceof RedirectSignal) return new URL(err.to, 'http://localhost');
+    if (err instanceof RedirectSignal) return urlOf(err.to);
     throw err;
   }
   throw new Error('the action returned without redirecting');

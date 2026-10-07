@@ -57,6 +57,7 @@ import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createCustomer, recordCharge, recordPayment, createSupplier } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -148,7 +149,7 @@ describe('C1 (DEF-457) — a comma-typed store credit is silently dropped, never
 
       const before = await collectionCountFor(f.customerId);
       const to = await expectRedirectTo(() => recordCollectionAction(collectionFormData(f, '1,000')));
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
 
       // Was asserted directly against the pre-fix behaviour (no `error` param — the action
       // redirected with `ok` instead — and a collection row was written); green since eb40f35.
@@ -170,7 +171,7 @@ describe('C1 (DEF-457) — a comma-typed store credit is silently dropped, never
 
       const before = await collectionCountFor(f.customerId);
       const to = await expectRedirectTo(() => recordCollectionAction(collectionFormData(f, '')));
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
       expect(params.get('error'), `redirect URL was: ${to}`).toBeNull();
       expect(params.get('ok')).toContain('Collected');
       const after = await collectionCountFor(f.customerId);

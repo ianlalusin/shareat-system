@@ -26,6 +26,7 @@ import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
+import { seedSearch } from '../helpers/flash-jar';
 
 config({ path: '.env.local' });
 
@@ -130,7 +131,7 @@ async function renderAsViewer(f: Fixture, searchParams: Record<string, string>) 
     storeId: null,
     expiresAt: new Date('2099-01-01'),
   });
-  const element = await ChannelSettlementsPage({ searchParams: Promise.resolve(searchParams) });
+  const element = await ChannelSettlementsPage({ searchParams: Promise.resolve(await seedSearch(searchParams)) });
   return renderToStaticMarkup(element as never);
 }
 

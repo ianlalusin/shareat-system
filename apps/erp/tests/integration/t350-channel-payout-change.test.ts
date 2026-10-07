@@ -30,6 +30,7 @@ import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accou
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, signInWithPin, setPin, type Actor } from '@shareat/auth';
 import { setChannelPayoutDestination } from '@shareat/domain';
+import { outcomeOfUrl } from '../helpers/flash-jar';
 
 // ============================================================================================
 // G1 (S4) — the ACTION's own redirect, not the domain function. `next/navigation`'s `redirect()`
@@ -371,10 +372,9 @@ describe('G1 (S4/S5) — the ACTION redirect for a same-account save carries no 
       }
       expect(caught, 'expected the action to redirect (success or error)').toBeInstanceOf(RedirectSignal);
       const to = (caught as RedirectSignal).to;
-      expect(to, `wanted no changed=1 on a same-account no-op — got ${to}`).not.toMatch(/changed=1/);
-      expect(to, `T-350 S5: wanted no same=1 either — the redirect names ONLY ok+changedChannel — got ${to}`).not.toMatch(
-        /same=1/,
-      );
+      const outcome = outcomeOfUrl(to, g1Jar);
+      expect(outcome.nav.get('changed'), `wanted no changed=1 on a same-account no-op — got ${to}`).not.toBe('1');
+      expect(outcome.nav.get('same'), `T-350 S5: wanted no same=1 either — the redirect names ONLY ok+changedChannel — got ${to}`).not.toBe('1');
     },
   );
 });

@@ -70,6 +70,7 @@ import { MoneyLines } from '../../src/components/money/MoneyLines';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -476,7 +477,7 @@ describe('A3 — Count = 0 (no lines): the parser\'s refusal is intact', () => {
     const before = await expenseCountForInvoice(f.invoiceCodId);
     const to = await expectRedirectTo(() => recordExpenseForInvoiceAction(fd));
     expect(to).toContain(hidden.returnTo);
-    expect(decodeURIComponent(to)).toContain('Add at least one payment line.');
+    expect(paramsOf(to).get('error')).toContain('Add at least one payment line.');
     expect(await expenseCountForInvoice(f.invoiceCodId)).toBe(before);
   });
 });
@@ -500,7 +501,7 @@ describe('A4 — a credit line for the cash-on-delivery supplier: refused', () =
 
     const before = await expenseCountForInvoice(f.invoiceCodId);
     const to = await expectRedirectTo(() => recordExpenseForInvoiceAction(fd));
-    expect(decodeURIComponent(to)).toMatch(/is cash-on-delivery/);
+    expect(paramsOf(to).get('error')).toMatch(/is cash-on-delivery/);
     expect(await expenseCountForInvoice(f.invoiceCodId)).toBe(before);
   });
 });
@@ -553,6 +554,6 @@ describe('DEF-485 repro (evidence) — the old trio\'s exact FormData refuses wi
     // Deliberately NO lineCount — the trio never posted one.
 
     const to = await expectRedirectTo(() => recordExpenseForInvoiceAction(fd));
-    expect(decodeURIComponent(to)).toContain("The payment lines didn't arrive complete — reload the page and try again.");
+    expect(paramsOf(to).get('error')).toContain("The payment lines didn't arrive complete — reload the page and try again.");
   });
 });

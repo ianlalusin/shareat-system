@@ -13,6 +13,7 @@
  * since the root vitest config has no `@/*` alias — never a stub, per the spec's own instruction).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { paramsOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -85,7 +86,7 @@ describe('H5 — createRemittanceAction: a malformed line amount names its accou
     async () => {
       const { createRemittanceAction } = await import('../src/app/remittance/actions');
       const to = await expectRedirectTo(() => createRemittanceAction(lineFormData('abc')));
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
       expect(params.get('error'), `redirect URL was: ${to}`).toBe(
         '"GCash": the amount handed over — "abc" is not a valid amount. Use at most two decimal places.',
       );

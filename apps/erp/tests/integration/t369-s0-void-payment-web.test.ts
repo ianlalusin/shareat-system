@@ -183,7 +183,7 @@ beforeAll(async () => {
 
 async function renderBill(who: Actor, invoiceId: string, search: Record<string, string> = {}): Promise<string> {
   ACTOR_HOLDER.actor = who;
-  const element = await InvoiceDetailPage({ params: Promise.resolve({ id: invoiceId }), searchParams: Promise.resolve(search) });
+  const element = await InvoiceDetailPage({ params: Promise.resolve({ id: invoiceId }), searchParams: Promise.resolve(await seedSearch(search)) });
   return renderToStaticMarkup(element as never);
 }
 /** Every `<details>…</details>` block whose summary is "Void this payment". */
@@ -199,7 +199,7 @@ async function expectRedirectTo(run: () => Promise<unknown>): Promise<string> {
   throw new Error('expected the action to redirect');
 }
 const pathOf = (to: string) => new URL(to, 'http://localhost').pathname;
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 
 // -----------------------------------------------------------------------------------------------
 // T9 — the bill page lists its payments and offers the void only where it can be used
@@ -421,6 +421,7 @@ describe('T10 — voidPaymentAction', () => {
 // -----------------------------------------------------------------------------------------------
 
 import { ACTION_LINK } from '../../src/components/action-link';
+import { paramsOf, seedSearch } from '../helpers/flash-jar';
 
 /** Adds an admin (both stores) and Malvar's funded office safe to a fixture, for a payment drawn on ANOTHER store's money. */
 async function withMalvarSafe(f: Fixture) {

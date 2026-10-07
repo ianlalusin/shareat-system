@@ -21,6 +21,7 @@
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { seedSearch } from './helpers/flash-jar';
 
 const ACTOR = { orgId: 'org-1', personId: 'actor-1' };
 
@@ -161,7 +162,7 @@ async function renderPage(
   currentHeld = new Set(held);
   heldCapabilitiesMock.mockResolvedValueOnce(currentHeld);
   if (options.accounts) listDestinationAccountsMock.mockResolvedValueOnce(options.accounts);
-  const element = await ChannelSettlementsPage({ searchParams: Promise.resolve(options.searchParams ?? {}) });
+  const element = await ChannelSettlementsPage({ searchParams: Promise.resolve(await seedSearch(options.searchParams ?? {})) });
   return renderToStaticMarkup(element as never);
 }
 

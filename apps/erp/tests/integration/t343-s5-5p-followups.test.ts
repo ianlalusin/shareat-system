@@ -59,6 +59,7 @@ import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createCustomer, createPrepaidItem, recordCharge, writeOffPrepaidItem } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -157,7 +158,7 @@ describe('P1 (DEF-460) — a comma-typed refund is silently dropped, never reach
       const to = await expectRedirectTo(() =>
         writeOffAction(writeOffFormData(f, { refundAmount: '1,000', refundAccountCode: '1110' })),
       );
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
 
       expect(params.get('error'), `redirect URL was: ${to}`).toBe(
         'The refund amount — "1,000" is not a valid amount. Use at most two decimal places.',
@@ -176,7 +177,7 @@ describe('P1 (DEF-460) — a comma-typed refund is silently dropped, never reach
       const { writeOffAction } = await import('../../src/app/prepaid/actions');
 
       const to = await expectRedirectTo(() => writeOffAction(writeOffFormData(f)));
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
       expect(params.get('error'), `redirect URL was: ${to}`).toBeNull();
       expect(params.get('ok')).toContain('Written off');
       expect(await prepaidStatus(f.itemId)).toBe('written_off');
@@ -200,7 +201,7 @@ describe('A1 (T-343 S5.5u item 1) — refundAccountCode set, refundAmount blank:
       const to = await expectRedirectTo(() =>
         writeOffAction(writeOffFormData(f, { refundAmount: '', refundAccountCode: '1110' })),
       );
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
       expect(params.get('error'), `redirect URL was: ${to}`).toBe('Enter the refund amount, or clear the refund account.');
       expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
       expect(await prepaidStatus(f.itemId), 'a refusal must not flip the item to written_off').toBe('active');
@@ -259,7 +260,7 @@ describe('P3 (DEF-460) — a positive refund with no account refuses by name', (
       const { writeOffAction } = await import('../../src/app/prepaid/actions');
 
       const to = await expectRedirectTo(() => writeOffAction(writeOffFormData(f, { refundAmount: '100' })));
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
       expect(params.get('error'), `redirect URL was: ${to}`).toBe('Say which account the refund landed in.');
       expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
       expect(await prepaidStatus(f.itemId), 'a refusal must not flip the item to written_off').toBe('active');
@@ -279,7 +280,7 @@ describe('P4 (DEF-460) — a refund above what is left refuses by name', () => {
       const to = await expectRedirectTo(() =>
         writeOffAction(writeOffFormData(f, { refundAmount: '30000.00', refundAccountCode: '1110' })),
       );
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
       expect(params.get('error'), `redirect URL was: ${to}`).toMatch(
         /^The refund can.t be more than what.s left on this item\./,
       );
@@ -342,7 +343,7 @@ describe('N1 (DEF-461) — a negative store credit refuses by name', () => {
 
       const before = await collectionCountFor(f.customerId);
       const to = await expectRedirectTo(() => recordCollectionAction(collectionFormData(f, '-5')));
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
       expect(params.get('error'), `redirect URL was: ${to}`).toBe('The store credit applied cannot be negative.');
       const after = await collectionCountFor(f.customerId);
       expect(after, 'no collection row should have been written').toBe(before);

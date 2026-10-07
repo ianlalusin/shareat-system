@@ -63,6 +63,7 @@ import { createSupplier, recordInvoice, verifyInvoice } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -211,7 +212,7 @@ async function expectRedirectTo(action: () => Promise<void>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 
 const PER_LINE = '10.00';
 const INCOMPLETE = "The payment lines didn't arrive complete — reload the page and try again.";

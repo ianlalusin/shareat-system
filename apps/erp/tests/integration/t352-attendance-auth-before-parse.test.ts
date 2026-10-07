@@ -54,6 +54,7 @@ vi.mock('@/lib/constraint-messages', async () => {
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createEmployment, getLiveConfig, seedAttendanceConfig, seedCanonicalPositions, toShiftDay } from '@shareat/domain';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -82,7 +83,7 @@ async function expectRedirectTo(action: () => Promise<void>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const errorOf = (to: string) => new URL(to, 'http://localhost').searchParams.get('error');
+const errorOf = (to: string) => paramsOf(to).get('error');
 
 // =================================================================================================
 // W1-W8, G1 — settings/attendance/actions.ts: updateAttendanceConfigAction.

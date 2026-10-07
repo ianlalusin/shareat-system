@@ -50,6 +50,7 @@ import type { Actor } from '@shareat/auth';
 import { createItem, createPrepaidItem, createSupplier, recordInvoice } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -144,8 +145,8 @@ async function expectRedirectTo(action: () => Promise<void>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const errorOf = (to: string) => new URL(to, 'http://localhost').searchParams.get('error');
-const okOf = (to: string) => new URL(to, 'http://localhost').searchParams.get('ok');
+const errorOf = (to: string) => paramsOf(to).get('error');
+const okOf = (to: string) => paramsOf(to).get('ok');
 
 let actionsAp: typeof import('../../src/app/ap/actions');
 let actionsLoans: typeof import('../../src/app/loans/actions');

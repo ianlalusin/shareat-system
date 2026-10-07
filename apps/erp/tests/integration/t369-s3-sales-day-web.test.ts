@@ -62,6 +62,7 @@ import type { Actor } from '@shareat/auth';
 import { createSalesDay, submitSalesDay } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -162,7 +163,7 @@ async function expectRedirectTo(run: () => Promise<unknown>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 const pathOf = (to: string) => new URL(to, 'http://localhost').pathname;
 
 // -----------------------------------------------------------------------------------------------

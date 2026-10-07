@@ -52,6 +52,7 @@ import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/i
 import { asOrgOn, DAY, insertSalesRecheck, R1_FIGURES, s6Fixture, type S6F } from '../../../../packages/domain/tests/integration/_fixtures/pos-s6';
 import * as actions from '../../src/app/sales-days/actions';
 import SalesDayDetailPage from '../../src/app/sales-days/[id]/page';
+import { urlOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 afterAll(async () => {
@@ -78,7 +79,7 @@ async function run(as: { personId: string; orgId: string }, fd: FormData): Promi
     .then(() => (action as (fd: FormData) => Promise<void>)(fd))
     .then(() => null, (e) => e);
   expect(err, 'the action ends by redirecting').toBeInstanceOf(Redirected);
-  return new URL((err as Redirected).target, 'http://x');
+  return urlOf((err as Redirected).target);
 }
 const renderDay = async (who: { personId: string; orgId: string }, f: S6F, id: string): Promise<string> => {
   h.actor = who;

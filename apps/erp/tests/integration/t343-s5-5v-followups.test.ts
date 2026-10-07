@@ -52,6 +52,7 @@ import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createItem, createSupplier, openTillShift } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -80,8 +81,8 @@ async function expectRedirectTo(action: () => Promise<void>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const errorOf = (to: string) => new URL(to, 'http://localhost').searchParams.get('error');
-const okOf = (to: string) => new URL(to, 'http://localhost').searchParams.get('ok');
+const errorOf = (to: string) => paramsOf(to).get('error');
+const okOf = (to: string) => paramsOf(to).get('ok');
 
 const DATABASE_ERROR_FALLBACK =
   'The database refused that change for a reason this screen cannot show. The detail is in the server log.';

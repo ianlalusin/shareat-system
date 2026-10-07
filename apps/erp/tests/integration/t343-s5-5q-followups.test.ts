@@ -56,6 +56,7 @@ import type { Actor } from '@shareat/auth';
 import { getLiveConfig, preview13thMonthRun, post13thMonthRun, seedAttendanceConfig, createAsset } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -163,7 +164,7 @@ describe('A1 (DEF-463) — lateGraceMinutes="abc" refuses by name', () => {
       const to = await expectRedirectTo(() =>
         updateAttendanceConfigAction(attendanceFormData(f, { lateGraceMinutes: 'abc' })),
       );
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
       expect(params.get('error'), `redirect URL was: ${to}`).toBe('The late grace minutes — "abc" is not a number.');
       const live = await asOrg(f.orgId, (tx) => getLiveConfig(tx, { storeId: f.storeId }));
       expect(live.lateGraceMinutes, 'nothing should have changed').toBe(0);
@@ -183,7 +184,7 @@ describe('A2 (DEF-463) — autoClockOutHour="abc" refuses by name', () => {
       const to = await expectRedirectTo(() =>
         updateAttendanceConfigAction(attendanceFormData(f, { autoClockOutHour: 'abc' })),
       );
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
       expect(params.get('error'), `redirect URL was: ${to}`).toBe('The auto clock-out hour — "abc" is not a number.');
       const live = await asOrg(f.orgId, (tx) => getLiveConfig(tx, { storeId: f.storeId }));
       expect(live.autoClockOutHour, 'nothing should have changed').toBeNull();
@@ -199,7 +200,7 @@ describe('A1n/A2n (⛔ green, must stay unedited) — blank and ordinary numeric
     const { updateAttendanceConfigAction } = await import('../../src/app/settings/attendance/actions');
 
     const to1 = await expectRedirectTo(() => updateAttendanceConfigAction(attendanceFormData(f, {})));
-    expect(new URL(to1, 'http://localhost').searchParams.get('error')).toBeNull();
+    expect(paramsOf(to1).get('error')).toBeNull();
     let live = await asOrg(f.orgId, (tx) => getLiveConfig(tx, { storeId: f.storeId }));
     expect(live.lateGraceMinutes).toBe(0);
     expect(live.autoClockOutHour).toBeNull();
@@ -207,7 +208,7 @@ describe('A1n/A2n (⛔ green, must stay unedited) — blank and ordinary numeric
     const to2 = await expectRedirectTo(() =>
       updateAttendanceConfigAction(attendanceFormData(f, { lateGraceMinutes: '5', effectiveFrom: '2026-07-01' })),
     );
-    expect(new URL(to2, 'http://localhost').searchParams.get('error')).toBeNull();
+    expect(paramsOf(to2).get('error')).toBeNull();
     live = await asOrg(f.orgId, (tx) => getLiveConfig(tx, { storeId: f.storeId }));
     expect(live.lateGraceMinutes).toBe(5);
   });
@@ -223,7 +224,7 @@ describe('A3n (RULED FLIP, S5.5w item 5 / Ian Q2 landed) — lateGraceMinutes sp
       const { updateAttendanceConfigAction } = await import('../../src/app/settings/attendance/actions');
 
       const to = await expectRedirectTo(() => updateAttendanceConfigAction(attendanceFormData(f, { lateGraceMinutes: '   ' })));
-      expect(new URL(to, 'http://localhost').searchParams.get('error')).toBe('The late grace minutes — enter a whole number, 0 or more.');
+      expect(paramsOf(to).get('error')).toBe('The late grace minutes — enter a whole number, 0 or more.');
     },
   );
 
@@ -233,7 +234,7 @@ describe('A3n (RULED FLIP, S5.5w item 5 / Ian Q2 landed) — lateGraceMinutes sp
     const { updateAttendanceConfigAction } = await import('../../src/app/settings/attendance/actions');
 
     const to = await expectRedirectTo(() => updateAttendanceConfigAction(attendanceFormData(f, { autoClockOutHour: '   ' })));
-    expect(new URL(to, 'http://localhost').searchParams.get('error')).toBeNull();
+    expect(paramsOf(to).get('error')).toBeNull();
     const live = await asOrg(f.orgId, (tx) => getLiveConfig(tx, { storeId: f.storeId }));
     expect(live.autoClockOutHour).toBeNull();
   });
@@ -291,7 +292,7 @@ describe('F1 (DEF-464) — usefulLifeMonths="abc" should refuse by name, never p
 
     const before = await assetCountFor(f.orgId);
     const to = await expectRedirectTo(() => createAssetAction(assetFormData(f, { usefulLifeMonths: 'abc' })));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     const error = params.get('error');
     expect(error, `redirect URL was: ${to}`).toBe(lifeSentence('abc'));
     expect(error).not.toContain('NaN');
@@ -306,7 +307,7 @@ describe('F1 (DEF-464) — usefulLifeMonths="abc" should refuse by name, never p
 
     const before = await assetCountFor(f.orgId);
     const to = await expectRedirectTo(() => createAssetAction(assetFormData(f, { usefulLifeMonths: '0' })));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('error'), `redirect URL was: ${to}`).toBe(lifeSentence('0'));
     const after = await assetCountFor(f.orgId);
     expect(after, 'no asset should have been created').toBe(before);
@@ -319,7 +320,7 @@ describe('F1 (DEF-464) — usefulLifeMonths="abc" should refuse by name, never p
 
     const before = await assetCountFor(f.orgId);
     const to = await expectRedirectTo(() => createAssetAction(assetFormData(f, {})));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('error'), `redirect URL was: ${to}`).toBeNull();
     const after = await assetCountFor(f.orgId);
     expect(after).toBe(before + 1);
@@ -370,7 +371,7 @@ describe('T1 (DEF-467) — updateTermsAction usefulLifeMonths="" should refuse b
 
     const before = await unmappedConstraintCountFor(f.orgId, 'fixed_assets_useful_life_positive_check');
     const to = await expectRedirectTo(() => updateTermsAction(termsFormData(assetId, { usefulLifeMonths: '' })));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('error'), `redirect URL was: ${to}`).toBe(LIFE_BLANK_SENTENCE);
     const [row] = await sql<{ useful_life_months: number; needs_review: boolean }[]>`
       select useful_life_months, needs_review from fixed_assets where id = ${assetId}`;
@@ -386,7 +387,7 @@ describe('T1 (DEF-467) — updateTermsAction usefulLifeMonths="" should refuse b
     const { updateTermsAction } = await import('../../src/app/fixed-assets/actions');
 
     const to = await expectRedirectTo(() => updateTermsAction(termsFormData(assetId, { usefulLifeMonths: 'abc' })));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('error'), `redirect URL was: ${to}`).toBe(lifeSentence('abc'));
     const [row] = await sql<{ useful_life_months: number }[]>`select useful_life_months from fixed_assets where id = ${assetId}`;
     expect(row!.useful_life_months).toBe(24);
@@ -399,7 +400,7 @@ describe('T1 (DEF-467) — updateTermsAction usefulLifeMonths="" should refuse b
     const { updateTermsAction } = await import('../../src/app/fixed-assets/actions');
 
     const to = await expectRedirectTo(() => updateTermsAction(termsFormData(assetId, { usefulLifeMonths: '1.5' })));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('error'), `redirect URL was: ${to}`).toBe(lifeSentence('1.5'));
     const [row] = await sql<{ useful_life_months: number }[]>`select useful_life_months from fixed_assets where id = ${assetId}`;
     expect(row!.useful_life_months).toBe(24);
@@ -412,7 +413,7 @@ describe('T1 (DEF-467) — updateTermsAction usefulLifeMonths="" should refuse b
     const { updateTermsAction } = await import('../../src/app/fixed-assets/actions');
 
     const to = await expectRedirectTo(() => updateTermsAction(termsFormData(assetId, { usefulLifeMonths: '36' })));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('ok'), `redirect URL was: ${to}`).toBe('terms');
     const [row] = await sql<{ useful_life_months: number; needs_review: boolean }[]>`
       select useful_life_months, needs_review from fixed_assets where id = ${assetId}`;
@@ -454,7 +455,7 @@ describe('Y1 (DEF-465) — post13thMonthRunAction with year="" (a forged post; t
       const { post13thMonthRunAction } = await import('../../src/app/payroll/thirteenth-month/actions');
 
       const to = await expectRedirectTo(() => post13thMonthRunAction(post13thFormData(f, '')));
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
       expect(params.get('error'), `redirect URL was: ${to}`).toBe(YEAR_SENTENCE);
       const [row] = await sql<{ count: string }[]>`select count(*)::text as count from thirteenth_month_runs where org_id = ${f.orgId}`;
       expect(Number(row!.count), 'nothing should have been written').toBe(0);

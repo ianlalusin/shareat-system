@@ -11,6 +11,7 @@
  * the three supplier-return functions replaced, so `refuse` builds real refusals).
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { paramsOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -94,7 +95,7 @@ async function outcomeOf(run: () => Promise<unknown>): Promise<{ redirect: strin
   }
 }
 const param = (to: string | null, key: string): string | null =>
-  to ? new URLSearchParams(to.split('?')[1] ?? '').get(key) : null;
+  to ? paramsOf(to).get(key) : null;
 
 const ACTIONS = [
   ['recordReturnAction', 'recordReturn', RETURN_FORM, RECORD_OK],
@@ -194,12 +195,12 @@ describe.each(ACTIONS)('%s', (actionName, domainFn, formData, okSentence) => {
     domain().mockResolvedValue({ ok: true });
     const okOut = await outcomeOf(() => actions[actionName](form(noStore)));
     expect(okOut.redirect, 'no redirect').not.toBeNull();
-    expect(new URLSearchParams(okOut.redirect!.split('?')[1]).has('store'), `ok redirect: ${okOut.redirect}`).toBe(false);
+    expect(paramsOf(okOut.redirect!).has('store'), `ok redirect: ${okOut.redirect}`).toBe(false);
     expect(param(okOut.redirect, 'ok'), `ok redirect: ${okOut.redirect}`).toBe(okSentence);
 
     domain().mockResolvedValue({ ok: false, reason: 'refused' });
     const errOut = await outcomeOf(() => actions[actionName](form(noStore)));
-    expect(new URLSearchParams(errOut.redirect!.split('?')[1]).has('store'), `error redirect: ${errOut.redirect}`).toBe(false);
+    expect(paramsOf(errOut.redirect!).has('store'), `error redirect: ${errOut.redirect}`).toBe(false);
     expect(param(errOut.redirect, 'error'), `error redirect: ${errOut.redirect}`).toBe('refused');
 
     domain().mockResolvedValue({ ok: true });

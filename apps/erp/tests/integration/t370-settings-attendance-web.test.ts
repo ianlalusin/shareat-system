@@ -44,6 +44,7 @@ vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/con
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { seedAttendanceConfig } from '@shareat/domain';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -72,7 +73,7 @@ async function expectRedirectTo(action: () => Promise<void>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 
 async function fixture(hint: string) {
   const code = uid(`t370w-${hint}`);

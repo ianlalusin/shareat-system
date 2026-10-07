@@ -63,6 +63,7 @@ import { importTestDay, linkTestStore, seedTestTenders } from '../../../../packa
 import { insertRecheckBatch } from '../../../../packages/domain/tests/integration/_fixtures/pos-sold-items';
 import PosUsagePage from '../../src/app/inventory/pos-usage/page';
 import { buildPlanAction, finalizeSectionAction } from '../../src/app/inventory/pos-usage/actions';
+import { paramsOf, urlOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -154,7 +155,7 @@ async function build(f: F, storeId: string, dayId: string, locationId: string): 
     await buildPlanAction(form({ storeId, salesDayId: dayId, locationId }));
   } catch (err) {
     if (err instanceof RedirectSignal) {
-      const u = new URL(err.to, 'http://x');
+      const u = urlOf(err.to);
       return { path: u.pathname, q: u.searchParams };
     }
     throw err;
@@ -280,7 +281,7 @@ async function finalizeVia(f: F, fields: Record<string, string>): Promise<{ q: U
   try {
     await finalizeSectionAction(form(fields));
   } catch (err) {
-    if (err instanceof RedirectSignal) return { q: new URL(err.to, 'http://x').searchParams };
+    if (err instanceof RedirectSignal) return { q: paramsOf(err.to) };
     throw err;
   }
   throw new Error('finalizeSectionAction returned without redirecting');

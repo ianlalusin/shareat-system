@@ -27,6 +27,7 @@ import {
   type Role,
 } from '../../../packages/auth/src/capabilities';
 import { AuthorizationError } from '../../../packages/auth/src/errors';
+import { paramsOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -599,7 +600,7 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
   it('A1: granted, one store-scoped capability → ok = "Granted: <Title>, at every store they have access to."', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(grantFormData({ capabilities: ['record_sale'] })));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('ok'), `redirect URL was: ${to}`).toBe(`Granted: ${capabilityTitle('record_sale')}, at every store they have access to.`);
     expect(grantCapabilityAsActor).toHaveBeenCalledTimes(1);
   });
@@ -616,7 +617,7 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
           grantFormData({ capabilities: ['record_sale'], intent: 'hold_own_right', positionGrantId: 'grant-position-1' }),
         ),
       );
-      const paramsOne = new URL(toOne, 'http://localhost').searchParams;
+      const paramsOne = paramsOf(toOne);
       expect(paramsOne.get('ok'), `redirect URL was: ${toOne}`).toBe(
         `${capabilityTitle('record_sale')} is now held in their own right at SmokeStore.`,
       );
@@ -633,7 +634,7 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
           }),
         ),
       );
-      const paramsTwo = new URL(toTwo, 'http://localhost').searchParams;
+      const paramsTwo = paramsOf(toTwo);
       expect(paramsTwo.get('error'), `A4 (negative): redirect URL was: ${toTwo}`).toBeTruthy();
       expect(paramsTwo.has('ok'), `redirect URL was: ${toTwo}`).toBe(false);
     },
@@ -646,7 +647,7 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
     const to = await expectRedirectTo(() =>
       actions.setCapabilityGrantAction(grantFormData({ capabilities: ['record_sale', 'submit_sales_day'] })),
     );
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     const ok = params.get('ok');
     expect(ok, `redirect URL was: ${to}`).toBe(
       `Granted 2 capabilities: ${capabilityTitle('record_sale')}, at every store they have access to; ${capabilityTitle('submit_sales_day')}, at every store they have access to.`,
@@ -671,7 +672,7 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
           grantFormData({ capabilities: ['record_sale'], intent: 'hold_own_right', positionGrantId: 'grant-position-1' }),
         ),
       );
-      const params = new URL(to, 'http://localhost').searchParams;
+      const params = paramsOf(to);
       expect(params.get('error'), `redirect URL was: ${to}`).toBeTruthy();
       expect(params.get('error')).not.toContain('now held');
       expect(params.has('ok'), `redirect URL was: ${to}`).toBe(false);
@@ -681,7 +682,7 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
 
   it('A6 (⛔): revoke → ok === "Grant revoked."', async () => {
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(revokeFormData({})));
-    const params = new URL(to, 'http://localhost').searchParams;
+    const params = paramsOf(to);
     expect(params.get('ok'), `redirect URL was: ${to}`).toBe('Grant revoked.');
   });
 });

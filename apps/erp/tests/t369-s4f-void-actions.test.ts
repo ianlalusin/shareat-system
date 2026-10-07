@@ -14,6 +14,7 @@
  * Four actions, not the three the briefing named: the customer-return void (`trade/returns/actions.ts`) throws the same way.
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { paramsOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -83,7 +84,7 @@ async function outcomeOf(run: () => Promise<unknown>): Promise<{ redirect: strin
     return { redirect: null, thrown: err as Error };
   }
 }
-const errorParam = (to: string | null): string | null => (to ? new URLSearchParams(to.split('?')[1] ?? '').get('error') : null);
+const errorParam = (to: string | null): string | null => (to ? paramsOf(to).get('error') : null);
 
 describe('a refused void redirects back carrying the sentence, and never throws', () => {
   it('inventory/returns voidReturnAction ({ok:false} from voidReturn)', async () => {
@@ -143,7 +144,7 @@ describe('control — a successful void still completes, with no error redirect'
     mocks.voidTradeOrder.mockResolvedValue({ reversedEntryId: 'e-1' });
     const out = await outcomeOf(() => voidOrderAction(form({ orderId: 'o-1', reason: 'Typed wrong' })));
     expect(out.thrown).toBeNull();
-    expect(out.redirect).toMatch(/[?&]ok=/);
+    expect(paramsOf(out.redirect!).get('ok')).toBeTruthy();
   });
 
   it('commissary/orders/[id] withdrawOrderAction redirects with ok=', async () => {
@@ -151,7 +152,7 @@ describe('control — a successful void still completes, with no error redirect'
     mocks.voidTradeOrder.mockResolvedValue({ reversedEntryId: 'e-1' });
     const out = await outcomeOf(() => withdrawOrderAction(form({ orderId: 'o-1', reason: 'Typed wrong' })));
     expect(out.thrown).toBeNull();
-    expect(out.redirect).toMatch(/[?&]ok=/);
+    expect(paramsOf(out.redirect!).get('ok')).toBeTruthy();
   });
 });
 

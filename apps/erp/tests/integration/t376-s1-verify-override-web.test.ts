@@ -57,6 +57,7 @@ import { createExpense } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { postEntry } from '../../../../packages/domain/src/ledger/post-entry';
+import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -162,7 +163,7 @@ async function expectRedirectTo(run: () => Promise<unknown>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 
 type OverrideFields = { confirm?: boolean; reason?: string; note?: string };
 function addOverride(fd: FormData, o: OverrideFields) {

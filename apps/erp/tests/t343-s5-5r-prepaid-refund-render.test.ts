@@ -11,6 +11,7 @@
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { seedSearch } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -136,7 +137,7 @@ describe('K1 (T-343 S5.5u item 3) — after a refusal, the write-off form keeps 
       };
       const element = await PrepaidItemPage({
         params: Promise.resolve({ id: 'item-1' }),
-        searchParams: Promise.resolve(postRefusalParams),
+        searchParams: Promise.resolve(await seedSearch(postRefusalParams)),
       });
       const html = renderToStaticMarkup(element as never);
 
@@ -181,7 +182,7 @@ describe('K2 (S5.5u Amendment A1 item 1) — a refused, back-dated write-off kee
       };
       const element = await PrepaidItemPage({
         params: Promise.resolve({ id: 'item-1' }),
-        searchParams: Promise.resolve(postRefusalParams),
+        searchParams: Promise.resolve(await seedSearch(postRefusalParams)),
       });
       const html = renderToStaticMarkup(element as never);
 

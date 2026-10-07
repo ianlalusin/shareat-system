@@ -67,6 +67,7 @@ import { MoneyLines } from '../../src/components/money/MoneyLines';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
+import { paramsOf, urlOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -173,8 +174,8 @@ async function expectRedirectTo(action: () => Promise<void>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const errorOf = (to: string) => new URL(to, 'http://localhost').searchParams.get('error');
-const okOf = (to: string) => new URL(to, 'http://localhost').searchParams.get('ok');
+const errorOf = (to: string) => paramsOf(to).get('error');
+const okOf = (to: string) => paramsOf(to).get('ok');
 
 /** Verbatim shape of the editSupplierAction form — `name` always carries the CURRENT name, the
  * way a real edit form pre-fills it, so legs not testing the name field never trip it. */
@@ -314,7 +315,7 @@ describe('W8 — createSupplierAction, name, termsMode=credit, creditTermsDays=1
     fd.set('termsMode', 'credit');
     fd.set('creditTermsDays', '15');
     const to = await expectRedirectTo(() => createSupplierAction(fd));
-    const url = new URL(to, 'http://localhost');
+    const url = urlOf(to);
     expect(url.pathname, `redirect URL was: ${to}`).toBe('/ap');
     expect(url.searchParams.get('ok')).not.toBeNull();
     const [row] = await sql<{ id: string; credit_terms_days: number | null }[]>`select id, credit_terms_days from suppliers where name = ${name}`;

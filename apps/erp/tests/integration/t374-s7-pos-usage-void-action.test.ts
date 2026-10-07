@@ -54,6 +54,7 @@ import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accou
 import { receiveDelivery } from '../../../../packages/domain/src/deliveries/receive';
 import { quantity } from '../../../../packages/domain/src/stock/quantity';
 import { importTestDay, linkTestStore, seedTestTenders } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
+import { urlOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -158,7 +159,7 @@ async function run(f: Fixture, who: Actor, fd: FormData): Promise<{ path: string
     await (fn as (fd: FormData) => Promise<void>)(fd);
   } catch (err) {
     if (err instanceof RedirectSignal) {
-      const u = new URL(err.to, 'http://x');
+      const u = urlOf(err.to);
       return { path: u.pathname, q: u.searchParams };
     }
     throw err;

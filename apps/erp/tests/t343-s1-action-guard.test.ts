@@ -14,6 +14,7 @@
  * to the REAL module by its relative path — a resolution shim, not a stub.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { urlOf } from './helpers/flash-jar';
 
 class RedirectSignal extends Error {
   constructor(public to: string) {
@@ -92,7 +93,7 @@ describe('R7 — createSupplierAction never puts a raw UUID in the ?error= URL',
     formData.set('name', 'Acme Trading');
 
     const to = await expectRedirectTo(() => createSupplierAction(formData));
-    const url = new URL(to, 'http://localhost');
+    const url = urlOf(to);
     const errorParam = url.searchParams.get('error');
 
     expect(errorParam).not.toBeNull();

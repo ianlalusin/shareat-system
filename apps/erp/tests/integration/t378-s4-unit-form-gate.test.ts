@@ -9,6 +9,7 @@ import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
+import { paramsOf } from '../helpers/flash-jar';
 
 config({ path: '.env.local' });
 
@@ -107,7 +108,7 @@ async function redirectOf(action: () => Promise<void>): Promise<string> {
   }
   throw new Error('expected the action to redirect');
 }
-const param = (to: string, k: string) => new URL(to, 'http://localhost').searchParams.get(k);
+const param = (to: string, k: string) => paramsOf(to).get(k);
 const decode = (s: string) => s.replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"');
 
 function form(fields: Record<string, string>): FormData {
