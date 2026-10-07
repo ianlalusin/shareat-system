@@ -89,7 +89,7 @@ const S = {
   blank: 'Say why this store is being unlinked.',
   tooLong: 'Keep the reason under 500 characters.',
   unverified: (n: string) => `${n} has imported sales days that aren't verified yet (`,
-  unverifiedTail: ') Verify or withdraw them before unlinking it.',
+  unverifiedTail: '). Verify or withdraw them before unlinking it.',
   changed: (n: string, d: string) => `${n}'s POS link changed while ${hd(d)} was being imported. Nothing was saved. Try again.`,
   held: (holder: string) => `That POS store is still held by ${holder}, which was unlinked. Link ${holder} to its own POS store first.`,
   w6: (n: string, dates: string) => `${n} still has typed sales days that aren't verified (${dates}). Verify or withdraw them before linking it to POS.`,
