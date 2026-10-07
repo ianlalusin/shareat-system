@@ -15,6 +15,8 @@
 
 ## ⛔ Deploy gate — read-only prechecks for migrations not yet on production (added 2026-10-03)
 
+**2026-10-07: production is at 0186.** Prechecks P0186a/b run with Ian (see the 0186 row); main pushed at `d79e754`; CI 37588901078 green; Deploy 37591334281 green; `https://erp2.shareat.net/sign-in` → 200. Next free migration 0187.
+
 **2026-10-06: production is at 0185.** Ian ran every precheck below (all 0, as `doadmin`, orgs = 1); main pushed at `aefdb2f`; CI 37408800087 green; Deploy 37410742035 green (migrate, swap, healthy after 1 attempt); `https://erp2.shareat.net/sign-in` → 200; `drizzle.__drizzle_migrations` = **166** rows (Ian, on the box). Next free migration 0186; the next migration's prechecks go in this table.
 
 Production (`159.223.46.224`, never `.78.207`) is at **0181**; main is now through **0184** (`040e572`; pushed 2026-10-05 NOT to main but to branch `wrapup/2026-10-05`, Ian: "push to main later"), so a push to main deploys 0182, 0183 and 0184 and the checklist rows below run BEFORE it. Production was at **0181** (162 rows in `drizzle.__drizzle_migrations` = every journal entry; release `20261004091631`, deployed 2026-10-04 09:16 UTC). Prechecks run 2026-10-04 with Ian, all **0**: P0178, P0179a/b, P0181, T-374 S5 `useful_life > 1200`, T-373 S2 inter-store pairs out of step, unpairable 1250/2150 lines; T-316 1115 float money accounts: 0 rows. ⛔ **A push to main DEPLOYS automatically** (`ci.yml` on push, then `deploy.yml` on workflow_run completed) — prechecks run BEFORE the push, never after. For any future migration, run each check READ-ONLY (`BEGIN READ ONLY; … ROLLBACK;`) with Ian. A non-zero result stops the
