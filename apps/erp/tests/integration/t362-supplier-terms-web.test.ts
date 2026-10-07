@@ -293,9 +293,10 @@ describe('W7 (green, guard; ordering) — staff, termsMode=credit, creditTermsDa
     const s = await codSupplier(f, 'w7');
     ACTOR_HOLDER.actor = f.staff;
     const { editSupplierAction } = await import('../../src/app/ap/actions');
+    // One jar sees both redirects, and the second flash overwrites the first: read each error right after its own redirect.
     const toValid = await expectRedirectTo(() => editSupplierAction(editFormData(s, { termsMode: 'credit', creditTermsDays: '30' })));
-    const toMalformed = await expectRedirectTo(() => editSupplierAction(editFormData(s, { termsMode: 'credit', creditTermsDays: 'abc' })));
     const baseline = errorOf(toValid);
+    const toMalformed = await expectRedirectTo(() => editSupplierAction(editFormData(s, { termsMode: 'credit', creditTermsDays: 'abc' })));
     const malformed = errorOf(toMalformed);
     expect(baseline, `no error on baseline — redirect URL was: ${toValid}`).not.toBeNull();
     expect(malformed, `redirect URL was: ${toMalformed}`).toBe(baseline);

@@ -11,7 +11,6 @@
  * "each field has exactly one owner" (T-172 invariant 10) is enforced. Nothing here decides who
  * may do what; it only says what happened, or why not.
  */
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { authorize, type Actor } from '@shareat/auth';
@@ -36,6 +35,7 @@ import {
 import { outcomeMessage } from '@/lib/constraint-messages';
 import { requireActor } from '../../../../lib/session';
 import { errorMessageOf, withOrgPrincipal } from '../lib';
+import { redirectWithFlash, type Flash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -45,22 +45,19 @@ function strs(fd: FormData, key: string): string[] {
   return fd.getAll(key).map((v) => (typeof v === 'string' ? v.trim() : ''));
 }
 
-function back(orderId: string, params: Record<string, string>): never {
-  redirect(`/commissary/orders/${orderId}?${new URLSearchParams(params).toString()}`);
-}
-
-/** One shape for every action: run the domain under the org principal, then say what happened. */
-async function perform(orderId: string, fn: (tx: Tx, actor: Actor) => Promise<string>): Promise<void> {
+/** One shape for every action: run the domain under the org principal and return what to say. Each exported action
+ *  redirects with it itself (`return await redirectWithFlash`), so the guard sees every call (T-380 G1b). */
+async function perform(orderId: string, fn: (tx: Tx, actor: Actor) => Promise<string>): Promise<Flash> {
   const actor = await requireActor(`/commissary/orders/${orderId}`);
-  let message = '';
+  let message: string;
   try {
     message = await withOrgPrincipal(actor.orgId, (tx) => fn(tx, actor));
   } catch (err) {
-    back(orderId, { error: errorMessageOf(err) });
+    return { error: errorMessageOf(err) };
   }
   revalidatePath('/commissary/orders');
   revalidatePath(`/commissary/orders/${orderId}`);
-  back(orderId, { ok: message });
+  return { ok: message };
 }
 
 // ---- T-175: the thread ---------------------------------------------------------------------------
@@ -124,12 +121,12 @@ export async function postMessageAction(fd: FormData): Promise<void> {
     // T-343 S5.1c/DEF-445 — `authorize()`'s refusal (and anything else `withOrgPrincipal` throws)
     // used to escape this action into the framework's error boundary. A banner now, like every
     // other action here.
-    redirect(`/commissary/orders/${orderId}?error=${encodeURIComponent(errorMessageOf(err))}`);
+    return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, { error: errorMessageOf(err) });
   }
 
   if (!result.ok) {
     const target = 'gone' in result && result.gone ? '/commissary/orders' : `/commissary/orders/${orderId}`;
-    redirect(`${target}?error=${encodeURIComponent(outcomeMessage(result))}`);
+    return await redirectWithFlash(target, {}, { error: outcomeMessage(result) });
   }
   revalidatePath(`/commissary/orders/${orderId}`);
 }
@@ -138,7 +135,7 @@ export async function postMessageAction(fd: FormData): Promise<void> {
 
 export async function addLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     await addBranchOrderLine(tx, actor, {
       orderId,
       itemId: str(fd, 'itemId'),
@@ -146,12 +143,12 @@ export async function addLineAction(fd: FormData): Promise<void> {
       rate: str(fd, 'rate') || null,
     });
     return 'Line added.';
-  });
+  }));
 }
 
 export async function updateLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     await updateBranchOrderLine(tx, actor, {
       orderId,
       lineId: str(fd, 'lineId'),
@@ -159,45 +156,45 @@ export async function updateLineAction(fd: FormData): Promise<void> {
       rate: str(fd, 'rate') || null,
     });
     return 'Line updated.';
-  });
+  }));
 }
 
 export async function removeLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     await removeBranchOrderLine(tx, actor, { orderId, lineId: str(fd, 'lineId') });
     return 'Line removed.';
-  });
+  }));
 }
 
 export async function submitOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     await submitOrder(tx, actor, { orderId });
     return 'Submitted. The commissary will accept it and pack it; you will see what they change here.';
-  });
+  }));
 }
 
 export async function decideLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   const decision = str(fd, 'decision') === 'approved' ? 'approved' : 'rejected';
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     await decideProposedLine(tx, actor, { orderId, lineId: str(fd, 'lineId'), decision });
     return decision === 'approved'
       ? 'Approved — the line now counts toward the order.'
       : 'Declined — the line will not be sent or charged.';
-  });
+  }));
 }
 
 /** Withdraw (branch) or cancel (commissary) before dispatch; void after it. One domain function. */
 export async function withdrawOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     const result = await voidTradeOrder(tx, actor, { orderId, reason: str(fd, 'reason') });
     return result.reversedEntryId
       ? 'Voided. The dispatch posting is reversed — never deleted — and the stock is back on the commissary\'s shelf.'
       : 'Cancelled. Nothing had moved, so nothing needed reversing. The branch may order again.';
-  });
+  }));
 }
 
 export async function receiveOrderAction(fd: FormData): Promise<void> {
@@ -214,7 +211,7 @@ export async function receiveOrderAction(fd: FormData): Promise<void> {
         : null,
     }))
     .filter((l) => l.lineId);
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     const result = await receiveTradeOrder(tx, actor, {
       orderId,
       receivedOn: str(fd, 'receivedOn') || undefined,
@@ -230,30 +227,30 @@ export async function receiveOrderAction(fd: FormData): Promise<void> {
         .map((o) => ` ${o.itemName}: ${o.counted} counted, ${o.booked} booked — the extra ${o.excess} is waiting for the commissary to resolve.`)
         .join('')
     );
-  });
+  }));
 }
 
 // ---- The commissary's side ------------------------------------------------------------------------
 
 export async function acceptOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     await acceptOrder(tx, actor, { orderId });
     return 'Accepted. Every line now carries the quantity asked for — adjust what you will actually send, then mark it ready.';
-  });
+  }));
 }
 
 export async function rejectOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     await rejectOrder(tx, actor, { orderId, reason: str(fd, 'reason') });
     return 'Rejected. The branch sees your reason on the thread and may order again.';
-  });
+  }));
 }
 
 export async function fulfilLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     await fulfilLine(tx, actor, {
       orderId,
       lineId: str(fd, 'lineId'),
@@ -262,12 +259,12 @@ export async function fulfilLineAction(fd: FormData): Promise<void> {
       sourceLocationId: str(fd, 'sourceLocationId') || null,
     });
     return 'Fulfilment saved.';
-  });
+  }));
 }
 
 export async function proposeLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     await proposeLine(tx, actor, {
       orderId,
       itemId: str(fd, 'itemId'),
@@ -278,24 +275,24 @@ export async function proposeLineAction(fd: FormData): Promise<void> {
       note: str(fd, 'note') || null,
     });
     return 'Proposed. It counts toward nothing until the branch approves it, and the order cannot be marked ready until they answer.';
-  });
+  }));
 }
 
 export async function markReadyAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     await markReady(tx, actor, { orderId });
     return 'Marked ready — the list is final. A manager can now dispatch it.';
-  });
+  }));
 }
 
 export async function dispatchOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
-  await perform(orderId, async (tx, actor) => {
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     const result = await dispatchBranchOrder(tx, actor, { orderId });
     return (
       `Dispatched. The goods are in transit at cost (1340) and the commissary's stock is relieved` +
       ` — entry ${result.entryId.slice(0, 8)}…. Both stores' books move when the branch confirms what actually arrived.`
     );
-  });
+  }));
 }

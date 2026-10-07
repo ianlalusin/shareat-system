@@ -7,8 +7,8 @@
  * the session, never the form; `saveBranchOrderDraft` authorises `place_branch_order` at the
  * BRANCH as its first statement, under the org's RLS principal.
  */
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { redirectWithFlash } from '@/lib/flash';
 import { saveBranchOrderDraft } from '@shareat/domain';
 import { errorMessageOf, withOrgPrincipal, peso } from './lib';
 import { requireActor } from '../../../lib/session';
@@ -52,12 +52,10 @@ export async function createOrderAction(fd: FormData): Promise<void> {
     orderId = result.orderId;
     total = result.totalAmount;
   } catch (err) {
-    redirect(`/commissary/orders?${new URLSearchParams({ store: branchStoreId, error: errorMessageOf(err) })}`);
+    return await redirectWithFlash('/commissary/orders', { store: branchStoreId }, { error: errorMessageOf(err) });
   }
   revalidatePath('/commissary/orders');
-  redirect(
-    `/commissary/orders/${orderId}?${new URLSearchParams({
-      ok: `Draft saved at ${peso(total)}. Add or change lines, then submit it to the commissary.`,
-    })}`,
-  );
+  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, {
+    ok: `Draft saved at ${peso(total)}. Add or change lines, then submit it to the commissary.`,
+  });
 }

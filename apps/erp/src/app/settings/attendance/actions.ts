@@ -14,11 +14,11 @@
  * `authorize()` call, not here. Parsing before the gate let a non-holder's malformed field draw a
  * field sentence instead of the authorization refusal.
  */
-import { redirect } from 'next/navigation';
 import { supersedeConfig, type ConfigChangesInput } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -27,10 +27,6 @@ function str(fd: FormData, key: string): string {
 
 function bool(fd: FormData, key: string): boolean {
   return fd.get(key) === 'on';
-}
-
-function back(store: string, params: Record<string, string>): never {
-  redirect(`/settings/attendance?${new URLSearchParams({ store, ...params }).toString()}`);
 }
 
 export async function updateAttendanceConfigAction(formData: FormData): Promise<void> {
@@ -106,7 +102,7 @@ export async function updateAttendanceConfigAction(formData: FormData): Promise<
       }),
     );
   } catch (err) {
-    back(store, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/attendance', { store: store }, { error: errorMessage(err) });
   }
-  back(store, { ok: `Saved. The new policy takes effect from ${effectiveFrom}.` });
+  return await redirectWithFlash('/settings/attendance', { store: store }, { ok: `Saved. The new policy takes effect from ${effectiveFrom}.` });
 }

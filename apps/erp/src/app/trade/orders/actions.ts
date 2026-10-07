@@ -9,13 +9,13 @@
  * repeated here. Every one of those runs under the org's RLS principal (`withOrgPrincipal`), the
  * same way the AP and item actions do.
  */
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createTradeOrder, dispatchTradeOrder, receiveTradeOrder, voidTradeOrder } from '@shareat/domain';
 import { SHORTAGE_REASONS, type ShortageReason } from '@shareat/db/schema';
 import { peso, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -25,10 +25,6 @@ function str(fd: FormData, key: string): string {
 /** Repeated fields — one per line row. Parallel arrays, in document order. */
 function strs(fd: FormData, key: string): string[] {
   return fd.getAll(key).map((v) => (typeof v === 'string' ? v.trim() : ''));
-}
-
-function back(path: string, params: Record<string, string>): never {
-  redirect(`${path}?${new URLSearchParams(params).toString()}`);
 }
 
 export async function createOrderAction(fd: FormData): Promise<void> {
@@ -62,10 +58,10 @@ export async function createOrderAction(fd: FormData): Promise<void> {
     orderId = result.orderId;
     total = result.totalAmount;
   } catch (err) {
-    back('/trade/orders', { store: storeId, error: errorMessage(err) });
+    return await redirectWithFlash('/trade/orders', { store: storeId }, { error: errorMessage(err) });
   }
   revalidatePath('/trade/orders');
-  back(`/trade/orders/${orderId}`, {
+  return await redirectWithFlash(`/trade/orders/${orderId}`, {}, {
     ok: `Draft saved at ${peso(total)}. Nothing has posted — dispatch is the event that bills and moves stock.`,
   });
 }
@@ -91,11 +87,11 @@ export async function dispatchOrderAction(fd: FormData): Promise<void> {
           'and cost of sales posted.' +
           (result.creditOverridden ? ' ⚠️ The credit limit was exceeded on your stated reason, which is kept.' : '');
   } catch (err) {
-    back(`/trade/orders/${orderId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { error: errorMessage(err) });
   }
   revalidatePath('/trade/orders');
   revalidatePath(`/trade/orders/${orderId}`);
-  back(`/trade/orders/${orderId}`, { ok: message });
+  return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { ok: message });
 }
 
 export async function receiveOrderAction(fd: FormData): Promise<void> {
@@ -134,11 +130,11 @@ export async function receiveOrderAction(fd: FormData): Promise<void> {
       message += ` ${o.itemName}: ${o.counted} counted, ${o.booked} booked — the extra ${o.excess} is waiting for the commissary to resolve.`;
     }
   } catch (err) {
-    back(`/trade/orders/${orderId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { error: errorMessage(err) });
   }
   revalidatePath('/trade/orders');
   revalidatePath(`/trade/orders/${orderId}`);
-  back(`/trade/orders/${orderId}`, { ok: message });
+  return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { ok: message });
 }
 
 export async function voidOrderAction(fd: FormData): Promise<void> {
@@ -153,9 +149,9 @@ export async function voidOrderAction(fd: FormData): Promise<void> {
       ? 'Voided. The posting is reversed — never deleted — and the stock it moved is given back.'
       : 'Voided. Nothing had posted yet, so nothing needed reversing.';
   } catch (err) {
-    back(`/trade/orders/${orderId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { error: errorMessage(err) });
   }
   revalidatePath('/trade/orders');
   revalidatePath(`/trade/orders/${orderId}`);
-  back(`/trade/orders/${orderId}`, { ok: message });
+  return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { ok: message });
 }

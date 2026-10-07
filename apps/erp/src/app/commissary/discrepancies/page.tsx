@@ -10,6 +10,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Transit discrepancies — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default async function DiscrepanciesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/commissary/discrepancies');
   const stores = await listStores(actor.orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;

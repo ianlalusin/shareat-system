@@ -82,9 +82,10 @@ vi.mock('@shareat/db', async () => {
   };
 });
 
-vi.mock('@shareat/auth', () => ({
-  authorize: vi.fn(async () => undefined),
-}));
+vi.mock('@shareat/auth', async () => {
+  const { signFlash, flashSignatureMatches } = await vi.importActual<typeof import('@shareat/auth')>('@shareat/auth');
+  return { signFlash, flashSignatureMatches, authorize: vi.fn(async () => undefined) };
+});
 
 const U = '0190a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b';
 const GONE_ORDER_SENTENCE =

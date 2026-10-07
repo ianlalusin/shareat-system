@@ -55,7 +55,10 @@ const STUB_TX = { select: () => ({ from: () => ({ where: (...args: unknown[]) =>
 const authorize = vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined);
 vi.mock('@shareat/auth', async () => {
   const { AuthorizationError } = await import('../../../packages/auth/src/errors');
+  const { signFlash, flashSignatureMatches } = await vi.importActual<typeof import('@shareat/auth')>('@shareat/auth');
   return {
+    signFlash,
+    flashSignatureMatches,
     authorize: (...args: unknown[]) => authorize(...args),
     AuthorizationError,
   };

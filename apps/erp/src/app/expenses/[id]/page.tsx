@@ -10,6 +10,7 @@ import { closedMonthOf, closedMonths } from '../../../lib/period-override';
 import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
 // that reader returns, so the two cannot drift.
@@ -42,7 +43,7 @@ export default async function ExpenseDetailPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
 
   const { actor } = await requireSession(`/expenses/${id}`);
   const orgId = actor.orgId;

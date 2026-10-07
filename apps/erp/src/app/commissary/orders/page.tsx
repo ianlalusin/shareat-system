@@ -15,6 +15,7 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Branch orders — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,7 @@ const LABEL = 'flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-40
 const NEW_ORDER_ROWS = [1, 2, 3];
 
 export default async function BranchOrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/commissary/orders');
   const stores = await listStores(actor.orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;

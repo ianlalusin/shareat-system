@@ -12,7 +12,6 @@
  * `verify_sales_day` being a different capability from `submit_sales_day` proved nothing — anyone
  * could claim to be anyone. **The segregation only became real when this line changed.**
  */
-import { redirect } from 'next/navigation';
 import {
   createSalesDay, editSalesDay, importSalesDay, postPosCorrection, recheckPosDay, recheckRecentDays, reimportSalesDay,
   setPlatformSales, submitSalesDay, verifySalesDay, voidSalesDay,
@@ -21,6 +20,7 @@ import { logger } from '@shareat/core/logger';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash, splitReturnTo, type Nav } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -35,11 +35,9 @@ function amount(fd: FormData, key: string): string {
 
 /** Only the FILTER state travels in the URL now. The org and the person come from the session,
  *  and a store here names which store a day belongs to — not who is acting. */
-function carryQs(fd: FormData): string {
-  const params = new URLSearchParams();
+function carryNav(fd: FormData): Nav {
   const store = str(fd, 'storeId');
-  if (store) params.set('store', store);
-  return params.toString();
+  return store ? { store } : {};
 }
 
 /**
@@ -95,7 +93,7 @@ function parseDayFigures(formData: FormData) {
 export async function createSalesDayAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const storeId = str(formData, 'storeId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
 
   let newId: string;
   try {
@@ -109,9 +107,9 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
     );
     newId = result.id;
   } catch (err) {
-    redirect(`/sales-days/new?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/sales-days/new', nav, { error: errorMessage(err) });
   }
-  redirect(`/sales-days/${newId}?${qs}`);
+  return await redirectWithFlash(`/sales-days/${newId}`, nav);
 }
 
 /**
@@ -122,7 +120,7 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
 export async function importSalesDayAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const storeId = str(formData, 'storeId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
 
   let dayId: string;
   try {
@@ -132,7 +130,7 @@ export async function importSalesDayAction(formData: FormData): Promise<void> {
     );
     dayId = result.id;
   } catch (err) {
-    redirect(`/sales-days/new?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/sales-days/new', nav, { error: errorMessage(err) });
   }
   // T-375 S6 (R10, V4): POS changes past days (voids, closed-receipt edits), so the 7 days before this one are
   // checked again - AFTER the import has committed, with nothing held across POS. A failure is logged, never shown.
@@ -141,7 +139,7 @@ export async function importSalesDayAction(formData: FormData): Promise<void> {
   } catch (err) {
     logger.error({ storeId, businessDate: str(formData, 'businessDate'), err: err instanceof Error ? err.message : String(err) }, 'importSalesDayAction: the prior-days recheck failed');
   }
-  redirect(`/sales-days/${dayId}?${qs}`);
+  return await redirectWithFlash(`/sales-days/${dayId}`, nav);
 }
 
 /**
@@ -151,16 +149,19 @@ export async function importSalesDayAction(formData: FormData): Promise<void> {
 export async function recheckPosDayAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'salesDayId');
-  const qs = carryQs(formData);
-  const returnTo = str(formData, 'returnTo');
-  const base = returnTo.startsWith('/reports/pos-reconciliation?') ? returnTo : `/sales-days/${id}?${qs}`;
-  const withError = (message: string) => `${base}${base.includes('?') ? '&' : '?'}error=${encodeURIComponent(message)}`;
+  const nav = carryNav(formData);
+  // DEF-603: `returnTo` is form-supplied. Only the reconciliation screen is honoured, as a same-app path plus its
+  // uuid / date nav keys; anything else is the day's own page.
+  const returned = splitReturnTo(str(formData, 'returnTo'), '');
+  const toReconciliation = returned.path === '/reports/pos-reconciliation';
+  const targetPath = toReconciliation ? returned.path : `/sales-days/${id}`;
+  const targetNav = toReconciliation ? returned.nav : nav;
   try {
     await recheckPosDay(actor, { salesDayId: id });
   } catch (err) {
-    redirect(withError(errorMessage(err)));
+    return await redirectWithFlash(targetPath, targetNav, { error: errorMessage(err) });
   }
-  redirect(base);
+  return await redirectWithFlash(targetPath, targetNav);
 }
 
 /**
@@ -170,7 +171,7 @@ export async function recheckPosDayAction(formData: FormData): Promise<void> {
 export async function postPosCorrectionAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'salesDayId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
       postPosCorrection(tx, actor, {
@@ -181,9 +182,9 @@ export async function postPosCorrectionAction(formData: FormData): Promise<void>
       }),
     );
   } catch (err) {
-    redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
   }
-  redirect(`/sales-days/${id}?${qs}`);
+  return await redirectWithFlash(`/sales-days/${id}`, nav);
 }
 
 /**
@@ -193,13 +194,13 @@ export async function postPosCorrectionAction(formData: FormData): Promise<void>
 export async function reimportSalesDayAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'salesDayId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
   try {
     await withOrgPrincipal(actor.orgId, (tx) => reimportSalesDay(tx, actor, { salesDayId: id }));
   } catch (err) {
-    redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
   }
-  redirect(`/sales-days/${id}?${qs}`);
+  return await redirectWithFlash(`/sales-days/${id}`, nav);
 }
 
 /**
@@ -210,51 +211,51 @@ export async function reimportSalesDayAction(formData: FormData): Promise<void> 
 export async function editSalesDayAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'salesDayId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
       editSalesDay(tx, actor, { salesDayId: id, ...parseDayFigures(formData) }),
     );
   } catch (err) {
-    redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
   }
-  redirect(`/sales-days/${id}?${qs}`);
+  return await redirectWithFlash(`/sales-days/${id}`, nav);
 }
 
 export async function submitSalesDayAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'salesDayId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
   try {
     await withOrgPrincipal(actor.orgId, (tx) => submitSalesDay(tx, actor, id));
   } catch (err) {
-    redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
   }
-  redirect(`/sales-days/${id}?${qs}`);
+  return await redirectWithFlash(`/sales-days/${id}`, nav);
 }
 
 export async function verifySalesDayAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'salesDayId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
   try {
     await withOrgPrincipal(actor.orgId, (tx) => verifySalesDay(tx, actor, id));
   } catch (err) {
-    redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
   }
-  redirect(`/sales-days/${id}?${qs}`);
+  return await redirectWithFlash(`/sales-days/${id}`, nav);
 }
 
 export async function voidSalesDayAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'salesDayId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
   try {
     await withOrgPrincipal(actor.orgId, (tx) => voidSalesDay(tx, actor, id, str(formData, 'reason')));
   } catch (err) {
-    redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
   }
-  redirect(`/sales-days/${id}?${qs}`);
+  return await redirectWithFlash(`/sales-days/${id}`, nav);
 }
 
 /**
@@ -265,8 +266,7 @@ export async function voidSalesDayAction(formData: FormData): Promise<void> {
 export async function setPlatformSalesAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'salesDayId');
-  const qs = carryQs(formData);
-  const back = (error: string) => redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(error)}`);
+  const nav = carryNav(formData);
 
   const rows: { channelId: string; amount: string; noSales: boolean }[] = [];
   for (const [key, value] of formData.entries()) {
@@ -278,7 +278,7 @@ export async function setPlatformSalesAction(formData: FormData): Promise<void> 
   try {
     await withOrgPrincipal(actor.orgId, (tx) => setPlatformSales(tx, actor, { salesDayId: id, rows }));
   } catch (err) {
-    return back(errorMessage(err));
+    return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
   }
-  redirect(`/sales-days/${id}?${qs}`);
+  return await redirectWithFlash(`/sales-days/${id}`, nav);
 }

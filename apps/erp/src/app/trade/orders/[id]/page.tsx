@@ -8,6 +8,7 @@ import { STATUS_LABEL, orderDetail, peso, today } from '../lib';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Trade order — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -41,7 +42,7 @@ export default async function TradeOrderPage({
   searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/trade/orders/${id}`);
   const detail = await orderDetail(actor.orgId, id);
   if (!detail) notFound();

@@ -8,6 +8,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { Button, Input } from '@/components/ui';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Reimbursements — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,7 @@ export default async function ReimbursementsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess('/expenses/reimbursements');
   if (refusal) return refusal;
 

@@ -10,20 +10,16 @@
  * ⭐ **The organisation is never read from the form.** `setOrganizationIdentity` takes it from the
  * Actor and has no `orgId` parameter at all — the shape DEF-210 exists to close.
  */
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { setOrganizationIdentity } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(params: Record<string, string>): never {
-  redirect(`/settings/organization?${new URLSearchParams(params).toString()}`);
 }
 
 export async function setOrganizationIdentityAction(fd: FormData): Promise<void> {
@@ -41,8 +37,8 @@ export async function setOrganizationIdentityAction(fd: FormData): Promise<void>
       }),
     );
   } catch (err) {
-    back({ error: errorMessage(err) });
+    return await redirectWithFlash('/settings/organization', {}, { error: errorMessage(err) });
   }
   revalidatePath('/settings/organization');
-  back({ ok: 'Saved. This is what a document printed from these books will carry.' });
+  return await redirectWithFlash('/settings/organization', {}, { ok: 'Saved. This is what a document printed from these books will carry.' });
 }

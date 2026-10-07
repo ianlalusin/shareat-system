@@ -9,6 +9,7 @@ import { withOrgPrincipal } from '../lib';
 import { BudgetHint } from './BudgetHint';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'New expense — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,7 @@ interface SearchParams {
 
 
 export default async function NewExpensePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
 
   const { actor } = await requireSession('/expenses/new');
   const orgId = actor.orgId;

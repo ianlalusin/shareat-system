@@ -22,6 +22,7 @@ import {
 import { BRANCH_ORDER_STAGE_LABEL, actorStoreIds, orderView, peso, today, type OrderView } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Branch order — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -59,7 +60,7 @@ export default async function BranchOrderPage({
   searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/commissary/orders/${id}`);
   const [view, scope] = await Promise.all([orderView(actor.orgId, id), actorStoreIds(actor)]);
   if (!view) notFound();

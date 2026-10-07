@@ -80,8 +80,8 @@ function form(entries: Record<string, string>): FormData {
   for (const [k, v] of Object.entries(entries)) fd.set(k, v);
   return fd;
 }
-const RETURN_FORM = { store: 'store-9', tradeOrderId: 'to-1', tradeOrderLineId: 'tol-1', quantity: '2', reason: 'Spoiled' };
-const CREDIT_FORM = { store: 'store-9', tradeOrderId: 'to-1', moneyAccountId: 'acct-1', amount: '100.00' };
+const RETURN_FORM = { store: '3f2b8c1e-7a4d-4e5b-9c61-0d2e8a7b5f10', tradeOrderId: 'to-1', tradeOrderLineId: 'tol-1', quantity: '2', reason: 'Spoiled' };
+const CREDIT_FORM = { store: '3f2b8c1e-7a4d-4e5b-9c61-0d2e8a7b5f10', tradeOrderId: 'to-1', moneyAccountId: 'acct-1', amount: '100.00' };
 
 async function outcomeOf(run: () => Promise<unknown>): Promise<{ redirect: string | null; thrown: Error | null }> {
   try {
@@ -114,7 +114,7 @@ describe('B1 recordReturnAction success, per settlement', () => {
       expect(out.redirect, 'no redirect on success (the screen stays silent)').not.toBeNull();
       expect(out.redirect!.startsWith('/trade/returns?'), `redirect: ${out.redirect}`).toBe(true);
       expect(param(out.redirect, 'ok'), `redirect: ${out.redirect}`).toBe(sentence);
-      expect(param(out.redirect, 'store'), `store lost (redirect: ${out.redirect})`).toBe('store-9');
+      expect(param(out.redirect, 'store'), `store lost (redirect: ${out.redirect})`).toBe('3f2b8c1e-7a4d-4e5b-9c61-0d2e8a7b5f10');
       expect(param(out.redirect, 'error'), `redirect: ${out.redirect}`).toBeNull();
       const rev = calls.order.indexOf('revalidate:/trade/returns');
       const red = calls.order.findIndex((m) => m.startsWith('redirect:'));
@@ -135,7 +135,7 @@ describe('B2 {ok:false} with an id in the reason', () => {
     expect(shown, `no ?error= (redirect: ${out.redirect})`).not.toBeNull();
     expect(shown, 'a uuid reached the page').not.toMatch(UUID_RE);
     expect(shown).toBe(errorMessage(new Error(withId)));
-    expect(param(out.redirect, 'store')).toBe('store-9');
+    expect(param(out.redirect, 'store')).toBe('3f2b8c1e-7a4d-4e5b-9c61-0d2e8a7b5f10');
     expect(param(out.redirect, 'ok')).toBeNull();
     expect(calls.order.filter((m) => m.startsWith('revalidate:')), `order: ${calls.order.join(' | ')}`).toEqual([]);
   });
@@ -149,7 +149,7 @@ describe('B3 a thrown refusal', () => {
     const out = await recordRun();
     expect(out.thrown, `the action threw (a digest in production): ${out.thrown?.message}`).toBeNull();
     expect(param(out.redirect, 'error'), `redirect: ${out.redirect}`).toBe(sentence);
-    expect(param(out.redirect, 'store')).toBe('store-9');
+    expect(param(out.redirect, 'store')).toBe('3f2b8c1e-7a4d-4e5b-9c61-0d2e8a7b5f10');
     expect(param(out.redirect, 'ok')).toBeNull();
   });
 });
@@ -161,7 +161,7 @@ describe('B4 applyCreditAction', () => {
     expect(out.thrown, `the action threw: ${out.thrown?.message}`).toBeNull();
     expect(out.redirect, 'no redirect on success').not.toBeNull();
     expect(param(out.redirect, 'ok'), `redirect: ${out.redirect}`).toBe(CREDIT_OK);
-    expect(param(out.redirect, 'store'), `redirect: ${out.redirect}`).toBe('store-9');
+    expect(param(out.redirect, 'store'), `redirect: ${out.redirect}`).toBe('3f2b8c1e-7a4d-4e5b-9c61-0d2e8a7b5f10');
     const rev = calls.order.indexOf('revalidate:/trade/returns');
     const red = calls.order.findIndex((m) => m.startsWith('redirect:'));
     expect(rev, `order: ${calls.order.join(' | ')}`).toBeGreaterThanOrEqual(0);
@@ -216,7 +216,7 @@ describe('B5 no store in the form', () => {
 
     mocks.recordCustomerReturn.mockResolvedValue({ ok: true, settlement: 'reduce_ar' });
     const keep = await recordRun();
-    expect(param(keep.redirect, 'store'), `control redirect: ${keep.redirect}`).toBe('store-9');
+    expect(param(keep.redirect, 'store'), `control redirect: ${keep.redirect}`).toBe('3f2b8c1e-7a4d-4e5b-9c61-0d2e8a7b5f10');
   });
 });
 

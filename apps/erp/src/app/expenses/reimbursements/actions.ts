@@ -11,13 +11,13 @@
  * figures, the account, the date and the `payoutId` the page minted for THIS render — a second
  * submit of the same form carries the same `payoutId` and so posts once.
  */
-import { redirect } from 'next/navigation';
 import { payReimbursement } from '@shareat/domain';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 import { displayNameOf, peso, withOrgPrincipal } from './lib';
 import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '../../../lib/period-override';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash, type Flash, type Nav } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -29,12 +29,11 @@ const BASE = '/expenses/reimbursements';
 export async function payReimbursementAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const storeId = str(formData, 'storeId');
-  const back = (params: Record<string, string>): string =>
-    `${BASE}?${new URLSearchParams({ ...(storeId ? { store: storeId } : {}), ...params }).toString()}`;
+  const nav: Nav = storeId ? { store: storeId } : {};
 
-  // The redirect is computed inside the try and issued after it: `redirect()` throws, and a throw
-  // inside the try would be caught by our own catch (DEF-422).
-  let target: string;
+  // The banner is computed inside the try and the redirect is issued after it: `redirect()` throws, and a
+  // throw inside the try would be caught by our own catch (DEF-422).
+  let flash: Flash;
   try {
     const amount = str(formData, 'amount');
     if (!amount) throw new Error('Enter the amount to pay.');
@@ -68,9 +67,9 @@ export async function payReimbursementAction(formData: FormData): Promise<void> 
     const ok = result.created
       ? `Paid ${peso(parseMoneyInput(amount, 'payReimbursementAction: the amount', 'The reimbursement amount'))} to ${name}. ${still}`
       : `This payout to ${name} was already recorded. ${still}`;
-    target = back({ ok, ...(result.warning ? { warning: result.warning } : {}) });
+    flash = { ok, ...(result.warning ? { warning: result.warning } : {}) };
   } catch (err) {
-    target = back({ error: errorMessage(err) });
+    flash = { error: errorMessage(err) };
   }
-  redirect(target);
+  return await redirectWithFlash(BASE, nav, flash);
 }

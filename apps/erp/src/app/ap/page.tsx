@@ -5,6 +5,7 @@ import { createSupplierAction, recordInvoiceAction } from './actions';
 import { listSuppliersWithPosition, listInvoices, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,7 @@ interface SearchParams {
 }
 
 export default async function ApPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/ap');
 
   const [suppliers, pending, stores] = await Promise.all([

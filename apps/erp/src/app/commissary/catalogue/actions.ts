@@ -9,21 +9,16 @@
  * mutation runs under the org's RLS principal (`withOrgPrincipal`), the same way the trade-orders
  * and expenses actions do.
  */
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { removeMap, upsertCommissaryLink, upsertMap, upsertOffering } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(commissaryStoreId: string, extra: Record<string, string>): never {
-  const params = new URLSearchParams({ commissary: commissaryStoreId, ...extra });
-  redirect(`/commissary/catalogue?${params.toString()}`);
 }
 
 export async function upsertLinkAction(fd: FormData): Promise<void> {
@@ -44,10 +39,10 @@ export async function upsertLinkAction(fd: FormData): Promise<void> {
           : 'Linked.'
         : 'Link set to inactive — the branch can no longer be mapped or ordered from here.';
   } catch (err) {
-    back(commissaryStoreId, { error: errorMessage(err) });
+    return await redirectWithFlash('/commissary/catalogue', { commissary: commissaryStoreId }, { error: errorMessage(err) });
   }
   revalidatePath('/commissary/catalogue');
-  back(commissaryStoreId, { ok: message });
+  return await redirectWithFlash('/commissary/catalogue', { commissary: commissaryStoreId }, { ok: message });
 }
 
 export async function upsertOfferingAction(fd: FormData): Promise<void> {
@@ -65,10 +60,10 @@ export async function upsertOfferingAction(fd: FormData): Promise<void> {
     );
     message = status === 'inactive' ? 'Offering deactivated.' : 'Offering saved.';
   } catch (err) {
-    back(commissaryStoreId, { error: errorMessage(err) });
+    return await redirectWithFlash('/commissary/catalogue', { commissary: commissaryStoreId }, { error: errorMessage(err) });
   }
   revalidatePath('/commissary/catalogue');
-  back(commissaryStoreId, { ok: message });
+  return await redirectWithFlash('/commissary/catalogue', { commissary: commissaryStoreId }, { ok: message });
 }
 
 export async function upsertMapAction(fd: FormData): Promise<void> {
@@ -90,10 +85,10 @@ export async function upsertMapAction(fd: FormData): Promise<void> {
     );
     message = 'Mapped. This line can now be received as a real internal transfer.';
   } catch (err) {
-    back(commissaryStoreId, { branch: branchStoreId, error: errorMessage(err) });
+    return await redirectWithFlash('/commissary/catalogue', { commissary: commissaryStoreId, branch: branchStoreId }, { error: errorMessage(err) });
   }
   revalidatePath('/commissary/catalogue');
-  back(commissaryStoreId, { branch: branchStoreId, ok: message });
+  return await redirectWithFlash('/commissary/catalogue', { commissary: commissaryStoreId, branch: branchStoreId }, { ok: message });
 }
 
 export async function removeMapAction(fd: FormData): Promise<void> {
@@ -107,8 +102,8 @@ export async function removeMapAction(fd: FormData): Promise<void> {
     await withOrgPrincipal(actor.orgId, (tx) => removeMap(tx, actor, { id }));
     message = 'Map row removed.';
   } catch (err) {
-    back(commissaryStoreId, { branch: branchStoreId, error: errorMessage(err) });
+    return await redirectWithFlash('/commissary/catalogue', { commissary: commissaryStoreId, branch: branchStoreId }, { error: errorMessage(err) });
   }
   revalidatePath('/commissary/catalogue');
-  back(commissaryStoreId, { branch: branchStoreId, ok: message });
+  return await redirectWithFlash('/commissary/catalogue', { commissary: commissaryStoreId, branch: branchStoreId }, { ok: message });
 }
