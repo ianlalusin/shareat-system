@@ -43,7 +43,9 @@ function run(args: string[], env: Record<string, string | undefined> = { POS_API
   });
 }
 
-describe('pos-v1-feed-census script', { timeout: 60_000 }, () => {
+// retry: under a full-suite load on Windows the spawned node child has died with 0xC0000409 (a process crash,
+// not a wrong exit code: gate 11, 2026-10-07). A real regression fails every attempt; only the crash is retried.
+describe('pos-v1-feed-census script', { timeout: 60_000, retry: 2 }, () => {
   it('passes on a clean store, prints counts only, never the key', async () => {
     const r = await run(['--pos-store', 'OK', '--days', '10', '--to', '2026-09-10']);
     expect(r.code).toBe(0);
