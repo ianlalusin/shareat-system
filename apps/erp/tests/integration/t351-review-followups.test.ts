@@ -140,13 +140,19 @@ async function expectRedirectTo(action: () => Promise<void>): Promise<string> {
   try {
     await action();
   } catch (err) {
-    if (err instanceof RedirectSignal) return err.to;
+    if (err instanceof RedirectSignal) {
+      // T-380: the flash cookie is ONE cookie, overwritten by every redirect. A test that compares two
+      // redirects must read each banner at the moment its redirect happened, so snapshot it here.
+      SEEN.set(err.to, paramsOf(err.to));
+      return err.to;
+    }
     throw err;
   }
   throw new Error('expected the action to redirect');
 }
-const errorOf = (to: string) => paramsOf(to).get('error');
-const okOf = (to: string) => paramsOf(to).get('ok');
+const SEEN = new Map<string, URLSearchParams>();
+const errorOf = (to: string) => (SEEN.get(to) ?? paramsOf(to)).get('error');
+const okOf = (to: string) => (SEEN.get(to) ?? paramsOf(to)).get('ok');
 
 let actionsAp: typeof import('../../src/app/ap/actions');
 let actionsLoans: typeof import('../../src/app/loans/actions');

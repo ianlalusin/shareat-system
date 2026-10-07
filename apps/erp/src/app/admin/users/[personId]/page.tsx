@@ -18,6 +18,7 @@ import {
   userDetail,
 } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'User access — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -51,7 +52,7 @@ export default async function UserAccessPage({
   searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   const { personId } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess(`/admin/users/${personId}`);
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;

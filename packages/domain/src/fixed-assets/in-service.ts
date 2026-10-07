@@ -163,6 +163,32 @@ export function describeReversal(toReverse: fixedAssetsRepo.PostedDepreciationEn
   return `${toReverse.length} depreciation entries (${first}–${last}), ${formatMoney(total)}`;
 }
 
+/** How many assets a store-wide confirm names one by one before it summarises the rest (T-380 S2-R1). */
+export const CONFIRM_NAMED_ASSETS = 10;
+
+/**
+ * The per-asset part of the store-wide confirm sentence. Up to `CONFIRM_NAMED_ASSETS` assets are named in a stable
+ * order (name, then the first entry id), each as `describeReversal` words it. Beyond that: `and N more asset(s). In
+ * all: <every entry being reversed> entries, ₱<total>`, counted over the SAME entries the plan hash covers, so the
+ * figures shown are exactly what a confirm will reverse. Nothing is cut mid-sentence. T-380 S2-R1 (the consent text
+ * rides a size-limited cookie).
+ */
+export function describeStoreReversal(
+  affected: { name: string; toReverse: fixedAssetsRepo.PostedDepreciationEntry[] }[],
+): string {
+  const ordered = [...affected].sort(
+    (a, b) => a.name.localeCompare(b.name) || a.toReverse[0]!.entryId.localeCompare(b.toReverse[0]!.entryId),
+  );
+  const named = ordered
+    .slice(0, CONFIRM_NAMED_ASSETS)
+    .map(({ name, toReverse }) => `${name} — ${describeReversal(toReverse)}`)
+    .join('; ');
+  if (ordered.length <= CONFIRM_NAMED_ASSETS) return named;
+  const all = ordered.flatMap((a) => a.toReverse);
+  const total = all.reduce((sum, e) => add(sum, money(e.amount)), money('0'));
+  return `${named}; and ${ordered.length - CONFIRM_NAMED_ASSETS} more asset(s). In all: ${all.length} depreciation entries, ${formatMoney(total)}`;
+}
+
 /**
  * Reverses every planned entry, dating each one per R1.4 (`reverseEntry`'s own open/closed-period
  * branching — this only decides whether to override it). `memo` is the caller's full reversal

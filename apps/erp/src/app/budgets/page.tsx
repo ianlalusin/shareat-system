@@ -17,6 +17,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Budgets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,7 @@ interface SearchParams {
 }
 
 export default async function BudgetsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/budgets');
   const orgId = actor.orgId;
 

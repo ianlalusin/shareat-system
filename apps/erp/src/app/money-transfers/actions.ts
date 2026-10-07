@@ -10,11 +10,11 @@
  *
  * ⭐ The actor comes from `requireActor()`, never the form (T-138, bible §7.1).
  */
-import { redirect } from 'next/navigation';
 import { createMoneyTransfer, settleBetweenStores, voidMoneyTransfer } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -51,14 +51,10 @@ export async function createMoneyTransferAction(formData: FormData): Promise<voi
     // books is worth knowing.
     if (result.warning) warning = result.warning;
   } catch (err) {
-    redirect(`/money-transfers?error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/money-transfers', {}, { error: errorMessage(err) });
   }
 
-  redirect(
-    warning
-      ? `/money-transfers?ok=created&warning=${encodeURIComponent(warning)}`
-      : '/money-transfers?ok=created',
-  );
+  return await redirectWithFlash('/money-transfers', {}, warning ? { ok: 'created', warning } : { ok: 'created' });
 }
 
 /**
@@ -91,14 +87,10 @@ export async function settleBetweenStoresAction(formData: FormData): Promise<voi
     );
     if (result.warning) warning = result.warning;
   } catch (err) {
-    redirect(`/money-transfers?error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/money-transfers', {}, { error: errorMessage(err) });
   }
 
-  redirect(
-    warning
-      ? `/money-transfers?ok=settled&warning=${encodeURIComponent(warning)}`
-      : '/money-transfers?ok=settled',
-  );
+  return await redirectWithFlash('/money-transfers', {}, warning ? { ok: 'settled', warning } : { ok: 'settled' });
 }
 
 export async function voidMoneyTransferAction(formData: FormData): Promise<void> {
@@ -116,8 +108,8 @@ export async function voidMoneyTransferAction(formData: FormData): Promise<void>
       }),
     );
   } catch (err) {
-    redirect(`/money-transfers?error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/money-transfers', {}, { error: errorMessage(err) });
   }
 
-  redirect('/money-transfers?ok=voided');
+  return await redirectWithFlash('/money-transfers', {}, { ok: 'voided' });
 }

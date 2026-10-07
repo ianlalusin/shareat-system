@@ -5,6 +5,7 @@ import { post13thMonthRunAction, void13thMonthRunAction } from './actions';
 import { cashAccountsFor, listStores, payoutsFor, peso, preview, runsFor } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: '13th-month pay — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,7 @@ export default async function ThirteenthMonthPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess('/payroll/thirteenth-month');
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;

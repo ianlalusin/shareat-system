@@ -7,20 +7,16 @@
  * `payroll/actions.ts` and `thirteenth-month/actions.ts`. A gate in a server action protects one
  * caller.
  */
-import { redirect } from 'next/navigation';
 import { postSeparation, voidSeparation } from '@shareat/domain';
 import type { SeparationCause } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(store: string, params: Record<string, string>): never {
-  redirect(`/payroll/separations?${new URLSearchParams({ store, ...params }).toString()}`);
 }
 
 export async function postSeparationAction(formData: FormData): Promise<void> {
@@ -46,9 +42,13 @@ export async function postSeparationAction(formData: FormData): Promise<void> {
   } catch (err) {
     // ⭐ Keeps the form's selection alive on a rejection — a validation error should not also
     // throw away which employment and date were being processed.
-    back(store, { employmentId, separationDate, error: errorMessage(err) });
+    return await redirectWithFlash(
+      '/payroll/separations',
+      { store, employmentId },
+      { error: errorMessage(err), keep: { separationDate } },
+    );
   }
-  back(store, { ok: 'Separation posted.' });
+  return await redirectWithFlash('/payroll/separations', { store }, { ok: 'Separation posted.' });
 }
 
 export async function voidSeparationAction(formData: FormData): Promise<void> {
@@ -59,7 +59,11 @@ export async function voidSeparationAction(formData: FormData): Promise<void> {
       voidSeparation(tx, actor, { id: str(formData, 'id'), reason: str(formData, 'reason') }),
     );
   } catch (err) {
-    back(store, { error: errorMessage(err) });
+    return await redirectWithFlash('/payroll/separations', { store }, { error: errorMessage(err) });
   }
-  back(store, { ok: 'Voided — that employment can be separated again if this was a correction.' });
+  return await redirectWithFlash(
+    '/payroll/separations',
+    { store },
+    { ok: 'Voided — that employment can be separated again if this was a correction.' },
+  );
 }

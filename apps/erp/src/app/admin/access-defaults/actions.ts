@@ -16,7 +16,6 @@
  * ⚠️ The actor comes from the session (`requireActor`), never the form
  * (`tests/unit/no-client-supplied-actor.test.ts`, bible §7.1).
  */
-import { redirect } from 'next/navigation';
 import { accessRepo, type Tx } from '@shareat/db';
 import { retireStorePosition, setPositionDefault } from '@shareat/domain';
 import { type Capability } from '@shareat/auth';
@@ -24,6 +23,7 @@ import { requireActor } from '../../../lib/session';
 import { activeDefaultsAtStore, bannerMessage, bulkBannerMessage, copyableDefaults, withOrgPrincipal } from './lib';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../../lib/error-shape';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -54,10 +54,6 @@ function errorMessage(err: unknown): string {
     return raw;
   }
   return sharedErrorMessage(err);
-}
-
-function backToGrid(storeId: string, extra: Record<string, string>): never {
-  redirect(`/admin/access-defaults?${new URLSearchParams({ store: storeId, ...extra }).toString()}`);
 }
 
 /**
@@ -94,9 +90,17 @@ export async function toggleDefaultAction(formData: FormData): Promise<void> {
   } catch (err) {
     // Amendment A1 point 1 — cap/pos ride BOTH the ok and error redirect, so the reopened area
     // survives whichever path the toggle took. Values are the ones already read from the form.
-    backToGrid(storeId, { error: errorMessage(err), cap: capability, pos: positionId });
+    return await redirectWithFlash(
+      '/admin/access-defaults',
+      { store: storeId, cap: capability, pos: positionId },
+      { error: errorMessage(err) },
+    );
   }
-  backToGrid(storeId, { ok: message, cap: capability, pos: positionId });
+  return await redirectWithFlash(
+    '/admin/access-defaults',
+    { store: storeId, cap: capability, pos: positionId },
+    { ok: message },
+  );
 }
 
 /**
@@ -142,9 +146,13 @@ export async function sameForEveryStoreAction(formData: FormData): Promise<void>
       }
     });
   } catch (err) {
-    backToGrid(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/admin/access-defaults', { store: storeId }, { error: errorMessage(err) });
   }
-  backToGrid(storeId, { ok: bulkBannerMessage(rowsWritten, storesReached.size, totalAffected, anySkippedSelf) });
+  return await redirectWithFlash(
+    '/admin/access-defaults',
+    { store: storeId },
+    { ok: bulkBannerMessage(rowsWritten, storesReached.size, totalAffected, anySkippedSelf) },
+  );
 }
 
 /**
@@ -180,9 +188,13 @@ export async function copyDefaultsAction(formData: FormData): Promise<void> {
       }
     });
   } catch (err) {
-    backToGrid(targetStoreId, { error: errorMessage(err) });
+    return await redirectWithFlash('/admin/access-defaults', { store: targetStoreId }, { error: errorMessage(err) });
   }
-  backToGrid(targetStoreId, { ok: bulkBannerMessage(rowsWritten, rowsWritten > 0 ? 1 : 0, totalAffected, anySkippedSelf) });
+  return await redirectWithFlash(
+    '/admin/access-defaults',
+    { store: targetStoreId },
+    { ok: bulkBannerMessage(rowsWritten, rowsWritten > 0 ? 1 : 0, totalAffected, anySkippedSelf) },
+  );
 }
 
 /**
@@ -206,7 +218,11 @@ export async function retireStorePositionAction(formData: FormData): Promise<voi
   try {
     await withOrgPrincipal(actor.orgId, (tx: Tx) => retireStorePosition(tx, actor, { positionId }));
   } catch (err) {
-    backToGrid(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/admin/access-defaults', { store: storeId }, { error: errorMessage(err) });
   }
-  backToGrid(storeId, { ok: 'Position retired. Its defaults were revoked and every holder reconciled.' });
+  return await redirectWithFlash(
+    '/admin/access-defaults',
+    { store: storeId },
+    { ok: 'Position retired. Its defaults were revoked and every holder reconciled.' },
+  );
 }

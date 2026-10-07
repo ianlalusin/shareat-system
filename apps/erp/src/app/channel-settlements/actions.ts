@@ -11,7 +11,6 @@
  * ⭐ The actor comes from `requireActor()`, never the form (bible §7.1, T-138) — and
  * `tests/unit/no-client-supplied-actor.test.ts` fails the build if that ever changes.
  */
-import { redirect } from 'next/navigation';
 import {
   previewChannelSettlement,
   recordChannelSettlement,
@@ -22,6 +21,7 @@ import {
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -157,10 +157,10 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
       }),
     );
   } catch (err) {
-    redirect(`/channel-settlements?error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/channel-settlements', {}, { error: errorMessage(err) });
   }
 
-  redirect('/channel-settlements?ok=posted');
+  return await redirectWithFlash('/channel-settlements', {}, { ok: 'posted' });
 }
 
 export async function voidSettlementAction(formData: FormData): Promise<void> {
@@ -175,10 +175,10 @@ export async function voidSettlementAction(formData: FormData): Promise<void> {
       voidChannelSettlement(tx, actor, { settlementId: str(formData, 'settlementId'), reason }),
     );
   } catch (err) {
-    redirect(`/channel-settlements?error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/channel-settlements', {}, { error: errorMessage(err) });
   }
 
-  redirect('/channel-settlements?ok=voided');
+  return await redirectWithFlash('/channel-settlements', {}, { ok: 'voided' });
 }
 
 /**
@@ -199,7 +199,7 @@ export async function setPayoutDestinationAction(formData: FormData): Promise<vo
     if (!moneyAccountId) throw new Error('Choose the account this channel pays into.');
     await withOrgPrincipal(actor.orgId, (tx) => setChannelPayoutDestination(tx, actor, { channelId, moneyAccountId }));
   } catch (err) {
-    redirect(`/channel-settlements?error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/channel-settlements', {}, { error: errorMessage(err) });
   }
 
   // T-350 S5 — the redirect says WHICH channel and nothing else. Whether this was a first set, a
@@ -207,5 +207,5 @@ export async function setPayoutDestinationAction(formData: FormData): Promise<vo
   // (`page.tsx`) — S4's `changed=1`/`same=1` flags re-created the exact "the URL says so" hole one
   // branch over, and this is the fix: the URL makes no claim at all. `changedChannel`, not
   // `channel` — that's the settlement form's own preselect register (`preselectChannelId`).
-  redirect(`/channel-settlements?${new URLSearchParams({ ok: 'destination', changedChannel: channelId }).toString()}`);
+  return await redirectWithFlash('/channel-settlements', { changedChannel: channelId }, { ok: 'destination' });
 }

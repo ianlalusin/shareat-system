@@ -10,12 +10,12 @@
  *
  * ⭐ The actor comes from `requireActor()`, never the form (T-138, bible §7.1).
  */
-import { redirect } from 'next/navigation';
 import { createMoneyAccount, renameMoneyAccount, retireMoneyAccount } from '@shareat/domain';
 import type { Custodian, MoneyInstrument } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -39,10 +39,10 @@ export async function createMoneyAccountAction(formData: FormData): Promise<void
       }),
     );
   } catch (err) {
-    redirect(`/money-accounts?error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/money-accounts', {}, { error: errorMessage(err) });
   }
 
-  redirect('/money-accounts?ok=created');
+  return await redirectWithFlash('/money-accounts', {}, { ok: 'created' });
 }
 
 export async function retireMoneyAccountAction(formData: FormData): Promise<void> {
@@ -53,10 +53,10 @@ export async function retireMoneyAccountAction(formData: FormData): Promise<void
       retireMoneyAccount(tx, actor, { moneyAccountId: str(formData, 'moneyAccountId') }),
     );
   } catch (err) {
-    redirect(`/money-accounts?error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/money-accounts', {}, { error: errorMessage(err) });
   }
 
-  redirect('/money-accounts?ok=retired');
+  return await redirectWithFlash('/money-accounts', {}, { ok: 'retired' });
 }
 
 export async function renameMoneyAccountAction(formData: FormData): Promise<void> {
@@ -72,8 +72,8 @@ export async function renameMoneyAccountAction(formData: FormData): Promise<void
       }),
     );
   } catch (err) {
-    redirect(`/money-accounts?error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/money-accounts', {}, { error: errorMessage(err) });
   }
 
-  redirect('/money-accounts?ok=renamed');
+  return await redirectWithFlash('/money-accounts', {}, { ok: 'renamed' });
 }

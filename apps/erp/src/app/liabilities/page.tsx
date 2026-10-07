@@ -6,6 +6,7 @@ import { createLiabilityAction } from './actions';
 import { CATEGORY_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Liabilities — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,7 @@ export default async function LiabilitiesPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess('/liabilities');
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;

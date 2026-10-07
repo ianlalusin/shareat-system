@@ -14,6 +14,7 @@ import {
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Fixed assets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -32,7 +33,7 @@ export default async function FixedAssetsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
 
   // ⭐ The org comes from the SESSION, not the URL — the same rule every screen built after
   // T-138 follows, and the one the two reports pages still do not (DEF-064).

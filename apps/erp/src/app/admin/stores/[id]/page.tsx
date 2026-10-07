@@ -11,6 +11,7 @@ import {
 } from '../actions';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Store — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -32,7 +33,7 @@ export default async function StoreDetailPage({
   searchParams: Promise<{ ok?: string; error?: string; confirm?: string; plan?: string; openingDate?: string }>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess(`/admin/stores/${id}`);
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
@@ -223,6 +224,12 @@ export default async function StoreDetailPage({
                 <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
                   {sp.confirm}
                 </div>
+                {/* The helper drops the refill whole when the cookie is over budget (never shortens it). */}
+                {sp.openingDate === undefined && (
+                  <p className="text-xs text-neutral-500">
+                    The date you typed could not be carried over. Enter it again before you confirm.
+                  </p>
+                )}
                 {/* ⛔ A hidden input, not a checkbox — clicking "Confirm and save" IS the
                     confirmation; a checkbox's native box is unresolvable-by-construction for the
                     touch-target sweep (Ian's ruling §6.1, T-262), and a second tick-then-click

@@ -6,7 +6,6 @@
  * Thin adapters: parse `FormData`, call the domain, redirect. ⛔ The gate is `authorize()` inside
  * each service, not here — a gate in a server action protects one caller.
  */
-import { redirect } from 'next/navigation';
 import {
   createRemittance,
   refuse,
@@ -16,6 +15,7 @@ import {
 } from '@shareat/domain';
 import { cashierAccounts, withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { add, compare, isZero, money, ZERO } from '@shareat/core/money';
 import { parseMoneyInput } from '@shareat/domain/money-input';
@@ -50,10 +50,6 @@ function errorMessage(err: unknown): string {
     if (raw.includes(constraint)) return message;
   }
   return sharedErrorMessage(err);
-}
-
-function back(params: Record<string, string>): never {
-  redirect(`/remittance?${new URLSearchParams(params).toString()}`);
 }
 
 export async function createRemittanceAction(formData: FormData): Promise<void> {
@@ -178,9 +174,9 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
         ? ` ⚠️ ${compare(money(result.variance ?? '0'), ZERO) < 0 ? 'SHORT' : 'OVER'} by ${Math.abs(Number(result.variance)).toFixed(2)} — recorded as an open item.`
         : '');
   } catch (err) {
-    back({ error: errorMessage(err), store: storeId });
+    return await redirectWithFlash('/remittance', { store: storeId }, { error: errorMessage(err) });
   }
-  back({ ok: summary, store: storeId });
+  return await redirectWithFlash('/remittance', { store: storeId }, { ok: summary });
 }
 
 export async function reverseRemittanceAction(formData: FormData): Promise<void> {
@@ -193,9 +189,9 @@ export async function reverseRemittanceAction(formData: FormData): Promise<void>
       reverseRemittance(tx, actor, { remittanceId: str(formData, 'remittanceId'), reason }),
     );
   } catch (err) {
-    back({ error: errorMessage(err), store: storeId });
+    return await redirectWithFlash('/remittance', { store: storeId }, { error: errorMessage(err) });
   }
-  back({ ok: 'Reversed. The days it settled are owed again.', store: storeId });
+  return await redirectWithFlash('/remittance', { store: storeId }, { ok: 'Reversed. The days it settled are owed again.' });
 }
 
 export async function resolveVarianceAction(formData: FormData): Promise<void> {
@@ -250,9 +246,9 @@ export async function resolveVarianceAction(formData: FormData): Promise<void> {
       throw new Error('That action is not available.');
     }
   } catch (err) {
-    back({ error: errorMessage(err), store: storeId });
+    return await redirectWithFlash('/remittance', { store: storeId }, { error: errorMessage(err) });
   }
-  back({ ok, store: storeId });
+  return await redirectWithFlash('/remittance', { store: storeId }, { ok });
 }
 
 /**
@@ -279,7 +275,7 @@ export async function setCashPolicyAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back({ error: errorMessage(err), store: storeId });
+    return await redirectWithFlash('/remittance', { store: storeId }, { error: errorMessage(err) });
   }
-  back({ ok: 'Cash policy updated.', store: storeId });
+  return await redirectWithFlash('/remittance', { store: storeId }, { ok: 'Cash policy updated.' });
 }

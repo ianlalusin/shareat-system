@@ -11,10 +11,10 @@
  * what makes `void_statutory_discount` being a different capability from `record_statutory_discount`
  * mean anything at all.
  */
-import { redirect } from 'next/navigation';
 import { recordStatutoryDiscount, voidStatutoryDiscount } from '@shareat/domain';
 import { withOrgPrincipal } from '../expenses/lib';
 import { requireActor } from '../../lib/session';
+import { redirectWithFlash, type Nav } from '@/lib/flash';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
@@ -41,16 +41,16 @@ function errorMessage(err: unknown): string {
   return sharedErrorMessage(err);
 }
 
-function backTo(fd: FormData, error?: string): string {
-  const params = new URLSearchParams();
+/** Where to land: the store and date range the person was looking at, each only if it is set. */
+function navOf(fd: FormData): Nav {
+  const nav: Nav = {};
   const store = str(fd, 'storeId');
   const from = str(fd, 'from');
   const to = str(fd, 'to');
-  if (store) params.set('store', store);
-  if (from) params.set('from', from);
-  if (to) params.set('to', to);
-  if (error) params.set('error', error);
-  return `/statutory-discounts?${params.toString()}`;
+  if (store) nav.store = store;
+  if (from) nav.from = from;
+  if (to) nav.to = to;
+  return nav;
 }
 
 export async function recordStatutoryDiscountAction(formData: FormData): Promise<void> {
@@ -75,9 +75,9 @@ export async function recordStatutoryDiscountAction(formData: FormData): Promise
       }),
     );
   } catch (err) {
-    redirect(backTo(formData, errorMessage(err)));
+    return await redirectWithFlash('/statutory-discounts', navOf(formData), { error: errorMessage(err) });
   }
-  redirect(backTo(formData));
+  return await redirectWithFlash('/statutory-discounts', navOf(formData));
 }
 
 export async function voidStatutoryDiscountAction(formData: FormData): Promise<void> {
@@ -90,7 +90,7 @@ export async function voidStatutoryDiscountAction(formData: FormData): Promise<v
       }),
     );
   } catch (err) {
-    redirect(backTo(formData, errorMessage(err)));
+    return await redirectWithFlash('/statutory-discounts', navOf(formData), { error: errorMessage(err) });
   }
-  redirect(backTo(formData));
+  return await redirectWithFlash('/statutory-discounts', navOf(formData));
 }

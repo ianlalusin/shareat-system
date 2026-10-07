@@ -7,7 +7,6 @@
  * enforced here** — every service calls `authorize()` itself. A gate in a server action protects
  * one caller; a gate in the domain protects every caller there will ever be.
  */
-import { redirect } from 'next/navigation';
 import {
   amortisePrepaidItem,
   confirmPrepaidTerm,
@@ -20,15 +19,11 @@ import { compare, ZERO } from '@shareat/core/money';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(path: string, params: Record<string, string>): never {
-  const q = new URLSearchParams(params).toString();
-  redirect(`${path}?${q}`);
 }
 
 export async function createPrepaidItemAction(formData: FormData): Promise<void> {
@@ -52,11 +47,13 @@ export async function createPrepaidItemAction(formData: FormData): Promise<void>
     );
     id = created.id;
   } catch (err) {
-    back('/prepaid', { error: errorMessage(err) });
+    return await redirectWithFlash('/prepaid', {}, { error: errorMessage(err) });
   }
-  back(`/prepaid/${id}`, {
-    ok: 'Recorded. Release the months it covers when you are ready — running it is safe to repeat.',
-  });
+  return await redirectWithFlash(
+    `/prepaid/${id}`,
+    {},
+    { ok: 'Recorded. Release the months it covers when you are ready — running it is safe to repeat.' },
+  );
 }
 
 export async function amortiseAction(formData: FormData): Promise<void> {
@@ -78,9 +75,9 @@ export async function amortiseAction(formData: FormData): Promise<void> {
         : `Released ${result.posted.length} month${result.posted.length === 1 ? '' : 's'}: ${result.posted.join(', ')}.` +
           (result.skipped.length > 0 ? ` ${result.skipped.length} already posted.` : '');
   } catch (err) {
-    back(`/prepaid/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/prepaid/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/prepaid/${id}`, { ok: summary });
+  return await redirectWithFlash(`/prepaid/${id}`, {}, { ok: summary });
 }
 
 export async function confirmTermAction(formData: FormData): Promise<void> {
@@ -95,9 +92,9 @@ export async function confirmTermAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back(`/prepaid/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/prepaid/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/prepaid/${id}`, { ok: 'Term confirmed — this item no longer needs review.' });
+  return await redirectWithFlash(`/prepaid/${id}`, {}, { ok: 'Term confirmed — this item no longer needs review.' });
 }
 
 export async function reverseMonthAction(formData: FormData): Promise<void> {
@@ -111,11 +108,13 @@ export async function reverseMonthAction(formData: FormData): Promise<void> {
       reverseAmortisation(tx, actor, { prepaidItemId: id, period, reason }),
     );
   } catch (err) {
-    back(`/prepaid/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/prepaid/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/prepaid/${id}`, {
-    ok: `${period} reversed. Run the release again to post a corrected month.`,
-  });
+  return await redirectWithFlash(
+    `/prepaid/${id}`,
+    {},
+    { ok: `${period} reversed. Run the release again to post a corrected month.` },
+  );
 }
 
 export async function writeOffAction(formData: FormData): Promise<void> {
@@ -155,13 +154,19 @@ export async function writeOffAction(formData: FormData): Promise<void> {
     // precedent (`sp.reason ?? ''`); omitted keys just mean the box was already blank.
     // S5.5u Amendment A1 item 1 — `writtenOffOn` too: a back-dated write-off resubmitted after a
     // refusal must not silently revert to today.
-    back(`/prepaid/${id}`, {
-      error: errorMessage(err),
-      ...(reason ? { reason } : {}),
-      ...(refundAmount ? { refundAmount } : {}),
-      ...(refundAccountCode ? { refundAccountCode } : {}),
-      ...(writtenOffOn ? { writtenOffOn } : {}),
-    });
+    return await redirectWithFlash(
+      `/prepaid/${id}`,
+      {},
+      {
+        error: errorMessage(err),
+        keep: {
+          ...(reason ? { reason } : {}),
+          ...(refundAmount ? { refundAmount } : {}),
+          ...(refundAccountCode ? { refundAccountCode } : {}),
+          ...(writtenOffOn ? { writtenOffOn } : {}),
+        },
+      },
+    );
   }
-  back(`/prepaid/${id}`, { ok: summary });
+  return await redirectWithFlash(`/prepaid/${id}`, {}, { ok: summary });
 }

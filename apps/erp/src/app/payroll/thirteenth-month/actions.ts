@@ -6,19 +6,15 @@
  * ⛔ Every gate is `authorize()` inside the service (`run_payroll`) — same shape as
  * `payroll/actions.ts`. A gate in a server action protects one caller.
  */
-import { redirect } from 'next/navigation';
 import { post13thMonthRun, void13thMonthRun } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(params: Record<string, string>): never {
-  redirect(`/payroll/thirteenth-month?${new URLSearchParams(params).toString()}`);
 }
 
 export async function post13thMonthRunAction(formData: FormData): Promise<void> {
@@ -36,13 +32,13 @@ export async function post13thMonthRunAction(formData: FormData): Promise<void> 
       }),
     );
   } catch (err) {
-    back({ store, year, error: errorMessage(err) });
+    return await redirectWithFlash('/payroll/thirteenth-month', { store, year }, { error: errorMessage(err) });
   }
-  back({
-    store,
-    year,
-    ok: `Posted ${out.payouts} payout(s), ${out.totalNet} net.`,
-  });
+  return await redirectWithFlash(
+    '/payroll/thirteenth-month',
+    { store, year },
+    { ok: `Posted ${out.payouts} payout(s), ${out.totalNet} net.` },
+  );
 }
 
 export async function void13thMonthRunAction(formData: FormData): Promise<void> {
@@ -55,11 +51,11 @@ export async function void13thMonthRunAction(formData: FormData): Promise<void> 
       void13thMonthRun(tx, actor, { runId: str(formData, 'runId'), reason: str(formData, 'reason') }),
     );
   } catch (err) {
-    back({ store, year, error: errorMessage(err) });
+    return await redirectWithFlash('/payroll/thirteenth-month', { store, year }, { error: errorMessage(err) });
   }
-  back({
-    store,
-    year,
-    ok: `Voided — ${out.reversed} entry(s) reversed. That year is payable again.`,
-  });
+  return await redirectWithFlash(
+    '/payroll/thirteenth-month',
+    { store, year },
+    { ok: `Voided — ${out.reversed} entry(s) reversed. That year is payable again.` },
+  );
 }

@@ -5,6 +5,7 @@ import { attestStepAction } from './actions';
 import { PHASE_TITLE, kindLabel, listStores, loadGaps, loadProgress, peso } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'The conversion — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ export default async function CutoverPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/cutover');
 
   const stores = await listStores(actor.orgId);

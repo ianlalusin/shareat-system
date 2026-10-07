@@ -5,6 +5,7 @@ import { createLoanAction } from './actions';
 import { METHOD_LABEL, STATUS_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Loans — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ export default async function LoansPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess('/loans');
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;

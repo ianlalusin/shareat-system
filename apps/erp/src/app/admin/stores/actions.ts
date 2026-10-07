@@ -10,7 +10,6 @@
  * second caller cannot skip it — a rule in one route file is a rule the next route file misses,
  * which is how DEF-180 happened.
  */
-import { redirect } from 'next/navigation';
 import {
   CANONICAL_POSITION_DEFAULTS,
   createStore,
@@ -31,6 +30,7 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../../lib/error-shape';
+import { redirectWithFlash } from '@/lib/flash';
 // T-346 Amendment R3.1 — the one date-validity check, never re-derived per call site.
 import { storesRepo } from '@shareat/db';
 
@@ -75,11 +75,6 @@ function errorMessage(err: unknown): string {
   return sharedErrorMessage(err);
 }
 
-function back(path: string, params: Record<string, string>): never {
-  const q = new URLSearchParams(params).toString();
-  redirect(`${path}?${q}`);
-}
-
 export async function createStoreAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const cadence = str(fd, 'remittanceCadence') || 'daily';
@@ -88,7 +83,7 @@ export async function createStoreAction(fd: FormData): Promise<void> {
   // T-346 Amendment R3.1 — validated here, in human terms, rather than let a malformed string
   // reach `createStore`'s date-typed column as a raw 22007.
   if (openingDate !== null && !storesRepo.isValidDateString(openingDate)) {
-    back('/admin/stores', { error: invalidDateMessage(openingDate) });
+    return await redirectWithFlash('/admin/stores', {}, { error: invalidDateMessage(openingDate) });
   }
 
   let result: Awaited<ReturnType<typeof createStore>> | undefined;
@@ -107,7 +102,7 @@ export async function createStoreAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back('/admin/stores', { error: errorMessage(err) });
+    return await redirectWithFlash('/admin/stores', {}, { error: errorMessage(err) });
   }
 
   // ⭐ The fan-out is REPORTED, not silent. §C.2's second half is invisible unless someone says it
@@ -120,11 +115,15 @@ export async function createStoreAction(fd: FormData): Promise<void> {
         `seeded: canonical position(s) missing — ${result!.missingCanonical.join(', ')}. Run T-335's ` +
         'backfill for this organisation.'
       : ` Access defaults seeded (${result!.accessDefaultsSeeded}/${TOTAL_RULED_ACCESS_DEFAULTS}).`;
-  back(`/admin/stores/${result!.storeId}`, {
-    ok:
-      `Store created with its default room, and store scope granted to ${result!.scopedAdminIds.length} ` +
-      `admin(s).${defaultsMessage} ⚠️ Nobody can sign in here yet — see the readiness checklist below.`,
-  });
+  return await redirectWithFlash(
+    `/admin/stores/${result!.storeId}`,
+    {},
+    {
+      ok:
+        `Store created with its default room, and store scope granted to ${result!.scopedAdminIds.length} ` +
+        `admin(s).${defaultsMessage} ⚠️ Nobody can sign in here yet — see the readiness checklist below.`,
+    },
+  );
 }
 
 export async function updateStoreAction(fd: FormData): Promise<void> {
@@ -144,9 +143,13 @@ export async function updateStoreAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back(`/admin/stores/${storeId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });
   }
-  back(`/admin/stores/${storeId}`, { ok: 'Store updated. ⛔ The code is deliberately not editable — it is the stable handle.' });
+  return await redirectWithFlash(
+    `/admin/stores/${storeId}`,
+    {},
+    { ok: 'Store updated. ⛔ The code is deliberately not editable — it is the stable handle.' },
+  );
 }
 
 /**
@@ -165,20 +168,24 @@ export async function setStoreStockModelAction(fd: FormData): Promise<void> {
   // ⚠️ Validated here rather than cast: the value reaches the database through a CHECK constraint
   //    either way, but a refusal that names the two legal values is worth more than a 23514.
   if (raw !== 'single_room' && raw !== 'multi_room') {
-    back(`/admin/stores/${storeId}`, { error: 'Choose either one room or several rooms.' });
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: 'Choose either one room or several rooms.' });
   }
   const model = raw as 'single_room' | 'multi_room';
   try {
     await withOrgPrincipal(actor.orgId, (tx) => setStoreStockModel(tx, actor, storeId, model));
   } catch (err) {
-    back(`/admin/stores/${storeId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });
   }
-  back(`/admin/stores/${storeId}`, {
-    ok:
-      model === 'multi_room'
-        ? 'This store may now hold several stockrooms. Add them under Inventory / Locations.'
-        : 'This store is back to a single stockroom.',
-  });
+  return await redirectWithFlash(
+    `/admin/stores/${storeId}`,
+    {},
+    {
+      ok:
+        model === 'multi_room'
+          ? 'This store may now hold several stockrooms. Add them under Inventory / Locations.'
+          : 'This store is back to a single stockroom.',
+    },
+  );
 }
 
 /**
@@ -196,7 +203,12 @@ export async function setStoreOpeningDateAction(fd: FormData): Promise<void> {
   const confirmedPlan = str(fd, 'confirmedPlan') || undefined;
   // T-346 Amendment R3.1 — same helper as createStoreAction; no second copy of the check.
   if (openingDate !== null && !storesRepo.isValidDateString(openingDate)) {
-    back(`/admin/stores/${storeId}`, { error: invalidDateMessage(openingDate) });
+    // M4: the refusal quotes the typed date; the date rides the flash so the box comes back as typed.
+    return await redirectWithFlash(
+      `/admin/stores/${storeId}`,
+      {},
+      { error: invalidDateMessage(openingDate), keep: { openingDate } },
+    );
   }
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
@@ -207,17 +219,25 @@ export async function setStoreOpeningDateAction(fd: FormData): Promise<void> {
     // "confirm to proceed" is `setStoreOpeningDate`'s own refusal shape (stores/service.ts) — the
     // ONE string this action recognises to show the in-page confirm step instead of a plain error.
     if (message.endsWith('confirm to proceed')) {
-      back(`/admin/stores/${storeId}`, {
-        confirm: message,
-        plan: (err as { planToken?: string }).planToken ?? '',
-        openingDate: openingDate ?? '',
-      });
+      // The consent text names every affected asset; `plan` is a hash of entry ids, so the text cannot be
+      // rebuilt from it. Carried whole in the flash cookie, never truncated.
+      return await redirectWithFlash(
+        `/admin/stores/${storeId}`,
+        {},
+        {
+          confirm: message,
+          plan: (err as { planToken?: string }).planToken ?? '',
+          keep: { openingDate: openingDate ?? '' },
+        },
+      );
     }
-    back(`/admin/stores/${storeId}`, { error: message });
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: message });
   }
-  back(`/admin/stores/${storeId}`, {
-    ok: openingDate ? `Opening date set to ${openingDate}.` : 'Opening date cleared.',
-  });
+  return await redirectWithFlash(
+    `/admin/stores/${storeId}`,
+    {},
+    { ok: openingDate ? `Opening date set to ${openingDate}.` : 'Opening date cleared.' },
+  );
 }
 
 export async function deactivateStoreAction(fd: FormData): Promise<void> {
@@ -226,11 +246,13 @@ export async function deactivateStoreAction(fd: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) => deactivateStore(tx, actor, storeId));
   } catch (err) {
-    back(`/admin/stores/${storeId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });
   }
-  back(`/admin/stores/${storeId}`, {
-    ok: 'Store deactivated. ⛔ Nothing was deleted — its journal entries, attendance and stock remain queryable.',
-  });
+  return await redirectWithFlash(
+    `/admin/stores/${storeId}`,
+    {},
+    { ok: 'Store deactivated. ⛔ Nothing was deleted — its journal entries, attendance and stock remain queryable.' },
+  );
 }
 
 export async function reactivateStoreAction(fd: FormData): Promise<void> {
@@ -240,12 +262,14 @@ export async function reactivateStoreAction(fd: FormData): Promise<void> {
   try {
     result = await withOrgPrincipal(actor.orgId, (tx) => reactivateStore(tx, actor, storeId));
   } catch (err) {
-    back(`/admin/stores/${storeId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });
   }
   // ⚠️ Re-fanned deliberately: an admin appointed WHILE this store was inactive has no scope row for
   // it, so reactivating without this leaves the store invisible to them — §C.2's failure in a third
   // costume (T-219's own smoketest saw "3 store(s), not 4, because one is inactive").
-  back(`/admin/stores/${storeId}`, {
-    ok: `Store reactivated, and store scope re-granted to ${result!.scopedAdminIds.length} admin(s).`,
-  });
+  return await redirectWithFlash(
+    `/admin/stores/${storeId}`,
+    {},
+    { ok: `Store reactivated, and store scope re-granted to ${result!.scopedAdminIds.length} admin(s).` },
+  );
 }

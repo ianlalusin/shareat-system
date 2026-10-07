@@ -29,6 +29,7 @@ import {
   withOrgPrincipal,
 } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Customer — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -78,7 +79,7 @@ export default async function CustomerDetailPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { customerId } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/customers/${customerId}`);
   const orgId = actor.orgId;
 

@@ -14,7 +14,6 @@
  * which is how DEF-180 happened. Scope and grant writes are gated here because they have no
  * equivalent orchestration layer and `accessRepo` deliberately holds no capability knowledge.
  */
-import { redirect } from 'next/navigation';
 import { accessRepo } from '@shareat/db';
 import {
   assignRoleAsActor,
@@ -31,6 +30,7 @@ import { requireRevokeReason, withOrgPrincipal } from './lib';
 import { clearSessionCookie, requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../../lib/error-shape';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -51,10 +51,6 @@ function errorMessage(err: unknown): string {
     return 'That Firebase account is already linked to somebody. Unlink it there first, then link it here.';
   }
   return sharedErrorMessage(err);
-}
-
-function backToUser(personId: string, extra: Record<string, string>): never {
-  redirect(`/admin/users/${personId}?${new URLSearchParams(extra).toString()}`);
 }
 
 /**
@@ -89,9 +85,9 @@ export async function assignRoleAction(formData: FormData): Promise<void> {
     }
     message = extras.length > 0 ? `Role updated, and ${extras.join(', and ')}.` : message;
   } catch (err) {
-    backToUser(personId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/admin/users/${personId}`, {}, { error: errorMessage(err) });
   }
-  backToUser(personId, { ok: message });
+  return await redirectWithFlash(`/admin/users/${personId}`, {}, { ok: message });
 }
 
 export async function setStoreScopeAction(formData: FormData): Promise<void> {
@@ -118,9 +114,13 @@ export async function setStoreScopeAction(formData: FormData): Promise<void> {
       }
     });
   } catch (err) {
-    backToUser(personId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/admin/users/${personId}`, {}, { error: errorMessage(err) });
   }
-  backToUser(personId, { ok: granted ? 'Store added to this person’s scope.' : 'Store removed from this person’s scope.' });
+  return await redirectWithFlash(
+    `/admin/users/${personId}`,
+    {},
+    { ok: granted ? 'Store added to this person’s scope.' : 'Store removed from this person’s scope.' },
+  );
 }
 
 export async function setCapabilityGrantAction(formData: FormData): Promise<void> {
@@ -232,9 +232,9 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
       }
     });
   } catch (err) {
-    backToUser(personId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/admin/users/${personId}`, {}, { error: errorMessage(err) });
   }
-  backToUser(personId, { ok });
+  return await redirectWithFlash(`/admin/users/${personId}`, {}, { ok });
 }
 
 /**
@@ -254,9 +254,9 @@ export async function linkFirebaseAction(formData: FormData): Promise<void> {
       linkFirebaseCredential(tx, actor, { personId, uid }),
     );
   } catch (err) {
-    backToUser(personId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/admin/users/${personId}`, {}, { error: errorMessage(err) });
   }
-  backToUser(personId, { ok: 'Email account linked. They can sign in with it now.' });
+  return await redirectWithFlash(`/admin/users/${personId}`, {}, { ok: 'Email account linked. They can sign in with it now.' });
 }
 
 /**
@@ -288,12 +288,16 @@ export async function unlinkCredentialAction(formData: FormData): Promise<void> 
     // this line is hygiene AFTER the real revocation, never instead of it.
     if (actor.personId === personId) await clearSessionCookie();
   } catch (err) {
-    backToUser(personId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/admin/users/${personId}`, {}, { error: errorMessage(err) });
   }
-  backToUser(personId, {
-    ok:
-      ended === 0
-        ? 'Unlinked. They had no live session to end.'
-        : `Unlinked, and signed out of ${ended} live session${ended === 1 ? '' : 's'}.`,
-  });
+  return await redirectWithFlash(
+    `/admin/users/${personId}`,
+    {},
+    {
+      ok:
+        ended === 0
+          ? 'Unlinked. They had no live session to end.'
+          : `Unlinked, and signed out of ${ended} live session${ended === 1 ? '' : 's'}.`,
+    },
+  );
 }

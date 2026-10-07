@@ -75,7 +75,6 @@ rateFor
 realSourceTypesForSpecName
 recentRuns
 reconcileSupplier
-redirectWithFlash
 remainingFor
 remainingOf
 removeUsageLine
@@ -110,5 +109,4 @@ upsertPolicy
 validateFingerprintTemplates
 valuateShell
 voidShift
-withFlash
 withPrincipal

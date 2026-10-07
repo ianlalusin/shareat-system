@@ -5,7 +5,6 @@
  *
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
-import { redirect } from 'next/navigation';
 import { arRepo } from '@shareat/db';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 import { logger } from '@shareat/core/logger';
@@ -25,15 +24,12 @@ import {
 import type { CustomerGroup } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(path: string, params: Record<string, string>): never {
-  redirect(`${path}?${new URLSearchParams(params).toString()}`);
 }
 
 export async function createCustomerAction(formData: FormData): Promise<void> {
@@ -66,9 +62,9 @@ export async function createCustomerAction(formData: FormData): Promise<void> {
           ? 'Recorded as another company — movements to it are real revenue and a real receivable.'
           : 'Recorded as an external customer — real revenue.';
   } catch (err) {
-    back('/customers', { error: errorMessage(err) });
+    return await redirectWithFlash('/customers', {}, { error: errorMessage(err) });
   }
-  back('/customers', { ok: message });
+  return await redirectWithFlash('/customers', {}, { ok: message });
 }
 
 export async function reconcileCustomerAction(formData: FormData): Promise<void> {
@@ -82,9 +78,9 @@ export async function reconcileCustomerAction(formData: FormData): Promise<void>
     );
     message = `Anchored at ${asOf}. Everything before it is treated as settled.`;
   } catch (err) {
-    back('/customers', { error: errorMessage(err) });
+    return await redirectWithFlash('/customers', {}, { error: errorMessage(err) });
   }
-  back('/customers', { ok: message });
+  return await redirectWithFlash('/customers', {}, { ok: message });
 }
 
 // -------------------------------------------------------------------------------------
@@ -99,11 +95,6 @@ export async function reconcileCustomerAction(formData: FormData): Promise<void>
 // ⛔ Every gate is `authorize()` INSIDE the service. Nothing is re-checked here: a gate in a
 // server action protects one caller.
 // -------------------------------------------------------------------------------------
-
-/** Back to the customer, keeping the store the user was working in. */
-function backToCustomer(customerId: string, storeId: string, params: Record<string, string>): never {
-  back(`/customers/${customerId}`, storeId ? { store: storeId, ...params } : params);
-}
 
 export interface AutoAllocateCollectionRequest {
   customerId: string;
@@ -238,9 +229,9 @@ export async function recordCollectionAction(formData: FormData): Promise<void> 
         ? `, and ₱${result.surplus} more than was owed is now store credit (2140) they can spend next time.`
         : '.');
   } catch (err) {
-    backToCustomer(customerId, storeId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { error: errorMessage(err) });
   }
-  backToCustomer(customerId, storeId, { ok: message });
+  return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { ok: message });
 }
 
 export async function voidCollectionAction(formData: FormData): Promise<void> {
@@ -254,11 +245,11 @@ export async function voidCollectionAction(formData: FormData): Promise<void> {
       voidCollection(tx, actor, { collectionId: str(formData, 'collectionId'), reason }),
     );
   } catch (err) {
-    backToCustomer(customerId, storeId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { error: errorMessage(err) });
   }
   // ⚠️ "Reversed, not deleted" is the whole point: the allocations stay, so the charges it
   // settled correctly reopen and the aging picks them up again.
-  backToCustomer(customerId, storeId, {
+  return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, {
     ok: 'Collection voided — reversed, not deleted, and the charges it settled are open again.',
   });
 }
@@ -274,9 +265,9 @@ export async function voidChargeAction(formData: FormData): Promise<void> {
       voidCharge(tx, actor, { chargeId: str(formData, 'chargeId'), reason }),
     );
   } catch (err) {
-    backToCustomer(customerId, storeId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { error: errorMessage(err) });
   }
-  backToCustomer(customerId, storeId, { ok: 'Charge voided — the entry is reversed, and it stays listed.' });
+  return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { ok: 'Charge voided — the entry is reversed, and it stays listed.' });
 }
 
 export async function writeOffChargeAction(formData: FormData): Promise<void> {
@@ -300,9 +291,9 @@ export async function writeOffChargeAction(formData: FormData): Promise<void> {
     // ⛔ The domain refuses the charge's own author, and that refusal is SURFACED rather than
     // pre-empted. Hiding the button for that person would teach that write-off is unavailable,
     // when the truth is that it needs a second pair of eyes.
-    backToCustomer(customerId, storeId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { error: errorMessage(err) });
   }
-  backToCustomer(customerId, storeId, { ok: message });
+  return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { ok: message });
 }
 
 export async function createPriceListAction(formData: FormData): Promise<void> {
@@ -317,9 +308,9 @@ export async function createPriceListAction(formData: FormData): Promise<void> {
     );
     id = created.id;
   } catch (err) {
-    back('/customers/price-lists', { error: errorMessage(err) });
+    return await redirectWithFlash('/customers/price-lists', {}, { error: errorMessage(err) });
   }
-  back(`/customers/price-lists/${id}`, { ok: 'Created. Add rates to it below.' });
+  return await redirectWithFlash(`/customers/price-lists/${id}`, {}, { ok: 'Created. Add rates to it below.' });
 }
 
 export async function setPriceAction(formData: FormData): Promise<void> {
@@ -337,9 +328,9 @@ export async function setPriceAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back(`/customers/price-lists/${priceListId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/customers/price-lists/${priceListId}`, {}, { error: errorMessage(err) });
   }
-  back(`/customers/price-lists/${priceListId}`, {
+  return await redirectWithFlash(`/customers/price-lists/${priceListId}`, {}, {
     // ⚠️ Says "replaced", because re-quoting an item does not add a second row.
     ok: 'Rate saved. Re-quoting an item replaces its rate — a list holds one price per item.',
   });

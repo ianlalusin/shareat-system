@@ -6,19 +6,15 @@
  * ⛔ Every gate is `authorize()` inside the service — `set_pay_rate` and `run_payroll`, both of
  * which deny a manager. A gate in a server action protects one caller.
  */
-import { redirect } from 'next/navigation';
 import { postPayRun, setPayRate, voidPayRun } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '../../lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(params: Record<string, string>): never {
-  redirect(`/payroll?${new URLSearchParams(params).toString()}`);
 }
 
 export async function setPayRateAction(formData: FormData): Promise<void> {
@@ -36,9 +32,13 @@ export async function setPayRateAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back({ store, error: errorMessage(err) });
+    return await redirectWithFlash('/payroll', { store }, { error: errorMessage(err) });
   }
-  back({ store, ok: 'Rate recorded. ⚠️ It applies from its effective date — earlier days keep the old rate.' });
+  return await redirectWithFlash(
+    '/payroll',
+    { store },
+    { ok: 'Rate recorded. ⚠️ It applies from its effective date — earlier days keep the old rate.' },
+  );
 }
 
 export async function postPayRunAction(formData: FormData): Promise<void> {
@@ -58,12 +58,13 @@ export async function postPayRunAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back({ store, start, end, error: errorMessage(err) });
+    return await redirectWithFlash('/payroll', { store, start, end }, { error: errorMessage(err) });
   }
-  back({
-    store,
-    ok: `Posted ${out.payslips} payslip(s), ${out.totalNet} net. The days they paid are now frozen.`,
-  });
+  return await redirectWithFlash(
+    '/payroll',
+    { store },
+    { ok: `Posted ${out.payslips} payslip(s), ${out.totalNet} net. The days they paid are now frozen.` },
+  );
 }
 
 export async function voidPayRunAction(formData: FormData): Promise<void> {
@@ -75,10 +76,13 @@ export async function voidPayRunAction(formData: FormData): Promise<void> {
       voidPayRun(tx, actor, { runId: str(formData, 'runId'), reason: str(formData, 'reason') }),
     );
   } catch (err) {
-    back({ store, error: errorMessage(err) });
+    return await redirectWithFlash('/payroll', { store }, { error: errorMessage(err) });
   }
-  back({
-    store,
-    ok: `Voided — ${out.reversed} entry(s) reversed and ${out.unfrozenDays} day(s) unfrozen, so the period is payable again.`,
-  });
+  return await redirectWithFlash(
+    '/payroll',
+    { store },
+    {
+      ok: `Voided — ${out.reversed} entry(s) reversed and ${out.unfrozenDays} day(s) unfrozen, so the period is payable again.`,
+    },
+  );
 }

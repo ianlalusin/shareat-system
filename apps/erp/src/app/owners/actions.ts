@@ -5,7 +5,6 @@
  *
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
-import { redirect } from 'next/navigation';
 import {
   closeDrawingMonth,
   createOwner,
@@ -19,14 +18,11 @@ import type { DrawingLimitPeriod, PersonalExpenseTreatment } from '@shareat/db/s
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(path: string, params: Record<string, string>): never {
-  redirect(`${path}?${new URLSearchParams(params).toString()}`);
 }
 
 export async function createOwnerAction(formData: FormData): Promise<void> {
@@ -53,9 +49,9 @@ export async function createOwnerAction(formData: FormData): Promise<void> {
     );
     id = created.id;
   } catch (err) {
-    back('/owners', { error: errorMessage(err) });
+    return await redirectWithFlash('/owners', {}, { error: errorMessage(err) });
   }
-  back(`/owners/${id}`, { ok: 'Recorded.' });
+  return await redirectWithFlash(`/owners/${id}`, {}, { ok: 'Recorded.' });
 }
 
 export async function contributionAction(formData: FormData): Promise<void> {
@@ -71,9 +67,9 @@ export async function contributionAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back(`/owners/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/owners/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/owners/${id}`, { ok: 'Capital in. Equity is up by that much.' });
+  return await redirectWithFlash(`/owners/${id}`, {}, { ok: 'Capital in. Equity is up by that much.' });
 }
 
 export async function drawingAction(formData: FormData): Promise<void> {
@@ -93,9 +89,9 @@ export async function drawingAction(formData: FormData): Promise<void> {
     // which is why the overdraft guard warns rather than blocks (row 154).
     if (result.warning) message += ` ⚠️ ${result.warning}`;
   } catch (err) {
-    back(`/owners/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/owners/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/owners/${id}`, { ok: message });
+  return await redirectWithFlash(`/owners/${id}`, {}, { ok: message });
 }
 
 export async function settleAction(formData: FormData): Promise<void> {
@@ -140,9 +136,9 @@ export async function settleAction(formData: FormData): Promise<void> {
       throw new Error('Choose how this is being settled.');
     }
   } catch (err) {
-    back(`/owners/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/owners/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/owners/${id}`, { ok: message });
+  return await redirectWithFlash(`/owners/${id}`, {}, { ok: message });
 }
 
 export async function closeMonthAction(formData: FormData): Promise<void> {
@@ -169,7 +165,7 @@ export async function closeMonthAction(formData: FormData): Promise<void> {
       message += ` An adjustment of ₱${result.adjustmentAmount} was posted to the books.`;
     }
   } catch (err) {
-    back(`/owners/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/owners/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/owners/${id}`, { ok: message });
+  return await redirectWithFlash(`/owners/${id}`, {}, { ok: message });
 }

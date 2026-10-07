@@ -6,20 +6,16 @@
  * ⛔ The gate lives in the service (`manage_expense_budgets`), not here. A gate in a server action
  * protects one caller; a gate in the domain protects every caller there will ever be.
  */
-import { redirect } from 'next/navigation';
 import { removeExpenseBudget, setExpenseBudget } from '@shareat/domain';
 import type { ReissueInterval } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(storeId: string, periodKey: string, params: Record<string, string>): never {
-  redirect(`/budgets?${new URLSearchParams({ store: storeId, period: periodKey, ...params }).toString()}`);
 }
 
 export async function setBudgetAction(formData: FormData): Promise<void> {
@@ -47,9 +43,9 @@ export async function setBudgetAction(formData: FormData): Promise<void> {
       ? 'Cap saved, and it renews on its own from now on.'
       : 'Cap saved. ⚠️ It applies to this period only — tick "renew automatically" if it should carry forward.';
   } catch (err) {
-    back(storeId, periodKey, { error: errorMessage(err) });
+    return await redirectWithFlash('/budgets', { store: storeId, period: periodKey }, { error: errorMessage(err) });
   }
-  back(storeId, periodKey, { ok: message });
+  return await redirectWithFlash('/budgets', { store: storeId, period: periodKey }, { ok: message });
 }
 
 export async function removeBudgetAction(formData: FormData): Promise<void> {
@@ -61,11 +57,11 @@ export async function removeBudgetAction(formData: FormData): Promise<void> {
       removeExpenseBudget(tx, actor, { budgetId: str(formData, 'budgetId') }),
     );
   } catch (err) {
-    back(storeId, periodKey, { error: errorMessage(err) });
+    return await redirectWithFlash('/budgets', { store: storeId, period: periodKey }, { error: errorMessage(err) });
   }
   // ⚠️ Says which of the two states it left behind. "Removed" and "set to zero" look identical on
   // a screen and mean opposite things — no cap at all, versus spend nothing here.
-  back(storeId, periodKey, {
+  return await redirectWithFlash('/budgets', { store: storeId, period: periodKey }, {
     ok: 'Cap removed — this category now has NO cap, which is not the same as a cap of zero.',
   });
 }

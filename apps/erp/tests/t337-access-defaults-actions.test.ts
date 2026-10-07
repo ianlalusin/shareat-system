@@ -70,8 +70,8 @@ async function expectRedirectTo(action: () => Promise<void>): Promise<string> {
 
 function toggleFormData(overrides: Partial<Record<'storeId' | 'positionId' | 'capability' | 'on', string>> = {}): FormData {
   const fd = new FormData();
-  fd.set('storeId', overrides.storeId ?? 'store-1');
-  fd.set('positionId', overrides.positionId ?? 'pos-cashier');
+  fd.set('storeId', overrides.storeId ?? '11111111-1111-4111-8111-111111111111');
+  fd.set('positionId', overrides.positionId ?? '33333333-3333-4333-8333-333333333333');
   fd.set('capability', overrides.capability ?? 'record_sale');
   fd.set('on', overrides.on ?? 'true');
   return fd;
@@ -99,31 +99,31 @@ describe('R6 — toggleDefaultAction redirects with cap and pos, on success AND 
   it('success path: redirect carries cap=<capability>&pos=<positionId>', async () => {
     setPositionDefault.mockResolvedValue({ affected: 1, skippedSelf: false, wroteDefault: true });
     const { toggleDefaultAction } = actions;
-    const to = await expectRedirectTo(() => toggleDefaultAction(toggleFormData({ capability: 'record_sale', positionId: 'pos-cashier' })));
+    const to = await expectRedirectTo(() => toggleDefaultAction(toggleFormData({ capability: 'record_sale', positionId: '33333333-3333-4333-8333-333333333333' })));
     const params = paramsOf(to);
     // Audit finding 2: `store` must survive too — a redirect that drops it lands the admin on
     // stores[0] instead of the store they were actually working in.
-    expect(params.get('store'), `redirect URL was: ${to}`).toBe('store-1');
+    expect(params.get('store'), `redirect URL was: ${to}`).toBe('11111111-1111-4111-8111-111111111111');
     expect(params.get('cap'), `redirect URL was: ${to}`).toBe('record_sale');
-    expect(params.get('pos'), `redirect URL was: ${to}`).toBe('pos-cashier');
+    expect(params.get('pos'), `redirect URL was: ${to}`).toBe('33333333-3333-4333-8333-333333333333');
   });
 
   it('error path: redirect STILL carries cap=<capability>&pos=<positionId> when the domain call throws', async () => {
     setPositionDefault.mockRejectedValue(new Error('may not \'grant_capability\''));
     const { toggleDefaultAction } = actions;
-    const to = await expectRedirectTo(() => toggleDefaultAction(toggleFormData({ capability: 'void_sales_day', positionId: 'pos-cook' })));
+    const to = await expectRedirectTo(() => toggleDefaultAction(toggleFormData({ capability: 'void_sales_day', positionId: '44444444-4444-4444-8444-444444444444' })));
     const params = paramsOf(to);
-    expect(params.get('store'), `redirect URL was: ${to}`).toBe('store-1');
+    expect(params.get('store'), `redirect URL was: ${to}`).toBe('11111111-1111-4111-8111-111111111111');
     expect(params.get('cap'), `redirect URL was: ${to}`).toBe('void_sales_day');
-    expect(params.get('pos'), `redirect URL was: ${to}`).toBe('pos-cook');
+    expect(params.get('pos'), `redirect URL was: ${to}`).toBe('44444444-4444-4444-8444-444444444444');
     expect(params.get('error'), 'the error path must still carry its error message too').toBeTruthy();
   });
 
   it('NEGATIVE: sameForEveryStoreAction\'s redirect has neither cap nor pos', async () => {
     const { sameForEveryStoreAction } = actions;
     const fd = new FormData();
-    fd.set('storeId', 'store-1');
-    fd.set('positionId', 'pos-cashier');
+    fd.set('storeId', '11111111-1111-4111-8111-111111111111');
+    fd.set('positionId', '33333333-3333-4333-8333-333333333333');
     const to = await expectRedirectTo(() => sameForEveryStoreAction(fd));
     const params = paramsOf(to);
     expect(params.has('cap'), `redirect URL was: ${to}`).toBe(false);
@@ -135,8 +135,8 @@ describe('R6 — toggleDefaultAction redirects with cap and pos, on success AND 
   it('NEGATIVE: copyDefaultsAction\'s redirect has neither cap nor pos', async () => {
     const { copyDefaultsAction } = actions;
     const fd = new FormData();
-    fd.set('storeId', 'store-1');
-    fd.set('sourceStoreId', 'store-2');
+    fd.set('storeId', '11111111-1111-4111-8111-111111111111');
+    fd.set('sourceStoreId', '22222222-2222-4222-8222-222222222222');
     const to = await expectRedirectTo(() => copyDefaultsAction(fd));
     const params = paramsOf(to);
     expect(params.has('cap'), `redirect URL was: ${to}`).toBe(false);
@@ -146,8 +146,8 @@ describe('R6 — toggleDefaultAction redirects with cap and pos, on success AND 
   it('NEGATIVE: retireStorePositionAction\'s redirect has neither cap nor pos', async () => {
     const { retireStorePositionAction } = actions;
     const fd = new FormData();
-    fd.set('storeId', 'store-1');
-    fd.set('positionId', 'pos-invented');
+    fd.set('storeId', '11111111-1111-4111-8111-111111111111');
+    fd.set('positionId', '55555555-5555-4555-8555-555555555555');
     const to = await expectRedirectTo(() => retireStorePositionAction(fd));
     const params = paramsOf(to);
     expect(params.has('cap'), `redirect URL was: ${to}`).toBe(false);

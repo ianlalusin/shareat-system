@@ -4,6 +4,7 @@ import { createPriceListAction } from '../actions';
 import { listLists } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Price lists — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ export default async function PriceListsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/customers/price-lists');
   const lists = await listLists(actor.orgId);
 

@@ -48,7 +48,7 @@ import {
   type Tx,
 } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
-import { describeReversal, executeReversals, planInServiceReversal, requireConfirmedPlan } from '../fixed-assets/in-service';
+import { describeStoreReversal, executeReversals, planInServiceReversal, requireConfirmedPlan } from '../fixed-assets/in-service';
 // ⭐ The LEAF module, not `../organizations` — `organizations/index.ts` imports `createStore` from
 // this file, so importing its barrel back would close an import cycle. See `identifiers.ts`.
 import { normaliseBranchCode } from '../organizations/identifiers';
@@ -355,9 +355,7 @@ export async function setStoreOpeningDate(
 
   const affected = plans.filter(({ plan }) => plan.toReverse.length > 0);
   if (affected.length > 0) {
-    const perAsset = affected
-      .map(({ asset, plan }) => `${asset.name} — ${describeReversal(plan.toReverse)}`)
-      .join('; ');
+    const perAsset = describeStoreReversal(affected.map(({ asset, plan }) => ({ name: asset.name, toReverse: plan.toReverse })));
     const sentence =
       `${store.name} — moving the opening date reverses depreciation for ` +
       `${affected.length} asset(s): ${perAsset}; confirm to proceed`;

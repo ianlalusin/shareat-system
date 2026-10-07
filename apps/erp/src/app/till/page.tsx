@@ -20,6 +20,7 @@ import {
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Till custody — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,7 @@ export default async function TillPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/till');
 
   const stores = await listStores(actor.orgId);

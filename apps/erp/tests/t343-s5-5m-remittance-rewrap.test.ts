@@ -15,6 +15,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { paramsOf } from './helpers/flash-jar';
 
+// T-380: the action now goes through the real `redirectWithFlash`, which signs the flash cookie (`signFlash` ->
+// `derivedKey` -> the validated server env). Signing stays real; only the env a unit test lacks is supplied.
+process.env['DATABASE_URL'] ??= 'postgresql://postgres:pw@localhost:5435/shareat_dev';
+process.env['SESSION_SECRET'] ??= 'x'.repeat(48);
+process.env['APP_TIMEZONE'] ??= 'Asia/Manila';
+
 class RedirectSignal extends Error {
   constructor(public to: string) {
     super(`redirect:${to}`);

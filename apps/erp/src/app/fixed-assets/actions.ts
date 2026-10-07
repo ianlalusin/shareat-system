@@ -12,7 +12,6 @@
  * here reads a person id out of client input, and `tests/unit/no-client-supplied-actor.test.ts`
  * fails the build if it ever does.
  */
-import { redirect } from 'next/navigation';
 import {
   createAsset,
   disposeAsset,
@@ -25,6 +24,7 @@ import { fixedAssetsRepo, type AssetCategory } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash, type Nav } from '@/lib/flash';
 import { recordingRefusalsFor } from '../expenses/lib';
 
 function str(fd: FormData, key: string): string {
@@ -32,16 +32,15 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
-function carryQs(fd: FormData): string {
-  const params = new URLSearchParams();
+/** The store filter the form came from, as a navigation key (the flash helper drops it if it is not a store id). */
+function carryNav(fd: FormData): Nav {
   const store = str(fd, 'filterStore');
-  if (store) params.set('store', store);
-  return params.toString();
+  return store ? { store } : {};
 }
 
 export async function createAssetAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
   let newId: string;
 
   try {
@@ -77,10 +76,10 @@ export async function createAssetAction(formData: FormData): Promise<void> {
     );
     newId = result.id;
   } catch (err) {
-    redirect(`/fixed-assets/new?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/fixed-assets/new', nav, { error: errorMessage(err) });
   }
 
-  redirect(`/fixed-assets/${newId}?${qs}`);
+  return await redirectWithFlash(`/fixed-assets/${newId}`, nav);
 }
 
 /**
@@ -93,7 +92,7 @@ export async function createAssetAction(formData: FormData): Promise<void> {
 export async function updateTermsAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const assetId = str(formData, 'assetId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
 
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
@@ -107,10 +106,10 @@ export async function updateTermsAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    redirect(`/fixed-assets/${assetId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { error: errorMessage(err) });
   }
 
-  redirect(`/fixed-assets/${assetId}?${qs}&ok=terms`);
+  return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { ok: 'terms' });
 }
 
 /**
@@ -125,7 +124,7 @@ export async function updateTermsAction(formData: FormData): Promise<void> {
 export async function setAssetInServiceAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const assetId = str(formData, 'assetId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
   const mode = str(formData, 'mode') as 'acquired' | 'store_opening' | 'set';
   // The token of the plan the person confirmed (T-368 S2 / DEF-441), resubmitted from the confirm step.
   const confirmedPlan = str(formData, 'confirmedPlan') || undefined;
@@ -145,22 +144,28 @@ export async function setAssetInServiceAction(formData: FormData): Promise<void>
     // string this action recognises to show a confirm checkpoint instead of a plain error.
     if (message.endsWith('confirm to proceed')) {
       const plan = (err as { planToken?: string }).planToken ?? '';
-      redirect(
-        `/fixed-assets/${assetId}?${qs}&confirm=${encodeURIComponent(message)}&plan=${encodeURIComponent(plan)}&mode=${mode}` +
-          `&inServiceOn=${encodeURIComponent(str(formData, 'inServiceOn'))}` +
-          `&reason=${encodeURIComponent(str(formData, 'reason'))}`,
-      );
+      // The consent text names the entries and amounts it will reverse: it rides the flash cookie, never the
+      // address. It cannot be rebuilt from `plan` (a hash of entry ids), so it is carried whole, never truncated.
+      return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, {
+        confirm: message,
+        plan,
+        keep: {
+          mode,
+          inServiceOn: str(formData, 'inServiceOn'),
+          reason: str(formData, 'reason'),
+        },
+      });
     }
-    redirect(`/fixed-assets/${assetId}?${qs}&error=${encodeURIComponent(message)}`);
+    return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { error: message });
   }
 
-  redirect(`/fixed-assets/${assetId}?${qs}&ok=inservice`);
+  return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { ok: 'inservice' });
 }
 
 export async function disposeAssetAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const assetId = str(formData, 'assetId');
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
 
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
@@ -171,10 +176,10 @@ export async function disposeAssetAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    redirect(`/fixed-assets/${assetId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { error: errorMessage(err) });
   }
 
-  redirect(`/fixed-assets/${assetId}?${qs}&ok=disposed`);
+  return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { ok: 'disposed' });
 }
 
 /**
@@ -186,7 +191,7 @@ export async function disposeAssetAction(formData: FormData): Promise<void> {
  */
 export async function runDepreciationAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
-  const qs = carryQs(formData);
+  const nav = carryNav(formData);
   const through = str(formData, 'through');
 
   let summary: string;
@@ -210,8 +215,8 @@ export async function runDepreciationAction(formData: FormData): Promise<void> {
         .join('; ')}`;
     }
   } catch (err) {
-    redirect(`/fixed-assets?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    return await redirectWithFlash('/fixed-assets', nav, { error: errorMessage(err) });
   }
 
-  redirect(`/fixed-assets?${qs}&ran=${encodeURIComponent(summary)}&failed=${failedCount}`);
+  return await redirectWithFlash('/fixed-assets', nav, { ran: summary, failed: String(failedCount) });
 }

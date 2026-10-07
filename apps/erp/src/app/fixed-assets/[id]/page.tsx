@@ -9,6 +9,7 @@ import { CATEGORY_LABEL, INTERVAL_LABEL, getAsset, listStores } from '../lib';
 import { StatusBadge } from '../page';
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
+import { withFlash } from '@/lib/flash';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +33,7 @@ export default async function AssetDetailPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess(`/fixed-assets/${id}`);
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
@@ -174,6 +175,11 @@ export default async function AssetDetailPage({
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
                 {sp.confirm}
               </div>
+            )}
+            {sp.confirm && sp.reason === undefined && (
+              <p className="text-xs text-neutral-500">
+                What you typed could not be carried over. Enter the choice, date and reason again before you confirm.
+              </p>
             )}
             <form action={setAssetInServiceAction} className="space-y-3">
               <input type="hidden" name="assetId" value={asset.id} />

@@ -436,6 +436,12 @@ behaviour, so this slice has no mutant. Its proof comes in S2–S5: those files 
 - **G-S2.** `findingsForFile` is empty for every BUILDER file of S2. Mutant: leave one local `back()` in
   `findings/actions.ts` → red.
 
+- ✎S2-R1 (orchestrator, 2026-10-07): the plan hash pins the consent; the confirm text is its human summary. A store-wide confirm
+  names at most 10 assets (stable order: name, then first entry id), then `and N more asset(s). In all: <entries>
+  depreciation entries, <total>`, counted over the same entries the plan hash covers (`describeStoreReversal`,
+  `fixed-assets/in-service.ts`). `plan` rides byte for byte; if `keep` still overflows it is dropped whole and the page
+  says the typed values must be entered again.
+
 **Smoke (9008):**
 1. Prepaid: a refused write-off with a typed reason and refund. The address bar shows only `?f=…`, and the boxes are
    refilled.

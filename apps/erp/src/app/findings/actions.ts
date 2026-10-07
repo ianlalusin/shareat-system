@@ -7,19 +7,15 @@
  * feed is for its condition to stop being true. Acknowledging says *"I accept this for now"*, is
  * still counted, ages visibly, and expires after 30 days on its own.
  */
-import { redirect } from 'next/navigation';
 import { acknowledgeFinding, bookMissedMonth, closePeriod, createMissingClosedPeriod } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(params: Record<string, string>): never {
-  redirect(`/findings?${new URLSearchParams(params).toString()}`);
 }
 
 export async function acknowledgeFindingAction(formData: FormData): Promise<void> {
@@ -35,9 +31,13 @@ export async function acknowledgeFindingAction(formData: FormData): Promise<void
       acknowledgeFinding(tx, actor, { findingKey, period, note: note || null }),
     );
   } catch (err) {
-    back({ error: errorMessage(err), period });
+    return await redirectWithFlash('/findings', { period }, { error: errorMessage(err) });
   }
-  back({ ok: 'Accepted for now — it is still counted, and it will expire.', period });
+  return await redirectWithFlash(
+    '/findings',
+    { period },
+    { ok: 'Accepted for now — it is still counted, and it will expire.' },
+  );
 }
 
 /**
@@ -53,9 +53,9 @@ export async function closePeriodAction(formData: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) => closePeriod(tx, actor, { period }));
   } catch (err) {
-    back({ error: errorMessage(err), period });
+    return await redirectWithFlash('/findings', { period }, { error: errorMessage(err) });
   }
-  back({ ok: `${period} is closed.`, period });
+  return await redirectWithFlash('/findings', { period }, { ok: `${period} is closed.` });
 }
 
 /**
@@ -77,9 +77,13 @@ export async function createMissingClosedPeriodAction(formData: FormData): Promi
       createMissingClosedPeriod(tx, actor, { startsOn, endsOn, reason }),
     );
   } catch (err) {
-    back({ error: errorMessage(err), period });
+    return await redirectWithFlash('/findings', { period }, { error: errorMessage(err) });
   }
-  back({ ok: `${result.startsOn} to ${result.endsOn} is created as ${result.status}.`, period });
+  return await redirectWithFlash(
+    '/findings',
+    { period },
+    { ok: `${result.startsOn} to ${result.endsOn} is created as ${result.status}.` },
+  );
 }
 
 /**
@@ -99,7 +103,11 @@ export async function bookMissedMonthAction(formData: FormData): Promise<void> {
   // unvalidated cast would let a bogus value fall into `bookMissedMonth`'s amortisation branch and
   // surface a raw id in the "does not exist" refusal.
   if (scheduleRaw !== 'depreciation' && scheduleRaw !== 'amortisation') {
-    back({ error: 'That is not a schedule this screen knows how to book.', period });
+    return await redirectWithFlash(
+      '/findings',
+      { period },
+      { error: 'That is not a schedule this screen knows how to book.' },
+    );
   }
   const schedule = scheduleRaw as 'depreciation' | 'amortisation';
 
@@ -108,7 +116,7 @@ export async function bookMissedMonthAction(formData: FormData): Promise<void> {
       bookMissedMonth(tx, actor, { schedule, subjectId, belongsToPeriod, reason }),
     );
   } catch (err) {
-    back({ error: errorMessage(err), period });
+    return await redirectWithFlash('/findings', { period }, { error: errorMessage(err) });
   }
-  back({ ok: `${belongsToPeriod} is booked.`, period });
+  return await redirectWithFlash('/findings', { period }, { ok: `${belongsToPeriod} is booked.` });
 }

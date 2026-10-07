@@ -9,6 +9,7 @@ import { requireSession } from '../../lib/session';
 import { recordStatutoryDiscountAction, voidStatutoryDiscountAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'SC/PWD register — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,7 @@ function monthBounds(businessDate: string): { from: string; to: string } {
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function StatutoryDiscountsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
 
   // ⭐ The org comes from the SESSION, not the URL — and RLS refuses cross-org reads underneath
   // even if someone edits the query string. That matters more here than on most screens: this

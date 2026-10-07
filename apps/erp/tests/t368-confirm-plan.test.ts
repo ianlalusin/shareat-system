@@ -34,7 +34,7 @@ describe('W1 — confirm forms carry confirmedPlan, not confirmReversal', () => 
     it(`${rel}: reads confirmedPlan from the form, puts plan= on the confirm redirect, no confirmReversal`, () => {
       const src = code(rel);
       expect(src).toMatch(/confirmedPlan/);
-      expect(src, 'the confirm redirect does not carry the token').toMatch(/plan=|set\('plan'|\bplan:/);
+      expect(src, 'the confirm redirect does not carry the token').toMatch(/plan=|set\('plan'|\bplan:|^\s*plan,\s*$/m);
       expect(src).not.toMatch(/confirmReversal/);
     });
   }

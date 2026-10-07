@@ -13,6 +13,13 @@ import { resetJar } from './flash-jar-core';
 
 vi.mock('next/headers', async () => (await import('./flash-jar-core')).nextHeadersMock());
 
+// Signing the flash needs the app secret, and `@shareat/core/env` refuses to start without these.
+// A unit test boots without env; an integration test already has them, so `??=` changes nothing there.
+// Signing itself is NOT mocked: the real `signFlash` runs.
+process.env['DATABASE_URL'] ??= 'postgresql://postgres:pw@localhost:5435/shareat_dev';
+process.env['SESSION_SECRET'] ??= 'x'.repeat(48);
+process.env['APP_TIMEZONE'] ??= 'Asia/Manila';
+
 beforeEach(() => {
   resetJar();
 });

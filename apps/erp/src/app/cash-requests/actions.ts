@@ -5,7 +5,6 @@
  *
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
-import { redirect } from 'next/navigation';
 import {
   cancelCashRequest,
   createCashRequest,
@@ -16,14 +15,11 @@ import {
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(path: string, params: Record<string, string>): never {
-  redirect(`${path}?${new URLSearchParams(params).toString()}`);
 }
 
 export async function createRequestAction(formData: FormData): Promise<void> {
@@ -46,9 +42,9 @@ export async function createRequestAction(formData: FormData): Promise<void> {
     );
     id = created.id;
   } catch (err) {
-    back('/cash-requests', { error: errorMessage(err) });
+    return await redirectWithFlash('/cash-requests', {}, { error: errorMessage(err) });
   }
-  back(`/cash-requests/${id}`, {
+  return await redirectWithFlash(`/cash-requests/${id}`, {}, {
     ok: 'Requested. ⚠️ No money has moved — asking is not a financial event.',
   });
 }
@@ -75,9 +71,9 @@ export async function decideAction(formData: FormData): Promise<void> {
       message = `Approved for ₱${amount}. ⚠️ Still nothing has moved — release it to hand the cash over.`;
     }
   } catch (err) {
-    back(`/cash-requests/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/cash-requests/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/cash-requests/${id}`, { ok: message });
+  return await redirectWithFlash(`/cash-requests/${id}`, {}, { ok: message });
 }
 
 export async function releaseAction(formData: FormData): Promise<void> {
@@ -98,9 +94,9 @@ export async function releaseAction(formData: FormData): Promise<void> {
     // short because its count is unverified, which is why this warns rather than blocks (row 154).
     if (result.warning) message += ` ⚠️ ${result.warning}`;
   } catch (err) {
-    back(`/cash-requests/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/cash-requests/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/cash-requests/${id}`, { ok: message });
+  return await redirectWithFlash(`/cash-requests/${id}`, {}, { ok: message });
 }
 
 export async function settleAction(formData: FormData): Promise<void> {
@@ -131,9 +127,9 @@ export async function settleAction(formData: FormData): Promise<void> {
       ? 'Settled. The float is back to zero and the request is closed.'
       : `Recorded. ₱${result.outstanding} is still out with the holder.`;
   } catch (err) {
-    back(`/cash-requests/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/cash-requests/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/cash-requests/${id}`, { ok: message });
+  return await redirectWithFlash(`/cash-requests/${id}`, {}, { ok: message });
 }
 
 export async function cancelAction(formData: FormData): Promise<void> {
@@ -147,7 +143,7 @@ export async function cancelAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back(`/cash-requests/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/cash-requests/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/cash-requests/${id}`, { ok: 'Withdrawn. Nothing posted, so nothing to undo.' });
+  return await redirectWithFlash(`/cash-requests/${id}`, {}, { ok: 'Withdrawn. Nothing posted, so nothing to undo.' });
 }

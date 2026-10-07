@@ -7,22 +7,18 @@
  * store's own cap from the ledger and refuses before any write — this action only shapes the
  * form and reports back what it said.
  */
-import { redirect } from 'next/navigation';
 // ⭐ Subpath import, not the `@shareat/domain` barrel — same pattern as `@shareat/domain/money-lines`
 // and `@shareat/domain/money-input` (packages/domain/package.json). The barrel is the
 // orchestrator's to wire; this is additive and does not touch it.
 import { distributeServiceCharge } from '@shareat/domain/service-charge';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(storeId: string, params: Record<string, string>): never {
-  redirect(`/service-charge?${new URLSearchParams({ store: storeId, ...params }).toString()}`);
 }
 
 export async function distributeAction(formData: FormData): Promise<void> {
@@ -45,7 +41,7 @@ export async function distributeAction(formData: FormData): Promise<void> {
     entryId = result.entryId;
     warning = result.warning;
   } catch (err) {
-    back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/service-charge', { store: storeId }, { error: errorMessage(err) });
   }
   // ⛔ AMENDMENT 2's replay guard makes a resubmitted store+payday a no-op on the LEDGER —
   // `created: false` means `postEntry` found the same idempotency key and posted NOTHING.
@@ -55,7 +51,7 @@ export async function distributeAction(formData: FormData): Promise<void> {
   // there is no legitimate second one to route the operator toward; a hint about changing the
   // payday to "make it post" is the exact move that defeats the key this guard depends on.
   if (!created) {
-    back(storeId, {
+    return await redirectWithFlash('/service-charge', { store: storeId }, {
       error: `A distribution for this store on this payday already exists (entry ${entryId}). Nothing new was posted.`,
     });
   }
@@ -63,7 +59,7 @@ export async function distributeAction(formData: FormData): Promise<void> {
   // read short because `checkDraw` allows a cashier drawer to go negative with a warning rather
   // than a refusal (service-charge payouts are expected to come from office/wallet accounts, but
   // the warning is propagated unconditionally so this stays correct if that ever changes).
-  back(storeId, {
+  return await redirectWithFlash('/service-charge', { store: storeId }, {
     ok: `Distributed.${warning ? ` ⚠️ ${warning}` : ''} Who received what is processed and documented manually.`,
   });
 }

@@ -4,6 +4,7 @@ import { listStoresForAdmin } from './lib';
 import { createStoreAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Stores — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -25,7 +26,7 @@ export default async function StoresPage({
 }: {
   searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess('/admin/stores');
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;

@@ -5,7 +5,6 @@
  *
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
-import { redirect } from 'next/navigation';
 import {
   chargeLiability,
   createLiability,
@@ -17,14 +16,11 @@ import type { LiabilityCategory } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(path: string, params: Record<string, string>): never {
-  redirect(`${path}?${new URLSearchParams(params).toString()}`);
 }
 
 export async function createLiabilityAction(formData: FormData): Promise<void> {
@@ -45,9 +41,9 @@ export async function createLiabilityAction(formData: FormData): Promise<void> {
     );
     id = created.id;
   } catch (err) {
-    back('/liabilities', { error: errorMessage(err) });
+    return await redirectWithFlash('/liabilities', {}, { error: errorMessage(err) });
   }
-  back(`/liabilities/${id}`, {
+  return await redirectWithFlash(`/liabilities/${id}`, {}, {
     ok: 'Recorded. ⚠️ Nothing is owed yet — charge it to put the obligation on the books.',
   });
 }
@@ -68,9 +64,9 @@ export async function chargeAction(formData: FormData): Promise<void> {
     );
     message = `Charged. ₱${result.outstanding} now owed.`;
   } catch (err) {
-    back(`/liabilities/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/liabilities/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/liabilities/${id}`, { ok: message });
+  return await redirectWithFlash(`/liabilities/${id}`, {}, { ok: message });
 }
 
 export async function payAction(formData: FormData): Promise<void> {
@@ -94,9 +90,9 @@ export async function payAction(formData: FormData): Promise<void> {
     // ⚠️ Surfaced, not swallowed: a cashier account can read short because its count is unverified.
     if (result.warning) message += ` ⚠️ ${result.warning}`;
   } catch (err) {
-    back(`/liabilities/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/liabilities/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/liabilities/${id}`, { ok: message });
+  return await redirectWithFlash(`/liabilities/${id}`, {}, { ok: message });
 }
 
 export async function reverseAction(formData: FormData): Promise<void> {
@@ -113,9 +109,9 @@ export async function reverseAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back(`/liabilities/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/liabilities/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/liabilities/${id}`, {
+  return await redirectWithFlash(`/liabilities/${id}`, {}, {
     ok: 'Reversed. Both entries stay on the ledger and net to nothing.',
   });
 }
@@ -126,7 +122,7 @@ export async function retireAction(formData: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) => retireLiability(tx, actor, { liabilityId: id }));
   } catch (err) {
-    back(`/liabilities/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/liabilities/${id}`, {}, { error: errorMessage(err) });
   }
-  back('/liabilities', { });
+  return await redirectWithFlash('/liabilities', {}, { });
 }

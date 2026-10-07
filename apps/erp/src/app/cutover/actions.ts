@@ -8,7 +8,6 @@
  * A gate in a server action protects one caller; a gate in the domain protects every caller there
  * will ever be.
  */
-import { redirect } from 'next/navigation';
 import { type Tx } from '@shareat/db';
 import {
   addOpeningFigure,
@@ -19,16 +18,12 @@ import {
 } from '@shareat/domain';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 import { recordingRefusalsFor, withOrgPrincipal } from '../expenses/lib';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(path: string, params: Record<string, string>): never {
-  const q = new URLSearchParams(params).toString();
-  redirect(q ? `${path}?${q}` : path);
 }
 
 export async function attestStepAction(formData: FormData): Promise<void> {
@@ -46,9 +41,9 @@ export async function attestStepAction(formData: FormData): Promise<void> {
       ),
     );
   } catch (err) {
-    back('/cutover', { error: errorMessage(err) });
+    return await redirectWithFlash('/cutover', {}, { error: errorMessage(err) });
   }
-  back('/cutover', {});
+  return await redirectWithFlash('/cutover', {});
 }
 
 export async function recordCountAction(formData: FormData): Promise<void> {
@@ -70,9 +65,9 @@ export async function recordCountAction(formData: FormData): Promise<void> {
       ),
     );
   } catch (err) {
-    back('/cutover/count', { store: storeId, error: errorMessage(err) });
+    return await redirectWithFlash('/cutover/count', { store: storeId }, { error: errorMessage(err) });
   }
-  back('/cutover/count', { store: storeId });
+  return await redirectWithFlash('/cutover/count', { store: storeId });
 }
 
 export async function addOpeningFigureAction(formData: FormData): Promise<void> {
@@ -91,9 +86,9 @@ export async function addOpeningFigureAction(formData: FormData): Promise<void> 
       ),
     );
   } catch (err) {
-    back('/cutover/opening', { error: errorMessage(err) });
+    return await redirectWithFlash('/cutover/opening', {}, { error: errorMessage(err) });
   }
-  back('/cutover/opening', {});
+  return await redirectWithFlash('/cutover/opening', {});
 }
 
 export async function removeOpeningFigureAction(formData: FormData): Promise<void> {
@@ -103,9 +98,9 @@ export async function removeOpeningFigureAction(formData: FormData): Promise<voi
       withOrgPrincipal(actor.orgId, (tx: Tx) => removeOpeningFigure(tx, actor, { entryId: str(formData, 'entryId') })),
     );
   } catch (err) {
-    back('/cutover/opening', { error: errorMessage(err) });
+    return await redirectWithFlash('/cutover/opening', {}, { error: errorMessage(err) });
   }
-  back('/cutover/opening', {});
+  return await redirectWithFlash('/cutover/opening', {});
 }
 
 /**
@@ -119,7 +114,7 @@ export async function postOpeningBalancesAction(): Promise<void> {
   try {
     await recordingRefusalsFor(actor.orgId, () => withOrgPrincipal(actor.orgId, (tx: Tx) => postOpeningBalances(tx, actor)));
   } catch (err) {
-    back('/cutover/opening', { error: errorMessage(err) });
+    return await redirectWithFlash('/cutover/opening', {}, { error: errorMessage(err) });
   }
-  back('/cutover/opening', { posted: '1' });
+  return await redirectWithFlash('/cutover/opening', {}, { posted: '1' });
 }

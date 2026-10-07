@@ -7,7 +7,6 @@
  * the service — `record_till_count` to count, `resolve_till_variance` to charge. A gate in a
  * server action protects one caller.
  */
-import { redirect } from 'next/navigation';
 import {
   chargeTillShortage,
   closeTillShift,
@@ -16,6 +15,7 @@ import {
 } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
@@ -55,10 +55,6 @@ function errorMessage(err: unknown): string {
  * `searchParams`. They disagreed until 2026-08-30, and the symptom was invisible on the first
  * store in the list and only showed on the second: every action bounced the picker back.
  */
-function back(params: Record<string, string>): never {
-  redirect(`/till?${new URLSearchParams(params).toString()}`);
-}
-
 export async function openShiftAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const storeId = str(formData, 'storeId');
@@ -77,10 +73,9 @@ export async function openShiftAction(formData: FormData): Promise<void> {
     );
     shiftNo = r.shiftNo;
   } catch (err) {
-    back({ store: storeId, error: errorMessage(err) });
+    return await redirectWithFlash('/till', { store: storeId }, { error: errorMessage(err) });
   }
-  back({
-    store: storeId,
+  return await redirectWithFlash('/till', { store: storeId }, {
     ok: `Shift ${shiftNo} is open. Record the opening count before trading.`,
   });
 }
@@ -104,9 +99,9 @@ export async function recordCountAction(formData: FormData): Promise<void> {
       recordTillCount(tx, actor, { shiftId, moment, counts }),
     );
   } catch (err) {
-    back({ store: storeId, error: errorMessage(err) });
+    return await redirectWithFlash('/till', { store: storeId }, { error: errorMessage(err) });
   }
-  back({ store: storeId, ok: `${moment === 'open' ? 'Opening' : 'Closing'} count recorded.` });
+  return await redirectWithFlash('/till', { store: storeId }, { ok: `${moment === 'open' ? 'Opening' : 'Closing'} count recorded.` });
 }
 
 export async function closeShiftAction(formData: FormData): Promise<void> {
@@ -120,9 +115,9 @@ export async function closeShiftAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back({ store: storeId, error: errorMessage(err) });
+    return await redirectWithFlash('/till', { store: storeId }, { error: errorMessage(err) });
   }
-  back({ store: storeId, ok: 'Shift closed. The till is now in nobody’s custody until the next opens.' });
+  return await redirectWithFlash('/till', { store: storeId }, { ok: 'Shift closed. The till is now in nobody’s custody until the next opens.' });
 }
 
 /**
@@ -142,10 +137,9 @@ export async function chargeShortageAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back({ store: storeId, error: errorMessage(err) });
+    return await redirectWithFlash('/till', { store: storeId }, { error: errorMessage(err) });
   }
-  back({
-    store: storeId,
+  return await redirectWithFlash('/till', { store: storeId }, {
     ok: outcome.posted
       ? 'Charged to the cashier against 1230. ⚠️ The office replenishment is a separate transfer.'
       : (outcome.reason ?? 'Nothing to charge.'),

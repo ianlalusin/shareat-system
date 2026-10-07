@@ -12,6 +12,7 @@ import {
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Cash requests — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -25,7 +26,7 @@ export default async function CashRequestsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/cash-requests');
 
   const [stores, persons, requests] = await Promise.all([

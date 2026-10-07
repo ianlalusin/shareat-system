@@ -17,6 +17,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Opening balances — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,7 @@ export default async function OpeningPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/cutover/opening');
 
   const [stores, drafts, accounts, gaps] = await Promise.all([

@@ -5,7 +5,6 @@
  *
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
-import { redirect } from 'next/navigation';
 import {
   createLoan,
   disburseLoan,
@@ -16,14 +15,11 @@ import type { InterestMethod, PaymentFrequency, RatePeriod } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { redirectWithFlash } from '@/lib/flash';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(path: string, params: Record<string, string>): never {
-  redirect(`${path}?${new URLSearchParams(params).toString()}`);
 }
 
 export async function createLoanAction(formData: FormData): Promise<void> {
@@ -51,9 +47,9 @@ export async function createLoanAction(formData: FormData): Promise<void> {
     );
     id = created.id;
   } catch (err) {
-    back('/loans', { error: errorMessage(err) });
+    return await redirectWithFlash('/loans', {}, { error: errorMessage(err) });
   }
-  back(`/loans/${id}`, {
+  return await redirectWithFlash(`/loans/${id}`, {}, {
     ok: 'Recorded. ⚠️ No money has moved — a signed loan is a commitment until it is drawn.',
   });
 }
@@ -71,9 +67,9 @@ export async function disburseLoanAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back(`/loans/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/loans/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/loans/${id}`, { ok: 'Drawn. The money is in the account and the debt is on the books.' });
+  return await redirectWithFlash(`/loans/${id}`, {}, { ok: 'Drawn. The money is in the account and the debt is on the books.' });
 }
 
 export async function recordPaymentAction(formData: FormData): Promise<void> {
@@ -99,9 +95,9 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
     const warning = (result as { warning?: string }).warning;
     if (warning) summary += ` ⚠️ ${warning}`;
   } catch (err) {
-    back(`/loans/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/loans/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/loans/${id}`, { ok: summary });
+  return await redirectWithFlash(`/loans/${id}`, {}, { ok: summary });
 }
 
 export async function reverseEntryAction(formData: FormData): Promise<void> {
@@ -114,7 +110,7 @@ export async function reverseEntryAction(formData: FormData): Promise<void> {
       reverseLoanEntry(tx, actor, { loanId: id, entryId: str(formData, 'entryId'), reason }),
     );
   } catch (err) {
-    back(`/loans/${id}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/loans/${id}`, {}, { error: errorMessage(err) });
   }
-  back(`/loans/${id}`, { ok: 'Reversed. The debt is back to what it was.' });
+  return await redirectWithFlash(`/loans/${id}`, {}, { ok: 'Reversed. The debt is back to what it was.' });
 }

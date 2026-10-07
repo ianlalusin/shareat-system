@@ -58,26 +58,6 @@ export const PRE_SESSION: readonly string[] = [
  * is a prefix.
  */
 export const PENDING: readonly string[] = [
-  // S2
-  'app/prepaid/actions.ts', 'app/fixed-assets/actions.ts', 'app/admin/stores/actions.ts', 'app/admin/users/actions.ts',
-  'app/admin/access-defaults/actions.ts', 'app/payroll/actions.ts', 'app/payroll/separations/actions.ts',
-  'app/payroll/thirteenth-month/actions.ts', 'app/cutover/actions.ts', 'app/findings/actions.ts',
-  'app/prepaid/page.tsx', 'app/prepaid/[id]/page.tsx', 'app/fixed-assets/page.tsx', 'app/fixed-assets/new/page.tsx',
-  'app/fixed-assets/[id]/page.tsx', 'app/admin/stores/page.tsx', 'app/admin/stores/[id]/page.tsx',
-  'app/admin/users/[personId]/page.tsx', 'app/admin/access-defaults/page.tsx', 'app/payroll/page.tsx',
-  'app/payroll/separations/page.tsx', 'app/payroll/thirteenth-month/page.tsx', 'app/cutover/page.tsx',
-  'app/cutover/opening/page.tsx', 'app/cutover/count/page.tsx', 'app/findings/page.tsx',
-  // S3
-  'app/loans/actions.ts', 'app/liabilities/actions.ts', 'app/owners/actions.ts', 'app/cash-requests/actions.ts',
-  'app/money-accounts/actions.ts', 'app/money-transfers/actions.ts', 'app/remittance/actions.ts', 'app/till/actions.ts',
-  'app/service-charge/actions.ts', 'app/budgets/actions.ts', 'app/channel-settlements/actions.ts',
-  'app/customers/actions.ts', 'app/statutory-discounts/actions.ts',
-  'app/loans/page.tsx', 'app/loans/[id]/page.tsx', 'app/liabilities/page.tsx', 'app/liabilities/[id]/page.tsx',
-  'app/owners/page.tsx', 'app/owners/[id]/page.tsx', 'app/cash-requests/page.tsx', 'app/cash-requests/[id]/page.tsx',
-  'app/money-accounts/page.tsx', 'app/money-transfers/page.tsx', 'app/remittance/page.tsx', 'app/till/page.tsx',
-  'app/service-charge/page.tsx', 'app/budgets/page.tsx', 'app/channel-settlements/page.tsx',
-  'app/customers/page.tsx', 'app/customers/[customerId]/page.tsx', 'app/customers/price-lists/page.tsx',
-  'app/customers/price-lists/[id]/page.tsx', 'app/statutory-discounts/page.tsx',
   // S4
   'app/ap/actions.ts', 'app/expenses/actions.ts', 'app/expenses/recurring/actions.ts',
   'app/expenses/reimbursements/actions.ts', 'app/sales-days/actions.ts', 'app/settings/attendance/actions.ts',
