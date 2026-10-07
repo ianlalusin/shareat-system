@@ -234,9 +234,10 @@ async function fixture(hint: string, opts: { instant?: boolean } = {}) {
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
 /** A day IMPORTED on the linked store; its stored sold items (coke 4) are what the usage plan reads. */
-async function mkUsageDay(f: Fixture, date: string, opts: { verify?: boolean } = {}): Promise<string> {
+async function mkUsageDay(f: Fixture, date: string, opts: { verify?: boolean; orphan?: boolean } = {}): Promise<string> {
+  const soldItems = [{ key: 'coke', name: 'Coke', physicalQty: 4 }, ...(opts.orphan ? [{ key: 'mystery', name: 'Mystery', physicalQty: 1 }] : [])];
   const { id } = await asOrg(f.orgId, (tx) =>
-    importTestDay(tx, f.manager, { storeId: f.storeL, businessDate: date, soldItems: [{ key: 'coke', name: 'Coke', physicalQty: 4 }] }),
+    importTestDay(tx, f.manager, { storeId: f.storeL, businessDate: date, soldItems }),
   );
   if (opts.verify) await asOrg(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, id));
   return id;
@@ -588,7 +589,9 @@ describe('T12 - the same date cannot be pulled twice across a void', () => {
 
   it('(b) voided D1 with ONE section finalized (pull status still planned) refuses D2 with the R7 sentence', async () => {
     const f = await fixture('t12b');
-    const d1 = await mkUsageDay(f, D1, { verify: true });
+    // T-377 S2: finalize now finishes a pull whose other open sections are all empty, so the day carries an unmapped item
+    // (an orphan line) to keep a non-empty section open and the pull genuinely `planned` after the direct section posts.
+    const d1 = await mkUsageDay(f, D1, { verify: true, orphan: true });
     const built = await plan(f, d1);
     expect(built.ok).toBe(true);
     if (!built.ok) return;

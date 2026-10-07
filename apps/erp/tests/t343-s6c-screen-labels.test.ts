@@ -221,6 +221,7 @@ const duplicateCandidatesMock = vi.fn();
 const getItemMock = vi.fn();
 const itemPricesMock = vi.fn();
 const sellabilityByStoreMock = vi.fn();
+const unitHistoryExistsMock = vi.fn();
 
 vi.mock('../src/app/items/lib', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/app/items/lib')>();
@@ -232,6 +233,7 @@ vi.mock('../src/app/items/lib', async (importOriginal) => {
     getItem: (...a: unknown[]) => getItemMock(...a),
     itemPrices: (...a: unknown[]) => itemPricesMock(...a),
     sellabilityByStore: (...a: unknown[]) => sellabilityByStoreMock(...a),
+    unitHistoryExists: (...a: unknown[]) => unitHistoryExistsMock(...a),
   };
 });
 
@@ -244,6 +246,7 @@ vi.mock('../src/app/items/actions', () => ({
   clearStoreSellabilityAction: vi.fn(),
   setStoreSellabilityAction: vi.fn(),
   updateItemFlagsAction: vi.fn(),
+  changeItemUnitAction: vi.fn(),
 }));
 
 const whoSellsMock = vi.fn();
@@ -301,7 +304,9 @@ describe('I1 — items list: meat_slab / meat_sliced show their label; the kind 
     const selectBlock = /<select\s+name="kind"[^>]*>([\s\S]*?)<\/select>/.exec(html)?.[1];
     expect(selectBlock, 'expected the kind <select>').toBeTruthy();
     const optionValues = [...selectBlock!.matchAll(/<option[^>]*value="([^"]*)"/g)].map((m) => m[1]!);
-    expect(optionValues).toEqual([...ITEM_KINDS]);
+    // T-378 S1: the kind has no default, so the <select> opens on a blank "Choose a kind" option before the ITEM_KINDS.
+    expect(optionValues).toEqual(['', ...ITEM_KINDS]);
+    expect(/<option[^>]*value=""[^>]*>([^<]*)<\/option>/.exec(selectBlock!)?.[1]).toBe('Choose a kind');
   });
 });
 
@@ -326,6 +331,7 @@ describe('I2 — item detail: a raw_material item shows "Raw material" (exact ca
     itemPricesMock.mockResolvedValueOnce({ history: [], movement: [], bySupplier: [] });
     whoSellsMock.mockResolvedValueOnce([]);
     sellabilityByStoreMock.mockResolvedValueOnce([]);
+    unitHistoryExistsMock.mockResolvedValueOnce(false);
 
     const { default: ItemDetailPage } = await import('../src/app/items/[id]/page');
     const html = renderToStaticMarkup(

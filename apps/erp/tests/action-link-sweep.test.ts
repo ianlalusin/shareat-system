@@ -204,8 +204,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 151 FAIL / 58 UNRESOLVED', () => {
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 58 });
+  it('accepted-baseline totals: 151 FAIL / 61 UNRESOLVED', () => {
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 61 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -358,7 +358,12 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // (`reports/pos-reconciliation/page.tsx`) and on the day page, and the Post correction form on the day page (the
     // date `<input>`, the reason `<input>` and its submit `<button>`); the hidden inputs are not controls. Nothing else.
     // Verified by running the census (1130).
-    expect(results.length).toBe(1130);
+    // 1130 -> 1137, T-377 S2 + T-378 S1/S3, 2026-10-07. +7, found by running the census and diffing against HEAD~5: the
+    // items approve form (`items/page.tsx`) gains the Measured-in `<select>` and three sold-as checkboxes (purchasable,
+    // retail, wholesale; +3 UNRESOLVED baseline entries, touch-target-baseline.json); the item detail page
+    // (`items/[id]/page.tsx`) gains the Change-unit `<select>` and its submit `<button>`; the POS usage pull page
+    // (`inventory/pos-usage/page.tsx`) gains the "Finish this pull" submit `<button>` (T-377 S2). Verified by running the census (1137).
+    expect(results.length).toBe(1137);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
