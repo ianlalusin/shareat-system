@@ -169,9 +169,12 @@ describe('W1 - who sees the Unlink section', () => {
 describe('W2 - the confirmation box', () => {
   it('unticked -> "Tick the box to confirm."; the link row is unchanged; no audit row', async () => {
     const f = await fixture('w2', { verified: 1 });
-    const { outcome, signal } = await run(f.superAdmin, form(f, { reason: REASON }));
+    const { outcome, signal, raw } = await run(f.superAdmin, form(f, { reason: REASON }));
     expect(signal.url.startsWith('/settings/pos-link')).toBe(true);
     expect(outcome.flash.error).toBe('Tick the box to confirm.');
+    // Auditor (T-382): a REFUSAL goes back through the flash too; the typed reason never reaches the address (DEF-476).
+    expect(decodeURIComponent(raw.replace(/\+/g, ' ')), 'the reason is not in the address on a refusal').not.toContain('wrong store');
+    expect(raw).not.toMatch(/[?&](ok|error|reason)=/);
     expect(outcome.flash.ok).toBeUndefined();
     expect((await linkRow(f.storeId))!.unlinked_at).toBeNull();
     expect(await sql`select 1 from audit_log where org_id = ${f.orgId} and action = 'unlink_store_from_pos'`).toHaveLength(0);
@@ -207,8 +210,10 @@ describe('W4 - R3 on the screen: an open imported day blocks the unlink', () => 
     expect(text).not.toContain('I understand:');
     expect(html).not.toMatch(/<input[^>]*type="checkbox"/);
 
-    const { outcome } = await run(f.superAdmin, form(f, { reason: REASON, confirm: 'on' }));
+    const { outcome, raw } = await run(f.superAdmin, form(f, { reason: REASON, confirm: 'on' }));
     expect(outcome.flash.error).toBe(r3Sentence('Lipa', [hd('2027-01-15')]));
+    expect(decodeURIComponent(raw.replace(/\+/g, ' ')), 'auditor: the reason is not in the address on the R3 refusal').not.toContain('wrong store');
+    expect(raw).not.toMatch(/[?&](ok|error|reason)=/);
     expect(outcome.flash.ok).toBeUndefined();
     expect((await linkRow(f.storeId))!.unlinked_at, 'nothing unlinked').toBeNull();
   });
