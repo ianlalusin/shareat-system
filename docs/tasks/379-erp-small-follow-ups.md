@@ -404,7 +404,7 @@ by raw insert. `trade.test.ts:919-956` stays unedited as the single-item control
 - **L3** (red on HEAD; conservation). One bill: two X lines of 10 kg at ₱1,000 each, + Y 10 kg ₱8,000, other fees
   ₱1,000 (total ₱11,000). Expect:
   - each X line landed 110/kg;
-  - Y landed 900/kg;
+  - Y landed 880/kg;
   - Σ (landed × base qty) over the three lines = ₱11,000.00 exactly (goods + fees).
 - **L4** (red on HEAD; REV-8's W8). Bill B1: X 10 kg ₱1,000, delivery fee ₱500 → `costBasisFor(X)` = 150. Void B1.
   Log B2 the same date: X 10 kg ₱1,000, no fee → `costBasisFor(X)` = 100. HEAD keeps 150 (the voided bill still

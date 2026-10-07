@@ -257,11 +257,22 @@ export async function priceHistory(
              (
                l.line_total
                + (coalesce(si.delivery_fee, 0) + coalesce(si.other_fees, 0))
-                 * (l.line_total / nullif(sum(l.line_total) over (partition by l.supplier_invoice_id), 0))
+                 * (l.line_total / nullif(g.goods, 0))
              ) / nullif(l.quantity * l.conversion_factor, 0)
            )::text as landed_base_price
     from supplier_invoice_lines l
     join supplier_invoices si on si.id = l.supplier_invoice_id
+    -- DEF-602 (T-379 R7): the fee share's denominator is the WHOLE bill's lines, summed BEFORE
+    -- the item filter narrows them. A window over the filtered rows gave each item the whole fee.
+    join (
+      select l2.supplier_invoice_id, sum(l2.line_total) as goods
+      from supplier_invoice_lines l2
+      join supplier_invoices s2 on s2.id = l2.supplier_invoice_id
+      where s2.org_id = ${orgId}
+        and l2.supplier_invoice_id in (
+          select supplier_invoice_id from supplier_invoice_lines where item_id = ${itemId})
+      group by l2.supplier_invoice_id
+    ) g on g.supplier_invoice_id = l.supplier_invoice_id
     join suppliers s on s.id = si.supplier_id
     where si.org_id = ${orgId} and l.item_id = ${itemId} and si.status <> 'voided'
       ${filter.from ? sql`and si.invoice_date >= ${filter.from}` : sql``}
@@ -987,22 +998,39 @@ export async function upsertItemPricing(
 }
 
 async function lastTwoLandedMax(tx: Tx, orgId: string, itemId: string): Promise<string | null> {
+  // T-379 S3a. R7 (DEF-602): fee share over the WHOLE bill's lines (`goods`), summed before the
+  // item filter. R8 (DEF-601): 'voided' is the schema's value. R10: one bill = one receive, a
+  // weighted price = sum(landed line totals) / sum(base qty), newest two bills, then max.
   const rows = (await tx.execute(sql`
-    with landed as (
-      select si.invoice_date,
-             (
-               (
-                 l.line_total
-                 + (coalesce(si.delivery_fee, 0) + coalesce(si.other_fees, 0))
-                   * (l.line_total / nullif(sum(l.line_total) over (partition by l.supplier_invoice_id), 0))
-               ) / nullif(l.quantity * l.conversion_factor, 0)
-             ) as landed_base_price
+    with goods as (
+      select l2.supplier_invoice_id, sum(l2.line_total) as goods
+      from supplier_invoice_lines l2
+      join supplier_invoices s2 on s2.id = l2.supplier_invoice_id
+      where s2.org_id = ${orgId}
+        and l2.supplier_invoice_id in (
+          select supplier_invoice_id from supplier_invoice_lines where item_id = ${itemId})
+      group by l2.supplier_invoice_id
+    ),
+    receives as (
+      select si.id, si.invoice_date, si.created_at,
+             sum(
+               l.line_total
+               + (coalesce(si.delivery_fee, 0) + coalesce(si.other_fees, 0))
+                 * (l.line_total / nullif(g.goods, 0))
+             ) / nullif(sum(l.quantity * l.conversion_factor), 0) as landed_base_price
       from supplier_invoice_lines l
       join supplier_invoices si on si.id = l.supplier_invoice_id
-      where si.org_id = ${orgId} and l.item_id = ${itemId} and si.status <> 'void'
+      join goods g on g.supplier_invoice_id = l.supplier_invoice_id
+      where si.org_id = ${orgId} and l.item_id = ${itemId} and si.status <> 'voided'
+      group by si.id, si.invoice_date, si.created_at
     )
     select max(landed_base_price)::text as basis
-    from (select landed_base_price from landed order by invoice_date desc limit 2) t
+    from (
+      select landed_base_price from receives
+      where landed_base_price is not null
+      order by invoice_date desc, created_at desc, id desc
+      limit 2
+    ) t
   `)) as unknown as Record<string, string | null>[];
   const basis = rows[0]?.basis;
   return basis == null ? null : String(basis);
