@@ -242,6 +242,12 @@ export async function getByIdForUpdate(tx: Tx, orgId: string, id: string): Promi
   return row as FixedAssetRow | undefined;
 }
 
+/** Takes the asset row's lock (`FOR UPDATE`), returning nothing. T-381 (DEF-606): `bookMissedMonth` serialises
+ *  bookers PER ASSET so the loser re-reads after the winner commits and answers in words. */
+export async function lockAssetRow(tx: Tx, orgId: string, id: string): Promise<void> {
+  await tx.execute(sql`SELECT 1 FROM fixed_assets WHERE id = ${id} AND org_id = ${orgId} FOR UPDATE`);
+}
+
 export async function getById(
   tx: Tx,
   orgId: string,

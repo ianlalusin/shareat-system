@@ -133,6 +133,14 @@ export async function bookMissedMonth(
     throw new Error(`bookMissedMonth: ${name} owes nothing for ${belongsToPeriod}`);
   }
 
+  // Step 4b (T-381 / DEF-606) — serialise bookers per subject: the second waits here, then re-reads below
+  // and answers "already booked" in words; the 0174 trigger stays as the backstop.
+  if (input.schedule === 'depreciation') {
+    await fixedAssetsRepo.lockAssetRow(tx, actor.orgId, input.subjectId);
+  } else {
+    await prepaidRepo.lockItemRow(tx, actor.orgId, input.subjectId);
+  }
+
   // Step 5 — a link row already exists for (subject, P)?
   const existingLink = await missedMonthsRepo.findLink(tx, actor.orgId, input.schedule, input.subjectId, belongsToPeriod);
   if (existingLink) {
