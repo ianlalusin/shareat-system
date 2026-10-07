@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { flashCookieName } from '@/lib/flash';
 import { transaction } from '@shareat/db';
 import {
   resolveActor,
@@ -47,7 +48,10 @@ export async function setSessionCookie(token: string, expiresAt: Date): Promise<
 }
 
 export async function clearSessionCookie(): Promise<void> {
-  (await cookies()).delete(COOKIE);
+  const jar = await cookies();
+  jar.delete(COOKIE);
+  // T-380: the next person on a shared PC inherits no banner or refill from the last one.
+  jar.delete(flashCookieName());
 }
 
 export async function readSessionToken(): Promise<string | null> {

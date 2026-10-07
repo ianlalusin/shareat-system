@@ -75,6 +75,7 @@ rateFor
 realSourceTypesForSpecName
 recentRuns
 reconcileSupplier
+redirectWithFlash
 remainingFor
 remainingOf
 removeUsageLine
@@ -92,6 +93,7 @@ seedCanonicalPositions
 setCostBasisItem
 setItemPricing
 setTillFloat
+splitReturnTo
 sumTender
 summarizeConversions
 tablesWithScope
@@ -108,4 +110,5 @@ upsertPolicy
 validateFingerprintTemplates
 valuateShell
 voidShift
+withFlash
 withPrincipal

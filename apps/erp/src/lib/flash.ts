@@ -1,0 +1,291 @@
+import { randomBytes } from 'node:crypto';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { flashSignatureMatches, signFlash } from '@shareat/auth';
+import { logger } from '@shareat/core/logger';
+
+/**
+ * The flash: one banner and a few form refills carried across a redirect in a signed, short-lived,
+ * httpOnly cookie, never in the page address. T-380 (DEF-476), docs/tasks/380-no-typed-values-in-urls.md.
+ *
+ * ## Why a cookie and not the URL
+ * A page address lands in browser history on a shared till PC, in the reverse proxy's access log and
+ * in `Referer` headers (CWE-598). A banner can quote what was typed (`"1,0OO" is not a valid
+ * amount`), and a refill IS what was typed, so neither belongs in a URL. The URL keeps only what
+ * identifies the page (the closed NAV set below) plus the random token `f`.
+ *
+ * ## Why the token `f`
+ * A Server Component can read a cookie but cannot delete one. Without a token, going back to the same
+ * page inside the minute would show "Written off" a second time on a money screen. The cookie carries
+ * `n`; the page uses the flash only when the URL's `f` equals it, so only the URL the redirect
+ * produced shows the banner. It is not one-time: reload or Back to that `?f=` entry within 60 s shows
+ * it again, by design (R3, REV-7). A path check was rejected (REV-3): `withFlash` has no pathname.
+ *
+ * ## Why it is signed
+ * A sibling `*.shareat.net` host can set a cookie with this name. Without a signature that brings back
+ * the fake-banner hole this task closes. The key is `derivedKey('flash')`, used for nothing else (R4).
+ * The payload is readable by whoever holds the cookie, so nothing secret goes in it.
+ *
+ * ## Why every call is awaited, as `return await redirectWithFlash(...)`
+ * `cookies()` is async, so the helper is async. A call that is not awaited lets the action carry on:
+ * a refused write-off would fall through to the success redirect and a guard clause would fall through
+ * to the posting call. `return await` (not a bare `await`) because only a returned call keeps
+ * TypeScript's narrowing after a guard (REV-1). Guard G1b enforces the form.
+ *
+ * Flash contents are never logged (I5). A dropped nav value is logged by KEY name only.
+ */
+
+/**
+ * The one definition of the cookie name. In production it is `__Host-` prefixed (Secure, Path=/, no
+ * Domain), so a sibling `*.shareat.net` host cannot plant or overwrite it. Dev stays plain because a
+ * `__Host-` cookie is refused over http. Read at call time; session.ts wipes the same name.
+ */
+export function flashCookieName(): string {
+  // Bracket access: a bundler may inline the dotted form at build time; this is read per call.
+  return process.env['NODE_ENV'] === 'production' ? '__Host-shareat_flash' : 'shareat_flash';
+}
+const CONTROL_CHARS = /[\x00-\x1f\x7f]/;
+const TTL_MS = 60_000;
+const MAX_COOKIE_BYTES = 3000;
+const MAX_BANNER_CHARS = 600;
+
+export const FLASH_KEYS = [
+  'ok',
+  'error',
+  'warning',
+  'notice',
+  'confirm',
+  'plan',
+  'ran',
+  'failed',
+  'posted',
+  'needsConfirmation',
+] as const;
+export type FlashKey = (typeof FLASH_KEYS)[number];
+
+export const KEEP_KEYS = [
+  'reason',
+  'refundAmount',
+  'refundAccountCode',
+  'writtenOffOn',
+  'inServiceOn',
+  'mode',
+  'openingDate',
+  'separationDate',
+] as const;
+export type KeepKey = (typeof KEEP_KEYS)[number];
+
+/** `confirm` is the consent text and `plan` is sent back byte for byte: neither is ever truncated (R8, REV-6). */
+const UNCAPPED: ReadonlySet<string> = new Set(['confirm', 'plan']);
+
+// Anchored on purpose (REV-4): lib/error-shape.ts UUID_SHAPE is `\b...\b`, built for "contains an id".
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const PERIOD = /^\d{4}-?\d{2}$/;
+const YEAR = /^\d{4}$/;
+const CAP = /^[a-z][a-z0-9_]{0,63}$/;
+
+const NAV_SHAPES = {
+  store: UUID,
+  day: UUID,
+  pull: UUID,
+  supplier: UUID,
+  employmentId: UUID,
+  branch: UUID,
+  commissary: UUID,
+  changedChannel: UUID,
+  pos: UUID,
+  start: ISO_DATE,
+  end: ISO_DATE,
+  date: ISO_DATE,
+  from: ISO_DATE,
+  to: ISO_DATE,
+  period: PERIOD,
+  year: YEAR,
+  cap: CAP,
+} as const satisfies Record<string, RegExp>;
+
+export type NavKey = keyof typeof NAV_SHAPES;
+export type Nav = Partial<Record<NavKey, string>>;
+
+export interface Flash {
+  ok?: string;
+  error?: string;
+  warning?: string;
+  notice?: string;
+  confirm?: string;
+  plan?: string;
+  ran?: string;
+  failed?: string;
+  posted?: string;
+  needsConfirmation?: string;
+  keep?: Partial<Record<KeepKey, string>>;
+}
+
+export type FlashFields = Partial<Record<FlashKey | KeepKey, string>>;
+
+export interface FlashPayload {
+  v: 1;
+  n: string;
+  p: string;
+  exp: number;
+  msg: Partial<Record<FlashKey, string>>;
+  keep: Partial<Record<KeepKey, string>>;
+}
+
+function isNavKey(k: string): k is NavKey {
+  return Object.prototype.hasOwnProperty.call(NAV_SHAPES, k);
+}
+
+/** Keep the nav values that fit their shape; drop the rest and log the KEY only. */
+function cleanNav(raw: Record<string, string | undefined>): Nav {
+  const out: Nav = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v === undefined) continue;
+    if (!isNavKey(k) || !NAV_SHAPES[k].test(v)) {
+      logger.warn({ key: k }, 'flash: nav value dropped (not a navigation key or wrong shape)');
+      continue;
+    }
+    out[k] = v;
+  }
+  return out;
+}
+
+/** The same test as sign-in/lib.ts `safeNext`: one `/`, then a character that is neither `/` nor `\`. */
+function isSameAppPath(p: string): boolean {
+  if (CONTROL_CHARS.test(p)) return false; // a tab or newline is stripped by URL parsers: `/<TAB>/evil.com` becomes `//evil.com`
+  return /^\/(?![/\\])/.test(p) && !/[?#\\]/.test(p);
+}
+
+function encode(payload: FlashPayload): string {
+  const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  return `${body}.${signFlash(body)}`;
+}
+
+/** Exported for the test helper only. The payload, or null for anything unsigned, tampered or malformed. Signature first, before the payload is parsed. Expiry is the reader's check. */
+export function decodeFlash(raw: string): FlashPayload | null {
+  const dot = raw.indexOf('.');
+  if (dot <= 0 || dot === raw.length - 1) return null;
+  const body = raw.slice(0, dot);
+  const sig = raw.slice(dot + 1);
+  if (!flashSignatureMatches(body, sig)) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const o = parsed as Record<string, unknown>;
+  if (o.v !== 1 || typeof o.n !== 'string' || !o.n) return null;
+  if (typeof o.exp !== 'number' || !Number.isFinite(o.exp)) return null;
+  const msg = o.msg;
+  const keep = o.keep;
+  if (typeof msg !== 'object' || msg === null || typeof keep !== 'object' || keep === null) return null;
+  return {
+    v: 1,
+    n: o.n,
+    p: typeof o.p === 'string' ? o.p : '',
+    exp: o.exp,
+    msg: pick(msg as Record<string, unknown>, FLASH_KEYS),
+    keep: pick(keep as Record<string, unknown>, KEEP_KEYS),
+  };
+}
+
+function pick<K extends string>(src: Record<string, unknown>, keys: readonly K[]): Partial<Record<K, string>> {
+  const out: Partial<Record<K, string>> = {};
+  for (const k of keys) {
+    const v = src[k];
+    if (typeof v === 'string') out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Redirect to `path` carrying a banner and refills in the flash cookie. Always `return await` it.
+ * `redirect` from `next/navigation` is called only here (guard G1a).
+ */
+export async function redirectWithFlash(path: string, nav: Nav, flash?: Flash): Promise<never> {
+  if (!isSameAppPath(path)) throw new Error('redirectWithFlash: path must be a same-app path with no query, hash or backslash');
+
+  const query = new URLSearchParams();
+  for (const [k, v] of Object.entries(cleanNav(nav as Record<string, string | undefined>))) query.set(k, v);
+
+  const msg: Partial<Record<FlashKey, string>> = {};
+  for (const k of FLASH_KEYS) {
+    const v = flash?.[k];
+    if (typeof v !== 'string') continue;
+    msg[k] = UNCAPPED.has(k) ? v : v.slice(0, MAX_BANNER_CHARS);
+  }
+  let keep: Partial<Record<KeepKey, string>> = {};
+  for (const k of KEEP_KEYS) {
+    const v = flash?.keep?.[k];
+    if (typeof v === 'string') keep[k] = v;
+  }
+
+  if (Object.keys(msg).length === 0 && Object.keys(keep).length === 0) {
+    const qs = query.toString();
+    return redirect(qs ? `${path}?${qs}` : path);
+  }
+
+  const n = randomBytes(12).toString('base64url');
+  const payload = (k: Partial<Record<KeepKey, string>>): FlashPayload => ({ v: 1, n, p: path, exp: Date.now() + TTL_MS, msg, keep: k });
+  let value = encode(payload(keep));
+  if (Buffer.byteLength(value) > MAX_COOKIE_BYTES && Object.keys(keep).length > 0) {
+    // Dropped whole, never shortened: a refilled amount that changed would post a different figure.
+    logger.warn({ keys: Object.keys(keep) }, 'flash: keep dropped whole (cookie over budget)');
+    keep = {};
+    value = encode(payload(keep));
+  }
+  if (Buffer.byteLength(value) > MAX_COOKIE_BYTES) {
+    // confirm/plan are never truncated; a browser would silently drop an oversize cookie. Spec defect (R8): report.
+    logger.error({ bytes: Buffer.byteLength(value) }, 'flash: cookie over budget even without keep');
+  }
+
+  (await cookies()).set(flashCookieName(), value, {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: process.env['NODE_ENV'] === 'production',
+    path: '/',
+    maxAge: TTL_MS / 1000,
+  });
+  query.set('f', n);
+  return redirect(`${path}?${query.toString()}`);
+}
+
+/**
+ * `const sp = await withFlash(searchParams)`: the URL params with the flash and refills merged in,
+ * flash first. Uses the flash only when signature, expiry and token all hold; otherwise it is as if
+ * none existed. Never sets or deletes a cookie (a Server Component cannot).
+ */
+export async function withFlash<T extends object>(searchParams: Promise<T>): Promise<T & FlashFields> {
+  const sp = await searchParams;
+  const f = (sp as Record<string, unknown>).f;
+  if (typeof f !== 'string' || !f) return sp as T & FlashFields;
+  const raw = (await cookies()).get(flashCookieName())?.value;
+  if (!raw) return sp as T & FlashFields;
+  const payload = decodeFlash(raw);
+  if (!payload || payload.exp <= Date.now() || payload.n !== f) return sp as T & FlashFields;
+  return { ...sp, ...payload.msg, ...payload.keep } as T & FlashFields;
+}
+
+/**
+ * Parse a form's `returnTo`: the pathname if it is a same-app path, plus only the nav keys that fit
+ * their shapes. Anything else (off-site, `//`, backslash, absolute URL) returns the fallback path
+ * and no nav. Fixes C2.
+ */
+export function splitReturnTo(raw: string, fallback = '/'): { path: string; nav: Nav } {
+  if (typeof raw !== 'string' || CONTROL_CHARS.test(raw) || !/^\/(?![/\\])/.test(raw)) return { path: fallback, nav: {} };
+  const hash = raw.indexOf('#');
+  const noHash = hash === -1 ? raw : raw.slice(0, hash);
+  const q = noHash.indexOf('?');
+  const path = q === -1 ? noHash : noHash.slice(0, q);
+  if (!isSameAppPath(path)) return { path: fallback, nav: {} };
+  const nav: Nav = {};
+  if (q !== -1) {
+    for (const [k, v] of new URLSearchParams(noHash.slice(q + 1))) {
+      if (isNavKey(k) && NAV_SHAPES[k].test(v)) nav[k] = v;
+    }
+  }
+  return { path, nav };
+}

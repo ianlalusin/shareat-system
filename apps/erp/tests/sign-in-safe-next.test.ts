@@ -51,3 +51,17 @@ describe('safeNext — only ever a path on this app', () => {
     expect(safeNext('/inventory/deliveries#latest')).toBe('/inventory/deliveries#latest');
   });
 });
+
+describe('safeNext - control characters (audit: browsers strip tab/CR/LF, so "/\t/evil.example" is "//evil.example")', () => {
+  it.each(['/\t/evil.example', '/\n/evil.example', '/\r/evil.example', '\t//evil.example', '/\u0000/evil.example', '/a\u007fb', '/a\u001fb'])(
+    '⛔ %j falls back to the default',
+    (bad) => {
+      expect(safeNext(bad)).toBe(DEFAULT_NEXT);
+      // Mutant: safeNext without a control-character test (/[\x00-\x1f\x7f]/) -> red.
+    },
+  );
+
+  it('✅ a good path with a query still passes (the guard does not over-refuse)', () => {
+    expect(safeNext('/expenses?month=2026-09')).toBe('/expenses?month=2026-09');
+  });
+});

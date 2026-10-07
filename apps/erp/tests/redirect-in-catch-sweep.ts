@@ -51,21 +51,27 @@ function containsCallTo(node: ts.Node, name: string): boolean {
   return found;
 }
 
-/** The `next/navigation` `redirect` import's LOCAL name (handles a rename via `redirect as foo`),
- *  or undefined if this file never imports it — the whole analysis is a no-op for those files. */
-function importedRedirectName(sourceFile: ts.SourceFile): string | undefined {
-  let name: string | undefined;
+/** The LOCAL names of every redirect-reaching import in this file, or `[]` if it has none (the whole
+ *  analysis is a no-op for those files): the `next/navigation` `redirect` (handles a rename via
+ *  `redirect as foo`) AND, from T-380 S1a, `redirectWithFlash` from the flash module. Once every action
+ *  moves to the flash helper, no action file imports `next/navigation` at all, so a sweep rooted only
+ *  there would silently check nothing - the flash import is a second root (REV-10). */
+function importedRedirectNames(sourceFile: ts.SourceFile): string[] {
+  const names: string[] = [];
   for (const stmt of sourceFile.statements) {
     if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) continue;
-    if (stmt.moduleSpecifier.text !== 'next/navigation') continue;
+    const spec = stmt.moduleSpecifier.text;
+    const exportName =
+      spec === 'next/navigation' ? 'redirect' : /^(?:@\/lib\/flash|(?:\.{1,2}\/)+(?:lib\/)?flash)$/.test(spec) ? 'redirectWithFlash' : undefined;
+    if (!exportName) continue;
     const bindings = stmt.importClause?.namedBindings;
     if (bindings && ts.isNamedImports(bindings)) {
       for (const el of bindings.elements) {
-        if ((el.propertyName ?? el.name).text === 'redirect') name = el.name.text;
+        if ((el.propertyName ?? el.name).text === exportName) names.push(el.name.text);
       }
     }
   }
-  return name;
+  return names;
 }
 
 interface LocalFn {
@@ -97,14 +103,14 @@ function topLevelFunctions(sourceFile: ts.SourceFile): LocalFn[] {
 
 /** Fixed-point over the file's own top-level functions: which ones call `redirect` themselves, or
  *  call another function that (transitively) does. */
-function functionsReachingRedirect(fns: LocalFn[], redirectName: string): Set<string> {
+function functionsReachingRedirect(fns: LocalFn[], redirectNames: string[]): Set<string> {
   const reaches = new Set<string>();
   let changed = true;
   while (changed) {
     changed = false;
     for (const fn of fns) {
       if (reaches.has(fn.name)) continue;
-      if (containsCallTo(fn.body, redirectName)) {
+      if (redirectNames.some((r) => containsCallTo(fn.body, r))) {
         reaches.add(fn.name);
         changed = true;
         continue;
@@ -165,11 +171,11 @@ function isSafeCatch(catchClause: ts.CatchClause): boolean {
  *  shape in one source file. `[]` for a file that never imports `redirect` at all. */
 export function findUnsafeRedirectInCatch(source: string, fileNameForParsing = 'file.ts'): RedirectInCatchFinding[] {
   const sourceFile = ts.createSourceFile(fileNameForParsing, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const redirectName = importedRedirectName(sourceFile);
-  if (!redirectName) return [];
+  const roots = importedRedirectNames(sourceFile);
+  if (roots.length === 0) return [];
 
-  const reaches = functionsReachingRedirect(topLevelFunctions(sourceFile), redirectName);
-  const redirectingNames = [redirectName, ...reaches];
+  const reaches = functionsReachingRedirect(topLevelFunctions(sourceFile), roots);
+  const redirectingNames = [...roots, ...reaches];
 
   const findings: RedirectInCatchFinding[] = [];
   const visit = (node: ts.Node): void => {

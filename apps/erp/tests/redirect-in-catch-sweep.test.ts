@@ -167,3 +167,62 @@ describe('redirect-in-catch sweep — a try that calls redirect()/back() must no
     expect(report, report.length ? `unexpected finding(s) — report these, do not fix them here:\n  ${report.join('\n  ')}` : '').toEqual([]);
   });
 });
+
+/**
+ * T-380 S1a / G-sweep / REV-10 - `redirectWithFlash` (imported from the flash module) is a
+ * redirect-reaching call, and the flash import is a second root: after conversion no action file
+ * imports `next/navigation`, and a sweep rooted only there would check nothing.
+ *
+ * Killing mutant: drop the flash name from `importedRedirectNames` -> the fixtures below go red.
+ */
+describe('redirect-in-catch sweep - redirectWithFlash is a root (T-380 S1a)', () => {
+  it('flags `try { await redirectWithFlash(...) } catch {}` in a file with no next/navigation import', () => {
+    const fixture = `
+      import { redirectWithFlash } from '@/lib/flash';
+      export async function doThing(): Promise<void> {
+        try {
+          await redirectWithFlash('/x', {}, { ok: 'done' });
+        } catch {}
+      }
+    `;
+    expect(findUnsafeRedirectInCatch(fixture)).toEqual([{ functionName: 'doThing', line: 4, via: 'redirectWithFlash' }]);
+  });
+
+  it('flags the return-await form inside a try with a swallowing catch, and an import alias', () => {
+    const fixture = `
+      import { redirectWithFlash as fail } from '../../lib/flash';
+      export async function doThing(): Promise<unknown> {
+        try {
+          return await fail('/x', {}, { ok: 'done' });
+        } catch (err) {
+          return await fail('/x', {}, { error: String(err) });
+        }
+      }
+    `;
+    expect(findUnsafeRedirectInCatch(fixture)).toEqual([{ functionName: 'doThing', line: 4, via: 'fail' }]);
+  });
+
+  it('NEGATIVE: the converted shape - the success redirect after the try, the refusal inside the catch - is clean; so is an isRedirectError rethrow', () => {
+    const fixture = `
+      import { redirectWithFlash } from '@/lib/flash';
+      import { isRedirectError } from 'next/dist/client/components/redirect';
+      export async function converted(): Promise<unknown> {
+        try {
+          await work();
+        } catch (err) {
+          return await redirectWithFlash('/x', {}, { error: String(err) });
+        }
+        return await redirectWithFlash('/x', {}, { ok: 'done' });
+      }
+      export async function rethrows(): Promise<unknown> {
+        try {
+          return await redirectWithFlash('/x', {}, { ok: 'done' });
+        } catch (err) {
+          if (isRedirectError(err)) throw err;
+          return null;
+        }
+      }
+    `;
+    expect(findUnsafeRedirectInCatch(fixture)).toEqual([]);
+  });
+});

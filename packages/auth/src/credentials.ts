@@ -62,7 +62,7 @@ const SALT_BYTES = 16;
  * keeps them apart, and it is cheaper and less error-prone than a second environment variable
  * somebody will forget to set — which is exactly how DEF-062's secret came to be unset.
  */
-function derivedKey(label: 'pin-lookup' | 'session-token' | 'setup-identity'): string {
+function derivedKey(label: 'pin-lookup' | 'session-token' | 'setup-identity' | 'flash'): string {
   return createHmac('sha256', env().SESSION_SECRET).update(`shareat:${label}:v1`).digest('hex');
 }
 
@@ -191,6 +191,32 @@ export function signSetupIdentity(encodedPayload: string): string {
  */
 export function setupIdentitySignatureMatches(encodedPayload: string, signature: string): boolean {
   const expected = Buffer.from(signSetupIdentity(encodedPayload), 'base64url');
+  const actual = Buffer.from(signature, 'base64url');
+  if (actual.length !== expected.length || actual.length === 0) return false;
+  return timingSafeEqual(actual, expected);
+}
+
+// -------------------------------------------------------------------------------------
+// The flash cookie - T-380 (DEF-476)
+// -------------------------------------------------------------------------------------
+
+/**
+ * Signs the one-minute flash cookie (`shareat_flash`) that carries a banner and form refills across
+ * a redirect so they never travel in a URL.
+ *
+ * A key used for nothing else (`derivedKey('flash')`). A sibling `*.shareat.net` host can set a
+ * cookie with this name; the signature is the only thing that stops it showing a forged banner.
+ * Signing with the setup-identity or session-token key would let a value minted for one purpose
+ * verify for another. Same shape as {@link signSetupIdentity}: the caller passes the already-encoded
+ * payload segment, so the signed bytes are the bytes read back.
+ */
+export function signFlash(encodedPayload: string): string {
+  return createHmac('sha256', derivedKey('flash')).update(encodedPayload).digest('base64url');
+}
+
+/** Constant-time verification of {@link signFlash}. False (never a throw) for any malformed value. */
+export function flashSignatureMatches(encodedPayload: string, signature: string): boolean {
+  const expected = Buffer.from(signFlash(encodedPayload), 'base64url');
   const actual = Buffer.from(signature, 'base64url');
   if (actual.length !== expected.length || actual.length === 0) return false;
   return timingSafeEqual(actual, expected);

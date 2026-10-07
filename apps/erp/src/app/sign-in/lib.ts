@@ -54,6 +54,7 @@ const DEFAULT_NEXT = '/sales-days';
  * | `next` | What the browser does with it |
  * |---|---|
  * | `//evil.com` | `https://evil.com` — the form's own check allowed it (`startsWith('/')` is true) |
+ * | `/<TAB>/evil.com` | `https://evil.com` — URL parsers strip tab, CR and LF, so a tab between the slashes is `//evil.com` after the check passed (DEF-605) |
  * | `/\evil.com` | `https://evil.com` — **a backslash is a slash to a URL parser**, and nothing looked for one |
  *
  * So the rule is stated positively instead: a `/`, then a character that is neither `/` nor `\`. A
@@ -66,6 +67,8 @@ const DEFAULT_NEXT = '/sales-days';
  * — so `page.tsx` had grown its own weaker copy of the check inline. One rule, one place.
  */
 export function safeNext(raw: string): string {
+  // Control characters first (DEF-605): URL parsers strip tab/CR/LF, so the slash rule below cannot see them.
+  if (/[\x00-\x1f\x7f]/.test(raw)) return DEFAULT_NEXT;
   return /^\/(?![/\\])/.test(raw) ? raw : DEFAULT_NEXT;
 }
 
