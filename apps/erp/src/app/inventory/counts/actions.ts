@@ -15,7 +15,7 @@
  * THROWS for an authorize() denial or a DB trigger — both are captured into one `errorText`
  * variable inside the try, and the single redirect at the end reads it.
  */
-import { redirect } from 'next/navigation';
+import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import {
   advanceCountSession,
@@ -82,10 +82,10 @@ export async function openCountSessionAction(fd: FormData): Promise<void> {
   }
 
   if (errorText || !sessionId) {
-    redirect(`/inventory/counts?store=${storeId}&error=${encodeURIComponent(errorText ?? 'Could not open the count.')}`);
+    return await redirectWithFlash('/inventory/counts', { store: storeId }, { error: errorText ?? 'Could not open the count.' });
   }
   revalidatePath('/inventory/counts');
-  redirect(`/inventory/counts/${sessionId}?ok=${encodeURIComponent('Count opened. The room is frozen for every other stock writer.')}`);
+  return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { ok: 'Count opened. The room is frozen for every other stock writer.' });
 }
 
 export async function recordCountAction(fd: FormData): Promise<void> {
@@ -107,10 +107,10 @@ export async function recordCountAction(fd: FormData): Promise<void> {
   }
 
   if (errorText) {
-    redirect(`/inventory/counts/${sessionId}?error=${encodeURIComponent(errorText)}`);
+    return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { error: errorText });
   }
   revalidatePath(`/inventory/counts/${sessionId}`);
-  redirect(`/inventory/counts/${sessionId}?ok=${encodeURIComponent('Line saved.')}`);
+  return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { ok: 'Line saved.' });
 }
 
 export async function advanceCountAction(fd: FormData): Promise<void> {
@@ -126,10 +126,10 @@ export async function advanceCountAction(fd: FormData): Promise<void> {
   }
 
   if (errorText) {
-    redirect(`/inventory/counts/${sessionId}?error=${encodeURIComponent(errorText)}`);
+    return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { error: errorText });
   }
   revalidatePath(`/inventory/counts/${sessionId}`);
-  redirect(`/inventory/counts/${sessionId}?ok=${encodeURIComponent('Moved to reviewing.')}`);
+  return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { ok: 'Moved to reviewing.' });
 }
 
 export async function commitCountAction(fd: FormData): Promise<void> {
@@ -156,11 +156,11 @@ export async function commitCountAction(fd: FormData): Promise<void> {
   }
 
   if (errorText) {
-    redirect(`/inventory/counts/${sessionId}?error=${encodeURIComponent(errorText)}`);
+    return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { error: errorText });
   }
   revalidatePath(`/inventory/counts/${sessionId}`);
   revalidatePath('/inventory/counts');
-  redirect(`/inventory/counts/${sessionId}?ok=${encodeURIComponent(message)}`);
+  return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { ok: message });
 }
 
 export async function cancelCountAction(fd: FormData): Promise<void> {
@@ -176,9 +176,9 @@ export async function cancelCountAction(fd: FormData): Promise<void> {
   }
 
   if (errorText) {
-    redirect(`/inventory/counts/${sessionId}?error=${encodeURIComponent(errorText)}`);
+    return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { error: errorText });
   }
   revalidatePath(`/inventory/counts/${sessionId}`);
   revalidatePath('/inventory/counts');
-  redirect(`/inventory/counts/${sessionId}?ok=${encodeURIComponent('Count cancelled. The room is free again; nothing posted.')}`);
+  return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { ok: 'Count cancelled. The room is free again; nothing posted.' });
 }

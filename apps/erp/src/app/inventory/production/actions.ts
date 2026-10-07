@@ -6,7 +6,7 @@
  * Thin adapters: parse `FormData`, call the domain, redirect with a message — same shape as
  * `inventory/usage/actions.ts`. The actor comes from the session, never the form.
  */
-import { redirect } from 'next/navigation';
+import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import {
   createProductionDraft,
@@ -39,10 +39,6 @@ function errorMessage(err: unknown): string {
   return sharedErrorMessage(err);
 }
 
-function back(path: string, params: Record<string, string>): never {
-  redirect(`${path}?${new URLSearchParams(params).toString()}`);
-}
-
 function parseLines(fd: FormData, prefix: 'input' | 'output'): { itemId: string; quantity: string; unit: string }[] {
   const itemIds = strs(fd, `${prefix}ItemId`);
   const quantities = strs(fd, `${prefix}Quantity`);
@@ -64,7 +60,7 @@ export async function saveProductionDraftAction(fd: FormData): Promise<void> {
   const outputs = parseLines(fd, 'output');
 
   if (kind !== 'slice' && kind !== 'cook' && kind !== 'convert') {
-    back('/inventory/production', { store: storeId, error: `unknown kind "${kind}"` });
+    return await redirectWithFlash('/inventory/production', { store: storeId }, { error: `unknown kind "${kind}"` });
   }
 
   let result: Awaited<ReturnType<typeof createProductionDraft>> | undefined;
@@ -75,14 +71,12 @@ export async function saveProductionDraftAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back('/inventory/production', { store: storeId, error: errorMessage(err) });
+    return await redirectWithFlash('/inventory/production', { store: storeId }, { error: errorMessage(err) });
   }
-  if (!result!.ok) back('/inventory/production', { store: storeId, error: result!.reason });
+  if (!result.ok) return await redirectWithFlash('/inventory/production', { store: storeId }, { error: result.reason });
 
   revalidatePath('/inventory/production');
-  back(`/inventory/production/${result!.recordId}`, {
-    ok: 'Draft saved. Nothing has posted — post is the step that moves stock and hits the books.',
-  });
+  return await redirectWithFlash(`/inventory/production/${result.recordId}`, {}, { ok: 'Draft saved. Nothing has posted — post is the step that moves stock and hits the books.' });
 }
 
 export async function postProductionAction(fd: FormData): Promise<void> {
@@ -93,16 +87,14 @@ export async function postProductionAction(fd: FormData): Promise<void> {
   try {
     result = await withOrgPrincipal(actor.orgId, (tx) => postProduction(tx, actor, { recordId }));
   } catch (err) {
-    back(`/inventory/production/${recordId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: errorMessage(err) });
   }
-  if (!result!.ok) back(`/inventory/production/${recordId}`, { error: result!.reason });
+  if (!result.ok) return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: result.reason });
 
   revalidatePath('/inventory/production');
   revalidatePath(`/inventory/production/${recordId}`);
-  const warn = result!.warnings.length > 0 ? ` Warnings: ${result!.warnings.join('; ')}.` : '';
-  back(`/inventory/production/${recordId}`, {
-    ok: `Posted${result!.journalEntryId ? ` — journal ${result!.journalEntryId}` : ' (a convert posts no journal entry)'}.${warn}`,
-  });
+  const warn = result.warnings.length > 0 ? ` Warnings: ${result.warnings.join('; ')}.` : '';
+  return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { ok: `Posted${result.journalEntryId ? ` — journal ${result.journalEntryId}` : ' (a convert posts no journal entry)'}.${warn}` });
 }
 
 export async function editPostedProductionAction(fd: FormData): Promise<void> {
@@ -118,13 +110,13 @@ export async function editPostedProductionAction(fd: FormData): Promise<void> {
       editPostedProduction(tx, actor, { recordId, inputs, outputs, labourCost }),
     );
   } catch (err) {
-    back(`/inventory/production/${recordId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: errorMessage(err) });
   }
-  if (!result!.ok) back(`/inventory/production/${recordId}`, { error: result!.reason });
+  if (!result.ok) return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: result.reason });
 
   revalidatePath('/inventory/production');
   revalidatePath(`/inventory/production/${recordId}`);
-  back(`/inventory/production/${recordId}`, { ok: `Edited — now revision ${result!.revision}.` });
+  return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { ok: `Edited — now revision ${result.revision}.` });
 }
 
 export async function voidProductionAction(fd: FormData): Promise<void> {
@@ -136,15 +128,13 @@ export async function voidProductionAction(fd: FormData): Promise<void> {
   try {
     result = await withOrgPrincipal(actor.orgId, (tx) => voidProduction(tx, actor, { recordId, reason }));
   } catch (err) {
-    back(`/inventory/production/${recordId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: errorMessage(err) });
   }
-  if (!result!.ok) back(`/inventory/production/${recordId}`, { error: result!.reason });
+  if (!result.ok) return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: result.reason });
 
   revalidatePath('/inventory/production');
   revalidatePath(`/inventory/production/${recordId}`);
-  back(`/inventory/production/${recordId}`, {
-    ok: result!.ledgerGap
-      ? `Voided. Stock is restored. ⚠️ The ledger entry could not be reversed and the gap is reported: ${result!.ledgerGapReason}`
-      : 'Voided. Stock is restored and the entry is reversed.',
-  });
+  return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { ok: result.ledgerGap
+      ? `Voided. Stock is restored. ⚠️ The ledger entry could not be reversed and the gap is reported: ${result.ledgerGapReason}`
+      : 'Voided. Stock is restored and the entry is reversed.' });
 }

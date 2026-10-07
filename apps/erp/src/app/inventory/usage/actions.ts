@@ -16,7 +16,7 @@
  * redirect call may sit INSIDE the `try` block, because `redirect()` itself throws, and a redirect
  * thrown inside its own `try` would be caught and re-reported as a garbled error.
  */
-import { redirect } from 'next/navigation';
+import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import { deleteUsageDraft, postUsage, replenishAfterUsage, saveUsageDraft, voidUsage } from '@shareat/domain';
 import { toBusinessDate } from '@shareat/core/datetime';
@@ -65,10 +65,6 @@ function errorMessage(err: unknown): string {
   return sharedErrorMessage(err);
 }
 
-function back(path: string, params: Record<string, string>): never {
-  redirect(`${path}?${new URLSearchParams(params).toString()}`);
-}
-
 export async function saveUsageDraftAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/usage');
   const storeId = str(fd, 'storeId');
@@ -92,16 +88,14 @@ export async function saveUsageDraftAction(fd: FormData): Promise<void> {
       saveUsageDraft(tx, actor, { orgId: actor.orgId, storeId, locationId, kind, usedOn, reasonCode, departmentId, lines }),
     );
   } catch (err) {
-    back('/inventory/usage', { store: storeId, error: errorMessage(err) });
+    return await redirectWithFlash('/inventory/usage', { store: storeId }, { error: errorMessage(err) });
   }
-  if (!result!.ok) {
-    back('/inventory/usage', { store: storeId, error: result!.reason });
+  if (!result.ok) {
+    return await redirectWithFlash('/inventory/usage', { store: storeId }, { error: result.reason });
   }
 
   revalidatePath('/inventory/usage');
-  back(`/inventory/usage/${result!.recordId}`, {
-    ok: 'Draft saved. Nothing has posted — post is the step that moves stock and hits the books.',
-  });
+  return await redirectWithFlash(`/inventory/usage/${result.recordId}`, {}, { ok: 'Draft saved. Nothing has posted — post is the step that moves stock and hits the books.' });
 }
 
 export async function postUsageAction(fd: FormData): Promise<void> {
@@ -112,10 +106,10 @@ export async function postUsageAction(fd: FormData): Promise<void> {
   try {
     result = await withOrgPrincipal(actor.orgId, (tx) => postUsage(tx, actor, { recordId }));
   } catch (err) {
-    back(`/inventory/usage/${recordId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: errorMessage(err) });
   }
-  if (!result!.ok) {
-    back(`/inventory/usage/${recordId}`, { error: result!.reason });
+  if (!result.ok) {
+    return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: result.reason });
   }
 
   // ⭐ T-223 / DEF-186 — THE low-stock auto-order's only caller, and the reason it must be here.
@@ -130,11 +124,11 @@ export async function postUsageAction(fd: FormData): Promise<void> {
   // auto-order had never run once in production. DEF-186.
   const replenish = await replenishAfterUsage({
     orgId: actor.orgId,
-    branchStoreId: result!.storeId,
+    branchStoreId: result.storeId,
     orderedOn: toBusinessDate(),
     createdBy: actor.personId,
     // ⚠️ Scoped to what this post touched, never a whole-store sweep on every usage record.
-    itemIds: result!.itemIds,
+    itemIds: result.itemIds,
   });
 
   revalidatePath('/inventory/usage');
@@ -144,13 +138,13 @@ export async function postUsageAction(fd: FormData): Promise<void> {
   // ⛔ **The failure is reported, never swallowed — that IS the defect this task closes.** The post
   // is already committed and stands either way, so this is a clause on the success message and not
   // an error banner: an error over a successful post teaches people to ignore banners.
-  const posted = `Posted at FIFO cost ${peso(result!.totalCost)} — journal ${result!.entryIds.join(', ')}.`;
+  const posted = `Posted at FIFO cost ${peso(result.totalCost)} — journal ${result.entryIds.join(', ')}.`;
   const replenishNote = replenish.failed
     ? ` ⚠️ The low-stock auto-order did not run: ${replenish.failed}. Your post is unaffected; add any reorder lines by hand.`
     : replenish.appended.length > 0
       ? ` Low stock: ${replenish.appended.length} line(s) added to the open commissary order.`
       : '';
-  back(`/inventory/usage/${recordId}`, { ok: posted + replenishNote });
+  return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { ok: posted + replenishNote });
 }
 
 export async function deleteUsageDraftAction(fd: FormData): Promise<void> {
@@ -162,14 +156,14 @@ export async function deleteUsageDraftAction(fd: FormData): Promise<void> {
   try {
     result = await withOrgPrincipal(actor.orgId, (tx) => deleteUsageDraft(tx, actor, { recordId }));
   } catch (err) {
-    back(`/inventory/usage/${recordId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: errorMessage(err) });
   }
-  if (!result!.ok) {
-    back(`/inventory/usage/${recordId}`, { error: result!.reason });
+  if (!result.ok) {
+    return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: result.reason });
   }
 
   revalidatePath('/inventory/usage');
-  back('/inventory/usage', { store: storeId, ok: 'Draft deleted.' });
+  return await redirectWithFlash('/inventory/usage', { store: storeId }, { ok: 'Draft deleted.' });
 }
 
 export async function voidUsageAction(fd: FormData): Promise<void> {
@@ -181,18 +175,15 @@ export async function voidUsageAction(fd: FormData): Promise<void> {
   try {
     result = await withOrgPrincipal(actor.orgId, (tx) => voidUsage(tx, actor, { recordId, reason }));
   } catch (err) {
-    back(`/inventory/usage/${recordId}`, { error: errorMessage(err) });
+    return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: errorMessage(err) });
   }
-  if (!result!.ok) {
-    back(`/inventory/usage/${recordId}`, { error: result!.reason });
+  if (!result.ok) {
+    return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: result.reason });
   }
 
   revalidatePath('/inventory/usage');
   revalidatePath(`/inventory/usage/${recordId}`);
-  back(`/inventory/usage/${recordId}`, {
-    ok:
-      result!.reversalEntryIds.length > 0
-        ? `Voided. Stock and the FIFO layers are restored, and the entry is reversed — journal ${result!.reversalEntryIds.join(', ')}.`
-        : 'Voided. Stock and the FIFO layers are restored.',
-  });
+  return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { ok: result.reversalEntryIds.length > 0
+        ? `Voided. Stock and the FIFO layers are restored, and the entry is reversed — journal ${result.reversalEntryIds.join(', ')}.`
+        : 'Voided. Stock and the FIFO layers are restored.' });
 }

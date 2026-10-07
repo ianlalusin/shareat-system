@@ -13,7 +13,7 @@
  * (T-156) and adjustments (T-158) are for, both of which attribute the human who did it. An
  * editable inbox would be a second, unattributed write path into payroll.
  */
-import { redirect } from 'next/navigation';
+import { redirectWithFlash } from '@/lib/flash';
 import { discardQuarantined, retryQuarantined } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
@@ -22,11 +22,6 @@ import { errorMessage } from '@/lib/constraint-messages';
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(params: Record<string, string>): never {
-  const q = new URLSearchParams(params).toString();
-  redirect(q ? `/attendance/lane?${q}` : '/attendance/lane');
 }
 
 /**
@@ -51,9 +46,9 @@ export async function retryEventAction(formData: FormData): Promise<void> {
       ? 'That event went through and is now a punch.'
       : `Still stuck: ${result.stillStuckBecause ?? 'unknown'}. Nothing about it has changed yet.`;
   } catch (err) {
-    back({ store: storeId, error: errorMessage(err) });
+    return await redirectWithFlash('/attendance/lane', { store: storeId }, { error: errorMessage(err) });
   }
-  back({ store: storeId, notice });
+  return await redirectWithFlash('/attendance/lane', { store: storeId }, { notice });
 }
 
 /** ⛔ The one button here that can lose a real shift. It needs a reason and it names who pressed it. */
@@ -69,7 +64,7 @@ export async function discardEventAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    back({ store: storeId, error: errorMessage(err) });
+    return await redirectWithFlash('/attendance/lane', { store: storeId }, { error: errorMessage(err) });
   }
-  back({ store: storeId, notice: 'Discarded. The event is kept, with your reason against it.' });
+  return await redirectWithFlash('/attendance/lane', { store: storeId }, { notice: 'Discarded. The event is kept, with your reason against it.' });
 }

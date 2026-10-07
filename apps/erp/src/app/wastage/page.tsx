@@ -10,6 +10,7 @@ import { recordOrderWastageAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Order wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,7 @@ interface SearchParams {
 const STATUS_LABEL: Record<string, string> = { open: 'Open', disputed: 'Disputed', resolved: 'Resolved' };
 
 export default async function WastagePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/wastage');
   const stores = await listStores(actor.orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;

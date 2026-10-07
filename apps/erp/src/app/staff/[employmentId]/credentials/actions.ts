@@ -8,7 +8,7 @@
  * tests until this screen. Every mutation runs `withOrgPrincipal`, the same pattern
  * `items/actions.ts` and `commissary/catalogue/actions.ts` already use.
  */
-import { redirect } from 'next/navigation';
+import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import { enrolCard, enrolFingerprint, revokeCredential } from '@shareat/domain';
 import { withOrgPrincipal } from '../../../expenses/lib';
@@ -18,12 +18,6 @@ import { errorMessage } from '@/lib/constraint-messages';
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function back(employmentId: string, extra: Record<string, string>): never {
-  const path = `/staff/${employmentId}/credentials`;
-  const qs = new URLSearchParams(extra).toString();
-  redirect(qs ? `${path}?${qs}` : path);
 }
 
 /** The keyboard-wedge reader types digits and Enter exactly like a keyboard — a plain text field
@@ -36,10 +30,10 @@ export async function enrolCardAction(formData: FormData): Promise<void> {
       enrolCard(tx, actor, { employmentId, cardId: str(formData, 'cardId') }),
     );
   } catch (err) {
-    back(employmentId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/staff/${employmentId}/credentials`, {}, { error: errorMessage(err) });
   }
   revalidatePath(`/staff/${employmentId}/credentials`);
-  back(employmentId, { ok: 'Card enrolled.' });
+  return await redirectWithFlash(`/staff/${employmentId}/credentials`, {}, { ok: 'Card enrolled.' });
 }
 
 /**
@@ -58,12 +52,10 @@ export async function enrolFingerprintAction(formData: FormData): Promise<void> 
   try {
     await withOrgPrincipal(actor.orgId, (tx) => enrolFingerprint(tx, actor, { employmentId, templates }));
   } catch (err) {
-    back(employmentId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/staff/${employmentId}/credentials`, {}, { error: errorMessage(err) });
   }
   revalidatePath(`/staff/${employmentId}/credentials`);
-  back(employmentId, {
-    ok: 'Template(s) recorded — this is the test/dev enrolment path; no reader is wired into this app.',
-  });
+  return await redirectWithFlash(`/staff/${employmentId}/credentials`, {}, { ok: 'Template(s) recorded — this is the test/dev enrolment path; no reader is wired into this app.' });
 }
 
 export async function revokeCredentialAction(formData: FormData): Promise<void> {
@@ -74,8 +66,8 @@ export async function revokeCredentialAction(formData: FormData): Promise<void> 
   try {
     await withOrgPrincipal(actor.orgId, (tx) => revokeCredential(tx, actor, { credentialId, reason }));
   } catch (err) {
-    back(employmentId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/staff/${employmentId}/credentials`, {}, { error: errorMessage(err) });
   }
   revalidatePath(`/staff/${employmentId}/credentials`);
-  back(employmentId, { ok: 'Credential revoked.' });
+  return await redirectWithFlash(`/staff/${employmentId}/credentials`, {}, { ok: 'Credential revoked.' });
 }

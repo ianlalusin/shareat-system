@@ -14,6 +14,7 @@ import {
 import { isBlockingAnomaly } from '@shareat/domain';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { withFlash } from '@/lib/flash';
 
 /**
  * Plain-language names for the engine's anomaly codes.
@@ -69,7 +70,7 @@ export default async function AttendanceDayPage({
   searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
   const { dayId } = await params;
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/attendance/${dayId}`);
 
   const detail = await loadDay(actor.orgId, actor, dayId);

@@ -9,7 +9,7 @@
  * repeated here. Every mutation runs under the org's RLS principal (`withOrgPrincipal`), the same
  * way the items and commissary-catalogue actions do.
  */
-import { redirect } from 'next/navigation';
+import { redirectWithFlash } from '@/lib/flash';
 import {
   createEmployment,
   createPerson,
@@ -75,18 +75,6 @@ function errorMessage(err: unknown): string {
   return sharedErrorMessage(err);
 }
 
-function backToHire(storeId: string, extra: Record<string, string>): never {
-  redirect(`/staff/hire?${new URLSearchParams({ store: storeId, ...extra }).toString()}`);
-}
-
-function backToRoster(storeId: string, extra: Record<string, string>): never {
-  redirect(`/staff?${new URLSearchParams({ store: storeId, ...extra }).toString()}`);
-}
-
-function backToEmployment(employmentId: string, extra: Record<string, string>): never {
-  redirect(`/staff/${employmentId}?${new URLSearchParams(extra).toString()}`);
-}
-
 /**
  * ⭐ Contract §3. Find-or-create the person, then hire — ONE transaction, so a person created here
  * is never left with no employment to show for it if the employment half fails (a second open
@@ -108,13 +96,13 @@ export async function hireAction(formData: FormData): Promise<void> {
   const primaryPositionId = str(formData, 'primaryPositionId');
 
   if (!isExisting && !isNew) {
-    backToHire(storeId, { error: 'Pick "use this existing person" or "create new person" before hiring.' });
+    return await redirectWithFlash('/staff/hire', { store: storeId }, { error: 'Pick "use this existing person" or "create new person" before hiring.' });
   }
   if (isExisting && !existingPersonId) {
-    backToHire(storeId, { error: 'Pick which existing person to hire.' });
+    return await redirectWithFlash('/staff/hire', { store: storeId }, { error: 'Pick which existing person to hire.' });
   }
   if (isNew && !newDisplayName) {
-    backToHire(storeId, { error: 'Name the new person.' });
+    return await redirectWithFlash('/staff/hire', { store: storeId }, { error: 'Name the new person.' });
   }
 
   // ⚠️ A "primary" radio checked without its checkbox is a UI slip, not a rejection — the person
@@ -144,9 +132,9 @@ export async function hireAction(formData: FormData): Promise<void> {
     });
     employmentId = employment.id;
   } catch (err) {
-    backToHire(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/staff/hire', { store: storeId }, { error: errorMessage(err) });
   }
-  backToEmployment(employmentId, { ok: 'Hired.' });
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Hired.' });
 }
 
 export async function setPositionsAction(formData: FormData): Promise<void> {
@@ -165,9 +153,9 @@ export async function setPositionsAction(formData: FormData): Promise<void> {
       setEmploymentPositions(tx, actor, { employmentId, positionIds, primaryPositionId }),
     );
   } catch (err) {
-    backToEmployment(employmentId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
-  backToEmployment(employmentId, { ok: 'Positions saved.' });
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Positions saved.' });
 }
 
 export async function endEmploymentAction(formData: FormData): Promise<void> {
@@ -181,9 +169,9 @@ export async function endEmploymentAction(formData: FormData): Promise<void> {
       endEmployment(tx, actor, { employmentId, endedOn, employmentStatus }),
     );
   } catch (err) {
-    backToEmployment(employmentId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
-  backToEmployment(employmentId, { ok: 'Employment ended. The record stays visible.' });
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Employment ended. The record stays visible.' });
 }
 
 /**
@@ -216,9 +204,9 @@ export async function issuePinAction(formData: FormData): Promise<void> {
       });
     });
   } catch (err) {
-    backToEmployment(employmentId, { error: errorMessage(err) });
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
-  backToEmployment(employmentId, { ok: 'Sign-in PIN issued.' });
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Sign-in PIN issued.' });
 }
 
 export async function upsertStorePositionAction(formData: FormData): Promise<void> {
@@ -229,7 +217,7 @@ export async function upsertStorePositionAction(formData: FormData): Promise<voi
   try {
     await withOrgPrincipal(actor.orgId, (tx) => upsertStorePosition(tx, actor, { storeId, name }));
   } catch (err) {
-    backToRoster(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash('/staff', { store: storeId }, { error: errorMessage(err) });
   }
-  backToRoster(storeId, { ok: `Position "${name}" added.` });
+  return await redirectWithFlash('/staff', { store: storeId }, { ok: `Position "${name}" added.` });
 }
