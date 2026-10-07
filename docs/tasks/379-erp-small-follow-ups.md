@@ -1,6 +1,6 @@
 # T-379: small ERP follow-ups — DEF-575, DEF-592 (+DEF-564 trade half), DEF-568, DEF-569, DEF-570
 
-**Status:** SPEC 2026-10-07 (Opus planner). Written at HEAD `93222bc`. Not yet reviewed.
+**Status:** SPEC 2026-10-07 (Opus planner). Written at HEAD `93222bc`. Not yet reviewed. **DONE 2026-10-07:** S1 `6e40cbc`, S2 `a8e6e0c`, S3a `aaa7eb3` (Opus-reviewed), S3b `3a58fce`. Smoked on 9008, 5/5.
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
 **Migration:** none. If one turns out to be needed, STOP and report: it is a spec defect. Do not number one.
 **Money:** S3 changes a cost basis (DEF-569, see R6), so S3 gets an **independent Opus review** before it is
