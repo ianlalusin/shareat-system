@@ -6,3 +6,5 @@ export { Input } from './Input';
 export type { InputProps } from './Input';
 export { Card } from './Card';
 export type { CardProps } from './Card';
+export { EditableRecord } from './EditableRecord';
+export type { EditableRecordProps } from './EditableRecord';
