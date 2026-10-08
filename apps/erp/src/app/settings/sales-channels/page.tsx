@@ -10,6 +10,8 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid, Field } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Sales channels — Shareat System' };
@@ -126,7 +128,13 @@ export default async function SalesChannelsSettingsPage({
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Add a channel</h2>
-        <ChannelForm action={createSalesChannelAction} storeId={storeId} accounts={accounts} submitLabel="Add channel" />
+        <form action={createSalesChannelAction} className="space-y-4 text-sm">
+          <input type="hidden" name="storeId" value={storeId} />
+          <ChannelFields accounts={accounts} />
+          <button type="submit" className={BTN}>
+            Save
+          </button>
+        </form>
       </section>
 
       {retired.length > 0 && (
@@ -228,13 +236,13 @@ function ChannelCard({
         </p>
       )}
 
-      <ChannelForm
+      <EditableRecord
         action={updateSalesChannelAction}
-        storeId={storeId}
-        accounts={accounts}
-        channel={channel}
-        submitLabel="Save changes"
-      />
+        label={channel.name}
+        hidden={{ storeId, channelId: channel.id }}
+      >
+        <ChannelFields accounts={accounts} channel={channel} />
+      </EditableRecord>
 
       <form action={setSalesChannelActiveAction}>
         <input type="hidden" name="storeId" value={storeId} />
@@ -263,34 +271,26 @@ function ChannelCard({
  * components with no client bundle, and the honest arrangement is to show the field with the
  * condition written next to it — the database's CHECK is what actually enforces the pairing.
  */
-function ChannelForm({
-  action,
-  storeId,
+function ChannelFields({
   accounts,
   channel,
-  submitLabel,
 }: {
-  action: (fd: FormData) => Promise<void>;
-  storeId: string;
   accounts: { code: string; name: string }[];
   channel?: SalesChannelAdminRow;
-  submitLabel: string;
 }) {
   return (
-    <form action={action} className="space-y-4 text-sm">
-      <input type="hidden" name="storeId" value={storeId} />
-      {channel && <input type="hidden" name="channelId" value={channel.id} />}
-
-      <label className="block">
-        <span className="text-neutral-600 dark:text-neutral-400">Channel name</span>
-        <input
-          name="name"
-          required
-          defaultValue={channel?.name ?? ''}
-          placeholder="Walk-in, Foodpanda, GrabFood…"
-          className={`${FIELD} mt-1 w-full max-w-sm`}
-        />
-      </label>
+    <div className="space-y-4 text-sm">
+      <FormGrid>
+        <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel name</span>}>
+          <input
+            name="name"
+            required
+            defaultValue={channel?.name ?? ''}
+            placeholder="Walk-in, Foodpanda, GrabFood…"
+            className={`${FIELD} mt-1 w-full`}
+          />
+        </Field>
+      </FormGrid>
 
       <fieldset className="space-y-2">
         <legend className="text-neutral-600 dark:text-neutral-400">Where does this money go?</legend>
@@ -312,23 +312,28 @@ function ChannelForm({
         />
       </fieldset>
 
-      <label className="block">
-        <span className="text-neutral-600 dark:text-neutral-400">
-          Receivable account <span className="text-neutral-400">— required when it settles later</span>
-        </span>
-        <select
-          name="receivableAccountCode"
-          defaultValue={channel?.receivableAccountCode ?? ''}
-          className={`${FIELD} mt-1 w-full max-w-sm`}
+      <FormGrid>
+        <Field
+          label={
+            <span className="text-neutral-600 dark:text-neutral-400">
+              Receivable account <span className="text-neutral-400">— required when it settles later</span>
+            </span>
+          }
         >
-          <option value="">— none (only valid when it reaches the till) —</option>
-          {accounts.map((a) => (
-            <option key={a.code} value={a.code}>
-              {a.code} · {a.name}
-            </option>
-          ))}
-        </select>
-      </label>
+          <select
+            name="receivableAccountCode"
+            defaultValue={channel?.receivableAccountCode ?? ''}
+            className={`${FIELD} mt-1 w-full`}
+          >
+            <option value="">— none (only valid when it reaches the till) —</option>
+            {accounts.map((a) => (
+              <option key={a.code} value={a.code}>
+                {a.code} · {a.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </FormGrid>
 
       <fieldset className="space-y-2">
         <legend className="text-neutral-600 dark:text-neutral-400">
@@ -350,10 +355,7 @@ function ChannelForm({
         />
       </fieldset>
 
-      <button type="submit" className={BTN}>
-        {submitLabel}
-      </button>
-    </form>
+    </div>
   );
 }
 

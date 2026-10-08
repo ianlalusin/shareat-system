@@ -117,9 +117,9 @@ export default async function UserAccessPage({
           <>
             <form action={assignRoleAction} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="personId" value={personId} />
-              <label className="text-sm">
+              <label className="min-w-0 flex-1 text-sm">
                 <span className="block text-neutral-600 dark:text-neutral-400">Role</span>
-                <select name="role" required defaultValue={person.role ?? ''} className={INPUT}>
+                <select name="role" required defaultValue={person.role ?? ''} className={`${INPUT} w-full`}>
                   <option value="" disabled>
                     Select
                   </option>
@@ -221,7 +221,7 @@ export default async function UserAccessPage({
                       <input type="hidden" name="personId" value={personId} />
                       <input type="hidden" name="grantId" value={g.id} />
                       <input type="hidden" name="granted" value="false" />
-                      <input name="reason" required placeholder="Reason to revoke" className={`${INPUT} w-40`} />
+                      <input name="reason" required placeholder="Reason to revoke" className={`${INPUT} min-w-0 flex-1`} />
                       <button type="submit" className={LINK_BTN}>
                         Revoke
                       </button>
@@ -388,7 +388,7 @@ export default async function UserAccessPage({
                         name="reason"
                         required
                         placeholder="Reason to unlink"
-                        className={`${INPUT} w-44`}
+                        className={`${INPUT} min-w-0 flex-1`}
                       />
                       <button type="submit" className={LINK_BTN}>
                         Unlink
