@@ -22,7 +22,7 @@
  "inventory/pos-map/page.tsx": 1,
  "inventory/pos-usage/page.tsx": 1,
  "items/page.tsx": 4,
- "items/[id]/page.tsx": 4,
+ "items/[id]/page.tsx": 3,
  "money-accounts/page.tsx": 2,
  "owners/page.tsx": 1,
  "payroll/page.tsx": 1,

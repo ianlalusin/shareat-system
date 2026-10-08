@@ -34,7 +34,7 @@ import { resolve } from 'node:path';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 const L3 = 'Save or cancel the changes you are making first.';
-const load = async () => await import('../src/components/ui/EditableRecord');
+const load = async () => await import('../src/components/forms/EditableRecord');
 
 type S = { mode: 'locked' | 'editing'; message: string | null };
 const LOCKED: S = { mode: 'locked', message: null };
@@ -271,7 +271,7 @@ describe('E6: the editing render (audit B6), through EditableRecordView', () => 
 });
 
 describe('E7: the registry key is per instance (audit A4)', () => {
-  const src = readFileSync(resolve(__dirname, '..', 'src', 'components', 'ui', 'EditableRecord.tsx'), 'utf8');
+  const src = readFileSync(resolve(__dirname, '..', 'src', 'components', 'forms', 'EditableRecord.tsx'), 'utf8');
   it('derives the key from useId(), not from hidden.id or the label', () => {
     expect(src).toMatch(/useId\(\)/);
     expect(src).not.toMatch(/hidden\.id\s*\?\?/);

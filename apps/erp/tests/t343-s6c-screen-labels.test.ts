@@ -255,6 +255,7 @@ vi.mock('../src/app/items/actions', () => ({
   setStoreSellabilityAction: vi.fn(),
   updateItemFlagsAction: vi.fn(),
   changeItemUnitAction: vi.fn(),
+  renameItemAction: vi.fn(),
 }));
 
 const whoSellsMock = vi.fn();

@@ -25,7 +25,7 @@
  "inventory/production/page.tsx": 1,
  "inventory/usage/NewUsageForm.tsx": 1,
  "items/page.tsx": 1,
- "items/[id]/page.tsx": 4,
+ "items/[id]/page.tsx": 3,
  "liabilities/[id]/page.tsx": 2,
  "loans/[id]/page.tsx": 2,
  "money-accounts/page.tsx": 1,

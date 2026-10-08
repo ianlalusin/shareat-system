@@ -152,7 +152,7 @@ async function holdsApproveItem(f: Fixture, actor: { orgId: string; personId: st
 
 describe('W1 - the Name and code form is drawn only for who may use it', () => {
   it(
-    'W1 (super-admin): name and code inputs hold the item values and are required, a hidden itemId, a Rename button. Killing mutants: required dropped; defaultValue dropped. Red today: no such inputs',
+    'W1 (super-admin): name and code inputs hold the item values and are required, a hidden itemId, an Edit button (locked until Edit, Amendment A0). Killing mutants: required dropped; defaultValue dropped. Red today: no such inputs',
     async () => {
       const f = await fixture('w1s');
       expect(await holdsApproveItem(f, f.superAdmin), 'super-admin must hold approve_item').toBe(true);
@@ -169,14 +169,17 @@ describe('W1 - the Name and code form is drawn only for who may use it', () => {
       const hidden = inputTag(html, 'itemId');
       expect(hidden).toMatch(/type="hidden"/);
       expect(hidden).toContain(id);
-      expect(html).toMatch(/>Rename</);
+      expect(html).toMatch(/<fieldset disabled/);
+      expect(html).toMatch(/aria-label="Edit [^"]*"[^>]*>Edit</);
+      expect(html).not.toMatch(/>Rename</);
+      expect(html).not.toMatch(/(w-64|w-40)/);
     },
     60_000,
   );
 
   for (const who of ['manager', 'admin'] as const) {
     it(
-      `W1 (${who}): no name input, no Rename button, the sentence shown. Killing mutant: drop the gate (form drawn for everyone). Red today: the sentence is absent`,
+      `W1 (${who}): no name input, no Edit button, the sentence shown. Killing mutant: drop the gate (form drawn for everyone). Red today: the sentence is absent`,
       async () => {
         const f = await fixture(`w1${who}`);
         expect(await holdsApproveItem(f, f[who]), `${who} must lack approve_item`).toBe(false);
@@ -184,6 +187,7 @@ describe('W1 - the Name and code form is drawn only for who may use it', () => {
         const html = await detailHtmlAs(f[who], id);
         expect(inputTag(html, 'name')).toBeNull();
         expect(html).not.toMatch(/>Rename</);
+        expect(html).not.toMatch(/aria-label="Edit [^"]*"[^>]*>Edit</);
         expect(decode(html)).toContain(NOT_SUPER_ADMIN);
       },
       60_000,
