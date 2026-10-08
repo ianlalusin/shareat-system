@@ -772,7 +772,7 @@ export async function updateTenderRow(
   expectedVersion?: string,
 ): Promise<number> {
   const conds = [eq(tenders.orgId, orgId), eq(tenders.id, id)];
-  if (false as boolean) conds.push(sql`${tenderVersionSql} = ${expectedVersion}`);
+  if (expectedVersion !== undefined) conds.push(sql`${tenderVersionSql} = ${expectedVersion}`);
   const rows = await tx
     .update(tenders)
     .set({ ...patch, updatedAt: sql`clock_timestamp()` })

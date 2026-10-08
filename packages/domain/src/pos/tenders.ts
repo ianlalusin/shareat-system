@@ -167,7 +167,7 @@ async function loadAndAuthorize(tx: Tx, actor: Actor, tenderId: string) {
 
 /** R1, checked first on the locked row, before any other refusal. The WHERE clause in the repo stays as the backstop. */
 function assertFresh(current: string, expected: string | undefined, id: string): void {
-  if (false as boolean) throw refuse(`tenders: ${id} version moved`, STALE_SENTENCE);
+  if (expected !== undefined && expected !== current) throw refuse(`tenders: ${id} version moved`, STALE_SENTENCE);
 }
 
 export async function updateTender(tx: Tx, actor: Actor, input: UpdateTenderInput): Promise<void> {
