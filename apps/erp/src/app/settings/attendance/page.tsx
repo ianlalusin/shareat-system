@@ -38,7 +38,7 @@ export default async function AttendanceSettingsPage({
   const storeId = sp.store || stores[0]?.id;
   if (!storeId) {
     return (
-      <Page density="form" className="space-y-4">
+      <Page density="table" className="space-y-4">
         <h1 className="text-2xl font-semibold">Attendance & payroll settings</h1>
         <PageDescription>No store is set up yet.</PageDescription>
       </Page>

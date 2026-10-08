@@ -27,7 +27,7 @@ export default async function CountPage({
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
   if (!storeId) {
     return (
-      <Page density="form" className="">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Opening count</h1>
         <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
           There are no stores to count yet.
@@ -44,7 +44,7 @@ export default async function CountPage({
   const missing = rows.filter((r) => r.quantity === null);
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <Link
           href="/cutover"

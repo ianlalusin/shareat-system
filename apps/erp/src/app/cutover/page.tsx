@@ -39,7 +39,7 @@ export default async function CutoverPage({
   const balanced = isZero(money(progress.openingResidual));
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">The 31 December conversion</h1>
         <PageDescription>
