@@ -137,10 +137,11 @@ export interface EditableRecordViewProps extends EditableRecordProps {
   editRef?: Ref<HTMLButtonElement>;
 }
 
-const BTN =
-  'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
-const PRIMARY = `${BTN} border border-transparent bg-brand text-white hover:bg-brand-hover`;
-const SECONDARY = `${BTN} border border-surface-border bg-surface text-ink`;
+// Single string literals (no template or `+`): the touch-target census resolves only literal initializers.
+const PRIMARY =
+  'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium border border-transparent bg-brand text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+const SECONDARY =
+  'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium border border-surface-border bg-surface text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
 /** The presentational tree: no hooks, so the editing state is reachable in server render tests. */
 export function EditableRecordView({
