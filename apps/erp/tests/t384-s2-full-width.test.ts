@@ -106,6 +106,39 @@ function fixedWidthControls(src: string): Hit[] {
   return hits;
 }
 
+/**
+ * FormGrid sets `container-type: inline-size`, which makes its width independent of its content. In a
+ * flex row without flex-1/w-full, inline, w-fit or a table cell it therefore collapses to 0.
+ * Walks the JSX tag stack (brace-aware) and checks the direct parent of each `<FormGrid`.
+ */
+function formGridPlacementProblems(src: string): string[] {
+  const clean = codeOnly(src);
+  const out: string[] = [];
+  const stack: { name: string; cls: string }[] = [];
+  const re = /<(\/?)([A-Za-z][\w.]*)(?=[\s/>])/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(clean))) {
+    const name = m[2]!;
+    if (m[1]) {
+      for (let i = stack.length - 1; i >= 0; i--) if (stack[i]!.name === name) { stack.length = i; break; }
+      continue;
+    }
+    const tag = tagText(clean, m.index);
+    const cls = /className=\{?[`"]([^`"]*)/.exec(tag)?.[1] ?? '';
+    if (name === 'FormGrid') {
+      const parent = stack[stack.length - 1];
+      if (parent) {
+        const p = ` ${parent.cls} `;
+        if (parent.name === 'td' || parent.name === 'th') out.push(`FormGrid inside <${parent.name}>`);
+        else if (/\s(?:inline|inline-block|inline-flex|w-fit|table-cell)\s/.test(p)) out.push('FormGrid inside an inline/w-fit parent');
+        else if (/\s(?:inline-)?flex\s/.test(p) && !/\sflex-col\s/.test(p) && !/(?:^|\s)(?:flex-1|w-full|basis-full|grow)(?:\s|$)/.test(cls)) out.push('FormGrid a flex-row child without flex-1/w-full');
+      }
+    }
+    if (!/\/\s*>$/.test(tag) && !/^<(input|br|img|hr)$/.test(`<${name}`)) stack.push({ name, cls });
+  }
+  return out;
+}
+
 /** G4: an action `<form>` (has `action=`) holding >=3 `<label`, and the file does not import FormGrid. */
 function needsFormGrid(src: string): boolean {
   const clean = codeOnly(src);
@@ -277,12 +310,33 @@ describe('T-384 S2a G6 - FormGrid and Field', () => {
     expect(base).not.toContain('col-span');
     expect(renderToStaticMarkup(createElement(F, { label: 'R', span: 'full' }, createElement('textarea')))).toContain('col-span-full');
   });
-  it('Field span=wide follows the CONTAINER: no viewport-prefixed span, and a container mechanism is present', async () => {
+  it('Field span=wide is EXACTLY a 29rem container-query span; FormGrid is the container', async () => {
     const { FormGrid, Field } = await load();
     const wide = renderToStaticMarkup(createElement(Field as never, { label: 'R', span: 'wide' }, createElement('input')));
     const grid = renderToStaticMarkup(createElement(FormGrid as never, null, 'x'));
-    expect(wide, 'wide must not use a viewport breakpoint span (it can create an implicit 2nd column in a one-track container)').not.toMatch(/(?:sm|md|lg|xl|2xl):[^\s"]*col-span/);
-    expect(wide + grid, 'no container-query mechanism (container-type / @container / @[..] variant) found').toMatch(/container-type|@container|@\[|@(?:xs|sm|md|lg|xl):/);
+    expect(wide, 'wide must not use a viewport breakpoint span').not.toMatch(/(?:sm|md|lg|xl|2xl):[^\s"]*col-span/);
+    expect(wide, 'wide must be a conditional container span, never unconditional').toContain('[@container_(min-width:29rem)]:col-span-2');
+    expect(wide, 'wide must not carry an unconditional or other-width span').not.toMatch(/(?:^|[\s"])col-span-2/);
+    expect(wide).not.toMatch(/min-width:(?!29rem)/);
+    expect(grid, 'FormGrid must be the size container').toContain('[container-type:inline-size]');
+  });
+  it('FormGrid is never where inline-size containment collapses it (flex row without flex-1/w-full, inline, w-fit, table cell)', () => {
+    const offenders: string[] = [];
+    for (const f of allFiles()) {
+      for (const why of formGridPlacementProblems(readFileSync(f, 'utf8'))) offenders.push(`${relSrc(f)}: ${why}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+  it('placement guard positive controls (literal fixtures)', () => {
+    const bad = (src: string) => formGridPlacementProblems(src).length;
+    expect(bad('<div className="flex gap-2"><FormGrid>x</FormGrid></div>')).toBe(1);
+    expect(bad('<div className="flex gap-2"><FormGrid className="flex-1">x</FormGrid></div>')).toBe(0);
+    expect(bad('<div className="flex"><FormGrid className="w-full">x</FormGrid></div>')).toBe(0);
+    expect(bad('<div className="flex flex-col"><FormGrid>x</FormGrid></div>')).toBe(0);
+    expect(bad('<span className="inline-block"><FormGrid>x</FormGrid></span>')).toBe(1);
+    expect(bad('<div className="w-fit"><FormGrid>x</FormGrid></div>')).toBe(1);
+    expect(bad('<td><FormGrid>x</FormGrid></td>')).toBe(1);
+    expect(bad('<div className="space-y-4"><form action={a} onSubmit={(e) => go(e)}><FormGrid>x</FormGrid></form></div>')).toBe(0);
   });
   it('components/ui/index.ts exports FormGrid and Field', () => {
     const idx = readFileSync(join(srcRoot, 'components', 'ui', 'index.ts'), 'utf8');
