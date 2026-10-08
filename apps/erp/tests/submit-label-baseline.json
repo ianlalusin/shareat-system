@@ -1,12 +1,1 @@
-{
- "admin/access-defaults/page.tsx": 2,
- "admin/users/[personId]/page.tsx": 1,
- "ap/page.tsx": 1,
- "customers/page.tsx": 1,
- "fixed-assets/[id]/page.tsx": 1,
- "inventory/locations/page.tsx": 1,
- "inventory/pos-usage/page.tsx": 1,
- "items/[id]/page.tsx": 1,
- "items/page.tsx": 3,
- "settings/attendance/page.tsx": 1
-}
+{}
