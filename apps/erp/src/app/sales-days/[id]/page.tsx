@@ -137,6 +137,7 @@ export default async function SalesDayDetailPage({
     </>
   );
 
+  const hasPlatformRows = channels.some((r) => platformChannels.some((c) => c.id === r.channelId));
   return (
     <Page density="table">
       <div className="flex items-start justify-between gap-4">
@@ -405,12 +406,8 @@ export default async function SalesDayDetailPage({
             Orders that were not rung through POS. They are added to this day when it is verified. Leave a box blank for
             none, or tick &quot;no sales&quot; to confirm there were none.
           </p>
-          <EditableRecord
-            key={platformChannels.map((c) => { const r = channels.find((x) => x.channelId === c.id); return `${c.id}:${r?.amount ?? ''}:${r?.noSales ? 1 : 0}`; }).join('|')}
-            action={setPlatformSalesAction}
-            label="platform sales"
-            hidden={{ storeId: sp.store ?? '', salesDayId: day.id }}
-          >
+          {(() => {
+            const platformFields = (
             <FormGrid>
               {platformChannels.map((c) => {
                 const row = channels.find((r) => r.channelId === c.id);
@@ -434,7 +431,27 @@ export default async function SalesDayDetailPage({
                 );
               })}
             </FormGrid>
-          </EditableRecord>
+            );
+            return hasPlatformRows ? (
+              <EditableRecord
+                key={platformChannels.map((c) => { const r = channels.find((x) => x.channelId === c.id); return `${c.id}:${r?.amount ?? ''}:${r?.noSales ? 1 : 0}`; }).join('|')}
+                action={setPlatformSalesAction}
+                label="platform sales"
+                hidden={{ storeId: sp.store ?? '', salesDayId: day.id }}
+              >
+                {platformFields}
+              </EditableRecord>
+            ) : (
+              <form action={setPlatformSalesAction} className="space-y-3">
+                <input type="hidden" name="storeId" value={sp.store ?? ''} />
+                <input type="hidden" name="salesDayId" value={day.id} />
+                {platformFields}
+                <button type="submit" className="rounded border border-neutral-300 px-4 py-1.5 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+                  Save
+                </button>
+              </form>
+            );
+          })()}
         </section>
       )}
 

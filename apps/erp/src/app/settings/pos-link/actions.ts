@@ -75,12 +75,13 @@ export async function linkStoreToPosAction(fd: FormData): Promise<void> {
 // authorize(tx, actor, 'manage_chart_of_accounts', ...) first and own every sentence.
 // ---------------------------------------------------------------------------------------------
 /**
- * R7: an ok sentence names the tender, read back from the database in the same transaction, never trusted from the
+ * R7: an ok sentence names the tender, read back from the database after the write commits, never trusted from the
  * form. The read-back is only a label: if it cannot be read the write must still stand, so it falls back to a plain word.
  */
-async function savedName(tx: Parameters<typeof posV1Repo.getTenderById>[0], orgId: string, tenderId: string): Promise<string> {
+async function savedName(orgId: string, tenderId: string): Promise<string> {
   try {
-    return (await posV1Repo.getTenderById(tx, orgId, tenderId))?.name ?? 'Tender';
+    // Its own read, AFTER the write committed: a failing lookup can never abort or roll back the write.
+    return await withOrgPrincipal(orgId, async (tx) => (await posV1Repo.getTenderById(tx, orgId, tenderId))?.name ?? 'Tender');
   } catch {
     return 'Tender';
   }
@@ -92,16 +93,16 @@ export async function createTenderAction(fd: FormData): Promise<void> {
   let name = 'Tender';
   try {
     const kind = str(fd, 'kind');
-    name = await withOrgPrincipal(actor.orgId, async (tx) => {
-      const { id } = await createTender(tx, actor, {
+    const { id } = await withOrgPrincipal(actor.orgId, async (tx) =>
+      createTender(tx, actor, {
         storeId,
         name: str(fd, 'name'),
         kind: kind as 'cash' | 'wallet', // R4: never decided here; a blank or unknown kind is the domain's to refuse
         moneyAccountId: str(fd, 'moneyAccountId') || null,
         posV1Alias: str(fd, 'posV1Alias') || null,
-      });
-      return await savedName(tx, actor.orgId, id);
-    });
+      }),
+    );
+    name = await savedName(actor.orgId, id);
   } catch (err) {
     return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
   }
@@ -121,7 +122,7 @@ export async function updateTenderAction(fd: FormData): Promise<void> {
     if (!version) throw new Error(STALE_SENTENCE);
     // R5: the account is forwarded only for a wallet (the form always submits the select); a cash result sends none
     // and the domain clears it. A form with no kind field keeps the old behaviour.
-    name = await withOrgPrincipal(actor.orgId, async (tx) => {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
       await updateTender(tx, actor, {
         tenderId,
         expectedVersion: version,
@@ -130,12 +131,13 @@ export async function updateTenderAction(fd: FormData): Promise<void> {
         ...(kind ? { kind: kind as 'cash' | 'wallet' } : {}),
         ...(kind === 'cash' ? {} : accountId ? { moneyAccountId: accountId } : {}),
       });
-      return await savedName(tx, actor.orgId, tenderId);
     });
+    name = await savedName(actor.orgId, tenderId);
   } catch (err) {
     // DEF-617: the refused Save carries what was typed in the signed flash (never the URL), so the record reopens in
     // edit mode holding it. Only this one form's fields, and only when the record is named.
-    const keep = tenderId
+    // A STALE refusal keeps nothing: the page redraws the tender locked with what is saved (the other user's change).
+    const keep = tenderId && errorMessage(err) !== STALE_SENTENCE
       ? { tenderId, tenderName: str(fd, 'name'), tenderKind: str(fd, 'kind'), tenderAccount: str(fd, 'moneyAccountId'), tenderAlias: str(fd, 'posV1Alias') }
       : undefined;
     return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err), ...(keep ? { keep } : {}) }, { anchor: anchorOf(storeId) });
@@ -153,10 +155,8 @@ export async function setTenderActiveAction(fd: FormData): Promise<void> {
     const version = str(fd, 'version');
     if (!version) throw new Error(STALE_SENTENCE);
     const tenderId = str(fd, 'tenderId');
-    name = await withOrgPrincipal(actor.orgId, async (tx) => {
-      await setTenderActive(tx, actor, { tenderId, isActive, expectedVersion: version });
-      return await savedName(tx, actor.orgId, tenderId);
-    });
+    await withOrgPrincipal(actor.orgId, (tx) => setTenderActive(tx, actor, { tenderId, isActive, expectedVersion: version }));
+    name = await savedName(actor.orgId, tenderId);
   } catch (err) {
     return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
   }

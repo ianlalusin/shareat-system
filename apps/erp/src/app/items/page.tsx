@@ -297,7 +297,7 @@ export default async function ItemsPage({
               formAction={createItemAction}
               className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
             >
-              Save
+              Add directly (super-admin)
             </button>
           </div>
         </form>
