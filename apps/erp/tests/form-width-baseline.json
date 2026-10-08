@@ -17,7 +17,6 @@
     "app/inventory/pos-usage/page.tsx": 1,
     "app/inventory/returns/page.tsx": 1,
     "app/inventory/usage/[id]/page.tsx": 1,
-    "app/items/[id]/page.tsx": 1,
     "app/payroll/page.tsx": 7,
     "app/payroll/separations/page.tsx": 3,
     "app/payroll/thirteenth-month/page.tsx": 5,
