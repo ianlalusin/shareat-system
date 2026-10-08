@@ -64,7 +64,7 @@ export default async function SalesDayDetailPage({
   // day is edited under `submit_sales_day`, a submitted one under `verify_sales_day`; a void needs
   // `void_sales_day`.
   const can = await withOrgPrincipal(orgId, async (tx) => {
-    const probe = async (capability: 'submit_sales_day' | 'verify_sales_day' | 'void_sales_day') => {
+    const probe = async (capability: 'submit_sales_day' | 'verify_sales_day' | 'void_sales_day' | 'verify_own_sales_day') => {
       try {
         await authorize(tx, actor, capability, { storeId: day.storeId });
         return true;
@@ -77,6 +77,10 @@ export default async function SalesDayDetailPage({
       edit: await probe(day.status === 'submitted' ? 'verify_sales_day' : 'submit_sales_day'),
       void: await probe('void_sales_day'),
       verify: await probe('verify_sales_day'),
+      // T-385 S3: the submitter may verify their own day only with verify_own_sales_day (super-admin). A probe of the
+      // same capability the domain checks; the domain still refuses a forged post.
+      ownBlocked:
+        day.status === 'submitted' && day.submittedBy === actor.personId && !(await probe('verify_own_sales_day')),
     };
   });
   const unverified = day.status === 'open' || day.status === 'submitted';
@@ -473,15 +477,21 @@ export default async function SalesDayDetailPage({
           </form>
         )}
 
-        {day.status === 'submitted' && can.verify && (
+        {day.status === 'submitted' && can.verify && can.ownBlocked && (
+          <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+            <h2 className="font-medium">Verification</h2>
+            <p className="mt-1 text-neutral-600 dark:text-neutral-400">You submitted this day, so someone else has to verify it.</p>
+          </div>
+        )}
+
+        {day.status === 'submitted' && can.verify && !can.ownBlocked && (
           <form action={verifySalesDayAction} className="flex flex-col justify-between gap-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
             {hiddenIds}
             <div>
               <h2 className="font-medium">Verify &amp; post</h2>
               <p className="mt-1 text-neutral-600 dark:text-neutral-400">
                 <strong>This is what recognises the revenue.</strong> The entry dates on{' '}
-                {day.businessDate}, not today. ⚠️ The person who submits should not be the one who
-                verifies.
+                {day.businessDate}, not today.
               </p>
             </div>
             <button type="submit" className="rounded bg-neutral-900 px-4 py-1.5 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300">
