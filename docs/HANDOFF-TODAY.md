@@ -32,7 +32,7 @@ screens, not sign-in).
 ## Pick up here
 1. **With Ian: the push to `main`.** First the three READ-ONLY 0187 prechecks as `doadmin` (`docs/ops/README.md` deploy
    gate, P0187a–c; **P0187b lists who receives the new `unlink_store_from_pos` grant — it should be only Ian**). Then
-   push, watch CI and the deploy, confirm 167 rows in `drizzle.__drizzle_migrations`. CI has been flaky on timing tests
+   push, watch CI and the deploy, confirm 168 rows in `drizzle.__drizzle_migrations`. CI has been flaky on timing tests
    (A19 fixed by T-381); if CI fails, read the log before re-running.
 2. **Monday 12 Oct with Ian:** link Lipa per the runbook (map 4 methods → money accounts, verify/void any open typed
    day, then Link). First import the morning after.
