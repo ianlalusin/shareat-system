@@ -60,7 +60,7 @@ export default async function SalesChannelsSettingsPage({
 
   if (!storeId) {
     return (
-      <Page density="form" className="space-y-4">
+      <Page density="table" className="space-y-4">
         <Crumb />
         <h1 className="text-2xl font-semibold">Sales channels</h1>
         <PageDescription>
@@ -84,7 +84,7 @@ export default async function SalesChannelsSettingsPage({
   const retired = channels.filter((c) => !c.isActive);
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <Crumb />
         <h1 className="text-2xl font-semibold">Sales channels</h1>

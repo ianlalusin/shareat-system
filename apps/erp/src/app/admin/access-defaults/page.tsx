@@ -65,7 +65,7 @@ export default async function AccessDefaultsPage({
 
   if (stores.length === 0) {
     return (
-      <Page density="form">
+      <Page density="table">
         <h1 className="text-2xl font-semibold">Position access defaults</h1>
         <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-400">
           You have no store scope, so there is nothing to configure here.

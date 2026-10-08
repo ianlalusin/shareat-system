@@ -47,7 +47,7 @@ export default async function StoreDetailPage({
   // T-222 smoketest is what caught it. A refusal is a sentence, never a stack trace.
   if (!readiness) {
     return (
-      <Page density="form" className="space-y-4">
+      <Page density="table" className="space-y-4">
         <Link href="/admin/stores" className="text-sm underline underline-offset-2">
           ← Stores
         </Link>

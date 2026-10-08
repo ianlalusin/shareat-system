@@ -71,7 +71,7 @@ export default async function CredentialsPage({
   const storeName = stores.find((s) => s.id === employment.storeId)?.name ?? employment.storeId;
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <Link
           href={`/staff/${employmentId}`}

@@ -41,7 +41,7 @@ export default async function EmploymentDetailPage({
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <a href="/staff" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Staff
