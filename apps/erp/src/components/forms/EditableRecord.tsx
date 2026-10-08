@@ -98,9 +98,36 @@ export async function runEditableAction(
   dispatch({ type: 'saved' });
 }
 
-/** Dirty = some control's value differs from its rendered default. */
-function formIsDirty(form: HTMLFormElement | null): boolean {
+/** The named, user-editable controls of a form (hidden inputs and buttons excluded). */
+function editableControls(form: HTMLFormElement): Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> {
+  const out: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> = [];
+  for (const el of Array.from(form.elements)) {
+    if (el instanceof HTMLInputElement) {
+      if (el.type === 'hidden' || el.type === 'button' || el.type === 'submit' || el.type === 'checkbox' || el.type === 'radio') continue;
+      out.push(el);
+    } else if (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) out.push(el);
+  }
+  return out;
+}
+
+/** Puts the stored values back after form.reset(), for a record drawn from typed values (`storedValues`). */
+function restoreStored(form: HTMLFormElement | null, stored: Record<string, string> | undefined): void {
+  if (!form || !stored) return;
+  for (const el of editableControls(form)) {
+    const v = stored[el.name];
+    if (v !== undefined) el.value = v;
+  }
+}
+
+/** Dirty = some control's value differs from its rendered default (or, for a reopened record, from the stored value). */
+function formIsDirty(form: HTMLFormElement | null, stored?: Record<string, string>): boolean {
   if (!form) return false;
+  if (stored) {
+    for (const el of editableControls(form)) {
+      const v = stored[el.name];
+      if (v !== undefined && el.value !== v) return true;
+    }
+  }
   for (const el of Array.from(form.elements)) {
     if (el instanceof HTMLInputElement) {
       if (el.type === 'hidden' || el.type === 'button' || el.type === 'submit') continue;
@@ -126,6 +153,16 @@ export interface EditableRecordProps {
   /** Command buttons shown only in edit mode, each its own form (for example Retire). */
   extra?: ReactNode;
   saveLabel?: 'Save' | 'Save draft';
+  /**
+   * DEF-617: start in edit mode. Used after a refused Save: the page draws the fields from what the user typed (their
+   * `defaultValue`s), so the record comes back open and holding their typing. Default 'locked'.
+   */
+  initialMode?: 'locked' | 'editing';
+  /**
+   * With `initialMode="editing"`: the STORED values by field name. Cancel restores these (not the typed defaults) and
+   * a field that differs from them counts as unsaved. Only for fields the page drew from typed values.
+   */
+  storedValues?: Record<string, string>;
 }
 
 export interface EditableRecordViewProps extends EditableRecordProps {
@@ -196,7 +233,9 @@ export function EditableRecordView({
 }
 
 export function EditableRecord(props: EditableRecordProps) {
-  const [state, dispatch] = useReducer(editableRecordReducer, EDITABLE_RECORD_INITIAL);
+  const [state, dispatch] = useReducer(editableRecordReducer, props.initialMode, (m): EditableRecordState =>
+    m === 'editing' ? { mode: 'editing', message: null } : EDITABLE_RECORD_INITIAL,
+  );
   const formRef = useRef<HTMLFormElement>(null);
   const editRef = useRef<HTMLButtonElement>(null);
   const wasEditing = useRef(false);
@@ -207,9 +246,10 @@ export function EditableRecord(props: EditableRecordProps) {
     if (!editing) return;
     return registry.register({
       id,
-      isDirty: () => formIsDirty(formRef.current),
+      isDirty: () => formIsDirty(formRef.current, props.storedValues),
       close: () => {
         formRef.current?.reset();
+        restoreStored(formRef.current, props.storedValues);
         dispatch({ type: 'cancel' });
       },
       notify: () => dispatch({ type: 'otherDirty' }),
@@ -238,6 +278,7 @@ export function EditableRecord(props: EditableRecordProps) {
       }}
       onCancel={() => {
         formRef.current?.reset();
+        restoreStored(formRef.current, props.storedValues);
         dispatch({ type: 'cancel' });
       }}
     />

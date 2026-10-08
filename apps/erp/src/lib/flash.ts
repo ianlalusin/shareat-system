@@ -72,6 +72,12 @@ export const KEEP_KEYS = [
   'mode',
   'openingDate',
   'separationDate',
+  // T-384 S1b / DEF-617: one tender record's typed values after a refused Save, so it reopens holding them.
+  'tenderId',
+  'tenderName',
+  'tenderKind',
+  'tenderAccount',
+  'tenderAlias',
 ] as const;
 export type KeepKey = (typeof KEEP_KEYS)[number];
 
