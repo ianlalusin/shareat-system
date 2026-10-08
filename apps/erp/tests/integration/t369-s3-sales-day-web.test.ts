@@ -62,6 +62,7 @@ import type { Actor } from '@shareat/auth';
 import { createSalesDay, submitSalesDay } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
+import { submitThenVerify } from '../../../../packages/domain/tests/integration/_fixtures/sales-day-flow';
 import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
@@ -225,8 +226,7 @@ describe('/sales-days/[id] — Edit and Withdraw', () => {
     expect(html).toMatch(/Withdraw this unverified day/);
 
     const verified = await mkDay(f, '2026-01-09', '1000.00');
-    const { verifySalesDay } = await import('@shareat/domain');
-    await asOrg(f.orgId, (tx) => verifySalesDay(tx, f.manager, verified));
+    await asOrg(f.orgId, (tx) => submitThenVerify(tx, f.manager, verified, f.staff));
     const vhtml = await detail(f.manager, verified, { store: f.storeId });
     expect(vhtml).not.toMatch(new RegExp(`href="/sales-days/${verified}/edit`));
     expect(vhtml).not.toMatch(/Withdraw this unverified day/);

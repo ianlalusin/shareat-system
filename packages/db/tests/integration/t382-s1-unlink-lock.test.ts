@@ -34,6 +34,7 @@ import { APP_ROLE } from '../../src/rls/registry';
 import { seedChartOfAccounts } from '../../seed/chart-of-accounts';
 import { closeDb, posV1Repo, transaction } from '@shareat/db';
 import { insertDerivedSalesDayRow } from '../../../domain/tests/integration/_fixtures/pos-day';
+import { forceVerifiedSql } from '../../../domain/tests/integration/_fixtures/sales-day-flow';
 
 const sql = postgres(url, { max: 8 });
 let seq = 0;
@@ -228,7 +229,7 @@ describe('D2 - a VERIFIED feed day on an unlinked store stays frozen', () => {
     const s = await mkStore(o, { linked: true });
     const day = await feedDay(o, s, '2027-01-10');
     await addTender(day.id, s.wallet1);
-    await sql`update sales_days set status = 'verified', verified_by = ${o.personId}, verified_at = now() where id = ${day.id}`;
+    await forceVerifiedSql(sql, day.id, o.personId);
     await unlink(o, s.storeId);
 
     await expectRefused(attempt(o.orgId, (t) => update(t, day.id, { cash_collected: '5.00' }), { flag: true }), FIGURES_LOCKED, 'figure UPDATE, verified feed day, store unlinked, flag on');

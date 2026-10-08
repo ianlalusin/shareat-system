@@ -54,6 +54,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
+import { forceVerifiedSql } from './_fixtures/sales-day-flow';
 import { createSalesDay } from '../../src/sales-days/create';
 import { setSalesChannelActive, updateSalesChannel } from '../../src/sales-channels';
 import { humanDate as humanDateOf } from '../../src/shared/refusal-leaf';
@@ -343,7 +344,7 @@ describe('L4 - a store with an unverified typed day cannot be linked (W6)', () =
     const f = await fixture('l4c');
     const id = await typedDay(f, '2027-01-05', 'open');
     await expect(link(f, f.admin)).rejects.toBeInstanceOf(Error);
-    await sql`update sales_days set status = 'verified', verified_by = ${f.adminId}, verified_at = now() where id = ${id}`;
+    await forceVerifiedSql(sql, id, f.adminId);
     await expect(link(f, f.admin)).resolves.toBeDefined();
     expect(await linkRows(f.storeId)).toHaveLength(1);
   });

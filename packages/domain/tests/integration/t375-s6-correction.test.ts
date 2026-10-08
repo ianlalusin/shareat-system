@@ -45,6 +45,7 @@ import * as D from '@shareat/domain';
 import { humanDate as humanDateOf } from '../../src/shared/refusal-leaf';
 import { D1_FIGURES, importTestDay } from './_fixtures/pos-day';
 import { asOrgOn, DAY, insertSalesRecheck, R1_FIGURES, s6Fixture, type S6F } from './_fixtures/pos-s6';
+import { submitThenVerify } from './_fixtures/sales-day-flow';
 
 const hd = (d: string) => humanDateOf(parseBusinessDate(d));
 const sql = postgres(url, { max: 6 });
@@ -75,7 +76,7 @@ async function correct(f: S6F, who: Actor, input: Omit<CorrectionInput, 'reason'
 
 const imp = (f: S6F, date: string, figures?: Parameters<typeof importTestDay>[2]['figures']) =>
   asOrgOn(f.orgId, (tx) => importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: date, figures }));
-const verify = (f: S6F, dayId: string) => asOrgOn(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, dayId));
+const verify = (f: S6F, dayId: string) => asOrgOn(f.orgId, (tx) => submitThenVerify(tx, f.manager, dayId, f.admin));
 const recheck = (f: S6F, date: string, figures = R1_FIGURES) =>
   asOrgOn(f.orgId, (tx) =>
     insertSalesRecheck(tx, { orgId: f.orgId, storeId: f.storeId, businessDate: date, posStoreId: f.posStoreId, fetchedBy: f.managerId, figures }),

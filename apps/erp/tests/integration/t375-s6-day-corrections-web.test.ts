@@ -46,10 +46,10 @@ vi.mock('../../src/lib/session', () => ({
 }));
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
 
-import { verifySalesDay } from '../../../../packages/domain/src/sales-days/verify';
 import { importTestDay } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { asOrgOn, DAY, insertSalesRecheck, R1_FIGURES, s6Fixture, type S6F } from '../../../../packages/domain/tests/integration/_fixtures/pos-s6';
+import { submitThenVerify } from '../../../../packages/domain/tests/integration/_fixtures/sales-day-flow';
 import * as actions from '../../src/app/sales-days/actions';
 import SalesDayDetailPage from '../../src/app/sales-days/[id]/page';
 import { urlOf } from '../helpers/flash-jar';
@@ -90,7 +90,7 @@ const renderDay = async (who: { personId: string; orgId: string }, f: S6F, id: s
 async function setup(hint: string, o: { drift?: boolean } = {}) {
   const f = await s6Fixture(sql, hint);
   const { id: dayId } = await asOrgOn(f.orgId, (tx) => importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: DAY }));
-  await asOrgOn(f.orgId, (tx) => verifySalesDay(tx, f.manager, dayId));
+  await asOrgOn(f.orgId, (tx) => submitThenVerify(tx, f.manager, dayId, f.admin));
   let feedId = '';
   if (o.drift !== false) {
     feedId = (

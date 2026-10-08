@@ -22,9 +22,10 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
+import { mkSubmitter, submitThenVerify } from './_fixtures/sales-day-flow';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
-import { createSalesDay, verifySalesDay, getSalesRollup } from '@shareat/domain';
+import { createSalesDay, getSalesRollup } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -65,8 +66,9 @@ async function fixture(hint: string) {
     insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code)
     values (${orgId}, ${store2Id}, 'Foodpanda', false, '1220') returning id`;
 
+  const submitter = await mkSubmitter(sql, orgId, [storeId, store2Id]);
   return {
-    orgId, storeId, store2Id, managerId: manager!.id, manager: { personId: manager!.id, orgId } as Actor,
+    orgId, storeId, store2Id, managerId: manager!.id, manager: { personId: manager!.id, orgId } as Actor, submitter,
     walkInChannelId: walkIn!.id, foodpandaChannelId: foodpanda!.id,
     store2WalkInChannelId: walkIn2!.id, store2FoodpandaChannelId: foodpanda2!.id,
   };
@@ -95,7 +97,7 @@ async function postVerifiedDay(
       ],
     }),
   );
-  await asOrg(f.orgId, (tx) => verifySalesDay(tx, f.manager, day.id));
+  await asOrg(f.orgId, (tx) => submitThenVerify(tx, f.manager, day.id, f.submitter));
   return day.id;
 }
 

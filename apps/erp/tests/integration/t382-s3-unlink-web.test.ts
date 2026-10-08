@@ -57,6 +57,7 @@ import { sql as dsql } from 'drizzle-orm';
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { importTestDay } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
 import { s6Fixture } from '../../../../packages/domain/tests/integration/_fixtures/pos-s6';
+import { submitThenVerify } from '../../../../packages/domain/tests/integration/_fixtures/sales-day-flow';
 import { humanDate as humanDateOf } from '../../../../packages/domain/src/shared/refusal-leaf';
 import PosLinkSettingsPage from '../../src/app/settings/pos-link/page';
 import { captureRedirect, currentJar, FLASH_COOKIE, outcomeOf, pageParamsOf, resetJar } from '../helpers/flash-jar';
@@ -91,7 +92,7 @@ async function fixture(hint: string, o: { verified?: number; openDay?: boolean }
   const dates = [D1, D2].slice(0, o.verified ?? 0);
   for (const date of dates) {
     const { id } = await asOrg(base.orgId, (tx) => importTestDay(tx, base.manager, { storeId: base.storeId, businessDate: date }));
-    await asOrg(base.orgId, (tx) => D.verifySalesDay(tx, base.manager, id));
+    await asOrg(base.orgId, (tx) => submitThenVerify(tx, base.manager, id, base.admin));
   }
   if (o.openDay) await asOrg(base.orgId, (tx) => importTestDay(tx, base.manager, { storeId: base.storeId, businessDate: '2027-01-15' }));
   return { ...base, superAdmin, adminActor: { personId: base.adminId, orgId: base.orgId } };

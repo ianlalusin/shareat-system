@@ -44,6 +44,7 @@ import { seedChartOfAccounts } from '../../seed/chart-of-accounts';
 import { closeDb, transaction } from '@shareat/db';
 import { withSalesDayDerivation } from '../../src/repo/sales-days';
 import { insertDerivedSalesDayRow } from '../../../domain/tests/integration/_fixtures/pos-day';
+import { forceVerifiedSql } from '../../../domain/tests/integration/_fixtures/sales-day-flow';
 
 const sql = postgres(url, { max: 8 });
 /** ONE connection: the same pooled session serves consecutive transactions (K6). */
@@ -245,9 +246,13 @@ describe('K1 - a LINKED store\'s feed day: every protected column refuses an UPD
       attempt(o.orgId, (t) => update(t, day.id, { status: 'submitted', submitted_by: o.personId, submitted_at: '2027-01-11T00:00:00Z', updated_at: '2027-01-11T00:00:00Z' })),
       'submit (markSubmitted)',
     );
+    // T-385 / 0188: verify is only legal from a submitted day, so the control takes both steps in one attempt (rolled back)
     await expectAllowed(
-      attempt(o.orgId, (t) => update(t, day.id, { status: 'verified', verified_by: o.personId, verified_at: '2027-01-11T00:00:00Z', updated_at: '2027-01-11T00:00:00Z' })),
-      'verify (markVerified)',
+      attempt(o.orgId, async (t) => {
+        await update(t, day.id, { status: 'submitted', submitted_by: o.personId, submitted_at: '2027-01-11T00:00:00Z', updated_at: '2027-01-11T00:00:00Z' });
+        await update(t, day.id, { status: 'verified', verified_by: o.personId, verified_at: '2027-01-11T00:00:00Z', updated_at: '2027-01-11T00:00:00Z' });
+      }),
+      'verify (markVerified), after submit',
     );
     await expectAllowed(
       attempt(o.orgId, (t) => update(t, day.id, { status: 'voided', voided_by: o.personId, voided_at: '2027-01-11T00:00:00Z', void_reason: 'test', updated_at: '2027-01-11T00:00:00Z' })),
@@ -333,7 +338,7 @@ describe('K4b - flagged child-row writes on a FEED day need the day open or subm
       await addChannel(d.id, s.walkInId);
     }
     // children are written while open (the derivation), then the day is verified (status moves are never locked)
-    await sql`update sales_days set status = 'verified', verified_by = ${o.personId}, verified_at = now() where id = ${verified.id}`;
+    await forceVerifiedSql(sql, verified.id, o.personId);
     const tender = (id: string) => (t: Tx) => t`update sales_day_tenders set amount = '5.00' where sales_day_id = ${id}`;
     const channel = (id: string) => (t: Tx) => t`update sales_day_channels set amount = '5.00' where sales_day_id = ${id}`;
     await expectAllowed(attempt(o.orgId, tender(open.id), { flag: true }), 'tender UPDATE, open feed day, flag on');

@@ -230,8 +230,10 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // read, and vice versa.
     // ⭐ 99 -> 100 (T-382 S1, A3): `unlink_store_from_pos`. ORG-scoped, super_admin only, audited — Ian,
     // 2026-10-07 (`t375-unlink-safety`). ⛔ RED until the builder adds the row: today's document has 99.
+    // ⭐ 100 -> 101 (T-385 S3, A3): `verify_own_sales_day`. super_admin only (scope is the builder's call, store or org) — Ian,
+    // 2026-10-09 (t385-q1 = a). ⛔ RED until the builder adds the row: today's document has 100.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(100);
+    expect(rows.length).toBe(101);
   });
 
   it('has no duplicate capability names', () => {
@@ -302,11 +304,12 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 100 capabilities', () => {
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 101 capabilities', () => {
     // ⭐ 99 -> 100 (T-382 S1, A3): `unlink_store_from_pos`. ⛔ RED until the builder adds it to capabilities.ts.
-    expect(CAPABILITIES.length).toBe(100);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(100);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(100);
+    // ⭐ 100 -> 101 (T-385 S3, A3): `verify_own_sales_day`. ⛔ RED until the builder adds it to capabilities.ts.
+    expect(CAPABILITIES.length).toBe(101);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(101);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(101);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -467,6 +470,34 @@ describe('T-382 A1/A3 — unlink_store_from_pos: org scope, super_admin only, an
     const mine = rows.filter((r) => r.capability === CAP);
     expect(mine.length, 'CAPABILITY-MATRIX.md carries exactly one unlink_store_from_pos row').toBe(1);
     expect(mine[0]!.scope).toBe('org');
+    expect(mine[0]!.cells).toEqual([true, false, false, false]);
+    expect(mine[0]!.conditionalManager).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// T-385 S3 - A1 and A3: `verify_own_sales_day`, the sixth super_admin-only capability.
+// `docs/tasks/385-verify-only-after-submit.md` S3 (Ian 2026-10-09, t385-q1 = a): the person who submitted a day may not
+// verify it, EXCEPT a super-admin. The exception is a capability so `authorize()` stays the one decider.
+// ⛔ RED until the builder adds the code row and the document row.
+// ---------------------------------------------------------------------------------------------------------------
+describe('T-385 A1/A3 - verify_own_sales_day: super_admin only, and the document says the same', () => {
+  const CAP = 'verify_own_sales_day' as string as Capability;
+
+  it('A1: the typed matrix - super_admin yes, admin no, manager no, staff no; not conditional', () => {
+    expect(CAPABILITIES as readonly string[]).toContain(CAP);
+    expect(CAPABILITY_MATRIX[CAP]).toEqual({ super_admin: true, admin: false, manager: false, staff: false });
+    expect(['store', 'org']).toContain(CAPABILITY_SCOPE[CAP]);
+    expect(CONDITIONAL_CAPABILITIES.has(CAP)).toBe(false);
+    // admin lacks it, so the adminless-manager fallback (the admin-minus-manager delta) cannot hand it to a manager either
+    expect(ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER as readonly string[]).not.toContain(CAP);
+  });
+
+  it('A3: the document row exists exactly once and matches the code row (parsed, not hand-compared)', () => {
+    const { rows } = parseCapabilityMatrixDoc();
+    const mine = rows.filter((r) => r.capability === CAP);
+    expect(mine.length, 'CAPABILITY-MATRIX.md carries exactly one verify_own_sales_day row').toBe(1);
+    expect(mine[0]!.scope).toBe(CAPABILITY_SCOPE[CAP]);
     expect(mine[0]!.cells).toEqual([true, false, false, false]);
     expect(mine[0]!.conditionalManager).toBe(false);
   });

@@ -52,6 +52,7 @@ import { humanDate as humanDateOf } from '../../src/shared/refusal-leaf';
 import type { LocationLike } from '../../src/stock-locations/rules';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
+import { mkSubmitter, submitThenVerify } from './_fixtures/sales-day-flow';
 import { insertRecheckBatch } from './_fixtures/pos-sold-items';
 
 const hd = (d: string) => humanDateOf(parseBusinessDate(d));
@@ -251,9 +252,10 @@ async function fixture(hint: string, o: { link?: boolean } = {}) {
   const linkNow = () => linkTestStore(sql, { orgId, storeId, channelId: walkIn, createdBy: managerId });
   const posStoreId = o.link === false ? '' : (await linkNow()).posStoreId;
 
+const submitter = await mkSubmitter(sql, orgId, [storeId, store2Id]);
   return {
     orgId, storeId, store2Id, walkIn, walkIn2, kitchen, kitchen2, cheese, buns, managerId, staffId, nobodyId, posStoreId, linkNow,
-    manager, staff: actorOf(orgId, staffId), nobody: actorOf(orgId, nobodyId),
+    manager, submitter, staff: actorOf(orgId, staffId), nobody: actorOf(orgId, nobodyId),
   };
 }
 type F = Awaited<ReturnType<typeof fixture>>;
@@ -449,7 +451,7 @@ describe('U5 - a typed day on a store that is now linked is refused (Q-D)', () =
         }),
       )
     ).id;
-    await asOrg(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, typed));
+    await asOrg(f.orgId, (tx) => submitThenVerify(tx, f.manager, typed, f.submitter));
     await f.linkNow();
 
     const out = await plan(f, typed);

@@ -29,6 +29,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, findingsRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { postEntry } from '../../src/ledger/post-entry';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
+import { forceVerifiedSql } from './_fixtures/sales-day-flow';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -135,7 +136,7 @@ async function feedDay(f: Fixture, status: 'open' | 'verified'): Promise<string>
   const { id } = await asOrg(f.orgId, (tx) =>
     importTestDay(tx, { personId: f.adminId, orgId: f.orgId }, { storeId: f.storeId, businessDate: '2026-01-01' }),
   );
-  if (status === 'verified') await sql`update sales_days set status = 'verified' where id = ${id}`;
+  if (status === 'verified') await forceVerifiedSql(sql, id, f.adminId);
   return id;
 }
 

@@ -552,10 +552,33 @@ describe('T-382 - the unlink CHECKs', () => {
   });
 });
 
+// T-385 S2 (0188) - D8: an UPDATE that jumps a sales day from open to verified is refused by the trigger, and the person reads
+// a sentence, not the raw 23514.
+describe('T-385 S2 - the verify-requires-submitted trigger', () => {
+  const KEY = 'sales_days_verify_requires_submitted';
+  const SENTENCE = 'A sales day can be verified only after it has been submitted.';
+
+  it(KEY, async () => {
+    const code = uid('t385-lookup');
+    const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
+    const orgId = org!.id;
+    const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('store')}, 'Lipa') returning id`;
+    const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
+    const [day] = await sql<{ id: string }[]>`
+      insert into sales_days (org_id, store_id, business_date, status, total_sales, unli_sales, ala_carte_sales, created_by)
+      values (${orgId}, ${store!.id}, '2027-02-03', 'open', '1.00', '1.00', '0.00', ${person!.id}) returning id`;
+    const err = await provoke(() => sql`update sales_days set status = 'verified', verified_by = ${person!.id}, verified_at = now() where id = ${day!.id}`);
+    const row = record(KEY, err);
+    expect(row.constraintName).toBe(KEY);
+    expect(row.message, `a raw driver error reached the person: ${row.message}`).toBe(CONSTRAINT_MESSAGES[KEY]);
+    expect(row.message).toBe(SENTENCE);
+  });
+});
+
 it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   const exercised = new Set(rows.map((r) => r.key));
   const missing = Object.keys(CONSTRAINT_MESSAGES).filter((k) => !exercised.has(k));
   expect(missing).toEqual([]);
-  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys + T-383 S1's items blank-name and blank-code CHECK keys = 41 rows provoked above.
-  expect(rows.length).toBe(41);
+  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys + T-383 S1's items blank-name and blank-code CHECK keys + T-385 S2's sales_days_verify_requires_submitted = 42 rows provoked above.
+  expect(rows.length).toBe(42);
 });

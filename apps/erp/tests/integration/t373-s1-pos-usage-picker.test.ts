@@ -39,9 +39,10 @@ vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
-import { verifySalesDay, voidSalesDay } from '@shareat/domain';
+import { voidSalesDay } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { importTestDay, linkTestStore, seedTestTenders } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
+import { mkSubmitter, submitThenVerify } from '../../../../packages/domain/tests/integration/_fixtures/sales-day-flow';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -85,9 +86,10 @@ async function fixture(hint: string) {
     insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
     values (${orgId}, ${storeId}, 'KIT', 'Kitchen', ${type!.id}, 'operating', true, ${mgr!.id}) returning id`;
   const manager: Actor = { personId: mgr!.id, orgId };
+  const submitter = await mkSubmitter(sql, orgId, [storeId]); // T-385 S3: the submitter is not the verifier
   const mk = async (date: string, opts: { verify?: boolean } = {}) => {
     const { id } = await asOrg(orgId, (tx) => importTestDay(tx, manager, { storeId, businessDate: date }));
-    if (opts.verify) await asOrg(orgId, (tx) => verifySalesDay(tx, manager, id));
+    if (opts.verify) await asOrg(orgId, (tx) => submitThenVerify(tx, manager, id, submitter));
     return id;
   };
   const voidIt = (id: string) => asOrg(orgId, (tx) => voidSalesDay(tx, manager, id, 'Entered wrong'));

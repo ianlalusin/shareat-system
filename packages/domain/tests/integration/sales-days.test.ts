@@ -34,6 +34,7 @@ import { RLS_REGISTRY } from '../../../db/src/rls/registry';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { submitThenVerify } from './_fixtures/sales-day-flow';
 import {
   createSalesDay,
   TransitShortfallBlockedError,
@@ -246,7 +247,7 @@ describe('invariant 2 — verifying posts, and the entry dates on the business d
     const { id } = await asPerson(f.orgId, (tx) =>
       createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
     );
-    const res = await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+    const res = await asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId)));
 
     expect(res.created).toBe(true);
     const lines = await linesFor(res.journalEntryId);
@@ -272,8 +273,8 @@ describe('invariant 2 — verifying posts, and the entry dates on the business d
     const { id } = await asPerson(f.orgId, (tx) =>
       createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
     );
-    const first = await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
-    const second = await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+    const first = await asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId)));
+    const second = await asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId)));
 
     expect(second.created).toBe(false);
     expect(second.journalEntryId).toBe(first.journalEntryId);
@@ -303,7 +304,7 @@ describe('invariant 3 — the create-block holds, and its carve-outs stop it dea
     const { id } = await asPerson(f.orgId, (tx) =>
       createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
     );
-    await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+    await asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId)));
 
     const next = await asPerson(f.orgId, (tx) =>
       createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D2)),
@@ -351,7 +352,7 @@ describe('invariant 3 — the create-block holds, and its carve-outs stop it dea
     const { id } = await asPerson(f.orgId, (tx) =>
       createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
     );
-    await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+    await asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId)));
     await asPerson(f.orgId, (tx) => voidSalesDay(tx, actor(f.orgId, f.managerId), id, 'duplicate'));
 
     const next = await asPerson(f.orgId, (tx) =>
@@ -371,7 +372,7 @@ describe('invariant 4 — voiding reverses, and the original stands', () => {
     const { id } = await asPerson(f.orgId, (tx) =>
       createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
     );
-    const posted = await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+    const posted = await asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId)));
     const res = await asPerson(f.orgId, (tx) =>
       voidSalesDay(tx, actor(f.orgId, f.managerId), id, 'counted twice'),
     );
@@ -415,7 +416,7 @@ describe('invariant 4 — voiding reverses, and the original stands', () => {
     const { id } = await asPerson(f.orgId, (tx) =>
       createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
     );
-    await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+    await asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId)));
     await expect(
       asPerson(f.orgId, (tx) => voidSalesDay(tx, actor(f.orgId, f.managerId), id, '   ')),
     ).rejects.toThrow(/reason is required/);
@@ -443,7 +444,7 @@ describe('invariant 5 — non-remitted channels, and DEF-059 refused', () => {
         ],
       }),
     );
-    const res = await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+    const res = await asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId)));
     const lines = await linesFor(res.journalEntryId);
 
     const receivable = lines.find((l) => l.code === '1220');
@@ -515,7 +516,7 @@ describe('invariant 6 — a day that cannot balance blocks, and stays fixable', 
       }),
     );
     await expect(
-      asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id)),
+      asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId))),
     ).rejects.toThrow(/does not reconcile/);
 
     // ⭐ Unchanged and still fixable — a failed verify is not a state change.
@@ -546,7 +547,7 @@ describe('invariant 7 — the denials fire', () => {
     const { id } = await asPerson(f.orgId, (tx) =>
       createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
     );
-    await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+    await asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId)));
     await expect(
       asPerson(f.orgId, (tx) => voidSalesDay(tx, actor(f.orgId, f.staffId), id, 'nope')),
     ).rejects.toThrow(AuthorizationError);
@@ -600,7 +601,7 @@ describe('DEF-068 — online tender names its wallet', () => {
         ],
       }),
     );
-    const res = await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+    const res = await asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId)));
 
     const lines = await linesFor(res.journalEntryId);
     const online = lines.filter((l) => l.code === '1140');
@@ -621,7 +622,7 @@ describe('DEF-068 — online tender names its wallet', () => {
       }),
     );
     await expect(
-      asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id)),
+      asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId))),
     ).rejects.toThrow(/tender breakdown does not equal online collected/);
   });
 
@@ -631,7 +632,7 @@ describe('DEF-068 — online tender names its wallet', () => {
       createSalesDay(tx, actor(f.orgId, f.staffId), dayWithOnline(f.storeId, D1)),
     );
     await expect(
-      asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id)),
+      asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId))),
     ).rejects.toThrow(/tender breakdown does not equal online collected/);
   });
 
@@ -901,7 +902,7 @@ describe('T-343 S5.1 — sales-days refusals carry a human sentence', () => {
     const { id } = await asPerson(f.orgId, (tx) =>
       createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
     );
-    await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+    await asPerson(f.orgId, (tx) => submitThenVerify(tx, actor(f.orgId, f.managerId), id, actor(f.orgId, f.staffId)));
 
     // Test-only corruption, planted directly against the real row (cheaper and more convincing
     // than a synthetic fixture — shareat-system-real-source-plant-when-cheap): the public API

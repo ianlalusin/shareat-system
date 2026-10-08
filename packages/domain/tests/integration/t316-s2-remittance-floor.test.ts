@@ -39,6 +39,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, moneyAccountsRepo, remittanceRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { type Actor } from '@shareat/auth';
+import { forceVerifiedSql } from './_fixtures/sales-day-flow';
 import {
   createMoneyTransfer,
   createRemittance,
@@ -341,7 +342,8 @@ describe('T-S2-8 ✎S-1 (1) — R1 early handover can never start at a float sto
     expect(r1.variance, 'R1 books the 7,500 as an open overage variance').toBe('7500.00');
     // Verify U: its cash posts to the drawer and the day becomes verified.
     await tillMovement(f, U, '7500.00');
-    await sql`update sales_days set status = 'verified' where org_id = ${f.orgId} and store_id = ${f.storeId} and business_date = ${U}`;
+    const [uDay] = await sql<{ id: string }[]>`select id from sales_days where org_id = ${f.orgId} and store_id = ${f.storeId} and business_date = ${U}`;
+    await forceVerifiedSql(sql, uDay!.id, f.adminId);
     const r3 = await remit(f, { amount: '7500.00' }, '2026-01-07');
     expect(r3.settled).toEqual([{ businessDate: U, amount: '7500.00' }]);
   });
