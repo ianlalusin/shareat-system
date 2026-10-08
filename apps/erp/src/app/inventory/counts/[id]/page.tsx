@@ -5,6 +5,8 @@ import { getCountSessionDetail, type SheetLine } from '../lib';
 import { advanceCountAction, cancelCountAction, commitCountAction, recordCountAction } from '../actions';
 import { requireSession } from '../../../../lib/session';
 import { Page } from '@/components/shell/Page';
+import { FormGrid, Field } from '@/components/ui';
+import { EditableRecord } from '@/components/forms';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -13,6 +15,8 @@ export const dynamic = 'force-dynamic';
 
 const INPUT =
   'w-24 rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm tabular-nums dark:border-neutral-700 dark:bg-neutral-950';
+const INPUT_FULL =
+  'mt-1 block w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm tabular-nums dark:border-neutral-700 dark:bg-neutral-950';
 const BTN =
   'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
 const BTN_SECONDARY =
@@ -49,23 +53,44 @@ function SheetRow({ line, sessionId, editable }: { line: SheetLine; sessionId: s
       </td>
       <td className="py-2 pr-4">
         {editable ? (
-          <form action={recordCountAction} className="flex items-center gap-2">
-            <input type="hidden" name="sessionId" value={sessionId} />
-            <input type="hidden" name="itemId" value={line.itemId} />
-            <input type="hidden" name="locationId" value={line.locationId} />
-            <input
-              name="countedQuantity"
-              required
-              inputMode="decimal"
-              placeholder="0.000"
-              defaultValue={line.countedQuantity ?? ''}
-              className={INPUT}
-            />
-            <span className="text-xs text-neutral-500">{line.baseUnit}</span>
-            <button type="submit" className={BTN_SECONDARY}>
-              Save
-            </button>
-          </form>
+          line.countedQuantity === null ? (
+            <form action={recordCountAction} className="flex items-center gap-2">
+              <input type="hidden" name="sessionId" value={sessionId} />
+              <input type="hidden" name="itemId" value={line.itemId} />
+              <input type="hidden" name="locationId" value={line.locationId} />
+              <input
+                name="countedQuantity"
+                required
+                inputMode="decimal"
+                placeholder="0.000"
+                defaultValue={line.countedQuantity ?? ''}
+                className={INPUT}
+              />
+              <span className="text-xs text-neutral-500">{line.baseUnit}</span>
+              <button type="submit" className={BTN_SECONDARY}>
+                Save
+              </button>
+            </form>
+          ) : (
+            <EditableRecord
+              key={`${line.itemId}:${line.locationId}:${line.countedQuantity}`}
+              action={recordCountAction}
+              label={line.itemName}
+              hidden={{ sessionId, itemId: line.itemId, locationId: line.locationId }}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  name="countedQuantity"
+                  required
+                  inputMode="decimal"
+                  placeholder="0.000"
+                  defaultValue={line.countedQuantity}
+                  className={INPUT}
+                />
+                <span className="text-xs text-neutral-500">{line.baseUnit}</span>
+              </div>
+            </EditableRecord>
+          )
         ) : (
           <span className="tabular-nums">{line.countedQuantity !== null ? `${line.countedQuantity} ${line.baseUnit}` : '—'}</span>
         )}
@@ -174,37 +199,36 @@ export default async function CountSessionPage({
             Found something the ledger has no record of in this room? Add it — it will still show its
             true count against a ledger balance of zero, and post as counted LONG at commit.
           </p>
-          <form action={recordCountAction} className="mt-3 flex flex-wrap items-end gap-2">
+          <form action={recordCountAction} className="mt-3 space-y-3">
             <input type="hidden" name="sessionId" value={detail.id} />
-            <label className="text-xs text-neutral-600 dark:text-neutral-400">
-              Item
-              <select name="itemId" required defaultValue="" className={`${INPUT} w-56`}>
-                <option value="" disabled>
-                  — pick —
-                </option>
-                {detail.addableItems.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name} ({i.baseUnit})
+            <FormGrid>
+              <Field label="Item">
+                <select name="itemId" required defaultValue="" className={INPUT_FULL}>
+                  <option value="" disabled>
+                    — pick —
                   </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs text-neutral-600 dark:text-neutral-400">
-              Room
-              <select name="locationId" required defaultValue={detail.locations[0]?.id ?? ''} className={INPUT}>
-                {detail.locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs text-neutral-600 dark:text-neutral-400">
-              Quantity
-              <input name="countedQuantity" required inputMode="decimal" placeholder="0.000" className={INPUT} />
-            </label>
+                  {detail.addableItems.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.name} ({i.baseUnit})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Room">
+                <select name="locationId" required defaultValue={detail.locations[0]?.id ?? ''} className={INPUT_FULL}>
+                  {detail.locations.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Quantity">
+                <input name="countedQuantity" required inputMode="decimal" placeholder="0.000" className={INPUT_FULL} />
+              </Field>
+            </FormGrid>
             <button type="submit" className={BTN_SECONDARY}>
-              Add
+              Save
             </button>
           </form>
         </section>

@@ -11,6 +11,8 @@ import {
 } from './actions';
 import { listStores, locationsPageData } from './lib';
 import { Page } from '@/components/shell/Page';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid, Field } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -153,35 +155,38 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                     <td className="px-3 py-2">{loc.status}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-col gap-2">
-                        <form
+                        <EditableRecord
                           action={updateLocationAction}
-                          className="grid grid-cols-2 gap-2 sm:grid-cols-3"
+                          label={loc.name}
+                          hidden={{ storeId, id: loc.id }}
                         >
-                          <input type="hidden" name="storeId" value={storeId} />
-                          <input type="hidden" name="id" value={loc.id} />
-                          <input name="name" defaultValue={loc.name} className={`${INPUT} col-span-2 sm:col-span-1`} />
-                          <select name="typeId" defaultValue={loc.typeId} className={INPUT}>
-                            {types.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.name}
-                              </option>
-                            ))}
-                          </select>
-                          {loc.purpose === 'receiving' ? (
-                            <span className="self-center text-xs text-neutral-500">storage (fixed)</span>
-                          ) : (
-                            <select name="role" defaultValue={loc.role} className={INPUT}>
-                              {LOCATION_ROLES.map((r) => (
-                                <option key={r} value={r}>
-                                  {r}
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            <input
+                              name="name"
+                              aria-label="Name"
+                              defaultValue={loc.name}
+                              className={`${INPUT} col-span-2 sm:col-span-1`}
+                            />
+                            <select name="typeId" aria-label="Type" defaultValue={loc.typeId} className={INPUT}>
+                              {types.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.name}
                                 </option>
                               ))}
                             </select>
-                          )}
-                          <button type="submit" className={`${BTN_SM} col-span-2 sm:col-span-3`}>
-                            Save
-                          </button>
-                        </form>
+                            {loc.purpose === 'receiving' ? (
+                              <span className="self-center text-xs text-neutral-500">storage (fixed)</span>
+                            ) : (
+                              <select name="role" aria-label="Role" defaultValue={loc.role} className={INPUT}>
+                                {LOCATION_ROLES.map((r) => (
+                                  <option key={r} value={r}>
+                                    {r}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        </EditableRecord>
                         <div className="flex flex-wrap gap-2">
                           {loc.status === 'active' && !loc.isDefault && (
                             <form action={setDefaultAction}>
@@ -222,52 +227,48 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
             </table>
           </div>
 
-          <form
-            action={createLocationAction}
-            className="grid grid-cols-2 gap-3 border-t border-neutral-200 pt-3 sm:grid-cols-3 dark:border-neutral-800"
-          >
+          <h3 className="border-t border-neutral-200 pt-3 font-medium dark:border-neutral-800">Add a room</h3>
+          <form action={createLocationAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
-            <label className="text-sm">
-              <span className="block text-neutral-600 dark:text-neutral-400">Code</span>
-              <input name="code" required className={`${INPUT} w-full`} />
-            </label>
-            <label className="text-sm">
-              <span className="block text-neutral-600 dark:text-neutral-400">Name</span>
-              <input name="name" required className={`${INPUT} w-full`} />
-            </label>
-            <label className="text-sm">
-              <span className="block text-neutral-600 dark:text-neutral-400">Type</span>
-              <select name="typeId" required defaultValue="" className={`${INPUT} w-full`}>
-                <option value="" disabled>
-                  Select a type
-                </option>
-                {types.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
+            <FormGrid>
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Code</span>} className="text-sm">
+                <input name="code" required className={`${INPUT} w-full`} />
+              </Field>
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>} className="text-sm">
+                <input name="name" required className={`${INPUT} w-full`} />
+              </Field>
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Type</span>} className="text-sm">
+                <select name="typeId" required defaultValue="" className={`${INPUT} w-full`}>
+                  <option value="" disabled>
+                    Select a type
                   </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm">
-              <span className="block text-neutral-600 dark:text-neutral-400">Role</span>
-              <select name="role" defaultValue="storage" className={`${INPUT} w-full`}>
-                {LOCATION_ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="col-span-2 flex items-center gap-2 text-sm sm:col-span-1">
-              <input type="checkbox" name="isReceiving" />
-              This is the Receiving room
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" name="isDefault" />
-              Make it the default
-            </label>
-            <button type="submit" className={`${BTN} col-span-2 sm:col-span-3`}>
-              Add room
+                  {types.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Role</span>} className="text-sm">
+                <select name="role" defaultValue="storage" className={`${INPUT} w-full`}>
+                  {LOCATION_ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="isReceiving" />
+                This is the Receiving room
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="isDefault" />
+                Make it the default
+              </label>
+            </FormGrid>
+            <button type="submit" className={BTN}>
+              Save
             </button>
           </form>
         </section>

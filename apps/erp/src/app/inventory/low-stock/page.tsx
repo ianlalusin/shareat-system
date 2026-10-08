@@ -5,6 +5,7 @@ import { listStores } from '../lib';
 import { setThresholdAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
+import { EditableRecord } from '@/components/forms';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -170,23 +171,41 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
               </td>
               <td className="py-2 pr-4 text-neutral-600 dark:text-neutral-400">{item.baseUnit}</td>
               <td className="py-2">
-                <form action={setThresholdAction} className="flex items-center gap-2">
-                  <input type="hidden" name="storeId" value={storeId} />
-                  <input type="hidden" name="itemId" value={item.id} />
-                  <input
-                    name="threshold"
-                    inputMode="decimal"
-                    defaultValue={thresholdByItem.get(item.id) ?? ''}
-                    placeholder="none"
-                    className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-sm tabular-nums dark:border-neutral-700 dark:bg-neutral-900"
-                  />
-                  <button
-                    type="submit"
-                    className="rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                {thresholdByItem.has(item.id) ? (
+                  <EditableRecord
+                    action={setThresholdAction}
+                    label={`${item.name} threshold`}
+                    hidden={{ storeId, itemId: item.id }}
                   >
-                    Save
-                  </button>
-                </form>
+                    <input
+                      name="threshold"
+                      aria-label={`${item.name} threshold`}
+                      inputMode="decimal"
+                      defaultValue={thresholdByItem.get(item.id) ?? ''}
+                      placeholder="none"
+                      className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-sm tabular-nums dark:border-neutral-700 dark:bg-neutral-900"
+                    />
+                  </EditableRecord>
+                ) : (
+                  <form action={setThresholdAction} className="flex items-center gap-2">
+                    <input type="hidden" name="storeId" value={storeId} />
+                    <input type="hidden" name="itemId" value={item.id} />
+                    <input
+                      name="threshold"
+                      aria-label={`${item.name} threshold`}
+                      inputMode="decimal"
+                      defaultValue={thresholdByItem.get(item.id) ?? ''}
+                      placeholder="none"
+                      className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-sm tabular-nums dark:border-neutral-700 dark:bg-neutral-900"
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                    >
+                      Save
+                    </button>
+                  </form>
+                )}
               </td>
             </tr>
           ))}

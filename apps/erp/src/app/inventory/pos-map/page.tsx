@@ -3,6 +3,7 @@ import { requireSession } from '../../../lib/session';
 import { upsertPosItemMapAction, decideMapRequestAction } from './actions';
 import { listStores, posMapScreenData } from './lib';
 import { Page } from '@/components/shell/Page';
+import { FormGrid, Field } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -108,26 +109,23 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium">New / edit mapping</h2>
-        <form action={upsertPosItemMapAction} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <form action={upsertPosItemMapAction} className="mt-3 space-y-3">
           <input type="hidden" name="storeId" value={storeId} />
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">POS item key</span>
+          <FormGrid>
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">POS item key</span>} className="text-sm">
             <input name="posItemKey" required className={`${INPUT} w-full`} />
-          </label>
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">POS item name</span>
+          </Field>
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">POS item name</span>} className="text-sm">
             <input name="posItemName" required className={`${INPUT} w-full`} />
-          </label>
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Mode</span>
+          </Field>
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Mode</span>} className="text-sm">
             <select name="mode" className={`${INPUT} w-full`} defaultValue="direct">
               <option value="direct">Direct → one stock item</option>
               <option value="recipe">Recipe → ingredients</option>
               <option value="no_stock">Sells, consumes no stock</option>
             </select>
-          </label>
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Stock item (direct)</span>
+          </Field>
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Stock item (direct)</span>} className="text-sm">
             <select name="itemId" className={`${INPUT} w-full`}>
               <option value="">—</option>
               {items.map((i) => (
@@ -136,13 +134,11 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
                 </option>
               ))}
             </select>
-          </label>
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Quantity per sale (direct)</span>
+          </Field>
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Quantity per sale (direct)</span>} className="text-sm">
             <input name="quantityPerSale" defaultValue="1" className={`${INPUT} w-full`} />
-          </label>
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Recipe</span>
+          </Field>
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Recipe</span>} className="text-sm">
             <select name="recipeId" className={`${INPUT} w-full`}>
               <option value="">—</option>
               {recipes.map((r) => (
@@ -151,9 +147,8 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
                 </option>
               ))}
             </select>
-          </label>
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Location override (optional)</span>
+          </Field>
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Location override (optional)</span>} className="text-sm">
             <select name="locationId" className={`${INPUT} w-full`}>
               <option value="">— use the pull&apos;s own location —</option>
               {locations.map((l) => (
@@ -162,16 +157,15 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
                 </option>
               ))}
             </select>
-          </label>
+          </Field>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="confirmShared" value="true" />
             <span>Confirm sharing this stock item across POS items</span>
           </label>
-          <div className="flex flex-wrap items-end gap-y-2">
-            <button type="submit" className={BTN_SM}>
-              Save mapping
-            </button>
-          </div>
+          </FormGrid>
+          <button type="submit" className={BTN_SM}>
+            Save
+          </button>
         </form>
       </section>
 
