@@ -23,10 +23,30 @@ import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..', '..');
 
+// 2026-10-09, T-384 sweep fallout (A6): cutover/count renders each row's box twice - an open ADD form and an EditableRecord
+// EDIT form - so its `name="quantity"` appears in exactly two <input>s. Every other site still appears exactly once.
+// For the two-site file the two tags are joined, so every negative assertion (no type=number/step/min) applies to both.
+const TWO_SITE_FILES = new Set(['apps/erp/src/app/cutover/count/page.tsx']);
+
 function inputTagFor(filePath: string, nameLiteral: string): string {
   const src = readFileSync(resolve(repoRoot, filePath), 'utf8');
   const needle = `name=${nameLiteral}`;
   const occurrences = src.split(needle).length - 1;
+  if (TWO_SITE_FILES.has(filePath)) {
+    expect(occurrences, `"${needle}" must appear exactly twice (add + edit) in ${filePath}`).toBe(2);
+    const tags: string[] = [];
+    let from = 0;
+    for (let k = 0; k < 2; k++) {
+      const idx = src.indexOf(needle, from);
+      from = idx + needle.length;
+      const start = src.lastIndexOf('<input', idx);
+      expect(start, `no preceding <input for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
+      const end = src.indexOf('/>', idx);
+      expect(end, `no self-closing "/>" found for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
+      tags.push(src.slice(start, end + 2));
+    }
+    return tags.join(' | ');
+  }
   expect(occurrences, `"${needle}" must appear exactly once in ${filePath}`).toBe(1);
 
   const nameIdx = src.indexOf(needle);

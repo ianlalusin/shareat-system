@@ -125,11 +125,17 @@ describe('S2-R2 — the Change control is decided PER CHANNEL, at that channel\'
       const cardA = cardFor('Foodpanda A');
       const cardB = cardFor('Foodpanda B');
 
-      expect(cardA, 'store A: the admin is scoped here, Change must show').toMatch(/<summary[^>]*>[\s\S]*Change/i);
+      // 2026-10-09, T-384 sweep fallout (A0): "Change" (a <details>/<summary>) is now the EditableRecord's Edit button,
+      // labelled "Edit <channel> payout account". Same per-store gate: present on A, absent on B.
+      expect(html, 'store A: the admin is scoped here, Edit must show').toMatch(
+        /aria-label="Edit Foodpanda A [^"]* payout account"[^>]*>Edit</,
+      );
       expect(
-        cardB,
-        'store B: the admin is NOT scoped here — Change must NOT show, even though the render is org-wide today',
-      ).not.toMatch(/<summary[^>]*>[\s\S]*Change/i);
+        html,
+        'store B: the admin is NOT scoped here — Edit must NOT show, even though the render is org-wide today',
+      ).not.toMatch(/aria-label="Edit Foodpanda B [^"]* payout account"/);
+      void cardA;
+      void cardB;
     },
     30000,
   );

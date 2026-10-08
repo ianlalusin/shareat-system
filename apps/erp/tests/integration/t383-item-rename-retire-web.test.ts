@@ -187,7 +187,9 @@ describe('W1 - the Name and code form is drawn only for who may use it', () => {
         const html = await detailHtmlAs(f[who], id);
         expect(inputTag(html, 'name')).toBeNull();
         expect(html).not.toMatch(/>Rename</);
-        expect(html).not.toMatch(/aria-label="Edit [^"]*"[^>]*>Edit</);
+        // 2026-10-09, T-384 sweep fallout: the page now carries other EditableRecords (unit, organisation default), so
+        // "no Edit button" is scoped to the RENAME record, whose label is exactly the item name.
+        expect(html).not.toMatch(/aria-label="Edit Coke 1\.5"[^>]*>Edit</);
         expect(decode(html)).toContain(NOT_SUPER_ADMIN);
       },
       60_000,

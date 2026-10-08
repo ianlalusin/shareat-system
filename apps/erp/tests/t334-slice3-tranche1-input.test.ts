@@ -365,7 +365,17 @@ describe('(d) non-converted <select> sites are byte-for-byte unchanged', () => {
         const after = findSelectByName(readCurrent(f.rel), name);
         expect(before, `fixture problem: no <select name="${name}"> at BEFORE_REF in ${f.rel}`).toBeTruthy();
         expect(after, `<select name="${name}"> is missing from ${f.rel} after the change`).toBeTruthy();
-        expect(after).toBe(before);
+        // 2026-10-09, T-384 sweep fallout. Two sweep effects are normalised, nothing else: (1) the width ruling (A0) appended
+        // ` mt-1 w-full` to the className of the staff/hire and staff/[employmentId] selects; (2) wrapping a form in
+        // EditableRecord re-indented expenses/recurring's selects. Per-line leading whitespace is ignored and that one
+        // className suffix is folded back to the bare token; every attribute, <option> and text node is still compared.
+        const norm = (x: string) =>
+          x
+            .replace(/className=\{`\$\{INPUT\} mt-1 w-full`\}/g, 'className={INPUT}')
+            .split('\n')
+            .map((l) => l.trim())
+            .join('\n');
+        expect(norm(after)).toBe(norm(before));
       });
     }
   }
