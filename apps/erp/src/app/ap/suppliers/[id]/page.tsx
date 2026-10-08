@@ -6,6 +6,8 @@ import { getSupplier, getPosition, listOpenItems, listInvoices, moneyAccountsFor
 import { SUPPLIER_CLASSIFICATIONS, SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES } from '@shareat/db';
 import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL } from '../../lib';
 import { Page } from '@/components/shell/Page';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid } from '@/components/ui';
 import { AutoAllocatePaymentForm } from './AutoAllocatePaymentForm';
 import { withFlash } from '@/lib/flash';
 
@@ -83,19 +85,19 @@ export default async function SupplierDetailPage({
           existed in the repo with no caller — so a typo in a name was permanent. */}
       <details className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <summary className="cursor-pointer text-sm font-medium">Edit this supplier</summary>
-        <form action={editSupplierAction} className="mt-4 space-y-4">
-          <input type="hidden" name="supplierId" value={supplier.id} />
+        <EditableRecord action={editSupplierAction} label={supplier.name} hidden={{ supplierId: supplier.id }}>
+          <div className="mt-4 space-y-4">
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <FormGrid>
             <TextField label="Name" name="name" defaultValue={supplier.name} required />
             <TextField label="Representative" name="representativeName" defaultValue={supplier.representativeName} />
             <TextField label="Contact no." name="contactNo" defaultValue={supplier.contactNo} />
             <TextField label="Email" name="email" type="email" defaultValue={supplier.email} />
             <TextField label="Address" name="address" defaultValue={supplier.address} />
             <TextField label="TIN" name="tin" defaultValue={supplier.tin} />
-          </div>
+          </FormGrid>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <FormGrid>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">VAT status</span>
               <select name="vatStatus" defaultValue={supplier.vatStatus ?? ''} className={INPUT}>
@@ -123,7 +125,7 @@ export default async function SupplierDetailPage({
                 ))}
               </select>
             </label>
-          </div>
+          </FormGrid>
 
           {/* ⭐ The one ported field that actually does work: it DEFAULTS the document type on a
               new invoice. The invoice owns its own copy thereafter and may disagree. */}
@@ -188,13 +190,8 @@ export default async function SupplierDetailPage({
 
           <TextField label="Notes" name="notes" defaultValue={supplier.notes} />
 
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-          >
-            Save changes
-          </button>
-        </form>
+          </div>
+        </EditableRecord>
       </details>
 
       {storeOptions.length > 1 && (

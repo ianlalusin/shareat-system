@@ -69,13 +69,13 @@ export default async function SuppliersPage({
       )}
 
       <form className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-[14rem] flex-1 flex-col gap-1">
           <span className={LABEL}>Search</span>
           <input
             name="q"
             defaultValue={q}
             placeholder="Name, TIN, contact, bank…"
-            className={`${INPUT} w-72`}
+            className={INPUT}
           />
         </label>
         <label className="flex items-center gap-2 pb-2 text-sm">

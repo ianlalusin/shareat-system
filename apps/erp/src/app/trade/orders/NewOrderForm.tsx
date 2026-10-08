@@ -10,6 +10,7 @@
  * sees "no default" before the server refuses the line.
  */
 import { useState } from 'react';
+import { FormGrid } from '@/components/ui';
 import type { CustomerOption, ItemOption, StoreOption } from './lib';
 
 interface LineDraft {
@@ -72,9 +73,9 @@ export function NewOrderForm({
     setLines((prev) => (prev.length === 1 ? prev : prev.filter((l) => l.key !== key)));
   }
 
-  const label = 'flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
+  const label = 'flex min-w-0 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
   const field =
-    'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+    'w-full rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
   if (customers.length === 0 || items.length === 0) {
     return (
@@ -88,7 +89,7 @@ export function NewOrderForm({
 
   return (
     <form action={action} className="mt-3 space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <FormGrid>
         <label className={label}>
           Selling store
           <select
@@ -130,7 +131,7 @@ export function NewOrderForm({
           Reference (optional)
           <input name="referenceNo" placeholder="DR-0001" className={field} />
         </label>
-      </div>
+      </FormGrid>
 
       <p
         className={`text-xs ${
@@ -226,7 +227,7 @@ export function NewOrderForm({
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <FormGrid>
         <label className={label}>
           Delivery fee ₱ (optional)
           <input name="deliveryFee" inputMode="decimal" placeholder="0.00" className={`${field} tabular-nums`} />
@@ -239,14 +240,14 @@ export function NewOrderForm({
           Notes (optional)
           <input name="notes" className={field} />
         </label>
-      </div>
+      </FormGrid>
 
       <button
         type="submit"
         disabled={unsupported}
         className="rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
       >
-        Save draft order
+        Save draft
       </button>
     </form>
   );

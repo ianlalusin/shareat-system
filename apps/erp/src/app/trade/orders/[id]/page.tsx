@@ -219,9 +219,9 @@ export default async function TradeOrderPage({
             </p>
           </div>
           {!isInternal && customer.creditLimit !== null && (
-            <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+            <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
               Reason to exceed the {peso(customer.creditLimit)} limit (only if it does)
-              <input name="creditOverrideReason" placeholder="say why, on the record" className={`${INPUT} w-64`} />
+              <input name="creditOverrideReason" placeholder="say why, on the record" className={`${INPUT} w-full`} />
             </label>
           )}
           <button type="submit" className={BTN}>
@@ -268,9 +268,9 @@ export default async function TradeOrderPage({
       {canVoid && (
         <form action={voidOrderAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="orderId" value={order.id} />
-          <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+          <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
             Void — say why
-            <input name="reason" required placeholder="reason" className={`${INPUT} w-64`} />
+            <input name="reason" required placeholder="reason" className={`${INPUT} w-full`} />
           </label>
           <button type="submit" className={BTN_DANGER}>
             Void order

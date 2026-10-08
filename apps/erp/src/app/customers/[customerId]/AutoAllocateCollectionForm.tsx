@@ -224,7 +224,7 @@ export function AutoAllocateCollectionForm({
                 value={value}
                 aria-label={`Amount applied to ${i.referenceNo ?? i.chargeDate}`}
                 onChange={(e) => setAmount(i.chargeId, e.target.value)}
-                className="w-28 rounded border border-neutral-300 bg-white px-2 py-1 text-right dark:border-neutral-700 dark:bg-neutral-950"
+                className="min-w-0 flex-1 basis-28 rounded border border-neutral-300 bg-white px-2 py-1 text-right dark:border-neutral-700 dark:bg-neutral-950"
               />
             </label>
           );

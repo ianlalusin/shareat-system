@@ -257,7 +257,7 @@ export function AutoAllocatePaymentForm({
           const value = amounts[i.expenseId] ?? '';
           const checked = value !== '';
           return (
-            <label key={i.expenseId} className="flex items-center gap-3 text-sm">
+            <label key={i.expenseId} className="flex flex-wrap items-center gap-3 text-sm">
               <input
                 type="checkbox"
                 name="allocateExpenseId"
@@ -265,14 +265,14 @@ export function AutoAllocatePaymentForm({
                 checked={checked}
                 onChange={(e) => setAmount(i.expenseId, e.target.checked ? i.outstanding : '')}
               />
-              <span className="flex-1">{i.particulars} — owed {peso(i.outstanding)}</span>
+              <span className="min-w-0 flex-1 basis-48">{i.particulars} — owed {peso(i.outstanding)}</span>
               <input
                 type="text"
                 inputMode="decimal"
                 name={`allocateAmount_${i.expenseId}`}
                 value={value}
                 onChange={(e) => setAmount(i.expenseId, e.target.value)}
-                className="w-28 rounded border border-neutral-300 bg-white px-2 py-1 text-right dark:border-neutral-700 dark:bg-neutral-950"
+                className="min-w-0 flex-1 basis-28 rounded border border-neutral-300 bg-white px-2 py-1 text-right dark:border-neutral-700 dark:bg-neutral-950"
               />
             </label>
           );

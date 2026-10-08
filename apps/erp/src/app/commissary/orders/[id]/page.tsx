@@ -21,6 +21,8 @@ import {
 } from './actions';
 import { BRANCH_ORDER_STAGE_LABEL, actorStoreIds, orderView, peso, today, type OrderView } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -195,7 +197,7 @@ export default async function BranchOrderPage({
               <input name="rate" inputMode="decimal" className={`${INPUT} tabular-nums`} />
             </label>
             <button type="submit" className={BTN_SECONDARY}>
-              Add
+              Save
             </button>
           </form>
           <div className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
@@ -332,9 +334,9 @@ export default async function BranchOrderPage({
       {((draft || stage === 'submitted' || packing) && (branchSide || commissarySide)) && (
         <form action={withdrawOrderAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="orderId" value={order.id} />
-          <label className={LABEL}>
+          <label className={`${LABEL} min-w-[14rem] flex-1`}>
             {branchSide ? 'Withdraw this order — say why' : 'Cancel this order — say why'}
-            <input name="reason" required placeholder="reason" className={`${INPUT} w-64`} />
+            <input name="reason" required placeholder="reason" className={`${INPUT} w-full`} />
           </label>
           <button type="submit" className={BTN_DANGER}>
             {branchSide ? 'Withdraw' : 'Cancel order'}
@@ -345,9 +347,9 @@ export default async function BranchOrderPage({
       {stage === 'dispatched' && commissarySide && !receiving && (
         <form action={withdrawOrderAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="orderId" value={order.id} />
-          <label className={LABEL}>
+          <label className={`${LABEL} min-w-[14rem] flex-1`}>
             Void the dispatch — say why
-            <input name="reason" required placeholder="truck never left" className={`${INPUT} w-64`} />
+            <input name="reason" required placeholder="truck never left" className={`${INPUT} w-full`} />
           </label>
           <button type="submit" className={BTN_DANGER}>
             Void dispatch
@@ -432,9 +434,9 @@ function RejectForm({ orderId }: { orderId: string }) {
   return (
     <form action={rejectOrderAction} className="flex flex-wrap items-end gap-2">
       <input type="hidden" name="orderId" value={orderId} />
-      <label className={LABEL}>
+      <label className={`${LABEL} min-w-[14rem] flex-1`}>
         Reject — say why
-        <input name="reason" required placeholder="the branch reads this" className={`${INPUT} w-56`} />
+        <input name="reason" required placeholder="the branch reads this" className={`${INPUT} w-full`} />
       </label>
       <button type="submit" className={BTN_DANGER}>
         Reject
@@ -519,21 +521,20 @@ function LineCard({
 
       {editAsk && (
         <div className="mt-3 flex flex-wrap items-end gap-2">
-          <form action={updateLineAction} className="flex flex-wrap items-end gap-2">
-            <input type="hidden" name="orderId" value={order.id} />
-            <input type="hidden" name="lineId" value={l.id} />
-            <label className={LABEL}>
-              Quantity ({l.unit})
-              <input name="quantity" inputMode="decimal" defaultValue={l.requestedQuantity ?? l.quantity} className={`${INPUT} w-28 tabular-nums`} />
-            </label>
-            <label className={LABEL}>
-              Rate ₱
-              <input name="rate" inputMode="decimal" defaultValue={l.rate} className={`${INPUT} w-28 tabular-nums`} />
-            </label>
-            <button type="submit" className={BTN_SECONDARY}>
-              Save
-            </button>
-          </form>
+          <div className="min-w-[14rem] flex-1">
+            <EditableRecord action={updateLineAction} label={`${l.itemName} line`} hidden={{ orderId: order.id, lineId: l.id }}>
+              <FormGrid>
+                <label className={`${LABEL} min-w-0`}>
+                  Quantity ({l.unit})
+                  <input name="quantity" inputMode="decimal" defaultValue={l.requestedQuantity ?? l.quantity} className={`${INPUT} w-full tabular-nums`} />
+                </label>
+                <label className={`${LABEL} min-w-0`}>
+                  Rate ₱
+                  <input name="rate" inputMode="decimal" defaultValue={l.rate} className={`${INPUT} w-full tabular-nums`} />
+                </label>
+              </FormGrid>
+            </EditableRecord>
+          </div>
           <form action={removeLineAction}>
             <input type="hidden" name="orderId" value={order.id} />
             <input type="hidden" name="lineId" value={l.id} />
@@ -545,32 +546,62 @@ function LineCard({
       )}
 
       {editPack && (
-        <form action={fulfilLineAction} className="mt-3 flex flex-wrap items-end gap-2">
-          <input type="hidden" name="orderId" value={order.id} />
-          <input type="hidden" name="lineId" value={l.id} />
-          <label className={LABEL}>
-            Send ({l.unit}) — 0 means none
-            <input name="quantity" inputMode="decimal" defaultValue={packed ?? l.quantity} className={`${INPUT} w-28 tabular-nums`} />
-          </label>
-          <label className={LABEL}>
-            Rate ₱
-            <input name="rate" inputMode="decimal" defaultValue={l.rate} className={`${INPUT} w-28 tabular-nums`} />
-          </label>
-          <label className={LABEL}>
-            From room
-            <select name="sourceLocationId" defaultValue={l.sourceLocationId ?? ''} className={INPUT}>
-              <option value="">default room</option>
-              {rooms.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" className={BTN_SECONDARY}>
-            Save
-          </button>
-        </form>
+        <div className="mt-3">
+          {packed !== null ? (
+            <EditableRecord action={fulfilLineAction} label={`${l.itemName} packing`} hidden={{ orderId: order.id, lineId: l.id }}>
+              <FormGrid>
+              <label className={`${LABEL} min-w-0`}>
+                Send ({l.unit}) — 0 means none
+                <input name="quantity" inputMode="decimal" defaultValue={packed ?? l.quantity} className={`${INPUT} w-full tabular-nums`} />
+              </label>
+              <label className={`${LABEL} min-w-0`}>
+                Rate ₱
+                <input name="rate" inputMode="decimal" defaultValue={l.rate} className={`${INPUT} w-full tabular-nums`} />
+              </label>
+              <label className={`${LABEL} min-w-0`}>
+                From room
+                <select name="sourceLocationId" defaultValue={l.sourceLocationId ?? ''} className={`${INPUT} w-full`}>
+                  <option value="">default room</option>
+                  {rooms.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </FormGrid>
+            </EditableRecord>
+          ) : (
+            <form action={fulfilLineAction}>
+              <input type="hidden" name="orderId" value={order.id} />
+              <input type="hidden" name="lineId" value={l.id} />
+              <FormGrid>
+              <label className={`${LABEL} min-w-0`}>
+                Send ({l.unit}) — 0 means none
+                <input name="quantity" inputMode="decimal" defaultValue={packed ?? l.quantity} className={`${INPUT} w-full tabular-nums`} />
+              </label>
+              <label className={`${LABEL} min-w-0`}>
+                Rate ₱
+                <input name="rate" inputMode="decimal" defaultValue={l.rate} className={`${INPUT} w-full tabular-nums`} />
+              </label>
+              <label className={`${LABEL} min-w-0`}>
+                From room
+                <select name="sourceLocationId" defaultValue={l.sourceLocationId ?? ''} className={`${INPUT} w-full`}>
+                  <option value="">default room</option>
+                  {rooms.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </FormGrid>
+              <button type="submit" className={`mt-3 ${BTN_SECONDARY}`}>
+                Save
+              </button>
+            </form>
+          )}
+        </div>
       )}
 
       {pending && (stage === 'accepted' || stage === 'ready') && branchSide && (
@@ -590,9 +621,9 @@ function LineCard({
       {receiving && !declined && packed !== null && compareQuantity(quantity(packed), ZERO_QUANTITY) > 0 && !l.isLedgerOnly && (
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <input type="hidden" name="lineId" value={l.id} />
-          <label className={LABEL}>
+          <label className={`${LABEL} min-w-[7rem] flex-1`}>
             Signed for ({l.unit})
-            <input name="receivedQuantity" inputMode="decimal" defaultValue={packed} className={`${INPUT} w-28 tabular-nums`} />
+            <input name="receivedQuantity" inputMode="decimal" defaultValue={packed} className={`${INPUT} w-full tabular-nums`} />
           </label>
           <label className={LABEL}>
             If short: why?
