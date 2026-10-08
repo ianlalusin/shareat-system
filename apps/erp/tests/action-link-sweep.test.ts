@@ -378,7 +378,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1147 -> 1145, T-384 sweep integration 2026-10-09. -2, found by running the census: the sweep (full-width FormGrid/Field,
     // EditableRecord wrapping, "Save"/"Save draft" submit renames) removed two controls net of those EditableRecord adds.
     // FAIL / UNRESOLVED assertions unmoved (they pass). Verified by running the census (1145).
-    expect(results.length).toBe(1145);
+    // 1145 -> 1146, T-384 audit-fix 2026-10-09. +1: a sales day with no saved platform rows renders the open add form's
+    // "Save" `<button>` (A6). FAIL 151 / UNRESOLVED 62 unmoved. Verified by running the census (1146).
+    expect(results.length).toBe(1146);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
