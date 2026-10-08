@@ -52,10 +52,15 @@ const sql = postgres(url, { max: 5 });
 let seq = 0;
 const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 
-const NOT_SUPER_ADMIN = 'Only a super-admin can rename, retire or restore an item.';
+// Until S2 lands managers can still retire (deactivateItem), so the sentence names only the rename.
+const NOT_SUPER_ADMIN = 'Only a super-admin can rename an item.';
 const DUP_NAME =
   'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, rename the existing item on its page first.';
 const DUP_CODE = "That item code is already in use. To reuse it, change the existing item's code on its page first.";
+// Shared by createItem and the request actions: the readers are not all super-admins, so no 'on its page' hint.
+const SHARED_DUP_NAME =
+  'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, ask a super-admin to rename the existing item first.';
+const SHARED_DUP_CODE = "That item code is already in use. To reuse it, ask a super-admin to change the existing item's code first.";
 const BLANK_NAME = 'Give the item a name people will recognise.';
 const BLANK_CODE = 'Give the item a code.';
 
@@ -260,11 +265,27 @@ describe('W3 - the create form tells you how to reuse a taken name or code', () 
       const byName = await redirectOf(() =>
         actions.createItemAction(form({ code: 'NEW1', name: 'coke 1.5', kind: 'raw_material', baseUnit: 'pcs' })),
       );
-      expect(param(byName, 'error')).toBe(DUP_NAME);
+      expect(param(byName, 'error')).toBe(SHARED_DUP_NAME);
       const byCode = await redirectOf(() =>
         actions.createItemAction(form({ code: 'COKE15', name: 'Something else', kind: 'raw_material', baseUnit: 'pcs' })),
       );
-      expect(param(byCode, 'error')).toBe(DUP_CODE);
+      expect(param(byCode, 'error')).toBe(SHARED_DUP_CODE);
+    },
+    60_000,
+  );
+
+  it(
+    "W3b: a manager who submits the duplicate (createItemAction; requestItemAction accepts an exact duplicate as a request, so it raises no duplicate error) is never told to rename 'on its page' (they cannot). Guards the shared errorMessage against leaking the page hint to non-super-admins. Green against a2fd5c3 (their refusal is an authorization sentence); kept as the regression guard",
+    async () => {
+      const f = await fixture('w3b');
+      await insertItem(f, 'Coke 1.5', 'COKE15');
+      ACTOR_HOLDER.actor = f.manager;
+      const to = await redirectOf(() =>
+        actions.createItemAction(form({ code: 'COKE15', name: 'Coke 1.5', kind: 'raw_material', baseUnit: 'pcs' })),
+      );
+      const err = param(to, 'error') ?? '';
+      expect(err).not.toBe('');
+      expect(err).not.toContain('on its page');
     },
     60_000,
   );

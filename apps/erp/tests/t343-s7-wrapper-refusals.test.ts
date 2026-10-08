@@ -753,9 +753,9 @@ describe('K1 (⛔) — a non-presentable error still hits its kept local branch,
       fd.set('kind', 'raw_material');
       fd.set('baseUnit', 'kg');
       const to = await expectRedirectTo(() => createItemAction(fd));
-      // T-383 S1 (R4): the sentence now carries the way out.
+      // T-383 S1 (R4, audit round): the shared sentence carries the way out for any reader: ask a super-admin.
       expect(errorOf(to)).toBe(
-        'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, rename the existing item on its page first.',
+        'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, ask a super-admin to rename the existing item first.',
       );
     },
     30000,
