@@ -6,6 +6,8 @@ import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid, Field } from '@/components/ui';
 
 export const metadata = { title: 'Opening count — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -115,18 +117,14 @@ export default async function CountPage({
 
       <div className="space-y-2">
         {rows.map((r) => (
-          <form
+          <div
             key={r.itemId}
-            action={recordCountAction}
             className={`rounded-lg border p-3 ${
               r.quantity === null
                 ? 'border-amber-300 dark:border-amber-800'
                 : 'border-neutral-200 dark:border-neutral-800'
             }`}
           >
-            <input type="hidden" name="storeId" value={storeId} />
-            <input type="hidden" name="itemId" value={r.itemId} />
-
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="font-medium">{r.name}</span>
               <span className="text-xs text-neutral-500 dark:text-neutral-500">
@@ -134,37 +132,71 @@ export default async function CountPage({
               </span>
             </div>
 
-            {/* Touch-first: full-width inputs, a real submit button per row, nothing on hover. */}
-            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
-              <label className="block">
-                <span className="sr-only">Quantity in {r.baseUnit}</span>
-                <input
-                  name="quantity"
-                  required
-                  defaultValue={r.quantity ?? ''}
-                  placeholder={`Quantity (${r.baseUnit})`}
-                  inputMode="decimal"
-                  className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-                />
-              </label>
-              <label className="block">
-                <span className="sr-only">Cost per {r.baseUnit}</span>
-                <input
-                  name="unitCost"
-                  defaultValue={r.unitCost ?? ''}
-                  placeholder={`Cost per ${r.baseUnit}`}
-                  inputMode="decimal"
-                  className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-                />
-              </label>
-              <button
-                type="submit"
-                className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
-              >
-                Save
-              </button>
+            {/* T-384 A0: a row with no saved count is an ADD: open, ending in Save. A saved count is locked until Edit
+                (keyed on the stored figures so a save comes back locked and showing them). */}
+            <div className="mt-2">
+              {r.quantity === null ? (
+                <form action={recordCountAction}>
+                  <input type="hidden" name="storeId" value={storeId} />
+                  <input type="hidden" name="itemId" value={r.itemId} />
+                  <FormGrid>
+                    <Field label={<span className="sr-only">Quantity in {r.baseUnit}</span>}>
+                      <input
+                        name="quantity"
+                        required
+                        placeholder={`Quantity (${r.baseUnit})`}
+                        inputMode="decimal"
+                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                      />
+                    </Field>
+                    <Field label={<span className="sr-only">Cost per {r.baseUnit}</span>}>
+                      <input
+                        name="unitCost"
+                        placeholder={`Cost per ${r.baseUnit}`}
+                        inputMode="decimal"
+                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                      />
+                    </Field>
+                  </FormGrid>
+                  <button
+                    type="submit"
+                    className="mt-3 rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+                  >
+                    Save
+                  </button>
+                </form>
+              ) : (
+                <EditableRecord
+                  key={`${r.itemId}:${r.quantity}:${r.unitCost ?? ''}`}
+                  action={recordCountAction}
+                  label={r.name}
+                  hidden={{ storeId, itemId: r.itemId }}
+                >
+                  <FormGrid>
+                    <Field label={<span className="sr-only">Quantity in {r.baseUnit}</span>}>
+                      <input
+                        name="quantity"
+                        required
+                        defaultValue={r.quantity}
+                        placeholder={`Quantity (${r.baseUnit})`}
+                        inputMode="decimal"
+                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                      />
+                    </Field>
+                    <Field label={<span className="sr-only">Cost per {r.baseUnit}</span>}>
+                      <input
+                        name="unitCost"
+                        defaultValue={r.unitCost ?? ''}
+                        placeholder={`Cost per ${r.baseUnit}`}
+                        inputMode="decimal"
+                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                      />
+                    </Field>
+                  </FormGrid>
+                </EditableRecord>
+              )}
             </div>
-          </form>
+          </div>
         ))}
       </div>
 
