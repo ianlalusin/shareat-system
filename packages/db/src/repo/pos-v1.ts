@@ -669,7 +669,11 @@ export interface TenderRow {
   readonly moneyAccountId: string | null;
   readonly posV1Alias: string | null;
   readonly isActive: boolean;
+  /** R1: microseconds of coalesce(updated_at, created_at), as text. A fresh row (updated_at NULL) still has one. */
+  readonly version: string;
 }
+
+const tenderVersionSql = sql<string>`(extract(epoch from coalesce(${tenders.updatedAt}, ${tenders.createdAt})) * 1000000)::bigint::text`;
 
 const tenderColumns = {
   id: tenders.id,
@@ -680,6 +684,7 @@ const tenderColumns = {
   moneyAccountId: tenders.moneyAccountId,
   posV1Alias: tenders.posV1Alias,
   isActive: tenders.isActive,
+  version: tenderVersionSql.as('version'),
 };
 
 export async function getTenderById(tx: Tx, orgId: string, id: string): Promise<TenderRow | undefined> {
@@ -749,14 +754,29 @@ export async function insertTender(tx: Tx, input: InsertTenderInput): Promise<{ 
 
 export interface UpdateTenderPatch {
   readonly name?: string;
+  readonly kind?: TenderKind;
   readonly posV1Alias?: string | null;
   readonly moneyAccountId?: string | null;
   readonly isActive?: boolean;
 }
 
-export async function updateTenderRow(tx: Tx, orgId: string, id: string, patch: UpdateTenderPatch): Promise<void> {
-  await tx
+/**
+ * Returns the number of rows changed. With `expectedVersion` the row is written only if its version still equals it
+ * (R1), so 0 means "changed since the page was drawn" (or gone).
+ */
+export async function updateTenderRow(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  patch: UpdateTenderPatch,
+  expectedVersion?: string,
+): Promise<number> {
+  const conds = [eq(tenders.orgId, orgId), eq(tenders.id, id)];
+  if (expectedVersion !== undefined) conds.push(sql`${tenderVersionSql} = ${expectedVersion}`);
+  const rows = await tx
     .update(tenders)
     .set({ ...patch, updatedAt: sql`now()` })
-    .where(and(eq(tenders.orgId, orgId), eq(tenders.id, id)));
+    .where(and(...conds))
+    .returning({ id: tenders.id });
+  return rows.length;
 }
