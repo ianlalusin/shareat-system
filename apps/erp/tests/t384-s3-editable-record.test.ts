@@ -15,12 +15,23 @@
  *   createEditRegistry() -> { register(entry): () => void; requestEdit(id): { allowed: boolean; message?: string; blockedBy?: string } }
  *   entry = { id: string; isDirty(): boolean; close(): void }. A record registers when it ENTERS edit mode and
  *   the returned function unregisters it (cancel / saved). The component keeps one module-level instance.
+ *   AUDIT-ROUND EXPORTS (the builder adds these; the tests below fail until it does):
+ *   runEditableAction(action, formData, dispatch): Promise<void>  - awaits the action; dispatches {type:'saved'}
+ *     ONLY on success. A throw, or a returned error result ({ ok: false } or a truthy `error`), must NOT lock
+ *     the record (the user's edits stay on screen); a throw is rethrown or swallowed, either is accepted.
+ *   selectIsDirty(options: {selected:boolean; defaultSelected:boolean}[], multiple: boolean): boolean
+ *     - a single <select> with no defaultSelected option has its FIRST option as the browser default.
+ *   EditableRecordView(props & { mode: 'locked'|'editing'; message?: string|null; onEdit?; onCancel?;
+ *     formRef?; editRef? }) - the presentational tree, rendered with no hooks, so editing is reachable in SSR.
+ *   The registry key is per INSTANCE (useId), never hidden.id / label (two records may share both).
  *   props: action, label, hidden: Record<string,string>, children, extra?, saveLabel?: 'Save' | 'Save draft'
  *   (hidden is a name->value map; the component renders one <input type="hidden"> per entry).
  */
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 const L3 = 'Save or cancel the changes you are making first.';
 const load = async () => await import('../src/components/ui/EditableRecord');
@@ -62,17 +73,36 @@ describe('E1: editableRecordReducer', () => {
   });
 });
 
+/**
+ * Server-render under a console spy. React 18 (what vitest resolves) warns "Invalid value for prop `action`" for
+ * a function action; that is a test-environment artefact, so it is dropped. ANY other console.error fails the test
+ * so a real warning is never hidden behind the known one.
+ */
+function quietly<T>(fn: () => T): T {
+  const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const out = fn();
+    const real = spy.mock.calls.filter((c) => !String(c[0]).includes('Invalid value for prop'));
+    expect(real).toEqual([]);
+    return out;
+  } finally {
+    spy.mockRestore();
+  }
+}
+
 describe('E2: locked render (renderToStaticMarkup)', () => {
   const render = async (extra?: unknown) => {
     const { EditableRecord } = await load();
-    return renderToStaticMarkup(
-      createElement(EditableRecord as never, {
-        action: async () => {},
-        label: 'Gcash',
-        hidden: { id: 't-1', storeId: 's-1', version: '3' },
-        extra: extra ?? undefined,
-        children: createElement('input', { name: 'name', defaultValue: 'Gcash' }),
-      } as never),
+    return quietly(() =>
+      renderToStaticMarkup(
+        createElement(EditableRecord as never, {
+          action: async () => {},
+          label: 'Gcash',
+          hidden: { id: 't-1', storeId: 's-1', version: '3' },
+          extra: extra ?? undefined,
+          children: createElement('input', { name: 'name', defaultValue: 'Gcash' }),
+        } as never),
+      ),
     );
   };
 
@@ -98,12 +128,6 @@ describe('E2: locked render (renderToStaticMarkup)', () => {
   it('does not render `extra` while locked', async () => {
     const html = await render(createElement('button', { type: 'submit' }, 'RETIRE-MARKER'));
     expect(html).not.toContain('RETIRE-MARKER');
-  });
-  it('named mutant: if <fieldset> lost `disabled` this test is the one that goes red', async () => {
-    // Pins the mutant on a literal so the assertion cannot silently weaken: the guarded string must be
-    // present in the real render and absent from a fieldset without the attribute.
-    expect('<fieldset class="min-w-0">').not.toContain('<fieldset disabled');
-    expect(await render()).toContain('<fieldset disabled');
   });
 });
 
@@ -154,5 +178,109 @@ describe('E1b: the page-level registry (one record in edit mode at a time, L3)',
     expect(r.requestEdit('a')).toEqual({ allowed: true });
     off();
     expect(r.requestEdit('b')).toEqual({ allowed: true });
+  });
+});
+
+describe('E4: run() locks only on success (audit A1)', () => {
+  const fd = new FormData();
+  it('a resolved action dispatches saved', async () => {
+    const { runEditableAction } = await load();
+    const dispatch = vi.fn();
+    await runEditableAction(async () => {}, fd, dispatch);
+    expect(dispatch).toHaveBeenCalledWith({ type: 'saved' });
+  });
+  it('a THROWING action does not dispatch saved', async () => {
+    const { runEditableAction } = await load();
+    const dispatch = vi.fn();
+    await runEditableAction(async () => { throw new Error('refused'); }, fd, dispatch).catch(() => {});
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+  it('an action returning { ok: false } or { error } does not dispatch saved', async () => {
+    const { runEditableAction } = await load();
+    for (const result of [{ ok: false }, { error: 'No.' }]) {
+      const dispatch = vi.fn();
+      await runEditableAction((async () => result) as never, fd, dispatch).catch(() => {});
+      expect(dispatch, JSON.stringify(result)).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe('E5: selectIsDirty (audit A2)', () => {
+  const o = (selected: boolean, defaultSelected = false) => ({ selected, defaultSelected });
+  it('an untouched single select with no defaultSelected (browser picks the first option) is NOT dirty', async () => {
+    const { selectIsDirty } = await load();
+    expect(selectIsDirty([o(true), o(false), o(false)], false)).toBe(false);
+  });
+  it('moving a no-default single select off its first option IS dirty', async () => {
+    const { selectIsDirty } = await load();
+    expect(selectIsDirty([o(false), o(true), o(false)], false)).toBe(true);
+  });
+  it('a single select left on its defaultSelected option is not dirty; moved off it is', async () => {
+    const { selectIsDirty } = await load();
+    expect(selectIsDirty([o(false), o(true, true)], false)).toBe(false);
+    expect(selectIsDirty([o(true), o(false, true)], false)).toBe(true);
+  });
+  it('a multiple select is dirty when any option differs from its default', async () => {
+    const { selectIsDirty } = await load();
+    expect(selectIsDirty([o(false), o(false)], true)).toBe(false);
+    expect(selectIsDirty([o(true), o(false)], true)).toBe(true);
+  });
+});
+
+describe('E6: the editing render (audit B6), through EditableRecordView', () => {
+  const view = async (mode: 'locked' | 'editing') => {
+    const { EditableRecordView } = await load();
+    return quietly(() =>
+      renderToStaticMarkup(
+        createElement(EditableRecordView as never, {
+          mode,
+          action: async () => {},
+          label: 'Gcash',
+          hidden: { id: 't-1', version: '3' },
+          extra: createElement('button', { type: 'submit' }, 'RETIRE-MARKER'),
+          saveLabel: 'Save',
+          children: createElement('input', { name: 'name', defaultValue: 'Gcash' }),
+        } as never),
+      ),
+    );
+  };
+  it('editing: the fieldset is enabled, Save (submit) and Cancel (button) are present, Edit is gone', async () => {
+    const html = await view('editing');
+    expect(html).toContain('<fieldset');
+    expect(html).not.toContain('<fieldset disabled');
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*>\s*Save\s*<\/button>/);
+    expect(html).toMatch(/<button[^>]*type="button"[^>]*>\s*Cancel\s*<\/button>/);
+    expect(html).not.toContain('aria-label="Edit Gcash"');
+  });
+  it('editing: extra is rendered; locked: it is not', async () => {
+    expect(await view('editing')).toContain('RETIRE-MARKER');
+    expect(await view('locked')).not.toContain('RETIRE-MARKER');
+  });
+  it('the version hidden input is present in editing AND sits outside (before) the fieldset', async () => {
+    for (const mode of ['editing', 'locked'] as const) {
+      const html = await view(mode);
+      const v = html.search(/<input[^>]*name="version"/);
+      expect(v, mode).toBeGreaterThanOrEqual(0);
+      expect(v, mode).toBeLessThan(html.indexOf('<fieldset'));
+    }
+  });
+  it('mutant pair: locked has `<fieldset disabled`, editing does not', async () => {
+    expect(await view('locked')).toContain('<fieldset disabled');
+    expect(await view('editing')).not.toContain('<fieldset disabled');
+  });
+});
+
+describe('E7: the registry key is per instance (audit A4)', () => {
+  const src = readFileSync(resolve(__dirname, '..', 'src', 'components', 'ui', 'EditableRecord.tsx'), 'utf8');
+  it('derives the key from useId(), not from hidden.id or the label', () => {
+    expect(src).toMatch(/useId\(\)/);
+    expect(src).not.toMatch(/hidden\.id\s*\?\?/);
+    expect(src).not.toMatch(/const id = [^;]*label/);
+  });
+  it('two entries with identical display data but different instance keys still block each other', async () => {
+    const { createEditRegistry } = await load();
+    const r = createEditRegistry();
+    r.register({ id: 'inst-1', isDirty: () => true, close() {} });
+    expect(r.requestEdit('inst-2')).toMatchObject({ allowed: false, blockedBy: 'inst-1' });
   });
 });

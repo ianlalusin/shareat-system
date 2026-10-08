@@ -8,6 +8,9 @@
  *      reads a record (`ident.x` or `ident?.x`) must be rendered through `<EditableRecord` (an ancestor
  *      JSX element), or its file must be in EXEMPT with a reason. A raw form is the edit-in-place
  *      shape A0 outlaws.
+ *      Audit round: hidden names id / *Id / version / code / slug; defaults from ANY variable (destructured
+ *      included); `src/components/**` is scanned as well as `src/app/**` (keys prefixed `components/`); a
+ *      form inside the `extra={...}` prop of EditableRecord still counts.
  *  G8  Every submit label (`<button type="submit">`, a `<button>` with no type, `<input type=submit>`)
  *      and the LAST button of every non-GET form must be exactly "Save" / "Save draft", a COMMANDS
  *      verb (L5, each with a reason) or a TOGGLES pair. "Add ...", "Create ...", "Update" and
@@ -26,6 +29,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const APP_ROOT = resolve(__dirname, '..', 'src', 'app');
+const COMPONENTS_ROOT = resolve(__dirname, '..', 'src', 'components');
 const rel = (f: string) => relative(APP_ROOT, f).replace(/\\/g, '/');
 
 /** Files whose raw record-bound form is deliberate. Each needs a reason. Empty at the end of S3b. */
@@ -33,8 +37,8 @@ const EXEMPT: Record<string, string> = {};
 
 /**
  * L5 / Q2 = a (Ian; orchestrator ruling 2026-10-08). A COMMAND posts money, moves stock, changes a record's
- * status, or grants / revokes access, and keeps its own verb. A key ending in " *" matches that verb followed
- * by anything ("Void *" matches "Void payment"); any other key matches the whole label. Plain data entry
+ * status, or grants / revokes access, and keeps its own verb. Every key is an EXACT label as it appears in app/ (audit round: no prefix matching, so
+ * "Post the opening balances" and a new "Post x" are judged separately). Plain data entry
  * (Save X, Set X, Add / Create / Record X on master data, Rename, Hire) is NOT here: it must say Save.
  */
 const COMMANDS: Record<string, string> = {
@@ -47,76 +51,104 @@ const COMMANDS: Record<string, string> = {
   'Record obligation': 'books a liability',
   'Record prepaid item': 'books a prepayment',
   'Record handover': 'books a cash handover',
-  Record: 'books a payout (cash-requests)',
-  'Post *': 'posts to the ledger',
-  'Pay *': 'books a payment',
-  'Charge *': 'books a charge',
-  'Reverse *': 'reverses a posting',
-  'Refund *': 'books a refund',
-  'Distribute *': 'distributes money',
-  'Write *': 'writes an amount off',
-  'Recognise *': 'books income',
+  'Record': 'books a payout (cash-requests)',
+  'Post': 'posts to the ledger',
+  'Post correction': 'posts to the ledger',
+  'Post payout(s)': 'posts to the ledger',
+  'Post payslip(s)': 'posts to the ledger',
+  'Post separation': 'posts to the ledger',
+  'Post the opening balances': 'posts to the ledger',
+  'Post this settlement': 'posts to the ledger',
+  'Pay': 'books a payment',
+  'Charge': 'books a charge',
+  'Charge to 1230': 'books a charge',
+  'Reverse': 'reverses a posting',
+  'Reverse — then resolve again with the correct disposition': 'reverses a posting',
+  'Refund': 'books a refund',
+  'Distribute': 'distributes money',
+  'Write it off': 'writes an amount off',
+  'Write off to 6860': 'writes an amount off',
+  'Recognise as other income (7350)': 'books income',
   'Book it': 'books a posting',
-  'Transfer *': 'moves stock',
-  'Receive *': 'receives stock',
-  'Dispatch *': 'dispatches stock',
-  'Return *': 'returns stock or goods',
-  'Dispose *': 'disposes of an asset',
-  'Approve *': 'moves a status',
-  'Accept *': 'moves a status',
-  'Reject *': 'moves a status',
-  'Decline *': 'moves a status',
-  'Refuse *': 'moves a status',
-  'Decide *': 'moves a status',
-  'Defer *': 'moves a status',
-  'Verify *': 'moves a status',
-  'Void *': 'voids a document',
-  void: 'voids a document',
+  'Transfer': 'moves stock',
+  'Receive': 'receives stock',
+  'Dispatch': 'dispatches stock',
+  'Return': 'returns stock or goods',
+  'Dispose this asset': 'disposes of an asset',
+  'Approve': 'moves a status',
+  'Approve &amp; post': 'moves a status',
+  'Approve (no stock)': 'moves a status',
+  'Accept': 'moves a status',
+  'Accept for now': 'moves a status',
+  'Reject': 'moves a status',
+  'Decline': 'moves a status',
+  'Refuse': 'moves a status',
+  'Decide': 'moves a status',
+  'Defer': 'moves a status',
+  'Verify': 'moves a status',
+  'Verify &amp; post': 'moves a status',
+  'Verify &mdash; all four must be checked': 'moves a status',
+  'Void': 'voids a document',
+  'Void charge': 'voids a document',
+  'Void dispatch': 'voids a document',
+  'Void order': 'voids a document',
+  'Void payment': 'voids a document',
+  'Void this pull': 'voids a document',
+  'Void — cascades through every linked expense': 'voids a document',
+  'void': 'voids a document',
   'Cancel count': 'moves a status',
-  'Commit *': 'commits a count',
-  'Close *': 'moves a status',
-  'Confirm *': 'confirms a status change',
+  'Commit': 'commits a count',
+  'Close': 'moves a status',
+  'Close shift': 'moves a status',
+  'Confirm term': 'confirms a status change',
   'I confirm this is done': 'confirms a cutover step',
-  'Finalize *': 'moves a status',
-  'Finish *': 'moves a status',
-  'Mark *': 'moves a status',
-  Propose: 'moves a status',
-  'Submit *': 'moves a status',
-  Resolve: 'moves a status',
-  'Dispute *': 'moves a status',
-  Override: 'overrides a verified day',
+  'Finalize': 'moves a status',
+  'Finish this pull — nothing left to post': 'moves a status',
+  'Mark paid by the platform — posts nothing': 'moves a status',
+  'Mark ready': 'moves a status',
+  'Propose': 'moves a status',
+  'Submit': 'moves a status',
+  'Submit request': 'moves a status',
+  'Submit to': 'moves a status',
+  'Resolve': 'moves a status',
+  'Dispute — flag for review, does not stop the 15-day clock': 'moves a status',
+  'Override': 'overrides a verified day',
   '\u2192 Move to reviewing': 'moves a status',
   'Flag as unmappable': 'moves a status',
   'Open branch': 'opening a store is a status change',
   'Create the missing month': 'creates a period',
   'Make default': 'changes which record is default',
-  'Delete *': 'deletes a record',
-  'Discard *': 'discards a record',
-  'Remove *': 'removes a link or cap',
-  'Release *': 'releases money held',
-  'Withdraw *': 'withdraws a request',
-  Link: 'links records',
-  Pair: 'pairs a device',
-  'Revoke *': 'revokes access',
-  'Grant *': 'grants access',
+  'Delete': 'deletes a record',
+  'Delete draft': 'deletes a record',
+  'Discard': 'discards a record',
+  'Remove': 'removes a link or cap',
+  'Remove cap': 'removes a link or cap',
+  'Release': 'releases money held',
+  'Withdraw': 'withdraws a request',
+  'Withdraw day': 'withdraws a request',
+  'Link': 'links records',
+  'Pair': 'pairs a device',
+  'Revoke': 'revokes access',
+  'Grant selected': 'grants access',
   'Hold in their own right': 'grants access',
-  'Enrol *': 'grants a credential',
+  'Enrol card': 'grants a credential',
+  'Enrol fingerprint (test/dev only)': 'grants a credential',
   'End employment': 'moves a status',
   'Import from POS': 'imports sales',
   'Re-import from POS': 'imports sales',
-  Run: 'runs a depreciation',
+  'Run': 'runs a depreciation',
   'Record closing count': 'books a till count',
   'Record expense': 'books an expense',
   'Open count': 'opens a count',
   'Open shift': 'opens a shift',
-  Settle: 'settles a balance',
-  Unlink: 'removes a link',
+  'Settle': 'settles a balance',
+  'Unlink': 'removes a link',
   'Link store': 'links a store to POS',
   'Assign role': 'grants access',
   'Cancel order': 'moves a status',
   'Issue PIN': 'issues a credential',
   'Provision terminal': 'issues a device credential',
-  Reinstate: 'moves a status',
+  'Reinstate': 'moves a status',
   'Retire this channel': 'moves a status',
 };
 /** Forms that only navigate, filter, preview or retry. Not data entry, so G8 does not judge them (ruling 2). */
@@ -172,10 +204,16 @@ function allJsx(sf: ts.SourceFile): ts.Node[] {
   return out;
 }
 const lineOf = (sf: ts.SourceFile, n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+/**
+ * Is `n` rendered through `<tag>`? A form passed in the `extra={...}` prop of EditableRecord is NOT: extra
+ * is outside the locked fieldset, so a raw record form hiding there must still count (audit round).
+ */
 function inside(n: ts.Node, tag: string): boolean {
+  let viaExtra = false;
   for (let p = n.parent; p; p = p.parent) {
+    if (ts.isJsxAttribute(p) && p.name.getText() === 'extra') viaExtra = true;
     const o = opening(p);
-    if (o && tagName(o) === tag) return true;
+    if (o && tagName(o) === tag) return !viaExtra;
   }
   return false;
 }
@@ -193,16 +231,14 @@ function descendants(n: ts.Node, pred: (x: ts.Node) => boolean): ts.Node[] {
   ts.forEachChild(n, v);
   return out;
 }
-function rootIsIdent(x: ts.Expression): boolean {
-  let c: ts.Expression = x;
-  while (ts.isPropertyAccessExpression(c) || ts.isElementAccessExpression(c) || ts.isNonNullExpression(c)) c = c.expression;
-  return ts.isIdentifier(c);
-}
-/** Does an expression read a property off an identifier: `row.name`, `link?.name`, `a.b.c`? */
+/**
+ * Does a default read a variable: `row.name`, `link?.name`, or a destructured `name` / `name ?? ''`? Any
+ * identifier that is not a property name (and not `undefined`) counts; pure literals do not.
+ */
 function readsRecord(e: ts.Node): boolean {
   let hit = false;
   const v = (x: ts.Node) => {
-    if (ts.isPropertyAccessExpression(x) && rootIsIdent(x)) hit = true;
+    if (ts.isIdentifier(x) && x.text !== 'undefined' && !(x.parent && ts.isPropertyAccessExpression(x.parent) && x.parent.name === x)) hit = true;
     ts.forEachChild(x, v);
   };
   v(e);
@@ -220,7 +256,7 @@ function lockFindings(source: string, file: string): Finding[] {
       const o = opening(k)!;
       if (tagName(o) !== 'input' || attrString(o, 'type') !== 'hidden') return false;
       const nm = attrString(o, 'name');
-      return nm !== undefined && (nm === 'id' || /Id$/.test(nm));
+      return nm !== undefined && /^(id|version|code|slug)$|Id$/.test(nm);
     });
     if (!hasHiddenId) continue;
     const bound = kids.some((k) => {
@@ -255,19 +291,19 @@ function buttonLabel(el: ts.Node): string | undefined {
   return s.replace(/\s+/g, ' ').trim();
 }
 function isCommand(label: string, commands: Record<string, string>): boolean {
-  return Object.keys(commands).some((k) => {
-    if (!k.endsWith(' *')) return label === k;
-    const verb = k.slice(0, -2);
-    return label === verb || (label.startsWith(verb) && /^[\s\-\u2014&]/.test(label.slice(verb.length)));
-  });
+  return Object.prototype.hasOwnProperty.call(commands, label);
 }
 function labelAllowed(label: string, commands: Record<string, string>): boolean {
   return SAVE_OK.has(label) || NAVIGATION.has(label) || TOGGLE_WORDS.has(label) || isCommand(label, commands);
 }
-/** G8 over one source. */
-function labelFindings(source: string, file: string, commands: Record<string, string> = COMMANDS): Finding[] {
+/** Buttons G8 looked at: the label it judged, or a DYNAMIC button whose text is not a literal (`{label}`). */
+interface LabelScan {
+  judged: Array<{ label: string; line: number }>;
+  dynamic: Array<{ line: number }>;
+}
+function labelScan(source: string, file: string): LabelScan {
   const sf = parse(source, file);
-  const out: Finding[] = [];
+  const out: LabelScan = { judged: [], dynamic: [] };
   if (OUT_OF_SCOPE.some((d) => file.startsWith(d))) return out;
   for (const form of allJsx(sf).filter(isNonGetForm)) {
     const btns = descendants(form, (x) => {
@@ -278,7 +314,8 @@ function labelFindings(source: string, file: string, commands: Record<string, st
     });
     const picked = new Set<ts.Node>();
     for (const b of btns) {
-      const o = opening(b)!;
+      const o = opening(b);
+      if (!o) continue;
       const type = attrString(o, 'type') ?? (tagName(o) === 'button' ? 'submit' : undefined);
       if (type === 'submit') picked.add(b);
     }
@@ -286,11 +323,18 @@ function labelFindings(source: string, file: string, commands: Record<string, st
     if (lastBtn) picked.add(lastBtn);
     for (const b of picked) {
       const label = buttonLabel(b);
-      if (!label) continue; // icon-only or fully dynamic: nothing to judge
-      if (!labelAllowed(label, commands)) out.push({ file, line: lineOf(sf, b), detail: `submit label "${label}"` });
+      const line = lineOf(sf, b);
+      if (label) out.judged.push({ label, line });
+      else if (ts.isJsxElement(b) && b.children.some((c) => ts.isJsxExpression(c) && c.expression)) out.dynamic.push({ line });
     }
   }
   return out;
+}
+/** G8 over one source. */
+function labelFindings(source: string, file: string, commands: Record<string, string> = COMMANDS): Finding[] {
+  return labelScan(source, file)
+    .judged.filter((j) => !labelAllowed(j.label, commands))
+    .map((j) => ({ file, line: j.line, detail: `submit label "${j.label}"` }));
 }
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -301,8 +345,14 @@ function walk(dir: string, out: string[] = []): string[] {
   }
   return out;
 }
-function scan(fn: (src: string, file: string) => Finding[]): Finding[] {
-  return walk(APP_ROOT).flatMap((f) => fn(readFileSync(f, 'utf8'), rel(f)));
+function scan(fn: (src: string, file: string) => Finding[], withComponents = false): Finding[] {
+  const app = walk(APP_ROOT).flatMap((f) => fn(readFileSync(f, 'utf8'), rel(f)));
+  if (!withComponents) return app;
+  // src/components/** too (audit round): shared components can hide a raw record form. Keys are prefixed.
+  const comp = walk(COMPONENTS_ROOT).flatMap((f) =>
+    fn(readFileSync(f, 'utf8'), 'components/' + relative(COMPONENTS_ROOT, f).replace(/\\/g, '/')),
+  );
+  return [...app, ...comp];
 }
 function counts(fs: Finding[]): Record<string, number> {
   const m: Record<string, number> = {};
@@ -324,11 +374,11 @@ function ratchet(actual: Record<string, number>, base: Record<string, number>): 
 
 describe('G7: record-bound forms are rendered through <EditableRecord>', () => {
   it('no raw record-bound form beyond the baseline (ends empty)', () => {
-    const found = scan(lockFindings).filter((f) => !(f.file in EXEMPT));
+    const found = scan(lockFindings, true).filter((f) => !(f.file in EXEMPT));
     expect(ratchet(counts(found), baseline('editable-record-baseline.json'))).toEqual([]);
   });
   it('EXEMPT has no stale entry (each exempt file still has a raw form) and every entry has a reason', () => {
-    const live = new Set(scan(lockFindings).map((f) => f.file));
+    const live = new Set(scan(lockFindings, true).map((f) => f.file));
     expect(Object.keys(EXEMPT).filter((f) => !live.has(f))).toEqual([]);
     expect(Object.entries(EXEMPT).filter(([, why]) => !why.trim())).toEqual([]);
   });
@@ -353,6 +403,22 @@ describe('G8: submit labels are Save / Save draft / a COMMANDS verb / a toggle',
     }
     const unseen = Object.keys(COMMANDS).filter((k) => ![...seen].some((l) => isCommand(l, { [k]: '' })));
     expect(unseen).toEqual([]);
+  });
+});
+
+/** Buttons whose text is not a literal (`{label}`), per file. Pinned so a new one is a decision, not silence. */
+const DYNAMIC_BUTTONS: Record<string, number> = {
+  'expenses/recurring/page.tsx': 1,
+  'settings/sales-channels/page.tsx': 1,
+};
+describe('G8b: dynamic-label buttons are an explicit list', () => {
+  it('equals DYNAMIC_BUTTONS', () => {
+    const actual: Record<string, number> = {};
+    for (const f of walk(APP_ROOT)) {
+      const n = labelScan(readFileSync(f, 'utf8'), rel(f)).dynamic.length;
+      if (n) actual[rel(f)] = n;
+    }
+    expect(actual).toEqual(DYNAMIC_BUTTONS);
   });
 });
 
@@ -404,6 +470,37 @@ describe('G9: positive controls on literal fixtures', () => {
     const lastBtn = `export default function P() { return (<form action={act}><button>Add room</button></form>); }`;
     expect(labelFindings(lastBtn, F)).toHaveLength(1);
   });
+  it('G7: a version / code / slug hidden field makes a record form (audit round)', () => {
+    for (const n of ['version', 'code', 'slug']) {
+      const src = rawForm.replace('name="id"', `name="${n}"`);
+      expect(lockFindings(src, F), n).toHaveLength(1);
+    }
+  });
+  it('G7: defaults from a destructured variable count, literal defaults do not', () => {
+    const destructured = `export default function P({ name }: any) { return (<form action={act}><input type="hidden" name="storeId" value="s" /><input name="n" defaultValue={name ?? ''} /></form>); }`;
+    expect(lockFindings(destructured, F)).toHaveLength(1);
+    const literal = destructured.replace("defaultValue={name ?? ''}", 'defaultValue="x"');
+    expect(lockFindings(literal, F)).toEqual([]);
+  });
+  it('G7: a raw record form inside the extra={...} prop of EditableRecord still counts', () => {
+    const inExtra = `export default function P({ row }: any) { return (
+      <EditableRecord action={act} label="x" hidden={{ id: row.id }} extra={
+        <form action={act}><input type="hidden" name="id" value={row.id} /><input name="n" defaultValue={row.n} /></form>
+      }><input name="n" defaultValue={row.n} /></EditableRecord>); }`;
+    expect(lockFindings(inExtra, F)).toHaveLength(1);
+  });
+  it('G7: src/components/** is part of the scan (keys are prefixed)', () => {
+    const seen: string[] = [];
+    scan((_s, f) => (seen.push(f), []), true);
+    expect(seen.some((f) => f.startsWith('components/ui/'))).toBe(true);
+    expect(seen.some((f) => f.startsWith('settings/'))).toBe(true);
+  });
+  it('G8: a dynamic `{label}` button is reported, not skipped', () => {
+    const dyn = `export default function P({ label }: any) { return (<form action={act}><button type="submit">{label}</button></form>); }`;
+    const sc = labelScan(dyn, F);
+    expect(sc.judged).toEqual([]);
+    expect(sc.dynamic).toHaveLength(1);
+  });
   it('a stale entry is detected by the live-set comparison (detector shape on literals)', () => {
     const live = new Set(lockFindings(rawForm, F).map((f) => f.file));
     expect(['app/gone/page.tsx'].filter((f) => !live.has(f))).toEqual(['app/gone/page.tsx']);
@@ -414,13 +511,24 @@ describe('G9: positive controls on literal fixtures', () => {
 /** Report helper for the orchestrator: set T384_REPORT=1 to print the per-file counts that seed the baselines. */
 describe.skipIf(!process.env.T384_REPORT)('report', () => {
   it('prints counts', () => {
-    const g7 = scan(lockFindings);
+    const g7 = scan(lockFindings, true);
     const g8 = scan((s, f) => labelFindings(s, f));
     console.log('G7 total', g7.length, 'files', Object.keys(counts(g7)).length, JSON.stringify(counts(g7)));
     console.log('G8 total', g8.length, 'files', Object.keys(counts(g8)).length, JSON.stringify(counts(g8)));
     const byLabel: Record<string, number> = {};
     for (const f of g8) byLabel[f.detail] = (byLabel[f.detail] ?? 0) + 1;
     console.log('G8 labels', JSON.stringify(byLabel));
+    if (process.env.T384_LABELS) {
+      const fs = require('node:fs');
+      const all: Record<string, string[]> = {};
+      const dyn: string[] = [];
+      for (const f of walk(APP_ROOT)) {
+        const sc = labelScan(readFileSync(f, 'utf8'), rel(f));
+        for (const j of sc.judged) (all[j.label] ??= []).push(rel(f) + ':' + j.line);
+        for (const d of sc.dynamic) dyn.push(rel(f) + ':' + d.line);
+      }
+      fs.writeFileSync(process.env.T384_LABELS, JSON.stringify({ all, dyn }, null, 1));
+    }
     if (process.env.T384_DUMP) {
       const fs = require('node:fs');
       fs.writeFileSync(process.env.T384_DUMP, JSON.stringify({ g7: counts(g7), g8: counts(g8), g8Detail: g8.map((f) => `${f.detail} @ ${f.file}:${f.line}`) }, null, 1));
