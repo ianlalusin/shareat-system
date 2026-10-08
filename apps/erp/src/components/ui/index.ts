@@ -8,5 +8,3 @@ export { Card } from './Card';
 export type { CardProps } from './Card';
 export { FormGrid, Field } from './FormGrid';
 export type { FormGridProps, FieldProps } from './FormGrid';
-export { EditableRecord } from './EditableRecord';
-export type { EditableRecordProps } from './EditableRecord';

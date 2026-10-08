@@ -13,6 +13,8 @@ import {
 import { BASE_UNITS, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid, Field } from '@/components/ui';
 
 export const metadata = { title: 'Item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -109,23 +111,21 @@ export default async function ItemDetailPage({
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Name and code</h2>
         {mayApproveItem ? (
-          <form action={renameItemAction} className="flex flex-wrap items-end gap-3 text-sm">
-            <input type="hidden" name="itemId" value={item.id} />
-            <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-              Name
-              <input name="name" type="text" required defaultValue={item.name} className={`${SELECT} w-64`} />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-              Code
-              <input name="code" type="text" required defaultValue={item.code} className={`${SELECT} w-40`} />
-            </label>
-            <button type="submit" className={BTN}>Rename</button>
-            <p className="w-full text-xs text-neutral-500 dark:text-neutral-400">
+          <EditableRecord action={renameItemAction} label={item.name} hidden={{ itemId: item.id }}>
+            <FormGrid>
+              <Field label="Name">
+                <input name="name" type="text" required defaultValue={item.name} className={`${SELECT} w-full`} />
+              </Field>
+              <Field label="Code">
+                <input name="code" type="text" required defaultValue={item.code} className={`${SELECT} w-full`} />
+              </Field>
+            </FormGrid>
+            <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
               Past records keep pointing at this item and show its new name. To replace an item measured in the wrong
               unit: rename this one (for example add &quot;(old)&quot;), add the replacement with the old name, then
               retire this one.
             </p>
-          </form>
+          </EditableRecord>
         ) : (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
             Only a super-admin can rename an item.
@@ -240,7 +240,7 @@ export default async function ItemDetailPage({
                         name="note"
                         defaultValue={s.override?.note ?? ''}
                         placeholder="made in-house here"
-                        className={`${SELECT} w-40`}
+                        className={`${SELECT} w-full min-w-[10rem]`}
                       />
                     </label>
                     <button type="submit" className={BTN}>

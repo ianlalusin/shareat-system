@@ -54,9 +54,9 @@ export function Field({ label, hint, span, className, children }: FieldProps) {
     <label
       className={`block min-w-0${span ? SPAN[span] : ''}${className ? ` ${className}` : ''}`}
     >
-      <span className="block text-neutral-600 dark:text-neutral-400">{label}</span>
+      <span className="block text-ink">{label}</span>
       {hint !== undefined && hint !== null && (
-        <span className="mt-0.5 block text-xs text-neutral-500">{hint}</span>
+        <span className="mt-0.5 block text-xs text-ink/70">{hint}</span>
       )}
       {children}
     </label>
