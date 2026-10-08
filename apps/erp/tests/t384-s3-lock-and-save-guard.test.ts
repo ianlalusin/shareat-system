@@ -143,7 +143,6 @@ const COMMANDS: Record<string, string> = {
   'Open shift': 'opens a shift',
   'Settle': 'settles a balance',
   'Unlink': 'removes a link',
-  'Link store': 'links a store to POS',
   'Assign role': 'grants access',
   'Cancel order': 'moves a status',
   'Issue PIN': 'issues a credential',

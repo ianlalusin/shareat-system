@@ -60,7 +60,9 @@ vi.mock('@shareat/domain', async (orig) => {
   };
 });
 
-import { closeDb } from '@shareat/db';
+import * as D from '@shareat/domain';
+import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { sql as dsql } from 'drizzle-orm';
 import { s6Fixture } from '../../../../packages/domain/tests/integration/_fixtures/pos-s6';
 import PosLinkSettingsPage from '../../src/app/settings/pos-link/page';
 import { captureRedirect, outcomeOf, pageParamsOf, resetJar, seedSearch } from '../helpers/flash-jar';
@@ -74,6 +76,15 @@ afterAll(async () => {
 const STALE = 'This tender was changed after this page was opened. The page now shows what is saved. Check it and save again.';
 const NEED_KIND = 'Choose whether this tender is cash or a wallet.';
 const POS_METHODS = ['Bank Transfer', 'Cash', 'Gcash', 'QRPH'];
+
+async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return transaction(async (tx) => {
+    await tx.execute(dsql.raw(`set local role ${APP_ROLE}`));
+    await tx.execute(dsql`select set_config('app.principal_kind', 'staff', true)`);
+    await tx.execute(dsql`select set_config('app.org_id', ${orgId}, true)`);
+    return fn(tx);
+  });
+}
 
 let seq = 0;
 const code = (p: string) => `${p}-${Date.now()}-${++seq}`;
@@ -117,6 +128,13 @@ async function fixture(hint: string) {
   await tender(otherId, 'QRPH', 'wallet', otherBpi, 'QRPH');
   const bareId = await mkStore('Bare');
   await acct(bareId, 'Bare drawer', 'cash', 'cashier', '1110');
+  // Creating a store seeds "Cashier online" / "Office online" (ewallet): retire them (through the domain) so Bare has no
+  // bank or e-wallet account and the empty state is reachable.
+  const seeded = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${bareId} and instrument <> 'cash' and is_active`;
+  // The domain refuses to retire a foundation account while the store trades, so the store is paused around the retire.
+  await sql`update stores set is_active = false where id = ${bareId}`;
+  for (const a of seeded) await asOrg(base.orgId, (tx) => D.retireMoneyAccount(tx, superAdmin, { moneyAccountId: a.id }));
+  await sql`update stores set is_active = true where id = ${bareId}`;
 
   return { ...base, superAdmin, drawer, bpi, bankTender, qrTender, otherId, bareId };
 }
