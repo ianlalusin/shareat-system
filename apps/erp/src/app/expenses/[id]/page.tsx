@@ -11,6 +11,8 @@ import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid } from '@/components/ui';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
 // that reader returns, so the two cannot drift.
@@ -206,12 +208,15 @@ export default async function ExpenseDetailPage({
 
       {isDraft && (
         <section className="grid gap-4 md:grid-cols-2">
-          <form
-            action={updateDraftAction}
-            className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
-          >
-            {hiddenIds}
+          <div className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
             <h2 className="font-medium">Correct this draft</h2>
+            <EditableRecord
+              action={updateDraftAction}
+              label="draft"
+              hidden={{ storeId: sp.store ?? '', expenseId: expense.id }}
+              saveLabel="Save draft"
+            >
+            <FormGrid>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Category</span>
               <select
@@ -240,13 +245,9 @@ export default async function ExpenseDetailPage({
                 className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
               />
             </label>
-            <button
-              type="submit"
-              className="rounded border border-neutral-300 px-4 py-1.5 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-            >
-              Save draft
-            </button>
-          </form>
+            </FormGrid>
+            </EditableRecord>
+          </div>
 
           <form
             action={approveExpenseAction}

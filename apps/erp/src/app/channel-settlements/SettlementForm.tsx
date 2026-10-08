@@ -21,6 +21,7 @@
  * returns money; v1 filtered to `amount > 0` and silently overstated fees by exactly the credit.
  */
 import { useMemo, useState, useTransition } from 'react';
+import { FormGrid } from '@/components/ui';
 import type { PreviewRequest, PreviewResponse } from './actions';
 
 export interface ChannelChoice {
@@ -239,7 +240,7 @@ export function SettlementForm({
       <input type="hidden" name="recognizeGain" value={recognizeGain ? 'on' : ''} />
 
       {/* ── Which payout ─────────────────────────────────────────────────────────────── */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <FormGrid>
         <label className={LABEL}>
           Channel
           <select
@@ -289,10 +290,10 @@ export function SettlementForm({
             </span>
           )}
         </label>
-      </div>
+      </FormGrid>
 
       {/* ── The two observable figures ───────────────────────────────────────────────── */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <FormGrid>
         <label className={LABEL}>
           Gross the platform settled
           <input
@@ -323,14 +324,14 @@ export function SettlementForm({
             What landed in the account. Both figures are on the payout statement
           </span>
         </label>
-      </div>
+      </FormGrid>
 
       {/* ── The deductions, each its own signed line ─────────────────────────────────── */}
       <fieldset className="space-y-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
         <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
           What the platform deducted — each line to its own account
         </legend>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <FormGrid>
           {DEDUCTIONS.map((d) => (
             <label key={d.name} className={LABEL}>
               <span>
@@ -347,7 +348,7 @@ export function SettlementForm({
               <span className="text-neutral-400 dark:text-neutral-600">{d.hint}</span>
             </label>
           ))}
-        </div>
+        </FormGrid>
         <p className="text-xs text-neutral-500 dark:text-neutral-500">
           ⛔ <strong>A deduction may be negative.</strong> A promo-heavy day genuinely hands money
           back, and that credit must survive — the legacy system filtered it out and overstated fees
@@ -360,7 +361,7 @@ export function SettlementForm({
         <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
           Loan repayment docked out of the payout — optional
         </legend>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <FormGrid>
           <label className={LABEL}>
             Loan
             <select
@@ -389,7 +390,7 @@ export function SettlementForm({
               className={`${INPUT} disabled:opacity-40`}
             />
           </label>
-        </div>
+        </FormGrid>
         {crossStoreLoan && (
           <p className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
             <strong>This loan belongs to another store.</strong> The paying store books{' '}
@@ -401,7 +402,7 @@ export function SettlementForm({
       </fieldset>
 
       {/* ── Provenance ───────────────────────────────────────────────────────────────── */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <FormGrid>
         <label className={LABEL}>
           Payout reference
           <input
@@ -427,7 +428,7 @@ export function SettlementForm({
             The entry dates on this, not on the sales day
           </span>
         </label>
-      </div>
+      </FormGrid>
 
       {/* ── ⭐ The preview. The reason this component exists ─────────────────────────── */}
       <div className="space-y-3 rounded-lg border border-neutral-300 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-900">

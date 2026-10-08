@@ -7,7 +7,7 @@ import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
-import { Button, Input } from '@/components/ui';
+import { Button, FormGrid, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Reimbursements — Shareat System' };
@@ -125,11 +125,12 @@ export default async function ReimbursementsPage({
                       <summary className="inline-flex min-h-[44px] cursor-pointer items-center px-1 text-sm font-medium">
                         Pay
                       </summary>
-                      <form action={payReimbursementAction} className="mt-2 grid gap-3 sm:grid-cols-2">
+                      <form action={payReimbursementAction} className="mt-2">
                         <input type="hidden" name="storeId" value={store.id} />
                         <input type="hidden" name="employeeId" value={row.employeeId} />
                         {/* Minted per render, so a double click or a replayed POST posts once. */}
                         <input type="hidden" name="payoutId" value={crypto.randomUUID()} />
+                        <FormGrid>
                         <label className="flex flex-col gap-1">
                           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Amount</span>
                           <Input name="amount" required inputMode="decimal" defaultValue={row.outstanding} />
@@ -155,11 +156,12 @@ export default async function ReimbursementsPage({
                         {closed.length > 0 && (
                           <ClosedMonthOverride closedMonths={closed} dateFieldName="on" initialDate={today} />
                         )}
-                        <div className="sm:col-span-2">
+                        <div className="col-span-full">
                           <Button type="submit" variant="primary">
                             Pay {row.displayName}
                           </Button>
                         </div>
+                        </FormGrid>
                       </form>
                     </details>
                   )}
