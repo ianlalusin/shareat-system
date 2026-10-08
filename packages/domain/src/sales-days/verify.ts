@@ -14,8 +14,10 @@
  * `submit_sales_day` includes staff — a cashier closes their own day. `verify_sales_day` does not.
  * *"The person who submits should not be the one who verifies"* (CAPABILITY-MATRIX.md), and v1's
  * four-role `signoff` block shows the business already knows it.
+ *
+ * T-385 (Ian 2026-10-09): verify requires `submitted`. The check sits before routing and posting.
  */
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { posV1Repo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -88,6 +90,30 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
       `verifySalesDay: sales day ${salesDayId} is voided — cannot post`,
       "This sales day has been voided, so it can't be posted.",
     );
+  }
+  // T-385 (Ian 2026-10-09): verify and post only after submit. Before routing, so no entry is attempted.
+  if (day.status !== 'submitted') {
+    throw refuse(
+      `verifySalesDay: sales day ${salesDayId} is ${day.status} — only a submitted day may be verified`,
+      "This sales day hasn't been submitted yet. Submit it first; it can be verified and posted after that.",
+    );
+  }
+
+  // T-385 S3: the person who submitted a day may not verify it, unless they hold verify_own_sales_day (super-admin only).
+  if (day.submittedBy && day.submittedBy === actor.personId) {
+    const exempt = await authorize(tx, actor, 'verify_own_sales_day').then(
+      () => true,
+      (err: unknown) => {
+        if (err instanceof AuthorizationError) return false;
+        throw err;
+      },
+    );
+    if (!exempt) {
+      throw refuse(
+        `verifySalesDay: sales day ${salesDayId} was submitted by the actor — a different person must verify`,
+        'You submitted this day, so someone else has to verify it.',
+      );
+    }
   }
 
   const channels = await salesDaysRepo.getChannelsForDay(tx, salesDayId);

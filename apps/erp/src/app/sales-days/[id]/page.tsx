@@ -464,13 +464,16 @@ export default async function SalesDayDetailPage({
               Hands the day on for checking. <strong>Still recognises nothing</strong> — submitting
               is not verifying.
             </p>
+            <p className="text-neutral-600 dark:text-neutral-400">
+              Verify &amp; post comes after this, on the submitted day.
+            </p>
             <button type="submit" className="rounded border border-neutral-300 px-4 py-1.5 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
               Submit
             </button>
           </form>
         )}
 
-        {(day.status === 'open' || day.status === 'submitted') && (
+        {day.status === 'submitted' && can.verify && (
           <form action={verifySalesDayAction} className="flex flex-col justify-between gap-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
             {hiddenIds}
             <div>

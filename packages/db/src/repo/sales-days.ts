@@ -655,12 +655,12 @@ export async function markVerified(
       and(
         eq(salesDays.id, id),
         eq(salesDays.orgId, orgId),
-        inArray(salesDays.status, [...UNVERIFIED_STATUSES]),
+        eq(salesDays.status, 'submitted'),
       ),
     )
     .returning({ id: salesDays.id });
   if (updated.length === 0) {
-    throw recordGone(`markVerified: sales day ${id} does not exist in org ${orgId}, or is already verified/voided`, 'sales day');
+    throw recordGone(`markVerified: sales day ${id} does not exist in org ${orgId}, or is not submitted`, 'sales day', 'submitted');
   }
 }
 
