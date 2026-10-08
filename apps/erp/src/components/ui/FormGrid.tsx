@@ -11,6 +11,11 @@
  * never a fixed width. `span='wide'` takes two columns only when the grid's own width fits two 14rem tracks plus the gap (29rem, a container query, so it can never create an implicit column and scroll sideways); `span='full'` takes the row
  * (a textarea, a long reason, a line-items table).
  *
+ * ⚠️ Adopters: `FormGrid` is an inline-size container, which gives it an intrinsic width of 0. Its
+ * parent must give it width (a block, or a flex child with `flex-1` or `w-full`; never `w-fit`,
+ * inline, or a table cell). It also becomes the containing block for `position: fixed` and
+ * `absolute` descendants, so a popover inside it anchors to the grid, not the viewport.
+ *
  * No `'use client'` and no hooks, like the other components in this folder, so a server component
  * or a server-action form can import it.
  */
@@ -40,7 +45,7 @@ export interface FieldProps {
 }
 
 const SPAN: Record<'wide' | 'full', string> = {
-  wide: ' [@container(min-width:29rem)]:col-span-2',
+  wide: ' [@container_(min-width:29rem)]:col-span-2',
   full: ' col-span-full',
 };
 
