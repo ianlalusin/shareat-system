@@ -19,6 +19,7 @@ import {
   clearStoreSellability,
   createItem,
   mergeItems,
+  renameItem,
   rejectItemRequest,
   requestItem,
   setStoreSellability,
@@ -59,9 +60,11 @@ function errorMessage(err: unknown): string {
   // The duplicate-name violation is the one people will actually hit, and Postgres's own wording
   // is unreadable. Say what happened and why it is refused.
   if (/items_org_name_key/.test(raw)) {
-    return 'An item with that name already exists — names are one per organisation, ignoring case.';
+    return 'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, ask a super-admin to rename the existing item first.';
   }
-  if (/items_org_code_key/.test(raw)) return 'That item code is already in use.';
+  if (/items_org_code_key/.test(raw)) {
+    return "That item code is already in use. To reuse it, ask a super-admin to change the existing item's code first.";
+  }
   return sharedErrorMessage(err);
 }
 
@@ -215,6 +218,26 @@ export async function changeItemUnitAction(formData: FormData): Promise<void> {
       return await redirectWithFlash(`/items/${itemId}`, {}, { error: "Only a super-admin can change an item's unit." });
     }
     return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message });
+}
+
+/** ⛔ T-383 R1. Super-admin only (`approve_item`). A blank goes to the database as blank, so its CHECK speaks. */
+export async function renameItemAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const itemId = str(formData, 'itemId');
+  let message = '';
+  try {
+    const { changed } = await withOrgPrincipal(actor.orgId, (tx) =>
+      renameItem(tx, actor, { itemId, name: str(formData, 'name'), code: str(formData, 'code') }),
+    );
+    message = changed ? 'Renamed.' : 'Nothing to change.';
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only a super-admin can rename an item.' });
+    }
+    // The rename form is on the item's own page, so here (and only here) the way out is the page itself.
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err).replace('ask a super-admin to rename the existing item first.', 'rename the existing item on its page first.').replace("ask a super-admin to change the existing item's code first.", "change the existing item's code on its page first.") });
   }
   return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message });
 }

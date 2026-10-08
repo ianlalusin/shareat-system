@@ -52,7 +52,7 @@
 
 ### Definition of done — all of it, every time
 
-typecheck clean · unit tests pass · **integration tests pass against real Postgres — and the FULL suite before any PUSH, not just the lane's files (Ian, 2026-09-22; ~33 min; DEF-412 is what a lane-scoped gate hides)** ·
+typecheck clean · unit tests pass · **integration tests pass against real Postgres — and the FULL suite before anything reaches `main`, not just the lane's files (Ian, 2026-09-22; DEF-412 is what a lane-scoped gate hides). ⭐ Since 2026-10-08 that full suite runs in CI on a PULL REQUEST, not on the laptop: push a branch, open a PR, merge to `main` only when its CI is green (bible row 291). Locally, run only the tests a change can affect** ·
 **smoketested in the running app on 9008** · `npm run build` succeeds with the dev server
 stopped · self-reviewed line by line · committed with a message explaining *why* · **bible
 amended if a decision was made**. *Reporting done when any of these is unmet is itself a

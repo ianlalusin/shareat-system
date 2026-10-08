@@ -140,7 +140,7 @@ describe('T-234 — every route uses the Page container', () => {
       offenders.length === 0
         ? ''
         : `Routes not using the page container:\n  ${offenders.join('\n  ')}\n\n` +
-            'T-234 §3.3: one density rule, four widths — `narrow` | `form` | `table` | `wide`.\n' +
+            'T-234 §3.3: one density rule, three widths — `narrow` | `table` | `wide` (T-384 S2a: `form` is gone; table and wide are both uncapped).\n' +
             'Import it from `components/shell/Page` and wrap the page in <Page density="…">.\n' +
             'If the page genuinely owns its own layout, add it to OWNS_ITS_LAYOUT with the reason.',
     ).toEqual([]);

@@ -6,12 +6,15 @@ import { whoSells } from '../../ap/lib';
 import {
   changeItemUnitAction,
   clearStoreSellabilityAction,
+  renameItemAction,
   setStoreSellabilityAction,
   updateItemFlagsAction,
 } from '../actions';
 import { BASE_UNITS, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid, Field } from '@/components/ui';
 
 export const metadata = { title: 'Item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -63,7 +66,7 @@ export default async function ItemDetailPage({
   ]);
   // T-378 S4 (DEF-600). Presentation aid only: the same gate the action uses, asked here so the form is drawn only for
   // who may use it. `changeItemBaseUnit` stays the enforcement. Pattern: channel-settlements/page.tsx.
-  const mayChangeUnit = await withOrgPrincipal(actor.orgId, async (tx) => {
+  const mayApproveItem = await withOrgPrincipal(actor.orgId, async (tx) => {
     try {
       await authorize(tx, actor, 'approve_item', {});
       return true;
@@ -104,6 +107,32 @@ export default async function ItemDetailPage({
         </div>
       )}
 
+      {/* T-383 R6. Rename: name and code, super-admin only; the domain (`renameItem`) is the enforcement. */}
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Name and code</h2>
+        {mayApproveItem ? (
+          <EditableRecord action={renameItemAction} label={item.name} hidden={{ itemId: item.id }}>
+            <FormGrid>
+              <Field label="Name">
+                <input name="name" type="text" required defaultValue={item.name} className={`${SELECT} w-full`} />
+              </Field>
+              <Field label="Code">
+                <input name="code" type="text" required defaultValue={item.code} className={`${SELECT} w-full`} />
+              </Field>
+            </FormGrid>
+            <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
+              Past records keep pointing at this item and show its new name. To replace an item measured in the wrong
+              unit: rename this one (for example add &quot;(old)&quot;), add the replacement with the old name, then
+              retire this one.
+            </p>
+          </EditableRecord>
+        ) : (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            Only a super-admin can rename an item.
+          </p>
+        )}
+      </section>
+
       {/* T-378 R2/R4. The form shows only while the database says the item has no history; the trigger is the rule. */}
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Measured in</h2>
@@ -112,7 +141,7 @@ export default async function ItemDetailPage({
             {"This item's unit can no longer change: it already has stock, counts, invoices, recipes, prices or orders recorded in its current unit, and changing it would re-read every one of them in the new unit."}{' '}
             It is measured in {item.baseUnit}.
           </p>
-        ) : !mayChangeUnit ? (
+        ) : !mayApproveItem ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
             Only a super-admin can change an item&apos;s unit. It is measured in {item.baseUnit}.
           </p>
@@ -211,7 +240,7 @@ export default async function ItemDetailPage({
                         name="note"
                         defaultValue={s.override?.note ?? ''}
                         placeholder="made in-house here"
-                        className={`${SELECT} w-40`}
+                        className={`${SELECT} w-full min-w-[10rem]`}
                       />
                     </label>
                     <button type="submit" className={BTN}>

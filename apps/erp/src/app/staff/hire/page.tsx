@@ -40,7 +40,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
 
   if (!storeId) {
     return (
-      <Page density="form" className="">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Hire</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
       </Page>

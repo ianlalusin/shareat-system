@@ -2,8 +2,10 @@
  * T-348 S3 (DEF-440), Amendment A3 (2026-09-30) — the eight two-column pages' MAIN return
  * switches `<Page density="form">` to `density="table">`; content unchanged (fields stretch).
  * A3 supersedes S3 items 1-2 and drops P3 (the W3 grid leg): no `lg:grid-cols-2` assertion here.
- * The three named early-return branches (a heading + one-line message, no form content) are
- * exempt and stay "form" (P2).
+ * The three named early-return branches (a heading + one-line message, no form content) were
+ * exempt and stayed "form" (P2).
+ * T-384 S2a (Ian, 2026-10-08, "always use full width"): P2 is INVERTED. `density="form"` is gone, so
+ * the early returns use "table" too. See apps/erp/tests/t384-s2-full-width.test.ts for the guards.
  *
  * Auditor pass (2026-09-30), folded in before RED went GREEN:
  * - Comments stripped before scanning (`codeOnly`, mirrored from tests/unit/page-container.test.ts:73
@@ -116,7 +118,7 @@ describe('T-348 S3 (DEF-440) — P0 positive control (literal fixture, no live p
     // Mutant proof: without codeOnly stripping the `//` line, this fixture's decoy is itself a
     // complete, single-line `<Page density="table">` and the regex would report it as a THIRD,
     // leading hit (['table', 'form', 'table']) — failing this exact assertion.
-    expect(findPageDensities(fixture)).toEqual(['form', 'table']);
+    expect(findPageDensities(fixture)).toEqual(['form', 'table']); // fixture text only; a literal, not a live page
   });
 });
 
@@ -129,13 +131,13 @@ describe('T-348 S3 (DEF-440) — P1: each of the eight\'s main return uses densi
   });
 });
 
-describe('T-348 S3 (DEF-440) — P2: the early-return branch stays density="form"', () => {
-  it.each(TWO_WRAPPER_FILES)('%s: the FIRST <Page density=...> (the guard clause) is "form"', (rel) => {
+describe('T-348 S3 (DEF-440) — P2 (inverted by T-384 S2a, 2026-10-08): the early-return branch uses density="table"', () => {
+  it.each(TWO_WRAPPER_FILES)('%s: the FIRST <Page density=...> (the guard clause) is "table"', (rel) => {
     const hits = densitiesOf(rel);
     // Mutant proof: if a builder edit collapsed the guard clause into the main return (or added a
     // third <Page site), this count check catches it before the position check would silently
     // compare the wrong element.
     expect(hits.length, `${rel}: expected exactly 2 <Page density=...> (guard + main), found ${hits.length}`).toBe(2);
-    expect(hits[0]).toBe('form');
+    expect(hits[0]).toBe('table');
   });
 });

@@ -99,6 +99,8 @@ export interface TenderAdminRow {
   readonly moneyAccountName: string | null;
   readonly posV1Alias: string | null;
   readonly isActive: boolean;
+  /** Optimistic-lock token (TenderRow.version); posted back by the edit and Retire/Restore forms. */
+  readonly version: string;
 }
 
 export interface StoreTenders {
@@ -135,6 +137,7 @@ export async function storeTenders(actor: Actor, storeId: string, posStoreId: st
       moneyAccountName: t.moneyAccountId ? (names.get(t.moneyAccountId) ?? null) : null,
       posV1Alias: t.posV1Alias,
       isActive: t.isActive,
+      version: t.version,
     })),
     accounts: accounts.map((a) => ({ id: a.id, name: a.name })),
     unmapped,

@@ -56,7 +56,7 @@ export default async function OrganizationSettingsPage({
   ].filter((x): x is string => x !== null);
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           <a href="/settings" className="underline">

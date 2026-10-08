@@ -1,7 +1,7 @@
 /**
  * **The one container every route uses.** T-234 slice 2, `docs/tasks/234-responsive-shell-sidebar-nav.md` §3.
  *
- * ## ⛔ Why one container, and why four widths
+ * ## ⛔ Why one container, and why few widths (now one: see T-384 S2a below)
  *
  * Before this, page width was ad hoc: 101 routes chose between six different `max-w-*` values with
  * no rule behind any of them — `5xl` ×48, `4xl` ×32, `3xl` ×13, `md` ×3, `6xl` ×3, `2xl` ×2. A
@@ -16,31 +16,19 @@
  * and an a11y defect that no test in this repo would have caught. Settled with lane E before either
  * slice was built. ⛔ Do not "tidy" this into a `<main>`.
  *
- * ## The arithmetic, because it is the whole point of the task
+ * ## T-384 S2a (2026-10-08): one width
  *
- * With the sidebar at `16rem` and `xl:px-8`, the content box is `viewport − 320px`. So on the
- * laptops Ian actually described:
- *
- * | Viewport | Available | `form` | `table` | `wide` |
- * |---|---|---|---|---|
- * | 1280 | 960 | 768 | 960 | 960 |
- * | 1440 | 1120 | 768 | **1120** | 1120 |
- * | 1536 | 1216 | 768 | **1216** | 1216 |
- * | 1920 | 1600 | 768 | 1280 | 1536 |
- *
- * ⭐ **`table`'s larger cap is at `xl` (1280), not `2xl` (1536), and that is the laptop win.** Under
- * `2xl` it capped at `64rem` = 1024 px on a 1440 screen and left 96 px unused — narrowing the very
- * machines the task exists to serve, on 75 of 101 pages. Corrected before the sweep.
- *
- * ⚠️ **`wide` therefore does nothing below a ~1600 px viewport** — it and `table` resolve to the
- * same available width until then, and only diverge on an external monitor. That is not a bug and
- * it is not a reason to widen it; it is written down so nobody later "discovers" the reports look
- * identical to the lists on their laptop and assumes something is broken.
+ * Ian: "i want all forms to adjust based on screen size and always use full width". So `form` is
+ * gone from `PageDensity` (any `density="table"` stops compiling), and `table` and `wide` carry no
+ * cap: the content box is the viewport minus the sidebar and the page padding, at every size.
+ * `wide` is kept as a documented alias of `table`; it is identical to it now. `narrow` stays for
+ * the sign-in, setup and clock cards. Forms adapt to the space with `FormGrid` and `Field`
+ * (`components/ui/FormGrid.tsx`).
  */
 import type { ReactNode } from 'react';
 import { PageDescription } from './PageDescription';
 
-export type PageDensity = 'narrow' | 'form' | 'table' | 'wide';
+export type PageDensity = 'narrow' | 'table' | 'wide';
 
 /**
  * ⛔ `narrow` HAS NO CALLER TODAY, and that is recorded rather than left to be found.
@@ -55,12 +43,10 @@ export type PageDensity = 'narrow' | 'form' | 'table' | 'wide';
 const WIDTH: Record<PageDensity, string> = {
   /** 28rem — a single field or a confirmation. */
   narrow: 'max-w-md',
-  /** 48rem — create/edit one thing, or configure. Line length matters more than screen use. */
-  form: 'max-w-3xl',
-  /** 64rem, 80rem at ≥1280 — a list to scan, or a record with its history. The default. */
-  table: 'max-w-5xl xl:max-w-[80rem]',
-  /** 96rem — reading across many dimensions: the dashboard and the reports. */
-  wide: 'max-w-[96rem]',
+  /** No cap: every page uses the full width (Ian, 2026-10-08). The default. */
+  table: '',
+  /** Alias of `table`, kept so the 14 report pages are not churned. Identical to `table` now. */
+  wide: '',
 };
 
 export interface PageProps {
@@ -103,7 +89,7 @@ export function Page({ density, title, description, actions, className, children
     <div
       // ⚠️ `w-full` matters: without it a short page inside a flex shell can shrink-to-fit and the
       // `mx-auto` centring silently stops applying.
-      className={`mx-auto w-full ${WIDTH[density]} px-4 py-4 md:px-6 md:py-6 xl:px-8 ${className ?? 'space-y-6'}`}
+      className={`mx-auto w-full${WIDTH[density] ? ` ${WIDTH[density]}` : ''} px-4 py-4 md:px-6 md:py-6 xl:px-8 ${className ?? 'space-y-6'}`}
     >
       {title !== undefined && (
         <PageHeader title={title} description={description} actions={actions} />

@@ -37,7 +37,7 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
   const [rows, options, mayUnlink] = await Promise.all([posLinkRows(actor, stores), posStoreOptions(), canUnlink(actor)]);
 
   return (
-    <Page density="form">
+    <Page density="table">
       <div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           <a href="/settings" className={ACTION_LINK}>
@@ -94,7 +94,7 @@ function StoreCard({
 }) {
   const link = row.link;
   return (
-    <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+    <section id={`store-${row.storeId}`} className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-medium">{row.storeName}</h2>
         {link ? (
@@ -248,6 +248,7 @@ function TendersSection({ storeId, linked, t }: { storeId: string; linked: boole
           <form action={updateTenderAction} className="flex flex-wrap items-end gap-2">
             <input type="hidden" name="storeId" value={storeId} />
             <input type="hidden" name="tenderId" value={x.id} />
+            <input type="hidden" name="version" value={x.version} />
             <label className="block">
               <span className={label}>Name ({x.kind})</span>
               <input name="name" required defaultValue={x.name} className={`${FIELD} mt-1 w-40`} />
@@ -278,6 +279,7 @@ function TendersSection({ storeId, linked, t }: { storeId: string; linked: boole
           <form action={setTenderActiveAction}>
             <input type="hidden" name="storeId" value={storeId} />
             <input type="hidden" name="tenderId" value={x.id} />
+            <input type="hidden" name="version" value={x.version} />
             <input type="hidden" name="isActive" value={x.isActive ? 'false' : 'true'} />
             <button type="submit" className={BTN}>
               {x.isActive ? 'Retire' : 'Restore'}
