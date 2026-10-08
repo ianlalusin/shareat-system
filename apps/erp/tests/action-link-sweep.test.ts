@@ -369,7 +369,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // and the "Unlink <store>" submit `<button>`. FAIL unmoved at 151. Verified by running the census (1142).
     // 1142 -> 1145, T-383 S1, 2026-10-08. +3: the rename form on `items/[id]/page.tsx` gains the name and code inputs and its
     // "Rename" submit `<button>` (super-admin only). Verified by running the census (1145).
-    expect(results.length).toBe(1145);
+    // 1145 -> 1148, T-384 S3a (merged 2026-10-08). +3: `components/ui/EditableRecord.tsx` gains its Edit, Save and Cancel
+    // `<button>`s (static class literals, so the census resolves them; FAIL 151 / UNRESOLVED 62 unmoved). The S1b-min hidden
+    // `version` inputs on `settings/pos-link/page.tsx` are not counted. Verified by running the census (1148).
+    expect(results.length).toBe(1148);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
