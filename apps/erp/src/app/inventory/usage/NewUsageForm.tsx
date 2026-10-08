@@ -8,6 +8,7 @@
  * starts with is created in ONE submission.
  */
 import { useState } from 'react';
+import { FormGrid, Field } from '@/components/ui';
 
 interface LocationOption {
   id: string;
@@ -63,6 +64,8 @@ export function NewUsageForm({
     setLines((prev) => (prev.length === 1 ? prev : prev.filter((l) => l.key !== key)));
   }
 
+  const FULL = 'mt-1 block w-full';
+  const FLABEL = 'text-xs text-neutral-600 dark:text-neutral-400';
   const label = 'flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
   const field =
     'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
@@ -79,38 +82,34 @@ export function NewUsageForm({
     <form action={action} className="mt-3 space-y-4">
       <input type="hidden" name="storeId" value={storeId} />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label className={label}>
-          Room
-          <select name="locationId" required className={field}>
+      <FormGrid>
+        <Field label="Room" className={FLABEL}>
+          <select name="locationId" required className={`${field} ${FULL}`}>
             {locations.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name} ({l.code})
               </option>
             ))}
           </select>
-        </label>
-        <label className={label}>
-          Kind
+        </Field>
+        <Field label="Kind" className={FLABEL}>
           <select
             name="kind"
             required
             value={kind}
             onChange={(e) => setKind(e.target.value === 'wastage' ? 'wastage' : 'usage')}
-            className={field}
+            className={`${field} ${FULL}`}
           >
             <option value="usage">Usage — consumed</option>
             <option value="wastage">Wastage — spoiled, damaged, lost</option>
           </select>
-        </label>
-        <label className={label}>
-          Used on
-          <input name="usedOn" type="date" required defaultValue={today} className={field} />
-        </label>
+        </Field>
+        <Field label="Used on" className={FLABEL}>
+          <input name="usedOn" type="date" required defaultValue={today} className={`${field} ${FULL}`} />
+        </Field>
         {kind === 'wastage' && (
-          <label className={label}>
-            Reason
-            <select name="reasonCode" required defaultValue="" className={field}>
+          <Field label="Reason" className={FLABEL}>
+            <select name="reasonCode" required defaultValue="" className={`${field} ${FULL}`}>
               <option value="" disabled>
                 Choose a reason
               </option>
@@ -120,12 +119,11 @@ export function NewUsageForm({
                 </option>
               ))}
             </select>
-          </label>
+          </Field>
         )}
         {departments.length > 0 && (
-          <label className={label}>
-            Department (optional)
-            <select name="departmentId" defaultValue="" className={field}>
+          <Field label="Department (optional)" className={FLABEL}>
+            <select name="departmentId" defaultValue="" className={`${field} ${FULL}`}>
               <option value="">—</option>
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -133,9 +131,9 @@ export function NewUsageForm({
                 </option>
               ))}
             </select>
-          </label>
+          </Field>
         )}
-      </div>
+      </FormGrid>
 
       <div className="space-y-2">
         <div className="flex items-baseline justify-between">

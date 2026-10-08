@@ -3,6 +3,7 @@ import { countsRegister, listStores } from './lib';
 import { openCountSessionAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { Page } from '@/components/shell/Page';
+import { FormGrid, Field } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -114,30 +115,28 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
                 </label>
               ))}
             </fieldset>
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="text-xs text-neutral-600 dark:text-neutral-400">
-                Counted on
+            <FormGrid>
+              <Field label="Counted on" className="text-xs text-neutral-600 dark:text-neutral-400">
                 <input
                   name="countedOn"
                   type="date"
                   defaultValue={today()}
-                  className="mt-1 block rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                  className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
                 />
-              </label>
-              <label className="grow text-xs text-neutral-600 dark:text-neutral-400">
-                Note (optional)
+              </Field>
+              <Field label="Note (optional)" span="wide" className="text-xs text-neutral-600 dark:text-neutral-400">
                 <input
                   name="note"
                   className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
                 />
-              </label>
-              <button
-                type="submit"
-                className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-              >
-                Open count
-              </button>
-            </div>
+              </Field>
+            </FormGrid>
+            <button
+              type="submit"
+              className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              Open count
+            </button>
           </form>
         )}
       </section>

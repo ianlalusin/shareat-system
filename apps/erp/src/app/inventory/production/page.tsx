@@ -4,6 +4,7 @@ import { requireSession } from '../../../lib/session';
 import { saveProductionDraftAction } from './actions';
 import { listStores, productionScreenData } from './lib';
 import { Page } from '@/components/shell/Page';
+import { FormGrid, Field } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -101,9 +102,8 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
           <h2 className="text-sm font-medium">New record</h2>
           <form action={saveProductionDraftAction} className="mt-3 space-y-4">
             <input type="hidden" name="storeId" value={storeId} />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-              <label className="text-sm">
-                <span className="block text-neutral-600 dark:text-neutral-400">Kind</span>
+            <FormGrid>
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Kind</span>} className="text-sm">
                 <select name="kind" defaultValue="slice" className={`${INPUT} w-full`}>
                   {Object.entries(KIND_LABEL).map(([k, label]) => (
                     <option key={k} value={k}>
@@ -111,9 +111,8 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="text-sm">
-                <span className="block text-neutral-600 dark:text-neutral-400">Room</span>
+              </Field>
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Room</span>} className="text-sm">
                 <select name="locationId" defaultValue={locations[0]?.id} className={`${INPUT} w-full`}>
                   {locations.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -121,16 +120,14 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="text-sm">
-                <span className="block text-neutral-600 dark:text-neutral-400">Date</span>
+              </Field>
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Date</span>} className="text-sm">
                 <input type="date" name="producedOn" defaultValue={toBusinessDate()} className={`${INPUT} w-full`} />
-              </label>
-              <label className="text-sm">
-                <span className="block text-neutral-600 dark:text-neutral-400">Labour cost (optional)</span>
+              </Field>
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Labour cost (optional)</span>} className="text-sm">
                 <input type="text" name="labourCost" placeholder="0.00" className={`${INPUT} w-full`} />
-              </label>
-            </div>
+              </Field>
+            </FormGrid>
 
             <LineRows label="Inputs (what goes out)" prefix="input" items={items} />
             <LineRows label="Outputs (what comes in)" prefix="output" items={items} />

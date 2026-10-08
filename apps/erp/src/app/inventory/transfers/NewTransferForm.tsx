@@ -2,6 +2,7 @@
 
 /** The "New transfer" form. From/To exclusivity is `TwoWayPicker`'s job — shared with
  *  money-transfers rather than reimplemented here (see that component's header). */
+import { FormGrid, Field } from '@/components/ui';
 import { TwoWayPicker, type PickerOption } from '../../../components/two-way-picker';
 
 export function NewTransferForm({
@@ -20,8 +21,9 @@ export function NewTransferForm({
     'mt-1 block w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900';
 
   return (
-    <form action={action} className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+    <form action={action} className="mt-3 space-y-3">
       <input type="hidden" name="storeId" value={storeId} />
+      <FormGrid>
 
       <TwoWayPicker
         options={locations}
@@ -31,8 +33,7 @@ export function NewTransferForm({
         selectClassName={fieldSelect}
       />
 
-      <label className={fieldLabel}>
-        Item
+      <Field label="Item" className={fieldLabel}>
         <select name="itemId" required className={fieldSelect}>
           {items.map((i) => (
             <option key={i.id} value={i.id}>
@@ -40,9 +41,8 @@ export function NewTransferForm({
             </option>
           ))}
         </select>
-      </label>
-      <label className={fieldLabel}>
-        Quantity
+      </Field>
+      <Field label="Quantity" className={fieldLabel}>
         <input
           name="quantity"
           required
@@ -50,26 +50,23 @@ export function NewTransferForm({
           placeholder="0.000"
           className={`${fieldSelect} tabular-nums`}
         />
-      </label>
-      <label className={fieldLabel}>
-        Mode
+      </Field>
+      <Field label="Mode" className={fieldLabel}>
         <select name="mode" className={fieldSelect}>
           <option value="immediate">Transfer now (instant)</option>
           <option value="two_step">Dispatch, then receive later</option>
         </select>
-      </label>
-      <label className={fieldLabel}>
-        Note (optional)
+      </Field>
+      <Field label="Note (optional)" className={fieldLabel}>
         <input name="note" className={fieldSelect} />
-      </label>
-      <div className="col-span-full">
-        <button
-          type="submit"
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-        >
-          Transfer
-        </button>
-      </div>
+      </Field>
+      </FormGrid>
+      <button
+        type="submit"
+        className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+      >
+        Transfer
+      </button>
     </form>
   );
 }

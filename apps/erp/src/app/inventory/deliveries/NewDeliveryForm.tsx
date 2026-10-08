@@ -13,6 +13,7 @@
  */
 import { PhotoInput } from '@/components/PhotoInput';
 import { useState } from 'react';
+import { FormGrid, Field } from '@/components/ui';
 
 interface ItemOption {
   id: string;
@@ -90,6 +91,8 @@ export function NewDeliveryForm({
     setLines((prev) => (prev.length === 1 ? prev : prev.filter((l) => l.key !== key)));
   }
 
+  const FULL = 'mt-1 block w-full';
+  const FLABEL = 'text-xs text-neutral-600 dark:text-neutral-400';
   const label = 'flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
   const field =
     'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
@@ -106,24 +109,22 @@ export function NewDeliveryForm({
     <form action={action} className="mt-3 space-y-4">
       <input type="hidden" name="storeId" value={storeId} />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label className={label}>
-          Kind
+      <FormGrid>
+        <Field label="Kind" className={FLABEL}>
           <select
             name="kind"
             required
             value={kind}
             onChange={(e) => setKind(e.target.value === 'purchase' ? 'purchase' : 'supplier')}
-            className={field}
+            className={`${field} ${FULL}`}
           >
             <option value="supplier">Supplier delivery</option>
             <option value="purchase">Cash purchase</option>
           </select>
-        </label>
+        </Field>
         {kind === 'supplier' ? (
-          <label className={label}>
-            Supplier
-            <select name="supplierId" required defaultValue="" className={field}>
+          <Field label="Supplier" className={FLABEL}>
+            <select name="supplierId" required defaultValue="" className={`${field} ${FULL}`}>
               <option value="" disabled>
                 Choose…
               </option>
@@ -133,11 +134,10 @@ export function NewDeliveryForm({
                 </option>
               ))}
             </select>
-          </label>
+          </Field>
         ) : (
-          <label className={label}>
-            Supplier (optional)
-            <select name="supplierId" defaultValue="" className={field}>
+          <Field label="Supplier (optional)" className={FLABEL}>
+            <select name="supplierId" defaultValue="" className={`${field} ${FULL}`}>
               <option value="">— none, cash purchase —</option>
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -145,28 +145,24 @@ export function NewDeliveryForm({
                 </option>
               ))}
             </select>
-          </label>
+          </Field>
         )}
-        <label className={label}>
-          Reference no. (DR/invoice)
-          <input name="referenceNo" placeholder="DR-0001" className={field} />
-        </label>
-        <label className={label}>
-          Delivered on
-          <input name="deliveredOn" type="date" required defaultValue={today} className={field} />
-        </label>
-      </div>
-
-      <label className={label}>
-        Photo of the paper
-        {/* ⭐ T-296 — compressed to under 1 MB before submit; a PDF passes through untouched. */}
-        <PhotoInput
-          name="proofPhoto"
-          accept="image/jpeg,image/png,image/webp,application/pdf"
-          required
-          className={field}
-        />
-      </label>
+        <Field label="Reference no. (DR/invoice)" className={FLABEL}>
+          <input name="referenceNo" placeholder="DR-0001" className={`${field} ${FULL}`} />
+        </Field>
+        <Field label="Delivered on" className={FLABEL}>
+          <input name="deliveredOn" type="date" required defaultValue={today} className={`${field} ${FULL}`} />
+        </Field>
+        <Field label="Photo of the paper" span="full" className={FLABEL}>
+          {/* ⭐ T-296 — compressed to under 1 MB before submit; a PDF passes through untouched. */}
+          <PhotoInput
+            name="proofPhoto"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            required
+            className={`${field} ${FULL}`}
+          />
+        </Field>
+      </FormGrid>
       <p className="text-xs text-neutral-500 dark:text-neutral-500">
         ⭐ Required — a real anti-fraud control, not a nicety. Upload the actual photo of the
         delivery receipt or invoice; a link or a typed reference is not evidence.
@@ -291,7 +287,7 @@ export function NewDeliveryForm({
         type="submit"
         className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
       >
-        Save delivery
+        Save
       </button>
     </form>
   );

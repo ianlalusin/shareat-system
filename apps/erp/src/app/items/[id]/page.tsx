@@ -146,19 +146,21 @@ export default async function ItemDetailPage({
             Only a super-admin can change an item&apos;s unit. It is measured in {item.baseUnit}.
           </p>
         ) : (
-          <form action={changeItemUnitAction} className="flex flex-wrap items-center gap-3 text-sm">
-            <input type="hidden" name="itemId" value={item.id} />
-            <select name="baseUnit" required defaultValue={item.baseUnit} className={SELECT}>
-              {BASE_UNITS.map((u) => (
-                <option key={u} value={u}>{u}</option>
-              ))}
-            </select>
-            <button type="submit" className={BTN}>Change unit</button>
-            <p className="w-full text-xs text-neutral-500 dark:text-neutral-400">
+          <EditableRecord action={changeItemUnitAction} label={`${item.name} unit`} hidden={{ itemId: item.id }}>
+            <FormGrid>
+              <Field label="Unit">
+                <select name="baseUnit" required defaultValue={item.baseUnit} className={`${SELECT} w-full`}>
+                  {BASE_UNITS.map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+              </Field>
+            </FormGrid>
+            <p className="mt-3 w-full text-xs text-neutral-500 dark:text-neutral-400">
               Only a super-admin can change it, and only until the item has stock, counts, invoices,
               recipes, prices or orders.
             </p>
-          </form>
+          </EditableRecord>
         )}
       </section>
 
@@ -179,18 +181,16 @@ export default async function ItemDetailPage({
           </p>
         </div>
 
-        <form action={updateItemFlagsAction} className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-          <input type="hidden" name="itemId" value={item.id} />
-          {FLAGS.map((f) => (
-            <label key={f.key} className="flex items-center gap-2">
-              <input type="checkbox" name={f.key} defaultChecked={f.org} className="h-4 w-4" />
-              {f.label}
-            </label>
-          ))}
-          <button type="submit" className={BTN}>
-            Save organisation default
-          </button>
-        </form>
+        <EditableRecord action={updateItemFlagsAction} label={`${item.name} organisation default`} hidden={{ itemId: item.id }}>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+            {FLAGS.map((f) => (
+              <label key={f.key} className="flex items-center gap-2">
+                <input type="checkbox" name={f.key} defaultChecked={f.org} className="h-4 w-4" />
+                {f.label}
+              </label>
+            ))}
+          </div>
+        </EditableRecord>
 
         {byStore.length > 0 && (
           <div className="space-y-2">
@@ -204,7 +204,7 @@ export default async function ItemDetailPage({
               {byStore.map((s) => (
                 <li
                   key={s.storeId}
-                  className="flex flex-wrap items-end gap-3 rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800"
+                  className="space-y-2 rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800"
                 >
                   {/*
                     ⚠️ Save and Clear are TWO forms, side by side, not one form with a
@@ -213,48 +213,90 @@ export default async function ItemDetailPage({
                     "Clear" then SAVED the override instead. Two plain forms behave the same
                     with or without JS.
                   */}
-                  <form action={setStoreSellabilityAction} className="flex flex-wrap items-end gap-3">
+                  {s.override ? (
+                  <EditableRecord
+                      action={setStoreSellabilityAction}
+                      label={`${s.storeName} sellability`}
+                      hidden={{ itemId: item.id, storeId: s.storeId }}
+                      extra={
+                        s.override ? (
+                          <form action={clearStoreSellabilityAction}>
+                            <input type="hidden" name="itemId" value={item.id} />
+                            <input type="hidden" name="storeId" value={s.storeId} />
+                            <button type="submit" className={BTN_QUIET}>
+                              Clear
+                            </button>
+                          </form>
+                        ) : null
+                      }
+                    >
+                      <div className="flex flex-wrap items-end gap-3">
+                        <div className="min-w-[8rem]">
+                          <div className="font-medium">{s.storeName}</div>
+                          <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                            {s.override ? 'has its own answer' : 'follows the organisation'}
+                            {' · here: '}
+                            {soldAsLabel(s.resolved)}
+                          </div>
+                        </div>
+                        {FLAGS.map((f) => (
+                          <label key={f.key} className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                            {f.label}
+                            <select name={f.key} defaultValue={triValue(s.override?.[f.key])} className={SELECT}>
+                              <option value="">Follow the organisation ({f.org ? 'yes' : 'no'})</option>
+                              <option value="yes">Yes, here</option>
+                              <option value="no">No, here</option>
+                            </select>
+                          </label>
+                        ))}
+                        <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                          Why
+                          <input
+                            name="note"
+                            defaultValue={s.override?.note ?? ''}
+                            placeholder="made in-house here"
+                            className={`${SELECT} w-full min-w-[10rem]`}
+                          />
+                        </label>
+                      </div>
+                    </EditableRecord>
+                  ) : (
+                  <form action={setStoreSellabilityAction}>
                     <input type="hidden" name="itemId" value={item.id} />
                     <input type="hidden" name="storeId" value={s.storeId} />
-                    <div className="min-w-[8rem]">
-                      <div className="font-medium">{s.storeName}</div>
-                      <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                        {s.override ? 'has its own answer' : 'follows the organisation'}
-                        {' · here: '}
-                        {soldAsLabel(s.resolved)}
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="min-w-[8rem]">
+                        <div className="font-medium">{s.storeName}</div>
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                          {'follows the organisation'}
+                          {' · here: '}
+                          {soldAsLabel(s.resolved)}
+                        </div>
                       </div>
-                    </div>
-                    {FLAGS.map((f) => (
-                      <label key={f.key} className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-                        {f.label}
-                        <select name={f.key} defaultValue={triValue(s.override?.[f.key])} className={SELECT}>
-                          <option value="">Follow the organisation ({f.org ? 'yes' : 'no'})</option>
-                          <option value="yes">Yes, here</option>
-                          <option value="no">No, here</option>
-                        </select>
+                      {FLAGS.map((f) => (
+                        <label key={f.key} className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                          {f.label}
+                          <select name={f.key} defaultValue={triValue(undefined)} className={SELECT}>
+                            <option value="">Follow the organisation ({f.org ? 'yes' : 'no'})</option>
+                            <option value="yes">Yes, here</option>
+                            <option value="no">No, here</option>
+                          </select>
+                        </label>
+                      ))}
+                      <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                        Why
+                        <input
+                          name="note"
+                          defaultValue=""
+                          placeholder="made in-house here"
+                          className={`${SELECT} w-full min-w-[10rem]`}
+                        />
                       </label>
-                    ))}
-                    <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-                      Why
-                      <input
-                        name="note"
-                        defaultValue={s.override?.note ?? ''}
-                        placeholder="made in-house here"
-                        className={`${SELECT} w-full min-w-[10rem]`}
-                      />
-                    </label>
-                    <button type="submit" className={BTN}>
+                    </div>
+                    <button type="submit" className={`${BTN} mt-3`}>
                       Save
                     </button>
                   </form>
-                  {s.override && (
-                    <form action={clearStoreSellabilityAction}>
-                      <input type="hidden" name="itemId" value={item.id} />
-                      <input type="hidden" name="storeId" value={s.storeId} />
-                      <button type="submit" className={BTN_QUIET}>
-                        Clear
-                      </button>
-                    </form>
                   )}
                 </li>
               ))}

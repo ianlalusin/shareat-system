@@ -162,7 +162,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
             {[...credits.entries()].map(([supplierId, balance]) => (
               <li key={supplierId} className="flex items-center justify-between gap-3 py-1">
                 <span>{supplierName.get(supplierId) ?? supplierId}: ₱{balance}</span>
-                <form action={refundCreditAction} className="flex items-center gap-2">
+                <form action={refundCreditAction} className="flex min-w-0 flex-1 items-center justify-end gap-2">
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="supplierId" value={supplierId} />
                   <input type="hidden" name="moneyAccountId" value={moneyAccountId ?? ''} />
@@ -170,7 +170,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
                     name="amount"
                     placeholder="refund amount"
                     inputMode="decimal"
-                    className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                    className="min-w-0 flex-1 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
                   />
                   <button
                     type="submit"
