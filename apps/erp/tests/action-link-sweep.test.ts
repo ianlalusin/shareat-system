@@ -367,7 +367,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1139 -> 1142, T-382 S3, 2026-10-08. +3, found by running the census: the "Unlink from POS" form on `settings/pos-link/page.tsx`
     // gains the reason `<textarea>`, the confirm `<input type="checkbox">` (+1 UNRESOLVED baseline entry, touch-target-baseline.json)
     // and the "Unlink <store>" submit `<button>`. FAIL unmoved at 151. Verified by running the census (1142).
-    expect(results.length).toBe(1142);
+    // 1142 -> 1145, T-383 S1, 2026-10-08. +3: the rename form on `items/[id]/page.tsx` gains the name and code inputs and its
+    // "Rename" submit `<button>` (super-admin only). Verified by running the census (1145).
+    expect(results.length).toBe(1145);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

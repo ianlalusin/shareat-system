@@ -96,6 +96,9 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
   item_requests_base_unit_check: 'Choose the unit this item is measured in: pcs, kg, g, ltr, ml or roll.',
   items_kind_check: 'Choose what kind of item this is.',
   item_requests_kind_check: 'Choose what kind of item this is.',
+  // T-383 R4 - the blank guards (0047); no ids, no names.
+  items_name_not_blank_check: 'Give the item a name people will recognise.',
+  items_code_not_blank_check: 'Give the item a code.',
   // T-378 R2 - the history guard (migration 0186); no ids, no names (I3).
   items_base_unit_fixed:
     "This item's unit can no longer change: it already has stock, counts, invoices, recipes, prices or orders " +
