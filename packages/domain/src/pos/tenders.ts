@@ -18,6 +18,8 @@ const CAPABILITY = 'manage_chart_of_accounts' as const;
 
 const ACCOUNT_SENTENCE = "That money account isn't one of this store's.";
 
+const STALE_SENTENCE = 'This tender was changed after this page was opened. The page now shows what is saved. Check it and save again.';
+
 export interface CreateTenderInput {
   readonly storeId: string;
   readonly name: string;
@@ -28,7 +30,10 @@ export interface CreateTenderInput {
 
 export interface UpdateTenderInput {
   readonly tenderId: string;
+  /** R1: the version the page was drawn with; a write against a changed row is refused. */
+  readonly expectedVersion?: string;
   readonly name?: string;
+  readonly kind?: TenderKind;
   readonly posV1Alias?: string | null;
   readonly moneyAccountId?: string | null;
 }
@@ -160,51 +165,72 @@ async function loadAndAuthorize(tx: Tx, actor: Actor, tenderId: string) {
   return before;
 }
 
+/** R1, checked first on the locked row, before any other refusal. The WHERE clause in the repo stays as the backstop. */
+function assertFresh(current: string, expected: string | undefined, id: string): void {
+  if (expected !== undefined && expected !== current) throw refuse(`tenders: ${id} version moved`, STALE_SENTENCE);
+}
+
 export async function updateTender(tx: Tx, actor: Actor, input: UpdateTenderInput): Promise<void> {
   const before = await loadAndAuthorize(tx, actor, input.tenderId);
+  assertFresh(before.version, input.expectedVersion, before.id);
 
-  const patch: { name?: string; posV1Alias?: string | null; moneyAccountId?: string | null } = {};
+  const patch: { name?: string; kind?: TenderKind; posV1Alias?: string | null; moneyAccountId?: string | null } = {};
   if (input.name !== undefined) patch.name = cleanName(input.name);
   if (input.posV1Alias !== undefined) patch.posV1Alias = cleanAlias(input.posV1Alias);
-  if (input.moneyAccountId !== undefined) {
-    if (before.kind !== 'wallet') {
-      throw refuse('tenders: money account on a cash tender', 'A cash tender has no money account.');
-    }
-    if (!input.moneyAccountId) {
-      throw refuse('tenders: wallet without a money account', 'A wallet tender needs the money account it pays into.');
-    }
-    if (input.moneyAccountId !== before.moneyAccountId) {
-      await assertStoreAccount(tx, actor.orgId, before.storeId, input.moneyAccountId);
-    }
-    patch.moneyAccountId = input.moneyAccountId;
+  if (input.kind !== undefined && !(TENDER_KINDS as readonly string[]).includes(input.kind)) {
+    throw refuse(`tenders: unknown kind ${String(input.kind)}`, 'Choose whether this tender is cash or a wallet.');
   }
+  const kindChanged = input.kind !== undefined && input.kind !== before.kind;
+  const kind: TenderKind = input.kind ?? before.kind;
+  if (kind === 'wallet') {
+    // A wallet keeps its account unless a new one is given; a cash tender turned wallet must be given one.
+    if (input.moneyAccountId !== undefined || kindChanged) {
+      const accountId = input.moneyAccountId !== undefined ? input.moneyAccountId : null;
+      if (!accountId) {
+        throw refuse('tenders: wallet without a money account', 'A wallet tender needs the money account it pays into.');
+      }
+      if (accountId !== before.moneyAccountId) await assertStoreAccount(tx, actor.orgId, before.storeId, accountId);
+      patch.moneyAccountId = accountId;
+    }
+  } else if (kindChanged) {
+    // Wallet -> cash: the account is cleared (the shape CHECK holds). Naming one is refused.
+    if (input.moneyAccountId) throw refuse('tenders: money account on a cash tender', 'A cash tender has no money account.');
+    patch.moneyAccountId = null;
+  } else if (input.moneyAccountId !== undefined) {
+    throw refuse('tenders: money account on a cash tender', 'A cash tender has no money account.');
+  }
+  if (kindChanged) patch.kind = kind;
   if (patch.posV1Alias !== undefined && before.isActive) {
     await assertAliasFree(tx, actor.orgId, before.storeId, patch.posV1Alias, before.id);
   }
 
+  let changed = 0;
   try {
-    await posV1Repo.updateTenderRow(tx, actor.orgId, before.id, patch);
+    changed = await posV1Repo.updateTenderRow(tx, actor.orgId, before.id, patch, input.expectedVersion);
   } catch (err) {
     translate(err, patch.name ?? before.name, patch.posV1Alias ?? before.posV1Alias);
   }
+  if (changed === 0 && input.expectedVersion !== undefined) throw refuse(`tenders: ${before.id} version moved`, STALE_SENTENCE);
 
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'update_tender',
     entity: 'tenders',
     entityId: before.id,
-    before: { name: before.name, moneyAccountId: before.moneyAccountId, posV1Alias: before.posV1Alias },
+    before: { name: before.name, kind: before.kind, moneyAccountId: before.moneyAccountId, posV1Alias: before.posV1Alias },
     after: {
       name: patch.name ?? before.name,
-      moneyAccountId: patch.moneyAccountId ?? before.moneyAccountId,
+      kind,
+      moneyAccountId: patch.moneyAccountId !== undefined ? patch.moneyAccountId : before.moneyAccountId,
       posV1Alias: patch.posV1Alias !== undefined ? patch.posV1Alias : before.posV1Alias,
     },
     source: 'web',
   });
 }
 
-export async function setTenderActive(tx: Tx, actor: Actor, input: { tenderId: string; isActive: boolean }): Promise<void> {
+export async function setTenderActive(tx: Tx, actor: Actor, input: { tenderId: string; isActive: boolean; expectedVersion?: string }): Promise<void> {
   const before = await loadAndAuthorize(tx, actor, input.tenderId);
+  assertFresh(before.version, input.expectedVersion, before.id);
   if (before.isActive === input.isActive) return;
 
   if (input.isActive) {
@@ -212,11 +238,13 @@ export async function setTenderActive(tx: Tx, actor: Actor, input: { tenderId: s
     await assertAliasFree(tx, actor.orgId, before.storeId, before.posV1Alias, before.id);
     if (before.moneyAccountId) await assertStoreAccount(tx, actor.orgId, before.storeId, before.moneyAccountId);
   }
+  let changed = 0;
   try {
-    await posV1Repo.updateTenderRow(tx, actor.orgId, before.id, { isActive: input.isActive });
+    changed = await posV1Repo.updateTenderRow(tx, actor.orgId, before.id, { isActive: input.isActive }, input.expectedVersion);
   } catch (err) {
     translate(err, before.name, before.posV1Alias);
   }
+  if (changed === 0 && input.expectedVersion !== undefined) throw refuse(`tenders: ${before.id} version moved`, STALE_SENTENCE);
 
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,

@@ -21,6 +21,14 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
+/** R7: every action lands on its store's card. A blank store id gives a shape the helper drops. */
+function anchorOf(storeId: string): string {
+  return `store-${storeId}`;
+}
+
+/** R1: the web actions always carry the version the page was drawn with. The sentence is the domain's, repeated here. */
+const STALE_SENTENCE = 'This tender was changed after this page was opened. The page now shows what is saved. Check it and save again.';
+
 const TAX_TYPES = ['vat_inclusive', 'vat_exclusive', 'non_vat'] as const;
 
 export async function linkStoreToPosAction(fd: FormData): Promise<void> {
@@ -56,10 +64,10 @@ export async function linkStoreToPosAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
   }
   revalidatePath('/settings/pos-link');
-  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${storeName || 'The store'} is linked to POS.` });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${storeName || 'The store'} is linked to POS.` }, { anchor: anchorOf(storeId) });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -75,16 +83,16 @@ export async function createTenderAction(fd: FormData): Promise<void> {
       createTender(tx, actor, {
         storeId,
         name: str(fd, 'name'),
-        kind: kind === 'wallet' ? 'wallet' : 'cash',
+        kind: kind as 'cash' | 'wallet', // R4: never decided here; a blank or unknown kind is the domain's to refuse
         moneyAccountId: str(fd, 'moneyAccountId') || null,
         posV1Alias: str(fd, 'posV1Alias') || null,
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
   }
   revalidatePath('/settings/pos-link');
-  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: 'Tender added.' });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: 'Tender added.' }, { anchor: anchorOf(storeId) });
 }
 
 export async function updateTenderAction(fd: FormData): Promise<void> {
@@ -92,19 +100,26 @@ export async function updateTenderAction(fd: FormData): Promise<void> {
   const storeId = str(fd, 'storeId');
   try {
     const accountId = str(fd, 'moneyAccountId');
+    const kind = str(fd, 'kind');
+    const version = str(fd, 'version');
+    if (!version) throw new Error(STALE_SENTENCE);
+    // R5: the account is forwarded only for a wallet (the form always submits the select); a cash result sends none
+    // and the domain clears it. A form with no kind field keeps the old behaviour.
     await withOrgPrincipal(actor.orgId, (tx) =>
       updateTender(tx, actor, {
         tenderId: str(fd, 'tenderId'),
+        expectedVersion: version,
         name: str(fd, 'name'),
         posV1Alias: str(fd, 'posV1Alias') || null,
-        ...(accountId ? { moneyAccountId: accountId } : {}),
+        ...(kind ? { kind: kind as 'cash' | 'wallet' } : {}),
+        ...(kind === 'cash' ? {} : accountId ? { moneyAccountId: accountId } : {}),
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
   }
   revalidatePath('/settings/pos-link');
-  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: 'Tender saved.' });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: 'Tender saved.' }, { anchor: anchorOf(storeId) });
 }
 
 export async function setTenderActiveAction(fd: FormData): Promise<void> {
@@ -112,12 +127,14 @@ export async function setTenderActiveAction(fd: FormData): Promise<void> {
   const storeId = str(fd, 'storeId');
   const isActive = str(fd, 'isActive') === 'true';
   try {
-    await withOrgPrincipal(actor.orgId, (tx) => setTenderActive(tx, actor, { tenderId: str(fd, 'tenderId'), isActive }));
+    const version = str(fd, 'version');
+    if (!version) throw new Error(STALE_SENTENCE);
+    await withOrgPrincipal(actor.orgId, (tx) => setTenderActive(tx, actor, { tenderId: str(fd, 'tenderId'), isActive, expectedVersion: version }));
   } catch (err) {
-    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
   }
   revalidatePath('/settings/pos-link');
-  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: isActive ? 'Tender restored.' : 'Tender retired.' });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: isActive ? 'Tender restored.' : 'Tender retired.' }, { anchor: anchorOf(storeId) });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -139,8 +156,8 @@ export async function unlinkStoreFromPosAction(fd: FormData): Promise<void> {
       return (await storesRepo.getById(tx, actor.orgId, storeId))?.name ?? storeName;
     });
   } catch (err) {
-    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
   }
   revalidatePath('/settings/pos-link');
-  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${storeName} is unlinked from POS. Its sales days are typed from now on.` });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${storeName} is unlinked from POS. Its sales days are typed from now on.` }, { anchor: anchorOf(storeId) });
 }

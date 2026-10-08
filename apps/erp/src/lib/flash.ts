@@ -84,6 +84,8 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const PERIOD = /^\d{4}-?\d{2}$/;
 const YEAR = /^\d{4}$/;
 const CAP = /^[a-z][a-z0-9_]{0,63}$/;
+/** R7: the one anchor shape in use, a closed set like NAV_SHAPES. */
+const ANCHOR = /^store-[0-9a-f-]{36}$/;
 
 const NAV_SHAPES = {
   store: UUID,
@@ -205,8 +207,14 @@ function pick<K extends string>(src: Record<string, unknown>, keys: readonly K[]
  * Redirect to `path` carrying a banner and refills in the flash cookie. Always `return await` it.
  * `redirect` from `next/navigation` is called only here (guard G1a).
  */
-export async function redirectWithFlash(path: string, nav: Nav, flash?: Flash): Promise<never> {
+export async function redirectWithFlash(path: string, nav: Nav, flash?: Flash, opts?: { anchor?: string }): Promise<never> {
   if (!isSameAppPath(path)) throw new Error('redirectWithFlash: path must be a same-app path with no query, hash or backslash');
+
+  let hash = '';
+  if (opts?.anchor !== undefined) {
+    if (ANCHOR.test(opts.anchor)) hash = `#${opts.anchor}`;
+    else logger.warn({ key: 'anchor' }, 'flash: anchor dropped (wrong shape)');
+  }
 
   const query = new URLSearchParams();
   for (const [k, v] of Object.entries(cleanNav(nav as Record<string, string | undefined>))) query.set(k, v);
@@ -225,7 +233,7 @@ export async function redirectWithFlash(path: string, nav: Nav, flash?: Flash): 
 
   if (Object.keys(msg).length === 0 && Object.keys(keep).length === 0) {
     const qs = query.toString();
-    return redirect(qs ? `${path}?${qs}` : path);
+    return redirect(`${qs ? `${path}?${qs}` : path}${hash}`);
   }
 
   const n = randomBytes(12).toString('base64url');
@@ -250,7 +258,7 @@ export async function redirectWithFlash(path: string, nav: Nav, flash?: Flash): 
     maxAge: TTL_MS / 1000,
   });
   query.set('f', n);
-  return redirect(`${path}?${query.toString()}`);
+  return redirect(`${path}?${query.toString()}${hash}`);
 }
 
 /**
