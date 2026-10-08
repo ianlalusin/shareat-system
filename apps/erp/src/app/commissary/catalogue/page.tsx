@@ -13,6 +13,7 @@ import {
 } from './lib';
 import { selectDefaultCommissaryStoreId } from './default-store';
 import { Page } from '@/components/shell/Page';
+import { FormGrid } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -177,7 +178,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
             </select>
           </label>
           <button type="submit" className={BTN}>
-            Save link
+            Save
           </button>
         </form>
       </section>
@@ -252,10 +253,10 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           </label>
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Manual cost (optional)</span>
-            <input name="manualCost" inputMode="decimal" placeholder="tier 3 of the price fallback" className={`${INPUT} w-48`} />
+            <input name="manualCost" inputMode="decimal" placeholder="tier 3 of the price fallback" className={`${INPUT} w-full`} />
           </label>
           <button type="submit" className={BTN}>
-            Save offering
+            Save
           </button>
         </form>
       </section>
@@ -340,13 +341,14 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
 
             <form
               action={upsertMapAction}
-              className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800"
+              className="space-y-3 border-t border-neutral-200 pt-3 dark:border-neutral-800"
             >
               <input type="hidden" name="commissaryStoreId" value={commissaryStoreId} />
               <input type="hidden" name="branchStoreId" value={branchStoreId} />
-              <label className="text-sm">
+              <FormGrid>
+              <label className="min-w-0 text-sm">
                 <span className="block text-neutral-600 dark:text-neutral-400">Commissary item</span>
-                <select name="commissaryItemId" required defaultValue="" className={INPUT}>
+                <select name="commissaryItemId" required defaultValue="" className={`${INPUT} w-full`}>
                   <option value="" disabled>
                     Select an offering
                   </option>
@@ -357,9 +359,9 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                   ))}
                 </select>
               </label>
-              <label className="text-sm">
+              <label className="min-w-0 text-sm">
                 <span className="block text-neutral-600 dark:text-neutral-400">Branch item</span>
-                <select name="branchItemId" required defaultValue="" className={INPUT}>
+                <select name="branchItemId" required defaultValue="" className={`${INPUT} w-full`}>
                   <option value="" disabled>
                     Select an item
                   </option>
@@ -374,9 +376,9 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                 <input type="checkbox" name="isLedgerOnly" />
                 Ledger only (no branch stock moves)
               </label>
-              <label className="text-sm">
+              <label className="min-w-0 text-sm">
                 <span className="block text-neutral-600 dark:text-neutral-400">Expense category (optional)</span>
-                <select name="expenseCategoryId" defaultValue="" className={INPUT}>
+                <select name="expenseCategoryId" defaultValue="" className={`${INPUT} w-full`}>
                   <option value="">None</option>
                   {/* ⭐ T-229 slice 2 — active only: this mapping governs FUTURE receipts. */}
                   {EXPENSE_GROUPS.map((g) => {
@@ -394,8 +396,9 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                   })}
                 </select>
               </label>
+              </FormGrid>
               <button type="submit" className={BTN}>
-                Save map
+                Save
               </button>
             </form>
           </>

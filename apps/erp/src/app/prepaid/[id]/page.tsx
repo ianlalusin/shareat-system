@@ -126,14 +126,14 @@ export default async function PrepaidItemPage({
                 className={INPUT}
               />
             </label>
-            <label className="flex flex-col gap-1">
+            <label className="flex min-w-[6rem] flex-1 flex-col gap-1">
               <span className="text-xs font-medium text-amber-900 dark:text-amber-300">Months</span>
               <input
                 name="coverageMonths"
                 inputMode="numeric"
                 required
                 defaultValue={item.coverageMonths}
-                className={`${INPUT} w-24`}
+                className={INPUT}
               />
             </label>
             <button

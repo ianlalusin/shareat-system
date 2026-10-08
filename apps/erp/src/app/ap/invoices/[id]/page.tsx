@@ -16,6 +16,7 @@ import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { MoneyLines } from '@/components/money/MoneyLines';
 import { Page } from '@/components/shell/Page';
+import { EditableRecord } from '@/components/forms';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -216,8 +217,11 @@ return (
             sell by the case, enter cases &mdash; then set &ldquo;per unit&rdquo; to how many of the
             item&rsquo;s own unit are in one, so ₱/kg stays comparable across suppliers.
           </p>
-          <form action={setInvoiceLinesAction} className="space-y-2">
-            <input type="hidden" name="invoiceId" value={invoice.id} />
+          <LinesShell
+            saved={existingLines.length > 0}
+            invoiceId={invoice.id}
+          >
+            <div className="space-y-2">
             {Array.from({ length: INVOICE_LINE_ROWS }, (_, n) => n + 1).map((i) => {
               const prior = existingLines[i - 1];
               return (
@@ -275,10 +279,8 @@ return (
                 </div>
               );
             })}
-            <button type="submit" className="rounded border border-neutral-300 px-4 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
-              Save lines
-            </button>
-          </form>
+            </div>
+          </LinesShell>
         </section>
       )}
 
@@ -605,4 +607,24 @@ function StatusBadge({ status }: { status: string }) {
         ? 'bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
         : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
   return <span className={`rounded px-2 py-1 text-xs font-medium ${cls}`}>{status}</span>;
+}
+
+/** A2/A6: lines already saved show locked (Edit); an invoice with no lines yet is an add, open, with Save. */
+function LinesShell({ saved, invoiceId, children }: { saved: boolean; invoiceId: string; children: React.ReactNode }) {
+  if (saved) {
+    return (
+      <EditableRecord action={setInvoiceLinesAction} label="invoice lines" hidden={{ invoiceId }}>
+        {children}
+      </EditableRecord>
+    );
+  }
+  return (
+    <form action={setInvoiceLinesAction} className="space-y-2">
+      <input type="hidden" name="invoiceId" value={invoiceId} />
+      {children}
+      <button type="submit" className="rounded border border-neutral-300 px-4 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+        Save
+      </button>
+    </form>
+  );
 }

@@ -125,7 +125,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
             <Field label="Days to pay" hint="Only for On credit. 0 to 365.">
               <input type="number" name="creditTermsDays" min="0" max="365" step="1" className={INPUT} />
             </Field>
-            <button type="submit" className={BTN}>Record supplier</button>
+            <button type="submit" className={BTN}>Save</button>
           </form>
         </section>
 

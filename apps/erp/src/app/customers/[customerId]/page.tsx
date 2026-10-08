@@ -355,16 +355,16 @@ export default async function CustomerDetailPage({
                     <input type="hidden" name="customerId" value={customerId} />
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="chargeId" value={c.chargeId} />
-                    <Field label="Write off">
+                    <Field label="Write off" className="min-w-[8rem] flex-1">
                       <input
                         name="amount"
                         inputMode="decimal"
                         defaultValue={c.outstanding}
-                        className={`${INPUT} w-32`}
+                        className={INPUT}
                       />
                     </Field>
-                    <Field label="Why is it uncollectible?">
-                      <input name="reason" required className={`${INPUT} w-64`} />
+                    <Field label="Why is it uncollectible?" className="min-w-[14rem] flex-[2]">
+                      <input name="reason" required className={INPUT} />
                     </Field>
                     <button
                       type="submit"
@@ -379,8 +379,8 @@ export default async function CustomerDetailPage({
                     <input type="hidden" name="customerId" value={customerId} />
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="chargeId" value={c.chargeId} />
-                    <Field label="Void this charge — why?">
-                      <input name="reason" required className={`${INPUT} w-64`} />
+                    <Field label="Void this charge — why?" className="min-w-[14rem] flex-[2]">
+                      <input name="reason" required className={INPUT} />
                     </Field>
                     <button
                       type="submit"
@@ -514,9 +514,19 @@ export default async function CustomerDetailPage({
 const INPUT =
   'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  className,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <label className="flex flex-col gap-1">
+    <label className={`flex flex-col gap-1${className ? ` ${className}` : ''}`}>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
