@@ -86,9 +86,9 @@ export default async function AttendanceReviewPage({
       </div>
 
       <form className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
+        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Store
-          <select name="store" defaultValue={storeId} className={`${FIELD} w-52`}>
+          <select name="store" defaultValue={storeId} className={`${FIELD} w-full`}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -96,13 +96,13 @@ export default async function AttendanceReviewPage({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
+        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           From
-          <input name="from" type="date" defaultValue={from} className={`${FIELD} w-44`} />
+          <input name="from" type="date" defaultValue={from} className={`${FIELD} w-full`} />
         </label>
-        <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
+        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           to
-          <input name="to" type="date" defaultValue={to} className={`${FIELD} w-44`} />
+          <input name="to" type="date" defaultValue={to} className={`${FIELD} w-full`} />
         </label>
         <button
           type="submit"

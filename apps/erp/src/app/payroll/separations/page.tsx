@@ -3,6 +3,7 @@ import { SEPARATION_CAUSES } from '@shareat/db/schema';
 import { postSeparationAction, voidSeparationAction } from './actions';
 import { cashAccountsFor, listStores, peso, preview, separationsFor, worklistFor } from './lib';
 import { Page } from '@/components/shell/Page';
+import { FormGrid, Field } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -80,10 +81,10 @@ export default async function SeparationsPage({
         </PageDescription>
       </div>
 
-      <form className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
+      <form method="get" className="flex flex-wrap items-end gap-3">
+        <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
           <span className={LABEL}>Store</span>
-          <select name="store" defaultValue={storeId} className={`${FIELD} w-52`}>
+          <select name="store" defaultValue={storeId} className={`${FIELD} w-full`}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -128,12 +129,12 @@ export default async function SeparationsPage({
         <section className="space-y-4 rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
           <h2 className="text-sm font-medium">Processing {selected.personName}</h2>
 
-          <form className="flex flex-wrap items-end gap-3">
+          <form method="get" className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="store" value={storeId} />
             <input type="hidden" name="employmentId" value={selected.employmentId} />
-            <label className="flex flex-col gap-1">
+            <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1">
               <span className={LABEL}>Separation date</span>
-              <input name="separationDate" type="date" defaultValue={separationDate} className={`${FIELD} w-44`} />
+              <input name="separationDate" type="date" defaultValue={separationDate} className={`${FIELD} w-full`} />
             </label>
             <button type="submit" className={BTN}>
               Preview
@@ -154,33 +155,29 @@ export default async function SeparationsPage({
                 Outstanding advance: {peso(Number(pvResult.preview.outstandingAdvance))}.
               </p>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <label className="flex flex-col gap-1">
-                  <span className={LABEL}>Cause</span>
-                  <select name="cause" defaultValue="resignation" className={FIELD}>
+              <FormGrid>
+                <Field label="Cause">
+                  <select name="cause" defaultValue="resignation" className={`${FIELD} mt-1 w-full`}>
                     {SEPARATION_CAUSES.map((c) => (
                       <option key={c} value={c}>
                         {CAUSE_LABELS[c] ?? c}
                       </option>
                     ))}
                   </select>
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className={LABEL}>Separation pay (₱)</span>
-                  <input name="separationPayAmount" inputMode="decimal" defaultValue="0" className={FIELD} />
-                  <span className="text-[11px] text-neutral-500">A decision, not a calculation — see above.</span>
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className={LABEL}>Pay from</span>
-                  <select name="moneyAccountId" className={FIELD}>
+                </Field>
+                <Field label="Separation pay (₱)" hint="A decision, not a calculation — see above.">
+                  <input name="separationPayAmount" inputMode="decimal" defaultValue="0" className={`${FIELD} mt-1 w-full`} />
+                </Field>
+                <Field label="Pay from">
+                  <select name="moneyAccountId" className={`${FIELD} mt-1 w-full`}>
                     {accounts.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name}
                       </option>
                     ))}
                   </select>
-                </label>
-              </div>
+                </Field>
+              </FormGrid>
 
               <label className="flex items-start gap-2 rounded border border-neutral-200 px-3 py-2 dark:border-neutral-800">
                 <input type="checkbox" name="clearanceConfirmed" className="mt-0.5" />
@@ -225,7 +222,7 @@ export default async function SeparationsPage({
                 <form action={voidSeparationAction} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="id" value={s.id} />
-                  <input name="reason" placeholder="Why void it?" className={`${FIELD} w-64`} />
+                  <input name="reason" placeholder="Why void it?" className={`${FIELD} min-w-0 flex-1 basis-48`} />
                   <button type="submit" className={BTN}>
                     Void
                   </button>

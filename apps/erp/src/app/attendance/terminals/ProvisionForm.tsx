@@ -64,14 +64,14 @@ export function ProvisionForm({
 
   return (
     <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
-      <label className="text-sm">
+      <label className="min-w-0 flex-1 basis-48 text-sm">
         <span className="block text-neutral-600 dark:text-neutral-400">Label</span>
         <input
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           required
           placeholder="e.g. Lipa front counter"
-          className={`${INPUT} w-64`}
+          className={`${INPUT} w-full`}
         />
       </label>
       <button type="submit" disabled={pending} className={BTN}>

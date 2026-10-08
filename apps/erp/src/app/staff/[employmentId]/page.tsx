@@ -5,6 +5,7 @@ import { requireSession } from '../../../lib/session';
 import { endEmploymentAction, issuePinAction, setPositionsAction } from '../actions';
 import { employmentDetail, livePinFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { EditableRecord } from '@/components/forms';
 import { Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
@@ -91,8 +92,8 @@ export default async function EmploymentDetailPage({
             )}
           </ul>
         ) : (
-          <form action={setPositionsAction} className="space-y-2">
-            <input type="hidden" name="employmentId" value={employmentId} />
+          <EditableRecord action={setPositionsAction} label="positions" hidden={{ employmentId }}>
+            <div className="space-y-2">
             {positions.map((p) => (
               <div key={p.id} className="flex items-center gap-3 text-sm">
                 <label className="flex items-center gap-2">
@@ -111,10 +112,8 @@ export default async function EmploymentDetailPage({
                 </label>
               </div>
             ))}
-            <button type="submit" className={BTN}>
-              Save positions
-            </button>
-          </form>
+            </div>
+          </EditableRecord>
         )}
       </section>
 
@@ -149,7 +148,7 @@ export default async function EmploymentDetailPage({
         {!isEnded && (
           <form action={issuePinAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="employmentId" value={employmentId} />
-            <label className="text-sm">
+            <label className="min-w-0 flex-1 text-sm sm:min-w-48">
               <span className="block text-neutral-600 dark:text-neutral-400">
                 {livePin ? 'New PIN' : 'PIN'} (6 digits)
               </span>
@@ -160,7 +159,7 @@ export default async function EmploymentDetailPage({
                 maxLength={6}
                 inputMode="numeric"
                 placeholder="000000"
-                className="font-mono"
+                className="w-full font-mono"
               />
             </label>
             <button type="submit" className={BTN}>
@@ -210,13 +209,13 @@ export default async function EmploymentDetailPage({
         ) : (
           <form action={endEmploymentAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="employmentId" value={employmentId} />
-            <label className="text-sm">
+            <label className="min-w-0 flex-1 text-sm sm:min-w-48">
               <span className="block text-neutral-600 dark:text-neutral-400">End date</span>
-              <Input type="date" name="endedOn" required defaultValue={toBusinessDate()} />
+              <Input type="date" name="endedOn" required defaultValue={toBusinessDate()} className="w-full" />
             </label>
-            <label className="text-sm">
+            <label className="min-w-0 flex-1 text-sm sm:min-w-48">
               <span className="block text-neutral-600 dark:text-neutral-400">Status</span>
-              <select name="employmentStatus" required defaultValue="" className={INPUT}>
+              <select name="employmentStatus" required defaultValue="" className={`${INPUT} mt-1 w-full`}>
                 <option value="" disabled>
                   Select
                 </option>
