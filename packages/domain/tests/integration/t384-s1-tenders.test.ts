@@ -283,3 +283,73 @@ describe('D5 - control: no expectedVersion behaves as before', () => {
     expect(await audits(t.id, 'update_tender')).toHaveLength(2);
   });
 });
+
+describe('D6 - the version moves on every write, even inside one transaction', () => {
+  it('create, read v, update with v, update again with the same v, all in ONE transaction: the second is refused and its name does not land', async () => {
+    const f = await fixture('d6');
+    const out = await asOrg(f.orgId, async (tx) => {
+      const t = await mod.createTender(tx, f.admin, { storeId: f.storeId, name: 'A', kind: 'cash', posV1Alias: 'A' } as never);
+      const v = ((await posV1Repo.getTenderById(tx, f.orgId, t.id)) as unknown as { version: string }).version;
+      await mod.updateTender(tx, f.admin, { tenderId: t.id, name: 'A2', expectedVersion: v } as never);
+      const err = await mod.updateTender(tx, f.admin, { tenderId: t.id, name: 'A3', expectedVersion: v } as never).then(() => null, (e) => e);
+      const name = ((await posV1Repo.getTenderById(tx, f.orgId, t.id)) as { name: string }).name;
+      return { err, name };
+    });
+    expect(out.err, 'the second update carries a version the first update already moved').toBeInstanceOf(Error);
+    expect(sentence(out.err)).toBe(STALE_SENTENCE);
+    expect(out.name).toBe('A2');
+  });
+
+  it('same, for an existing row: update with v then retire with the same v in one transaction is refused', async () => {
+    const f = await fixture('d6b');
+    const t = await create(f, { name: 'A', kind: 'cash', posV1Alias: 'A' });
+    await update(f, { tenderId: t.id, name: 'A1' });
+    const out = await asOrg(f.orgId, async (tx) => {
+      const v = ((await posV1Repo.getTenderById(tx, f.orgId, t.id)) as unknown as { version: string }).version;
+      await mod.updateTender(tx, f.admin, { tenderId: t.id, name: 'A2', expectedVersion: v } as never);
+      return mod.setTenderActive(tx, f.admin, { tenderId: t.id, isActive: false, expectedVersion: v } as never).then(() => null, (e) => e);
+    });
+    expect(out, 'the retire carries a version the update already moved').toBeInstanceOf(Error);
+    expect(sentence(out)).toBe(STALE_SENTENCE);
+  });
+});
+
+describe('D7 - the version is checked first: a stale form gets the stale sentence, not an alias or account one', () => {
+  it('stale update whose alias is now held by another tender -> stale sentence; control: the same alias with a fresh version -> the alias sentence', async () => {
+    const f = await fixture('d7a');
+    const a = await create(f, { name: 'A', kind: 'cash', posV1Alias: 'A' });
+    await create(f, { name: 'B', kind: 'cash', posV1Alias: 'B' });
+    const v0 = await versionOf(f, a.id);
+    await update(f, { tenderId: a.id, name: 'A2', expectedVersion: v0 });
+    expect(await sentenceOf(update(f, { tenderId: a.id, posV1Alias: 'B', expectedVersion: v0 }))).toBe(STALE_SENTENCE);
+    const alias = await sentenceOf(update(f, { tenderId: a.id, posV1Alias: 'B', expectedVersion: await versionOf(f, a.id) }));
+    expect(alias).toContain('already answers to');
+  });
+
+  it('stale kind change cash -> wallet with no account -> stale sentence; control: fresh -> the wallet-needs-account sentence', async () => {
+    const f = await fixture('d7b');
+    const a = await create(f, { name: 'A', kind: 'cash', posV1Alias: 'A' });
+    const v0 = await versionOf(f, a.id);
+    await update(f, { tenderId: a.id, name: 'A2', expectedVersion: v0 });
+    expect(await sentenceOf(update(f, { tenderId: a.id, kind: 'wallet', expectedVersion: v0 }))).toBe(STALE_SENTENCE);
+    expect(await sentenceOf(update(f, { tenderId: a.id, kind: 'wallet', expectedVersion: await versionOf(f, a.id) }))).toBe(WALLET_NEEDS_ACCOUNT);
+  });
+
+  it('stale update pointing a wallet at a cash drawer -> stale sentence', async () => {
+    const f = await fixture('d7c');
+    const a = await create(f, { name: 'G', kind: 'wallet', moneyAccountId: f.gcashAcct, posV1Alias: 'G' });
+    const v0 = await versionOf(f, a.id);
+    await update(f, { tenderId: a.id, name: 'G2', expectedVersion: v0 });
+    expect(await sentenceOf(update(f, { tenderId: a.id, moneyAccountId: f.drawerAcct, expectedVersion: v0 }))).toBe(STALE_SENTENCE);
+  });
+
+  it('stale restore whose alias was taken meanwhile -> stale sentence; control: fresh -> the alias sentence', async () => {
+    const f = await fixture('d7d');
+    const a = await create(f, { name: 'A', kind: 'cash', posV1Alias: 'A' });
+    const v0 = await versionOf(f, a.id);
+    await setActive(f, { tenderId: a.id, isActive: false, expectedVersion: v0 });
+    await create(f, { name: 'A again', kind: 'cash', posV1Alias: 'A' });
+    expect(await sentenceOf(setActive(f, { tenderId: a.id, isActive: true, expectedVersion: v0 }))).toBe(STALE_SENTENCE);
+    expect(await sentenceOf(setActive(f, { tenderId: a.id, isActive: true, expectedVersion: await versionOf(f, a.id) }))).toContain('already answers to');
+  });
+});
