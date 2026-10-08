@@ -60,6 +60,7 @@ const COMMANDS: Record<string, string> = {
   'Post the opening balances': 'posts to the ledger',
   'Post this settlement': 'posts to the ledger',
   'Pay': 'books a payment',
+  'Add directly (super-admin)': 'creates an item with no approval, bypassing the request flow (items page)',
   'Charge': 'books a charge',
   'Charge to 1230': 'books a charge',
   'Reverse': 'reverses a posting',

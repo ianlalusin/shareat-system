@@ -37,6 +37,9 @@ const h = vi.hoisted(() => ({
   actor: null as null | { personId: string; orgId: string },
   /** POS's payment methods for the linked store; null = POS is not answering. */
   methods: null as string[] | null,
+  /** Audit fix Y1: when > 0, the Nth and later posV1Repo.getTenderById calls run a failing query on the tx they were given. */
+  failReadFrom: 0,
+  readCalls: 0,
 }));
 
 vi.mock('next/navigation', async () => (await import('../helpers/flash-jar-core')).nextNavigationMock());
@@ -49,6 +52,23 @@ vi.mock('../../src/lib/session', () => ({
 }));
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@shareat/db', async (orig) => {
+  const real = await orig<typeof import('@shareat/db')>();
+  return {
+    ...real,
+    posV1Repo: {
+      ...real.posV1Repo,
+      getTenderById: async (...a: Parameters<typeof real.posV1Repo.getTenderById>) => {
+        h.readCalls += 1;
+        if (h.failReadFrom > 0 && h.readCalls >= h.failReadFrom) {
+          // A failed statement on the caller's transaction: Postgres aborts it, whatever the caller then does with the error.
+          await (a[0] as { execute: (q: unknown) => Promise<unknown> }).execute((await import('drizzle-orm')).sql`select 1/0`);
+        }
+        return real.posV1Repo.getTenderById(...a);
+      },
+    },
+  };
+});
 vi.mock('@shareat/domain', async (orig) => {
   const real = await orig<typeof import('@shareat/domain')>();
   return {
@@ -583,20 +603,46 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
     expect(decodeURIComponent(r.signal.url)).not.toMatch(/Typed|Zed/);
   });
 
-  it('X2: after the refusal the page reopens THAT record unlocked, holding the typed name and POS name', async () => {
+  /** A refusal that is NOT a stale version: a wallet pointed at the cash drawer (R6), with the CURRENT version. */
+  async function refusedNonStale(f: F) {
+    return act('updateTenderAction', f.superAdmin, {
+      storeId: f.storeId, tenderId: f.walletTenderId, version: await repoVersion(f.walletTenderId), name: 'Typed Name Zed', kind: 'wallet',
+      moneyAccountId: f.drawer, posV1Alias: 'TypedAliasQ',
+    });
+  }
+
+  it('X2: after a NON-stale refusal the page reopens THAT record unlocked, holding the typed name and POS name (stale refusals are Y3)', async () => {
     const f = await fixture('x2');
-    const r = await refused(f);
+    const r = await refusedNonStale(f);
+    expect(r.outcome.flash.error, 'a real refusal, not a save').toBeTruthy();
+    expect(r.outcome.flash.error).not.toBe(STALE);
     const card = cardOf(await render(f, pageParamsOf(r.signal.url)), f.storeId);
-    expect(plain(card), 'the refusal shows on the card').toContain(STALE);
-    const form = recordForm(card, f.cashTenderId)!;
+    expect(plain(card), 'the refusal shows on the card').toContain(r.outcome.flash.error!);
+    const form = recordForm(card, f.walletTenderId)!;
     expect(form).toBeDefined();
     expect(form, 'reopened: not disabled').not.toContain('<fieldset disabled');
     expect(form, 'the typed name is still in the box').toContain('value="Typed Name Zed"');
     expect(form, 'and the typed POS name').toContain('value="TypedAliasQ"');
     expect(form, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*>\s*Save\s*<\/button>/);
     expect(plain(form)).toContain('Cancel');
-    expect(recordForm(card, f.walletTenderId)!, 'the other tenders stay locked').toContain('<fieldset disabled');
+    expect(recordForm(card, f.cashTenderId)!, 'the other tenders stay locked').toContain('<fieldset disabled');
     // Red on HEAD / S1b-min: the record comes back with the stored values; the typed ones are gone.
+  });
+
+  it('Y3 (audit fix, DEF-617 vs stale): after a STALE refusal the tender renders LOCKED with the stored values (the other user change) - no typed values, no new version for a blind second Save', async () => {
+    const f = await fixture('y3');
+    const r = await refused(f); // first save 'Cash A' lands (the other user), the second, with the old version, is refused as stale
+    expect(r.outcome.flash.error).toBe(STALE);
+    const card = cardOf(await render(f, pageParamsOf(r.signal.url)), f.storeId);
+    expect(plain(card), 'the stale sentence still shows on the card').toContain(STALE);
+    const form = recordForm(card, f.cashTenderId)!;
+    expect(form).toBeDefined();
+    expect(form, 'locked: the user must look at what was saved before editing again').toContain('<fieldset disabled');
+    expect(form, 'the other user change is what is shown').toContain('value="Cash A"');
+    expect(form, 'the typed name is dropped').not.toContain('Typed Name Zed');
+    expect(form, 'the typed POS name is dropped').not.toContain('TypedAliasQ');
+    expect(form, 'no Save showing').not.toMatch(/<button[^>]*type="submit"/);
+    // Red on HEAD: the record reopens in edit mode holding the typed values (initialMode=editing), carrying the fresh version.
   });
 
   it('X3 (control; red on HEAD only because nothing is locked yet): with no flash the record renders locked with the stored values', async () => {
@@ -604,5 +650,38 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
     const form = recordForm(cardOf(await render(f), f.storeId), f.cashTenderId)!;
     expect(form).toContain('<fieldset disabled');
     expect(form).not.toContain('Typed');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+describe('Y - audit fix: the ok-sentence name lookup must never undo the write', () => {
+  it('Y1: a failing name read-back (a failed statement) does not roll the save back: the row is changed AND the user is told "saved", not an error', async () => {
+    const f = await fixture('y1');
+    const v = await repoVersion(f.cashTenderId);
+    h.readCalls = 0;
+    h.failReadFrom = 2; // call 1 is the domain's own peek; every later read (the action's name lookup) fails
+    try {
+      const r = await act('updateTenderAction', f.superAdmin, { storeId: f.storeId, tenderId: f.cashTenderId, version: v, name: 'Cash Renamed', kind: 'cash', posV1Alias: 'Cash' });
+      expect(r.outcome.flash.error, 'no refusal: the write was valid (HEAD: the aborted transaction fails at COMMIT, a bogus database error)').toBeUndefined();
+      expect(r.outcome.flash.ok ?? '', 'the user is told it saved').toMatch(/saved\.$/);
+      expect((await tenderRow(f.cashTenderId)).name, 'and it really is saved (HEAD: the aborted transaction rolled it back)').toBe('Cash Renamed');
+    } finally {
+      h.failReadFrom = 0;
+    }
+    // Mutant: lookup inside the write transaction with a swallowed error -> COMMIT of an aborted transaction is a ROLLBACK, red.
+  });
+
+  it('Y2 (same hazard on the add path): a failing read-back after createTender still leaves the new tender in the table', async () => {
+    const f = await fixture('y2');
+    const before = await tenderCount(f.storeId);
+    h.readCalls = 0;
+    h.failReadFrom = 1;
+    try {
+      const r = await act('createTenderAction', f.superAdmin, { storeId: f.storeId, name: 'Maya', kind: 'wallet', moneyAccountId: f.bpi, posV1Alias: 'Maya' });
+      expect(r.outcome.flash.error).toBeUndefined();
+      expect(await tenderCount(f.storeId), 'the tender exists').toBe(before + 1);
+    } finally {
+      h.failReadFrom = 0;
+    }
   });
 });
