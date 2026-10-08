@@ -486,6 +486,34 @@ describe('T-378 S2 - the item unit is fixed once it has history', () => {
   });
 });
 
+// T-383 S1 - the two blank CHECKs on items (0047), provoked for real. Red today: CONSTRAINT_MESSAGES has no such key, so errorMessage() returns the raw text.
+describe('T-383 S1 - an item cannot be blank-named or blank-coded', () => {
+  const NAME_SENTENCE = 'Give the item a name people will recognise.';
+  const CODE_SENTENCE = 'Give the item a code.';
+  async function blankItemOrg() {
+    const orgCode = uid('t383-blank');
+    const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${orgCode}`}, ${orgCode}) returning id`;
+    const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Admin') returning id`;
+    return { orgId: org!.id, personId: person!.id };
+  }
+  it('items_name_not_blank_check', async () => {
+    const f = await blankItemOrg();
+    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('C')}, '   ', 'retail', 'pcs', ${f.personId})`);
+    const row = record('items_name_not_blank_check', err);
+    expect(row.constraintName).toBe('items_name_not_blank_check');
+    expect(row.message).toBe(NAME_SENTENCE);
+    expect(row.message).toBe(CONSTRAINT_MESSAGES.items_name_not_blank_check);
+  });
+  it('items_code_not_blank_check', async () => {
+    const f = await blankItemOrg();
+    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, '', ${uid('n')}, 'retail', 'pcs', ${f.personId})`);
+    const row = record('items_code_not_blank_check', err);
+    expect(row.constraintName).toBe('items_code_not_blank_check');
+    expect(row.message).toBe(CODE_SENTENCE);
+    expect(row.message).toBe(CONSTRAINT_MESSAGES.items_code_not_blank_check);
+  });
+});
+
 // T-382 (0187) - the two unlink CHECKs on pos_v1_store_links, provoked for real (raw SQL on a freshly inserted link row).
 describe('T-382 - the unlink CHECKs', () => {
   async function link() {
@@ -528,6 +556,6 @@ it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   const exercised = new Set(rows.map((r) => r.key));
   const missing = Object.keys(CONSTRAINT_MESSAGES).filter((k) => !exercised.has(k));
   expect(missing).toEqual([]);
-  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys = 39 rows provoked above.
-  expect(rows.length).toBe(39);
+  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys + T-383 S1's items blank-name and blank-code CHECK keys = 41 rows provoked above.
+  expect(rows.length).toBe(41);
 });
