@@ -1,5 +1,7 @@
 import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
 
@@ -143,13 +145,17 @@ describe('V - the page posts the tender version', () => {
     expect(form!.fields['version'], 'edit form hidden version').toBe(await repoVersion(f.tenderId));
   });
 
-  it('V2: the Retire form carries hidden name="version" equal to the tender current version', async () => {
+  // 2026-10-09 (T-384 S1b R3): Retire is the EditableRecord's `extra`, rendered only while editing, so it is NOT in the
+  // locked server render this file reads. The assertion that its form carries the current version is kept, and moved to
+  // the thing that renders it: the version rides on the record's own hidden inputs (the Retire form is built from the
+  // same `x.version`, checked in the source), and E2 below still drives the action with the version read off the page.
+  it('V2: the Retire form (an `extra` of the record) is built with the tender version; the locked render carries that version on the record form', async () => {
     const f = await fixture('v2');
     const html = await render(f);
-    const form = retireForm(html, f.tenderId);
-    expect(form, 'the Retire form is on the page').toBeDefined();
-    expect(form!.text).toContain('Retire');
-    expect(form!.fields['version'], 'retire form hidden version').toBe(await repoVersion(f.tenderId));
+    expect(editForm(html, f.tenderId)!.fields['version'], 'record form hidden version').toBe(await repoVersion(f.tenderId));
+    expect(retireForm(html, f.tenderId), 'no Retire button while the record is locked (shown only in edit mode)').toBeUndefined();
+    const src = readFileSync(resolve(__dirname, '..', '..', 'src', 'app', 'settings', 'pos-link', 'page.tsx'), 'utf8');
+    expect(src, 'Retire form posts name="version"').toMatch(/setTenderActiveAction[\s\S]{0,700}name="version"/);
   });
 
   it('V3: after a retire the Restore form carries the NEW version, not the old one', async () => {
@@ -178,7 +184,7 @@ describe('E - end to end: the version read off the page drives the actions', () 
     expect(pageV, 'the page offers a version to submit').toBeTruthy();
     const ok = await act('updateTenderAction', f.superAdmin, edit(f, pageV!, 'Cash box'));
     expect(ok.outcome.flash.error).toBeUndefined();
-    expect(ok.outcome.flash.ok).toBe('Tender saved.');
+    expect(ok.outcome.flash.ok).toBe('Cash box saved.'); // 2026-10-09 (T-384 S1b R7): ok names the tender; was 'Tender saved.'
     expect((await tenderRow(f.tenderId)).name).toBe('Cash box');
     expect(ok.signal.url).toContain(`#store-${f.storeId}`);
 
@@ -189,11 +195,11 @@ describe('E - end to end: the version read off the page drives the actions', () 
 
   it('E2: setTenderActiveAction with the page version retires; the same (now old) version is refused', async () => {
     const f = await fixture('e2');
-    const pageV = retireForm(await render(f), f.tenderId)?.fields['version'];
+    const pageV = editForm(await render(f), f.tenderId)?.fields['version']; // 2026-10-09: Retire is edit-mode only; same version as the record form
     expect(pageV, 'the page offers a version to submit').toBeTruthy();
     const ok = await act('setTenderActiveAction', f.superAdmin, retire(f, pageV!, false));
     expect(ok.outcome.flash.error).toBeUndefined();
-    expect(ok.outcome.flash.ok).toBe('Tender retired.');
+    expect(ok.outcome.flash.ok).toBe('Cash drawer retired.'); // 2026-10-09 (T-384 S1b R7): was 'Tender retired.'
     expect((await tenderRow(f.tenderId)).is_active).toBe(false);
 
     const stale = await act('setTenderActiveAction', f.superAdmin, retire(f, pageV!, true));

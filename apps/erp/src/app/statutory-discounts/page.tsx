@@ -10,6 +10,7 @@ import { recordStatutoryDiscountAction, voidStatutoryDiscountAction } from './ac
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { FormGrid } from '@/components/ui';
 
 export const metadata = { title: 'SC/PWD register — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -210,9 +211,10 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
       {/* ── Entry ────────────────────────────────────────────────────────────────────── */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Add a record</h2>
-        <form action={recordStatutoryDiscountAction} className="grid gap-3 rounded border border-neutral-200 p-4 sm:grid-cols-2 lg:grid-cols-3 dark:border-neutral-800">
+        <form action={recordStatutoryDiscountAction} className="rounded border border-neutral-200 p-4 dark:border-neutral-800">
           <input type="hidden" name="from" value={carry.from} />
           <input type="hidden" name="to" value={carry.to} />
+          <FormGrid>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Store</span>
@@ -269,16 +271,17 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
             <span className="text-xs text-neutral-500">Not required by the regulations — kept if your store&apos;s logbook has the column.</span>
           </label>
 
-          <label className="flex flex-col gap-1 text-sm sm:col-span-2 lg:col-span-3">
+          <label className="flex flex-col gap-1 text-sm col-span-full">
             <span className="font-medium">Notes <span className="font-normal text-neutral-500">(optional)</span></span>
             <input name="notes" className="min-h-11 rounded border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-900" />
           </label>
 
-          <div className="sm:col-span-2 lg:col-span-3">
+          <div className="col-span-full">
             <button type="submit" className="min-h-11 w-full rounded bg-neutral-900 px-4 text-sm font-medium text-white hover:bg-neutral-700 sm:w-auto dark:bg-neutral-100 dark:text-neutral-900">
-              Record
+              Save
             </button>
           </div>
+          </FormGrid>
         </form>
       </section>
     </Page>

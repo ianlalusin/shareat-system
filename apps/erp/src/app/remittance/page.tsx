@@ -29,6 +29,8 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid } from '@/components/ui';
 
 export const metadata = { title: 'Remittance — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -208,7 +210,7 @@ export default async function RemittancePage({
             <form
               key={v.id}
               action={resolveVarianceAction}
-              className="flex flex-wrap items-end gap-2 border-t border-amber-200 pt-3 dark:border-amber-900"
+              className="space-y-3 border-t border-amber-200 pt-3 dark:border-amber-900"
             >
               <input type="hidden" name="varianceId" value={v.id} />
               <input type="hidden" name="storeId" value={storeId} />
@@ -234,11 +236,12 @@ export default async function RemittancePage({
                 </span>
               ) : compare(money(v.amount), ZERO) < 0 ? (
                 <>
+                  <FormGrid>
                   <label className="flex flex-col gap-1">
                     <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
                       Charge to
                     </span>
-                    <select name="personId" defaultValue="" className={`${INPUT} w-44`}>
+                    <select name="personId" defaultValue="" className={`${INPUT}`}>
                       <option value="">Nobody yet…</option>
                       {people.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -254,7 +257,7 @@ export default async function RemittancePage({
                       <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
                         Comes out of
                       </span>
-                      <select name="fromMoneyAccountId" defaultValue="" className={`${INPUT} w-44`}>
+                      <select name="fromMoneyAccountId" defaultValue="" className={`${INPUT}`}>
                         <option value="">Choose an account…</option>
                         {v.fromAccounts.map((a) => (
                           <option key={a.id} value={a.id}>
@@ -268,8 +271,9 @@ export default async function RemittancePage({
                     <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
                       Reason
                     </span>
-                    <input name="reason" className={`${INPUT} w-48`} />
+                    <input name="reason" className={`${INPUT}`} />
                   </label>
+                  </FormGrid>
                   <button
                     type="submit"
                     name="action"
@@ -281,13 +285,14 @@ export default async function RemittancePage({
                 </>
               ) : (
                 <>
+                  <FormGrid>
                   {/* R5: shown only when the handover came from more than one account. */}
                   {v.fromAccounts.length > 1 && (
                     <label className="flex flex-col gap-1">
                       <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
                         Came into
                       </span>
-                      <select name="fromMoneyAccountId" defaultValue="" className={`${INPUT} w-44`}>
+                      <select name="fromMoneyAccountId" defaultValue="" className={`${INPUT}`}>
                         <option value="">Choose an account…</option>
                         {v.fromAccounts.map((a) => (
                           <option key={a.id} value={a.id}>
@@ -301,8 +306,9 @@ export default async function RemittancePage({
                     <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
                       Note (optional)
                     </span>
-                    <input name="reason" className={`${INPUT} w-48`} />
+                    <input name="reason" className={`${INPUT}`} />
                   </label>
+                  </FormGrid>
                   <button
                     type="submit"
                     name="action"
@@ -443,7 +449,7 @@ export default async function RemittancePage({
 
             <div className="space-y-3">
               {cashier.map((a, i) => (
-                <div key={a.id} className="grid gap-3 sm:grid-cols-3">
+                <FormGrid key={a.id}>
                   <input type="hidden" name="lineAccountId" value={a.id} />
                   <Field label={a.name} hint={`Holds ${peso(a.balance)}`}>
                     <input
@@ -482,11 +488,11 @@ export default async function RemittancePage({
                       ))}
                     </select>
                   </Field>
-                </div>
+                </FormGrid>
               ))}
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <FormGrid>
               <Field label="Date">
                 <input
                   name="remittedOn"
@@ -499,7 +505,7 @@ export default async function RemittancePage({
               <Field label="Reference">
                 <input name="reference" maxLength={120} className={INPUT} />
               </Field>
-            </div>
+            </FormGrid>
             <Field label="Notes">
               <input name="notes" className={INPUT} />
             </Field>
@@ -591,15 +597,15 @@ export default async function RemittancePage({
               whatever this says — that is the control, and it is not what this changes.
             </p>
           </div>
-          <form action={setCashPolicyAction} className="flex flex-wrap items-end gap-3">
-            <input type="hidden" name="storeId" value={storeId} />
+          <EditableRecord action={setCashPolicyAction} label="cash policy" hidden={{ storeId }}>
+<FormGrid>
             {/* ⚠️ Both fields carry a hint so the control row lines up. With only one hinted, the
                 select and the text input sat at different heights under `items-end`. */}
             <Field label="Remittance cadence" hint="How often the money is carried in.">
               <select
                 name="remittanceCadence"
                 defaultValue={policy.remittanceCadence}
-                className={`${INPUT} w-44`}
+                className={`${INPUT}`}
               >
                 {Object.entries(CADENCE_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -617,16 +623,11 @@ export default async function RemittancePage({
                 inputMode="decimal"
                 defaultValue={policy.unremittedCeiling ?? ''}
                 placeholder="e.g. 20000.00"
-                className={`${INPUT} w-44`}
+                className={`${INPUT}`}
               />
             </Field>
-            <button
-              type="submit"
-              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-            >
-              Save policy
-            </button>
-          </form>
+</FormGrid>
+          </EditableRecord>
           <p className="text-xs text-neutral-400 dark:text-neutral-600">
             Crossing the ceiling never blocks a sale or a handover — it raises a finding at the top
             of this page. The peso figure is business policy and belongs to whoever carries the

@@ -5,8 +5,10 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import { listStores } from '../../expenses/lib';
 import { createTenderAction, linkStoreToPosAction, setTenderActiveAction, unlinkStoreFromPosAction, updateTenderAction } from './actions';
-import { canUnlink, posLinkRows, posStoreOptions, storeTenders, type PosLinkStoreRow, type StoreTenders } from './lib';
+import { canUnlink, posLinkRows, posStoreOptions, storeTenders, tenderMapping, type PosLinkStoreRow, type StoreTenders, type TenderAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
+import { EditableRecord } from '@/components/forms';
+import { Field, FormGrid } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 
@@ -17,6 +19,21 @@ interface SearchParams {
   ok?: string;
   error?: string;
   store?: string;
+  // DEF-617: one tender's typed values after a refused Save, from the signed flash only (never the address).
+  tenderId?: string;
+  tenderName?: string;
+  tenderKind?: string;
+  tenderAccount?: string;
+  tenderAlias?: string;
+}
+
+/** What the user typed into one tender's form before its Save was refused. */
+interface Reopened {
+  readonly tenderId: string;
+  readonly name: string | undefined;
+  readonly kind: string | undefined;
+  readonly account: string | undefined;
+  readonly alias: string | undefined;
 }
 
 /**
@@ -36,6 +53,12 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
   const stores = await listStores(actor.orgId);
   const [rows, options, mayUnlink] = await Promise.all([posLinkRows(actor, stores), posStoreOptions(), canUnlink(actor)]);
 
+  // R7: feedback shows on the card of the store it is about; the top banner only when no card matches.
+  const cardShowsFeedback = !!sp.store && rows.some((r) => r.storeId === sp.store);
+  const reopened: Reopened | null = sp.tenderId
+    ? { tenderId: sp.tenderId, name: sp.tenderName, kind: sp.tenderKind, account: sp.tenderAccount, alias: sp.tenderAlias }
+    : null;
+
   return (
     <Page density="table">
       <div>
@@ -52,8 +75,8 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
         </PageDescription>
       </div>
 
-      {sp.error && <Banner tone="error">{sp.error}</Banner>}
-      {sp.ok && <Banner tone="ok">{sp.ok}</Banner>}
+      {!cardShowsFeedback && sp.error && <Banner tone="error">{sp.error}</Banner>}
+      {!cardShowsFeedback && sp.ok && <Banner tone="ok">{sp.ok}</Banner>}
 
       {options === null && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
@@ -74,6 +97,8 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
             options={options}
             canUnlink={mayUnlink}
             tenders={await storeTenders(actor, r.storeId, r.link?.posStoreId ?? null)}
+            feedback={sp.store === r.storeId ? { error: sp.error, ok: sp.ok } : null}
+            reopened={sp.store === r.storeId ? reopened : null}
           />
         )),
       )}
@@ -86,15 +111,19 @@ function StoreCard({
   options,
   tenders,
   canUnlink,
+  feedback,
+  reopened,
 }: {
   row: PosLinkStoreRow;
   options: { id: string; name: string }[] | null;
   tenders: StoreTenders;
   canUnlink: boolean;
+  feedback: { error?: string; ok?: string } | null;
+  reopened: Reopened | null;
 }) {
   const link = row.link;
   return (
-    <section id={`store-${row.storeId}`} className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+    <section id={`store-${row.storeId}`} className="scroll-mt-4 space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-medium">{row.storeName}</h2>
         {link ? (
@@ -108,70 +137,25 @@ function StoreCard({
         )}
       </div>
 
-      <form action={linkStoreToPosAction} className="space-y-3 text-sm">
-        <input type="hidden" name="storeId" value={row.storeId} />
-        <input type="hidden" name="storeName" value={row.storeName} />
-
-        {options ? (
-          <label className="block">
-            <span className="block text-neutral-600 dark:text-neutral-400">POS store</span>
-            <select name="posStoreId" required defaultValue={link?.posStoreId ?? ''} className={`${FIELD} mt-1 w-full max-w-sm`}>
-              <option value="" disabled>
-                Choose a POS store
-              </option>
-              {options.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name || o.id}
-                </option>
-              ))}
-            </select>
-          </label>
+      <div className="space-y-3 text-sm">
+        <h3 className="font-medium">Link to POS</h3>
+        {link ? (
+          // A linked store's link is a saved record: locked until Edit (A0 L1).
+          <EditableRecord action={linkStoreToPosAction} label={row.storeName} hidden={{ storeId: row.storeId, storeName: row.storeName }}>
+            <LinkFields row={row} options={options} />
+          </EditableRecord>
         ) : (
-          <>
-            <label className="block">
-              <span className="block text-neutral-600 dark:text-neutral-400">POS store id</span>
-              <input name="posStoreId" required defaultValue={link?.posStoreId ?? ''} className={`${FIELD} mt-1 w-full max-w-sm`} />
-            </label>
-            <label className="block">
-              <span className="block text-neutral-600 dark:text-neutral-400">POS store name</span>
-              <input name="posStoreName" required defaultValue={link?.posStoreName ?? ''} className={`${FIELD} mt-1 w-full max-w-sm`} />
-            </label>
-          </>
+          // An unlinked store's link form is an add form: it ends in Save (A0 L4).
+          <form action={linkStoreToPosAction} className="space-y-3">
+            <input type="hidden" name="storeId" value={row.storeId} />
+            <input type="hidden" name="storeName" value={row.storeName} />
+            <LinkFields row={row} options={options} />
+            <button type="submit" className={BTN}>
+              Save
+            </button>
+          </form>
         )}
-
-        <label className="block">
-          <span className="block text-neutral-600 dark:text-neutral-400">Sales channel POS&apos;s sales land in</span>
-          <select name="salesChannelId" required defaultValue={link?.salesChannelId ?? ''} className={`${FIELD} mt-1 w-full max-w-sm`}>
-            <option value="" disabled>
-              Choose a channel
-            </option>
-            {row.channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <span className="mt-1 block text-xs text-neutral-500 dark:text-neutral-400">
-            Only channels whose money is remitted daily are offered: POS&apos;s sales are paid at the till.
-          </span>
-        </label>
-
-        <label className="block">
-          <span className="block text-neutral-600 dark:text-neutral-400">Tax type, as set in the POS store</span>
-          <select name="posTaxType" required defaultValue={link?.posTaxType ?? ''} className={`${FIELD} mt-1 w-full max-w-sm`}>
-            <option value="" disabled>
-              Choose a tax type
-            </option>
-            <option value="vat_inclusive">VAT inclusive</option>
-            <option value="non_vat">Non-VAT</option>
-            <option value="vat_exclusive">VAT exclusive (not importable yet)</option>
-          </select>
-        </label>
-
-        <button type="submit" className={BTN}>
-          {link ? 'Save link' : 'Link store'}
-        </button>
-      </form>
+      </div>
 
       {row.unlinked && !link && (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -181,14 +165,77 @@ function StoreCard({
 
       {link && canUnlink && <UnlinkSection row={row} posStoreName={link.posStoreName} />}
 
-      <TendersSection storeId={row.storeId} linked={!!link} t={tenders} />
+      {feedback?.error && <Banner tone="error">{feedback.error}</Banner>}
+      {feedback?.ok && <Banner tone="ok">{feedback.ok}</Banner>}
+
+      <TendersSection storeId={row.storeId} storeName={row.storeName} linked={!!link} t={tenders} reopened={reopened} />
     </section>
+  );
+}
+
+/** The link form's fields, shared by the locked record (linked) and the add form (unlinked). */
+function LinkFields({ row, options }: { row: PosLinkStoreRow; options: { id: string; name: string }[] | null }) {
+  const link = row.link;
+  return (
+    <FormGrid>
+      {options ? (
+        <Field label="POS store">
+          <select name="posStoreId" required defaultValue={link?.posStoreId ?? ''} className={FIELD}>
+            <option value="" disabled>
+              Choose a POS store
+            </option>
+            {options.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name || o.id}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : (
+        <>
+          <Field label="POS store id">
+            <input name="posStoreId" required defaultValue={link?.posStoreId ?? ''} className={FIELD} />
+          </Field>
+          <Field label="POS store name">
+            <input name="posStoreName" required defaultValue={link?.posStoreName ?? ''} className={FIELD} />
+          </Field>
+        </>
+      )}
+
+      <Field
+        label="Sales channel POS's sales land in"
+        hint="Only channels whose money is remitted daily are offered: POS's sales are paid at the till."
+      >
+        <select name="salesChannelId" required defaultValue={link?.salesChannelId ?? ''} className={FIELD}>
+          <option value="" disabled>
+            Choose a channel
+          </option>
+          {row.channels.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="Tax type, as set in the POS store">
+        <select name="posTaxType" required defaultValue={link?.posTaxType ?? ''} className={FIELD}>
+          <option value="" disabled>
+            Choose a tax type
+          </option>
+          <option value="vat_inclusive">VAT inclusive</option>
+          <option value="non_vat">Non-VAT</option>
+          <option value="vat_exclusive">VAT exclusive (not importable yet)</option>
+        </select>
+      </Field>
+    </FormGrid>
   );
 }
 
 /**
  * T-382 R13: the guarded unlink, shown to a super admin on a LINKED store. When R3 would refuse (an imported day still
  * open or submitted) it shows that sentence instead of the form. The action and `unlinkStoreFromPos` authorize again.
+ * Unlink is a command (A0 L5): it keeps its own verb.
  */
 function UnlinkSection({ row, posStoreName }: { row: PosLinkStoreRow; posStoreName: string }) {
   const store = row.storeName;
@@ -209,10 +256,11 @@ function UnlinkSection({ row, posStoreName }: { row: PosLinkStoreRow; posStoreNa
             {row.importedDays} days already imported from POS stay exactly as they are. They can&apos;t be edited, re-imported or corrected from POS. A
             manager can still withdraw an imported day and type it again. An admin can link the store again later.
           </p>
-          <label className="block">
-            <span className="block text-neutral-600 dark:text-neutral-400">Why is {store} being unlinked?</span>
-            <textarea name="reason" required maxLength={500} rows={3} className={`${FIELD} mt-1 w-full max-w-md`} />
-          </label>
+          <FormGrid>
+            <Field label={`Why is ${store} being unlinked?`} span="full">
+              <textarea name="reason" required maxLength={500} rows={3} className={FIELD} />
+            </Field>
+          </FormGrid>
           <label className="flex items-start gap-2">
             <input type="checkbox" name="confirm" required className="mt-1" />
             <span>I understand: {store}&apos;s sales will be typed from now on.</span>
@@ -226,100 +274,207 @@ function UnlinkSection({ row, posStoreName }: { row: PosLinkStoreRow; posStoreNa
   );
 }
 
-function TendersSection({ storeId, linked, t }: { storeId: string; linked: boolean; t: StoreTenders }) {
-  const label = 'block text-xs text-neutral-600 dark:text-neutral-400';
+const POS_NAME_HINT =
+  'Exactly what POS shows for this payment method. Leave it blank if POS has no matching method: this tender then answers to no POS method.';
+const ACCOUNT_HINT =
+  'Leave it blank for cash. Two wallets may pay into the same account — for example Bank Transfer and QRPH into one bank account.';
+
+function TendersSection({
+  storeId,
+  storeName,
+  linked,
+  t,
+  reopened,
+}: {
+  storeId: string;
+  storeName: string;
+  linked: boolean;
+  t: StoreTenders;
+  reopened: Reopened | null;
+}) {
+  const active = t.tenders.filter((x) => x.isActive);
+  const retired = t.tenders.filter((x) => !x.isActive);
+  const mapping = tenderMapping(t.methods, t.tenders, t.accounts);
   return (
     <div className="space-y-3 border-t border-neutral-200 pt-3 text-sm dark:border-neutral-800">
       <h3 className="font-medium">Tenders</h3>
-      {linked && t.unmapped === null && (
+
+      {t.accounts.length === 0 && (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          POS&apos;s payment methods can&apos;t be listed right now (POS isn&apos;t connected), so unmapped methods aren&apos;t shown.
+          {storeName} has no bank or e-wallet account yet. Add one under{' '}
+          <a href="/money-accounts" className={ACTION_LINK}>
+            Money accounts
+          </a>{' '}
+          first.
         </p>
       )}
-      {linked && t.unmapped && t.unmapped.length > 0 && (
-        <div className="rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          POS methods not mapped yet: {t.unmapped.map((m) => `"${m}"`).join(', ')}. A day that used one of them cannot be
-          imported until a tender answers to it.
-        </div>
-      )}
+
+      <div className="space-y-2">
+        <h4 className="text-xs font-medium text-neutral-700 dark:text-neutral-300">How POS&apos;s payment methods land</h4>
+        {!linked && (
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            POS&apos;s payment methods are listed here once {storeName} is linked. Make each tender&apos;s POS name exactly what POS shows.
+          </p>
+        )}
+        {linked && t.methods === null && (
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            POS&apos;s payment methods can&apos;t be listed right now (POS isn&apos;t connected), so unmapped methods aren&apos;t shown.
+          </p>
+        )}
+        {mapping.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-neutral-200 text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
+                  <th className="py-1 pr-3 font-medium">POS method</th>
+                  <th className="py-1 pr-3 font-medium">Tender</th>
+                  <th className="py-1 pr-3 font-medium">Kind</th>
+                  <th className="py-1 pr-3 font-medium">Money account</th>
+                  <th className="py-1 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mapping.map((m, i) => (
+                  <tr key={`${m.posMethod ?? ''}:${m.tenderId ?? ''}:${i}`} className="border-b border-neutral-100 dark:border-neutral-900">
+                    <td className="py-1 pr-3">{m.posMethod ?? '—'}</td>
+                    <td className="py-1 pr-3">{m.tenderName ?? '—'}</td>
+                    <td className="py-1 pr-3">{m.kind === 'cash' ? 'Cash' : m.kind === 'wallet' ? 'Wallet' : '—'}</td>
+                    <td className="py-1 pr-3">{m.moneyAccountName ?? '—'}</td>
+                    <td className={m.status === 'mapped' ? 'py-1' : 'py-1 text-amber-800 dark:text-amber-300'}>{m.statusText}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {t.tenders.length === 0 && <p className="text-xs text-neutral-500 dark:text-neutral-400">No tenders yet.</p>}
-      {t.tenders.map((x) => (
-        <div key={x.id} className={`flex flex-wrap items-end gap-2 ${x.isActive ? '' : 'opacity-60'}`}>
-          <form action={updateTenderAction} className="flex flex-wrap items-end gap-2">
-            <input type="hidden" name="storeId" value={storeId} />
-            <input type="hidden" name="tenderId" value={x.id} />
-            <input type="hidden" name="version" value={x.version} />
-            <label className="block">
-              <span className={label}>Name ({x.kind})</span>
-              <input name="name" required defaultValue={x.name} className={`${FIELD} mt-1 w-40`} />
-            </label>
-            <label className="block">
-              <span className={label}>POS name</span>
-              <input name="posV1Alias" defaultValue={x.posV1Alias ?? ''} className={`${FIELD} mt-1 w-40`} />
-            </label>
-            {x.kind === 'wallet' && (
-              <label className="block">
-                <span className={label}>Money account</span>
-                <select name="moneyAccountId" defaultValue={x.moneyAccountId ?? ''} className={`${FIELD} mt-1`}>
-                  {x.moneyAccountId && !t.accounts.some((a) => a.id === x.moneyAccountId) && (
-                    <option value={x.moneyAccountId}>{x.moneyAccountName ?? 'Retired account'}</option>
-                  )}
-                  {t.accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <button type="submit" className={BTN}>
-              Save
-            </button>
-          </form>
-          <form action={setTenderActiveAction}>
-            <input type="hidden" name="storeId" value={storeId} />
-            <input type="hidden" name="tenderId" value={x.id} />
-            <input type="hidden" name="version" value={x.version} />
-            <input type="hidden" name="isActive" value={x.isActive ? 'false' : 'true'} />
-            <button type="submit" className={BTN}>
-              {x.isActive ? 'Retire' : 'Restore'}
-            </button>
-          </form>
-        </div>
+
+      {active.map((x) => (
+        <TenderRecord key={`${x.id}:${x.version}`} storeId={storeId} x={x} t={t} typed={reopened && reopened.tenderId === x.id ? reopened : null} />
       ))}
-      <form action={createTenderAction} className="flex flex-wrap items-end gap-2">
-        <input type="hidden" name="storeId" value={storeId} />
-        <label className="block">
-          <span className={label}>New tender</span>
-          <input name="name" required placeholder="e.g. GCash" className={`${FIELD} mt-1 w-40`} />
-        </label>
-        <label className="block">
-          <span className={label}>Kind</span>
-          <select name="kind" defaultValue="cash" className={`${FIELD} mt-1`}>
+
+      {retired.length > 0 && (
+        <details className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
+          <summary className="cursor-pointer py-1 text-neutral-700 dark:text-neutral-300">Retired tenders ({retired.length})</summary>
+          <div className="mt-3 space-y-2">
+            {retired.map((x) => (
+              <form key={x.id} action={setTenderActiveAction} className="flex flex-wrap items-center gap-3 opacity-70">
+                <input type="hidden" name="storeId" value={storeId} />
+                <input type="hidden" name="tenderId" value={x.id} />
+                <input type="hidden" name="version" value={x.version} />
+                <input type="hidden" name="isActive" value="true" />
+                <span>
+                  {x.name} ({x.kind})
+                </span>
+                <button type="submit" className={BTN}>
+                  Restore
+                </button>
+              </form>
+            ))}
+          </div>
+        </details>
+      )}
+
+      <div className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+        <h4 className="font-medium">Add a tender</h4>
+        <form action={createTenderAction} autoComplete="off" className="space-y-3">
+          <input type="hidden" name="storeId" value={storeId} />
+          <FormGrid>
+            <Field label="Name">
+              <input name="name" required placeholder="e.g. GCash" autoComplete="off" className={FIELD} />
+            </Field>
+            <Field label="Kind">
+              <select name="kind" required defaultValue="" className={FIELD}>
+                <option value="">Choose cash or wallet</option>
+                <option value="cash">Cash</option>
+                <option value="wallet">Wallet</option>
+              </select>
+            </Field>
+            <Field label="Money account (wallets only)" hint={ACCOUNT_HINT}>
+              <select name="moneyAccountId" defaultValue="" className={FIELD}>
+                <option value="">None</option>
+                {t.accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="POS name" hint={POS_NAME_HINT}>
+              <input name="posV1Alias" autoComplete="off" className={FIELD} />
+            </Field>
+          </FormGrid>
+          <button type="submit" className={BTN}>
+            Save
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One saved tender: a locked EditableRecord (A0). Retire is its `extra`, shown only while editing. After a refused Save
+ * (`typed`), the record reopens in edit mode with the user's typing (DEF-617); Cancel then restores the stored values.
+ */
+function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdminRow; t: StoreTenders; typed: Reopened | null }) {
+  const name = typed?.name ?? x.name;
+  const kind = typed?.kind || x.kind;
+  const account = typed?.account ?? x.moneyAccountId ?? '';
+  const alias = typed?.alias ?? x.posV1Alias ?? '';
+  return (
+    <EditableRecord
+      action={updateTenderAction}
+      label={x.name}
+      hidden={{ storeId, tenderId: x.id, version: x.version }}
+      {...(typed
+        ? {
+            initialMode: 'editing' as const,
+            storedValues: { name: x.name, kind: x.kind, moneyAccountId: x.moneyAccountId ?? '', posV1Alias: x.posV1Alias ?? '' },
+          }
+        : {})}
+      extra={
+        <form action={setTenderActiveAction} className="mt-2">
+          <input type="hidden" name="storeId" value={storeId} />
+          <input type="hidden" name="tenderId" value={x.id} />
+          <input type="hidden" name="version" value={x.version} />
+          <input type="hidden" name="isActive" value="false" />
+          <button type="submit" className={BTN}>
+            Retire
+          </button>
+        </form>
+      }
+    >
+      <FormGrid>
+        <Field label="Name">
+          <input name="name" required defaultValue={name} autoComplete="off" className={FIELD} />
+        </Field>
+        <Field label="Kind">
+          <select name="kind" required defaultValue={kind} className={FIELD}>
             <option value="cash">Cash</option>
             <option value="wallet">Wallet</option>
           </select>
-        </label>
-        <label className="block">
-          <span className={label}>Money account (wallet)</span>
-          <select name="moneyAccountId" defaultValue="" className={`${FIELD} mt-1`}>
+        </Field>
+        <Field label="Money account (wallets only)" hint={ACCOUNT_HINT}>
+          <select name="moneyAccountId" defaultValue={account} className={FIELD}>
             <option value="">None</option>
+            {x.moneyAccountId && !t.accounts.some((a) => a.id === x.moneyAccountId) && (
+              <option value={x.moneyAccountId}>{x.moneyAccountName ?? 'Retired account'}</option>
+            )}
             {t.accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
           </select>
-        </label>
-        <label className="block">
-          <span className={label}>POS name</span>
-          <input name="posV1Alias" className={`${FIELD} mt-1 w-40`} />
-        </label>
-        <button type="submit" className={BTN}>
-          Add tender
-        </button>
-      </form>
-    </div>
+        </Field>
+        <Field label="POS name" hint={POS_NAME_HINT}>
+          <input name="posV1Alias" defaultValue={alias} autoComplete="off" className={FIELD} />
+        </Field>
+      </FormGrid>
+    </EditableRecord>
   );
 }
 
@@ -328,9 +483,13 @@ function Banner({ tone, children }: { tone: 'error' | 'ok'; children: React.Reac
     tone === 'error'
       ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
       : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-  return <div className={`rounded-lg border p-4 text-sm ${cls}`}>{children}</div>;
+  return (
+    <div role={tone === 'error' ? 'alert' : 'status'} className={`rounded-lg border p-4 text-sm ${cls}`}>
+      {children}
+    </div>
+  );
 }
 
-const FIELD = 'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+const FIELD = 'mt-1 w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const BTN =
   'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';

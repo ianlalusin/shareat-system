@@ -250,13 +250,13 @@ function Overtime({ day, locked }: { day: Day; locked: boolean }) {
           : '⛔ Pending overtime pays nothing until decided. Approving 0 is a decision; leaving it undecided is not.'}
       </p>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
+        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Minutes to pay
           <input
             name="approvedOtMinutes"
             inputMode="numeric"
             defaultValue={day.approvedOtMinutes ?? day.pendingOtMinutes}
-            className={FIELD + ' w-32'}
+            className={FIELD + ' w-full'}
           />
         </label>
         <button type="submit" className={BTN} disabled={locked}>
@@ -284,17 +284,17 @@ function StartAnchor({ day, locked }: { day: Day; locked: boolean }) {
         PAID from. The tap itself does not move.
       </p>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
+        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Minute of shift day
           <input
             name="chosenAnchorMinute"
             inputMode="numeric"
             defaultValue={day.anchorMinute ?? 0}
-            className={FIELD + ' w-32'}
+            className={FIELD + ' w-full'}
           />
         </label>
         <button type="submit" className={BTN} disabled={locked}>
-          Set
+          Save
         </button>
       </div>
     </form>
@@ -318,13 +318,13 @@ function EarlyOut({ day, locked }: { day: Day; locked: boolean }) {
         than to the actual tap.
       </p>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
+        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Minute of shift day
           <input
             name="effectiveOutMinute"
             inputMode="numeric"
             defaultValue={day.endMinute ?? 0}
-            className={FIELD + ' w-32'}
+            className={FIELD + ' w-full'}
           />
         </label>
         <button type="submit" className={BTN} disabled={locked}>
@@ -352,9 +352,9 @@ function HalfDay({ day, locked }: { day: Day; locked: boolean }) {
         rate, never the hours covered.
       </p>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
+        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Set to
-          <select name="isHalfDay" defaultValue={String(day.isHalfDay)} className={FIELD + ' w-28'}>
+          <select name="isHalfDay" defaultValue={String(day.isHalfDay)} className={FIELD + ' w-full'}>
             <option value="true">Half day</option>
             <option value="false">Full day</option>
           </select>

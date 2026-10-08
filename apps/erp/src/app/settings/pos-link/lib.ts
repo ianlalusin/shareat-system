@@ -105,10 +105,10 @@ export interface TenderAdminRow {
 
 export interface StoreTenders {
   readonly tenders: readonly TenderAdminRow[];
-  /** The store's ACTIVE money accounts: the only kind a wallet tender may point at. */
+  /** The store's ACTIVE bank and e-wallet accounts (never a cash drawer): the only kind a wallet tender may point at (R6). */
   readonly accounts: readonly { id: string; name: string }[];
-  /** POS methods with no active alias here, or null when POS is not configured / not answering. */
-  readonly unmapped: readonly string[] | null;
+  /** POS's payment methods for the linked store, or null when the store is not linked or POS is not answering. */
+  readonly methods: readonly string[] | null;
 }
 
 /** One store's tenders, its wallets' accounts, and POS's methods nothing answers to yet. Never throws on POS. */
@@ -118,14 +118,12 @@ export async function storeTenders(actor: Actor, storeId: string, posStoreId: st
     accounts: await moneyAccountsRepo.listMoneyAccounts(tx, actor.orgId, { storeId }),
   }));
   const names = new Map(accounts.map((a) => [a.id, a.name]));
-  let unmapped: string[] | null = null;
+  let methods: string[] | null = null;
   if (posStoreId) {
     try {
-      const methods = await fetchPosV1PaymentMethods(posStoreId);
-      const active = new Set(rows.filter((t) => t.isActive && t.posV1Alias).map((t) => normalizePosV1Alias(t.posV1Alias ?? '')));
-      unmapped = methods.filter((m) => !active.has(normalizePosV1Alias(m)));
+      methods = [...(await fetchPosV1PaymentMethods(posStoreId))];
     } catch {
-      unmapped = null;
+      methods = null;
     }
   }
   return {
@@ -139,7 +137,81 @@ export async function storeTenders(actor: Actor, storeId: string, posStoreId: st
       isActive: t.isActive,
       version: t.version,
     })),
-    accounts: accounts.map((a) => ({ id: a.id, name: a.name })),
-    unmapped,
+    // R6 (DEF-611): the screen is a convenience; the domain's own account check stays the rule.
+    accounts: accounts.filter((a) => a.instrument !== 'cash').map((a) => ({ id: a.id, name: a.name })),
+    methods,
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// R9: how POS's payment methods land. Pure; no database.
+// ---------------------------------------------------------------------------------------------
+export type TenderMappingStatus =
+  | 'mapped' //            an active tender answers to this POS method
+  | 'not_mapped' //        POS lists this method and no active tender answers to it
+  | 'pos_does_not_list' // an active tender has a POS name that no listed POS method matches
+  | 'no_pos_name' //       an active tender has no POS name
+  | 'unchecked'; //        POS's methods are not known (store not linked, or POS not answering)
+
+/**
+ * One row of the mapping table. Columns: POS method, Tender, Kind, Money account, Status.
+ * A POS-method row has `posMethod` set; a tender-only row has `posMethod: null`. `tenderId`, `tenderName`, `kind` and
+ * `moneyAccountName` are null on a POS method row that no tender answers (status `not_mapped`) and `moneyAccountName`
+ * is null for a cash tender. `statusText` is the words the table prints.
+ */
+export interface TenderMappingRow {
+  readonly posMethod: string | null;
+  readonly tenderId: string | null;
+  readonly tenderName: string | null;
+  readonly kind: 'cash' | 'wallet' | null;
+  readonly moneyAccountName: string | null;
+  readonly status: TenderMappingStatus;
+  readonly statusText: string;
+}
+
+const STATUS_TEXT: Record<TenderMappingStatus, string> = {
+  mapped: 'Mapped',
+  not_mapped: 'Not mapped — days that use it cannot be imported',
+  pos_does_not_list: "POS doesn't list this name",
+  no_pos_name: 'No POS name',
+  unchecked: 'Not checked against POS',
+};
+
+/**
+ * R9. Matches by `normalizePosV1Alias` (case and punctuation do not matter). Only ACTIVE tenders ever map. With POS's
+ * methods: one row per method, then one row per active tender that no method names. Without them (`null`): one row per
+ * active tender. Money accounts are read off the tender, falling back to `accounts` by id.
+ */
+export function tenderMapping(
+  methods: readonly string[] | null,
+  tenders: readonly TenderAdminRow[],
+  accounts: readonly { id: string; name: string }[],
+): TenderMappingRow[] {
+  const active = tenders.filter((t) => t.isActive);
+  const accountName = (t: TenderAdminRow): string | null =>
+    t.kind === 'cash' ? null : (t.moneyAccountName ?? accounts.find((a) => a.id === t.moneyAccountId)?.name ?? null);
+  const tenderCells = (t: TenderAdminRow) => ({ tenderId: t.id, tenderName: t.name, kind: t.kind, moneyAccountName: accountName(t) });
+  const aliasOf = (t: TenderAdminRow): string => (t.posV1Alias ? normalizePosV1Alias(t.posV1Alias) : '');
+
+  const rows: TenderMappingRow[] = [];
+  const named = new Set<string>();
+  if (methods) {
+    for (const m of methods) {
+      const key = normalizePosV1Alias(m);
+      named.add(key);
+      const hit = key ? active.find((t) => aliasOf(t) === key) : undefined;
+      rows.push(
+        hit
+          ? { posMethod: m, ...tenderCells(hit), status: 'mapped', statusText: STATUS_TEXT.mapped }
+          : { posMethod: m, tenderId: null, tenderName: null, kind: null, moneyAccountName: null, status: 'not_mapped', statusText: STATUS_TEXT.not_mapped },
+      );
+    }
+  }
+  for (const t of active) {
+    const key = aliasOf(t);
+    if (methods && key && named.has(key)) continue; // already shown on its POS method's row
+    const status: TenderMappingStatus = !key ? 'no_pos_name' : methods ? 'pos_does_not_list' : 'unchecked';
+    rows.push({ posMethod: null, ...tenderCells(t), status, statusText: STATUS_TEXT[status] });
+  }
+  return rows;
 }

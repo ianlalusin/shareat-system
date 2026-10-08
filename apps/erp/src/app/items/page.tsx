@@ -10,6 +10,7 @@ import { listItems, pendingRequests, duplicateCandidates, soldAsLabel } from './
 import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
+import { FormGrid, Field } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Items — Shareat System' };
@@ -17,6 +18,7 @@ export const dynamic = 'force-dynamic';
 
 const INPUT =
   'rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+const FULL = 'mt-1 block w-full';
 const BTN =
   'rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900';
 
@@ -223,40 +225,41 @@ export default async function ItemsPage({
           not a unit of measure — it belongs on the invoice line with its conversion.
         </p>
         <form action={requestItemAction} className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>
-              <input name="name" required placeholder="Pork belly" className={INPUT} />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Code</span>
-              <input name="code" required placeholder="PORK-BELLY" className={INPUT} />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>
-              <select name="kind" required defaultValue="" className={INPUT}>
+          <FormGrid>
+            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>} className="text-sm">
+              <input name="name" required placeholder="Pork belly" className={`${INPUT} ${FULL}`} />
+            </Field>
+            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Code</span>} className="text-sm">
+              <input name="code" required placeholder="PORK-BELLY" className={`${INPUT} ${FULL}`} />
+            </Field>
+            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>} className="text-sm">
+              <select name="kind" required defaultValue="" className={`${INPUT} ${FULL}`}>
                 <option value="">Choose a kind</option>
                 {ITEM_KINDS.map((k) => (
                   <option key={k} value={k}>{ITEM_KIND_LABEL[k]}</option>
                 ))}
               </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Measured in</span>
-              <select name="baseUnit" required defaultValue="" className={INPUT}>
+            </Field>
+            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Measured in</span>} className="text-sm">
+              <select name="baseUnit" required defaultValue="" className={`${INPUT} ${FULL}`}>
                 <option value="">Choose a unit</option>
                 {BASE_UNITS.map((u) => (
                   <option key={u} value={u}>{u}</option>
                 ))}
               </select>
-            </label>
-          </div>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-              Why do we need it? <span className="italic">(optional — helps whoever approves)</span>
-            </span>
-            <input name="reason" className={INPUT} />
-          </label>
+            </Field>
+          <Field
+              span="full"
+              label={
+                <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                  Why do we need it? <span className="italic">(optional — helps whoever approves)</span>
+                </span>
+              }
+              className="text-sm"
+            >
+              <input name="reason" className={`${INPUT} ${FULL}`} />
+            </Field>
+          </FormGrid>
           {/*
             ⭐ DEF-130. T-149's three independent facts. Until 2026-09-03 the form never asked, both
             "sold" columns default to false, and every item made here was sold to nobody — which

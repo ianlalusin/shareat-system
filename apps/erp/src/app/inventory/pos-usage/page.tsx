@@ -330,9 +330,9 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
                 <input type="hidden" name="storeId" value={storeId} />
                 <input type="hidden" name="salesDayId" value={pull.salesDayId} />
                 <input type="hidden" name="pullId" value={pull.id} />
-                <label className="text-sm">
+                <label className="grow text-sm">
                   <span className="block text-neutral-600 dark:text-neutral-400">Why is it being voided?</span>
-                  <input name="reason" required className={`${INPUT} w-80`} />
+                  <input name="reason" required className={`${INPUT} w-full`} />
                 </label>
                 <button type="submit" className={BTN_SM}>
                   Void this pull

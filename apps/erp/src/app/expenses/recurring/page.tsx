@@ -22,9 +22,10 @@ import {
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { Input } from '@/components/ui';
+import { FormGrid, Input } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { EditableRecord } from '@/components/forms';
 
 export const metadata = { title: 'Recurring expenses — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -226,7 +227,7 @@ export default async function RecurringExpensesPage({
                             accounts={accounts}
                             suppliers={suppliers}
                             defaults={t}
-                            submitLabel="Save changes"
+                            submitLabel="Save"
                           />
                           <div className="flex flex-wrap gap-2">
                             <form action={setTemplateStatusAction}>
@@ -277,7 +278,7 @@ export default async function RecurringExpensesPage({
               cats={cats}
               accounts={accounts}
               suppliers={suppliers}
-              submitLabel="Add template"
+              submitLabel="Save"
             />
           </section>
         </>
@@ -321,109 +322,123 @@ function TemplateForm({
   defaults?: TemplateDefaults;
   submitLabel: string;
 }) {
-  return (
-    <form action={action} className="space-y-3">
-      <input type="hidden" name="storeId" value={storeId} />
-      {templateId && <input type="hidden" name="templateId" value={templateId} />}
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Name" hint="What a person calls it — “Lipa branch rent”.">
-          <Input name="name" required defaultValue={defaults?.name ?? ''} className="w-full" />
-        </Field>
-        <Field
-          label="Supplier"
-          hint="Who the bill comes from. The job records an invoice against them on the due date, so a template without one cannot draft."
-        >
-          <select name="supplierId" required defaultValue={defaults?.supplierId ?? ''} className={`${INPUT} w-full`}>
-            <option value="" disabled>
-              Choose…
-            </option>
-            {suppliers.map((sup) => (
-              <option key={sup.id} value={sup.id}>
-                {sup.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Category">
-          <select name="categoryId" required defaultValue={defaults?.categoryId ?? ''} className={`${INPUT} w-full`}>
-            <option value="" disabled>
-              Choose…
-            </option>
-            {cats.map((c) => (
-              <option key={c.id} value={c.id} disabled={!c.accountCode}>
-                {c.group} — {c.category}
-                {!c.accountCode ? ' (unmapped — cannot post)' : ''}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Default amount">
-          <Input
-            name="defaultAmount"
-            required
-            inputMode="decimal"
-            defaultValue={defaults?.defaultAmount ?? ''}
-            placeholder="0.00"
-            className="w-full text-right"
-          />
-        </Field>
-        <Field label="How often">
-          <select name="interval" defaultValue={defaults?.interval ?? 'monthly'} className={`${INPUT} w-full`}>
-            {RECURRING_INTERVALS.map((i) => (
-              <option key={i} value={i}>
-                {INTERVAL_LABEL[i] ?? i}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field
-          label="On which day"
-          hint="Day of the month (1–31) — or day of the week (0 = Sunday) for weekly and fortnightly. 29–31 clamp to the month end."
-        >
-          <Input
-            name="anchorDay"
-            required
-            inputMode="numeric"
-            defaultValue={defaults?.anchorDay ?? 1}
-            className="w-full text-right"
-          />
-        </Field>
-      </div>
-
-      <Field label="Paid from" hint="Optional — whatever this produces can name a different account.">
-        <select
-          name="defaultMoneyAccountId"
-          defaultValue={defaults?.defaultMoneyAccountId ?? ''}
-          className={`${INPUT} w-full`}
-        >
-          <option value="">Not stated</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name} ({a.custodian})
+  const fields = (
+    <div className="space-y-3">
+    <FormGrid>
+      <Field label="Name" hint="What a person calls it — “Lipa branch rent”.">
+        <Input name="name" required defaultValue={defaults?.name ?? ''} className="w-full" />
+      </Field>
+      <Field
+        label="Supplier"
+        hint="Who the bill comes from. The job records an invoice against them on the due date, so a template without one cannot draft."
+      >
+        <select name="supplierId" required defaultValue={defaults?.supplierId ?? ''} className={`${INPUT} w-full`}>
+          <option value="" disabled>
+            Choose…
+          </option>
+          {suppliers.map((sup) => (
+            <option key={sup.id} value={sup.id}>
+              {sup.name}
             </option>
           ))}
         </select>
       </Field>
+      <Field label="Category">
+        <select name="categoryId" required defaultValue={defaults?.categoryId ?? ''} className={`${INPUT} w-full`}>
+          <option value="" disabled>
+            Choose…
+          </option>
+          {cats.map((c) => (
+            <option key={c.id} value={c.id} disabled={!c.accountCode}>
+              {c.group} — {c.category}
+              {!c.accountCode ? ' (unmapped — cannot post)' : ''}
+            </option>
+          ))}
+        </select>
+      </Field>
+    </FormGrid>
 
-      {/* ⛔ v1's `payment-routing.ts` exists because a scheduled payment could drift onto the till:
-          "a recurring/scheduled payment must never silently draw from the cashier till." Here it
-          cannot drift — it can only be chosen, on purpose, with this box. */}
-      <label className="flex items-start gap-2 text-sm">
-        <input type="checkbox" name="tillIsDeliberate" defaultChecked={defaults?.tillIsDeliberate ?? false} className="mt-1" />
-        <span>
-          Yes, really pay this from the <strong>cashier till</strong>
-          <span className="block text-xs text-neutral-500">
-            The till is the day&rsquo;s operating drawer. A bill that comes out of it leaves the day
-            short with nothing on the sales report naming why — so it needs saying out loud, and it
-            is recorded that somebody did.
-          </span>
+    <FormGrid>
+      <Field label="Default amount">
+        <Input
+          name="defaultAmount"
+          required
+          inputMode="decimal"
+          defaultValue={defaults?.defaultAmount ?? ''}
+          placeholder="0.00"
+          className="w-full text-right"
+        />
+      </Field>
+      <Field label="How often">
+        <select name="interval" defaultValue={defaults?.interval ?? 'monthly'} className={`${INPUT} w-full`}>
+          {RECURRING_INTERVALS.map((i) => (
+            <option key={i} value={i}>
+              {INTERVAL_LABEL[i] ?? i}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field
+        label="On which day"
+        hint="Day of the month (1–31) — or day of the week (0 = Sunday) for weekly and fortnightly. 29–31 clamp to the month end."
+      >
+        <Input
+          name="anchorDay"
+          required
+          inputMode="numeric"
+          defaultValue={defaults?.anchorDay ?? 1}
+          className="w-full text-right"
+        />
+      </Field>
+    </FormGrid>
+
+    <Field label="Paid from" hint="Optional — whatever this produces can name a different account.">
+      <select
+        name="defaultMoneyAccountId"
+        defaultValue={defaults?.defaultMoneyAccountId ?? ''}
+        className={`${INPUT} w-full`}
+      >
+        <option value="">Not stated</option>
+        {accounts.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name} ({a.custodian})
+          </option>
+        ))}
+      </select>
+    </Field>
+
+    {/* ⛔ v1's `payment-routing.ts` exists because a scheduled payment could drift onto the till:
+        "a recurring/scheduled payment must never silently draw from the cashier till." Here it
+        cannot drift — it can only be chosen, on purpose, with this box. */}
+    <label className="flex items-start gap-2 text-sm">
+      <input type="checkbox" name="tillIsDeliberate" defaultChecked={defaults?.tillIsDeliberate ?? false} className="mt-1" />
+      <span>
+        Yes, really pay this from the <strong>cashier till</strong>
+        <span className="block text-xs text-neutral-500">
+          The till is the day&rsquo;s operating drawer. A bill that comes out of it leaves the day
+          short with nothing on the sales report naming why — so it needs saying out loud, and it
+          is recorded that somebody did.
         </span>
-      </label>
-
+      </span>
+    </label>
+    </div>
+  );
+  // An existing template is locked until Edit (T-384 L1); a new one is an add form and ends in Save.
+  if (templateId) {
+    return (
+      <EditableRecord
+        action={action}
+        label={defaults?.name ?? 'template'}
+        hidden={{ storeId, templateId }}
+      >
+        {fields}
+      </EditableRecord>
+    );
+  }
+  return (
+    <form action={action} className="space-y-3">
+      <input type="hidden" name="storeId" value={storeId} />
+      {fields}
       <button
         type="submit"
         className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"

@@ -116,10 +116,10 @@ export default async function CredentialsPage({
                     Enrolled {fmt(c.enrolledAt)}
                   </div>
                 </div>
-                <form action={revokeCredentialAction} className="flex flex-wrap items-center gap-2">
+                <form action={revokeCredentialAction} className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:min-w-64 sm:flex-1 sm:justify-end">
                   <input type="hidden" name="credentialId" value={c.id} />
                   <input type="hidden" name="employmentId" value={employmentId} />
-                  <Input name="reason" required placeholder="Reason to revoke" className="w-40" />
+                  <Input name="reason" required placeholder="Reason to revoke" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
                   <button
                     type="submit"
                     className="rounded border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
@@ -141,9 +141,9 @@ export default async function CredentialsPage({
         </p>
         <form action={enrolCardAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="employmentId" value={employmentId} />
-          <label className="text-sm">
+          <label className="min-w-0 flex-1 text-sm sm:min-w-48">
             <span className="block text-neutral-600 dark:text-neutral-400">Card id</span>
-            <Input name="cardId" required autoFocus placeholder="Scan or type" className="w-56" />
+            <Input name="cardId" required autoFocus placeholder="Scan or type" className="w-full" />
           </label>
           <button type="submit" className={BTN}>
             Enrol card

@@ -104,7 +104,7 @@ export default async function FindingsPage({
       <form className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Period</span>
-          <select name="period" defaultValue={period} className={`${INPUT} w-40`}>
+          <select name="period" defaultValue={period} className={INPUT}>
             {periods.map((p) => (
               <option key={p} value={p}>
                 {p}
@@ -264,7 +264,7 @@ function FindingGroup({
               <input
                 name="note"
                 placeholder="Why is this acceptable for now?"
-                className={`${INPUT} w-72`}
+                className={`${INPUT} min-w-0 flex-1 basis-72`}
               />
               <button
                 type="submit"
@@ -340,7 +340,7 @@ function MissingPeriodsSection({
                   name="reason"
                   required
                   placeholder="Why is this being created now?"
-                  className={`${INPUT} w-72`}
+                  className={`${INPUT} min-w-0 flex-1 basis-72`}
                 />
                 <button
                   type="submit"
@@ -408,7 +408,7 @@ function ScheduledChargesMissedSection({
                 name="reason"
                 required
                 placeholder="Why is this being booked now?"
-                className={`${INPUT} w-72`}
+                className={`${INPUT} min-w-0 flex-1 basis-72`}
               />
               <button
                 type="submit"

@@ -24,6 +24,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { EditableRecord } from '@/components/forms';
 
 export const metadata = { title: 'Channel settlements — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -208,7 +209,7 @@ export default async function ChannelSettlementsPage({
                     type="submit"
                     className="rounded border border-amber-400 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900"
                   >
-                    Set
+                    Save
                   </button>
                 </form>
               ) : (
@@ -272,56 +273,39 @@ export default async function ChannelSettlementsPage({
                           {!c.isActive && ' · retired'}
                         </div>
                         {c.destinationMoneyAccountId && canSetChannelPayoutAt(c.storeId) && (
-                          <details className="mt-1">
-                            <summary className="cursor-pointer px-1 py-1.5 text-xs font-medium text-neutral-500 hover:text-neutral-800 dark:text-neutral-500 dark:hover:text-neutral-300">
-                              Change
-                            </summary>
-                            <form
-                              action={setPayoutDestinationAction}
-                              className="mt-2 flex flex-wrap items-center gap-2"
-                            >
-                              <input type="hidden" name="channelId" value={c.id} />
-                              {storeAccounts.length === 0 ? (
-                                // T-350 S2 (F6) — nothing to pick, so no picker is offered as if
-                                // choosable. Same sentinel idiom as the unwired panel's own gaps.
-                                <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                                  No active account at this store to change into.
-                                </span>
-                              ) : (
-                                <>
-                                  <select
-                                    name="moneyAccountId"
-                                    required
-                                    defaultValue={currentRetired ? '' : c.destinationMoneyAccountId}
-                                    className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
-                                  >
-                                    {currentRetired && (
-                                      <option value="" disabled>
-                                        — choose the new account —
-                                      </option>
-                                    )}
-                                    {storeAccounts.map((a) => (
-                                      <option key={a.id} value={a.id}>
-                                        {a.name} ({a.custodian} · {a.glAccountCode})
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    type="submit"
-                                    className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-800 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
-                                  >
-                                    Save
-                                  </button>
-                                </>
-                              )}
-                              <Link
-                                href="/channel-settlements"
-                                className="px-1 py-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"
+                          <div className="mt-2">
+                            {storeAccounts.length === 0 ? (
+                              // T-350 S2 (F6) — nothing to pick, so no picker is offered as if
+                              // choosable. Same sentinel idiom as the unwired panel's own gaps.
+                              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                                No active account at this store to change into.
+                              </span>
+                            ) : (
+                              <EditableRecord
+                                action={setPayoutDestinationAction}
+                                label={`${c.name} payout account`}
+                                hidden={{ channelId: c.id }}
                               >
-                                Cancel
-                              </Link>
-                            </form>
-                          </details>
+                                <select
+                                  name="moneyAccountId"
+                                  required
+                                  defaultValue={currentRetired ? '' : c.destinationMoneyAccountId}
+                                  className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                                >
+                                  {currentRetired && (
+                                    <option value="" disabled>
+                                      — choose the new account —
+                                    </option>
+                                  )}
+                                  {storeAccounts.map((a) => (
+                                    <option key={a.id} value={a.id}>
+                                      {a.name} ({a.custodian} · {a.glAccountCode})
+                                    </option>
+                                  ))}
+                                </select>
+                              </EditableRecord>
+                            )}
+                          </div>
                         )}
                       </>
                     );

@@ -60,6 +60,7 @@ const COMMANDS: Record<string, string> = {
   'Post the opening balances': 'posts to the ledger',
   'Post this settlement': 'posts to the ledger',
   'Pay': 'books a payment',
+  'Add directly (super-admin)': 'creates an item with no approval, bypassing the request flow (items page)',
   'Charge': 'books a charge',
   'Charge to 1230': 'books a charge',
   'Reverse': 'reverses a posting',
@@ -143,7 +144,19 @@ const COMMANDS: Record<string, string> = {
   'Open shift': 'opens a shift',
   'Settle': 'settles a balance',
   'Unlink': 'removes a link',
-  'Link store': 'links a store to POS',
+  // 2026-10-09 T-384 sweep fallout: 'Link store' removed (no button carries it any more). Added per A5/A6:
+  'Apply to every store': 'fans one setting out to every store (a bulk write, not a record edit)',
+  'Copy': 'copies a record into a new one',
+  'Add': 'admin/users/[personId]: grants access',
+  'Log invoice': 'books a supplier invoice',
+  'Anchor': 'anchors a balance / period (a posting)',
+  'Confirm change': 'confirms a status change',
+  'Set up rooms': 'provisions rooms (a one-shot setup action)',
+  'Build plan': 'generates a plan (an action, not data entry)',
+  'Keep &ldquo;&rdquo;': 'items/page: a permanent item merge (label is Keep &ldquo;{name}&rdquo;)',
+  'Request item': 'files a request (moves a status)',
+  'Clear': 'clears a held value / flag (an action)',
+  'Switch': 'switches the active store / context',
   'Assign role': 'grants access',
   'Cancel order': 'moves a status',
   'Issue PIN': 'issues a credential',
@@ -409,7 +422,6 @@ describe('G8: submit labels are Save / Save draft / a COMMANDS verb / a toggle',
 /** Buttons whose text is not a literal (`{label}`), per file. Pinned so a new one is a decision, not silence. */
 const DYNAMIC_BUTTONS: Record<string, number> = {
   'expenses/recurring/page.tsx': 1,
-  'settings/sales-channels/page.tsx': 1,
 };
 describe('G8b: dynamic-label buttons are an explicit list', () => {
   it('equals DYNAMIC_BUTTONS', () => {

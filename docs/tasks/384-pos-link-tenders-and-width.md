@@ -704,3 +704,20 @@ Rule (Ian Q2 = a): grants/revokes access, posts, moves stock or status, or gener
 - DATA ENTRY → Edit / Save: Change unit (items/[id]) — it edits the item's unit field.
 - NAVIGATION: Set up rooms (a link to another screen), Anchor (customers), Keep "" (items list filter) — if any of these turns out to post data, the sweep lane reports it rather than guessing.
 - Confirmed data entry → Save: Rename, Hire's form submit, Set X, Update in-service date, every "Save <noun>", Add/Create/Record on master data (customer, owner, supplier, figure, tender, asset, money account, room, category).
+
+## Amendment A6 — orchestrator rulings during the sweep (2026-10-08/09)
+- A form or row with **no saved value yet** (an uncounted item, an empty slot, a store with no override, a day with no
+  platform rows) is an **add**: open, submit "Save". Only a form showing an already-saved record goes inside
+  `EditableRecord` (locked, Edit). Applied to cutover count, the stock-count sheet, low-stock thresholds, budgets,
+  recurring expenses, sales-day platform sales.
+- A **dedicated whole-document edit page** (e.g. `/sales-days/[id]/edit`) is not locked again; its submit reads "Save".
+- **GET filter/search bars** are never locked; they wrap.
+- A **confirm step** in a two-step flow is its own command form ("Confirm change"), never a locked record
+  (fixed-assets in-service, store opening date).
+- After a **stale-version refusal** the record reopens LOCKED with the stored values (the other user's change);
+  only a non-stale refusal reopens in edit mode with the typed values (DEF-617).
+- Commands confirmed during the sweep keep their verb: Add directly (super-admin), Apply to every store, Copy, Add
+  (access), Log invoice, Anchor, Confirm change, Set up rooms, Build plan, Keep "…" (item merge), Request item, Clear,
+  Switch. Data entry relabelled "Save": Hire, Set (pay rate, paid start, payout), Record (statutory discounts).
+- Result (2026-10-09): fixed-width controls 89 → 0; record-bound forms 72 → 47 (all commands or exempt);
+  off-pattern labels 52 → 0.

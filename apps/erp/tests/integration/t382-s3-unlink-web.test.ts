@@ -158,7 +158,9 @@ describe('W1 - who sees the Unlink section', () => {
   it('an admin (manage_chart_of_accounts, not super admin) sees the page and the link form but NO Unlink section; passes on HEAD', async () => {
     const f = await fixture('w1a', { verified: 2 });
     const { html, text } = await renderAs(f.adminActor);
-    expect(text, 'control: the admin reaches the page and its link form').toContain('Save link');
+    // 2026-10-09 (T-384 S1b A0 L1): a linked store's link form is a locked EditableRecord; its button is now Edit, not 'Save link'.
+    expect(text, 'control: the admin reaches the page and its link form').toContain('POS store');
+    expect(html).toMatch(/aria-label="Edit Lipa"|aria-label="Edit [^"]*"/);
     expect(text).not.toContain('Unlink from POS');
     expect(text).not.toContain('Unlink Lipa');
     expect(html).not.toMatch(/<input[^>]*type="checkbox"/);
@@ -232,7 +234,8 @@ describe('W5 - an unlinked store\'s card', () => {
     expect(text).toContain('Not linked — sales are typed');
     expect(text, 'who, when (any format) and why').toMatch(/Unlinked .+ by Super: wrong store 123/);
     expect(text, 'not shown as linked').not.toContain('Linked to');
-    expect(text, 'the link form is there for a relink (R8)').toContain('Link store');
+    // 2026-10-09 (T-384 S1b A0 L4): an unlinked store's link form is an add form; its submit now reads 'Save', not 'Link store'.
+    expect(html, 'the link form is there for a relink (R8)').toMatch(/<button[^>]*type="submit"[^>]*>\s*Save\s*<\/button>/);
     expect(html).toMatch(/name="posStoreId"/);
     expect(text, 'no Unlink section on an unlinked store').not.toContain('Unlink Lipa');
   });

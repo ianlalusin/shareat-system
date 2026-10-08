@@ -111,7 +111,7 @@ export default async function NewAssetPage({
             </select>
           </Field>
           <Field label="Specific date" hint="Only used when 'A specific date' is chosen above">
-            <input type="date" name="inServiceOn" className={`${INPUT} max-w-xs`} />
+            <input type="date" name="inServiceOn" className={INPUT} />
           </Field>
         </section>
 
@@ -165,7 +165,7 @@ export default async function NewAssetPage({
             type="submit"
             className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
           >
-            Add asset
+            Save
           </button>
           <a
             href={`/fixed-assets?${sp.store ? `store=${sp.store}` : ''}`}

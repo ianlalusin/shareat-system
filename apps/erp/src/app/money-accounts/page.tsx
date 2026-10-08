@@ -16,6 +16,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { EditableRecord } from '@/components/forms';
 
 export const metadata = { title: 'Money accounts — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -138,8 +139,8 @@ export default async function MoneyAccountsPage({
                       Retire button that always errors would teach people to distrust buttons.
                     */}
                     {a.isActive && a.isFoundation && (
-                      <form action={renameMoneyAccountAction} className="flex justify-end gap-1">
-                        <input type="hidden" name="moneyAccountId" value={a.id} />
+                      <EditableRecord action={renameMoneyAccountAction} label={a.name} hidden={{ moneyAccountId: a.id }}>
+                        <div className="flex flex-wrap justify-end gap-1">
                         <input
                           name="name"
                           required
@@ -167,13 +168,8 @@ export default async function MoneyAccountsPage({
                             className="w-24 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
                           />
                         )}
-                        <button
-                          type="submit"
-                          className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                        >
-                          Rename
-                        </button>
-                      </form>
+                        </div>
+                      </EditableRecord>
                     )}
                     {a.isActive && !a.isFoundation && (
                       <form action={retireMoneyAccountAction}>
@@ -258,7 +254,7 @@ export default async function MoneyAccountsPage({
             type="submit"
             className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
           >
-            Add money account
+            Save
           </button>
         </form>
       </section>

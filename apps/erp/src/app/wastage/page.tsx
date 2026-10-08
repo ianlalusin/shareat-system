@@ -8,6 +8,7 @@ import { requireSession } from '../../lib/session';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
 import { recordOrderWastageAction } from './actions';
 import { Page } from '@/components/shell/Page';
+import { FormGrid, Field } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -119,16 +120,15 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
         <h2 className="font-medium">Record a wastage</h2>
         <form action={recordOrderWastageAction} className="mt-3 space-y-3 text-sm">
           <input type="hidden" name="storeId" value={storeId} />
-          <div className="grid gap-3 sm:grid-cols-3">
+          <FormGrid>
             {/* ⭐ T-230 — a SELECT of configured channels, not free text with a datalist hint.
                 Two reasons, and the first is the whole task: the channel now carries the wastage
                 policy (bible §13 row 180), so `recordOrderWastage` must resolve a REAL channel at
                 creation to derive it. The second is a defect this closes on the way past — a typed
                 name nothing matched used to create a tracked wastage that no human and no backstop
                 could ever resolve, and it only surfaced days later at posting time. */}
-            <label className="flex flex-col gap-1">
-              <span className="text-neutral-600 dark:text-neutral-400">Channel</span>
-              <select name="channel" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950">
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel</span>}>
+              <select name="channel" required defaultValue="" className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950">
                 <option value="" disabled>Choose a channel…</option>
                 {channels.map((c) => (
                   <option key={c.id} value={c.name}>
@@ -136,24 +136,19 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-neutral-600 dark:text-neutral-400">Business date</span>
-              <input type="date" name="businessDate" defaultValue={toBusinessDate()} required className="rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-neutral-600 dark:text-neutral-400">Platform order ref (optional)</span>
-              <input name="orderRef" className="rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-neutral-600 dark:text-neutral-400">Amount</span>
-              <input name="amount" inputMode="decimal" required placeholder="0.00" className="rounded-md border border-neutral-300 px-2 py-2 tabular-nums dark:border-neutral-700 dark:bg-neutral-950" />
-            </label>
-            <label className="flex flex-col gap-1 sm:col-span-2">
-              <span className="text-neutral-600 dark:text-neutral-400">Reason</span>
-              <input name="reason" required className="rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950" />
-            </label>
-          </div>
+            </Field>
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Business date</span>}>
+              <input type="date" name="businessDate" defaultValue={toBusinessDate()} required className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950" />
+            </Field>
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Platform order ref (optional)</span>}>
+              <input name="orderRef" className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950" />
+            </Field>
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Amount</span>}>
+              <input name="amount" inputMode="decimal" required placeholder="0.00" className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-2 tabular-nums dark:border-neutral-700 dark:bg-neutral-950" />
+            </Field>
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Reason</span>} span="wide">
+              <input name="reason" required className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950" />
+            </Field>
           {/* ⛔ THE TWO MODE RADIOS ARE GONE — bible §13 row 180, Ian 2026-09-07. They let the
               person recording a loss mark it `instant` + `absorbed` and skip the Wastage Monitor,
               the 48-hour dispute window and the 15-day auto-charge backstop in one click: the
@@ -162,18 +157,21 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
               ⚠️ The DISPOSITION stays, because it is a different kind of thing — a fact about what
               happened to the money, not a decision about whether that fact may be made on the
               spot. It is required on an instant channel and refused on a tracked one. */}
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-neutral-600 dark:text-neutral-400">
-                Disposition <span className="text-neutral-400">— only for a decided-on-the-spot channel</span>
-              </span>
-              <select name="disposition" defaultValue="" className="rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-900">
+            <Field
+              span="wide"
+              label={
+                <span className="text-neutral-600 dark:text-neutral-400">
+                  Disposition <span className="text-neutral-400">— only for a decided-on-the-spot channel</span>
+                </span>
+              }
+            >
+              <select name="disposition" defaultValue="" className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-900">
                 <option value="">(reviewed channel — leave blank)</option>
                 <option value="platform_paid">Platform paid — posts nothing</option>
                 <option value="absorbed">Store absorbs — Dr 5300</option>
               </select>
-            </label>
-          </div>
+            </Field>
+          </FormGrid>
           {/* ⭐ T-229 slice 3 — this used to say "set the Monitor under Settings", pointing at a
               screen that did not exist, and it never said whether one WAS set. Now it names them,
               or says plainly that nobody is named and what that costs. */}

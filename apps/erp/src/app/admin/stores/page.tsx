@@ -4,6 +4,7 @@ import { listStoresForAdmin } from './lib';
 import { createStoreAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { FormGrid, Field } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Stores — Shareat System' };
@@ -112,60 +113,58 @@ export default async function StoresPage({
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium">Open a branch</h2>
-        <form action={createStoreAction} className="grid gap-3 sm:grid-cols-2">
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Code</span>
-            <input name="code" required maxLength={16}
-              className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
-            <span className="mt-1 block text-xs text-neutral-500">
-              The stable handle. Not editable afterwards.
-            </span>
-          </label>
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Name</span>
-            <input name="name" required
-              className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
-          </label>
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Stock model</span>
-            <select name="stockModel"
-              className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900">
-              <option value="single_room">single_room</option>
-              <option value="multi_room">multi_room</option>
-            </select>
-          </label>
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Remittance cadence</span>
-            <select name="remittanceCadence"
-              className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900">
-              <option value="daily">daily</option>
-              <option value="every_2_days">every_2_days</option>
-              <option value="weekly">weekly</option>
-              <option value="monthly">monthly</option>
-            </select>
-          </label>
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Opening date</span>
-            <input type="date" name="openingDate"
-              className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
-            <span className="mt-1 block text-xs text-neutral-500">
-              Leave blank if it has not opened. The first day this store trades.
-            </span>
-          </label>
-          <label className="text-sm sm:col-span-2">
-            <span className="block text-neutral-600 dark:text-neutral-400">
-              Unremitted ceiling (required unless the cadence is daily)
-            </span>
-            <input name="unremittedCeiling" inputMode="decimal" placeholder="e.g. 20000.00"
-              className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
-            {/* ⚠️ The form does not enforce this pairing — the database does. Disabling a button
-                client-side would be help, not enforcement (bible §2 rule 7). */}
-            <span className="mt-1 block text-xs text-neutral-500">
-              A store that pools cash must name the ceiling that bounds it. The database refuses the
-              unsafe combination; this field is where you satisfy it.
-            </span>
-          </label>
-          <div className="sm:col-span-2">
+        <form action={createStoreAction} className="space-y-3 text-sm">
+          <FormGrid>
+            <Field
+              label={<span className="text-neutral-600 dark:text-neutral-400">Code</span>}
+              hint="The stable handle. Not editable afterwards."
+            >
+              <input name="code" required maxLength={16}
+                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+            </Field>
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}>
+              <input name="name" required
+                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+            </Field>
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Stock model</span>}>
+              <select name="stockModel"
+                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900">
+                <option value="single_room">single_room</option>
+                <option value="multi_room">multi_room</option>
+              </select>
+            </Field>
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Remittance cadence</span>}>
+              <select name="remittanceCadence"
+                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900">
+                <option value="daily">daily</option>
+                <option value="every_2_days">every_2_days</option>
+                <option value="weekly">weekly</option>
+                <option value="monthly">monthly</option>
+              </select>
+            </Field>
+            <Field
+              label={<span className="text-neutral-600 dark:text-neutral-400">Opening date</span>}
+              hint="Leave blank if it has not opened. The first day this store trades."
+            >
+              <input type="date" name="openingDate"
+                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+            </Field>
+            <Field
+              span="full"
+              label={
+                <span className="text-neutral-600 dark:text-neutral-400">
+                  Unremitted ceiling (required unless the cadence is daily)
+                </span>
+              }
+              hint="A store that pools cash must name the ceiling that bounds it. The database refuses the unsafe combination; this field is where you satisfy it."
+            >
+              <input name="unremittedCeiling" inputMode="decimal" placeholder="e.g. 20000.00"
+                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+              {/* ⚠️ The form does not enforce this pairing — the database does. Disabling a button
+                  client-side would be help, not enforcement (bible §2 rule 7). */}
+            </Field>
+          </FormGrid>
+          <div>
             <button type="submit"
               className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
               Open branch

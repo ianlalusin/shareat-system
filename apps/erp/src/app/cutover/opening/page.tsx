@@ -18,6 +18,7 @@ import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { FormGrid, Field } from '@/components/ui';
 
 export const metadata = { title: 'Opening balances — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -133,13 +134,12 @@ export default async function OpeningPage({
         <h2 className="text-sm font-medium">Add a figure</h2>
         <form action={addOpeningFigureAction} className="mt-3 space-y-3">
           <input type="hidden" name="entryDate" value={CONVERSION_DATE} />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">Account</span>
+          <FormGrid>
+            <Field label="Account">
               <select
                 name="accountCode"
                 required
-                className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
               >
                 {accounts.map((a) => (
                   <option key={a.code} value={a.code}>
@@ -147,13 +147,12 @@ export default async function OpeningPage({
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">Store</span>
+            </Field>
+            <Field label="Store">
               <select
                 name="storeId"
                 required
-                className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
               >
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -161,32 +160,28 @@ export default async function OpeningPage({
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">
-                Owns or owes
-              </span>
+            </Field>
+            <Field label="Owns or owes">
               <select
                 name="direction"
                 required
-                className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
               >
                 {/* Plain words, because "debit" and "credit" are the thing people get backwards. */}
                 <option value="debit">We have this (asset)</option>
                 <option value="credit">We owe this (liability)</option>
               </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">Amount</span>
+            </Field>
+            <Field label="Amount">
               <input
                 name="amount"
                 required
                 inputMode="decimal"
                 placeholder="0.00"
-                className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
               />
-            </label>
-          </div>
+            </Field>
+          </FormGrid>
           <input
             type="text"
             name="memo"
@@ -197,7 +192,7 @@ export default async function OpeningPage({
             type="submit"
             className="w-full rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white sm:w-auto dark:bg-neutral-100 dark:text-neutral-900"
           >
-            Add figure
+            Save
           </button>
         </form>
       </section>

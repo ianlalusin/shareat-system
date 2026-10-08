@@ -221,7 +221,7 @@ export default async function OwnersPage({
             type="submit"
             className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
           >
-            Record owner
+            Save
           </button>
         </form>
       </section>

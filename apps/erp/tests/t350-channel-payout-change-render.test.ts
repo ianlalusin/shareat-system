@@ -181,10 +181,11 @@ describe('R1 — a wired channel card, for a holder of set_channel_payout, shows
       expect(changeForm, 'expected a form carrying channelId=chan-1 and a moneyAccountId control').toBeTruthy();
       expect(changeForm, 'expected a moneyAccountId select in that form').toMatch(/name="moneyAccountId"/);
 
-      expect(html, 'expected a server-rendered disclosure, not client state (spec: <details>/<summary>)').toMatch(
-        /<details[^>]*>[\s\S]*<summary[^>]*>[\s\S]*Change[\s\S]*<\/summary>/i,
-      );
-      expect(html, 'expected a Cancel affordance next to Change').toMatch(/Cancel/);
+      // 2026-10-09, T-384 sweep fallout (A0): the <details>/<summary> "Change" disclosure and its Cancel link are gone; the
+      // payout account is an EditableRecord, so the holder sees it LOCKED (disabled fieldset) with an Edit button. Save +
+      // Cancel appear only after Edit (client state), so they are not in the static markup.
+      expect(changeForm, 'expected the payout account locked until Edit (A0)').toMatch(/<fieldset disabled/);
+      expect(html, 'expected an Edit button for the payout account').toMatch(/aria-label="Edit [^"]*"[^>]*>Edit</);
 
       const selectBlock = /<select[^>]*name="moneyAccountId"[^>]*>[\s\S]*?<\/select>/.exec(changeForm!)?.[0];
       expect(selectBlock, 'expected the moneyAccountId select itself').toBeTruthy();

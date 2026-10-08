@@ -156,8 +156,11 @@ describe('W1 - the item page: a unit form until the item has history, the locked
     async () => {
       const f = await fixture('w1a');
       const id = await insertItem(f, 'ltr');
-      const block = formsOf(await detailHtml(f, id)).find((b) => /Change unit/.test(b));
-      expect(block, 'a form with a Change unit button').toBeDefined();
+      // 2026-10-09, T-384 sweep fallout (A0): the "Change unit" submit is now an EditableRecord - the form is locked
+      // (disabled fieldset) with an "Edit <item> unit" button; Save + Cancel appear after Edit. Find it by that button.
+      const block = formsOf(await detailHtml(f, id)).find((b) => /aria-label="Edit [^"]* unit"[^>]*>Edit</.test(b));
+      expect(block, 'a form with an Edit unit button').toBeDefined();
+      expect(block, 'locked until Edit (A0)').toMatch(/<fieldset disabled/);
       const sel = selectIn(block!, 'baseUnit');
       expect(sel, 'baseUnit select').not.toBeNull();
       expect(sel!.options.filter((o) => o.selected).map((o) => o.value)).toEqual(['ltr']);

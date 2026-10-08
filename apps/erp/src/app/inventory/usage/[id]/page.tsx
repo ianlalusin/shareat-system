@@ -156,9 +156,9 @@ export default async function UsageRecordPage({
       {canVoid && (
         <form action={voidUsageAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="recordId" value={record.id} />
-          <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+          <label className="flex min-w-0 grow flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
             Void — say why
-            <input name="reason" required placeholder="reason" className={`${INPUT} w-64`} />
+            <input name="reason" required placeholder="reason" className={`${INPUT} w-full`} />
           </label>
           <button type="submit" className={BTN_DANGER}>
             Void

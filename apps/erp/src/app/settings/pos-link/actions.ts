@@ -9,7 +9,7 @@
  */
 import { revalidatePath } from 'next/cache';
 import { authorize } from '@shareat/auth';
-import { storesRepo } from '@shareat/db';
+import { posV1Repo, storesRepo } from '@shareat/db';
 import { createTender, linkStoreToPos, setTenderActive, unlinkStoreFromPos, updateTender } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
@@ -74,12 +74,26 @@ export async function linkStoreToPosAction(fd: FormData): Promise<void> {
 // Tenders (T-375 S2). Same rule: createTender, updateTender and setTenderActive each call
 // authorize(tx, actor, 'manage_chart_of_accounts', ...) first and own every sentence.
 // ---------------------------------------------------------------------------------------------
+/**
+ * R7: an ok sentence names the tender, read back from the database after the write commits, never trusted from the
+ * form. The read-back is only a label: if it cannot be read the write must still stand, so it falls back to a plain word.
+ */
+async function savedName(orgId: string, tenderId: string): Promise<string> {
+  try {
+    // Its own read, AFTER the write committed: a failing lookup can never abort or roll back the write.
+    return await withOrgPrincipal(orgId, async (tx) => (await posV1Repo.getTenderById(tx, orgId, tenderId))?.name ?? 'Tender');
+  } catch {
+    return 'Tender';
+  }
+}
+
 export async function createTenderAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/settings/pos-link');
   const storeId = str(fd, 'storeId');
+  let name = 'Tender';
   try {
     const kind = str(fd, 'kind');
-    await withOrgPrincipal(actor.orgId, (tx) =>
+    const { id } = await withOrgPrincipal(actor.orgId, async (tx) =>
       createTender(tx, actor, {
         storeId,
         name: str(fd, 'name'),
@@ -88,16 +102,19 @@ export async function createTenderAction(fd: FormData): Promise<void> {
         posV1Alias: str(fd, 'posV1Alias') || null,
       }),
     );
+    name = await savedName(actor.orgId, id);
   } catch (err) {
     return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
   }
   revalidatePath('/settings/pos-link');
-  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: 'Tender added.' }, { anchor: anchorOf(storeId) });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${name} added.` }, { anchor: anchorOf(storeId) });
 }
 
 export async function updateTenderAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/settings/pos-link');
   const storeId = str(fd, 'storeId');
+  const tenderId = str(fd, 'tenderId');
+  let name = 'Tender';
   try {
     const accountId = str(fd, 'moneyAccountId');
     const kind = str(fd, 'kind');
@@ -105,36 +122,46 @@ export async function updateTenderAction(fd: FormData): Promise<void> {
     if (!version) throw new Error(STALE_SENTENCE);
     // R5: the account is forwarded only for a wallet (the form always submits the select); a cash result sends none
     // and the domain clears it. A form with no kind field keeps the old behaviour.
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      updateTender(tx, actor, {
-        tenderId: str(fd, 'tenderId'),
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await updateTender(tx, actor, {
+        tenderId,
         expectedVersion: version,
         name: str(fd, 'name'),
         posV1Alias: str(fd, 'posV1Alias') || null,
         ...(kind ? { kind: kind as 'cash' | 'wallet' } : {}),
         ...(kind === 'cash' ? {} : accountId ? { moneyAccountId: accountId } : {}),
-      }),
-    );
+      });
+    });
+    name = await savedName(actor.orgId, tenderId);
   } catch (err) {
-    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
+    // DEF-617: the refused Save carries what was typed in the signed flash (never the URL), so the record reopens in
+    // edit mode holding it. Only this one form's fields, and only when the record is named.
+    // A STALE refusal keeps nothing: the page redraws the tender locked with what is saved (the other user's change).
+    const keep = tenderId && errorMessage(err) !== STALE_SENTENCE
+      ? { tenderId, tenderName: str(fd, 'name'), tenderKind: str(fd, 'kind'), tenderAccount: str(fd, 'moneyAccountId'), tenderAlias: str(fd, 'posV1Alias') }
+      : undefined;
+    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err), ...(keep ? { keep } : {}) }, { anchor: anchorOf(storeId) });
   }
   revalidatePath('/settings/pos-link');
-  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: 'Tender saved.' }, { anchor: anchorOf(storeId) });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${name} saved.` }, { anchor: anchorOf(storeId) });
 }
 
 export async function setTenderActiveAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/settings/pos-link');
   const storeId = str(fd, 'storeId');
   const isActive = str(fd, 'isActive') === 'true';
+  let name = 'Tender';
   try {
     const version = str(fd, 'version');
     if (!version) throw new Error(STALE_SENTENCE);
-    await withOrgPrincipal(actor.orgId, (tx) => setTenderActive(tx, actor, { tenderId: str(fd, 'tenderId'), isActive, expectedVersion: version }));
+    const tenderId = str(fd, 'tenderId');
+    await withOrgPrincipal(actor.orgId, (tx) => setTenderActive(tx, actor, { tenderId, isActive, expectedVersion: version }));
+    name = await savedName(actor.orgId, tenderId);
   } catch (err) {
     return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
   }
   revalidatePath('/settings/pos-link');
-  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: isActive ? 'Tender restored.' : 'Tender retired.' }, { anchor: anchorOf(storeId) });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${name} ${isActive ? 'restored' : 'retired'}.` }, { anchor: anchorOf(storeId) });
 }
 
 // ---------------------------------------------------------------------------------------------

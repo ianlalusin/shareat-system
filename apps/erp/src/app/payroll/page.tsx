@@ -102,9 +102,9 @@ export default async function PayrollPage({
       </div>
 
       <form className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
           <span className={LABEL}>Store</span>
-          <select name="store" defaultValue={storeId} className={`${FIELD} w-52`}>
+          <select name="store" defaultValue={storeId} className={`${FIELD} w-full`}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -115,12 +115,12 @@ export default async function PayrollPage({
         {/* ⭐ The store's OWN periods. ⚠️ The dates stay editable underneath — a late correction
             has to be payable even when it does not line up with a configured window. */}
         {periodOptions.length > 0 && (
-          <label className="flex flex-col gap-1">
+          <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
             <span className={LABEL}>Period</span>
             <select
               name="period"
               defaultValue={`${periodStart}|${periodEnd}`}
-              className={`${FIELD} w-64`}
+              className={`${FIELD} w-full`}
             >
               {periodOptions.map((p) => (
                 <option key={p.start} value={`${p.start}|${p.end}`}>
@@ -130,13 +130,13 @@ export default async function PayrollPage({
             </select>
           </label>
         )}
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1">
           <span className={LABEL}>From</span>
-          <input name="start" type="date" defaultValue={periodStart} className={`${FIELD} w-44`} />
+          <input name="start" type="date" defaultValue={periodStart} className={`${FIELD} w-full`} />
         </label>
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1">
           <span className={LABEL}>to</span>
-          <input name="end" type="date" defaultValue={periodEnd} className={`${FIELD} w-44`} />
+          <input name="end" type="date" defaultValue={periodEnd} className={`${FIELD} w-full`} />
         </label>
         <button type="submit" className={BTN}>
           Preview
@@ -315,9 +315,9 @@ export default async function PayrollPage({
               <input type="hidden" name="storeId" value={storeId} />
               <input type="hidden" name="periodStart" value={periodStart} />
               <input type="hidden" name="periodEnd" value={periodEnd} />
-              <label className="flex flex-col gap-1">
+              <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
                 <span className={LABEL}>Pay from</span>
-                <select name="moneyAccountId" className={`${FIELD} w-56`}>
+                <select name="moneyAccountId" className={`${FIELD} w-full`}>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
@@ -325,7 +325,7 @@ export default async function PayrollPage({
                   ))}
                 </select>
               </label>
-              <input name="notes" placeholder="Notes (optional)" className={`${FIELD} w-64`} />
+              <input name="notes" placeholder="Notes (optional)" className={`${FIELD} min-w-0 flex-1 basis-48`} />
               <button type="submit" className={BTN_PRIMARY}>
                 Post {pv.slips.length} payslip(s)
               </button>
@@ -384,7 +384,7 @@ export default async function PayrollPage({
                         className={`${FIELD} w-40`}
                       />
                       <button type="submit" className={BTN}>
-                        Set
+                        Save
                       </button>
                     </form>
                   </td>
@@ -435,7 +435,7 @@ export default async function PayrollPage({
                 <form action={voidPayRunAction} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="runId" value={run.id} />
-                  <input name="reason" placeholder="Why void it?" className={`${FIELD} w-64`} />
+                  <input name="reason" placeholder="Why void it?" className={`${FIELD} min-w-0 flex-1 basis-48`} />
                   <button type="submit" className={BTN}>
                     Void
                   </button>

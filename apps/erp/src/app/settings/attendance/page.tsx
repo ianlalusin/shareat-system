@@ -4,6 +4,8 @@ import { updateAttendanceConfigAction } from './actions';
 import { liveConfigFor, listStores } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Attendance & payroll settings — Shareat System' };
@@ -63,9 +65,9 @@ export default async function AttendanceSettingsPage({
       </div>
 
       <form className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-1 flex-col gap-1">
           <span className={LABEL}>Store</span>
-          <select name="store" defaultValue={storeId} className={`${FIELD} w-52`}>
+          <select name="store" defaultValue={storeId} className={`${FIELD} w-full`}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -86,9 +88,8 @@ export default async function AttendanceSettingsPage({
           This store has no attendance config yet.
         </p>
       ) : (
-        <form action={updateAttendanceConfigAction} className="space-y-6">
-          <input type="hidden" name="storeId" value={storeId} />
-
+        <EditableRecord action={updateAttendanceConfigAction} label="attendance policy" hidden={{ storeId }}>
+          <div className="space-y-6">
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Effective from</span>
             <input
@@ -96,7 +97,7 @@ export default async function AttendanceSettingsPage({
               type="date"
               required
               defaultValue={defaultEffectiveFrom}
-              className={`${FIELD} w-44`}
+              className={`${FIELD} w-full`}
             />
             <span className="text-xs text-neutral-500">
               ⛔ Must be after {cfg.effectiveFrom} (today&rsquo;s live policy) and cannot fall on or
@@ -232,10 +233,8 @@ export default async function AttendanceSettingsPage({
             <IntField label="Max shift hours" name="maxShiftHours" defaultValue={cfg.maxShiftHours} />
           </Group>
 
-          <button type="submit" className={BTN_PRIMARY}>
-            Save policy
-          </button>
-        </form>
+          </div>
+        </EditableRecord>
       )}
     </Page>
   );
@@ -245,7 +244,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   return (
     <section className="space-y-3 rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
       <h2 className="text-sm font-medium">{title}</h2>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">{children}</div>
+      <FormGrid className="gap-3">{children}</FormGrid>
     </section>
   );
 }
@@ -273,7 +272,7 @@ function NumField({
 }) {
   return (
     <FieldShell label={label} hint={hint}>
-      <input name={name} inputMode="decimal" defaultValue={defaultValue} className={FIELD} />
+      <input name={name} inputMode="decimal" defaultValue={defaultValue} className={`${FIELD} w-full`} />
     </FieldShell>
   );
 }
@@ -291,7 +290,7 @@ function IntField({
 }) {
   return (
     <FieldShell label={label} hint={hint}>
-      <input name={name} inputMode="numeric" defaultValue={defaultValue} className={FIELD} />
+      <input name={name} inputMode="numeric" defaultValue={defaultValue} className={`${FIELD} w-full`} />
     </FieldShell>
   );
 }
@@ -309,7 +308,7 @@ function TextField({
 }) {
   return (
     <FieldShell label={label} hint={hint}>
-      <input type="text" name={name} defaultValue={defaultValue} className={FIELD} />
+      <input type="text" name={name} defaultValue={defaultValue} className={`${FIELD} w-full`} />
     </FieldShell>
   );
 }
@@ -329,7 +328,7 @@ function SelectField({
 }) {
   return (
     <FieldShell label={label} hint={hint}>
-      <select name={name} defaultValue={defaultValue} className={FIELD}>
+      <select name={name} defaultValue={defaultValue} className={`${FIELD} w-full`}>
         {options.map(([value, text]) => (
           <option key={value} value={value}>
             {text}
@@ -375,5 +374,3 @@ const FIELD =
 const LABEL = 'text-xs font-medium text-neutral-600 dark:text-neutral-400';
 const BTN =
   'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';
-const BTN_PRIMARY =
-  'rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300';

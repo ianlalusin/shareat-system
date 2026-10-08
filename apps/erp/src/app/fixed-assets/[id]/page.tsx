@@ -9,6 +9,7 @@ import { CATEGORY_LABEL, INTERVAL_LABEL, getAsset, listStores } from '../lib';
 import { StatusBadge } from '../page';
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
+import { EditableRecord } from '@/components/forms';
 import { withFlash } from '@/lib/flash';
 
 export const dynamic = 'force-dynamic';
@@ -181,9 +182,34 @@ export default async function AssetDetailPage({
                 What you typed could not be carried over. Enter the choice, date and reason again before you confirm.
               </p>
             )}
-            <form action={setAssetInServiceAction} className="space-y-3">
-              <input type="hidden" name="assetId" value={asset.id} />
-              <input type="hidden" name="filterStore" value={sp.store ?? ''} />
+            {sp.confirm && (
+              <form action={setAssetInServiceAction} className="space-y-3">
+                <input type="hidden" name="assetId" value={asset.id} />
+                <input type="hidden" name="filterStore" value={sp.store ?? ''} />
+                <input type="hidden" name="mode" value={sp.mode ?? asset.inServiceSource ?? 'acquired'} />
+                <input type="hidden" name="inServiceOn" value={sp.inServiceOn ?? asset.inServiceOn ?? ''} />
+                {sp.reason !== undefined ? (
+                  <input type="hidden" name="reason" value={sp.reason} />
+                ) : (
+                  <Field label="Reason" hint="Required — an audit trail with no reason is unauditable">
+                    <input name="reason" required className={INPUT} />
+                  </Field>
+                )}
+                <input type="hidden" name="confirmedPlan" value={sp.plan ?? ''} />
+                <button
+                  type="submit"
+                  className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+                >
+                  Confirm change
+                </button>
+              </form>
+            )}
+            <EditableRecord
+              action={setAssetInServiceAction}
+              label={`${asset.name} in-service date`}
+              hidden={{ assetId: asset.id, filterStore: sp.store ?? '' }}
+            >
+              <div className="space-y-3">
               {/* ⛔ A `<select>`, not radios — a native radio's box is unresolvable-by-construction
                   for the touch-target sweep (Ian's ruling §6.1, T-262); a `<select>` sizes from its
                   own classes exactly like this file's other pickers. */}
@@ -204,7 +230,7 @@ export default async function AssetDetailPage({
                   name="inServiceOn"
                   min={asset.acquiredOn ?? undefined}
                   defaultValue={sp.inServiceOn ?? asset.inServiceOn ?? ''}
-                  className={`${INPUT} max-w-xs`}
+                  className={INPUT}
                 />
               </Field>
               <Field label="Reason" hint="Required — an audit trail with no reason is unauditable">
@@ -214,14 +240,8 @@ export default async function AssetDetailPage({
                   (same one-button shape as the dispose form below); a checkbox here would be a
                   second, redundant gesture, and its native box is unresolvable-by-construction for
                   the touch-target sweep the same way the radios above were. */}
-              {sp.confirm && <input type="hidden" name="confirmedPlan" value={sp.plan ?? ''} />}
-              <button
-                type="submit"
-                className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-              >
-                {sp.confirm ? 'Confirm change' : 'Update in-service date'}
-              </button>
-            </form>
+              </div>
+            </EditableRecord>
           </>
         )}
       </section>
@@ -230,9 +250,12 @@ export default async function AssetDetailPage({
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Depreciation terms</h2>
           {isActive ? (
-            <form action={updateTermsAction} className="space-y-4">
-              <input type="hidden" name="assetId" value={asset.id} />
-              <input type="hidden" name="filterStore" value={sp.store ?? ''} />
+            <EditableRecord
+              action={updateTermsAction}
+              label={asset.name}
+              hidden={{ assetId: asset.id, filterStore: sp.store ?? '' }}
+            >
+              <div className="space-y-4">
               <Field label="Name">
                 <input name="name" required defaultValue={asset.name} maxLength={200} className={INPUT} />
               </Field>
@@ -276,19 +299,14 @@ export default async function AssetDetailPage({
               <Field label="Notes">
                 <textarea name="notes" rows={2} defaultValue={asset.notes ?? ''} className={INPUT} />
               </Field>
-              <button
-                type="submit"
-                className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-              >
-                Save terms
-              </button>
               {/* ⚠️ Changing a life does NOT rewrite what has already posted. Past periods are
                   history; the remaining ones re-derive from the new terms. */}
               <p className="text-xs text-neutral-400 dark:text-neutral-600">
                 Changing the life or interval affects periods not yet posted. Entries already
                 posted are history and are not rewritten.
               </p>
-            </form>
+              </div>
+            </EditableRecord>
           ) : (
             <dl className="space-y-2 text-sm">
               <Row k="Life" v={`${asset.usefulLifeMonths} months`} />

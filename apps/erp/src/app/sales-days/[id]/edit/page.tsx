@@ -170,7 +170,7 @@ export default async function EditSalesDayPage({
           wallets={activeWallets}
           defaults={defaults}
           retiredTenders={retiredTenders}
-          submitLabel="Save changes"
+          submitLabel="Save"
         />
       </form>
     </Page>
