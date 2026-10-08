@@ -372,7 +372,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1145 -> 1148, T-384 S3a (merged 2026-10-08). +3: `components/ui/EditableRecord.tsx` gains its Edit, Save and Cancel
     // `<button>`s (static class literals, so the census resolves them; FAIL 151 / UNRESOLVED 62 unmoved). The S1b-min hidden
     // `version` inputs on `settings/pos-link/page.tsx` are not counted. Verified by running the census (1148).
-    expect(results.length).toBe(1148);
+    // 1148 -> 1147, int-fix 2026-10-08. -1: the item page's "Rename" submit `<button>` is gone; the rename section now uses
+    // EditableRecord (its Edit/Save/Cancel are counted once, in `components/forms/EditableRecord.tsx`). FAIL 151 / UNRESOLVED 62 unmoved.
+    // Verified by running the census (1147).
+    expect(results.length).toBe(1147);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
