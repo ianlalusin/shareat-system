@@ -64,7 +64,7 @@ export default async function ItemDetailPage({
   ]);
   // T-378 S4 (DEF-600). Presentation aid only: the same gate the action uses, asked here so the form is drawn only for
   // who may use it. `changeItemBaseUnit` stays the enforcement. Pattern: channel-settlements/page.tsx.
-  const mayChangeUnit = await withOrgPrincipal(actor.orgId, async (tx) => {
+  const mayApproveItem = await withOrgPrincipal(actor.orgId, async (tx) => {
     try {
       await authorize(tx, actor, 'approve_item', {});
       return true;
@@ -108,7 +108,7 @@ export default async function ItemDetailPage({
       {/* T-383 R6. Rename: name and code, super-admin only; the domain (`renameItem`) is the enforcement. */}
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Name and code</h2>
-        {mayChangeUnit ? (
+        {mayApproveItem ? (
           <form action={renameItemAction} className="flex flex-wrap items-end gap-3 text-sm">
             <input type="hidden" name="itemId" value={item.id} />
             <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
@@ -128,7 +128,7 @@ export default async function ItemDetailPage({
           </form>
         ) : (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Only a super-admin can rename, retire or restore an item.
+            Only a super-admin can rename an item.
           </p>
         )}
       </section>
@@ -141,7 +141,7 @@ export default async function ItemDetailPage({
             {"This item's unit can no longer change: it already has stock, counts, invoices, recipes, prices or orders recorded in its current unit, and changing it would re-read every one of them in the new unit."}{' '}
             It is measured in {item.baseUnit}.
           </p>
-        ) : !mayChangeUnit ? (
+        ) : !mayApproveItem ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
             Only a super-admin can change an item&apos;s unit. It is measured in {item.baseUnit}.
           </p>

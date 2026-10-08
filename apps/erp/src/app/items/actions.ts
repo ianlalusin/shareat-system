@@ -60,10 +60,10 @@ function errorMessage(err: unknown): string {
   // The duplicate-name violation is the one people will actually hit, and Postgres's own wording
   // is unreadable. Say what happened and why it is refused.
   if (/items_org_name_key/.test(raw)) {
-    return 'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, rename the existing item on its page first.';
+    return 'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, ask a super-admin to rename the existing item first.';
   }
   if (/items_org_code_key/.test(raw)) {
-    return "That item code is already in use. To reuse it, change the existing item's code on its page first.";
+    return "That item code is already in use. To reuse it, ask a super-admin to change the existing item's code first.";
   }
   return sharedErrorMessage(err);
 }
@@ -234,9 +234,10 @@ export async function renameItemAction(formData: FormData): Promise<void> {
     message = changed ? 'Renamed.' : 'Nothing to change.';
   } catch (err) {
     if (err instanceof AuthorizationError) {
-      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only a super-admin can rename, retire or restore an item.' });
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only a super-admin can rename an item.' });
     }
-    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err) });
+    // The rename form is on the item's own page, so here (and only here) the way out is the page itself.
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err).replace('ask a super-admin to rename the existing item first.', 'rename the existing item on its page first.').replace("ask a super-admin to change the existing item's code first.", "change the existing item's code on its page first.") });
   }
   return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message });
 }
