@@ -128,4 +128,30 @@ describe('T-385 S4 - the day page offers Verify & post only on a submitted day',
     expect(to.searchParams.get('error')).toBe(NOT_SUBMITTED);
     expect(await statusOf(dayId)).toBe('open');
   });
+  it('P5: the submitter who may verify sees the sentence, not the button; a super-admin submitter and a different verifier see the button', async () => {
+    const OWN = 'You submitted this day, so someone else has to verify it.';
+    const WARN = 'The person who submits should not be the one who verifies';
+    const { f, dayId, storeId } = await setup('p5');
+    const [sp] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Owner') returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${sp!.id}, ${f.orgId}, 'super_admin')`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${sp!.id}, ${storeId})`;
+    const superAdmin = { personId: sp!.id, orgId: f.orgId };
+    await asOrgOn(f.orgId, (tx) => submitSalesDay(tx, f.manager, dayId));
+    // (a) the manager who submitted
+    const a = await render(f, f.manager, dayId, storeId);
+    expect(a, '(a) the own-day sentence').toContain(OWN);
+    expect(a, '(a) no Verify & post button').not.toContain('Verify & post');
+    // (c) a different verifier
+    const c = await render(f, f.admin, dayId, storeId);
+    expect(c, '(c) a different verifier sees the button').toContain('Verify & post');
+    expect(c).not.toContain(OWN);
+    expect(c, 'the card states a rule now, not a warning').not.toContain(WARN);
+    // (b) a super-admin who submitted a day of their own
+    const other = await mkTypedDay(sql, f, [f.managerId, sp!.id], '2027-01-11');
+    await asOrgOn(f.orgId, (tx) => submitSalesDay(tx, superAdmin, other.id));
+    const b = await render(f, superAdmin, other.id, other.storeId);
+    expect(b, '(b) a super-admin sees the button on their own submission').toContain('Verify & post');
+    expect(b).not.toContain(OWN);
+    expect(b).not.toContain(WARN);
+  });
 });
