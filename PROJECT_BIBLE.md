@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1623` 13. Decision log
-- `1624–1643` 14. Amendment protocol
-- `1644–1648` 15. Engineering standards — the industry practices this project follows
-  - `1649–1654` 15.1 Build order: walking skeleton first
-  - `1655–1666` 15.2 Golden-master testing — the most important practice here
-  - `1667–1675` 15.3 Strangler Fig, not big-bang cutover
-  - `1676–1680` 15.4 No dual-write
-  - `1681–1689` 15.5 Expand/contract migrations
-  - `1690–1698` 15.6 Observability from day zero, not later
-  - `1699–1703` 15.7 CI gates
-  - `1704–1708` 15.8 Backups and a tested restore
-  - `1709–1713` 15.9 Twelve-Factor config
-  - `1714–1721` 15.10 Append-only ledgers — but not event sourcing
-  - `1722–1726` 15.11 Defence in depth
-  - `1727–1755` 15.12 Skills are lenses, not assurance
-  - `1756–1762` 15.13 Reconciliation is a permanent feature
-- `1763–1767` 16. The accounting spine
-  - `1768–1799` 16.0 What we are actually fixing — the diagnosis
-  - `1800–1843` 16.1 The ten invariants — non-negotiable
-  - `1844–1858` 16.2 The oracle: how "correct" is tested
-  - `1859–1880` 16.3 The model — header + lines, not legs
-  - `1881–1900` 16.4 Deliberately simpler than ERPNext
-  - `1901–1967` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1968–1992` 16.6 What v1 already gets right — preserve the intent
-  - `1993–2014` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2015–2029` 16.8 What v1's accounting already gets right
-  - `2030–2073` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2074–2124` 16.10 Posting patterns — one canonical pattern per business event
-  - `2125–2156` 16.11 Inventory's accounting integration
+- `1329–1626` 13. Decision log
+- `1627–1646` 14. Amendment protocol
+- `1647–1651` 15. Engineering standards — the industry practices this project follows
+  - `1652–1657` 15.1 Build order: walking skeleton first
+  - `1658–1669` 15.2 Golden-master testing — the most important practice here
+  - `1670–1678` 15.3 Strangler Fig, not big-bang cutover
+  - `1679–1683` 15.4 No dual-write
+  - `1684–1692` 15.5 Expand/contract migrations
+  - `1693–1701` 15.6 Observability from day zero, not later
+  - `1702–1706` 15.7 CI gates
+  - `1707–1711` 15.8 Backups and a tested restore
+  - `1712–1716` 15.9 Twelve-Factor config
+  - `1717–1724` 15.10 Append-only ledgers — but not event sourcing
+  - `1725–1729` 15.11 Defence in depth
+  - `1730–1758` 15.12 Skills are lenses, not assurance
+  - `1759–1765` 15.13 Reconciliation is a permanent feature
+- `1766–1770` 16. The accounting spine
+  - `1771–1802` 16.0 What we are actually fixing — the diagnosis
+  - `1803–1846` 16.1 The ten invariants — non-negotiable
+  - `1847–1861` 16.2 The oracle: how "correct" is tested
+  - `1862–1883` 16.3 The model — header + lines, not legs
+  - `1884–1903` 16.4 Deliberately simpler than ERPNext
+  - `1904–1970` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1971–1995` 16.6 What v1 already gets right — preserve the intent
+  - `1996–2017` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2018–2032` 16.8 What v1's accounting already gets right
+  - `2033–2076` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2077–2127` 16.10 Posting patterns — one canonical pattern per business event
+  - `2128–2159` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1620,6 +1620,9 @@ just a patch.**
 | 285 | 2026-10-08 | **A GUARDED POS UNLINK (T-382, migration 0187).** R1 soft unlink: three columns on the link row, never a delete. R3 an unlink refuses while the store has an unverified imported day. R4 0187 hardens 0185: no imported figure, tender or remitted row changes on an unlinked store, even under the derivation flag. R5 the import re-reads the whole link (id, updatedAt, POS id) under the store lock after its fetch and refuses on any change. R6 new capability `unlink_store_from_pos`, super-admin only, backfilled to existing owners (R6a, 0166 pattern). R7 a usage pull on an imported day no longer needs a live link. R8 relink is an UPDATE of the same row. R9 DROPPED (the full UNIQUE on `pos_store_id` stays, so an unlinked store keeps holding its POS id and no other store can link it). R10 (DEF-607) a POS store id whose sales were ever imported for one store is refused for any other store of the org, live link or not, relinked away or not, because the same sales would be booked twice. R9a a correction or recheck on a day imported under an earlier link refuses after a relink (judged on database-stamped times: feed `fetched_at` vs link `updated_at`). "Linked" now means a LIVE link row | Delete the link row plus an audit row (needs a DELETE grant 0183 left out and loses who/when/why on the screen); partial UNIQUE on live links (double import) | docs/tasks/382-pos-store-unlink.md; Ian, `t375-unlink-safety`, 2026-10-07 |
 | 286 | 2026-10-08 | **A STORE MANAGER IS A ROLE AN ADMIN ASSIGNS, NEVER A SEEDED POSITION; STORE READINESS WARNS (NON-BLOCKING) WHEN A STORE HAS NONE (T-338).** Ian, 2026-09-24 (recorded in docs/tasks/338-store-readiness-manager-warning.md; written here at the 2026-10-08 wrap-up): one organisation-wide admin, managers scoped per store, the adminless-manager elevation stays as it is; the readiness checklist gains a `manager` check that counts only active manager-role holders scoped to the store (admins do not count). Built 2026-10-08. | A decision that lived only in a task doc | Yes — a warning, not a gate |
 | 287 | 2026-10-08 | **AN ITEM'S UNIT STAYS EDITABLE UNTIL THE ITEM HAS ANY RECORD, THEN IS LOCKED; A WRONG UNIT ON A USED ITEM IS FIXED BY RETIRE-AND-RECREATE, NEVER BY RESTATING HISTORY (T-378 Q1 = a).** Ian, Open Questions `t378-q1-unit-history`, answered 2026-10-07: *"If there is no ledger transaction on that item, like newly created, allow edit; if there is then a."* This is the behaviour T-378 already ships (0186: `items_base_unit_fixed`). Not built: the restate tool (Q1 b). Follow-up: the small rename screen option (a) needs, because item names are unique (`items_org_name_key`; T-378 N2) | A ruling given on the Open Questions page and not yet written here | Yes — the restate (b) can still be built later |
+| 288 | 2026-10-08 | ⭐ **EVERY PAGE AND EVERY FORM USES THE FULL WIDTH AND ADAPTS TO THE SCREEN; ONLY SIGN-IN, SETUP AND THE CLOCK KIOSK STAY NARROW CENTRED CARDS (T-384 S2).** Ian, 2026-10-08: *"i want all forms to adjust based on screen size and always use full width"*. No `form` density and no width cap on `table`; fields sit in a grid that adapts to the space available (`FormGrid`/`Field`), never fixed narrow widths. On the three narrow screens (Open Questions `t384-q1-narrow-screens`): *"add them to narrow card, stack cards horizontally, mid balance always"* — several cards sit side by side, wrapping on small screens, always centred | The POS link screen and 12 other pages still sat at 768 px after DEF-440's W2 ruling; Ian said *"again"* | Yes — a density can be reintroduced per page, but the guard tests must then be changed on purpose |
+| 289 | 2026-10-08 | ⭐ **A SAVED RECORD OPENS LOCKED BEHIND ONE EDIT BUTTON; EDIT UNLOCKS ONLY THAT RECORD AND SHOWS SAVE AND CANCEL; AN ADD FORM ALWAYS ENDS IN SAVE; BUTTONS THAT POST MONEY, MOVE STOCK, CHANGE A STATUS OR GRANT ACCESS KEEP THEIR OWN VERB (T-384 S3).** Ian, 2026-10-08: *"save buttons existing must be renamed to edit, lock the fields and only allow edit once edit is clicked then save. implement this globally so user will not be misdirected"*; command buttons: Open Questions `t384-q2-command-buttons` = a. One record open at a time; Cancel restores the stored values; a save carries the record's version and is refused if the record changed since it was opened. One shared component (`EditableRecord`) and guard tests (G7/G8) enforce it app-wide | Lipa's tender setup (8 Oct): editable-looking rows and a hidden refusal read as "overwritten" and "only 3 allowed"; the audit log showed nothing was overwritten | Yes — UX only; the server actions are unchanged |
+| 290 | 2026-10-08 | **RENAME IS SUPER-ADMIN ONLY, ONE NAME FOR THE WHOLE BUSINESS; RETIRING AN ITEM THAT STILL HAS STOCK WARNS AND THEN ALLOWS IT, AND THE ITEM STAYS USABLE FOR CONSUMPTION AND MOVEMENT UNTIL ITS STOCK IS USED UP (T-383).** Ian, 2026-10-08, Open Questions `t383-q1-who-renames` (*"super admin only 1 name for entire business"*) and `t383-q2-retire-with-stock` (*"yes warning then allow until fully utilized"*). A retired item can no longer be ordered, received or given a new price or POS map; POS usage, recipes, wastage, transfers and counts still work on it until on-hand is zero | Row 287's retire-and-recreate needs the old name freed; stock already on hand must still be consumable | Yes — the retire rule can be tightened to refuse-until-zero later (needs a migration) |
 
 ## 14. Amendment protocol
 
