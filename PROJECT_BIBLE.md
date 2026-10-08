@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1627` 13. Decision log
-- `1628–1647` 14. Amendment protocol
-- `1648–1652` 15. Engineering standards — the industry practices this project follows
-  - `1653–1658` 15.1 Build order: walking skeleton first
-  - `1659–1670` 15.2 Golden-master testing — the most important practice here
-  - `1671–1679` 15.3 Strangler Fig, not big-bang cutover
-  - `1680–1684` 15.4 No dual-write
-  - `1685–1693` 15.5 Expand/contract migrations
-  - `1694–1702` 15.6 Observability from day zero, not later
-  - `1703–1707` 15.7 CI gates
-  - `1708–1712` 15.8 Backups and a tested restore
-  - `1713–1717` 15.9 Twelve-Factor config
-  - `1718–1725` 15.10 Append-only ledgers — but not event sourcing
-  - `1726–1730` 15.11 Defence in depth
-  - `1731–1759` 15.12 Skills are lenses, not assurance
-  - `1760–1766` 15.13 Reconciliation is a permanent feature
-- `1767–1771` 16. The accounting spine
-  - `1772–1803` 16.0 What we are actually fixing — the diagnosis
-  - `1804–1847` 16.1 The ten invariants — non-negotiable
-  - `1848–1862` 16.2 The oracle: how "correct" is tested
-  - `1863–1884` 16.3 The model — header + lines, not legs
-  - `1885–1904` 16.4 Deliberately simpler than ERPNext
-  - `1905–1971` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1972–1996` 16.6 What v1 already gets right — preserve the intent
-  - `1997–2018` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2019–2033` 16.8 What v1's accounting already gets right
-  - `2034–2077` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2078–2128` 16.10 Posting patterns — one canonical pattern per business event
-  - `2129–2160` 16.11 Inventory's accounting integration
+- `1329–1629` 13. Decision log
+- `1630–1649` 14. Amendment protocol
+- `1650–1654` 15. Engineering standards — the industry practices this project follows
+  - `1655–1660` 15.1 Build order: walking skeleton first
+  - `1661–1672` 15.2 Golden-master testing — the most important practice here
+  - `1673–1681` 15.3 Strangler Fig, not big-bang cutover
+  - `1682–1686` 15.4 No dual-write
+  - `1687–1695` 15.5 Expand/contract migrations
+  - `1696–1704` 15.6 Observability from day zero, not later
+  - `1705–1709` 15.7 CI gates
+  - `1710–1714` 15.8 Backups and a tested restore
+  - `1715–1719` 15.9 Twelve-Factor config
+  - `1720–1727` 15.10 Append-only ledgers — but not event sourcing
+  - `1728–1732` 15.11 Defence in depth
+  - `1733–1761` 15.12 Skills are lenses, not assurance
+  - `1762–1768` 15.13 Reconciliation is a permanent feature
+- `1769–1773` 16. The accounting spine
+  - `1774–1805` 16.0 What we are actually fixing — the diagnosis
+  - `1806–1849` 16.1 The ten invariants — non-negotiable
+  - `1850–1864` 16.2 The oracle: how "correct" is tested
+  - `1865–1886` 16.3 The model — header + lines, not legs
+  - `1887–1906` 16.4 Deliberately simpler than ERPNext
+  - `1907–1973` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1974–1998` 16.6 What v1 already gets right — preserve the intent
+  - `1999–2020` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2021–2035` 16.8 What v1's accounting already gets right
+  - `2036–2079` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2080–2130` 16.10 Posting patterns — one canonical pattern per business event
+  - `2131–2162` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1624,6 +1624,8 @@ just a patch.**
 | 289 | 2026-10-08 | ⭐ **A SAVED RECORD OPENS LOCKED BEHIND ONE EDIT BUTTON; EDIT UNLOCKS ONLY THAT RECORD AND SHOWS SAVE AND CANCEL; AN ADD FORM ALWAYS ENDS IN SAVE; BUTTONS THAT POST MONEY, MOVE STOCK, CHANGE A STATUS OR GRANT ACCESS KEEP THEIR OWN VERB (T-384 S3).** Ian, 2026-10-08: *"save buttons existing must be renamed to edit, lock the fields and only allow edit once edit is clicked then save. implement this globally so user will not be misdirected"*; command buttons: Open Questions `t384-q2-command-buttons` = a. One record open at a time; Cancel restores the stored values; a save carries the record's version and is refused if the record changed since it was opened. One shared component (`EditableRecord`) and guard tests (G7/G8) enforce it app-wide | Lipa's tender setup (8 Oct): editable-looking rows and a hidden refusal read as "overwritten" and "only 3 allowed"; the audit log showed nothing was overwritten | Yes — UX only; the server actions are unchanged |
 | 290 | 2026-10-08 | **RENAME IS SUPER-ADMIN ONLY, ONE NAME FOR THE WHOLE BUSINESS; RETIRING AN ITEM THAT STILL HAS STOCK WARNS AND THEN ALLOWS IT, AND THE ITEM STAYS USABLE FOR CONSUMPTION AND MOVEMENT UNTIL ITS STOCK IS USED UP (T-383).** Ian, 2026-10-08, Open Questions `t383-q1-who-renames` (*"super admin only 1 name for entire business"*) and `t383-q2-retire-with-stock` (*"yes warning then allow until fully utilized"*). A retired item can no longer be ordered, received or given a new price or POS map; POS usage, recipes, wastage, transfers and counts still work on it until on-hand is zero | Row 287's retire-and-recreate needs the old name freed; stock already on hand must still be consumable | Yes — the retire rule can be tightened to refuse-until-zero later (needs a migration) |
 | 291 | 2026-10-08 | ⭐ **THE FULL SUITE BEFORE `main` RUNS IN CI ON A PULL REQUEST, NOT ON THE LAPTOP.** Ian, 2026-10-08: *"use the PR route from now on"*. To ship: push a branch, open a PR (`ci.yml` runs typecheck, unit, integration and build on `pull_request`), merge to `main` only when that CI is green; the merge's own CI then gates the deploy. Locally, lanes and the orchestrator run only the tests a change can affect (the lane's files, the guards it touches, `vitest --changed`), plus the §9.4 browser smoke. Migration prechecks (row 278) still run against production BEFORE the merge | Local full gates took 40 min to 5.6 h (laptop sleep, load from parallel lanes) and twice reported load timeouts as failures; CI runs the same suite in ~17 min on clean machines. The full suite still guards `main` (DEF-412) | Yes — the local fresh-DB gate (`gates.mjs`) remains available for a migration that CI cannot exercise against production-shaped data |
+| 292 | 2026-10-09 | **POS'S "COLLECTED" METHOD IS A CASH SALE: MAP IT TO A SECOND CASH TENDER (NO MONEY ACCOUNT), AND RECORD WHERE THE CASH WENT THE SAME DAY — AN OWNER DRAWING OR PART OF THE DAY'S REMITTANCE.** Ian, 2026-10-09: *"collected is cash remitted earlier or collected by owner"*; Open Questions `pos-collected-lipa` = a. POS counts it once, inside total sales, never also under Cash (POS `external/sales/route.ts`). A wallet tender cannot point at a cash account, and a dummy account would hold nothing and double-count with the drawing. Still open on the page: does the owner usually keep it, and who at Lipa records it | Lipa's POS lists "collected" (₱0 for 90 days to 6 Oct); an unmapped method refuses the whole import | Yes — a dedicated tender kind that books straight to the owner or the office could be built later (2-3 days) |
+| 293 | 2026-10-09 | ⭐ **A SALES DAY IS VERIFIED AND POSTED ONLY AFTER IT IS SUBMITTED, AND THE PERSON WHO SUBMITTED IT MAY NOT VERIFY IT — EXCEPT A SUPER-ADMIN (T-385, migration 0188).** Ian, 2026-10-09: *"verify and post must be blocked until submitted"*; Open Questions `t385-q1-different-verifier` = a. The domain refuses, a database trigger refuses any change into `verified` that is not from `submitted` with a submitter, and the new super-admin-only capability `verify_own_sales_day` is the one exception. The day page shows Verify & post only where it can succeed and tells the submitter why not | Before this, a draft day could be posted directly and one person could submit and verify their own day (the capability matrix said they should not; nothing enforced it) | Yes — the self-verify exception can be widened by granting the capability; the trigger is additive |
 
 ## 14. Amendment protocol
 
