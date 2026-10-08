@@ -3,6 +3,8 @@ import { setOrganizationIdentityAction } from './actions';
 import { identityView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid, Field } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Organisation — Shareat System' };
@@ -90,49 +92,53 @@ export default async function OrganizationSettingsPage({
         </div>
       )}
 
-      <form action={setOrganizationIdentityAction} className="space-y-4 text-sm">
-        <label className="block">
-          <span className="text-neutral-600 dark:text-neutral-400">
-            Registered name{' '}
-            <span className="text-neutral-400">
-              — the everyday name stays &ldquo;{identity.name}&rdquo;
-            </span>
-          </span>
-          <input
-            name="legalName"
-            defaultValue={identity.legalName ?? ''}
-            placeholder="Shareat Food Corporation"
-            className={`${FIELD} mt-1 w-full max-w-md`}
-          />
-        </label>
+      <EditableRecord action={setOrganizationIdentityAction} label="Organisation" hidden={{}}>
+        <FormGrid className="text-sm">
+          <Field
+            span="full"
+            label={
+              <span className="text-neutral-600 dark:text-neutral-400">
+                Registered name{' '}
+                <span className="text-neutral-400">
+                  — the everyday name stays &ldquo;{identity.name}&rdquo;
+                </span>
+              </span>
+            }
+          >
+            <input
+              name="legalName"
+              defaultValue={identity.legalName ?? ''}
+              placeholder="Shareat Food Corporation"
+              className={`${FIELD} mt-1 w-full`}
+            />
+          </Field>
 
-        <label className="block">
-          <span className="text-neutral-600 dark:text-neutral-400">
-            TIN <span className="text-neutral-400">— digits; dashes are fine and are removed</span>
-          </span>
-          <input
-            name="tin"
-            defaultValue={identity.tin ?? ''}
-            inputMode="numeric"
-            placeholder="123-456-789"
-            className={`${FIELD} mt-1 w-full max-w-xs tabular-nums`}
-          />
-        </label>
+          <Field
+            label={
+              <span className="text-neutral-600 dark:text-neutral-400">
+                TIN <span className="text-neutral-400">— digits; dashes are fine and are removed</span>
+              </span>
+            }
+          >
+            <input
+              name="tin"
+              defaultValue={identity.tin ?? ''}
+              inputMode="numeric"
+              placeholder="123-456-789"
+              className={`${FIELD} mt-1 w-full tabular-nums`}
+            />
+          </Field>
 
-        <label className="block">
-          <span className="text-neutral-600 dark:text-neutral-400">Tax type</span>
-          <select name="taxType" defaultValue={identity.taxType ?? ''} className={`${FIELD} mt-1`}>
-            {/* ⭐ A real choice, not a placeholder: blank means "not stated" and is stored as null. */}
-            <option value="">— not stated —</option>
-            <option value="vat">VAT-registered</option>
-            <option value="non_vat">Non-VAT</option>
-          </select>
-        </label>
-
-        <button type="submit" className={BTN}>
-          Save
-        </button>
-      </form>
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Tax type</span>}>
+            <select name="taxType" defaultValue={identity.taxType ?? ''} className={`${FIELD} mt-1 w-full`}>
+              {/* ⭐ A real choice, not a placeholder: blank means "not stated" and is stored as null. */}
+              <option value="">— not stated —</option>
+              <option value="vat">VAT-registered</option>
+              <option value="non_vat">Non-VAT</option>
+            </select>
+          </Field>
+        </FormGrid>
+      </EditableRecord>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
         ⚠️ These books are a <strong>management record, not a statutory filing basis</strong>.
@@ -153,5 +159,3 @@ function Banner({ tone, children }: { tone: 'error' | 'ok'; children: React.Reac
 
 const FIELD =
   'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';

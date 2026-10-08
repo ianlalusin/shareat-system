@@ -9,6 +9,8 @@ import { categoriesForAdmin, mappableAccounts } from './lib';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid, Field } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Expense categories — Shareat System' };
@@ -120,19 +122,15 @@ export default async function ExpenseCategoriesSettingsPage({
                     {c.isSystem ? (
                       c.category
                     ) : (
-                      <form action={renameCategoryAction} className="flex flex-wrap items-center gap-1">
-                        <input type="hidden" name="categoryId" value={c.id} />
+                      <EditableRecord action={renameCategoryAction} label={c.category} hidden={{ categoryId: c.id }}>
                         <input
                           name="category"
                           defaultValue={c.category}
                           required
                           aria-label={`Name of ${c.category}`}
-                          className={`${FIELD} w-44 py-1`}
+                          className={`${FIELD} w-full py-1`}
                         />
-                        <button type="submit" className={ACTION_LINK}>
-                          Rename
-                        </button>
-                      </form>
+                      </EditableRecord>
                     )}
                     {isUnmapped && (
                       <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900 dark:text-amber-100">
@@ -172,13 +170,16 @@ export default async function ExpenseCategoriesSettingsPage({
                     )}
                   </td>
                   <td className="py-2">
-                    <form action={setCategoryAccountAction} className="flex flex-wrap items-center gap-2">
-                      <input type="hidden" name="categoryId" value={c.id} />
-                      <input type="hidden" name="categoryLabel" value={c.category} />
+                    {!isUnmapped ? (
+                    <EditableRecord
+                      action={setCategoryAccountAction}
+                      label={`account for ${c.category}`}
+                      hidden={{ categoryId: c.id, categoryLabel: c.category }}
+                    >
                       <select
                         name="accountCode"
                         defaultValue={c.accountCode ?? ''}
-                        className={`${FIELD} max-w-[22rem]`}
+                        className={`${FIELD} w-full`}
                         aria-label={`Account for ${c.category}`}
                       >
                         {/* ⭐ A real choice, not a placeholder: picking it CLEARS the mapping.
@@ -191,10 +192,33 @@ export default async function ExpenseCategoriesSettingsPage({
                           </option>
                         ))}
                       </select>
-                      <button type="submit" className={BTN}>
-                        Save
-                      </button>
-                    </form>
+                    </EditableRecord> 
+                    ) : (
+                      /* No account saved yet: an ADD, open with Save (A6 rule 1). */
+                      <form action={setCategoryAccountAction} className="space-y-2">
+                        <input type="hidden" name="categoryId" value={c.id} />
+                        <input type="hidden" name="categoryLabel" value={c.category} />
+                        <select
+                        name="accountCode"
+                        defaultValue=""
+                        className={`${FIELD} w-full`}
+                        aria-label={`Account for ${c.category}`}
+                      >
+                        {/* ⭐ A real choice, not a placeholder: picking it CLEARS the mapping.
+                            `account_code` is nullable on purpose so a wrong mapping is
+                            removable — a wrong account posts silently, an absent one refuses. */}
+                        <option value="">— none (blocks posting) —</option>
+                        {accounts.map((a) => (
+                          <option key={a.code} value={a.code}>
+                            {a.code} · {a.name}
+                          </option>
+                        ))}
+                      </select>
+                        <button type="submit" className={BTN}>
+                          Save
+                        </button>
+                      </form>
+                    )}
                   </td>
                 </tr>
               );
@@ -208,33 +232,32 @@ export default async function ExpenseCategoriesSettingsPage({
           with a seeded one by case or spacing — bible §4.4 rule 3, DEF-205. */}
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Add a category</h2>
-        <form action={createCategoryAction} className="mt-3 flex flex-wrap items-end gap-3 text-sm">
-          <label className="flex flex-col gap-1">
-            <span className="text-neutral-600 dark:text-neutral-400">Name</span>
-            <input name="category" required placeholder="Scooter rental" className={`${FIELD} w-56`} />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-neutral-600 dark:text-neutral-400">Group</span>
-            <select name="group" defaultValue="OPEX" className={FIELD}>
-              <option value="OPEX">OPEX — running cost</option>
-              <option value="COGS">COGS — cost of goods sold</option>
-              <option value="CAPEX">CAPEX — equipment</option>
-              <option value="PERSONAL">PERSONAL — owner&apos;s drawings</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-neutral-600 dark:text-neutral-400">Posts to</span>
-            <select name="accountCode" defaultValue="" className={`${FIELD} max-w-[22rem]`}>
-              <option value="">— none (blocks posting) —</option>
-              {accounts.map((a) => (
-                <option key={a.code} value={a.code}>
-                  {a.code} · {a.name}
-                </option>
-              ))}
-            </select>
-          </label>
+        <form action={createCategoryAction} className="mt-3 space-y-3 text-sm">
+          <FormGrid>
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}>
+              <input name="category" required placeholder="Scooter rental" className={`${FIELD} w-full`} />
+            </Field>
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Group</span>}>
+              <select name="group" defaultValue="OPEX" className={`${FIELD} w-full`}>
+                <option value="OPEX">OPEX — running cost</option>
+                <option value="COGS">COGS — cost of goods sold</option>
+                <option value="CAPEX">CAPEX — equipment</option>
+                <option value="PERSONAL">PERSONAL — owner&apos;s drawings</option>
+              </select>
+            </Field>
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Posts to</span>}>
+              <select name="accountCode" defaultValue="" className={`${FIELD} w-full`}>
+                <option value="">— none (blocks posting) —</option>
+                {accounts.map((a) => (
+                  <option key={a.code} value={a.code}>
+                    {a.code} · {a.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </FormGrid>
           <button type="submit" className={BTN}>
-            Add category
+            Save
           </button>
         </form>
         <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">

@@ -4,6 +4,8 @@ import { listActivePersons, listStores, monitorView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid, Field } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Wastage Monitor — Shareat System' };
@@ -144,33 +146,63 @@ export default async function WastageMonitorSettingsPage({
         </p>
       </div>
 
-      <form action={setWastageMonitorAction} className="space-y-4 text-sm">
-        <input type="hidden" name="storeId" value={storeId} />
-        <label className="block">
-          <span className="text-neutral-600 dark:text-neutral-400">Monitor</span>
-          <select
-            name="personId"
-            defaultValue={monitor?.personId ?? ''}
-            className={`${FIELD} mt-1 w-full max-w-sm`}
-            aria-label="Wastage Monitor"
-          >
-            {/* ⭐ A real choice, not a placeholder: picking it CLEARS the assignment. The column is
-                nullable on purpose — a Monitor who leaves must be removable, and a screen that
-                could only ever set one would make a wrong assignment permanent. */}
-            <option value="">— nobody (the store absorbs after 15 days) —</option>
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-        {/* Carried so the confirmation can name them without a second read. */}
-        <input type="hidden" name="personLabel" value={monitor?.displayName ?? ''} />
-        <button type="submit" className={BTN}>
-          Save
-        </button>
-      </form>
+      {/* Carried (hidden) so the confirmation can name them without a second read. */}
+      {monitor ? (
+      <EditableRecord
+        action={setWastageMonitorAction}
+        label="Wastage Monitor"
+        hidden={{ storeId, personLabel: monitor?.displayName ?? '' }}
+      >
+        <FormGrid className="text-sm">
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Monitor</span>}>
+            <select
+              name="personId"
+              defaultValue={monitor?.personId ?? ''}
+              className={`${FIELD} mt-1 w-full`}
+              aria-label="Wastage Monitor"
+            >
+              {/* ⭐ A real choice, not a placeholder: picking it CLEARS the assignment. The column is
+                  nullable on purpose — a Monitor who leaves must be removable, and a screen that
+                  could only ever set one would make a wrong assignment permanent. */}
+              <option value="">— nobody (the store absorbs after 15 days) —</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.displayName}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </FormGrid>
+      </EditableRecord> ) : (
+        /* No Monitor saved yet: an ADD, rendered open with a Save button (A6 rule 1). */
+        <form action={setWastageMonitorAction} className="space-y-3">
+          <input type="hidden" name="storeId" value={storeId} />
+          <input type="hidden" name="personLabel" value="" />
+          <FormGrid className="text-sm">
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Monitor</span>}>
+            <select
+              name="personId"
+              defaultValue=""
+              className={`${FIELD} mt-1 w-full`}
+              aria-label="Wastage Monitor"
+            >
+              {/* ⭐ A real choice, not a placeholder: picking it CLEARS the assignment. The column is
+                  nullable on purpose — a Monitor who leaves must be removable, and a screen that
+                  could only ever set one would make a wrong assignment permanent. */}
+              <option value="">— nobody (the store absorbs after 15 days) —</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.displayName}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </FormGrid>
+          <button type="submit" className={BTN}>
+            Save
+          </button>
+        </form>
+      )}
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
         ⚠️ The list is everyone active in the organisation, not only people who sign in here — a
@@ -204,7 +236,7 @@ function Banner({ tone, children }: { tone: 'error' | 'ok'; children: React.Reac
   return <div className={`rounded-lg border p-4 text-sm ${cls}`}>{children}</div>;
 }
 
-const FIELD =
-  'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const BTN =
   'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';
+const FIELD =
+  'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';

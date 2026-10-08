@@ -11,6 +11,8 @@ import {
 } from '../actions';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid, Field } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Store — Shareat System' };
@@ -138,57 +140,53 @@ export default async function StoreDetailPage({
         </section>
 
         <section className="space-y-4">
-          <form action={updateStoreAction} className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <h2 className="text-sm font-medium">Details</h2>
-            <input type="hidden" name="storeId" value={store.id} />
-            <label className="block text-sm">
-              <span className="block text-neutral-600 dark:text-neutral-400">Name</span>
-              <input name="name" defaultValue={store.name} required
-                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
-            </label>
-            <label className="block text-sm">
-              <span className="block text-neutral-600 dark:text-neutral-400">Timezone</span>
-              <input name="timezone" defaultValue={store.timezone}
-                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
-            </label>
-            {/* ⭐ T-229 slice 4 / DEF-208 — what a document printed for THIS BRANCH carries. The
-                registered name, the TIN and the tax type belong to the organisation and are set
-                once, on /settings/organization: in PH a corporation holds one TIN and each branch
-                carries a code against it, so duplicating the number per store (as v1 did) is one
-                number in N places to go wrong. */}
-            <label className="block text-sm">
-              <span className="block text-neutral-600 dark:text-neutral-400">Trading address</span>
-              <textarea name="address" defaultValue={store.address ?? ''} rows={2}
-                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
-            </label>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-sm">
-                <span className="block text-neutral-600 dark:text-neutral-400">Contact number</span>
-                <input name="contactNumber" defaultValue={store.contactNumber ?? ''}
-                  className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
-              </label>
-              <label className="block text-sm">
-                <span className="block text-neutral-600 dark:text-neutral-400">
-                  TIN branch code <span className="text-neutral-400">— digits, e.g. 00001</span>
-                </span>
-                <input name="tinBranchCode" defaultValue={store.tinBranchCode ?? ''} inputMode="numeric"
-                  className="mt-1 w-full rounded border border-neutral-300 p-2 tabular-nums dark:border-neutral-700 dark:bg-neutral-900" />
-              </label>
-            </div>
-            <p className="text-xs text-neutral-500">
-              ⛔ The code (<code>{store.code}</code>) is not editable. Rename freely — the code is the
-              stable handle other records refer to. The registered name and TIN are the
-              organisation&apos;s —{' '}
-              <Link href="/settings/organization" className="underline underline-offset-2">
-                set them once
-              </Link>
-              .
-            </p>
-            <button type="submit"
-              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
-              Save
-            </button>
-          </form>
+            <EditableRecord action={updateStoreAction} label={store.name} hidden={{ storeId: store.id }}>
+              <FormGrid className="text-sm">
+                <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}>
+                  <input name="name" defaultValue={store.name} required
+                    className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+                </Field>
+                <Field label={<span className="text-neutral-600 dark:text-neutral-400">Timezone</span>}>
+                  <input name="timezone" defaultValue={store.timezone}
+                    className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+                </Field>
+                {/* ⭐ T-229 slice 4 / DEF-208 — what a document printed for THIS BRANCH carries. The
+                    registered name, the TIN and the tax type belong to the organisation and are set
+                    once, on /settings/organization: in PH a corporation holds one TIN and each branch
+                    carries a code against it, so duplicating the number per store (as v1 did) is one
+                    number in N places to go wrong. */}
+                <Field span="full" label={<span className="text-neutral-600 dark:text-neutral-400">Trading address</span>}>
+                  <textarea name="address" defaultValue={store.address ?? ''} rows={2}
+                    className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+                </Field>
+                <Field label={<span className="text-neutral-600 dark:text-neutral-400">Contact number</span>}>
+                  <input name="contactNumber" defaultValue={store.contactNumber ?? ''}
+                    className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+                </Field>
+                <Field
+                  label={
+                    <span className="text-neutral-600 dark:text-neutral-400">
+                      TIN branch code <span className="text-neutral-400">— digits, e.g. 00001</span>
+                    </span>
+                  }
+                >
+                  <input name="tinBranchCode" defaultValue={store.tinBranchCode ?? ''} inputMode="numeric"
+                    className="mt-1 w-full rounded border border-neutral-300 p-2 tabular-nums dark:border-neutral-700 dark:bg-neutral-900" />
+                </Field>
+              </FormGrid>
+              <p className="mt-3 text-xs text-neutral-500">
+                ⛔ The code (<code>{store.code}</code>) is not editable. Rename freely — the code is the
+                stable handle other records refer to. The registered name and TIN are the
+                organisation&apos;s —{' '}
+                <Link href="/settings/organization" className="underline underline-offset-2">
+                  set them once
+                </Link>
+                .
+              </p>
+            </EditableRecord>
+          </section>
 
           {/**
             * ⭐ T-346 S1 (DEF-428). Its own form, not a field on Details above — same reasoning as
@@ -201,47 +199,78 @@ export default async function StoreDetailPage({
             * is that refusal's OWN message, shown verbatim as an in-page step — never
             * `window.confirm()` — with a resubmit that carries the plan token as `confirmedPlan`.
             */}
-          <form
-            action={setStoreOpeningDateAction}
-            className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
-          >
+          <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <h2 className="text-sm font-medium">Opening date</h2>
-            <input type="hidden" name="storeId" value={store.id} />
-            <label className="block text-sm">
-              <span className="block text-neutral-600 dark:text-neutral-400">Opening date</span>
-              {/* ⛔ `??`, not `||` — load-bearing. `sp.openingDate` is `''` when the confirm
-                  round-trip is carrying a DELIBERATELY CLEARED date; `||` would treat that empty
-                  string as absent and silently fall through to `store.openingDate`, undoing the
-                  clear the moment the confirm step re-renders this field. */}
-              <input type="date" name="openingDate" defaultValue={sp.openingDate ?? store.openingDate ?? ''}
-                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
-            </label>
-            <p className="text-xs text-neutral-500">
-              Leave blank if it has not opened. The first day this store trades.
-            </p>
             {sp.confirm && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                {sp.confirm}
+              </div>
+            )}
+            {/* The confirm step is a COMMAND, not an edit: the date to save rides in a hidden input
+                (`??`-style: `sp.openingDate` is `''` for a DELIBERATELY CLEARED date and must stay `''`),
+                and clicking "Confirm and save" IS the confirmation. ⛔ A hidden input, not a checkbox - a
+                checkbox's native box is unresolvable-by-construction for the touch-target sweep
+                (Ian's ruling §6.1, T-262). The helper drops the refill whole when the cookie is over
+                budget (never shortens it); then the locked form below carries the plan instead. */}
+            {sp.confirm && sp.openingDate !== undefined ? (
+              <form action={setStoreOpeningDateAction} className="space-y-3 text-sm">
+                <input type="hidden" name="storeId" value={store.id} />
+                <input type="hidden" name="openingDate" value={sp.openingDate} />
+                <input type="hidden" name="confirmedPlan" value={sp.plan ?? ''} />
+                <p className="text-neutral-600 dark:text-neutral-400">
+                  Opening date to save: <strong>{sp.openingDate === '' ? 'blank (not opened)' : sp.openingDate}</strong>
+                </p>
+                <button type="submit"
+                  className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700">
+                  Save
+                </button>
+              </form>
+            ) : (
               <>
-                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                  {sp.confirm}
-                </div>
-                {/* The helper drops the refill whole when the cookie is over budget (never shortens it). */}
-                {sp.openingDate === undefined && (
+                {sp.confirm && (
                   <p className="text-xs text-neutral-500">
                     The date you typed could not be carried over. Enter it again before you confirm.
                   </p>
                 )}
-                {/* ⛔ A hidden input, not a checkbox — clicking "Confirm and save" IS the
-                    confirmation; a checkbox's native box is unresolvable-by-construction for the
-                    touch-target sweep (Ian's ruling §6.1, T-262), and a second tick-then-click
-                    gesture here would be redundant with the button itself. */}
-                <input type="hidden" name="confirmedPlan" value={sp.plan ?? ''} />
+                {store.openingDate !== null ? (
+                <EditableRecord
+                  action={setStoreOpeningDateAction}
+                  label="opening date"
+                  hidden={{ storeId: store.id, ...(sp.confirm ? { confirmedPlan: sp.plan ?? '' } : {}) }}
+                >
+                  <FormGrid className="text-sm">
+                    <Field
+                      label={<span className="text-neutral-600 dark:text-neutral-400">Opening date</span>}
+                      hint="Leave blank if it has not opened. The first day this store trades."
+                    >
+                      <input type="date" name="openingDate" defaultValue={sp.openingDate ?? store.openingDate ?? ''}
+                        className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+                    </Field>
+                  </FormGrid>
+                </EditableRecord> 
+                ) : (
+                  /* No date saved yet: an ADD, open with Save (A6 rule 1). */
+                  <form action={setStoreOpeningDateAction} className="space-y-3">
+                    <input type="hidden" name="storeId" value={store.id} />
+                    {sp.confirm ? <input type="hidden" name="confirmedPlan" value={sp.plan ?? ''} /> : null}
+                    <FormGrid className="text-sm">
+                    <Field
+                      label={<span className="text-neutral-600 dark:text-neutral-400">Opening date</span>}
+                      hint="Leave blank if it has not opened. The first day this store trades."
+                    >
+                      <input type="date" name="openingDate" defaultValue={sp.openingDate ?? store.openingDate ?? ''}
+                        className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+                    </Field>
+                  </FormGrid>
+                    <button type="submit"
+                      className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700">
+                      Save
+                    </button>
+                  </form>
+                )}
               </>
             )}
-            <button type="submit"
-              className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700">
-              {sp.confirm ? 'Confirm and save' : 'Save opening date'}
-            </button>
-          </form>
+          </section>
 
           {/**
             * ⭐ T-284 / DEF-316 — Ian: *"shareat lipa needs more than 1 storage room, i can not
@@ -253,12 +282,10 @@ export default async function StoreDetailPage({
             * a room-count pre-flight the database does not have on this side (DEF-316) — folding
             * it in would route the column past that check.
             */}
-          <form
-            action={setStoreStockModelAction}
-            className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
-          >
+          <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <h2 className="text-sm font-medium">How this branch keeps stock</h2>
-            <input type="hidden" name="storeId" value={store.id} />
+            <EditableRecord action={setStoreStockModelAction} label="stock model" hidden={{ storeId: store.id }}>
+            <div className="space-y-3">
             <p className="text-xs text-neutral-500">
               A Receiving room never counts toward this — every branch needs somewhere to park a
               delivery, including one that keeps its stock in a single place.
@@ -308,13 +335,9 @@ export default async function StoreDetailPage({
               non-Receiving room — deactivate or merge the extras first.
             </p>
 
-            <button
-              type="submit"
-              className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700"
-            >
-              Save stock model
-            </button>
-          </form>
+            </div>
+            </EditableRecord>
+          </section>
 
           <form
             action={store.isActive ? deactivateStoreAction : reactivateStoreAction}
