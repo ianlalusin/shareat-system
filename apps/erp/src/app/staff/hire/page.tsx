@@ -5,7 +5,7 @@ import { hireAction } from '../actions';
 import { listStores, positionsForStore, searchPersonsFor } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { Input } from '@/components/ui';
+import { FormGrid, Field, Input } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -76,7 +76,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
       <FilterRow submitLabel="Search">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className={INPUT}>
+          <select name="store" defaultValue={storeId} className={`${INPUT} mt-1 w-full`}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
@@ -86,7 +86,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
         </label>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Find a person</span>
-          <Input name="q" defaultValue={query} placeholder="Maria" className="w-56" />
+          <Input name="q" defaultValue={query} placeholder="Maria" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
         </label>
       </FilterRow>
 
@@ -98,6 +98,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
         </p>
       )}
 
+      <h2 className="text-lg font-medium">Hire someone</h2>
       <form action={hireAction} className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <input type="hidden" name="storeId" value={storeId} />
 
@@ -111,10 +112,10 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
               Use this person: <strong>{p.displayName}</strong>
             </label>
           ))}
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex flex-wrap items-center gap-2 text-sm">
             <input type="radio" name="personChoice" value="new" required className="h-4 w-4" />
             Create new person named:
-            <Input name="newDisplayName" placeholder="Full name" className="w-56" />
+            <Input name="newDisplayName" placeholder="Full name" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
           </label>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             ⚠️ Nothing is created until you submit, and only the option you pick is used — searching
@@ -122,22 +123,20 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
           </p>
         </fieldset>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Starting status</span>
-            <select name="employmentStatus" defaultValue={HIRE_DEFAULT_STATUS} className={INPUT}>
+        <FormGrid>
+          <Field label="Starting status">
+            <select name="employmentStatus" defaultValue={HIRE_DEFAULT_STATUS} className={`${INPUT} mt-1 w-full`}>
               {HIRE_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s.replace(/-/g, ' ')}
                 </option>
               ))}
             </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Start date</span>
-            <Input type="date" name="startedOn" required defaultValue={toBusinessDate()} />
-          </label>
-        </div>
+          </Field>
+          <Field label="Start date">
+            <Input type="date" name="startedOn" required defaultValue={toBusinessDate()} className="mt-1 w-full" />
+          </Field>
+        </FormGrid>
 
         <fieldset className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
           <legend className="px-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
@@ -171,7 +170,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
         </fieldset>
 
         <button type="submit" className={BTN}>
-          Hire
+          Save
         </button>
       </form>
     </Page>

@@ -69,9 +69,9 @@ export default async function ThirteenthMonthPage({
       </div>
 
       <form className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
           <span className={LABEL}>Store</span>
-          <select name="store" defaultValue={storeId} className={`${FIELD} w-52`}>
+          <select name="store" defaultValue={storeId} className={`${FIELD} w-full`}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -79,9 +79,9 @@ export default async function ThirteenthMonthPage({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-1 basis-28 flex-col gap-1">
           <span className={LABEL}>Year</span>
-          <input name="year" type="number" step={1} defaultValue={year} className={`${FIELD} w-28`} />
+          <input name="year" type="number" step={1} defaultValue={year} className={`${FIELD} w-full`} />
         </label>
         <button type="submit" className={BTN}>
           Preview
@@ -146,9 +146,9 @@ export default async function ThirteenthMonthPage({
             >
               <input type="hidden" name="storeId" value={storeId} />
               <input type="hidden" name="year" value={year} />
-              <label className="flex flex-col gap-1">
+              <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
                 <span className={LABEL}>Pay from</span>
-                <select name="moneyAccountId" className={`${FIELD} w-56`}>
+                <select name="moneyAccountId" className={`${FIELD} w-full`}>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
@@ -156,7 +156,7 @@ export default async function ThirteenthMonthPage({
                   ))}
                 </select>
               </label>
-              <input name="notes" placeholder="Notes (optional)" className={`${FIELD} w-64`} />
+              <input name="notes" placeholder="Notes (optional)" className={`${FIELD} min-w-0 flex-1 basis-48`} />
               <button type="submit" className={BTN_PRIMARY}>
                 Post {pv.payouts.length} payout(s)
               </button>
@@ -196,7 +196,7 @@ export default async function ThirteenthMonthPage({
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="year" value={run.year} />
                   <input type="hidden" name="runId" value={run.id} />
-                  <input name="reason" placeholder="Why void it?" className={`${FIELD} w-64`} />
+                  <input name="reason" placeholder="Why void it?" className={`${FIELD} min-w-0 flex-1 basis-48`} />
                   <button type="submit" className={BTN}>
                     Void
                   </button>
