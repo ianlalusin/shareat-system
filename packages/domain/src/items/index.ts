@@ -85,8 +85,6 @@ export async function updateItem(
   actor: Actor,
   itemId: string,
   values: Partial<{
-    code: string;
-    name: string;
     kind: ItemKind;
     notes: string | null;
     isPurchasable: boolean;
@@ -99,6 +97,11 @@ export async function updateItem(
     // T-378 R4: one audited path for the unit. A caller that still passes it (the type no longer admits it) is told where to go.
     if ('baseUnit' in values) {
       const sentence = "Change the unit with Change unit on the item's page.";
+      throw refuse(sentence, sentence);
+    }
+    // T-383 R2: one audited path for the name and the code.
+    if ('name' in values || 'code' in values) {
+      const sentence = "Rename an item with Rename on the item's page.";
       throw refuse(sentence, sentence);
     }
     const item = await itemsRepo.getItemById(trx, actor.orgId, itemId);
@@ -133,6 +136,39 @@ export async function changeItemBaseUnit(
       entityId: input.itemId,
       before: { baseUnit: item.baseUnit },
       after: { baseUnit: input.baseUnit },
+      source: 'web',
+    });
+    return { changed: true };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⭐ T-383 R1. Rename an item: name and code, one audited path, super-admin only (`approve_item`). A blank is passed
+ * to the database as blank so its CHECK speaks; it is never replaced by the old value. The comparison is exact and
+ * case-sensitive. `status` is never written. The audit append comes after the UPDATE, so a refused rename writes none.
+ */
+export async function renameItem(
+  tx: Tx | null,
+  actor: Actor,
+  input: { itemId: string; name: string; code: string },
+): Promise<{ changed: boolean }> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'approve_item', {});
+    const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
+    if (!item) throw gone(`renameItem: item ${input.itemId} does not exist.`, 'item');
+    const name = input.name.trim();
+    const code = input.code.trim();
+    if (name === item.name && code === item.code) return { changed: false };
+    await itemsRepo.updateItem(trx, actor.orgId, input.itemId, { name, code });
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'rename_item',
+      entity: 'items',
+      entityId: input.itemId,
+      before: { name: item.name, code: item.code },
+      after: { name, code },
       source: 'web',
     });
     return { changed: true };

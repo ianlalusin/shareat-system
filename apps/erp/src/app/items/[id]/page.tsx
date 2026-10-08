@@ -6,6 +6,7 @@ import { whoSells } from '../../ap/lib';
 import {
   changeItemUnitAction,
   clearStoreSellabilityAction,
+  renameItemAction,
   setStoreSellabilityAction,
   updateItemFlagsAction,
 } from '../actions';
@@ -103,6 +104,34 @@ export default async function ItemDetailPage({
           {sp.ok}
         </div>
       )}
+
+      {/* T-383 R6. Rename: name and code, super-admin only; the domain (`renameItem`) is the enforcement. */}
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Name and code</h2>
+        {mayChangeUnit ? (
+          <form action={renameItemAction} className="flex flex-wrap items-end gap-3 text-sm">
+            <input type="hidden" name="itemId" value={item.id} />
+            <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+              Name
+              <input name="name" type="text" required defaultValue={item.name} className={`${SELECT} w-64`} />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+              Code
+              <input name="code" type="text" required defaultValue={item.code} className={`${SELECT} w-40`} />
+            </label>
+            <button type="submit" className={BTN}>Rename</button>
+            <p className="w-full text-xs text-neutral-500 dark:text-neutral-400">
+              Past records keep pointing at this item and show its new name. To replace an item measured in the wrong
+              unit: rename this one (for example add &quot;(old)&quot;), add the replacement with the old name, then
+              retire this one.
+            </p>
+          </form>
+        ) : (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            Only a super-admin can rename, retire or restore an item.
+          </p>
+        )}
+      </section>
 
       {/* T-378 R2/R4. The form shows only while the database says the item has no history; the trigger is the rule. */}
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
