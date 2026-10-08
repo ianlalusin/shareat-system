@@ -331,3 +331,10 @@ where the viewer cannot submit, nothing new; the domain still refuses a forged p
 - **t385-q1-different-verifier** — (a) refuse self-verify except a super-admin [recommended], (b) refuse for everyone,
   (c) keep it a warning. Ask with the Lipa consequence stated: the manager who submits a POS day cannot verify it
   under (a)/(b).
+
+## Amendment B1 — Ian's answer (2026-10-09, orchestrator)
+- **`t385-q1-different-verifier` = a**: the person who submitted a sales day may not verify it; **a super-admin may**
+  verify their own submission. S3 is IN scope and **folds into migration 0188** (no 0189): the new super-admin-only
+  capability `verify_own_sales_day` and its backfill to the existing owner/admin (the 0187 `unlink_store_from_pos`
+  pattern) ship in the same migration, and 0188's prechecks gain P0187b's holder list for the new grant.
+  Item codes move to migration 0189.
