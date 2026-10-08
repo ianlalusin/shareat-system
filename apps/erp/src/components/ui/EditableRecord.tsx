@@ -7,9 +7,13 @@
  * record on a page is in edit mode at a time (module-level registry). The record's `version` rides in
  * `hidden` so Save carries it (L6). The server action is passed through unchanged (L7).
  *
+ * ONLY UNCONTROLLED FIELDS: Cancel uses form.reset(), which restores uncontrolled fields (defaultValue /
+ * defaultChecked / defaultSelected) only. A child holding React state (value + onChange, useState) is NOT
+ * restored, so S3b adopters must use uncontrolled fields inside EditableRecord.
+ *
  * The behaviour is a plain reducer plus a plain registry so it is unit-tested in node, without jsdom.
  */
-import { useEffect, useReducer, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useReducer, useRef, type Ref, type ReactNode } from 'react';
 
 export const OTHER_DIRTY_MESSAGE = 'Save or cancel the changes you are making first.';
 
@@ -71,6 +75,29 @@ export function createEditRegistry() {
 
 const registry = createEditRegistry();
 
+/** Compares a select with what form.reset() restores: a single select with no defaultSelected falls back to its first option. */
+export function selectIsDirty(
+  options: ReadonlyArray<{ selected: boolean; defaultSelected: boolean }>,
+  multiple: boolean,
+): boolean {
+  if (multiple) return options.some((o) => o.selected !== o.defaultSelected);
+  const d = options.findIndex((o) => o.defaultSelected);
+  const expected = d >= 0 ? d : 0;
+  const actual = options.findIndex((o) => o.selected);
+  return options.length > 0 && actual !== expected;
+}
+
+/** Awaits the action and locks (dispatches saved) ONLY on success; a throw or an error result keeps edit mode. */
+export async function runEditableAction(
+  action: (formData: FormData) => unknown,
+  formData: FormData,
+  dispatch: (event: EditableRecordEvent) => void,
+): Promise<void> {
+  const result = (await action(formData)) as { ok?: boolean; error?: unknown } | null | undefined;
+  if (result && typeof result === 'object' && (result.ok === false || result.error)) return;
+  dispatch({ type: 'saved' });
+}
+
 /** Dirty = some control's value differs from its rendered default. */
 function formIsDirty(form: HTMLFormElement | null): boolean {
   if (!form) return false;
@@ -83,7 +110,7 @@ function formIsDirty(form: HTMLFormElement | null): boolean {
     } else if (el instanceof HTMLTextAreaElement) {
       if (el.value !== el.defaultValue) return true;
     } else if (el instanceof HTMLSelectElement) {
-      for (const o of Array.from(el.options)) if (o.selected !== o.defaultSelected) return true;
+      if (selectIsDirty(Array.from(el.options), el.multiple)) return true;
     }
   }
   return false;
@@ -101,24 +128,78 @@ export interface EditableRecordProps {
   saveLabel?: 'Save' | 'Save draft';
 }
 
+export interface EditableRecordViewProps extends EditableRecordProps {
+  mode: 'locked' | 'editing';
+  message?: string | null;
+  onEdit?: () => void;
+  onCancel?: () => void;
+  formRef?: Ref<HTMLFormElement>;
+  editRef?: Ref<HTMLButtonElement>;
+}
+
 const BTN =
   'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 const PRIMARY = `${BTN} border border-transparent bg-brand text-white hover:bg-brand-hover`;
 const SECONDARY = `${BTN} border border-surface-border bg-surface text-ink`;
 
-export function EditableRecord({
+/** The presentational tree: no hooks, so the editing state is reachable in server render tests. */
+export function EditableRecordView({
+  mode,
+  message,
+  onEdit,
+  onCancel,
+  formRef,
+  editRef,
   action,
   label,
   hidden,
   children,
   extra,
   saveLabel = 'Save',
-}: EditableRecordProps) {
+}: EditableRecordViewProps) {
+  const editing = mode === 'editing';
+  return (
+    <>
+      <form action={action} ref={formRef}>
+        {Object.entries(hidden).map(([name, value]) => (
+          <input key={name} type="hidden" name={name} value={value} />
+        ))}
+        <fieldset disabled={!editing} className="min-w-0">
+          {children}
+        </fieldset>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {editing ? (
+            <>
+              <button type="submit" className={PRIMARY}>
+                {saveLabel}
+              </button>
+              <button type="button" className={SECONDARY} onClick={onCancel}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button type="button" ref={editRef} className={SECONDARY} aria-label={`Edit ${label}`} onClick={onEdit}>
+              Edit
+            </button>
+          )}
+          {message ? (
+            <span role="alert" className="text-sm text-danger">
+              {message}
+            </span>
+          ) : null}
+        </div>
+      </form>
+      {editing ? extra : null}
+    </>
+  );
+}
+
+export function EditableRecord(props: EditableRecordProps) {
   const [state, dispatch] = useReducer(editableRecordReducer, EDITABLE_RECORD_INITIAL);
   const formRef = useRef<HTMLFormElement>(null);
   const editRef = useRef<HTMLButtonElement>(null);
   const wasEditing = useRef(false);
-  const id = hidden.id ?? label;
+  const id = useId();
   const editing = state.mode === 'editing';
 
   useEffect(() => {
@@ -143,50 +224,21 @@ export function EditableRecord({
     wasEditing.current = editing;
   }, [editing]);
 
-  const onEdit = () => {
-    if (registry.requestEdit(id).allowed) dispatch({ type: 'edit' });
-  };
-  const onCancel = () => {
-    formRef.current?.reset();
-    dispatch({ type: 'cancel' });
-  };
-  const run = async (fd: FormData) => {
-    await action(fd);
-    dispatch({ type: 'saved' });
-  };
-
   return (
-    <>
-      <form action={run} ref={formRef}>
-        {Object.entries(hidden).map(([name, value]) => (
-          <input key={name} type="hidden" name={name} value={value} />
-        ))}
-        <fieldset disabled={!editing} className="min-w-0">
-          {children}
-        </fieldset>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {editing ? (
-            <>
-              <button type="submit" className={PRIMARY}>
-                {saveLabel}
-              </button>
-              <button type="button" className={SECONDARY} onClick={onCancel}>
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button type="button" ref={editRef} className={SECONDARY} aria-label={`Edit ${label}`} onClick={onEdit}>
-              Edit
-            </button>
-          )}
-          {state.message ? (
-            <span role="alert" className="text-sm text-danger">
-              {state.message}
-            </span>
-          ) : null}
-        </div>
-      </form>
-      {editing ? extra : null}
-    </>
+    <EditableRecordView
+      {...props}
+      mode={state.mode}
+      message={state.message}
+      formRef={formRef}
+      editRef={editRef}
+      action={(fd: FormData) => runEditableAction(props.action, fd, dispatch)}
+      onEdit={() => {
+        if (registry.requestEdit(id).allowed) dispatch({ type: 'edit' });
+      }}
+      onCancel={() => {
+        formRef.current?.reset();
+        dispatch({ type: 'cancel' });
+      }}
+    />
   );
 }
