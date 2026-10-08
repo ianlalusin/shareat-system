@@ -1,11 +1,14 @@
 {
   "files": {
     "app/admin/users/[personId]/page.tsx": 2,
+    "app/ap/suppliers/[id]/AutoAllocatePaymentForm.tsx": 1,
     "app/ap/suppliers/page.tsx": 1,
     "app/attendance/page.tsx": 3,
+    "app/attendance/terminals/ProvisionForm.tsx": 1,
     "app/budgets/page.tsx": 1,
     "app/commissary/catalogue/page.tsx": 1,
     "app/commissary/orders/[id]/page.tsx": 8,
+    "app/customers/[customerId]/AutoAllocateCollectionForm.tsx": 1,
     "app/customers/[customerId]/page.tsx": 3,
     "app/findings/page.tsx": 4,
     "app/fixed-assets/[id]/page.tsx": 1,

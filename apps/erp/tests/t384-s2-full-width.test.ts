@@ -60,7 +60,7 @@ function countFormDensity(src: string): number {
 /** C3 tokens: w-16..w-96, w-[..], max-w-xs..max-w-2xl, max-w-[..], with any variant prefix. */
 const FIXED_WIDTH =
   /(?<![\w-])(?:[a-z0-9]+:)*(?:w-(?:16|20|24|28|32|36|40|44|48|52|56|60|64|72|80|96)|w-\[[^\]\s]+\]|max-w-(?:xs|sm|md|lg|xl|2xl)|max-w-\[[^\]\s]+\])(?![\w-])/;
-const CONTROL = /<(input|select|textarea|Input)\b[^>]*?className=\{?[`"]([^`"]*)/g;
+const CONTROL_OPEN = /<(input|select|textarea|Input)(?=[\s/>])/g;
 
 interface Hit {
   readonly tag: string;
@@ -68,17 +68,40 @@ interface Hit {
   readonly snippet: string;
 }
 
+/**
+ * The full text of the tag opened at `start`, brace-aware: `>` ends the tag only at brace depth 0 and
+ * outside quotes, so `onChange={(e) => ...}` (a `=>` before className) does not cut the tag short.
+ */
+function tagText(clean: string, start: number): string {
+  let depth = 0;
+  let quote = '';
+  for (let i = start; i < clean.length; i++) {
+    const c = clean[i]!;
+    if (quote) {
+      if (c === quote) quote = '';
+      continue;
+    }
+    if (depth === 0 && (c === '"' || c === "'")) quote = c;
+    else if (c === '{') depth++;
+    else if (c === '}') depth--;
+    else if (c === '>' && depth === 0) return clean.slice(start, i + 1);
+  }
+  return clean.slice(start);
+}
+
 /** G3: fixed-width controls NOT inside a table cell (last `<td` before it is after the last `</td>`). */
 function fixedWidthControls(src: string): Hit[] {
   const clean = codeOnly(src);
   const hits: Hit[] = [];
-  const re = new RegExp(CONTROL.source, 'g');
+  const re = new RegExp(CONTROL_OPEN.source, 'g');
   let m: RegExpExecArray | null;
   while ((m = re.exec(clean))) {
-    if (!FIXED_WIDTH.test(m[2]!)) continue;
+    const tag = tagText(clean, m.index);
+    const cm = /className=\{?[`"]([^`"]*)/.exec(tag);
+    if (!cm || !FIXED_WIDTH.test(cm[1]!)) continue;
     const before = clean.slice(0, m.index);
     if (before.lastIndexOf('<td') > before.lastIndexOf('</td>')) continue; // a cell is the measure
-    hits.push({ tag: m[1]!, cls: m[2]!, snippet: m[0].slice(0, 80) });
+    hits.push({ tag: m[1]!, cls: cm[1]!, snippet: tag.slice(0, 80) });
   }
   return hits;
 }
@@ -213,6 +236,11 @@ describe('T-384 S2a G5 - positive controls (literal fixtures)', () => {
     expect(fixedWidthControls('<td>x</td><input className="w-28" />')).toHaveLength(1);
     expect(fixedWidthControls('<input className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />')).toHaveLength(0);
   });
+  it('G3 is brace-aware: a `=>` inside {...} before className does not hide the control', () => {
+    expect(fixedWidthControls('<input onChange={(e) => set(e.target.value)} className="w-40" />')).toHaveLength(1);
+    expect(fixedWidthControls('<Input onBlur={() => { go(a > b); }} name="x" className={`w-64 rounded`} />')).toHaveLength(1);
+    expect(fixedWidthControls('<input onChange={(e) => set(1)} className="w-full" />')).toHaveLength(0);
+  });
   it('G4: a 3-label action form without FormGrid is flagged; with FormGrid or <3 labels or a GET form it is not', () => {
     const form = (n: number) => `<form action={a}>${'<label>x</label>'.repeat(n)}</form>`;
     expect(needsFormGrid(form(3))).toBe(true);
@@ -238,7 +266,7 @@ describe('T-384 S2a G6 - FormGrid and Field', () => {
     expect(html).toContain('gap-4');
     expect(html).toContain('repeat(auto-fit,minmax(min(100%,14rem),1fr))');
   });
-  it('Field: label with min-w-0, text and hint; span=full -> col-span-full; span=wide -> sm:col-span-2', async () => {
+  it('Field: label with min-w-0, text and hint; span=full -> col-span-full', async () => {
     const { Field } = await load();
     const F = Field as never;
     const base = renderToStaticMarkup(createElement(F, { label: 'Name', hint: 'As printed' }, createElement('input')));
@@ -248,7 +276,13 @@ describe('T-384 S2a G6 - FormGrid and Field', () => {
     expect(base).toContain('As printed');
     expect(base).not.toContain('col-span');
     expect(renderToStaticMarkup(createElement(F, { label: 'R', span: 'full' }, createElement('textarea')))).toContain('col-span-full');
-    expect(renderToStaticMarkup(createElement(F, { label: 'R', span: 'wide' }, createElement('input')))).toContain('sm:col-span-2');
+  });
+  it('Field span=wide follows the CONTAINER: no viewport-prefixed span, and a container mechanism is present', async () => {
+    const { FormGrid, Field } = await load();
+    const wide = renderToStaticMarkup(createElement(Field as never, { label: 'R', span: 'wide' }, createElement('input')));
+    const grid = renderToStaticMarkup(createElement(FormGrid as never, null, 'x'));
+    expect(wide, 'wide must not use a viewport breakpoint span (it can create an implicit 2nd column in a one-track container)').not.toMatch(/(?:sm|md|lg|xl|2xl):[^\s"]*col-span/);
+    expect(wide + grid, 'no container-query mechanism (container-type / @container / @[..] variant) found').toMatch(/container-type|@container|@\[|@(?:xs|sm|md|lg|xl):/);
   });
   it('components/ui/index.ts exports FormGrid and Field', () => {
     const idx = readFileSync(join(srcRoot, 'components', 'ui', 'index.ts'), 'utf8');
