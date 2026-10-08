@@ -282,7 +282,8 @@ function labelFindings(source: string, file: string, commands: Record<string, st
       const type = attrString(o, 'type') ?? (tagName(o) === 'button' ? 'submit' : undefined);
       if (type === 'submit') picked.add(b);
     }
-    if (btns.length) picked.add(btns[btns.length - 1]);
+    const lastBtn = btns[btns.length - 1];
+    if (lastBtn) picked.add(lastBtn);
     for (const b of picked) {
       const label = buttonLabel(b);
       if (!label) continue; // icon-only or fully dynamic: nothing to judge
