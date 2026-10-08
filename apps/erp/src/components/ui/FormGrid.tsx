@@ -8,7 +8,7 @@
  * the space grows. `min(100%,14rem)` stops a 375 px phone from scrolling sideways (DEF-199).
  *
  * `Field` is the label, its text, an optional hint and the control. Controls inside take `w-full`;
- * never a fixed width. `span='wide'` takes two columns from `sm` up; `span='full'` takes the row
+ * never a fixed width. `span='wide'` takes two columns only when the grid's own width fits two 14rem tracks plus the gap (29rem, a container query, so it can never create an implicit column and scroll sideways); `span='full'` takes the row
  * (a textarea, a long reason, a line-items table).
  *
  * No `'use client'` and no hooks, like the other components in this folder, so a server component
@@ -24,7 +24,7 @@ export interface FormGridProps {
 export function FormGrid({ className, children }: FormGridProps) {
   return (
     <div
-      className={`grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]${className ? ` ${className}` : ''}`}
+      className={`grid gap-4 [container-type:inline-size] [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]${className ? ` ${className}` : ''}`}
     >
       {children}
     </div>
@@ -40,7 +40,7 @@ export interface FieldProps {
 }
 
 const SPAN: Record<'wide' | 'full', string> = {
-  wide: ' sm:col-span-2',
+  wide: ' [@container(min-width:29rem)]:col-span-2',
   full: ' col-span-full',
 };
 
@@ -49,7 +49,7 @@ export function Field({ label, hint, span, className, children }: FieldProps) {
     <label
       className={`block min-w-0${span ? SPAN[span] : ''}${className ? ` ${className}` : ''}`}
     >
-      <span className="text-neutral-600 dark:text-neutral-400">{label}</span>
+      <span className="block text-neutral-600 dark:text-neutral-400">{label}</span>
       {hint !== undefined && hint !== null && (
         <span className="mt-0.5 block text-xs text-neutral-500">{hint}</span>
       )}
