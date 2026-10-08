@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1622` 13. Decision log
-- `1623–1642` 14. Amendment protocol
-- `1643–1647` 15. Engineering standards — the industry practices this project follows
-  - `1648–1653` 15.1 Build order: walking skeleton first
-  - `1654–1665` 15.2 Golden-master testing — the most important practice here
-  - `1666–1674` 15.3 Strangler Fig, not big-bang cutover
-  - `1675–1679` 15.4 No dual-write
-  - `1680–1688` 15.5 Expand/contract migrations
-  - `1689–1697` 15.6 Observability from day zero, not later
-  - `1698–1702` 15.7 CI gates
-  - `1703–1707` 15.8 Backups and a tested restore
-  - `1708–1712` 15.9 Twelve-Factor config
-  - `1713–1720` 15.10 Append-only ledgers — but not event sourcing
-  - `1721–1725` 15.11 Defence in depth
-  - `1726–1754` 15.12 Skills are lenses, not assurance
-  - `1755–1761` 15.13 Reconciliation is a permanent feature
-- `1762–1766` 16. The accounting spine
-  - `1767–1798` 16.0 What we are actually fixing — the diagnosis
-  - `1799–1842` 16.1 The ten invariants — non-negotiable
-  - `1843–1857` 16.2 The oracle: how "correct" is tested
-  - `1858–1879` 16.3 The model — header + lines, not legs
-  - `1880–1899` 16.4 Deliberately simpler than ERPNext
-  - `1900–1966` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1967–1991` 16.6 What v1 already gets right — preserve the intent
-  - `1992–2013` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2014–2028` 16.8 What v1's accounting already gets right
-  - `2029–2072` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2073–2123` 16.10 Posting patterns — one canonical pattern per business event
-  - `2124–2155` 16.11 Inventory's accounting integration
+- `1329–1623` 13. Decision log
+- `1624–1643` 14. Amendment protocol
+- `1644–1648` 15. Engineering standards — the industry practices this project follows
+  - `1649–1654` 15.1 Build order: walking skeleton first
+  - `1655–1666` 15.2 Golden-master testing — the most important practice here
+  - `1667–1675` 15.3 Strangler Fig, not big-bang cutover
+  - `1676–1680` 15.4 No dual-write
+  - `1681–1689` 15.5 Expand/contract migrations
+  - `1690–1698` 15.6 Observability from day zero, not later
+  - `1699–1703` 15.7 CI gates
+  - `1704–1708` 15.8 Backups and a tested restore
+  - `1709–1713` 15.9 Twelve-Factor config
+  - `1714–1721` 15.10 Append-only ledgers — but not event sourcing
+  - `1722–1726` 15.11 Defence in depth
+  - `1727–1755` 15.12 Skills are lenses, not assurance
+  - `1756–1762` 15.13 Reconciliation is a permanent feature
+- `1763–1767` 16. The accounting spine
+  - `1768–1799` 16.0 What we are actually fixing — the diagnosis
+  - `1800–1843` 16.1 The ten invariants — non-negotiable
+  - `1844–1858` 16.2 The oracle: how "correct" is tested
+  - `1859–1880` 16.3 The model — header + lines, not legs
+  - `1881–1900` 16.4 Deliberately simpler than ERPNext
+  - `1901–1967` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1968–1992` 16.6 What v1 already gets right — preserve the intent
+  - `1993–2014` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2015–2029` 16.8 What v1's accounting already gets right
+  - `2030–2073` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2074–2124` 16.10 Posting patterns — one canonical pattern per business event
+  - `2125–2156` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1619,6 +1619,7 @@ just a patch.**
 | 284 | 2026-10-07 | **LIPA IS LINKED TO POS v1 ON MONDAY 12 OCTOBER 2026 (T-375, the first production link).** Ian, 2026-10-07: *"link lipa on monday"*, after Lipa's 90-day census returned GATE PASS (T-375 S0: 90/90 days, every refusal count 0; methods Bank Transfer, Cash, Gcash, QRPH; charges on 64 days). Before the link: the push carrying T-379/T-380 S1a lands on production, and Lipa's four POS payment methods are mapped to money accounts on erp2 with Ian. From that business date Lipa's sales days come only from the POS import (0185's lock); earlier days stay typed. | A Monday start keeps a sales week from coming from two sources | Yes — linking is per store, and a store can be re-planned before the link is made |
 | 285 | 2026-10-08 | **A GUARDED POS UNLINK (T-382, migration 0187).** R1 soft unlink: three columns on the link row, never a delete. R3 an unlink refuses while the store has an unverified imported day. R4 0187 hardens 0185: no imported figure, tender or remitted row changes on an unlinked store, even under the derivation flag. R5 the import re-reads the whole link (id, updatedAt, POS id) under the store lock after its fetch and refuses on any change. R6 new capability `unlink_store_from_pos`, super-admin only, backfilled to existing owners (R6a, 0166 pattern). R7 a usage pull on an imported day no longer needs a live link. R8 relink is an UPDATE of the same row. R9 DROPPED (the full UNIQUE on `pos_store_id` stays, so an unlinked store keeps holding its POS id and no other store can link it). R10 (DEF-607) a POS store id whose sales were ever imported for one store is refused for any other store of the org, live link or not, relinked away or not, because the same sales would be booked twice. R9a a correction or recheck on a day imported under an earlier link refuses after a relink (judged on database-stamped times: feed `fetched_at` vs link `updated_at`). "Linked" now means a LIVE link row | Delete the link row plus an audit row (needs a DELETE grant 0183 left out and loses who/when/why on the screen); partial UNIQUE on live links (double import) | docs/tasks/382-pos-store-unlink.md; Ian, `t375-unlink-safety`, 2026-10-07 |
 | 286 | 2026-10-08 | **A STORE MANAGER IS A ROLE AN ADMIN ASSIGNS, NEVER A SEEDED POSITION; STORE READINESS WARNS (NON-BLOCKING) WHEN A STORE HAS NONE (T-338).** Ian, 2026-09-24 (recorded in docs/tasks/338-store-readiness-manager-warning.md; written here at the 2026-10-08 wrap-up): one organisation-wide admin, managers scoped per store, the adminless-manager elevation stays as it is; the readiness checklist gains a `manager` check that counts only active manager-role holders scoped to the store (admins do not count). Built 2026-10-08. | A decision that lived only in a task doc | Yes — a warning, not a gate |
+| 287 | 2026-10-08 | **AN ITEM'S UNIT STAYS EDITABLE UNTIL THE ITEM HAS ANY RECORD, THEN IS LOCKED; A WRONG UNIT ON A USED ITEM IS FIXED BY RETIRE-AND-RECREATE, NEVER BY RESTATING HISTORY (T-378 Q1 = a).** Ian, Open Questions `t378-q1-unit-history`, answered 2026-10-07: *"If there is no ledger transaction on that item, like newly created, allow edit; if there is then a."* This is the behaviour T-378 already ships (0186: `items_base_unit_fixed`). Not built: the restate tool (Q1 b). Follow-up: the small rename screen option (a) needs, because item names are unique (`items_org_name_key`; T-378 N2) | A ruling given on the Open Questions page and not yet written here | Yes — the restate (b) can still be built later |
 
 ## 14. Amendment protocol
 
