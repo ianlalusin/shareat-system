@@ -10,6 +10,7 @@ import { BudgetHint } from './BudgetHint';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { FormGrid } from '@/components/ui';
 
 export const metadata = { title: 'New expense — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -89,7 +90,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
             />
           )}
           {/* ⭐ No orgId, no "acting as" — the session supplies both (T-138). */}
-          <div className="grid grid-cols-2 gap-4">
+          <FormGrid>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Store</span>
               <select
@@ -155,7 +156,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                 })}
               </select>
             </label>
-          </div>
+          </FormGrid>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Particulars — what this was actually for</span>

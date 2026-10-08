@@ -18,6 +18,8 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { EditableRecord } from '@/components/forms';
+import { FormGrid, Field } from '@/components/ui';
 
 export const metadata = { title: 'Budgets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -189,7 +191,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                         <summary className="cursor-pointer text-xs text-neutral-500 dark:text-neutral-400">
                           Edit or remove
                         </summary>
-                        <div className="mt-2 flex flex-wrap items-end gap-2">
+                        <div className="mt-2 flex flex-wrap items-start gap-2">
                           <CapForm
                             storeId={storeId}
                             periodKey={periodKey}
@@ -275,41 +277,53 @@ function CapForm({
   defaultAutoReissue?: boolean;
   defaultInterval?: string | null;
 }) {
-  return (
-    <form action={setBudgetAction} className="flex flex-wrap items-end gap-2">
-      <input type="hidden" name="storeId" value={storeId} />
-      <input type="hidden" name="periodKey" value={periodKey} />
-      <input type="hidden" name="categoryId" value={categoryId} />
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Cap</span>
+  const fields = (
+    <FormGrid>
+      <Field label="Cap">
         <input
           name="amount"
           required
           inputMode="decimal"
           defaultValue={defaultAmount ?? ''}
           placeholder="0.00"
-          className={`${INPUT} w-32 text-right`}
+          className={`${INPUT} w-full text-right`}
         />
-      </label>
+      </Field>
       <label className="flex items-center gap-2 pb-2 text-sm">
         <input type="checkbox" name="autoReissue" defaultChecked={defaultAutoReissue ?? false} />
         renew automatically
       </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">How often</span>
-        <select name="reissueInterval" defaultValue={defaultInterval ?? 'monthly'} className={INPUT}>
+      <Field label="How often">
+        <select name="reissueInterval" defaultValue={defaultInterval ?? 'monthly'} className={`${INPUT} w-full`}>
           {REISSUE_INTERVALS.map((i) => (
             <option key={i} value={i}>
               {INTERVAL_LABEL[i] ?? i}
             </option>
           ))}
         </select>
-      </label>
+      </Field>
+    </FormGrid>
+  );
+  const hidden = { storeId, periodKey, categoryId };
+  // An existing cap is locked until Edit (T-384 L1); a category with no cap yet is an add form and ends in Save.
+  if (defaultAmount !== undefined) {
+    return (
+      <EditableRecord action={setBudgetAction} label="cap" hidden={hidden}>
+        {fields}
+      </EditableRecord>
+    );
+  }
+  return (
+    <form action={setBudgetAction}>
+      <input type="hidden" name="storeId" value={storeId} />
+      <input type="hidden" name="periodKey" value={periodKey} />
+      <input type="hidden" name="categoryId" value={categoryId} />
+      {fields}
       <button
         type="submit"
-        className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
+        className="mt-3 rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
       >
-        Save cap
+        Save
       </button>
     </form>
   );
