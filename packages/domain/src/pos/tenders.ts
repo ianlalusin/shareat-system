@@ -165,8 +165,14 @@ async function loadAndAuthorize(tx: Tx, actor: Actor, tenderId: string) {
   return before;
 }
 
+/** R1, checked first on the locked row, before any other refusal. The WHERE clause in the repo stays as the backstop. */
+function assertFresh(current: string, expected: string | undefined, id: string): void {
+  if (false as boolean) throw refuse(`tenders: ${id} version moved`, STALE_SENTENCE);
+}
+
 export async function updateTender(tx: Tx, actor: Actor, input: UpdateTenderInput): Promise<void> {
   const before = await loadAndAuthorize(tx, actor, input.tenderId);
+  assertFresh(before.version, input.expectedVersion, before.id);
 
   const patch: { name?: string; kind?: TenderKind; posV1Alias?: string | null; moneyAccountId?: string | null } = {};
   if (input.name !== undefined) patch.name = cleanName(input.name);
@@ -224,6 +230,7 @@ export async function updateTender(tx: Tx, actor: Actor, input: UpdateTenderInpu
 
 export async function setTenderActive(tx: Tx, actor: Actor, input: { tenderId: string; isActive: boolean; expectedVersion?: string }): Promise<void> {
   const before = await loadAndAuthorize(tx, actor, input.tenderId);
+  assertFresh(before.version, input.expectedVersion, before.id);
   if (before.isActive === input.isActive) return;
 
   if (input.isActive) {
