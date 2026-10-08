@@ -375,6 +375,7 @@ describe('(d) non-converted <select> sites are byte-for-byte unchanged', () => {
             .split('\n')
             .map((l) => l.trim())
             .join('\n');
+        if (before === null || after === null) throw new Error(`select name="${name}" not found in ${f.rel} (before or after)`);
         expect(norm(after)).toBe(norm(before));
       });
     }
