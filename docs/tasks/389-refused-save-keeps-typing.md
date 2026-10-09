@@ -1,6 +1,6 @@
 # T-389: a refused save keeps what the user typed, on every saved-record form (DEF-617)
 
-**Status:** SPEC 2026-10-10 (Opus planner), written at main `6e744d4`. Not started.
+**Status:** S1 DONE 2026-10-10 (`e2b3a1e`, on main; browser smoke on 9008 passed: supplier, tender, invoice lines, store link, two-tab stale, one-minute expiry, dropped, second person sees nothing, 375 px). S2-S4 (29 forms in 21 pages, guard baseline `apps/erp/tests/typed-baseline.json`) and S5 next. Ian answered Q1 (a).
 **Model:** Sonnet lanes, tester first, then builder (bible row 184). An amendment is written in plan mode (Opus).
 **Migration:** none. This is app-layer only (flash cookie, one client component, the actions). The next free number
 stays **0190**.
