@@ -1,7 +1,8 @@
 # T-395: PIN sign-in, the second tier: a daily guess budget per store, an attempt log, and a finding (DEF-063)
 
-**Status:** SPECIFIED 2026-10-10 by the Opus planner. Lane L3, wave 1, size S (1.5 days, two slices).
-Migration **0NNN (allocated at merge)**. One question for Ian (Q1); the recommended option is built.
+**Status:** SPEC APPROVED WITH CHANGES 2026-10-10 (review applied). Opus planner; lane L3, wave 1, size S
+(1.5 days, two slices). Migration **0NNN (allocated at merge)**. Also fixes **DEF-626** (the live tier-1
+burst bypass). One question for Ian (Q1); the recommended option is built.
 
 ## Goal
 
@@ -28,6 +29,7 @@ PINs at a steady pace for a whole day without the system stopping them and telli
 | Tier 1: 10 misses in a 60 s window, then a 2-minute pause, per store | `packages/db/src/repo/pin-attempts.ts` (`MISS_THRESHOLD`, `MISS_WINDOW_SECONDS`, `LOCK_COOLDOWN_SECONDS`) | Shipped, tested (`packages/auth/tests/integration/terminal-sign-in.test.ts`), never field-proven |
 | Check before lookup, flat failure sentence, constant-cost miss | `packages/auth/src/sessions.ts` `signInWithPin`, `BAD_PIN`, `DUMMY_SCRYPT_HASH` | Shipped |
 | Server-attested terminal id | `resolveTerminalIdentity` returns `deviceId` = the terminal's `persons.id`; `apps/erp/src/app/sign-in/actions.ts:76-77` passes it | Shipped, **and then dropped**: the throttle ignores it |
+| Check and miss in one transaction | **No.** The check runs in one transaction (`sessions.ts:91-94`), the lookup in another, and the miss is recorded after the lookup in a third (`:116`). A parallel burst from one terminal session runs N lookups before any miss commits | **Live hole, DEF-626.** Fixed here by charging before the lookup (R14) |
 | History of misses | none. `pin_attempt_throttle` holds only the current window, and `clearOnSuccess` wipes it | **Missing** |
 | A finding | none in `packages/db/src/repo/findings.ts` | **Missing** |
 
@@ -80,17 +82,18 @@ nothing is recorded.
 | # | Ruling | Reason |
 |---|---|---|
 | R1 | **Tier 1 is unchanged.** 10 / 60 s / 2 minutes, per store, cleared by a correct PIN. Ian ruled it on 2026-09-13 | Fumble tolerance at a shift change. This task adds a tier; it does not re-tune the first |
-| R2 | **Tier 2, the daily budget:** when a store reaches **50 misses in the rolling 24 hours** (counted since the last reopen, if that is later), PIN sign-in at that store is **stopped** | Bounds a store's guess budget to 50 a day: 50 x 30 / 10^6, **about 0.15 % a day**, down from about 32 %. Tier 1 alone allows about 13,000 |
-| R3 | **A correct PIN does not reset tier 2.** Tier 2 counts rows in the log, and nothing on the success path deletes them | Closes the own-PIN reset bypass |
+| R2 | **Tier 2, the daily budget:** once a store has **50 misses in the rolling 24 hours** (counted since the last reopen or expired stop, if later), the **next** attempt stops PIN sign-in at that store and is refused. So exactly 50 lookups can fail per window | Bounds a store's guess budget to 50 a day: 50 x 30 / 10^6, **about 0.15 % a day**, down from about 32 %. Tier 1 alone allows about 13,000 |
+| R3 | **A correct PIN does not reset tier 2.** Tier 2 counts rows in the log. The success path deletes only its own charged row (R14), never another attempt's | Closes the own-PIN reset bypass |
 | R4 | **Stopped means stopped until a manager reopens it** (Q1 option a, built). Constant `STOP_AUTO_REOPEN_MINUTES = null`; option b sets it to `60` | A daily budget that refills on its own is a slower tier 1. A human looking is the point |
 | R5 | **Who reopens:** anyone holding **`enrol_staff`** at that store (manager, admin, super_admin; not staff). **No new capability** | Same family as issuing a PIN. T-217 gated `issuePinAction` on `enrol_staff` for the same reason. §7 rule 2 is not widened: whoever can issue a new PIN at a store can already let a new person in |
 | R6 | **The reopen is audited** with an `audit_log` row (bible §7 rule 7): action `reopen_pin_sign_in`, entity `store`, before `{stoppedAt}`, after `{reopenedAt}`, source `web` | Every mutation writes an audit row |
 | R7 | **What the person sees.** Tier 1 keeps T-303's sentence. Tier 2 says: *"PIN sign-in is stopped at this store after too many wrong PINs today. A manager can reopen it: sign in with email and password, then open Staff."* Same text whoever types, whatever was typed | No enumeration. It names the way out, as T-303 §Q3 requires |
 | R8 | **The log records only misses and state changes.** One row per miss, one `lockout` row when tier 1 starts a pause, one `stopped` row when tier 2 trips. **Successes are not logged here** (they are already `sessions` rows with `device_id`). **Refusals while paused or stopped are not logged** | Write volume is bounded by the throttle itself. A refused attempt is not a guess, because no lookup ran |
 | R9 | **The log never holds the PIN, any hash or prefix of it, or whether the miss was "unknown" or "real person, wrong store"** | A table that managers can read must not become a guessing aid or the oracle that `BAD_PIN` refuses to be |
-| R10 | **State lives in Postgres**: new table `sign_in_attempts` (`org_column`) and two columns on `pin_attempt_throttle` (`stopped_at`, `reopened_at`, plus `reopened_by`) | RULES §1 rule 4. It is written after layer 1, so the org is known and there is no pre-auth write (DEF-333) |
+| R10 | **State lives in Postgres**: new table `sign_in_attempts` (`org_column`) and three columns on `pin_attempt_throttle` (`stopped_at`, `reopened_at`, `reopened_by`) | RULES §1 rule 4. It is written after layer 1, so the org is known and there is no pre-auth write (DEF-333) |
 | R11 | **Retention: 90 days, purged lazily.** Each miss deletes this org's rows older than 90 days in the same transaction. **No new timer.** Cutover class `purge` | The rows carry no personal data (store, terminal, time). An org with no misses has no rows. An org whose last miss was long ago keeps old rows until its next miss. That is accepted and stated |
 | R12 | **Two findings, both `soft`.** `pinSignInFailures` per (store, terminal) and `pinSignInStopped` per store. ⛔ **Never `hard`**: `closeReadiness` blocks a period close on hard findings, and a sign-in problem must not block the books | See §Contract |
+| R14 | **Charge before the lookup (fixes DEF-626).** Each attempt is charged as a miss in ONE transaction that locks the store's throttle row, refuses if stopped or paused, and otherwise writes the miss row and the tier-1 increment. Only then does the lookup run. **A success refunds only its own charge**: it deletes its own miss row (and the `lockout` row its charge wrote, if any), then runs `clearOnSuccess`. Any other outcome, including an infrastructure error, keeps the charge | Under a row lock, attempts are serialised before any scrypt runs. The guess bound is then exact, not "after the misses commit". R3 still holds: the other attempts' rows stay |
 | R13 | **Clock terminals are not in scope.** The clock tablet identifies a person by **badge or fingerprint, never a PIN** (`apps/erp/src/app/clock/page.tsx`). Offline punches go through the Firestore inbox. **PIN sign-in is a server action, so it cannot happen offline, and there is nothing to throttle offline.** Badge guessing at the clock is **not throttled by this task** and is not assessed here | Stated plainly so nobody assumes it is covered |
 
 ## Contract
@@ -108,24 +111,39 @@ export const FINDING_LOOKBACK_DAYS = 7;
 export interface ThrottleStatus { locked: boolean; lockedUntil: Date | null; stopped: boolean; stoppedAt: Date | null }
 
 checkThrottle(tx, storeId): Promise<ThrottleStatus>
-// `stopped` is decided in SQL against now(), the same as `locked`. With STOP_AUTO_REOPEN_MINUTES
-// non-null, stopped = stopped_at is not null and stopped_at + interval > now().
+// Read-only, for the panel. `stopped` and `locked` are decided in SQL against now() (one clock).
+// A stop is live while stopped_at is not null and (STOP_AUTO_REOPEN_MINUTES is null or
+// stopped_at + interval > now()). A stop past that interval is EXPIRED and counts as a reopen.
 
-recordMiss(tx, { orgId, storeId, deviceId }: { orgId: string; storeId: string; deviceId: string | null })
-  : Promise<{ lockStarted: boolean; stopped: boolean }>
-// ONE transaction, in this order:
-// 1. The existing tier-1 upsert, unchanged except `RETURNING locked_until`. A returned row with a
-//    non-null locked_until means THIS statement started the pause (the WHERE guard returns no row
-//    for a miss on an already-locked store).
-// 2. insert sign_in_attempts (kind 'miss'), plus kind 'lockout' when step 1 started a pause.
-// 3. update pin_attempt_throttle set stopped_at = now()
-//      where store_id = $s and stopped_at is null
-//        and (select count(*) from sign_in_attempts a where a.store_id = $s and a.kind = 'miss'
-//             and a.occurred_at > greatest(now() - interval '24 hours', coalesce(reopened_at, '-infinity')))
-//            >= DAILY_MISS_BUDGET
-//      returning id
-//    and when a row comes back, insert kind 'stopped'.
-// 4. delete from sign_in_attempts where org_id = $o and occurred_at < now() - interval '90 days'.
+export type Charge =
+  | { refused: 'stopped' | 'locked'; until: Date | null }
+  | { refused: null; missId: string; lockoutId: string | null };
+
+chargeAttempt(tx, { orgId, storeId, deviceId }: { orgId: string; storeId: string; deviceId: string | null }): Promise<Charge>
+// R14. ONE transaction, under withOrgPrincipal(orgId), in this order (invariant I12):
+// 1. LOCK: insert into pin_attempt_throttle (org_id, store_id) values ($o, $s)
+//      on conflict (store_id) do update set updated_at = pin_attempt_throttle.updated_at
+//      returning * . The row is now locked until commit, so every later step for this store is
+//    serialised, and each later statement sees every earlier attempt's committed rows.
+// 2. STOP CHECK. If the stop is live: return { refused: 'stopped' } and write nothing.
+//    Else count kind='miss' rows for the store with
+//      occurred_at > greatest(now() - interval '24 hours', coalesce(reopened_at, '-infinity'),
+//                             coalesce(stopped_at + auto-reopen interval, '-infinity'))
+//    (the last term only when STOP_AUTO_REOPEN_MINUTES is non-null).
+//    If count >= DAILY_MISS_BUDGET: set stopped_at = now() (this overwrites an EXPIRED stop),
+//    insert kind 'stopped', return { refused: 'stopped' }. So exactly 50 attempts can be charged.
+// 3. PAUSE CHECK. If locked_until > now(): return { refused: 'locked' } and write nothing
+//    (T-303's lock-clobber rule, unchanged).
+// 4. CHARGE. Tier-1 increment exactly as today's recordMiss does it (window roll; locked_until set
+//    when the new count reaches MISS_THRESHOLD). Insert kind 'miss' returning id; when this step set
+//    locked_until, also insert kind 'lockout' returning id.
+// 5. PURGE, bounded: delete from sign_in_attempts where id in (select id from sign_in_attempts
+//      where org_id = $o and occurred_at < now() - interval '90 days' limit 500 for update skip locked).
+// recordMiss is REMOVED: every attempt is charged up front, so nothing is recorded afterwards.
+
+refundOnSuccess(tx, storeId, charge): Promise<void>
+// delete from sign_in_attempts where id in (charge.missId, charge.lockoutId), then clearOnSuccess.
+// Deletes only this attempt's own rows (R3, R14).
 
 clearOnSuccess(tx, storeId)   // unchanged: clears tier 1 only; never touches stopped_at
 
@@ -135,14 +153,18 @@ reopen(tx, storeId, actorPersonId): Promise<{ reopened: boolean; stoppedAt: Date
 //   where store_id = $s and stopped_at is not null returning the old stopped_at.
 // Not stopped: returns { reopened: false } and writes nothing.
 
-statusForStore(tx, storeId): Promise<ThrottleStatus & { missesToday: number; reopenedAt: Date | null }>
+statusForStore(tx, storeId): Promise<ThrottleStatus & { missesLast24h: number; reopenedAt: Date | null }>
+// missesLast24h is the same rolling count step 2 uses; the panel labels it "wrong PINs in the last 24 hours".
 ```
 
 ### Auth (`packages/auth/src/sessions.ts`)
 
-- `signInWithPin` checks `stopped` **first**, then `locked`, both before `runPinSignIn`. Stopped means
-  `AuthenticationError(STOPPED_MESSAGE)` (R7). Nothing else changes in the order.
-- Both `recordMiss` call sites pass `deviceId: input.deviceId ?? null`. `deviceId` stays optional in the
+- `signInWithPin` (both the `tx === null` path and `runPinSignInWithThrottle`) replaces
+  check-then-record with `chargeAttempt`, in its own principal'd transaction, **committed before**
+  `runPinSignIn` starts. `refused: 'stopped'` throws `AuthenticationError(STOPPED_MESSAGE)` (R7);
+  `refused: 'locked'` throws T-303's `cooldownMessage`. On success, `refundOnSuccess` runs. On any
+  failure nothing more is written: the charge already counted it.
+- Both paths pass `deviceId: input.deviceId ?? null`. `deviceId` stays optional in the
   signature. The production caller already passes it; changing it would mean editing about 60 test call
   sites in other tasks' files.
 
@@ -173,7 +195,7 @@ Both key shapes end in a uuid or `none`, so `keyPeriod` returns null for them. A
 ### Screen (`apps/erp/src/app/staff/`)
 
 A **PIN sign-in** panel on `/staff`, for the selected store, shown to anyone who holds `enrol_staff` there.
-It shows one of three states: *Normal* (with today's miss count), *Paused until {time}* (tier 1), or
+It shows one of three states: *Normal* (with "wrong PINs in the last 24 hours: n"), *Paused until {time}* (tier 1), or
 *Stopped since {time}* with a **Reopen PIN sign-in** button. The button posts `reopenPinSignInAction`
 (`staff/actions.ts`), which runs `withOrgPrincipal` and `reopenPinSignIn`, then flashes *"PIN sign-in
 reopened at {store}."* or the refusal. A refused or no-op reopen changes nothing.
@@ -183,9 +205,9 @@ reopened at {store}."* or the refusal. A refused or no-op reopen changes nothing
 | # | Invariant |
 |---|---|
 | I1 | Every T-303 invariant (1-8) still holds. T-303's tests stay green unedited, except mechanical signature updates |
-| I2 | Stopped is checked before any credential lookup or KDF, and before tier 1 |
-| I3 | Only `reopen` clears `stopped_at`. A correct PIN, a tier-1 expiry, and a new window never do |
-| I4 | Tier 2 counts only `miss` rows, only in the last 24 hours, only since the last reopen |
+| I2 | Every attempt is charged, under the store's row lock and committed, before any credential lookup or KDF. Stopped is checked before paused |
+| I3 | Only `reopen` clears `stopped_at` (or, with option b, its expiry ends it). A correct PIN, a tier-1 expiry, and a new window never do |
+| I4 | Tier 2 counts only `miss` rows, only in the last 24 hours, only since the last reopen or expired stop |
 | I5 | An unknown PIN and a real-person-wrong-store PIN write byte-identical `sign_in_attempts` rows (apart from `id` and `occurred_at`) |
 | I6 | `sign_in_attempts` has exactly the columns in §Migration. No column can hold a PIN or its derivative |
 | I7 | Exactly one `lockout` row per pause, and exactly one `stopped` row per stop, under concurrent misses |
@@ -193,16 +215,13 @@ reopened at {store}."* or the refusal. A refused or no-op reopen changes nothing
 | I9 | Reopen requires `enrol_staff` **at that store**, writes exactly one `audit_log` row, and is a no-op on a store that is not stopped |
 | I10 | Every read and write runs under `withOrgPrincipal(orgId)`, never the auth door (DEF-333) |
 | I11 | Email sign-in works while a store is stopped |
-
-Tier 2 is approximate under concurrency. Two misses committing together may each see 49 and neither
-trips. The next miss trips. The budget can overrun by the number of misses in flight at that moment. That
-is accepted and stated.
+| I12 | `chargeAttempt`'s step order is fixed: lock, stop check, pause check, charge, purge. Because step 1 locks the store's row, the bounds are **exact** under any concurrency: at most 10 charged attempts per tier-1 window and at most 50 per tier-2 window. A success refunds only its own rows |
 
 ## Slices
 
 | Slice | BUILDER files | TESTER files | Size |
 |---|---|---|---|
-| **S1** log + tier 2 enforcement | `packages/db/migrations/0NNN_t395_sign_in_attempts.sql` (new), `packages/db/migrations/meta/_journal.json`, `packages/db/schema/sign-in-attempts.ts` (new), `packages/db/schema/pin-attempts.ts`, `packages/db/schema/index.ts`, `packages/db/src/rls/registry.ts`, `packages/db/src/cutover/classification.ts`, `packages/db/src/repo/pin-attempts.ts`, `packages/auth/src/sessions.ts` | `packages/auth/tests/integration/t395-pin-daily-budget.test.ts` (new); mechanical updates only in `packages/auth/tests/integration/terminal-sign-in.test.ts` (truncate list, `recordMiss` signature if called directly) and any shared reset helper that lists tables | 0.75 day |
+| **S1** charge-before-lookup (DEF-626) + log + tier 2 | `packages/db/migrations/0NNN_t395_sign_in_attempts.sql` (new), `packages/db/migrations/meta/_journal.json`, `packages/db/schema/sign-in-attempts.ts` (new), `packages/db/schema/pin-attempts.ts`, `packages/db/schema/index.ts`, `packages/db/src/rls/registry.ts`, `packages/db/src/cutover/classification.ts`, `packages/db/src/repo/pin-attempts.ts`, `packages/auth/src/sessions.ts` | `packages/auth/tests/integration/t395-pin-daily-budget.test.ts` (new); mechanical updates only in `packages/auth/tests/integration/terminal-sign-in.test.ts` (truncate list; any direct `recordMiss` call becomes `chargeAttempt`) and any shared reset helper that lists tables | 0.75 day |
 | **S2** findings + reopen + panel + smoke | `packages/db/src/repo/findings.ts`, `packages/domain/src/findings/index.ts`, `packages/auth/src/credentials-admin.ts`, `packages/auth/src/index.ts` (export), `apps/erp/src/app/staff/{page.tsx,actions.ts,PinSignInPanel.tsx (new)}`, `apps/erp/src/app/findings/lib.ts`, `scripts/smoke-pin-throttle.ts` (new), `package.json` (`smoke:pin-throttle` script) | `packages/db/tests/integration/t395-sign-in-findings.test.ts` (new), `packages/auth/tests/integration/t395-reopen.test.ts` (new), `apps/erp/tests/integration/t395-reopen-action.test.ts` (new); `apps/erp/tests/t343-s6c-screen-labels.test.ts` only if its fixture list needs the two kinds | 0.75 day |
 
 - **Disjoint paths.** BUILDER writes only the files in its column and never anything under `tests/`. TESTER
@@ -219,43 +238,62 @@ own idiom), never by sleeping.
 
 **S1, `t395-pin-daily-budget.test.ts`**
 
+Lookups are counted with a spy on `sessionsRepo.findActiveCredentialByLookupHash`, and every "wrong PIN"
+in a lookup-count test is **well-formed** (a malformed PIN is refused before the lookup and proves nothing).
+
 1. **Patient guesser is stopped.** 9 misses, roll the window (back-date `window_started_at`), repeated
-   until 50 misses. The store is stopped, and the next attempt with the **correct** PIN is refused with
-   the stopped sentence and **no credential lookup** (the malformed-PIN trick from T-303 test 1). Red on HEAD.
-2. **Own-PIN reset does not refill the budget.** 49 misses with a correct sign-in between every 9, then one
-   miss: stopped. *Mutant: `clearOnSuccess` deletes the store's log rows.*
-3. **Only the last 24 h count.** Insert 49 `miss` rows at `now() - 25 hours`, then 1 real miss: not stopped.
-   *Mutant: drop the time filter.*
+   until 50 misses. The next attempt, with the **correct** PIN, is refused with the stopped sentence and
+   **no credential lookup**. Red on HEAD.
+2. **Own-PIN reset does not refill the budget.** 50 misses with a correct sign-in after every 9th, then the
+   next attempt is refused: stopped. The correct sign-ins leave no rows. *Mutant: the refund deletes the
+   store's rows instead of its own.*
+3. **Only the last 24 h count.** Insert 49 `miss` rows at `now() - 25 hours`, then 1 real miss and 1 more
+   attempt: not stopped. *Mutant: drop the time filter.*
 4. **Only since reopen.** Stop the store, reopen, then 1 miss: not stopped. *Mutant: ignore `reopened_at`.*
-5. **Only misses count.** 49 misses plus `lockout` rows, then 1 miss: stopped at exactly 50, not before.
-   *Mutant: `kind` filter removed, which stops at fewer.*
-6. **Success writes no log row; a refusal while paused or stopped writes no log row.** *Mutant: log on every call.*
+5. **Only misses count.** 49 misses plus `lockout` rows: the next attempt is charged, not stopped; after
+   the 50th miss the next one is stopped. *Mutant: `kind` filter removed, which stops sooner.*
+6. **Refunds and refusals leave nothing.** A success leaves no row (its charge is refunded, including a
+   `lockout` row it wrote on the 10th attempt). A refusal while paused or stopped writes no row.
+   *Mutants: no refund; log on refusal.*
 7. **I5 parity.** An unknown PIN and a real-person-other-store PIN leave identical rows (compare every
    column except `id`, `occurred_at`).
 8. **I6 shape.** `information_schema.columns` for `sign_in_attempts` equals the list in §Migration exactly.
    *Mutant: add a `pin_hint` column.*
-9. **I7 concurrency.** 15 parallel misses from 0: exactly one `lockout` row. From 45 committed: exactly
-   one `stopped` row. *Mutant: insert `lockout` whenever `locked_until` is non-null after the upsert.*
-10. **Device attribution.** A miss through `signInWithPin(null, { ..., deviceId })` writes that `device_id`.
+9. **DEF-626, tier-1 burst.** 60 parallel well-formed wrong PINs from a clean store: **exactly 10 lookups**,
+   `fail_count` 10, 10 `miss` rows, exactly one `lockout` row; the other 50 get the pause sentence. Red on
+   HEAD (today's check-then-record lets many lookups run before any miss commits). *Mutants: charge after
+   the lookup; drop the step-1 row lock.*
+10. **Tier-2 burst.** 45 `miss` rows in the 24 h window and a clean tier-1 row, then 60 parallel wrong PINs:
+    **exactly 5 lookups**, exactly one `stopped` row. *Mutant: count before taking the lock.*
+    (The reviewer suggested 60 from zero giving 50 lookups. Tier 1 is unchanged (R1), so from zero it binds
+    at 10 first. Test 9 covers that, and this test isolates tier 2.)
+11. **Option b switch.** With `STOP_AUTO_REOPEN_MINUTES = 60` (test override): stop the store, back-date
+    `stopped_at` 61 minutes. The next attempt is charged, not refused. 50 further misses stop it again, with
+    a new `stopped_at` and a second `stopped` row. Misses from before the expiry do not count. *Mutant:
+    step 2 matches only `stopped_at is null`, so the store never stops again.*
+12. **Device attribution.** A miss through `signInWithPin(null, { ..., deviceId })` writes that `device_id`.
     *Mutant: `deviceId: null` hard-coded.*
-11. **Retention.** A 91-day-old row in this org is gone after the next miss anywhere in the org. A 91-day-old
-    row in **another org** is untouched. *Mutant: delete without `org_id`, which RLS also blocks, so also
-    assert the delete runs under the principal.*
-12. **I11.** Email sign-in succeeds while the store is stopped.
-13. **RLS.** Under org B's principal, org A's `sign_in_attempts` rows are invisible and an insert with
+13. **Retention.** Plant 91-day-old rows in this org and in **another org**. After the next charge anywhere
+    in this org, this org's rows are gone and the other org's rows are untouched. *Mutant: the purge runs on
+    the auth door (`authTransaction`) with no `org_id` predicate, which deletes the other org's rows.*
+    Purge is batch-limited: plant 600 old rows, and one charge removes 500.
+14. **I11.** Email sign-in succeeds while the store is stopped.
+15. **RLS.** Under org B's principal, org A's `sign_in_attempts` rows are invisible, and an insert with
     org A's id is refused.
 
 **S2**
 
-14. `t395-sign-in-findings.test.ts`: 19 misses in a Manila day at one terminal gives no finding; 20 gives
-    one; 1 `lockout` alone gives one; rows 8 days old give none; two terminals give two keys; a stopped
-    store gives `pinSignInStopped`, and after reopen it is gone. Both are `soft`, and `closeReadiness` is
-    not blocked by them. *Mutants: `>` for `>=`; `hard`; a missing `org_id` filter.*
-15. `t395-reopen.test.ts`: manager at the store reopens it, with one `audit_log` row, `reopened_by` set
+16. `t395-sign-in-findings.test.ts`: 19 misses in a Manila day at one terminal gives no finding; 20 gives
+    one; 1 `lockout` alone gives one; rows 8 days old give none; two terminals at one store give two keys;
+    a stopped store gives `pinSignInStopped`, and after reopen it is gone. Both are `soft`, and
+    `closeReadiness` is not blocked by them. *Mutants: `>` for `>=`; `hard`; grouping by store only (two
+    terminals collapse to one key).* (A missing `org_id` filter is NOT a killable mutant: `listFindings` runs
+    under the principal and RLS filters anyway.)
+17. `t395-reopen.test.ts`: manager at the store reopens it, with one `audit_log` row, `reopened_by` set
     and the counters zeroed. **Staff role refused** (the ✗ fires). **Manager scoped to another store refused.**
     Reopen of a store that is not stopped writes nothing (no audit row). *Mutant: authorize removed;
     authorize without `storeId`.*
-16. `t395-reopen-action.test.ts`: the action takes the actor from the session (not the form), uses
+18. `t395-reopen-action.test.ts`: the action takes the actor from the session (not the form), uses
     `storeId` only as the resource, and flashes the result. The existing `no-client-supplied-actor`
     and `t342-no-null-tx-from-actions` guards stay green.
 
@@ -328,16 +366,27 @@ which has never run in the field. Do not trip tier 2 in production; the local sm
   queries.
 - Notifying anyone by SMS or email when a store is stopped.
 
+## Rollout
+
+- **Before option (a) goes live, confirm each store has at least one person who can reopen it**: someone
+  holding `enrol_staff` at that store **with email sign-in linked**. A stopped store refuses every PIN,
+  including a manager's, and only an admin can link email sign-in (`linkFirebaseCredential` requires
+  `manage_users`, admin-only, `packages/auth/src/credentials-admin.ts:154`). A store whose managers have
+  only a PIN depends on an admin to reopen it. The orchestrator lists each store's reopen-capable people in
+  the hand-back, and Ian links email for any store that has none.
+- S1 alone already closes DEF-626, and it is safe to deploy before S2. Until S2 ships, a stopped store can
+  only be reopened by SQL. So deploy S1 and S2 together unless DEF-626 cannot wait.
+
 ## Done when
 
-- S1 and S2 are merged. Tests 1-16 are green, and every named mutant was shown red. T-303's tests are green.
+- S1 and S2 are merged. Tests 1-18 are green, and every named mutant was shown red. T-303's tests are green.
 - Typecheck is clean. The affected unit and integration tests pass locally. The full suite passes in CI on
   the PR. `npm run build` passes with the dev server stopped.
 - The migration is hand-authored. `sign_in_attempts` is classified in both `registry.ts` and
   `classification.ts`, and the build's classification guards pass.
 - The smoke steps 1-4 ran, with output and screenshots in the hand-back, and the unmet part is named.
-- The hand-back carries a `FOR IAN` block. The orchestrator moves DEF-063 to `fixed` (T-303 tier 1 plus
-  T-395 tier 2, the log and the finding), corrects plan row C7's stale *"no lockout"*, and asks the Opus
+- The hand-back carries a `FOR IAN` block. The orchestrator moves DEF-063 and **DEF-626** to `fixed`
+  (T-303 tier 1, made burst-proof by R14, plus T-395 tier 2, the log and the finding), corrects plan row C7's stale *"no lockout"*, and asks the Opus
   planner for the bible §13 row covering R2-R5.
 
 ## Questions for Ian
@@ -350,6 +399,11 @@ By the 50th wrong PIN that day:
   with email. A finding tells you which tablet and when. **Recommended, and built.** It caps guessing at
   about 50 a day per store, roughly a 1-in-700 chance of hitting someone's PIN, instead of about 1-in-3.
   The cost: if it trips before opening time, the cashier waits for a manager.
+  ⚠️ **Two things to know before choosing (a).** First, anyone at the counter can trip the stop on
+  purpose, in about 10 minutes of typing wrong PINs. The finding shows which tablet and when, but not who.
+  Second, reopening needs a manager who can sign in **by email**. Only an admin can link email sign-in, so
+  a store whose managers have only a PIN would need you or another admin to reopen it. Before (a) goes live,
+  each store needs at least one manager with email sign-in (see Rollout).
 - **(b) The same, but it reopens by itself after 60 minutes.** No manager needed. Guessing is capped at
   roughly 50 an hour instead of 50 a day.
 - **(c) No stop; only the finding.** Nothing is blocked. You find out the next time someone opens Findings.
