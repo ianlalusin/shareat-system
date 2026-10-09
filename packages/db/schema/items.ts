@@ -32,6 +32,7 @@ import {
   integer,
   numeric,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -91,7 +92,8 @@ export const items = pgTable(
     orgId: uuid('org_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict' }),
-    /** Short human key — `PORK-BELLY`. Unique per org. */
+    /** Item code `CHWN-001` (T-386): 4 characters from the name + 3 digits. Unique per org, ignoring case. */
+    // NOTE: items_code_never_reused trigger hand-added in migration 0189 (T-386)
     code: text('code').notNull(),
     name: text('name').notNull(),
     kind: text('kind', { enum: ITEM_KINDS }).notNull(),
@@ -145,7 +147,8 @@ export const items = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex('items_org_code_key').on(t.orgId, t.code),
+    // NOTE: the index is on upper(code) since migration 0189 (T-386), under the same name.
+    uniqueIndex('items_org_code_key').on(t.orgId, sql`upper(${t.code})`),
     /** ⛔ "Pork Belly" and "pork belly" are ONE thing — case-insensitive, because 187
      *  duplicate names across v1's stores is exactly how a price chart stops summing. */
     uniqueIndex('items_org_name_key').on(t.orgId, sql`lower(${t.name})`),
@@ -329,5 +332,31 @@ export const itemPricing = pgTable(
     check('item_pricing_markup_percent_finite_check', sql`${t.markupPercent} > '-Infinity'::numeric and ${t.markupPercent} < 'Infinity'::numeric`),
     check('item_pricing_fixed_markup_amount_finite_check', sql`${t.fixedMarkupAmount} > '-Infinity'::numeric and ${t.fixedMarkupAmount} < 'Infinity'::numeric`),
     check('item_pricing_margin_alert_threshold_pct_finite_check', sql`${t.marginAlertThresholdPct} > '-Infinity'::numeric and ${t.marginAlertThresholdPct} < 'Infinity'::numeric`),
+  ],
+);
+
+/**
+ * ⭐ T-386 R4. The highest number ever issued per 4-character stem, per org: why a code, once printed on a count sheet or a PO,
+ * is never given to another item. A table and not `max()` over current codes: codes change (rename, recode, override), and only a
+ * record of what was ISSUED keeps "never reused" true.
+ *
+ * NOTE: hand-added in migration 0189 - the RLS policy `item_code_counters_org_isolation`, the grants (SELECT, INSERT, UPDATE; no
+ * DELETE), the `items_code_never_reused` trigger on `items` that raises the mark, and the ENABLE ALWAYS trigger
+ * `item_code_counters_forward_only` (the mark only rises, the key never changes).
+ */
+export const itemCodeCounters = pgTable(
+  'item_code_counters',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    stem: text('stem').notNull(),
+    lastSeq: integer('last_seq').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: 'item_code_counters_pkey', columns: [t.orgId, t.stem] }),
+    check('item_code_counters_stem_check', sql`${t.stem} ~ '^[A-Z0-9]{4}$'`),
+    check('item_code_counters_last_seq_check', sql`${t.lastSeq} BETWEEN 0 AND 999`),
   ],
 );

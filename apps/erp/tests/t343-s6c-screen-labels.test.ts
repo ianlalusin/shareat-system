@@ -229,6 +229,8 @@ vi.mock('../src/app/items/lib', async (importOriginal) => {
     ...actual,
     listItems: (...a: unknown[]) => itemsListMock(...a),
     pendingRequests: (...a: unknown[]) => pendingRequestsMock(...a),
+    // T-386 S4: the page asks for each pending request's render-time code; I1/I2 prove labels only, so an empty answer.
+    pendingRequestCodes: async () => new Map(),
     duplicateCandidates: (...a: unknown[]) => duplicateCandidatesMock(...a),
     getItem: (...a: unknown[]) => getItemMock(...a),
     itemPrices: (...a: unknown[]) => itemPricesMock(...a),
@@ -256,6 +258,7 @@ vi.mock('../src/app/items/actions', () => ({
   updateItemFlagsAction: vi.fn(),
   changeItemUnitAction: vi.fn(),
   renameItemAction: vi.fn(),
+  suggestItemCodeAction: vi.fn(),
 }));
 
 const whoSellsMock = vi.fn();

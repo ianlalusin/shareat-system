@@ -44,6 +44,7 @@ import {
   receiveTradeOrder,
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -176,7 +177,7 @@ const receivedQty = async (orderId: string) =>
 const deliveryRows = async (orgId: string) => Number((await sql<{ n: string }[]>`select count(*)::text as n from deliveries where org_id = ${orgId}`)[0]!.n);
 
 async function wholesaleItem(f: Fixture): Promise<string> {
-  const item = await asOrg(f.orgId, (tx) => createItem(tx, f.superAdmin, { code: uid('WS'), name: `Beef ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }));
+  const item = await asOrg(f.orgId, (tx) => createItem(tx, f.superAdmin, { code: testItemCode(), name: `Beef ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }));
   return item.id;
 }
 /** An EXTERNAL order for 10 kg dated `orderDate`, created (not dispatched). Stock was received 1 Jan 2026. */

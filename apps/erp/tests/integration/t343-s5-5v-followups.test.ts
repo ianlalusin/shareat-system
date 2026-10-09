@@ -53,6 +53,7 @@ import type { Actor } from '@shareat/auth';
 import { createItem, createSupplier, openTillShift } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { paramsOf } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -584,7 +585,7 @@ describe('Converted guards — chargeAction/payAction amount="0"', () => {
 async function priceListFixture(hint: string) {
   const f = await orgWithAdmin(hint);
   const item = await asOrg(f.orgId, (tx) =>
-    createItem(tx, f.superAdmin, { code: uid('SKU'), name: 'Test Item', kind: 'raw_material', baseUnit: 'pcs', sellableWholesale: true } as any),
+    createItem(tx, f.superAdmin, { code: testItemCode(), name: 'Test Item', kind: 'raw_material', baseUnit: 'pcs', sellableWholesale: true } as any),
   );
   const { createPriceListAction } = await import('../../src/app/customers/actions');
   ACTOR_HOLDER.actor = f.admin;

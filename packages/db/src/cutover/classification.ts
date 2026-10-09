@@ -1143,6 +1143,14 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason: 'The detail of a pull, hanging off it by CASCADE. Same class as its parent.',
   },
 
+  // ---- T-386: item codes (migration 0189) -----------------------------------------------------
+  item_code_counters: {
+    class: 'keep',
+    reason:
+      "Items are kept, so the numbers already issued to them must stay issued; purging the marks would let a kept item's " +
+      'number be issued again.',
+  },
+
   // ---- T-375: the POS v1 day feed (migration 0183) --------------------------------------------
   pos_v1_store_links: {
     class: 'keep',

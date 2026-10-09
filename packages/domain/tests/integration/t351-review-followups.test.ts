@@ -42,6 +42,7 @@ import {
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { postEntry } from '../../src/ledger/post-entry';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -112,7 +113,7 @@ async function evidence(f: Fixture): Promise<string> {
 async function porkBelly(f: Fixture): Promise<{ id: string; name: string }> {
   const name = `Pork belly ${uid('n')}`;
   const { id } = await asOrg(f.orgId, (tx) =>
-    createItem(tx, f.superAdmin, { code: uid('PORK'), name, kind: 'raw_material', baseUnit: 'kg' }),
+    createItem(tx, f.superAdmin, { code: testItemCode(), name, kind: 'raw_material', baseUnit: 'kg' }),
   );
   return { id, name };
 }

@@ -43,6 +43,7 @@ import {
   verifyInvoice,
   voidInvoice,
 } from '@shareat/domain';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -135,7 +136,7 @@ async function invoiceWithLines(
 
 async function porkBelly(f: Fixture): Promise<string> {
   const { id } = await asOrg(f.orgId, (tx) =>
-    createItem(tx, f.superAdmin, { code: uid('PORK'), name: `Pork belly ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg' }),
+    createItem(tx, f.superAdmin, { code: testItemCode(), name: `Pork belly ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg' }),
   );
   return id;
 }
@@ -519,11 +520,11 @@ describe('item identity', () => {
   it('⛔ two items cannot share a name differing only by case', async () => {
     const f = await fixture('dupe');
     await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, { code: 'PB-1', name: 'Pork Belly', kind: 'raw_material', baseUnit: 'kg' }),
+      createItem(tx, f.superAdmin, { code: testItemCode(), name: 'Pork Belly', kind: 'raw_material', baseUnit: 'kg' }),
     );
     await expect(
       asOrg(f.orgId, (tx) =>
-        createItem(tx, f.superAdmin, { code: 'PB-2', name: 'pork belly', kind: 'raw_material', baseUnit: 'kg' }),
+        createItem(tx, f.superAdmin, { code: testItemCode(), name: 'pork belly', kind: 'raw_material', baseUnit: 'kg' }),
       ),
       '187 duplicate names across v1 stores is exactly how a price chart stops summing',
     ).rejects.toThrow();
@@ -534,7 +535,7 @@ describe('item identity', () => {
     await expect(
       asOrg(f.orgId, (tx) =>
         // @ts-expect-error — 'box' is deliberately absent from BaseUnit; the DB refuses it too.
-        createItem(tx, f.superAdmin, { code: 'BX-1', name: 'Boxed thing', kind: 'supply', baseUnit: 'box' }),
+        createItem(tx, f.superAdmin, { code: testItemCode(), name: 'Boxed thing', kind: 'supply', baseUnit: 'box' }),
       ),
     ).rejects.toThrow();
   });
@@ -543,7 +544,7 @@ describe('item identity', () => {
     const a = await fixture('orgA');
     const b = await fixture('orgB');
     await asOrg(a.orgId, (tx) =>
-      createItem(tx, a.superAdmin, { code: 'SECRET', name: 'Org A secret item', kind: 'retail', baseUnit: 'pcs' }),
+      createItem(tx, a.superAdmin, { code: testItemCode(), name: 'Org A secret item', kind: 'retail', baseUnit: 'pcs' }),
     );
     const seenByB = await asOrg(b.orgId, (tx) => itemsRepo.listItems(tx, b.orgId, { includeInactive: true }));
     expect(seenByB.map((i) => i.name)).not.toContain('Org A secret item');
@@ -673,7 +674,7 @@ describe('it is hard to duplicate an item on purpose, and harder by accident', (
     const f = await fixture('nocreate');
     await expect(
       asOrg(f.orgId, (tx) =>
-        createItem(tx, f.manager, { code: 'X-1', name: 'Sneaky item', kind: 'supply', baseUnit: 'pcs' }),
+        createItem(tx, f.manager, { code: testItemCode(), name: 'Sneaky item', kind: 'supply', baseUnit: 'pcs' }),
       ),
     ).rejects.toThrow(AuthorizationError);
   });
@@ -681,19 +682,19 @@ describe('it is hard to duplicate an item on purpose, and harder by accident', (
   it('the trigram check flags v1 real duplicates, and stays quiet on unrelated names', async () => {
     const f = await fixture('trigram');
     await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, { code: 'BEAN-SPROUT', name: 'Bean sprout', kind: 'raw_material', baseUnit: 'kg' }),
+      createItem(tx, f.superAdmin, { code: testItemCode(), name: 'Bean sprout', kind: 'raw_material', baseUnit: 'kg' }),
     );
 
     // The pair that genuinely exists in v1 live data, at two different units.
     const dupe = await asOrg(f.orgId, (tx) =>
-      requestItem(tx, f.manager, { name: 'Beans Sprout', code: 'BEANS-SPROUT', kind: 'raw_material', baseUnit: 'pcs' }),
+      requestItem(tx, f.manager, { name: 'Beans Sprout', kind: 'raw_material', baseUnit: 'pcs' }),
     );
     expect(dupe.similar).toHaveLength(1);
     expect(dupe.similarWarning).toMatch(/Bean sprout/);
 
     // An unrelated name must NOT be flagged, or the warning becomes noise people click past.
     const fine = await asOrg(f.orgId, (tx) =>
-      requestItem(tx, f.manager, { name: 'Charcoal', code: 'CHARCOAL', kind: 'supply', baseUnit: 'kg' }),
+      requestItem(tx, f.manager, { name: 'Charcoal', kind: 'supply', baseUnit: 'kg' }),
     );
     expect(fine.similar).toHaveLength(0);
     expect(fine.similarWarning).toBeNull();
@@ -702,7 +703,7 @@ describe('it is hard to duplicate an item on purpose, and harder by accident', (
   it('a request approved by a super-admin mints the item and links the two', async () => {
     const f = await fixture('approve');
     const req = await asOrg(f.orgId, (tx) =>
-      requestItem(tx, f.manager, { name: 'Charcoal', code: 'CHARCOAL', kind: 'supply', baseUnit: 'kg' }),
+      requestItem(tx, f.manager, { name: 'Charcoal', kind: 'supply', baseUnit: 'kg' }),
     );
     const { itemId } = await asOrg(f.orgId, (tx) =>
       approveItemRequest(tx, f.superAdmin, { requestId: req.requestId }),
@@ -717,7 +718,7 @@ describe('it is hard to duplicate an item on purpose, and harder by accident', (
   it('an ADMIN cannot approve — only a super-admin', async () => {
     const f = await fixture('adminapprove');
     const req = await asOrg(f.orgId, (tx) =>
-      requestItem(tx, f.manager, { name: 'Charcoal', code: 'CHARCOAL', kind: 'supply', baseUnit: 'kg' }),
+      requestItem(tx, f.manager, { name: 'Charcoal', kind: 'supply', baseUnit: 'kg' }),
     );
     await expect(
       asOrg(f.orgId, (tx) => approveItemRequest(tx, f.admin, { requestId: req.requestId })),
@@ -727,7 +728,7 @@ describe('it is hard to duplicate an item on purpose, and harder by accident', (
   it('a rejection needs a reason, and one request cannot be decided twice', async () => {
     const f = await fixture('reject');
     const req = await asOrg(f.orgId, (tx) =>
-      requestItem(tx, f.manager, { name: 'Charcoal', code: 'CHARCOAL', kind: 'supply', baseUnit: 'kg' }),
+      requestItem(tx, f.manager, { name: 'Charcoal', kind: 'supply', baseUnit: 'kg' }),
     );
     await expect(
       asOrg(f.orgId, (tx) => rejectItemRequest(tx, f.superAdmin, { requestId: req.requestId, note: '  ' })),
@@ -746,10 +747,10 @@ describe('merge — when two slipped through anyway', () => {
   it('repoints invoice lines, combines both histories, and leaves a trail', async () => {
     const f = await fixture('merge');
     const winner = await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, { code: 'PORK-W', name: `Pork belly W ${uid('w')}`, kind: 'raw_material', baseUnit: 'kg' }),
+      createItem(tx, f.superAdmin, { code: testItemCode(), name: `Pork belly W ${uid('w')}`, kind: 'raw_material', baseUnit: 'kg' }),
     );
     const loser = await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, { code: 'PORK-L', name: `Pork Belly L ${uid('l')}`, kind: 'raw_material', baseUnit: 'kg' }),
+      createItem(tx, f.superAdmin, { code: testItemCode(), name: `Pork Belly L ${uid('l')}`, kind: 'raw_material', baseUnit: 'kg' }),
     );
 
     await invoiceWithLines(f, '2026-01-10', '2900.00', [
@@ -781,10 +782,10 @@ describe('merge — when two slipped through anyway', () => {
   it('refuses to merge items measured differently — the v1 case that breaks every price', async () => {
     const f = await fixture('mergeunit');
     const kg = await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, { code: 'BS-KG', name: 'Bean sprout', kind: 'raw_material', baseUnit: 'kg' }),
+      createItem(tx, f.superAdmin, { code: testItemCode(), name: 'Bean sprout', kind: 'raw_material', baseUnit: 'kg' }),
     );
     const pcs = await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, { code: 'BS-PCS', name: 'Beans Sprout', kind: 'raw_material', baseUnit: 'pcs' }),
+      createItem(tx, f.superAdmin, { code: testItemCode(), name: 'Beans Sprout', kind: 'raw_material', baseUnit: 'pcs' }),
     );
     await expect(
       asOrg(f.orgId, (tx) => mergeItems(tx, f.superAdmin, { loserId: pcs.id, winnerId: kg.id })),
@@ -795,13 +796,13 @@ describe('merge — when two slipped through anyway', () => {
   it('an item cannot merge into itself, and a manager cannot merge at all', async () => {
     const f = await fixture('mergeguards');
     const a = await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, { code: 'A-1', name: `Thing A ${uid('t')}`, kind: 'supply', baseUnit: 'pcs' }),
+      createItem(tx, f.superAdmin, { code: testItemCode(), name: `Thing A ${uid('t')}`, kind: 'supply', baseUnit: 'pcs' }),
     );
     await expect(
       asOrg(f.orgId, (tx) => mergeItems(tx, f.superAdmin, { loserId: a.id, winnerId: a.id })),
     ).rejects.toThrow(/cannot merge into itself/);
     const b = await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, { code: 'B-1', name: `Thing B ${uid('t')}`, kind: 'supply', baseUnit: 'pcs' }),
+      createItem(tx, f.superAdmin, { code: testItemCode(), name: `Thing B ${uid('t')}`, kind: 'supply', baseUnit: 'pcs' }),
     );
     await expect(
       asOrg(f.orgId, (tx) => mergeItems(tx, f.manager, { loserId: b.id, winnerId: a.id })),
@@ -818,7 +819,7 @@ describe('sellability: the bento box, the wholesale pack, and Milkis', () => {
     const f = await fixture('bento');
     const bento = await asOrg(f.orgId, (tx) =>
       createItem(tx, f.superAdmin, {
-        code: 'BENTO-SAMGYUP',
+        code: testItemCode(),
         name: `Samgyup bento ${uid('b')}`,
         kind: 'retail',
         baseUnit: 'pcs',
@@ -838,13 +839,13 @@ describe('sellability: the bento box, the wholesale pack, and Milkis', () => {
     const f = await fixture('both');
     const pack = await asOrg(f.orgId, (tx) =>
       createItem(tx, f.superAdmin, {
-        code: 'BEEF-5KG', name: `Beef Premium 5kg ${uid('p')}`, kind: 'meat_sliced', baseUnit: 'kg',
+        code: testItemCode(), name: `Beef Premium 5kg ${uid('p')}`, kind: 'meat_sliced', baseUnit: 'kg',
         isPurchasable: true, sellableRetail: false, sellableWholesale: true,
       }),
     );
     const milkis = await asOrg(f.orgId, (tx) =>
       createItem(tx, f.superAdmin, {
-        code: 'MILKIS', name: `Milkis ${uid('m')}`, kind: 'retail', baseUnit: 'pcs',
+        code: testItemCode(), name: `Milkis ${uid('m')}`, kind: 'retail', baseUnit: 'pcs',
         isPurchasable: true, sellableRetail: true, sellableWholesale: true,
       }),
     );
@@ -861,7 +862,7 @@ describe('sellability: the bento box, the wholesale pack, and Milkis', () => {
     // The org's default answer: it is something we buy.
     const sauce = await asOrg(f.orgId, (tx) =>
       createItem(tx, f.superAdmin, {
-        code: 'BULGOGI-SAUCE', name: `Bulgogi sauce ${uid('s')}`, kind: 'raw_material', baseUnit: 'ltr',
+        code: testItemCode(), name: `Bulgogi sauce ${uid('s')}`, kind: 'raw_material', baseUnit: 'ltr',
         isPurchasable: true, sellableRetail: false, sellableWholesale: false,
       }),
     );
@@ -906,7 +907,7 @@ describe('sellability: the bento box, the wholesale pack, and Milkis', () => {
   it('⛔ an override that overrides nothing is refused', async () => {
     const f = await fixture('emptyoverride');
     const item = await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, { code: 'X-2', name: `Thing ${uid('x')}`, kind: 'supply', baseUnit: 'pcs' }),
+      createItem(tx, f.superAdmin, { code: testItemCode(), name: `Thing ${uid('x')}`, kind: 'supply', baseUnit: 'pcs' }),
     );
     await expect(
       asOrg(f.orgId, (tx) => setStoreSellability(tx, f.superAdmin, { storeId: f.storeId, itemId: item.id })),
@@ -917,7 +918,7 @@ describe('sellability: the bento box, the wholesale pack, and Milkis', () => {
     const f = await fixture('anywhere');
     const sauce = await asOrg(f.orgId, (tx) =>
       createItem(tx, f.superAdmin, {
-        code: 'SAUCE-2', name: `Sauce ${uid('s')}`, kind: 'raw_material', baseUnit: 'ltr',
+        code: testItemCode(), name: `Sauce ${uid('s')}`, kind: 'raw_material', baseUnit: 'ltr',
         sellableWholesale: false,
       }),
     );
@@ -936,7 +937,7 @@ describe('sellability: the bento box, the wholesale pack, and Milkis', () => {
   it('⭐ DEF-130 — the org default can be changed on an EXISTING item, and every store follows it', async () => {
     const f = await fixture('flagedit');
     const item = await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, { code: 'MILKIS-1', name: `Milkis ${uid('m')}`, kind: 'retail', baseUnit: 'pcs' }),
+      createItem(tx, f.superAdmin, { code: testItemCode(), name: `Milkis ${uid('m')}`, kind: 'retail', baseUnit: 'pcs' }),
     );
     const before = await asOrg(f.orgId, (tx) => itemsRepo.sellabilityAt(tx, f.orgId, item.id, f.storeId));
     expect(before!.sellableWholesale).toBe(false);
@@ -958,7 +959,7 @@ describe('sellability: the bento box, the wholesale pack, and Milkis', () => {
   it('⭐ DEF-130 — a store’s raw override is listable, nulls and all, and vanishes when cleared', async () => {
     const f = await fixture('overridelist');
     const item = await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, { code: 'SAUCE-3', name: `Sauce ${uid('s')}`, kind: 'raw_material', baseUnit: 'ltr' }),
+      createItem(tx, f.superAdmin, { code: testItemCode(), name: `Sauce ${uid('s')}`, kind: 'raw_material', baseUnit: 'ltr' }),
     );
     expect(await asOrg(f.orgId, (tx) => itemsRepo.listStoreSellabilityOverrides(tx, f.orgId, item.id))).toEqual([]);
 

@@ -34,6 +34,7 @@ import {
   voidInvoice,
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -94,7 +95,7 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 async function itemKg(f: Fixture, name: string): Promise<string> {
   const item = await asOrg(f.orgId, (tx) =>
     createItem(tx, f.superAdmin, {
-      code: uid('LC'), name: `${name} ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg',
+      code: testItemCode(), name: `${name} ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg',
     }),
   );
   return item.id;

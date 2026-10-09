@@ -26,6 +26,7 @@ import { createCustomer, createItem, createSalesDay, createTradeOrder, dispatchT
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -116,7 +117,7 @@ async function mapSelf(f: Fixture, itemId: string): Promise<void> {
     values (${f.orgId}, ${f.storeId}, ${f.otherStoreId}, ${itemId}, ${itemId}, ${f.superAdmin.personId})`;
 }
 async function wholesaleItem(f: Fixture, name: string): Promise<string> {
-  const item = await asOrg(f.orgId, (tx) => createItem(tx, f.superAdmin, { code: uid('WS'), name: `${name} ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }));
+  const item = await asOrg(f.orgId, (tx) => createItem(tx, f.superAdmin, { code: testItemCode(), name: `${name} ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }));
   return item.id;
 }
 async function internalCustomer(f: Fixture): Promise<string> {

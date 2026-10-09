@@ -140,15 +140,15 @@ describe('R - renameItem', () => {
     'R1: super-admin renames name and code: row has both, {changed:true}, exactly one audit row with before/after, actor, source web. Killing mutants: drop the append; swap before and after. Red today: renameItem is not a function',
     async () => {
       const f = await fixture('r1');
-      const id = await newNamed(f, 'Coke 1.5', 'COKE15');
-      const res = await rename(f, f.superAdmin, id, 'Coke 1.5 (old)', 'COKE15-OLD');
+      const id = await newNamed(f, 'Coke 1.5', 'CK15-001');
+      const res = await rename(f, f.superAdmin, id, 'Coke 1.5 (old)', 'CK1O-001');
       expect(res).toEqual({ changed: true });
-      expect(await itemRow(id)).toMatchObject({ name: 'Coke 1.5 (old)', code: 'COKE15-OLD' });
+      expect(await itemRow(id)).toMatchObject({ name: 'Coke 1.5 (old)', code: 'CK1O-001' });
       const rows = await auditRows(id);
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({
         action: 'rename_item', entity: 'items', entity_id: id,
-        before: { name: 'Coke 1.5', code: 'COKE15' }, after: { name: 'Coke 1.5 (old)', code: 'COKE15-OLD' },
+        before: { name: 'Coke 1.5', code: 'CK15-001' }, after: { name: 'Coke 1.5 (old)', code: 'CK1O-001' },
         actor_person_id: f.superAdmin.personId, source: 'web',
       });
     },
@@ -159,10 +159,10 @@ describe('R - renameItem', () => {
     'R2: %s -> AuthorizationError, row unchanged, no audit row. Killing mutant: authorize(..., "manage_items") (admin and manager would pass). Red today: TypeError, not AuthorizationError',
     async (who) => {
       const f = await fixture(`r2${who}`);
-      const id = await newNamed(f, 'Coke 1.5', 'COKE15');
-      const err = await failure(rename(f, f[who], id, 'Coke 1.5 (old)', 'COKE15-OLD'));
+      const id = await newNamed(f, 'Coke 1.5', 'CK15-001');
+      const err = await failure(rename(f, f[who], id, 'Coke 1.5 (old)', 'CK1O-001'));
       expect(err).toBeInstanceOf(AuthorizationError);
-      expect(await itemRow(id)).toMatchObject({ name: 'Coke 1.5', code: 'COKE15' });
+      expect(await itemRow(id)).toMatchObject({ name: 'Coke 1.5', code: 'CK15-001' });
       expect(await auditRows(id)).toHaveLength(0);
     },
     30_000,
@@ -172,21 +172,21 @@ describe('R - renameItem', () => {
     'R3 (row 287, the point of the task): a kg item with an invoice line holds its name; rename it, then the replacement in pcs under the old name and code is accepted, the old item stays kg and its invoice line still points at it. Control leg: before the rename the same createItem is refused by items_org_name_key. Red today: control leg passes, renameItem is not a function',
     async () => {
       const f = await fixture('r3');
-      const oldId = await newNamed(f, 'Coke 1.5', 'COKE15', 'kg');
+      const oldId = await newNamed(f, 'Coke 1.5', 'CK15-001', 'kg');
       const invoiceId = await giveHistory(f, oldId);
       const control = await failure(
         asOrg(f.orgId, (tx) =>
-          createItem(tx, f.superAdmin, { code: 'COKE15-NEW', name: 'coke 1.5', kind: 'raw_material', baseUnit: 'pcs' }),
+          createItem(tx, f.superAdmin, { code: 'CK15-002', name: 'coke 1.5', kind: 'raw_material', baseUnit: 'pcs' }),
         ),
       );
       expect(constraintOf(control)).toBe('items_org_name_key');
 
-      await rename(f, f.superAdmin, oldId, 'Coke 1.5 (old)', 'COKE15-OLD');
+      await rename(f, f.superAdmin, oldId, 'Coke 1.5 (old)', 'CK1O-001');
       const replacement = await asOrg(f.orgId, (tx) =>
-        createItem(tx, f.superAdmin, { code: 'COKE15', name: 'Coke 1.5', kind: 'raw_material', baseUnit: 'pcs' }),
+        createItem(tx, f.superAdmin, { code: 'CK15-002', name: 'Coke 1.5', kind: 'raw_material', baseUnit: 'pcs' }),
       );
       expect(replacement.id).not.toBe(oldId);
-      expect(await itemRow(replacement.id)).toMatchObject({ name: 'Coke 1.5', code: 'COKE15', base_unit: 'pcs' });
+      expect(await itemRow(replacement.id)).toMatchObject({ name: 'Coke 1.5', code: 'CK15-002', base_unit: 'pcs' });
       expect((await itemRow(oldId)).base_unit).toBe('kg');
       const lines = await sql<{ item_id: string; purchase_unit: string }[]>`
         select item_id, purchase_unit from supplier_invoice_lines where supplier_invoice_id = ${invoiceId}`;
@@ -199,13 +199,14 @@ describe('R - renameItem', () => {
     "R4: rename to another item's name (different case) -> items_org_name_key; to another item's code -> items_org_code_key; row unchanged, no audit. Killing mutant: swallow the error and report changed. Red today: TypeError, no constraint",
     async () => {
       const f = await fixture('r4');
-      await newNamed(f, 'Pepsi 1.5', 'PEPSI15');
-      const id = await newNamed(f, 'Coke 1.5', 'COKE15');
-      const byName = await failure(rename(f, f.superAdmin, id, 'PEPSI 1.5', 'COKE15'));
+      await newNamed(f, 'Pepsi 1.5', 'PEPS-001');
+      const id = await newNamed(f, 'Coke 1.5', 'CK15-001');
+      const byName = await failure(rename(f, f.superAdmin, id, 'PEPSI 1.5', 'CK15-001'));
       expect(constraintOf(byName)).toBe('items_org_name_key');
-      const byCode = await failure(rename(f, f.superAdmin, id, 'Coke 1.5', 'PEPSI15'));
-      expect(constraintOf(byCode)).toBe('items_org_code_key');
-      expect(await itemRow(id)).toMatchObject({ name: 'Coke 1.5', code: 'COKE15' });
+      const byCode = await failure(rename(f, f.superAdmin, id, 'Coke 1.5', 'PEPS-001'));
+      // T-386 S3: the domain's high-water-mark check speaks before the unique index: the 'cannot be used' sentence, never the constraint.
+      expect((byCode as { userMessage?: string }).userMessage).toMatch(/^PEPS-001 cannot be used: /);
+      expect(await itemRow(id)).toMatchObject({ name: 'Coke 1.5', code: 'CK15-001' });
       expect(await auditRows(id)).toHaveLength(0);
     },
     30_000,
@@ -215,12 +216,12 @@ describe('R - renameItem', () => {
     'R5: blank name -> items_name_not_blank_check, blank code -> items_code_not_blank_check; unchanged, no audit. (The two sentences are asserted in the web file, W2b.) Killing mutant: name || item.name (a silent no-op, no refusal). Red today: TypeError',
     async () => {
       const f = await fixture('r5');
-      const id = await newNamed(f, 'Coke 1.5', 'COKE15');
-      const blankName = await failure(rename(f, f.superAdmin, id, '   ', 'COKE15'));
+      const id = await newNamed(f, 'Coke 1.5', 'CK15-001');
+      const blankName = await failure(rename(f, f.superAdmin, id, '   ', 'CK15-001'));
       expect(constraintOf(blankName)).toBe('items_name_not_blank_check');
       const blankCode = await failure(rename(f, f.superAdmin, id, 'Coke 1.5', ''));
       expect(constraintOf(blankCode)).toBe('items_code_not_blank_check');
-      expect(await itemRow(id)).toMatchObject({ name: 'Coke 1.5', code: 'COKE15' });
+      expect(await itemRow(id)).toMatchObject({ name: 'Coke 1.5', code: 'CK15-001' });
       expect(await auditRows(id)).toHaveLength(0);
     },
     30_000,
@@ -230,8 +231,8 @@ describe('R - renameItem', () => {
     'R6: same name and code -> {changed:false}, no audit row. Killing mutant: append unconditionally. Red today: TypeError',
     async () => {
       const f = await fixture('r6');
-      const id = await newNamed(f, 'Coke 1.5', 'COKE15');
-      expect(await rename(f, f.superAdmin, id, 'Coke 1.5', 'COKE15')).toEqual({ changed: false });
+      const id = await newNamed(f, 'Coke 1.5', 'CK15-001');
+      expect(await rename(f, f.superAdmin, id, 'Coke 1.5', 'CK15-001')).toEqual({ changed: false });
       expect(await auditRows(id)).toHaveLength(0);
     },
     30_000,
@@ -241,8 +242,8 @@ describe('R - renameItem', () => {
     'R6b: case-only change "coke 1.5" -> "Coke 1.5" is a real change: {changed:true}, one audit row, no clash with the row itself. Killing mutant: compare lower-cased (reports unchanged). Red today: TypeError',
     async () => {
       const f = await fixture('r6b');
-      const id = await newNamed(f, 'coke 1.5', 'COKE15');
-      expect(await rename(f, f.superAdmin, id, 'Coke 1.5', 'COKE15')).toEqual({ changed: true });
+      const id = await newNamed(f, 'coke 1.5', 'CK15-001');
+      expect(await rename(f, f.superAdmin, id, 'Coke 1.5', 'CK15-001')).toEqual({ changed: true });
       expect((await itemRow(id)).name).toBe('Coke 1.5');
       expect(await auditRows(id)).toHaveLength(1);
     },
@@ -253,10 +254,10 @@ describe('R - renameItem', () => {
     'R6c: name and code are trimmed before they are compared and written. Killing mutant: no trim (stores padded text, reports changed). Red today: TypeError',
     async () => {
       const f = await fixture('r6c');
-      const id = await newNamed(f, 'Coke 1.5', 'COKE15');
-      expect(await rename(f, f.superAdmin, id, '  Coke 1.5  ', ' COKE15 ')).toEqual({ changed: false });
-      expect(await rename(f, f.superAdmin, id, '  Coke 2  ', ' COKE2 ')).toEqual({ changed: true });
-      expect(await itemRow(id)).toMatchObject({ name: 'Coke 2', code: 'COKE2' });
+      const id = await newNamed(f, 'Coke 1.5', 'CK15-001');
+      expect(await rename(f, f.superAdmin, id, '  Coke 1.5  ', ' CK15-001 ')).toEqual({ changed: false });
+      expect(await rename(f, f.superAdmin, id, '  Coke 2  ', ' CK2X-001 ')).toEqual({ changed: true });
+      expect(await itemRow(id)).toMatchObject({ name: 'Coke 2', code: 'CK2X-001' });
     },
     30_000,
   );
@@ -265,10 +266,10 @@ describe('R - renameItem', () => {
     'R7: updateItem no longer accepts %s: refused with the pointer sentence, row unchanged. Killing mutant: updateItem passes name/code through. Red today: updateItem silently rewrites the row (promise resolves, "expected the call to be refused")',
     async (key) => {
       const f = await fixture(`r7${key}`);
-      const id = await newNamed(f, 'Coke 1.5', 'COKE15');
+      const id = await newNamed(f, 'Coke 1.5', 'CK15-001');
       const err = await failure(asOrg(f.orgId, (tx) => updateItem(tx, f.manager, id, { [key]: 'x' } as never)));
       expect(String((err as Error).message)).toContain("Rename an item with Rename on the item's page.");
-      expect(await itemRow(id)).toMatchObject({ name: 'Coke 1.5', code: 'COKE15' });
+      expect(await itemRow(id)).toMatchObject({ name: 'Coke 1.5', code: 'CK15-001' });
     },
     30_000,
   );
@@ -277,7 +278,7 @@ describe('R - renameItem', () => {
     'R7 (control): the flags edit through updateItem still works for a manager. Green today and after',
     async () => {
       const f = await fixture('r7c');
-      const id = await newNamed(f, 'Coke 1.5', 'COKE15');
+      const id = await newNamed(f, 'Coke 1.5', 'CK15-001');
       await asOrg(f.orgId, (tx) => updateItem(tx, f.manager, id, { sellableRetail: true }));
       const [row] = await sql<{ sellable_retail: boolean }[]>`select sellable_retail from items where id = ${id}`;
       expect(row!.sellable_retail).toBe(true);
@@ -289,15 +290,15 @@ describe('R - renameItem', () => {
     'R8: renaming an inactive item leaves it inactive (v1 reactivation bug); a merged item may be renamed and stays merged. Killing mutant: the rename writes status "active". Red today: TypeError',
     async () => {
       const f = await fixture('r8');
-      const id = await newNamed(f, 'Coke 1.5', 'COKE15');
+      const id = await newNamed(f, 'Coke 1.5', 'CK15-001');
       await sql`update items set status = 'inactive' where id = ${id}`;
-      expect(await rename(f, f.superAdmin, id, 'Coke 1.5 (old)', 'COKE15-OLD')).toEqual({ changed: true });
+      expect(await rename(f, f.superAdmin, id, 'Coke 1.5 (old)', 'CK1O-001')).toEqual({ changed: true });
       expect((await itemRow(id)).status).toBe('inactive');
 
-      const target = await newNamed(f, 'Target', 'TGT');
-      const mergedId = await newNamed(f, 'Merged one', 'MRG');
+      const target = await newNamed(f, 'Target', 'TGTX-001');
+      const mergedId = await newNamed(f, 'Merged one', 'MRGX-001');
       await sql`update items set status = 'merged', merged_into_id = ${target} where id = ${mergedId}`;
-      expect(await rename(f, f.superAdmin, mergedId, 'Merged one (x)', 'MRG-X')).toEqual({ changed: true });
+      expect(await rename(f, f.superAdmin, mergedId, 'Merged one (x)', 'MRGY-001')).toEqual({ changed: true });
       expect(await itemRow(mergedId)).toMatchObject({ status: 'merged', name: 'Merged one (x)' });
     },
     30_000,

@@ -42,6 +42,7 @@ import {
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { reverseConsumption } from '../../src/stock/consume';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -190,7 +191,7 @@ async function receiveStock(f: Fixture, itemId: string, itemKind: string, qty: s
 }
 
 async function wholesaleItem(f: Fixture): Promise<string> {
-  const item = await asOrg(f.orgId, (tx) => createItem(tx, f.superAdmin, { code: uid('WS'), name: `Beef ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }));
+  const item = await asOrg(f.orgId, (tx) => createItem(tx, f.superAdmin, { code: testItemCode(), name: `Beef ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }));
   return item.id;
 }
 /** A dispatched external sale (dated 10 Jan 2026) ready to return. */

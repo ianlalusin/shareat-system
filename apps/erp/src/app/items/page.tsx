@@ -5,8 +5,10 @@ import {
   mergeItemsAction,
   rejectItemRequestAction,
   requestItemAction,
+  suggestItemCodeAction,
 } from './actions';
-import { listItems, pendingRequests, duplicateCandidates, soldAsLabel } from './lib';
+import { ItemCodeField } from './ItemCodeField';
+import { listItems, mayApproveItem, pendingRequestCodes, pendingRequests, duplicateCandidates, soldAsLabel } from './lib';
 import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
@@ -34,6 +36,9 @@ export default async function ItemsPage({
     pendingRequests(actor.orgId),
     duplicateCandidates(actor.orgId),
   ]);
+  // T-386 R10. Presentation aids only (the domain stays the enforcement): who gets the override inputs, and what each pending
+  // request would be coded if approved right now (its stored code is only the requester's frozen preview).
+  const [canOverride, willBe] = await Promise.all([mayApproveItem(actor), pendingRequestCodes(actor, requests)]);
 
   return (
     <Page density="table">
@@ -126,9 +131,25 @@ export default async function ItemsPage({
           <ul className="space-y-3">
             {requests.map((r) => (
               <li key={r.id} className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
-                <div className="font-medium">
-                  {r.name} <span className="font-mono text-xs text-neutral-500">{r.code}</span>
-                </div>
+                <div className="font-medium">{r.name}</div>
+                {(() => {
+                  const w = willBe.get(r.id);
+                  if (!w || !w.stem) return null;
+                  return (
+                    <div className="text-xs text-neutral-600 dark:text-neutral-300">
+                      {w.code ? (
+                        <>Will be coded {w.code} on approval</>
+                      ) : (
+                        <>Every number under {w.stem} has been used (999 items); a super-admin must type a code.</>
+                      )}
+                      {w.sameStem.length > 0 && (
+                        <span className="block text-amber-800 dark:text-amber-300">
+                          Same code letters as: {w.sameStem.map((s) => `${s.code} ${s.name} (${s.status})`).join(', ')}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className="text-xs text-neutral-500 dark:text-neutral-400">
                   {itemKindLabel(r.kind)} · measured in {r.baseUnit} · {soldAsLabel(r)}
                   {r.reason ? ` · ${r.reason}` : ''}
@@ -150,6 +171,18 @@ export default async function ItemsPage({
                         ))}
                       </select>
                     </label>
+                    {canOverride && (
+                      <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                        Use a different code
+                        <input
+                          name="code"
+                          autoComplete="off"
+                          pattern="[A-Za-z0-9]{4}-[0-9]{3}"
+                          placeholder={willBe.get(r.id)?.code ?? 'CHWN-001'}
+                          className={`${INPUT} font-mono`}
+                        />
+                      </label>
+                    )}
                     <label className="flex items-center gap-1 text-xs">
                       <input type="checkbox" name="isPurchasable" defaultChecked={r.isPurchasable} className="h-4 w-4" />
                       Bought
@@ -227,11 +260,9 @@ export default async function ItemsPage({
         <form action={requestItemAction} className="space-y-3">
           <FormGrid>
             <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>} className="text-sm">
-              <input name="name" required placeholder="Pork belly" className={`${INPUT} ${FULL}`} />
+              <input id="item-name" name="name" required placeholder="Pork belly" className={`${INPUT} ${FULL}`} />
             </Field>
-            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Code</span>} className="text-sm">
-              <input name="code" required placeholder="PORK-BELLY" className={`${INPUT} ${FULL}`} />
-            </Field>
+            <ItemCodeField nameInputId="item-name" mode="new" canOverride={false} suggestAction={suggestItemCodeAction} />
             <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>} className="text-sm">
               <select name="kind" required defaultValue="" className={`${INPUT} ${FULL}`}>
                 <option value="">Choose a kind</option>
@@ -292,6 +323,20 @@ export default async function ItemsPage({
           </fieldset>
           <div className="flex flex-wrap gap-2">
             <button type="submit" className={BTN}>Request item</button>
+            {/* T-386 R7: the override belongs to the direct add (a super-admin), not to the request fields. */}
+            {canOverride && (
+              <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                Use a different code (super-admin)
+                <input
+                  name="code"
+                  type="text"
+                  autoComplete="off"
+                  pattern="[A-Za-z0-9]{4}-[0-9]{3}"
+                  placeholder="CHWN-001"
+                  className={`${INPUT} font-mono`}
+                />
+              </label>
+            )}
             <button
               type="submit"
               formAction={createItemAction}

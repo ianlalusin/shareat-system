@@ -204,8 +204,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 151 FAIL / 62 UNRESOLVED', () => {
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 62 });
+  it('accepted-baseline totals: 151 FAIL / 63 UNRESOLVED', () => {
+    // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
+    // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 63 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -380,7 +382,12 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // FAIL / UNRESOLVED assertions unmoved (they pass). Verified by running the census (1145).
     // 1145 -> 1146, T-384 audit-fix 2026-10-09. +1: a sales day with no saved platform rows renders the open add form's
     // "Save" `<button>` (A6). FAIL 151 / UNRESOLVED 62 unmoved. Verified by running the census (1146).
-    expect(results.length).toBe(1146);
+    // 1146 -> 1148, T-386 S4 2026-10-09. +2: `app/items/ItemCodeField.tsx` adds the super-admin code-override input and the
+    // rename "use the suggested code" checkbox (+1 UNRESOLVED baseline entry, touch-target-baseline.json). FAIL unmoved at 151.
+    // Verified by running the census (1148).
+    // 1148 -> 1149, T-386 audit round 2026-10-09. +1: the super-admin "Use a different code" override input moved out of
+    // ItemCodeField onto app/items/page.tsx beside "Add directly" (audit #4). FAIL 151 / UNRESOLVED 63 unmoved. Verified (1149).
+    expect(results.length).toBe(1149);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

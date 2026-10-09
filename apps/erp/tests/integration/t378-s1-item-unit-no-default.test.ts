@@ -49,6 +49,7 @@ vi.mock('@/components/shell/PageDescription', () => ({ PageDescription: () => nu
 
 import { BASE_UNITS, ITEM_KINDS } from '@shareat/db';
 import { paramsOf } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -172,7 +173,7 @@ describe('U2-U4 - a blank or unknown unit is refused in a sentence', () => {
       ACTOR_HOLDER.actor = f.superAdmin;
       const name = uid('Box thing');
       const to = await redirectOf(() =>
-        actions.createItemAction(form({ name, code: uid('BOX'), kind: 'raw_material', baseUnit: 'box' })),
+        actions.createItemAction(form({ name, code: testItemCode(), kind: 'raw_material', baseUnit: 'box' })),
       );
       expect(param(to, 'error')).toBe(UNIT_SENTENCE);
       const rows = await sql`select 1 from items where org_id = ${f.orgId} and name = ${name}`;

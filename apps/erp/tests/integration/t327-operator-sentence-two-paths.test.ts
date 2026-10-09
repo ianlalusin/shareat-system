@@ -95,6 +95,7 @@ import type { Actor } from '@shareat/auth';
 import { createItem, createPriceList, postEntry } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { errorMessage } from '../../src/lib/constraint-messages';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -211,7 +212,7 @@ describe('T-327 test 3 — the cashier reads a sentence, on two different constr
     const f = await fixture();
     const item = await asOrg(f.orgId, (tx) =>
       createItem(tx, f.superAdmin, {
-        code: uid('WS'),
+        code: testItemCode(),
         name: `Item ${uid('n')}`,
         kind: 'raw_material',
         baseUnit: 'kg',
@@ -264,7 +265,7 @@ describe('T-327 test 3 — the cashier reads a sentence, on two different constr
     const f = await fixture();
     const item = await asOrg(f.orgId, (tx) =>
       createItem(tx, f.superAdmin, {
-        code: uid('WS'),
+        code: testItemCode(),
         name: `Item ${uid('n')}`,
         kind: 'raw_material',
         baseUnit: 'kg',

@@ -34,6 +34,7 @@ import {
   postOpeningBalances,
 } from '@shareat/domain';
 import { postEntry } from '../../src/ledger/post-entry';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -187,7 +188,7 @@ describe('B3 — an item silently absent is not an item counted as zero', () => 
   async function anItem(f: Fixture, name: string) {
     const item = await asOrg(f.orgId, (tx) =>
       createItem(tx, f.superAdmin, {
-        code: uid('IT'), name: `${name} ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg',
+        code: testItemCode(), name: `${name} ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg',
       }),
     );
     return item.id;

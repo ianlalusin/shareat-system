@@ -575,10 +575,34 @@ describe('T-385 S2 - the verify-requires-submitted trigger', () => {
   });
 });
 
+// T-386 S2 (0189) - D10: re-using a number already given out under an item-code stem is refused by the trigger
+// items_code_never_reused (23514, CONSTRAINT = the trigger's name), and the person reads R5's sentence, not the raw error.
+describe('T-386 S2 - the item-code never-reused trigger', () => {
+  const KEY = 'items_code_never_reused';
+  const SENTENCE = "That code's number has already been given out under those letters. Leave the code blank to get the next free one.";
+
+  it(KEY, async () => {
+    const code = uid('t386-lookup');
+    const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
+    const orgId = org!.id;
+    const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
+    await sql`insert into items (org_id, code, name, kind, base_unit, created_by)
+              values (${orgId}, 'CHWN-001', 'Chicken wings', 'raw_material', 'kg', ${person!.id})`;
+    const err = await provoke(
+      () => sql`insert into items (org_id, code, name, kind, base_unit, created_by)
+                values (${orgId}, 'CHWN-001', 'Chicken winglets', 'raw_material', 'kg', ${person!.id})`,
+    );
+    const row = record(KEY, err);
+    expect(row.constraintName).toBe(KEY);
+    expect(row.message, `a raw driver error reached the person: ${row.message}`).toBe(CONSTRAINT_MESSAGES[KEY]);
+    expect(row.message).toBe(SENTENCE);
+  });
+});
+
 it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   const exercised = new Set(rows.map((r) => r.key));
   const missing = Object.keys(CONSTRAINT_MESSAGES).filter((k) => !exercised.has(k));
   expect(missing).toEqual([]);
-  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys + T-383 S1's items blank-name and blank-code CHECK keys + T-385 S2's sales_days_verify_requires_submitted = 42 rows provoked above.
-  expect(rows.length).toBe(42);
+  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys + T-383 S1's items blank-name and blank-code CHECK keys + T-385 S2's sales_days_verify_requires_submitted + T-386 S2's items_code_never_reused = 43 rows provoked above.
+  expect(rows.length).toBe(43);
 });

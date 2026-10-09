@@ -22,6 +22,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { closeDb, commissaryRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createItem, removeMap, upsertCommissaryLink, upsertMap, upsertOffering } from '@shareat/domain';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 3 });
 let seq = 0;
@@ -106,7 +107,7 @@ async function mkItem(
 ): Promise<string> {
   const item = await asOrg(f.orgId, (tx) =>
     createItem(tx, f.superAdmin, {
-      code: uid('IT'),
+      code: testItemCode(),
       name: `${name} ${uid('n')}`,
       kind: 'raw_material',
       baseUnit: opts.baseUnit ?? 'kg',

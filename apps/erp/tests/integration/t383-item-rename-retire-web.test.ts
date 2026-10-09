@@ -56,11 +56,9 @@ const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 const NOT_SUPER_ADMIN = 'Only a super-admin can rename an item.';
 const DUP_NAME =
   'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, rename the existing item on its page first.';
-const DUP_CODE = "That item code is already in use. To reuse it, change the existing item's code on its page first.";
 // Shared by createItem and the request actions: the readers are not all super-admins, so no 'on its page' hint.
 const SHARED_DUP_NAME =
   'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, ask a super-admin to rename the existing item first.';
-const SHARED_DUP_CODE = "That item code is already in use. To reuse it, ask a super-admin to change the existing item's code first.";
 const BLANK_NAME = 'Give the item a name people will recognise.';
 const BLANK_CODE = 'Give the item a code.';
 
@@ -156,14 +154,14 @@ describe('W1 - the Name and code form is drawn only for who may use it', () => {
     async () => {
       const f = await fixture('w1s');
       expect(await holdsApproveItem(f, f.superAdmin), 'super-admin must hold approve_item').toBe(true);
-      const id = await insertItem(f, 'Coke 1.5', 'COKE15');
+      const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
       const html = await detailHtmlAs(f.superAdmin, id);
       const name = inputTag(html, 'name');
       const code = inputTag(html, 'code');
       expect(name, 'a name input').not.toBeNull();
       expect(code, 'a code input').not.toBeNull();
       expect(name).toMatch(/value="Coke 1\.5"/);
-      expect(code).toMatch(/value="COKE15"/);
+      expect(code).toMatch(/value="CK15-001"/);
       expect(name).toMatch(/\brequired\b/);
       expect(code).toMatch(/\brequired\b/);
       const hidden = inputTag(html, 'itemId');
@@ -172,7 +170,7 @@ describe('W1 - the Name and code form is drawn only for who may use it', () => {
       expect(html).toMatch(/<fieldset disabled/);
       expect(html).toMatch(/aria-label="Edit [^"]*"[^>]*>Edit</);
       expect(html).not.toMatch(/>Rename</);
-      expect(html).not.toMatch(/(w-64|w-40)/);
+      expect(html).not.toMatch(/\b(w-64|w-40)\b/);
     },
     60_000,
   );
@@ -183,7 +181,7 @@ describe('W1 - the Name and code form is drawn only for who may use it', () => {
       async () => {
         const f = await fixture(`w1${who}`);
         expect(await holdsApproveItem(f, f[who]), `${who} must lack approve_item`).toBe(false);
-        const id = await insertItem(f, 'Coke 1.5', 'COKE15');
+        const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
         const html = await detailHtmlAs(f[who], id);
         expect(inputTag(html, 'name')).toBeNull();
         expect(html).not.toMatch(/>Rename</);
@@ -202,12 +200,12 @@ describe('W2 - renameItemAction', () => {
     'W2: super-admin -> ok "Renamed." and the row is renamed; the same values again -> ok "Nothing to change." Red today: renameItemAction is not a function',
     async () => {
       const f = await fixture('w2a');
-      const id = await insertItem(f, 'Coke 1.5', 'COKE15');
+      const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
       ACTOR_HOLDER.actor = f.superAdmin;
-      const to = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'Coke 1.5 (old)', code: 'COKE15-OLD' })));
+      const to = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'Coke 1.5 (old)', code: 'CK1O-001' })));
       expect(param(to, 'ok')).toBe('Renamed.');
-      expect(await rowOf(id)).toEqual({ name: 'Coke 1.5 (old)', code: 'COKE15-OLD' });
-      const again = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'Coke 1.5 (old)', code: 'COKE15-OLD' })));
+      expect(await rowOf(id)).toEqual({ name: 'Coke 1.5 (old)', code: 'CK1O-001' });
+      const again = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'Coke 1.5 (old)', code: 'CK1O-001' })));
       expect(param(again, 'ok')).toBe('Nothing to change.');
     },
     60_000,
@@ -217,14 +215,14 @@ describe('W2 - renameItemAction', () => {
     'W2: duplicate name -> error is the new name sentence (with the way out); duplicate code -> the new code sentence; row unchanged. Killing mutant: errorMessage keeps the old sentences. Red today: not a function',
     async () => {
       const f = await fixture('w2b');
-      await insertItem(f, 'Pepsi 1.5', 'PEPSI15');
-      const id = await insertItem(f, 'Coke 1.5', 'COKE15');
+      await insertItem(f, 'Pepsi 1.5', 'PEPS-001');
+      const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
       ACTOR_HOLDER.actor = f.superAdmin;
-      const byName = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'pepsi 1.5', code: 'COKE15' })));
+      const byName = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'pepsi 1.5', code: 'CK15-001' })));
       expect(param(byName, 'error')).toBe(DUP_NAME);
-      const byCode = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'Coke 1.5', code: 'PEPSI15' })));
-      expect(param(byCode, 'error')).toBe(DUP_CODE);
-      expect(await rowOf(id)).toEqual({ name: 'Coke 1.5', code: 'COKE15' });
+      const byCode = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'Coke 1.5', code: 'PEPS-001' })));
+      expect(param(byCode, 'error')).toMatch(/^PEPS-001 cannot be used: /);
+      expect(await rowOf(id)).toEqual({ name: 'Coke 1.5', code: 'CK15-001' });
     },
     60_000,
   );
@@ -233,13 +231,13 @@ describe('W2 - renameItemAction', () => {
     'W2b: blank name -> error is the blank-name sentence, blank code -> the blank-code sentence (CONSTRAINT_MESSAGES keys); row unchanged. Killing mutant: name || item.name (silent no-op, no error). Red today: not a function',
     async () => {
       const f = await fixture('w2c');
-      const id = await insertItem(f, 'Coke 1.5', 'COKE15');
+      const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
       ACTOR_HOLDER.actor = f.superAdmin;
-      const n = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: '   ', code: 'COKE15' })));
+      const n = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: '   ', code: 'CK15-001' })));
       expect(param(n, 'error')).toBe(BLANK_NAME);
       const c = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'Coke 1.5', code: '' })));
       expect(param(c, 'error')).toBe(BLANK_CODE);
-      expect(await rowOf(id)).toEqual({ name: 'Coke 1.5', code: 'COKE15' });
+      expect(await rowOf(id)).toEqual({ name: 'Coke 1.5', code: 'CK15-001' });
     },
     60_000,
   );
@@ -250,11 +248,11 @@ describe('W2 - renameItemAction', () => {
       async () => {
         const f = await fixture(`w2${who}`);
         expect(await holdsApproveItem(f, f[who]), `${who} must lack approve_item`).toBe(false);
-        const id = await insertItem(f, 'Coke 1.5', 'COKE15');
+        const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
         ACTOR_HOLDER.actor = f[who];
-        const to = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'Coke 1.5 (old)', code: 'COKE15-OLD' })));
+        const to = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'Coke 1.5 (old)', code: 'CK1O-001' })));
         expect(param(to, 'error')).toBe(NOT_SUPER_ADMIN);
-        expect(await rowOf(id)).toEqual({ name: 'Coke 1.5', code: 'COKE15' });
+        expect(await rowOf(id)).toEqual({ name: 'Coke 1.5', code: 'CK15-001' });
       },
       60_000,
     );
@@ -266,16 +264,16 @@ describe('W3 - the create form tells you how to reuse a taken name or code', () 
     'W3: createItemAction with a taken name -> error is the new name sentence; a taken code -> the new code sentence. Killing mutant: the old sentences. Red today: the old sentences',
     async () => {
       const f = await fixture('w3');
-      await insertItem(f, 'Coke 1.5', 'COKE15');
+      await insertItem(f, 'Coke 1.5', 'CK15-001');
       ACTOR_HOLDER.actor = f.superAdmin;
       const byName = await redirectOf(() =>
-        actions.createItemAction(form({ code: 'NEW1', name: 'coke 1.5', kind: 'raw_material', baseUnit: 'pcs' })),
+        actions.createItemAction(form({ code: 'NEWX-001', name: 'coke 1.5', kind: 'raw_material', baseUnit: 'pcs' })),
       );
       expect(param(byName, 'error')).toBe(SHARED_DUP_NAME);
       const byCode = await redirectOf(() =>
-        actions.createItemAction(form({ code: 'COKE15', name: 'Something else', kind: 'raw_material', baseUnit: 'pcs' })),
+        actions.createItemAction(form({ code: 'CK15-001', name: 'Something else', kind: 'raw_material', baseUnit: 'pcs' })),
       );
-      expect(param(byCode, 'error')).toBe(SHARED_DUP_CODE);
+      expect(param(byCode, 'error')).toMatch(/^CK15-001 cannot be used: /);
     },
     60_000,
   );
@@ -284,10 +282,10 @@ describe('W3 - the create form tells you how to reuse a taken name or code', () 
     "W3b: a manager who submits the duplicate (createItemAction; requestItemAction accepts an exact duplicate as a request, so it raises no duplicate error) is never told to rename 'on its page' (they cannot). Guards the shared errorMessage against leaking the page hint to non-super-admins. Green against a2fd5c3 (their refusal is an authorization sentence); kept as the regression guard",
     async () => {
       const f = await fixture('w3b');
-      await insertItem(f, 'Coke 1.5', 'COKE15');
+      await insertItem(f, 'Coke 1.5', 'CK15-001');
       ACTOR_HOLDER.actor = f.manager;
       const to = await redirectOf(() =>
-        actions.createItemAction(form({ code: 'COKE15', name: 'Coke 1.5', kind: 'raw_material', baseUnit: 'pcs' })),
+        actions.createItemAction(form({ code: 'CK15-001', name: 'Coke 1.5', kind: 'raw_material', baseUnit: 'pcs' })),
       );
       const err = param(to, 'error') ?? '';
       expect(err).not.toBe('');
