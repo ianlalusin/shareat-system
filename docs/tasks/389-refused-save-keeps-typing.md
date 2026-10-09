@@ -1,6 +1,6 @@
 # T-389: a refused save keeps what the user typed, on every saved-record form (DEF-617)
 
-**Status:** S1 DONE 2026-10-10 (`e2b3a1e`, on main; browser smoke on 9008 passed: supplier, tender, invoice lines, store link, two-tab stale, one-minute expiry, dropped, second person sees nothing, 375 px). S2-S4 (29 forms in 21 pages, guard baseline `apps/erp/tests/typed-baseline.json`) and S5 next. Ian answered Q1 (a).
+**Status:** S3 DONE 2026-10-10 (`a4d533f`, merged to main `c590727`; 9 forms; field-name pattern now allows a hyphen; baseline minus 8 pages; browser smoke on 9008 pending). Scope notes from the S3 audit: the ADD forms that share an action (budgets add-cap, recurring create, the channel payout panel) are outside the census and still lose typing on a refusal (S5 decides); the fixed-assets in-service confirm branch reopens with the user's own earlier values (cosmetic). S2 in a lane; S4 after T-390 S1 lands (shares cutover/actions.ts). | Earlier: S1 DONE 2026-10-10 (`e2b3a1e`, on main; browser smoke on 9008 passed: supplier, tender, invoice lines, store link, two-tab stale, one-minute expiry, dropped, second person sees nothing, 375 px). S2-S4 (29 forms in 21 pages, guard baseline `apps/erp/tests/typed-baseline.json`) and S5 next. Ian answered Q1 (a).
 **Model:** Sonnet lanes, tester first, then builder (bible row 184). An amendment is written in plan mode (Opus).
 **Migration:** none. This is app-layer only (flash cookie, one client component, the actions). The next free number
 stays **0190**.
