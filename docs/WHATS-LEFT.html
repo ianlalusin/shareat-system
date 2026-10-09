@@ -164,7 +164,7 @@
         <div class="k">Now</div>
         <h3>Sales days from POS, and the bill override</h3>
         <ul>
-          <li>T-375: POS v1 day feed live; <b>Lipa linked on 8 Oct</b> &mdash; add its Cash and Collected tenders, then import each closed day (Submit, then a different person verifies)</li><li>On main for the wrap-up PR: T-383 S2 (retire and restore), T-386 S5 (recode script), T-388 (a POS pull holds back only the short item); then the recode dry run with you</li>
+          <li>T-389 keep-typing: S3 (9 money forms) on main, S2 (10 admin/settings/staff forms) built; T-390 S1 opening count per room in its gate run</li><li>T-375: POS v1 day feed live; <b>Lipa linked on 8 Oct</b> &mdash; add its Cash and Collected tenders, then import each closed day (Submit, then a different person verifies)</li><li>Live since 10 Oct (PR #8): T-383 S2, T-386 S5, T-388, T-389 S1, T-395 S1; next the recode dry run with you</li>
         </ul>
       </div>
       <div class="step">
@@ -219,7 +219,7 @@
       <div class="item"><div class="id">ADR-015</div><div><b>POS &amp; CUSTOMER on the shared backend:</b> copied POS after 1 Jan 2027. Planned phase.</div></div>
       <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
       <div class="item"><div class="id">POS pulls</div><div>Interim pulls rebuilt per your redesign (T-375 S5-lite, S6). At the shared backend (ADR-015 P2) the pull goes away: usage posts after verify, and refunded or voided items wait for a manager decision (your answers, bible row 282).</div></div>
-      <div class="item"><div class="id">T-389 S2&ndash;S5</div><div>A refused save keeps your typing: done on supplier, tenders, store link and invoice lines (S1); 29 more forms in 21 pages to sweep (DEF-617).</div></div>
+      <div class="item"><div class="id">T-389 S2&ndash;S5</div><div>A refused save keeps your typing: S1 (4 forms) live, S3 (9 money forms) on main, S2 (10 forms) built; S4 (stock and items) and S5 close remain (DEF-617).</div></div>
       <div class="item"><div class="id">T-386 S6</div><div>The database shape check for item codes, after the production recode (S5, built) reads 0 unconverted.</div></div>
       <div class="item"><div class="id">Cutover plan</div><div><b>docs/plans/remaining-build-plan.md:</b> T-390 opening stock (spec reviewed; S2 waits on your cost-basis answer), T-391 master data, T-392 dual-run comparator, T-393 backups, T-394 rehearsal, T-395 PIN throttle (done), T-396 link 3 stores, T-397 payroll bridge.</div></div>
       <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
@@ -240,7 +240,7 @@
     <p class="lede">Each holds work still.</p>
     <div class="items">
       <div class="item y"><div class="id">Plan questions</div><div><b>13 cutover questions</b> (plan-q1&hellip;q13; Q1 decides what v2 runs on 1 Jan), plus t390-q1/q2, t395-q1 on the Open Questions page.</div></div>
-      <div class="item y"><div class="id">0190 prechecks</div><div>Run the READ ONLY 0190 precheck with me as doadmin before it merges (docs/ops/README.md).</div></div>
+      <div class="item y"><div class="id">0191 precheck</div><div>When T-390 S1 is ready: run the READ ONLY 0191 precheck as doadmin (docs/ops/README.md). It also lists each store's default room; a store with none cannot record its opening count. (0190 done 10 Oct, live.)</div></div>
       <div class="item y"><div class="id">Item recode</div><div><b>Be present for the T-386 S5 recode dry run</b> on production (existing items get CHWN-001 style codes; nothing is applied until you approve the dry run).</div></div>
       <div class="item y"><div class="id">Lipa tenders</div><div><b>Add Cash and &ldquo;Collected off the till&rdquo;</b> (both Kind Cash, no money account; POS names <code>Cash</code> and <code>collected</code>) on Settings &rsaquo; POS link, then import the closed day. A refused import writes nothing.</div></div>
       <div class="item y"><div class="id">Open Questions</div><div>The rest of &ldquo;collected&rdquo;: does the owner usually keep it, and who at Lipa records it each day.</div></div>
@@ -287,7 +287,7 @@
           <tr><td class="n">T-380</td><td>No typed amount, reason or banner text in any page address: one signed one-minute message cookie, every screen converted, crafted links show nothing</td><td class="n">476, 603, 604, 605</td></tr>
           <tr><td class="n">T-381</td><td>Two people booking the same missed month take turns; the second gets a sentence</td><td class="n">606</td></tr>
           <tr><td class="n">T-382</td><td>A guarded unlink from POS (super-admin, reason, audit; 0187); a POS store with imported sales never links to another store</td><td class="n">607</td></tr>
-          <tr><td class="n">T-388</td><td>A POS usage pull posts every line that has stock and holds back only the short item, named in words; the day is finalized only when nothing is held (row 297). On main, deploys at wrap-up</td><td class="n">618, 619, 620, 621, 622</td></tr>
+          <tr><td class="n">T-388</td><td>A POS usage pull posts every line that has stock and holds back only the short item, named in words; the day is finalized only when nothing is held (row 297). Live</td><td class="n">618, 619, 620, 621, 622</td></tr>
           <tr><td class="n">T-395</td><td>PIN sign-in charges each attempt before checking it, so a burst of guesses can no longer slip past the lockout; a store stops after 50 wrong PINs a day (live, 0190). Repeated wrong PINs and a stopped store show on Findings, and a manager of that store reopens PIN sign-in on the Staff page (S2 on main)</td><td class="n">063, 626</td></tr>
         </tbody>
       </table>
