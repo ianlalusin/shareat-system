@@ -288,7 +288,8 @@ async function item(f: Fixture, code: string, name: string, baseUnit = 'kg'): Pr
     -- ⭐ T-149: a price list is a WHOLESALE instrument, so anything quoted on one must be sold
     -- wholesale. These fixtures exist to test rates, so they are wholesale items by definition.
     values (${f.orgId}, ${code}, ${name}, 'raw_material', ${baseUnit}, ${f.adminId}, true)
-    on conflict (org_id, code) do update set updated_at = now()
+    -- T-386 / 0189: item codes are unique ignoring case, so the conflict target is the upper(code) index.
+    on conflict (org_id, upper(code)) do update set updated_at = now()
     returning id
   `;
   return row!.id;
