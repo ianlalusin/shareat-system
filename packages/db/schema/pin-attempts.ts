@@ -13,6 +13,7 @@
 import { sql } from 'drizzle-orm';
 import { integer, pgTable, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
+import { persons } from './persons';
 import { stores } from './stores';
 
 export const pinAttemptThrottle = pgTable(
@@ -29,6 +30,10 @@ export const pinAttemptThrottle = pgTable(
     windowStartedAt: timestamp('window_started_at', { withTimezone: true }),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    // T-395 tier 2: set when the daily miss budget trips; only a reopen clears it.
+    stoppedAt: timestamp('stopped_at', { withTimezone: true }),
+    reopenedAt: timestamp('reopened_at', { withTimezone: true }),
+    reopenedBy: uuid('reopened_by').references(() => persons.id, { onDelete: 'restrict' }),
   },
   (t) => [
     // One counter per store — v1's key. A store belongs to one org, so this alone also fixes

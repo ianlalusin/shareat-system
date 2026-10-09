@@ -264,6 +264,12 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'A rate-limit counter, not configuration — same class as sessions and for the same ' +
       'reason. A cooldown mid-window in December has no business surviving into January.',
   },
+  sign_in_attempts: {
+    class: 'purge',
+    reason:
+      'Attempt history, same class as pin_attempt_throttle and for the same reason: attempt ' +
+      'history from December has no business in the January ledger.',
+  },
 
   // ---- T-154: the staff master record (Phase 4, lane B) --------------------------------
   positions: {
