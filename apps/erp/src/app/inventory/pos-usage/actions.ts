@@ -40,6 +40,23 @@ export async function buildPlanAction(fd: FormData): Promise<void> {
   return await redirectWithFlash('/inventory/pos-usage', { store: storeId, day: salesDayId, pull: result.pullId }, { ok: `Plan built — ${result.lines.length} line(s).` });
 }
 
+/**
+ * T-388 R12 (audit 4): the error flash is capped at 600 characters, so say the count and the first 3 sentences, then point at
+ * the page. A sentence is never cut mid-way. `sentences` ends with the closing untick sentence, which is left out here.
+ */
+function heldFlash(section: string, posted: number, held: number, sentences: readonly string[]): string {
+  const real = sentences.filter((x) => x !== 'Or untick a held line to finalize without it.');
+  const head = `${section}: ${posted} line(s) posted. Not finalized yet, ${held} held back: `;
+  const tail = real.length > 3 ? ' See the held lines below.' : ' Or untick a held line to finalize without it. See the held lines below.';
+  let out = head;
+  for (const x of real.slice(0, 3)) {
+    // keep whole sentences only: stop adding once one would not fit in the 600 characters
+    if ((out + x + tail).length > 600) break;
+    out += (out === head ? '' : ' ') + x;
+  }
+  return out + tail;
+}
+
 export async function finalizeSectionAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/pos-usage');
   const storeId = str(fd, 'storeId');
@@ -84,9 +101,15 @@ export async function finalizeSectionAction(fd: FormData): Promise<void> {
     return await redirectWithFlash('/inventory/pos-usage', { store: storeId, day: salesDayId, pull: pullId }, { error: outcome?.reason ?? 'Finalize refused.' });
   }
 
-  return await redirectWithFlash('/inventory/pos-usage', { store: storeId, day: salesDayId, pull: pullId }, { ok: outcome.blockedLineCount > 0
-        ? `${section}: ${outcome.postedLineCount} line(s) posted, ${outcome.blockedLineCount} skipped (frozen location) — finalized either way.`
-        : `${section}: ${outcome.postedLineCount} line(s) posted.` });
+  // T-388 R12: something held -> an error-style flash (a person must act), the section stays open.
+  if (outcome.held.length > 0) {
+    return await redirectWithFlash(
+      '/inventory/pos-usage',
+      { store: storeId, day: salesDayId, pull: pullId },
+      { error: heldFlash(section, outcome.postedLineCount, outcome.held.length, outcome.heldSentences) },
+    );
+  }
+  return await redirectWithFlash('/inventory/pos-usage', { store: storeId, day: salesDayId, pull: pullId }, { ok: `${section}: ${outcome.postedLineCount} line(s) posted.` });
 }
 
 export async function requestMapFromPullAction(fd: FormData): Promise<void> {

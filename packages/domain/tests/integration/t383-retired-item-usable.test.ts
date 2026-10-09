@@ -388,7 +388,7 @@ describe('C5-C6 - POS usage pull still depletes a retired item (direct map, reci
 
     const { plan, outcome } = await pull(w, day, 'direct');
     expect(plan.lines.find((l) => l.posItemKey === 'coke')?.itemId).toBe(item);
-    expect(outcome).toMatchObject({ ok: true, postedLineCount: 1, blockedLineCount: 0 });
+    expect(outcome).toMatchObject({ ok: true, postedLineCount: 1, held: [], finalized: true });
     expect(await onHand(item, w.kitchenA)).toBe('39.000');
     expect(await movementCount(item, 'out')).toBe(1);
   });
@@ -412,7 +412,7 @@ describe('C5-C6 - POS usage pull still depletes a retired item (direct map, reci
 
     const { plan, outcome } = await pull(w, day, 'recipe');
     expect(plan.lines.find((l) => l.itemId === ingredient), 'the retired ingredient must be in the plan').toBeDefined();
-    expect(outcome).toMatchObject({ ok: true, postedLineCount: 1, blockedLineCount: 0 });
+    expect(outcome).toMatchObject({ ok: true, postedLineCount: 1, held: [], finalized: true });
     expect(await onHand(ingredient, w.kitchenA)).toBe('8.000');
   });
 });
