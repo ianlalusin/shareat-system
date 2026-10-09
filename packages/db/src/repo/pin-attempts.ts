@@ -39,8 +39,7 @@ function autoReopen(opts: ReopenOpts): number | null {
   return opts.stopAutoReopenMinutes === undefined ? STOP_AUTO_REOPEN_MINUTES : opts.stopAutoReopenMinutes;
 }
 
-// checkThrottle / statusForStore (the read-only panel status) arrive with S2's caller, the Staff
-// panel: the production-caller ratchet refuses a function nothing calls.
+// T-395 S2: statusForStore (below) is the Staff panel's read-only status; its caller is staff/page.tsx.
 
 export type Charge =
   | { refused: 'stopped' | 'locked'; until: Date | null }
@@ -186,16 +185,18 @@ export async function reopen(
   tx: Tx,
   storeId: string,
   actorPersonId: string,
-): Promise<{ reopened: boolean; stoppedAt: Date | null }> {
+): Promise<{ reopened: boolean; stoppedAt: Date | null; reopenedAt: Date | null }> {
   const rows = (await tx.execute(sql`
     update pin_attempt_throttle t set
       stopped_at = null, reopened_at = now(), reopened_by = ${actorPersonId}::uuid,
       fail_count = 0, window_started_at = null, locked_until = null, updated_at = now()
     from (select stopped_at from pin_attempt_throttle where store_id = ${storeId} and stopped_at is not null for update) old
     where t.store_id = ${storeId} and t.stopped_at is not null
-    returning old.stopped_at as "stoppedAt"
-  `)) as unknown as Array<{ stoppedAt: Date | string | null }>;
-  return rows[0] ? { reopened: true, stoppedAt: toDate(rows[0].stoppedAt) } : { reopened: false, stoppedAt: null };
+    returning old.stopped_at as "stoppedAt", t.reopened_at as "reopenedAt"
+  `)) as unknown as Array<{ stoppedAt: Date | string | null; reopenedAt: Date | string | null }>;
+  return rows[0]
+    ? { reopened: true, stoppedAt: toDate(rows[0].stoppedAt), reopenedAt: toDate(rows[0].reopenedAt) }
+    : { reopened: false, stoppedAt: null, reopenedAt: null };
 }
 
 /**
@@ -213,4 +214,49 @@ export async function clearOnSuccess(tx: Tx, storeId: string): Promise<void> {
         or(gt(pinAttemptThrottle.failCount, 0), sql`${pinAttemptThrottle.lockedUntil} is not null`),
       ),
     );
+}
+
+export interface PinSignInStatus {
+  stopped: boolean;
+  stoppedAt: Date | null;
+  paused: boolean;
+  pausedUntil: Date | null;
+  missesLast24h: number;
+  /** Misses in the 24h before stopped_at (0 when not stopped): what the stop was about, however old it is. */
+  missesBeforeStop: number;
+}
+
+/** The Staff panel's read: normal, paused (tier 1) or stopped (tier 2), and the rolling 24-hour miss count. */
+export async function statusForStore(tx: Tx, storeId: string): Promise<PinSignInStatus> {
+  const auto = STOP_AUTO_REOPEN_MINUTES;
+  const rows = (await tx.execute(sql`
+    select (t.stopped_at is not null and (${auto}::int is null or t.stopped_at + make_interval(mins => ${auto}::int) > now())) as stopped,
+           t.stopped_at as stopped_at,
+           (t.locked_until is not null and t.locked_until > now()) as paused,
+           t.locked_until as locked_until,
+           (select count(*)::int from sign_in_attempts a
+             where a.store_id = t.store_id and a.kind = 'miss'
+               and a.occurred_at > greatest(now() - interval '24 hours', coalesce(t.reopened_at, '-infinity'::timestamptz))) as misses,
+           (select count(*)::int from sign_in_attempts a
+             where a.store_id = t.store_id and a.kind = 'miss' and t.stopped_at is not null
+               and a.occurred_at > t.stopped_at - interval '24 hours' and a.occurred_at <= t.stopped_at) as misses_before_stop
+      from pin_attempt_throttle t where t.store_id = ${storeId}
+  `)) as unknown as {
+    stopped: boolean;
+    stopped_at: Date | string | null;
+    paused: boolean;
+    locked_until: Date | string | null;
+    misses: number;
+    misses_before_stop: number;
+  }[];
+  const r = rows[0];
+  if (!r) return { stopped: false, stoppedAt: null, paused: false, pausedUntil: null, missesLast24h: 0, missesBeforeStop: 0 };
+  return {
+    stopped: r.stopped,
+    stoppedAt: r.stopped && r.stopped_at ? new Date(r.stopped_at) : null,
+    paused: r.paused,
+    pausedUntil: r.paused && r.locked_until ? new Date(r.locked_until) : null,
+    missesLast24h: r.misses,
+    missesBeforeStop: r.stopped ? r.misses_before_stop : 0,
+  };
 }

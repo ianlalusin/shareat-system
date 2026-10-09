@@ -390,7 +390,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1149 -> 1151, T-383 S2a 2026-10-09. +2: the Retire section on `items/[id]/page.tsx` (super-admin only) has two submit
     // `<button>`s, one in the Retire form and one in the Restore form (a static census counts both branches); the hidden
     // `itemId`/`status` inputs are not controls. FAIL / UNRESOLVED assertions unmoved. Verified by running the census (1151).
-    expect(results.length).toBe(1151);
+    // 1151 -> 1152, T-395 S2 2026-10-10. +1 PASS: the "Reopen PIN sign-in" submit `<button>` in the new
+    // `app/staff/PinSignInPanel.tsx` (the hidden `storeId` input is not a control). FAIL 151 / UNRESOLVED unmoved, so
+    // touch-target-baseline.json needs no entry. Verified by running the census (1152).
+    expect(results.length).toBe(1152);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
