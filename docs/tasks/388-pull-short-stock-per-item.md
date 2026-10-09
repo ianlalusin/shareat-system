@@ -278,7 +278,7 @@ and a bible §13 row recording R7 (finalized = nothing confirmed left unposted, 
 superseding T-177 invariants 4 and 9 (orchestrator/planner, not the lanes); Q1 answered.
 
 ## Questions only Ian can answer
-**Q1 (`t388-q1-old-dropped-lines`, priority medium). Sections finalized before this fix may have lost lines.**
+**ANSWERED (Ian, 2026-10-10): a — leave them; no reopen action. A recent day with no count since can be voided and rebuilt.** **Q1 (`t388-q1-old-dropped-lines`, priority medium). Sections finalized before this fix may have lost lines.**
 Example: a day where Coke was short; the whole Kitchen's usage never posted, and the section says Finalized.
 Options: **(a, recommended) leave them as they are**: any physical count since then already put on-hand right,
 so posting them now would count that usage twice; a manager who wants one recent day fixed (no count since,
