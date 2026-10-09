@@ -93,14 +93,15 @@ async function livePgTriggers(): Promise<{ tgname: string; table: string; tgenab
 }
 
 describe('T1 — registry floor', () => {
-  it('TRIGGER_REGISTRY has >=57 entries, exactly 22 with mode:\'always\', and those 22 names equal R1\'s table — was red today: the import fails, triggers/registry.ts does not exist', async () => {
+  it('TRIGGER_REGISTRY has >=57 entries, exactly 23 with mode:\'always\', and those 23 names equal R1\'s table — was red today: the import fails, triggers/registry.ts does not exist', async () => {
     const mod = await loadRegistry();
     expect(mod, 'triggers/registry.ts does not exist yet').toBeDefined();
     const reg = mod!.TRIGGER_REGISTRY;
     expect(Object.keys(reg).length, 'expected >=57 non-internal triggers classified').toBeGreaterThanOrEqual(57);
 
     const always = Object.entries(reg).filter(([, e]) => e.mode === 'always');
-    expect(always.length, 'expected exactly 22 ALWAYS triggers (R1 + 0175 + 0179 + 0183)').toBe(22);
+    // T-386 S2 (2026-10-09): 22 -> 23, DELIBERATELY. item_code_counters_forward_only (migration 0189) is ENABLE ALWAYS: the mark only rises.
+    expect(always.length, 'expected exactly 23 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189)').toBe(23);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {

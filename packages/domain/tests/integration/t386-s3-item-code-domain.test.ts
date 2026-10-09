@@ -118,7 +118,7 @@ const requestRow = async (id: string) =>
     select code, status, created_item_id, similar_warning from item_requests where id = ${id}`)[0]!;
 const auditRows = (itemId: string) =>
   sql<{ before: { name?: string; code?: string }; after: { name?: string; code?: string }; actor_person_id: string }[]>`
-    select before, after, actor_person_id from audit_log where entity = 'items' and entity_id = ${itemId} and action = 'rename_item' order by created_at, id`;
+    select before, after, actor_person_id from audit_log where entity = 'items' and entity_id = ${itemId} and action = 'rename_item' order by occurred_at, id`;
 
 /** The sentence a person reads: `RefusalError.userMessage`. Fails if the call succeeded or threw something that is not a refusal. */
 async function sentenceOf(p: Promise<unknown>): Promise<string> {
