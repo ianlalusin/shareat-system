@@ -33,6 +33,8 @@ import { formatItemCode, itemCodeStem, parseItemCode } from './code';
 import { allocateItemCode, requireItemCodeStem, validateItemCodeOverride } from './code-allocation';
 
 export { ITEM_CODE_RE, formatItemCode, itemCodeStem, parseItemCode } from './code';
+export { recodeItems, type RecodeRow } from './recode';
+export { allocateItemCode, requireItemCodeStem } from './code-allocation';
 
 export interface CreateItemInput {
   /**

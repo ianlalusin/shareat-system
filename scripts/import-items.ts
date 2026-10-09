@@ -35,9 +35,12 @@
  * Without `--apply` it is a DRY RUN and writes nothing.
  */
 import { config } from 'dotenv';
-import postgres from 'postgres';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import admin from 'firebase-admin';
+import { closeDb, itemsRepo, personsRepo, withOrgPrincipal } from '@shareat/db';
+import type { BaseUnit, ItemKind } from '@shareat/db/schema';
+import { allocateItemCode, requireItemCodeStem } from '@shareat/domain';
 
 config({ path: '.env.local' });
 
@@ -107,19 +110,42 @@ const isJunkName = (name: string) => {
   return t.length < 2 || !/[a-z]/i.test(t);
 };
 
-/** PORK-BELLY from "Pork belly". Collisions get a numeric suffix. */
-function codeFor(name: string, taken: Set<string>): string {
-  const base =
-    name
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 28) || 'ITEM';
-  let code = base;
-  let n = 2;
-  while (taken.has(code)) code = `${base}-${n++}`;
-  taken.add(code);
-  return code;
+/**
+ * T-386: each new name gets its code from `allocateItemCode`, in the SAME transaction as its insert, and only after the name is
+ * known to be new - a re-run (every name already present) consumes no number. `PRBL-001`, never `PORK-BELLY`.
+ */
+export async function insertCleanItems(input: {
+  orgId: string;
+  items: { name: string; kind: string; baseUnit: string }[];
+}): Promise<{ inserted: number; skipped: number }> {
+  return withOrgPrincipal(input.orgId, async (tx) => {
+    const personId = await personsRepo.firstPersonId(tx, input.orgId);
+    if (!personId) throw new Error(`Org ${input.orgId} has no persons row to attribute the items to.`);
+    const known = new Set(
+      (await itemsRepo.listItems(tx, input.orgId, { includeInactive: true })).map((i) => key(i.name)),
+    );
+    let inserted = 0;
+    let skipped = 0;
+    for (const it of input.items) {
+      if (known.has(key(it.name))) {
+        skipped++;
+        continue;
+      }
+      const code = await allocateItemCode(tx, input.orgId, requireItemCodeStem(it.name));
+      await itemsRepo.insertItem(tx, {
+        orgId: input.orgId,
+        code,
+        name: it.name,
+        kind: it.kind as ItemKind,
+        baseUnit: it.baseUnit as BaseUnit,
+        notes: 'Imported from v1 item master by scripts/import-items.ts',
+        createdBy: personId,
+      });
+      known.add(key(it.name));
+      inserted++;
+    }
+    return { inserted, skipped };
+  });
 }
 
 async function main() {
@@ -229,38 +255,24 @@ async function main() {
     process.exit(0);
   }
 
-  const url = process.env.DATABASE_URL!;
-  const sql = postgres(url, { max: 1 });
-  const [person] = await sql<{ id: string }[]>`
-    select id from persons where org_id = ${orgId} order by created_at limit 1`;
-  if (!person) throw new Error(`Org ${orgId} has no persons row to attribute the items to.`);
-
-  const [existing] = await sql<{ codes: string[] }[]>`
-    select coalesce(array_agg(code), '{}') as codes from items where org_id = ${orgId}`;
-  const taken = new Set(existing!.codes);
-
-  let inserted = 0;
-  let skipped = 0;
-  for (const it of take) {
-    const code = codeFor(it.name, taken);
-    // ⚠️ ON CONFLICT DO NOTHING on the case-insensitive name index — re-running must be safe.
-    const res = await sql`
-      insert into items (org_id, code, name, kind, base_unit, notes, created_by)
-      values (${orgId}, ${code}, ${it.name}, ${it.kind}, ${it.baseUnit},
-              ${'Imported from v1 item master by scripts/import-items.ts'}, ${person.id})
-      on conflict do nothing
-      returning id`;
-    if (res.length > 0) inserted++;
-    else skipped++;
-  }
-
-  const [total] = await sql<{ n: number }[]>`select count(*)::int n from items where org_id = ${orgId}`;
-  console.log(`\nInserted ${inserted}, already present ${skipped}. Org now has ${total!.n} items.`);
-  await sql.end();
+  const { inserted, skipped } = await insertCleanItems({ orgId, items: take });
+  console.log(`
+Inserted ${inserted}, already present ${skipped}.`);
+  await closeDb();
   process.exit(0);
 }
 
-main().catch((e) => {
-  console.error('Import FAILED:', e);
-  process.exit(1);
-});
+const isMain = (() => {
+  try {
+    return !!process.argv[1] && realpathSync(process.argv[1]).toLowerCase() === realpathSync(fileURLToPath(import.meta.url)).toLowerCase();
+  } catch {
+    return false;
+  }
+})();
+
+if (isMain) {
+  main().catch((e) => {
+    console.error('Import FAILED:', e);
+    process.exit(1);
+  });
+}
