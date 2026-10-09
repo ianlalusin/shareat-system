@@ -236,6 +236,8 @@ vi.mock('../src/app/items/lib', async (importOriginal) => {
     itemPrices: (...a: unknown[]) => itemPricesMock(...a),
     sellabilityByStore: (...a: unknown[]) => sellabilityByStoreMock(...a),
     unitHistoryExists: (...a: unknown[]) => unitHistoryExistsMock(...a),
+    // T-383 S2a: the Retire section's readout; I2 proves labels only, so an empty answer.
+    retireReadout: async () => ({ onHand: [], activePosMaps: 0, activeRecipes: 0 }),
     // T-378 S4 (DEF-600): the item page now asks the approve_item gate (withOrgPrincipal + authorize).
     // I2 proves only a label, so the gate is stubbed to allow.
     withOrgPrincipal: async (_orgId: string, fn: (tx: unknown) => unknown) => fn({}),
@@ -258,6 +260,7 @@ vi.mock('../src/app/items/actions', () => ({
   updateItemFlagsAction: vi.fn(),
   changeItemUnitAction: vi.fn(),
   renameItemAction: vi.fn(),
+  setItemStatusAction: vi.fn(),
   suggestItemCodeAction: vi.fn(),
 }));
 

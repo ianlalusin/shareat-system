@@ -241,6 +241,7 @@ export { CATALOGUE_SOURCES } from '../schema/supplier-items';
 export type { CatalogueSource } from '../schema/supplier-items';
 export type {
   ItemRow,
+  RetireReadout,
   InvoiceLineInput,
   InvoiceLineRow,
   PriceObservation,

@@ -21,7 +21,6 @@ convertSpecimen
 countedVariances
 createRecipe
 customerReturnableQuantity
-deactivateItem
 declareSupplierItem
 depreciateAsset
 depreciationDrift

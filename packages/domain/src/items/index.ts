@@ -208,10 +208,36 @@ export async function renameItem(
   return transaction(run);
 }
 
-export async function deactivateItem(tx: Tx | null, actor: Actor, itemId: string): Promise<void> {
+/**
+ * ⭐ T-383 R3. Retire (`inactive`) or restore (`active`) an item: one audited, reversible path, super-admin only
+ * (`approve_item`). Not gated on history, stock, maps or recipes (the page shows them). A merged item is refused in words
+ * (the database's `items_merged_shape_check` backs it; this check exists for the sentence). The audit append comes after the UPDATE.
+ */
+export async function setItemStatus(
+  tx: Tx | null,
+  actor: Actor,
+  input: { itemId: string; status: 'active' | 'inactive' },
+): Promise<{ changed: boolean }> {
   const run = async (trx: Tx) => {
-    await authorize(trx, actor, 'manage_items', {});
-    await itemsRepo.updateItem(trx, actor.orgId, itemId, { status: 'inactive' });
+    await authorize(trx, actor, 'approve_item', {});
+    const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
+    if (!item) throw gone(`setItemStatus: item ${input.itemId} does not exist.`, 'item');
+    if (item.status === 'merged') {
+      const S = 'This item was merged into another, so it cannot be retired or restored.';
+      throw refuse(S, S);
+    }
+    if (item.status === input.status) return { changed: false };
+    await itemsRepo.updateItem(trx, actor.orgId, input.itemId, { status: input.status });
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: input.status === 'inactive' ? 'retire_item' : 'restore_item',
+      entity: 'items',
+      entityId: input.itemId,
+      before: { status: item.status },
+      after: { status: input.status },
+      source: 'web',
+    });
+    return { changed: true };
   };
   if (tx) return run(tx);
   return transaction(run);

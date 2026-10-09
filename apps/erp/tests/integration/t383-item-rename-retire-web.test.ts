@@ -52,8 +52,9 @@ const sql = postgres(url, { max: 5 });
 let seq = 0;
 const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 
-// Until S2 lands managers can still retire (deactivateItem), so the sentence names only the rename.
-const NOT_SUPER_ADMIN = 'Only a super-admin can rename an item.';
+// T-383 S2a (B2.4): retire and restore are super-admin only too, so one combined sentence covers all three (W5b).
+const NOT_SUPER_ADMIN = 'Only a super-admin can rename, retire or restore an item.';
+const MERGED_SENTENCE = 'This item was merged into another, so it cannot be retired or restored.';
 const DUP_NAME =
   'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, rename the existing item on its page first.';
 // Shared by createItem and the request actions: the readers are not all super-admins, so no 'on its page' hint.
@@ -121,7 +122,10 @@ function form(fields: Record<string, string>): FormData {
 
 let ItemDetailPage: typeof import('../../src/app/items/[id]/page').default;
 // `renameItemAction` does not exist at HEAD: typed loosely so each test fails on its BEHAVIOUR (TypeError), not at import.
-let actions: typeof import('../../src/app/items/actions') & { renameItemAction: (fd: FormData) => Promise<void> };
+let actions: typeof import('../../src/app/items/actions') & {
+  renameItemAction: (fd: FormData) => Promise<void>;
+  setItemStatusAction: (fd: FormData) => Promise<void>; // T-383 S2a: does not exist at HEAD
+};
 
 beforeAll(async () => {
   ItemDetailPage = (await import('../../src/app/items/[id]/page')).default;
@@ -290,6 +294,237 @@ describe('W3 - the create form tells you how to reuse a taken name or code', () 
       const err = param(to, 'error') ?? '';
       expect(err).not.toBe('');
       expect(err).not.toContain('on its page');
+    },
+    60_000,
+  );
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// T-383 S2a (Amendment B2.4): the Retire section and setItemStatusAction. Red today: no section, no action.
+// ---------------------------------------------------------------------------------------------------------------
+async function stockRoom(f: Fixture, storeId: string): Promise<string> {
+  const [t] = await sql<{ id: string }[]>`
+    insert into location_types (org_id, code, name) values (${f.orgId}, ${uid('lt')}, 'Stockroom') returning id`;
+  const [l] = await sql<{ id: string }[]>`
+    insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
+    values (${f.orgId}, ${storeId}, ${uid('loc')}, 'Kitchen', ${t!.id}, 'operating', true, ${f.superAdmin.personId}) returning id`;
+  return l!.id;
+}
+async function stockAt(f: Fixture, storeId: string, itemId: string, qty: string): Promise<void> {
+  const [existing] = await sql<{ id: string }[]>`select id from stock_locations where store_id = ${storeId} limit 1`;
+  const loc = existing?.id ?? (await stockRoom(f, storeId));
+  await sql`
+    insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
+    values (${f.orgId}, ${storeId}, ${loc}, ${itemId}, now(), ${qty}, 'receipt', 'test', ${crypto.randomUUID()}, ${f.superAdmin.personId})`;
+}
+async function otherStore(f: Fixture, name: string): Promise<string> {
+  const [s] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${f.orgId}, ${uid('st')}, ${name}) returning id`;
+  return s!.id;
+}
+async function liveMap(f: Fixture, itemId: string): Promise<void> {
+  await sql`
+    insert into pos_item_maps (org_id, store_id, pos_item_key, pos_item_name, mode, item_id, quantity_per_sale, status, created_by)
+    values (${f.orgId}, ${f.storeId}, ${uid('pk')}, 'POS Coke', 'direct', ${itemId}, 1, 'active', ${f.superAdmin.personId})`;
+}
+const statusOf = async (id: string) => (await sql<{ status: string }[]>`select status from items where id = ${id}`)[0]!.status;
+const retireAudit = (id: string) =>
+  sql<{ action: string }[]>`select action from audit_log where entity = 'items' and entity_id = ${id} and action in ('retire_item','restore_item') order by occurred_at, id`;
+
+describe('W4 - the Retire section', () => {
+  it(
+    'W4 (super-admin, active item): with +5 at one store, +3 then -3 at another (net zero) and one live POS map, the section lists the first store with its quantity and unit, the map line with the B2 wording, and not the net-zero store; it carries the explanatory line, a Retire button, and a hidden status=inactive. Killing mutants: readout without HAVING (the net-zero store appears); POS-map line wording; drop the gate (W4 manager leg). Red today: no Retire section',
+    async () => {
+      const f = await fixture('w4');
+      const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
+      const zulu = await otherStore(f, 'Zulu');
+      await stockAt(f, f.storeId, id, '5');
+      await stockAt(f, zulu, id, '3');
+      await stockAt(f, zulu, id, '-3');
+      await liveMap(f, id);
+      expect(await holdsApproveItem(f, f.superAdmin)).toBe(true);
+      const html = decode(await detailHtmlAs(f.superAdmin, id));
+      expect(html).toMatch(/Still holds stock at: Store \(5(\.0+)? kg\)/);
+      expect(html).toContain('It stays on count sheets until counted out.');
+      // The sellability section lists every store, so scope to the Retire section only.
+      const retireStart = html.indexOf('Retire or restore');
+      expect(retireStart).toBeGreaterThan(-1);
+      const retireSection = html.slice(retireStart, html.indexOf('</section>', retireStart));
+      expect(retireSection).not.toContain('Zulu');
+      expect(html).toMatch(
+        /1 live POS maps? still use it\. Point them at the replacement, or sales keep using up this item, even below zero\./,
+      );
+      expect(html).not.toMatch(/live recipes? still use it/);
+      expect(html).toContain(
+        'Retiring keeps every record. It can no longer be ordered, received, priced, mapped to a POS item or put on a new recipe. Stock already on hand can still be used, wasted, moved and counted until it runs out. You can restore it.',
+      );
+      expect(html).toMatch(/>Retire</);
+      expect(html).not.toMatch(/>Restore</);
+      expect(inputTag(html, 'status')).toMatch(/type="hidden"/);
+      expect(inputTag(html, 'status')).toMatch(/value="inactive"/);
+    },
+    60_000,
+  );
+
+  it(
+    'W4 (clean item): nothing uses it -> the Retire button is there but none of the readout lines are. Killing mutant: draw the lines unconditionally (zero counts rendered). Red today: no Retire button',
+    async () => {
+      const f = await fixture('w4c');
+      const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
+      const html = decode(await detailHtmlAs(f.superAdmin, id));
+      expect(html).toMatch(/>Retire</);
+      expect(html).not.toContain('Still holds stock at');
+      expect(html).not.toMatch(/live POS maps? still use it/);
+      expect(html).not.toMatch(/live recipes? still use it/);
+    },
+    60_000,
+  );
+
+  it(
+    'W4b (super-admin, inactive item): with +5 at a store it shows "Retired.", the store line ending "It can still be used, wasted, moved and counted until it runs out.", a Restore button with hidden status=active, and no Retire button. Killing mutant: the loader reads the readout only when active (the store line vanishes). Red today: no Retired. text, no Restore button',
+    async () => {
+      const f = await fixture('w4b');
+      const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
+      await stockAt(f, f.storeId, id, '5');
+      await sql`update items set status = 'inactive' where id = ${id}`;
+      const html = decode(await detailHtmlAs(f.superAdmin, id));
+      expect(html).toContain('Retired.');
+      expect(html).toMatch(/Still holds stock at: Store \(5(\.0+)? kg\)/);
+      expect(html).toContain('It can still be used, wasted, moved and counted until it runs out.');
+      expect(html).toMatch(/>Restore</);
+      expect(html).not.toMatch(/>Retire</);
+      expect(inputTag(html, 'status')).toMatch(/value="active"/);
+    },
+    60_000,
+  );
+
+  it(
+    'W4 (merged item): no Retire section at all (no Retire, no Restore, no explanatory line). Killing mutant: drop the merged exclusion. Red today passes trivially, so this leg is a regression guard that goes red on the mutant; named as legitimately green today',
+    async () => {
+      const f = await fixture('w4m');
+      const target = await insertItem(f, 'Target', 'TGTX-001');
+      const id = await insertItem(f, 'Merged one', 'MRGX-001');
+      await sql`update items set status = 'merged', merged_into_id = ${target} where id = ${id}`;
+      const html = decode(await detailHtmlAs(f.superAdmin, id));
+      expect(html).not.toMatch(/>Retire</);
+      expect(html).not.toMatch(/>Restore</);
+      expect(html).not.toContain('Retiring keeps every record');
+    },
+    60_000,
+  );
+
+  for (const who of ['manager', 'admin'] as const) {
+    it(
+      `W4 (${who}): no Retire or Restore control, no form with status. Killing mutant: drop the gate on the section. Green today (no section yet); the gate mutant turns it red`,
+      async () => {
+        const f = await fixture(`w4${who}`);
+        const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
+        const html = decode(await detailHtmlAs(f[who], id));
+        expect(html).not.toMatch(/>Retire</);
+        expect(html).not.toMatch(/>Restore</);
+        expect(inputTag(html, 'status')).toBeNull();
+      },
+      60_000,
+    );
+  }
+});
+
+describe('W5 - setItemStatusAction', () => {
+  it(
+    'W5: retire -> ok "Retired. Its records stay." and the row is inactive with one retire_item audit row; restore -> ok "Restored."; asking for the state it is already in -> ok "No change: it already is." and no new audit row. Red today: setItemStatusAction is not a function',
+    async () => {
+      const f = await fixture('w5');
+      const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
+      ACTOR_HOLDER.actor = f.superAdmin;
+      const retired = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'inactive' })));
+      expect(param(retired, 'ok')).toBe('Retired. Its records stay.');
+      expect(await statusOf(id)).toBe('inactive');
+      const again = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'inactive' })));
+      expect(param(again, 'ok')).toBe('No change: it already is.');
+      const restored = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'active' })));
+      expect(param(restored, 'ok')).toBe('Restored.');
+      expect(await statusOf(id)).toBe('active');
+      expect((await retireAudit(id)).map((r) => r.action)).toEqual(['retire_item', 'restore_item']);
+    },
+    60_000,
+  );
+
+  it(
+    'W5: a merged item -> error is the merged sentence, status unchanged. Killing mutant: errorMessage lets the DB constraint text through. Red today: not a function',
+    async () => {
+      const f = await fixture('w5m');
+      const target = await insertItem(f, 'Target', 'TGTX-001');
+      const id = await insertItem(f, 'Merged one', 'MRGX-001');
+      await sql`update items set status = 'merged', merged_into_id = ${target} where id = ${id}`;
+      ACTOR_HOLDER.actor = f.superAdmin;
+      const to = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'inactive' })));
+      expect(param(to, 'error')).toBe(MERGED_SENTENCE);
+      expect(await statusOf(id)).toBe('merged');
+    },
+    60_000,
+  );
+
+  for (const who of ['manager', 'admin'] as const) {
+    it(
+      `W5b (${who}): retire and restore both get exactly the combined super-admin sentence; status unchanged, no audit. Killing mutant: drop the AuthorizationError mapping (generic approve_item sentence). Red today: not a function`,
+      async () => {
+        const f = await fixture(`w5b${who}`);
+        expect(await holdsApproveItem(f, f[who])).toBe(false);
+        const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
+        ACTOR_HOLDER.actor = f[who];
+        const retire = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'inactive' })));
+        expect(param(retire, 'error')).toBe(NOT_SUPER_ADMIN);
+        await sql`update items set status = 'inactive' where id = ${id}`;
+        const restore = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'active' })));
+        expect(param(restore, 'error')).toBe(NOT_SUPER_ADMIN);
+        expect(await statusOf(id)).toBe('inactive');
+        expect(await retireAudit(id)).toHaveLength(0);
+      },
+      60_000,
+    );
+  }
+});
+
+describe('W5c - a malformed status is refused, never coerced', () => {
+  for (const [label, fields] of [
+    ['missing', {}],
+    ['empty', { status: '' }],
+    ['garbage', { status: 'garbage' }],
+  ] as const) {
+    it(
+      `W5c (${label}): a super-admin posting status ${label} -> a plain-words error, status unchanged, no audit row. Killing mutant: coerce anything that is not "active" to inactive. Red until the builder's fix`,
+      async () => {
+        const f = await fixture(`w5c${label}`);
+        const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
+        ACTOR_HOLDER.actor = f.superAdmin;
+        const to = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, ...fields })));
+        const err = param(to, 'error') ?? '';
+        expect(err, 'an error banner').not.toBe('');
+        expect(err).not.toMatch(/violates|constraint|undefined|TypeError/i);
+        expect(param(to, 'ok')).toBeNull();
+        expect(await statusOf(id)).toBe('active');
+        expect(await retireAudit(id)).toHaveLength(0);
+      },
+      60_000,
+    );
+  }
+});
+
+describe('W4c - the other readout lines', () => {
+  it(
+    'W4c: an item used by one active recipe and two active POS maps shows "1 live recipe still use it" and the plural "2 live POS maps still use it". Killing mutants: break either line in page.tsx (drop the recipe line; singular-only wording). Red today only if page.tsx is broken',
+    async () => {
+      const f = await fixture('w4c2');
+      const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
+      const other = await insertItem(f, 'Other', 'OTHR-001');
+      await liveMap(f, id);
+      await liveMap(f, id);
+      const [r] = await sql<{ id: string }[]>`
+        insert into production_recipes (org_id, name, output_item_id, output_quantity, created_by)
+        values (${f.orgId}, ${uid('recipe')}, ${other}, 1, ${f.superAdmin.personId}) returning id`;
+      await sql`insert into production_recipe_lines (recipe_id, item_id, quantity, unit) values (${r!.id}, ${id}, 1, 'kg')`;
+      const html = decode(await detailHtmlAs(f.superAdmin, id));
+      expect(html).toMatch(/1 live recipes? still use it\./);
+      expect(html).toMatch(/2 live POS maps still use it\./);
     },
     60_000,
   );

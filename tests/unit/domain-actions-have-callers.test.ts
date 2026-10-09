@@ -154,9 +154,6 @@ const EXEMPT: Record<string, string> = {
   depreciationDrift:
     'UNWIRED — DEF-198. The should-versus-does reconciliation T-135 describes as an OIL finding. ' +
     'No detector reads it, so a depreciation outage stays invisible exactly as it did in v1.',
-  deactivateItem:
-    'UNWIRED — DEF-198. `/items` wires create / update / merge / request / approve / reject and ' +
-    'not this, so an item can be created and never retired.',
   declareSupplierItem:
     'UNWIRED — DEF-198. Which supplier sells which item has no screen, so the declaration ' +
     '`validateInvoiceLines` checks against can only be made by hand-run SQL.',
