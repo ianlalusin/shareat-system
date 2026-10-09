@@ -553,3 +553,17 @@ has run out.**
   retired item's page lists the live map; the next count corrects it; re-pointing the map is one edit.
 - **(b) Block that pull line once the retired item is at zero at that store**, so the day cannot be finalised until
   someone re-points the map. Stricter, but a forgotten map stops a store's day close; about half a day more.
+
+## B2 errata — orchestrator, 2026-10-09, from the S2b tester's evidence (verified at source)
+- **Stock never goes below zero, for any item.** `consume()` refuses a shortfall (`packages/domain/src/stock/consume.ts`,
+  "A shortfall is refused and nothing is written") and the trigger `stock_movements_no_negative_on_hand_trg` (0063/0142)
+  backs it. So every B2 statement that a pull "keeps depleting below zero" is false: a retired item at zero blocks its
+  pull line exactly as an active item at zero does. Case C5b is dropped; Open Question `t383-q3-retired-map-at-zero` is
+  withdrawn (its option a was never possible).
+- **The S2a page sentence is corrected** (S2b carries it): "{n} live POS map(s) still use it. Point them at the
+  replacement; sales keep using up this item until its stock runs out." (was "... or sales keep using up this item,
+  even below zero.").
+- **What a short line does today is DEF-618** (a short item skips its whole location's lines, finalizes anyway, and says
+  "frozen location"). Not T-383's to fix; Ian's choice is on the Open Questions page (`def-618-pull-short-stock`).
+- B2.2's "found two more in the back" (usage or wastage of a retired item at zero) is refused by the consume engine, not
+  by a status check; do not promise it. L1's "retired -2" leg cannot exist (+3 then -3 is used instead).
