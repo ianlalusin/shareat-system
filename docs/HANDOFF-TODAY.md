@@ -34,7 +34,7 @@ browser smoke on 9008 for T-383 S2a/S2b, T-388, T-389 S1 (forged sessions).
    watch the deploy; expect one more row in `drizzle.__drizzle_migrations` than after 0189; record results in
    `docs/ops/README.md`. Then **T-386 S5 recode dry run on production with Ian** before `--apply`.
 2. **T-389 S2–S4** (29 forms in 21 pages; baseline `apps/erp/tests/typed-baseline.json`) — three lanes on disjoint
-   pages, or one Workflow sweep if Ian approves (speed proposal 5).
+   pages, or one Workflow sweep (approved, row 298).
 3. **T-395 S2** (findings + reopen panel + smoke script) and **T-390 S1/S3/S4** (S2 waits on t390-q2).
 
 ## Do not decide these alone — they are Ian's (Open Questions page)
@@ -42,7 +42,7 @@ browser smoke on 9008 for T-383 S2a/S2b, T-388, T-389 S1 (forged sessions).
   AP/AR, inventory; payroll/attendance stay on v1 to 1 Mar). Q7 needs Ian to place a Spaces key on the droplet.
 - `t390-q2` opening-stock cost basis (bible says weighted average; recommended last v1 delivery price) — holds T-390 S2.
 - `t390-q1` cost for items with no v1 delivery · `t395-q1` 50-a-day stop (a needs an email-capable manager per store).
-- Speed proposals (chat 10 Oct): 1,3,4,6,7 in use; **5 (Workflow sweeps) needs Ian's opt-in**. PR #7 merge; t387-q4..q7.
+- PR #7 merge; t387-q4..q7. (Speed practices 1-7 approved, incl. Workflow sweeps: bible row 298, `b7a10c7`, on local main for the next PR.)
 - POS "collected" follow-ups (`pos-collected-lipa`); automatic morning import (plan Q6).
 
 ## Traps that have actually bitten
@@ -67,7 +67,7 @@ before building anything gated on Ian. GREP the register and bible, never Read t
 State: production at 0189 (7489bba). PR for branch release/2026-10-10 carries T-383 S2, T-386 S5, T-388,
 T-389 S1, T-395 S1 + migration 0190: merge only when CI is green, after the 0190 precheck with Ian, on his go;
 then the T-386 recode dry run with Ian. Next: T-389 S2-S4, T-395 S2, T-390 S1/S3/S4. Next free migration 0191.
-STANDING: GitHub CI once a day at wrap-up (row 296; exceptions: early PR to unblock Ian, migrations prechecked);
+STANDING: bible row 298 speed practices (worktree per lane, shared fixtures, template DBs, Workflow sweeps approved); GitHub CI once a day at wrap-up (row 296; exceptions: early PR to unblock Ian, migrations prechecked);
 lanes are Sonnet subagents (tester/builder/auditor separate, own _test DB, worktrees wt-t385/wt-t386; never two
 agents on one DB at once; workers never run git); Opus for specs and a fresh Opus review of every money/auth spec;
 never commit a lane while its agent has background work; byte-check every changed file for \r and \x08;
