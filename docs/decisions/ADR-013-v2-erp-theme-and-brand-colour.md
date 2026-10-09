@@ -546,9 +546,15 @@ The rule that a body-copy link must clear AAA uses `--danger`, as before.
   money. Both are self-hosted through `next/font`, the same families the Website uses and the headings
   v1's staff already know. Dark mode keeps the same fonts. The sheet's Manrope on C was a mock-up variation
   and is **not** ruled.
-- **Buttons are pills** (`rounded-full`). **Fields have a 10px radius, cards 14px.** Amendment 3's one size
-  holds: a pill is a shape, not a second size. The control height stays the one `Button` and `Input`
-  geometry.
+- ⭐ **Buttons are 12px rounded rectangles, across the whole app** (`rounded-[12px]`). **Fields have a 10px
+  radius, cards 14px. Pills (`rounded-full`) are only for things you read or filter by: status badges, filter
+  chips and counts.** Amendment 3's one size holds. ⚠️ This amendment first said "buttons are pills". Ian
+  reopened that the same day (*"pill shaped button or rounded corner rectangle for the entire app let
+  weigh"*), saw both drawn on the same screens (Artifact `9cvfRibBSRuvBbZYe8DfjW`, board `Shapes`), and ruled
+  *"rounded rectangle like your pick"*. The reasons that decided it: a pill button looks like a status badge in
+  the same row; rectangles match the fields and cards (v1's pill-beside-rectangle mismatch was flagged in the
+  audit); and they are about 12px narrower each, which matters in tables and toolbars. The brand still comes
+  from the type, colour and logo.
 - Status badges are a dot plus a word, and keep v1's colour code: draft blue, submitted amber, approved and
   posted green, in progress violet, voided and overdue red, closed slate.
 - The logo is the Website's `logo-icon` PNG. The wordmark reads "Shar**E**at", with the E in `--brand-ink`.
