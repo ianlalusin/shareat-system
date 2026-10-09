@@ -24,7 +24,7 @@
  * ends that person's live sessions. A revoked row beside a live session is the same defect wearing
  * different clothes.
  */
-import { sessionsRepo, accessRepo, goneSentence, personsRepo, refuse, type Tx } from '@shareat/db';
+import { sessionsRepo, accessRepo, auditLogRepo, pinAttemptsRepo, goneSentence, personsRepo, refuse, UUID_SHAPE, type Tx } from '@shareat/db';
 import { authorize, type Actor } from './authorize';
 import { AuthorizationError } from './errors';
 
@@ -280,4 +280,31 @@ async function refuseIfLastWayIn(
     'This is the last way into this organisation. Give someone else an admin role, or issue this ' +
       'person a PIN, before unlinking it.',
   );
+}
+
+/**
+ * T-395 S2 (R5, R6, I9) - a manager reopens a store whose PIN sign-in the daily budget stopped.
+ *
+ * Gated on `enrol_staff` AT THAT STORE (whoever can issue a new PIN there can already let a new
+ * person in; no new capability). A store that is not stopped is a no-op: nothing changes and NO
+ * audit row is written. A real reopen writes exactly one `audit_log` row in the same transaction.
+ * Cross-org is refused by `authorize` (the actor's org is not the store's).
+ */
+export async function reopenPinSignIn(tx: Tx, actor: Actor, storeId: string): Promise<{ reopened: boolean }> {
+  if (!UUID_SHAPE.test(storeId)) {
+    throw refuse('Pick a store to reopen PIN sign-in for.', 'Pick a store to reopen PIN sign-in for.');
+  }
+  await authorize(tx, actor, 'enrol_staff', { storeId });
+  const result = await pinAttemptsRepo.reopen(tx, storeId, actor.personId);
+  if (!result.reopened) return { reopened: false };
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'reopen_pin_sign_in',
+    entity: 'store',
+    entityId: storeId,
+    before: { stoppedAt: result.stoppedAt ? result.stoppedAt.toISOString() : null },
+    after: { reopenedAt: result.reopenedAt ? result.reopenedAt.toISOString() : null },
+    source: 'web',
+  });
+  return { reopened: true };
 }

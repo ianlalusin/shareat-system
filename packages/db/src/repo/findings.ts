@@ -21,6 +21,7 @@ import { isPreOpeningSql } from './stores';
 import { notCustodySourceType, tillFloorPosition } from './remittance';
 import { periodBounds } from './fiscal-periods';
 import * as posV1Repo from './pos-v1';
+import { STOP_AUTO_REOPEN_MINUTES } from './pin-attempts';
 import { businessDayRange, formatBusinessDateTime, parseBusinessDate } from '@shareat/core/datetime';
 
 /**
@@ -2400,6 +2401,105 @@ export async function attendanceConfigMissing(tx: Tx, orgId: string): Promise<De
       `${r.store_name} has no live attendance/pay-cycle policy at all — nothing for Labor Code ` +
       'Art. 103 to judge, and /settings/attendance has nothing to show an admin until a policy ' +
       'exists to edit.',
+  }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-395 S2 - the two PIN sign-in findings (R12) and the Staff panel's status read.
+// Both SOFT, never hard: closeReadiness blocks a period close on hard findings, and a sign-in
+// problem must not block the books.
+// ---------------------------------------------------------------------------------------------
+
+const FINDING_DAILY_MISSES = 20;
+/** Ian: 7 Manila days = today and the 6 before. The cutoff date is today - (FINDING_LOOKBACK_DAYS - 1). */
+const FINDING_LOOKBACK_DAYS = 7;
+
+/**
+ * `pinSignInFailures`, one per (store, terminal): some Manila day in the last 7 had at least 20
+ * misses at that terminal, or the terminal caused at least one tier-1 pause. Bucketed by MANILA day
+ * (never a UTC day), grouped by terminal (a null terminal keys as 'none').
+ */
+export async function pinSignInFailures(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    with per_day as (
+      select a.store_id, a.device_id,
+             (a.occurred_at at time zone 'Asia/Manila')::date as day,
+             count(*) filter (where a.kind = 'miss')::int    as misses,
+             count(*) filter (where a.kind = 'lockout')::int as pauses,
+             min(a.occurred_at) as first_at,
+             max(a.occurred_at) as last_at
+        from sign_in_attempts a
+       where a.org_id = ${orgId}
+         and (a.occurred_at at time zone 'Asia/Manila')::date >= ((now() at time zone 'Asia/Manila')::date - (${FINDING_LOOKBACK_DAYS}::int - 1))
+         and a.kind in ('miss', 'lockout')
+       group by a.store_id, a.device_id, (a.occurred_at at time zone 'Asia/Manila')::date
+    ), totals as (
+      select store_id, device_id, sum(pauses)::int as pauses_total, max(misses)::int as worst
+        from per_day group by store_id, device_id
+    ), worst_day as (
+      select distinct on (store_id, device_id) store_id, device_id, day::text as day, misses, pauses, first_at, last_at
+        from per_day
+       order by store_id, device_id, misses desc, pauses desc, day desc
+    )
+    select w.store_id::text as store_id, w.device_id::text as device_id, w.day, w.misses,
+           w.first_at as first_at, w.last_at as last_at, w.pauses as pauses,
+           s.name as store_name, p.display_name as device_name
+      from worst_day w
+      join totals t on t.store_id = w.store_id and t.device_id is not distinct from w.device_id
+      join stores s on s.id = w.store_id
+      left join persons p on p.id = w.device_id
+     where t.worst >= ${FINDING_DAILY_MISSES}::int or t.pauses_total >= 1
+     order by w.store_id, w.device_id
+  `)) as unknown as {
+    store_id: string;
+    device_id: string | null;
+    day: string;
+    misses: number;
+    first_at: Date | string;
+    last_at: Date | string;
+    pauses: number;
+    store_name: string;
+    device_name: string | null;
+  }[];
+
+  return rows.map((r) => ({
+    kind: 'pinSignInFailures',
+    key: `pinSignInFailures:${r.store_id}:${r.device_id ?? 'none'}`,
+    storeId: r.store_id,
+    severity: 'soft' as const,
+    detail:
+      `${r.misses} wrong PINs at ${r.device_name ?? 'a terminal with no name'} (${r.store_name}) on ${humanDay(r.day)}, ` +
+      `between ${formatBusinessDateTime(new Date(r.first_at), { timeStyle: 'short' })} and ` +
+      `${formatBusinessDateTime(new Date(r.last_at), { timeStyle: 'short' })}; it paused ${r.pauses} time(s). ` +
+      'A wrong PIN does not say who typed it. If this was not a known mix-up, ask who was at the counter.',
+  }));
+}
+
+/** `pinSignInStopped`, one per store whose PIN sign-in is stopped (a stop past auto-reopen has expired). */
+export async function pinSignInStopped(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const auto = STOP_AUTO_REOPEN_MINUTES;
+  const rows = (await tx.execute(sql`
+    select t.store_id::text as store_id, s.name as store_name, t.stopped_at as stopped_at,
+           (select count(*)::int from sign_in_attempts a
+             where a.store_id = t.store_id and a.kind = 'miss'
+               and a.occurred_at > t.stopped_at - interval '24 hours'
+               and a.occurred_at <= t.stopped_at) as misses
+      from pin_attempt_throttle t
+      join stores s on s.id = t.store_id
+     where t.org_id = ${orgId}
+       and t.stopped_at is not null
+       and (${auto}::int is null or t.stopped_at + make_interval(mins => ${auto}::int) > now())
+     order by t.store_id
+  `)) as unknown as { store_id: string; store_name: string; stopped_at: Date | string; misses: number }[];
+
+  return rows.map((r) => ({
+    kind: 'pinSignInStopped',
+    key: `pinSignInStopped:${r.store_id}`,
+    storeId: r.store_id,
+    severity: 'soft' as const,
+    detail:
+      `PIN sign-in at ${r.store_name} has been stopped since ${formatBusinessDateTime(new Date(r.stopped_at))} ` +
+      `after ${r.misses} wrong PINs in a day. Nobody can sign in by PIN there until a manager reopens it on the Staff page.`,
   }));
 }
 

@@ -52,7 +52,7 @@ export type { SignInResult, ResolvedSession, TerminalIdentity } from './sessions
 export { hashPin, verifyPin, pinLookupHash, isValidPinFormat, newSessionToken, sessionTokenHash } from './credentials';
 /** T-237 / DEF-224 — administering someone else's sign-in credentials. Gated on `manage_users`,
  *  unlike everything in `sessions.ts`, which is why it is a separate module. */
-export { linkFirebaseCredential, unlinkCredential } from './credentials-admin';
+export { linkFirebaseCredential, unlinkCredential, reopenPinSignIn } from './credentials-admin';
 export type {
   LinkFirebaseCredentialInput,
   UnlinkCredentialInput,
