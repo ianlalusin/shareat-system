@@ -51,7 +51,7 @@ sweep of 283 raw buttons, 790 inputs and 240 selects, stays T-334's job and land
 - **Seen (§9.4, render-first rule):** screenshots of `/sign-in`, `/expenses/new` and one report, in light and dark.
 
 ### S2: the kit reshaped (Button, Input, Card)
-- `Button`: `rounded-full`; secondary hover `bg-canvas`; ghost variant added (Cancel). The size stays as the one
+- `Button`: `rounded-[12px]` (Ian, 2026-10-09, `t387-q3` = b; never `rounded-full`); secondary hover `bg-canvas`; ghost variant added (Cancel). The size stays as the one
   geometry (Amendment 3; ⛔ no `size` prop). Danger is still outlined with the icon, now in `border-danger text-danger`.
 - `SubmitButton` (new, `'use client'`): wraps `Button` and reads `useFormStatus()`. While pending it sets
   `aria-busy`, disables itself, shows a spinner and swaps its label ("Submitting…"). This is the fix for
@@ -98,19 +98,29 @@ the heatmap for pos not erp"*. On the success toast: *"i like this toast notif a
 | Success feedback | **Toast at the bottom right** (`Feedback`). Errors stay as banners plus the field | S4. Answers `t387-q1` = (a) |
 | Hour-by-day heat map | **Not for the ERP.** Ian wants it in POS (`DashScoreboard`) | POS backlog. Out of this task |
 
-Not chosen: the ticket-rail and day-line dashboards, and the floor board by station. Drawn and waiting for review: the
-till count, clock terminal, leaderboard, checklist photo review, memo kiosk, onboarding exam, payslip, and the 80mm
-delivery receipt.
+Not chosen: the ticket-rail and day-line dashboards, and the floor board by station. Still waiting for Ian's review: the
+till count, the clock terminal and the 80mm delivery receipt (the others are reviewed below).
 
-⛔ **Button shape is reopened by Ian and NOT decided:** *"pill shaped button or rounded corner rectangle for the
-entire app let weigh"*. The `Shapes` board weighs both. The recommendation is a 12px rounded rectangle for every
-button and field, with pills kept for badges and chips. S2's `rounded-full` waits on `t387-q3-shape`.
-Amendment 7's "buttons are pills" line stands until Ian rules.
+✅ **Button shape RULED: a 12px rounded rectangle for every button in the app** (Ian, 2026-10-09: *"rounded rectangle
+like your pick"*, after the `Shapes` board weighed both). Pills are only for status badges, filter chips and counts.
+Amendment 7 was corrected to say so.
+
+**Board feedback (Ian, 2026-10-09):** *"performance good, could be better, checklist good, memo signing good,
+onboarding good, payslip must be compressed 2 slips per page duplicate for employee and office copy with signature
+and confirmation texts"*. Done the same day:
+- **Leaderboard:** added rank movement (▲/▼) and a badge, a 6-month trend per person, the gap to the rank above,
+  rows that open into the four score parts, and a strip with most improved, team average and who needs a talk.
+- **Payslip:** two half-page slips per letter sheet with a cut line between. The EMPLOYEE COPY is kept by staff;
+  the OFFICE COPY is filed. Each has its own confirmation sentence (net amount, period, and the 7-day error window),
+  plus signature lines for employee, releaser and (office copy) payroll checker. Statutory lines are merged into one
+  row, with the split shown in the footer.
+- **Checklist photo review, memo signing kiosk, onboarding:** accepted as drawn.
 
 ## Open questions (for Ian)
 - `t387-q1-toast`: ✅ **ANSWERED (a), Ian 2026-10-09.** Success becomes a toast; errors stay as banners.
-- `t387-q2-stamp`: keep v1's "APPROVED / VOID" stamp animation? (a) yes, on approve, verify and void · (b) no.
-- `t387-q3-shape`: should every button in the app be (a) a pill, or (b) a 12px rounded rectangle? Recommended: (b).
+- `t387-q2-stamp`: ✅ **ANSWERED (a), Ian 2026-10-09:** *"keep the stamp"*. An APPROVED / VERIFIED / RELEASED / VOID stamp
+  plays on those state changes, for 1.2s, and is skipped under `prefers-reduced-motion` (S4).
+- `t387-q3-shape`: ✅ **ANSWERED (b), Ian 2026-10-09.** A 12px rounded rectangle.
 
 ## Done when
 - S1–S3 are merged through a PR with green CI (bible row 291), and the screenshots are attached in both themes.
