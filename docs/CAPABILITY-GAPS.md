@@ -574,3 +574,13 @@ deferred indefinitely.
 row 260) plus an asset account for a voucher held and its later use. Count from v2 production before sizing it: the
 T-367 S5 P5 count of any `other` rows entered since launch is the utilisation number. **Owner:** a new task spec
 (Opus), after T-367 S5 lands. Not a launch blocker.
+
+## Added 2026-10-10 — staff schedules, found while planning T-387's live roster (`t387-q6`)
+
+### Staff schedules (who is rostered for which shift)
+Neither v1 nor v2 records a per-person, per-day schedule. v2 has only store rules (`store_attendance_config`: shift
+hours, allowed start hours, open or fixed mode). So nothing can say "Carlo was due at 5 pm and is late", and the T-387
+roster cannot draw its "scheduled" band. Ian, 2026-10-10 (`t387-q6` = a): build the roster without it, and track
+schedules as their own feature. The UI reference is the `StaffRoster` board (`docs/design/t387/StaffRoster.dc.html`),
+which draws the scheduled band as a dashed box. **Owner: unassigned.** It would need a schedule table (a migration).
+

@@ -1,7 +1,7 @@
 # T-387: the ERP looks like the brand. SharEat Warm in light, Grill Night in dark
 
-**Status:** BUILD PLAN 2026-10-10 (Opus planner), ready to build. NOT BUILT. Before S1 starts, Ian answers
-`t387-q4` to `t387-q7` (bottom of this file). S1 does not wait on them.
+**Status:** BUILD PLAN 2026-10-10 (Opus planner), **ready to build; every open question is answered** (Ian,
+2026-10-10: *"4 - a , 5 - a , 6 - a, 7 -a"*). NOT BUILT. Next: S1.
 **Ruling:** Ian, 2026-10-09: *"go with B, C as dark mode"*. The values are recorded in ADR-013 **Amendment 7** and
 bible §13 **row 295**. ⛔ The values are RULED. This task builds them and does not re-pick them.
 **Sources:** brand sheet Artifact `L7hn691wjL76rSV2BgPa1A`; screen looks Artifact `9cvfRibBSRuvBbZYe8DfjW`.
@@ -251,9 +251,9 @@ need for a migration stops and reports; that would be a spec change.
   - The tenure formatter.
 - **Seen:** `/staff` in both views and both themes, with a photo and without.
 
-### S8: the sweep onto the kit (was T-334 slice 3; ⚠️ needs `t387-q7`)
-Mechanical, many files, so it is a candidate for a Workflow. That needs Ian's explicit opt-in (`t387-q7`). Otherwise
-it runs as several lane tranches.
+### S8: the sweep onto the kit (was T-334 slice 3). ✅ Runs as a Workflow (`t387-q7` = a)
+Mechanical, many files. Ian opted in to a multi-agent Workflow for this slice (2026-10-10). Workflow agents edit
+only; the orchestrator runs the guards, tests and smoke, then commits each tranche.
 - The 93 flash-banner files → `FlashBanner`. The `ok` banners are removed because the Toaster shows them.
 - The 16 `STATUS_LABEL`, 4 `STATUS_TONE` and 6 local `StatusBadge` → `Badge` + `statusTone`.
 - Local `BTN`/`INPUT` constants (T-334 slice 3's census: 65 files, 99 declarations) → `Button`/`Input`. Raw
@@ -295,11 +295,11 @@ with employee and office copies. Checklist, memo kiosk and onboarding were accep
 - `t387-q1-toast`: ✅ **ANSWERED (a), 2026-10-09.** Success becomes a toast; errors stay as banners.
 - `t387-q2-stamp`: ✅ **ANSWERED (a), 2026-10-09:** *"keep the stamp"*.
 - `t387-q3-shape`: ✅ **ANSWERED (b), 2026-10-09.** A 12px rounded rectangle.
-- `t387-q4-height` (blocks S2): should every button and field be **44px** tall? Today a Button is 42px and an Input
+- `t387-q4-height`: ✅ **ANSWERED (a), Ian 2026-10-10. Every button and field is 44px.** Was: should every button and field be **44px** tall? Today a Button is 42px and an Input
   is 38px. The boards Ian approved draw 44px, and 44px is the touch-target floor the shell already uses on touch
   screens. (a) 44px for both · (b) keep 42 and 38. **Recommended: (a).** Controls only get bigger, which Amendment 3
   allows.
-- `t387-q5-stamp-words` (blocks S4): one word per action, following the glossary:
+- `t387-q5-stamp-words`: ✅ **ANSWERED (a), Ian 2026-10-10. The table below is the stamp vocabulary.** One word per action, following the glossary:
   | Action | Stamp |
   |---|---|
   | Verify a sales day, an AP invoice, an attendance day | VERIFIED |
@@ -311,10 +311,10 @@ with employee and office copies. Checklist, memo kiosk and onboarding were accep
   | Reverse a remittance, a loan entry, a prepaid month | REVERSED |
 
   (a) as listed · (b) changes. **Recommended: (a).**
-- `t387-q6-schedule` (blocks only the roster's scheduled band): v2 has no shift schedule (neither did v1). Build the
+- `t387-q6-schedule`: ✅ **ANSWERED (a), Ian 2026-10-10.** Build the roster without a scheduled band. "Staff schedules" is now in `docs/CAPABILITY-GAPS.md` (added 2026-10-10). Was: v2 has no shift schedule (neither did v1). Build the
   roster now with worked, break and now, and no scheduled band? (a) yes, and add "staff schedules" to CAPABILITY-GAPS
   as its own feature · (b) wait for schedules. **Recommended: (a).**
-- `t387-q7-sweep` (blocks S8): run the sweep as a multi-agent **Workflow** (fast, more tokens), or as ordinary lane
+- `t387-q7-sweep`: ✅ **ANSWERED (a), Ian 2026-10-10. S8 runs as a multi-agent Workflow.** This is Ian's explicit opt-in for that slice only. Was: run the sweep as a multi-agent **Workflow** (fast, more tokens), or as ordinary lane
   tranches (slower, fewer tokens)? (a) Workflow · (b) lane tranches.
 
 ## Done when
