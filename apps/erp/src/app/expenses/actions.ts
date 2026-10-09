@@ -36,6 +36,8 @@ import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { authorize, type Actor, type Capability } from '@shareat/auth';
 import { redirectWithFlash, splitReturnTo, type Nav } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { EXPENSE_DRAFT_EDIT } from './typed-forms';
 
 /**
  * ⭐ Screen-local, deliberately — T-266, migration 0141, and the same reasoning `till/actions.ts`
@@ -375,7 +377,7 @@ export async function updateDraftAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err) });
+    return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err), typed: keepTyping(formData, EXPENSE_DRAFT_EDIT, expenseId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(`/expenses/${expenseId}`, nav);
 }

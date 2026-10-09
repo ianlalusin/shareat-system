@@ -18,6 +18,8 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor, type TypedView } from '@/lib/keep-typing';
+import { BUDGET_CAP_EDIT } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
 import { FormGrid, Field } from '@/components/ui';
 
@@ -187,7 +189,8 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                         </p>
                       )}
 
-                      <details>
+                      {/* T-389: a reopened (or too-long-to-keep) cap must be visible, so its <details> opens. */}
+                      <details open={typedFor(sp, BUDGET_CAP_EDIT, b.categoryId, actor.personId) !== null}>
                         <summary className="cursor-pointer text-xs text-neutral-500 dark:text-neutral-400">
                           Edit or remove
                         </summary>
@@ -199,6 +202,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                             defaultAmount={b.amount}
                             defaultAutoReissue={b.autoReissue}
                             defaultInterval={b.reissueInterval}
+                            typed={typedFor(sp, BUDGET_CAP_EDIT, b.categoryId, actor.personId)}
                           />
                           <form action={removeBudgetAction}>
                             <input type="hidden" name="storeId" value={storeId} />
@@ -269,6 +273,7 @@ function CapForm({
   defaultAmount,
   defaultAutoReissue,
   defaultInterval,
+  typed,
 }: {
   storeId: string;
   periodKey: string;
@@ -276,6 +281,8 @@ function CapForm({
   defaultAmount?: string;
   defaultAutoReissue?: boolean;
   defaultInterval?: string | null;
+  /** T-389: the typing of a refused save of THIS cap, or the too-long notice. */
+  typed?: TypedView | null;
 }) {
   const fields = (
     <FormGrid>
@@ -308,7 +315,7 @@ function CapForm({
   // An existing cap is locked until Edit (T-384 L1); a category with no cap yet is an add form and ends in Save.
   if (defaultAmount !== undefined) {
     return (
-      <EditableRecord action={setBudgetAction} label="cap" hidden={hidden}>
+      <EditableRecord action={setBudgetAction} label="cap" hidden={hidden} typed={typed ?? null}>
         {fields}
       </EditableRecord>
     );
