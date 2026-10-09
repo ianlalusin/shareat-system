@@ -72,12 +72,6 @@ export const KEEP_KEYS = [
   'mode',
   'openingDate',
   'separationDate',
-  // T-384 S1b / DEF-617: one tender record's typed values after a refused Save, so it reopens holding them.
-  'tenderId',
-  'tenderName',
-  'tenderKind',
-  'tenderAccount',
-  'tenderAlias',
 ] as const;
 export type KeepKey = (typeof KEEP_KEYS)[number];
 
@@ -116,6 +110,26 @@ const NAV_SHAPES = {
 export type NavKey = keyof typeof NAV_SHAPES;
 export type Nav = Partial<Record<NavKey, string>>;
 
+/**
+ * T-389 (DEF-617): what the user typed into ONE saved-record form before its Save was refused. `form` is the
+ * `<area>.<form>` key from `defineTypedForm`, `record` the record id ('' only for a singleton form). A repeated name
+ * (a checkbox group) is an array. Rides in the signed cookie only, never the address, never a log.
+ */
+export interface TypedFlash {
+  form: string;
+  record: string;
+  fields: Record<string, string | string[]>;
+  /** The person whose Save was refused. `typedFor` shows the slot to that person only (a shared till PC, one minute). */
+  actor?: string;
+}
+/** The typed slot was too big for the cookie and was dropped whole: the page says so instead of reopening the record. */
+export interface TypedDropped {
+  form: string;
+  record: string;
+  /** Same binding as the typed slot: the notice is shown to the person whose Save was refused. */
+  actor?: string;
+}
+
 export interface Flash {
   ok?: string;
   error?: string;
@@ -128,9 +142,13 @@ export interface Flash {
   posted?: string;
   needsConfirmation?: string;
   keep?: Partial<Record<KeepKey, string>>;
+  typed?: TypedFlash | undefined;
 }
 
-export type FlashFields = Partial<Record<FlashKey | KeepKey, string>>;
+export type FlashFields = Partial<Record<FlashKey | KeepKey, string>> & {
+  typed?: TypedFlash;
+  typedDropped?: TypedDropped;
+};
 
 export interface FlashPayload {
   v: 1;
@@ -139,6 +157,44 @@ export interface FlashPayload {
   exp: number;
   msg: Partial<Record<FlashKey, string>>;
   keep: Partial<Record<KeepKey, string>>;
+  /** T-389: the typed slot. Absent on an old cookie, which decodes as before. */
+  t?: TypedFlash;
+  /** T-389: set when `t` was dropped for size. */
+  td?: TypedDropped;
+}
+
+const TYPED_FORM = /^[a-z][a-zA-Z0-9.]{0,63}$/;
+const TYPED_RECORD = /^[A-Za-z0-9_-]{0,64}$/; // '' , a UUID, or a short slug
+const TYPED_FIELD = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+
+/** Strict shape check of a typed slot. Anything else is not a TypedFlash. */
+function asTyped(v: unknown): TypedFlash | null {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o['form'] !== 'string' || !TYPED_FORM.test(o['form'])) return null;
+  if (typeof o['record'] !== 'string' || !TYPED_RECORD.test(o['record'])) return null;
+  const f = o['fields'];
+  if (typeof f !== 'object' || f === null || Array.isArray(f)) return null;
+  const fields: Record<string, string | string[]> = {};
+  for (const [k, val] of Object.entries(f as Record<string, unknown>)) {
+    if (!TYPED_FIELD.test(k)) return null;
+    if (typeof val === 'string') fields[k] = val;
+    else if (Array.isArray(val) && val.every((x) => typeof x === 'string')) fields[k] = [...(val as string[])];
+    else return null;
+  }
+  const actor = o['actor'];
+  if (actor !== undefined && (typeof actor !== 'string' || !TYPED_RECORD.test(actor) || actor === '')) return null;
+  return { form: o['form'], record: o['record'], fields, ...(actor !== undefined ? { actor } : {}) };
+}
+
+function asDropped(v: unknown): TypedDropped | null {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o['form'] !== 'string' || !TYPED_FORM.test(o['form'])) return null;
+  if (typeof o['record'] !== 'string' || !TYPED_RECORD.test(o['record'])) return null;
+  const actor = o['actor'];
+  if (actor !== undefined && (typeof actor !== 'string' || !TYPED_RECORD.test(actor) || actor === '')) return null;
+  return { form: o['form'], record: o['record'], ...(actor !== undefined ? { actor } : {}) };
 }
 
 function isNavKey(k: string): k is NavKey {
@@ -190,6 +246,8 @@ export function decodeFlash(raw: string): FlashPayload | null {
   const msg = o.msg;
   const keep = o.keep;
   if (typeof msg !== 'object' || msg === null || typeof keep !== 'object' || keep === null) return null;
+  const t = o['t'] === undefined ? null : asTyped(o['t']);
+  const td = o['td'] === undefined ? null : asDropped(o['td']);
   return {
     v: 1,
     n: o.n,
@@ -197,6 +255,8 @@ export function decodeFlash(raw: string): FlashPayload | null {
     exp: o.exp,
     msg: pick(msg as Record<string, unknown>, FLASH_KEYS),
     keep: pick(keep as Record<string, unknown>, KEEP_KEYS),
+    ...(t ? { t } : {}),
+    ...(td ? { td } : {}),
   };
 }
 
@@ -237,14 +297,39 @@ export async function redirectWithFlash(path: string, nav: Nav, flash?: Flash, o
     if (typeof v === 'string') keep[k] = v;
   }
 
-  if (Object.keys(msg).length === 0 && Object.keys(keep).length === 0) {
+  // T-389: the typed slot. A shape the reader would refuse is dropped here, logged by form key only.
+  let typed: TypedFlash | undefined;
+  if (flash?.typed !== undefined) {
+    const ok = asTyped(flash.typed);
+    if (ok) typed = ok;
+    else logger.warn({ form: flash.typed.form }, 'flash: typed slot dropped (wrong shape)');
+  }
+
+  if (Object.keys(msg).length === 0 && Object.keys(keep).length === 0 && !typed) {
     const qs = query.toString();
     return redirect(`${qs ? `${path}?${qs}` : path}${hash}`);
   }
 
   const n = randomBytes(12).toString('base64url');
-  const payload = (k: Partial<Record<KeepKey, string>>): FlashPayload => ({ v: 1, n, p: path, exp: Date.now() + TTL_MS, msg, keep: k });
+  let dropped: TypedDropped | undefined;
+  const payload = (k: Partial<Record<KeepKey, string>>): FlashPayload => ({
+    v: 1,
+    n,
+    p: path,
+    exp: Date.now() + TTL_MS,
+    msg,
+    keep: k,
+    ...(typed ? { t: typed } : {}),
+    ...(dropped ? { td: dropped } : {}),
+  });
   let value = encode(payload(keep));
+  if (Buffer.byteLength(value) > MAX_COOKIE_BYTES && typed) {
+    // Dropped whole, FIRST, never shortened: a shortened amount would reopen a different figure. Field NAMES only in the log.
+    logger.warn({ form: typed.form, keys: Object.keys(typed.fields) }, 'flash: typed slot dropped whole (cookie over budget)');
+    dropped = { form: typed.form, record: typed.record, ...(typed.actor !== undefined ? { actor: typed.actor } : {}) };
+    typed = undefined;
+    value = encode(payload(keep));
+  }
   if (Buffer.byteLength(value) > MAX_COOKIE_BYTES && Object.keys(keep).length > 0) {
     // Dropped whole, never shortened: a refilled amount that changed would post a different figure.
     logger.warn({ keys: Object.keys(keep) }, 'flash: keep dropped whole (cookie over budget)');
@@ -283,7 +368,13 @@ export async function withFlash<T extends object>(
   if (!raw) return sp as T & FlashFields;
   const payload = decodeFlash(raw);
   if (!payload || payload.exp <= Date.now() || payload.n !== f) return sp as T & FlashFields;
-  return { ...sp, ...payload.msg, ...payload.keep } as T & FlashFields;
+  return {
+    ...sp,
+    ...payload.msg,
+    ...payload.keep,
+    ...(payload.t ? { typed: payload.t } : {}),
+    ...(payload.td ? { typedDropped: payload.td } : {}),
+  } as T & FlashFields;
 }
 
 /**
@@ -299,6 +390,7 @@ function stripFlashKeys<T extends object>(sp: T, allow: readonly string[]): T {
       continue;
     }
     if ((FLASH_KEYS as readonly string[]).includes(k) || (KEEP_KEYS as readonly string[]).includes(k)) continue;
+    if (k === 'typed' || k === 'typedDropped') continue; // T-389: only the signed cookie can carry a typed slot
     out[k] = v;
   }
   return out as T;
