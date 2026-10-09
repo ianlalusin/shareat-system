@@ -32,6 +32,7 @@ import { stockLayers as stockLayersTable } from '@shareat/db/schema';
 import { eq, sql as drizzleSql } from 'drizzle-orm';
 import { add, compare, decimal, money, subtract, toCentavos, ZERO, type Decimal, type Money } from '@shareat/core/money';
 import { parseDecimalInput } from '../shared/money-input';
+import { notActiveItemSentence } from '../items/not-active';
 import { postEntry, type PostEntryLine } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { consume, reverseConsumption } from '../stock/consume';
@@ -126,6 +127,21 @@ export async function createRecipe(tx: Tx, actor: Actor, input: CreateRecipeInpu
   for (const line of lines) {
     if (!isPositiveQuantity(line.quantity)) {
       return { ok: false, reason: `ingredient ${line.itemId} must have a quantity greater than zero` };
+    }
+  }
+  // T-383 S2b (X10): a retired (or merged) item cannot go on a NEW recipe, as output or as an ingredient. An item that does
+  // not exist is left to the foreign key, as before. (Production OUTPUT on a run is left as it is: B2.2.)
+  const recipeItems = new Map(
+    (await productionRepo.getItemsForProduction(tx, input.orgId, [input.outputItemId, ...lines.map((l) => l.itemId)])).map((r) => [r.id, r]),
+  );
+  const outputRow = recipeItems.get(input.outputItemId);
+  if (outputRow && outputRow.status !== 'active') {
+    return { ok: false, reason: notActiveItemSentence(outputRow.status, 'put on a new recipe', 'The output') };
+  }
+  for (const [i, line] of lines.entries()) {
+    const row = recipeItems.get(line.itemId);
+    if (row && row.status !== 'active') {
+      return { ok: false, reason: notActiveItemSentence(row.status, 'put on a new recipe', `Ingredient line ${i + 1}`) };
     }
   }
   const { id: recipeId } = await productionRepo.insertRecipe(tx, {

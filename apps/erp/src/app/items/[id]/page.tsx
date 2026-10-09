@@ -378,7 +378,7 @@ export default async function ItemDetailPage({
           )}
           {readout.activePosMaps > 0 && (
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              {`${readout.activePosMaps} live POS ${readout.activePosMaps === 1 ? 'map' : 'maps'} still use it. Point them at the replacement, or sales keep using up this item, even below zero.`}
+              {`${readout.activePosMaps} live POS ${readout.activePosMaps === 1 ? 'map' : 'maps'} still use it. Point them at the replacement; sales keep using up this item until its stock runs out.`}
             </p>
           )}
           {readout.activeRecipes > 0 && (

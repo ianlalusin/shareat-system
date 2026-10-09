@@ -351,7 +351,7 @@ describe('W4 - the Retire section', () => {
       const retireSection = html.slice(retireStart, html.indexOf('</section>', retireStart));
       expect(retireSection).not.toContain('Zulu');
       expect(html).toMatch(
-        /1 live POS maps? still use it\. Point them at the replacement, or sales keep using up this item, even below zero\./,
+        /1 live POS maps? still use it\. Point them at the replacement; sales keep using up this item until its stock runs out./,
       );
       expect(html).not.toMatch(/live recipes? still use it/);
       expect(html).toContain(

@@ -28,6 +28,7 @@ import {
 import { supplierItems, type CatalogueSource } from '../../schema/supplier-items';
 import type { Decimal, Money, Quantity } from '@shareat/core/money';
 import { storeItemSellability } from '../../schema/items';
+import { stockMovements } from '../../schema/stock-ledger';
 
 export interface ItemRow {
   id: string;
@@ -83,6 +84,29 @@ export async function listItems(
   const conditions = [eq(items.orgId, orgId)];
   if (!filter.includeInactive) conditions.push(eq(items.status, 'active'));
   const rows = await tx.select().from(items).where(and(...conditions)).orderBy(asc(items.name));
+  return rows as ItemRow[];
+}
+
+/**
+ * T-383 S2b (B2.5). The items a CONSUME or MOVE picker offers at one store: every active item, plus a retired
+ * (`inactive`) item only while its on-hand at THAT store is above zero ("usable until it is used up"). A merged item is
+ * never offered. Same columns and order as `listItems`.
+ */
+export async function listUsableItems(tx: Tx, orgId: string, storeId: string): Promise<ItemRow[]> {
+  const rows = await tx
+    .select()
+    .from(items)
+    .where(
+      and(
+        eq(items.orgId, orgId),
+        sql`(${items.status} = 'active' or (${items.status} = 'inactive' and (
+          select coalesce(sum(${stockMovements.quantity}), 0) from ${stockMovements}
+          where ${stockMovements.itemId} = ${items.id} and ${stockMovements.storeId} = ${storeId}
+            and ${stockMovements.orgId} = ${orgId}
+        ) > 0))`,
+      ),
+    )
+    .orderBy(asc(items.name));
   return rows as ItemRow[];
 }
 

@@ -31,11 +31,13 @@ import {
   commissaryRepo,
   itemsRepo,
   lowStockRepo,
+  refuse,
   stockLocationsRepo,
   tradeRepo,
   transaction,
   type Tx,
 } from '@shareat/db';
+import { notActiveItemSentence } from '../items/not-active';
 import { dispatchTradeOrder, type DispatchResult } from '../trade';
 import { money, ZERO, type Money } from '@shareat/core/money';
 import { lineCost } from '../stock/layers';
@@ -190,7 +192,9 @@ export async function proposeLine(tx: Tx | null, actor: Actor, input: ProposeLin
 
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw new Error('proposeLine: that item does not exist.');
-    if (item.status !== 'active') throw new Error(`proposeLine: ${item.name} is ${item.status}, not active.`);
+    if (item.status !== 'active') {
+      throw refuse(`proposeLine: ${item.name} is ${item.status}, not active.`, notActiveItemSentence(item.status, 'added to an order'));
+    }
 
     const lines = await tradeRepo.linesFor(trx, actor.orgId, order.id);
     if (lines.some((l) => l.itemId === item.id && l.approval !== 'rejected')) {

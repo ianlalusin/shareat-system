@@ -29,6 +29,7 @@ import { parseQuantityInput } from '../shared/quantity-input';
 import { isPositiveQuantity, toThousandths, type Quantity } from '../stock/quantity';
 import { parseFourDecimalCost } from '../commissary/catalogue';
 import { gone, refuse } from '../shared/refusal';
+import { notActiveItemSentence } from './not-active';
 import { formatItemCode, itemCodeStem, parseItemCode } from './code';
 import { allocateItemCode, requireItemCodeStem, validateItemCodeOverride } from './code-allocation';
 
@@ -393,7 +394,10 @@ export async function validateInvoiceLines(
     const item = await itemsRepo.getItemById(trx, orgId, l.itemId);
     if (!item) throw new Error(`validateInvoiceLines: line ${i + 1} names item ${l.itemId}, which does not exist.`);
     if (item.status !== 'active') {
-      throw new Error(`validateInvoiceLines: line ${i + 1} names ${item.name}, which is inactive.`);
+      throw refuse(
+        `validateInvoiceLines: line ${i + 1} names ${item.name}, which is inactive.`,
+        notActiveItemSentence(item.status, 'bought or received', `Line ${i + 1}`),
+      );
     }
     // ⭐ T-149. A supplier billing us for something we MAKE means either the item is wrong or the
     // flag is — both worth stopping before it becomes a price observation. Resolved at the
@@ -564,7 +568,10 @@ export async function declareSupplierItem(
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw new Error(`declareSupplierItem: item ${input.itemId} does not exist.`);
     if (item.status !== 'active') {
-      throw new Error(`declareSupplierItem: ${item.name} is inactive.`);
+      throw refuse(
+        `declareSupplierItem: ${item.name} is inactive.`,
+        notActiveItemSentence(item.status, 'bought from a supplier'),
+      );
     }
     return itemsRepo.insertSupplierItem(trx, {
       orgId: actor.orgId,
@@ -948,6 +955,12 @@ export async function setItemPricing(
     await authorize(trx, actor, 'manage_items', {});
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw new Error(`setItemPricing: item ${input.itemId} does not exist.`);
+    if (item.status !== 'active') {
+      throw refuse(
+        `setItemPricing: ${item.name} is not active (${item.status}).`,
+        notActiveItemSentence(item.status, 'given a new price'),
+      );
+    }
 
     // ⭐ T-371 (R5, R6) — every figure is parsed AFTER `authorize()`, at its `item_pricing` column's shape. All four
     // columns are NULLABLE with no default, so a blank is stored as null — never a guessed '0'; a blank in the mode's

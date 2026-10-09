@@ -12,7 +12,8 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { compareDecimal, decimal, type Decimal } from '@shareat/core/money';
-import { posMappingRepo, type Tx } from '@shareat/db';
+import { itemsRepo, posMappingRepo, type Tx } from '@shareat/db';
+import { notActiveItemSentence } from '../items/not-active';
 import { parseDecimalInput } from '../shared/money-input';
 
 export interface UpsertPosItemMapInput {
@@ -62,6 +63,24 @@ export async function upsertPosItemMap(tx: Tx, actor: Actor, input: UpsertPosIte
     }
     if (compareDecimal(quantityPerSale, decimal('0', '14,6')) <= 0) {
       return { ok: false, reason: 'a direct map needs a quantity-per-sale greater than zero' };
+    }
+    // T-383 S2b (X9): a retired (or merged) item cannot be newly mapped to a POS item. The one exception is the map
+    // that ALREADY points at that same item (a quantity edit on it still saves), so retiring never locks an existing map.
+    const mapItem = await itemsRepo.getItemById(tx, actor.orgId, input.itemId);
+    if (mapItem && mapItem.status !== 'active') {
+      const existing = input.editMapId
+        ? await posMappingRepo.getMapById(tx, input.editMapId)
+        : await posMappingRepo.getActiveMapByKey(tx, input.storeId, input.posItemKey);
+      // An unknown map id is left to the "does not exist" refusal further down. The exception also needs the SAME POS key
+      // and an ACTIVE map: re-keying a map, or reviving an inactive one, onto a retired item is a new mapping.
+      const unknownEdit = Boolean(input.editMapId) && !existing;
+      const sameItem =
+        existing?.storeId === input.storeId &&
+        existing.mode === 'direct' &&
+        existing.itemId === input.itemId &&
+        existing.status === 'active' &&
+        existing.posItemKey === input.posItemKey.trim();
+      if (!sameItem && !unknownEdit) return { ok: false, reason: notActiveItemSentence(mapItem.status, 'mapped to a POS item') };
     }
     const conflict = await posMappingRepo.findOtherActiveDirectMapByItem(tx, input.storeId, input.itemId, input.editMapId ?? null);
     if (conflict && !input.confirmShared) {
