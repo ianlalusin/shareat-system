@@ -1,6 +1,6 @@
 # T-383: rename an item and retire it, so a wrong-unit item can be replaced under its own name
 
-**Status:** S1 DONE 2026-10-08 (rename, super-admin only; live via PR #1, e2451ad; rebuilt on EditableRecord). **S2 not started; RE-SPECIFIED by Amendment B2 (2026-10-09) as S2a (retire/restore/readout) then S2b (a retired item stays usable for consume/move, refused in words for order/receive/price/map/new recipe). B2 supersedes the "## S2" section and the S2 row of the parallel plan. Still no migration.** SPEC 2026-10-08 (Opus planner), written at `1301c8a`.
+**Status:** S1 DONE 2026-10-08 (rename, super-admin only; live via PR #1, e2451ad; rebuilt on EditableRecord). **S2a DONE 2026-10-09 locally (`ef6835b`; browser smoke on 9008: retire, restore, manager sees no section); goes up with the wrap-up PR (bible row 296). S2b in progress. S2 was RE-SPECIFIED by Amendment B2 (2026-10-09) as S2a (retire/restore/readout) then S2b (a retired item stays usable for consume/move, refused in words for order/receive/price/map/new recipe). B2 supersedes the "## S2" section and the S2 row of the parallel plan. Still no migration.** SPEC 2026-10-08 (Opus planner), written at `1301c8a`.
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
 **Migration:** **none.** Everything needed exists: `items.status` already admits `inactive` (0050:40), the unique
 indexes are what they must be, and `audit_log` has its writer. If Ian picks Q2(b), that option alone needs **0188**.
