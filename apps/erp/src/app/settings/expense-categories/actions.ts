@@ -18,6 +18,8 @@ import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { EXPENSE_CATEGORY_ACCOUNT, EXPENSE_CATEGORY_RENAME } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -40,7 +42,7 @@ export async function setCategoryAccountAction(formData: FormData): Promise<void
       setCategoryAccount(tx, actor, { categoryId, accountCode }),
     );
   } catch (err) {
-    return await redirectWithFlash('/settings/expense-categories', {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/expense-categories', {}, { error: errorMessage(err), typed: keepTyping(formData, EXPENSE_CATEGORY_ACCOUNT, categoryId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash('/settings/expense-categories', {}, {
     ok:
@@ -87,7 +89,7 @@ export async function renameCategoryAction(formData: FormData): Promise<void> {
       renameCategory(tx, actor, { categoryId, category: name }),
     );
   } catch (err) {
-    return await redirectWithFlash('/settings/expense-categories', {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/expense-categories', {}, { error: errorMessage(err), typed: keepTyping(formData, EXPENSE_CATEGORY_RENAME, categoryId, { actorId: actor.personId }) });
   }
   // ⚠️ Stated plainly: a rename does not touch history, because `expenses.category_id` is an id.
   return await redirectWithFlash('/settings/expense-categories', {}, { ok: `Renamed to "${name}". Everything already recorded in it stays where it is.` });
