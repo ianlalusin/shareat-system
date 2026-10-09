@@ -31,6 +31,7 @@ export * from './expenses';
 export * from './sales-days';
 export * from './sessions';
 export * from './pin-attempts';
+export * from './sign-in-attempts';
 export * from './fixed-assets';
 export * from './money-accounts';
 export * from './money-transfers';
