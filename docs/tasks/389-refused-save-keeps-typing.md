@@ -258,7 +258,7 @@ For each form the lane touched (S1: tender, store link, supplier, invoice lines)
   roadmap, not a lane.
 
 ## Questions (none block: the conservative option is built)
-- **Q1, supplier bank account number (`t389-q1-bank-account`).** May a supplier's typed bank or e-wallet account
+- **ANSWERED (Ian, 2026-10-10): a — not kept, as built.** **Q1, supplier bank account number (`t389-q1-bank-number-kept`).** May a supplier's typed bank or e-wallet account
   number ride in the one-minute signed cookie after a refused save? The page already shows the stored number, but
   T-380 says nothing secret goes in the flash, and a till PC is shared.
   **(a) Recommended and built: no.** It is excluded through `SENSITIVE`, and the user retypes that one field, with a
