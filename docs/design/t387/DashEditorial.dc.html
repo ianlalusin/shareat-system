@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dashboard Editorial</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit}a:hover{color:#d40909}
+.d{--bg:#fbf4e4;--ink:#2b2620;--muted:#6b5f4f;--hair:#e4d7bb;--brand:#d40909;--line:#d40909;--area:rgba(212,9,9,.09);--prev:#a89c88;--gold:#f4b942;--gold-deep:#a8730f;--ok:#0e6b45;--band:#1a1a1a;--band-ink:#fbf4e4;--band-muted:#cfc4b0;--pill:#fffdf8;--seg4:#a89c88}
+.d.dk{--bg:#121110;--ink:#f5efe4;--muted:#a89f92;--hair:#34302b;--brand:#d40909;--line:#ff7a70;--area:rgba(255,122,112,.12);--prev:#6e665b;--gold:#f4b942;--gold-deep:#f4b942;--ok:#4ade80;--band:#1c1a18;--band-ink:#f5efe4;--band-muted:#a89f92;--pill:#1c1a18;--seg4:#6e665b}
+.d{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',sans-serif}
+.disp{font-family:'Baloo 2',sans-serif;font-weight:700;letter-spacing:-.02em}
+.kick{margin:0;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.rule{display:flex;align-items:center;gap:16px;border-top:2px solid var(--ink);padding-top:12px}
+.rule h2{margin:0;font-family:'Baloo 2',sans-serif;font-size:28px;font-weight:700;line-height:1}
+.rule span{font-size:13px;color:var(--muted)}
+.rb{height:40px;padding:0 16px;border-radius:999px;border:0;background:transparent;color:var(--muted);font:600 14px 'Plus Jakarta Sans',sans-serif;cursor:pointer}
+.rb.on{background:var(--ink);color:var(--bg)}
+.rb:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.line{stroke-dasharray:1;stroke-dashoffset:0;animation:draw 1.8s cubic-bezier(.16,1,.3,1) both}
+.prevl{animation:fade 1s .2s both}
+.areaf{animation:fade 1.4s .6s both}
+.peak{animation:pop .5s 1.5s both}
+.peak i{position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:99px;background:var(--line);opacity:.35;animation:ping 1.8s 2s infinite}
+.bar{transform-origin:left center;animation:grow 1.2s cubic-bezier(.16,1,.3,1) both}
+.ring{animation:ring 1.4s cubic-bezier(.16,1,.3,1) both}
+.rise{animation:rise .8s cubic-bezier(.16,1,.3,1) both}
+.need{display:flex;flex-direction:column;gap:6px;text-decoration:none;padding:20px 24px 20px 0;border-right:1px solid var(--hair);min-width:0}
+.need .big{font-family:'Baloo 2',sans-serif;font-weight:800;font-size:112px;line-height:.85;color:transparent;-webkit-text-stroke:2px var(--ink);transition:color .25s,-webkit-text-stroke-color .25s}
+.need:hover .big,.need:focus-visible .big{color:var(--brand);-webkit-text-stroke-color:var(--brand)}
+.need:hover,.need:focus-visible{color:var(--ink)}
+.need:focus-visible{outline:2px solid var(--ink);outline-offset:4px}
+.truck{position:absolute;top:-5px;width:12px;height:12px;border-radius:99px;background:var(--gold);box-shadow:0 0 0 4px rgba(244,185,66,.25);animation:drive 7s linear infinite}
+.dot{width:10px;height:10px;border-radius:99px;background:var(--band-muted);opacity:.25}
+.dot.on{background:var(--gold);opacity:1}
+.dot.blink{animation:blink 2.4s infinite}
+@keyframes draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes pop{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
+@keyframes ping{0%{transform:scale(.6);opacity:.5}100%{transform:scale(2.4);opacity:0}}
+@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes ring{from{stroke-dasharray:0 100}}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes drive{from{left:0%}to{left:100%}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+@media (prefers-reduced-motion:reduce){.d *{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div class="d {{ themeClass }}" style="box-sizing: border-box; min-height: 100%; padding: 32px clamp(16px, 4vw, 64px) 64px">
+<div style="max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+<div style="display: flex; align-items: center; gap: 14px">
+<img src="/_blob/e03e260ef5e100156c67ba0cd8aa761f" alt="SharEat" style="width: 44px; height: 44px; border-radius: 999px; background: #fbf4e4">
+<div style="display: flex; flex-direction: column">
+<span class="disp" style="font-size: 22px; line-height: 1">Shar<span style="color: var(--line)">E</span>at</span>
+<span style="font-size: 13px; color: var(--muted)">Thursday, 9 October 2026 · 8:12 pm</span>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<div role="group" aria-label="Period" style="display: inline-flex; gap: 2px; padding: 4px; border-radius: 999px; background: var(--pill); border: 1px solid var(--hair)">
+<sc-for list="{{ ranges }}" as="r" hint-placeholder-count="3">
+<button type="button" class="rb {{ r.cls }}" aria-pressed="{{ r.pressed }}" onClick="{{ r.pick }}">{{ r.label }}</button>
+</sc-for>
+</div>
+<button type="button" class="rb" style="border: 1px solid var(--hair); background: var(--pill); color: var(--ink)">All stores ▾</button>
+</div>
+</header>
+
+<section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 40px; align-items: end">
+<div class="rise" style="display: flex; flex-direction: column; gap: 18px; min-width: 0">
+<p class="kick">Sales · {{ sub }} · all stores</p>
+<div class="disp" style="font-size: clamp(64px, 8.6vw, 132px); line-height: .82; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap"><span style="font-size: .42em; vertical-align: .95em; color: var(--gold-deep); margin-right: .06em">₱</span>{{ heroText }}</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<span style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--ok); color: var(--bg); font-weight: 700; font-size: 14px">▲ {{ deltaPct }}</span>
+<span style="font-size: 15px; color: var(--muted)">₱{{ deltaAbs }} more than {{ prevName }}</span>
+</div>
+<p style="margin: 0; font-size: 20px; line-height: 1.45; max-width: 30ch">{{ lede }}</p>
+</div>
+<figure style="margin: 0; position: relative; min-width: 0">
+<svg viewBox="0 0 1000 360" preserveAspectRatio="none" role="img" aria-label="{{ chartLabel }}" style="display: block; width: 100%; height: 360px; overflow: visible">
+<line x1="0" x2="1000" y1="40" y2="40" stroke="var(--hair)" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+<line x1="0" x2="1000" y1="143" y2="143" stroke="var(--hair)" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+<line x1="0" x2="1000" y1="247" y2="247" stroke="var(--hair)" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+<line x1="0" x2="1000" y1="350" y2="350" stroke="var(--ink)" stroke-width="1.5" vector-effect="non-scaling-stroke"></line>
+<path class="areaf" d="{{ areaPath }}" fill="var(--area)"></path>
+<path class="prevl" d="{{ prevPath }}" fill="none" stroke="var(--prev)" stroke-width="2" stroke-dasharray="6 6" vector-effect="non-scaling-stroke"></path>
+<path class="line" d="{{ curPath }}" pathLength="1" fill="none" stroke="var(--line)" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>
+<div class="peak" style="position: absolute; left: {{ peakLeft }}%; top: {{ peakTop }}%; width: 0; height: 0">
+<i></i>
+<span style="position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 99px; background: var(--line); box-shadow: 0 0 0 4px var(--bg)"></span>
+<span style="position: absolute; left: {{ calloutX }}; bottom: 18px; white-space: nowrap; background: var(--ink); color: var(--bg); padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.3"><b class="disp" style="font-size: 18px">₱{{ peakText }}</b><br>{{ peakLabel }} · busiest {{ unit }}</span>
+</div>
+<div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums">
+<sc-for list="{{ ticks }}" as="t" hint-placeholder-count="7"><span style="min-width: 0; text-align: center">{{ t.text }}</span></sc-for>
+</div>
+<figcaption style="display: flex; gap: 20px; margin-top: 14px; font-size: 13px; color: var(--muted)">
+<span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 22px; height: 3px; border-radius: 2px; background: var(--line)"></span>{{ curName }}</span>
+<span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 22px; height: 0; border-top: 2px dashed var(--prev)"></span>{{ prevName }}</span>
+</figcaption>
+</figure>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair)">
+<sc-for list="{{ support }}" as="s" hint-placeholder-count="4">
+<a href="{{ s.href }}" class="rise" style="display: flex; flex-direction: column; gap: 8px; padding: 24px 24px 24px 0; text-decoration: none; border-right: 1px solid var(--hair); animation-delay: {{ s.delay }}">
+<span class="kick">{{ s.label }}</span>
+<span class="disp" style="font-size: 44px; line-height: .95; font-variant-numeric: tabular-nums"><span style="font-size: .5em; color: var(--muted)">₱</span>{{ s.value }}</span>
+<span style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted)">{{ s.note }}
+<svg viewBox="0 0 120 32" style="width: 96px; height: 26px; flex: none" aria-hidden="true"><polyline class="line" points="{{ s.spark }}" pathLength="1" fill="none" stroke="{{ s.sparkColor }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+</span>
+</a>
+</sc-for>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 56px">
+<div style="display: flex; flex-direction: column; gap: 24px; min-width: 0">
+<div class="rule"><h2>By store</h2><span>share of {{ sub }}</span></div>
+<sc-for list="{{ stores }}" as="st" hint-placeholder-count="4">
+<a href="#" style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; align-items: baseline; text-decoration: none">
+<span class="disp" style="font-size: 30px; line-height: 1">{{ st.name }}</span>
+<span style="font-variant-numeric: tabular-nums; font-weight: 700; font-size: 16px">₱{{ st.value }} <span style="color: var(--muted); font-weight: 500">· {{ st.pctText }}</span></span>
+<span style="grid-column: 1 / -1; display: block; height: 10px; border-radius: 99px; background: var(--hair); overflow: hidden"><span class="bar" style="display: block; height: 100%; width: {{ st.pct }}%; border-radius: 99px; background: {{ st.color }}; animation-delay: {{ st.delay }}"></span></span>
+</a>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 24px; min-width: 0">
+<div class="rule"><h2>By channel</h2><span>where the orders came from</span></div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 32px">
+<div style="position: relative; width: 220px; height: 220px; flex: none">
+<svg viewBox="0 0 42 42" style="width: 220px; height: 220px; transform: rotate(-90deg)" aria-hidden="true">
+<circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--hair)" stroke-width="5"></circle>
+<sc-for list="{{ channels }}" as="c" hint-placeholder-count="4">
+<circle class="ring" cx="21" cy="21" r="15.915" fill="none" stroke="{{ c.color }}" stroke-width="5" stroke-dasharray="{{ c.dash }}" stroke-dashoffset="{{ c.offset }}" style="animation-delay: {{ c.delay }}"></circle>
+</sc-for>
+</svg>
+<div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center">
+<span class="disp" style="font-size: 48px; line-height: .9">62%</span>
+<span style="font-size: 13px; color: var(--muted)">eaten in-store</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px; flex: 1; min-width: 180px">
+<sc-for list="{{ channels }}" as="c" hint-placeholder-count="4">
+<div style="display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 12px; align-items: center; font-size: 15px">
+<span style="width: 14px; height: 14px; border-radius: 4px; background: {{ c.color }}"></span>
+<span style="font-weight: 600">{{ c.name }}</span>
+<span style="font-variant-numeric: tabular-nums; color: var(--muted)">₱{{ c.value }} · {{ c.pct }}%</span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 8px">
+<div class="rule"><h2>Waiting on you</h2><span>tap a number to deal with it</span></div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr))">
+<sc-for list="{{ needs }}" as="n" hint-placeholder-count="4">
+<a href="{{ n.href }}" class="need"><span class="big">{{ n.n }}</span><span style="font-size: 15px; font-weight: 600">{{ n.label }} →</span><span style="font-size: 13px; color: var(--muted)">{{ n.hint }}</span></a>
+</sc-for>
+</div>
+</section>
+
+<section style="background: var(--band); color: var(--band-ink); border-radius: 24px; padding: clamp(24px, 4vw, 48px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 40px">
+<div style="display: flex; flex-direction: column; gap: 14px; min-width: 0">
+<p class="kick" style="color: var(--gold)">Right now · on shift</p>
+<div style="display: flex; align-items: baseline; gap: 10px"><span class="disp" style="font-size: 72px; line-height: .85">46</span><span style="color: var(--band-muted)">of 58 rostered</span></div>
+<div style="display: grid; grid-template-columns: repeat(15, 10px); gap: 6px" aria-hidden="true">
+<sc-for list="{{ dots }}" as="dt" hint-placeholder-count="58"><span class="dot {{ dt.cls }}"></span></sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px; min-width: 0">
+<p class="kick" style="color: var(--gold)">On the road · commissary</p>
+<div style="display: flex; align-items: baseline; gap: 10px"><span class="disp" style="font-size: 72px; line-height: .85">5</span><span style="color: var(--band-muted)">deliveries in flight</span></div>
+<div style="position: relative; height: 2px; background: var(--band-muted); opacity: .9; margin: 18px 8px 6px">
+<span class="truck" style="animation-delay: 0s"></span><span class="truck" style="animation-delay: -1.4s"></span><span class="truck" style="animation-delay: -2.8s"></span><span class="truck" style="animation-delay: -4.2s"></span><span class="truck" style="animation-delay: -5.6s"></span>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--band-muted)"><span>Commissary</span><span>Lipa · Malvar · Davao</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px; min-width: 0">
+<p class="kick" style="color: var(--gold)">Books · balance sheet</p>
+<div style="display: flex; align-items: center; gap: 14px"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="m7.5 12.5 3 3 6-7"></path></svg><span class="disp" style="font-size: 44px; line-height: .9">Balanced</span></div>
+<span style="color: var(--band-muted); font-size: 14px; line-height: 1.5">Assets ₱8.42M = liabilities ₱3.10M + equity ₱5.32M. Trial balance ties to the centavo.</span>
+</div>
+</section>
+
+<p style="margin: 0; font-size: 12px; color: var(--muted)">Sample figures for the mock-up. The live page reads the same tiles the current dashboard does: sales, expenses, net income, AR, AP, staff, floats, findings, low stock, commissary and the balance sheet.</p>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":2400}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { range: 'week', t: 1 };
+}
+componentDidMount() { this.run(); }
+componentWillUnmount() { if (this.raf) cancelAnimationFrame(this.raf); }
+run() {
+if (this.raf) cancelAnimationFrame(this.raf);
+var reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (reduce) { this.setState({ t: 1 }); return; }
+var start = null, self = this;
+var step = function (ts) {
+if (start === null) start = ts;
+var p = Math.min(1, (ts - start) / 1400);
+self.setState({ t: p });
+if (p < 1) self.raf = requestAnimationFrame(step);
+};
+this.setState({ t: 0 });
+this.raf = requestAnimationFrame(step);
+}
+data(range) {
+if (range === 'today') {
+return { labels: ['11a','12p','1p','2p','3p','4p','5p','6p','7p','8p','9p','10p'], cur: [6200,21400,24800,11300,7900,9100,17600,31800,39400,28300], prev: [5800,19900,22100,10400,7300,8800,15900,29600,36200,33800,22400,9100], sub: 'today so far', unit: 'hour', curName: 'Today', prevName: 'last Thursday by this hour', tickEvery: 1 };
+}
+if (range === 'month') {
+var w = [1.0, 1.55, 1.45, 0.78, 0.86, 0.92, 1.02], cur = [], prev = [], labels = [];
+for (var i = 0; i < 30; i++) {
+cur.push(Math.round(152000 * w[i % 7] + Math.sin(i * 1.7) * 9000));
+prev.push(Math.round(141000 * w[i % 7] + Math.cos(i * 1.3) * 8000));
+labels.push(String(((i + 10) % 30) + 1) + (i === 0 ? ' Sep' : ''));
+}
+return { labels: labels, cur: cur, prev: prev, sub: 'last 30 days', unit: 'day', curName: 'Last 30 days', prevName: 'the 30 days before', tickEvery: 5 };
+}
+return { labels: ['Fri 3','Sat 4','Sun 5','Mon 6','Tue 7','Wed 8','Thu 9'], cur: [162400,248300,231900,121700,139600,148200,232460], prev: [151000,229800,214300,118900,126400,131200,213480], sub: 'last 7 days', unit: 'day', curName: 'This week', prevName: 'the week before', tickEvery: 1 };
+}
+renderVals() {
+var dark = this.props.dark ?? false;
+var self = this;
+var range = this.state.range;
+var t = this.state.t;
+var e = 1 - Math.pow(1 - t, 4);
+var d = this.data(range);
+var n = d.labels.length;
+var fmt = function (v) { return Math.round(v).toLocaleString('en-PH'); };
+var sum = function (a) { return a.reduce(function (x, y) { return x + y; }, 0); };
+var total = sum(d.cur);
+var prevSame = sum(d.prev.slice(0, d.cur.length));
+var maxV = Math.max.apply(null, d.cur.concat(d.prev)) * 1.08;
+var X = function (i) { return (n === 1 ? 0 : i / (n - 1)) * 1000; };
+var Y = function (v) { return 40 + (1 - v / maxV) * 310; };
+var path = function (a) { return a.map(function (v, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); }).join(' '); };
+var curPath = path(d.cur);
+var areaPath = curPath + ' L' + X(d.cur.length - 1).toFixed(1) + ' 350 L0 350 Z';
+var pi = 0;
+d.cur.forEach(function (v, i) { if (v > d.cur[pi]) pi = i; });
+var peakLeft = X(pi) / 10;
+var stores = [['Lipa', 0.46, 'var(--line)'], ['Davao', 0.24, 'var(--gold)'], ['Malvar', 0.18, 'var(--ink)'], ['Banay-Banay', 0.12, 'var(--seg4)']];
+var lipa = total * 0.46;
+var ch = [['In-store', 62, 'var(--line)'], ['GrabFood', 21, 'var(--gold)'], ['foodpanda', 11, 'var(--ink)'], ['Catering', 6, 'var(--seg4)']];
+var acc = 0;
+var spark = function (a) {
+var mx = Math.max.apply(null, a), mn = Math.min.apply(null, a);
+return a.map(function (v, i) { return (i / (a.length - 1) * 116 + 2).toFixed(1) + ',' + (30 - (v - mn) / ((mx - mn) || 1) * 26).toFixed(1); }).join(' ');
+};
+var exp = d.cur.map(function (v, i) { return v * (0.3 + 0.04 * Math.sin(i)); });
+var net = d.cur.map(function (v, i) { return v - exp[i]; });
+var expT = sum(exp);
+var dots = [];
+for (var k = 0; k < 58; k++) dots.push({ cls: k < 46 ? (k % 7 === 3 ? 'on blink' : 'on') : '' });
+var r = [['today', 'Today'], ['week', '7 days'], ['month', '30 days']];
+return {
+themeClass: dark ? 'dk' : '',
+ranges: r.map(function (x) { return { label: x[1], cls: x[0] === range ? 'on' : '', pressed: x[0] === range ? 'true' : 'false', pick: function () { self.setState({ range: x[0] }); self.run(); } }; }),
+sub: d.sub,
+unit: d.unit,
+curName: d.curName,
+prevName: d.prevName,
+heroText: fmt(total * e),
+deltaPct: ((total - prevSame) / prevSame * 100).toFixed(1) + '%',
+deltaAbs: fmt(total - prevSame),
+lede: d.labels[pi].replace(/ \d+$/, '') + ' carried it at ₱' + fmt(d.cur[pi]) + ', and Lipa alone did ₱' + Math.round(lipa / 1000).toLocaleString('en-PH') + 'k.',
+chartLabel: d.curName + ' sales, ' + n + ' points, peak ' + d.labels[pi] + ' at ₱' + fmt(d.cur[pi]),
+curPath: curPath,
+prevPath: path(d.prev),
+areaPath: areaPath,
+peakLeft: peakLeft.toFixed(2),
+peakTop: (Y(d.cur[pi]) / 360 * 100).toFixed(2),
+calloutX: peakLeft > 70 ? 'auto; right: -10px' : '-10px',
+peakText: fmt(d.cur[pi]),
+peakLabel: d.labels[pi],
+ticks: d.labels.map(function (l, i) { return { text: (i % d.tickEvery === 0 || i === n - 1) ? l : '' }; }),
+support: [
+{ label: 'Expenses', value: fmt(expT * e), note: (expT / total * 100).toFixed(1) + '% of sales', spark: spark(exp), sparkColor: 'var(--muted)', href: '/expenses', delay: '.1s' },
+{ label: 'Net income', value: fmt((total - expT) * e), note: 'margin ' + ((total - expT) / total * 100).toFixed(1) + '%', spark: spark(net), sparkColor: 'var(--ok)', href: '/reports/income-statement', delay: '.2s' },
+{ label: 'Customers owe us', value: fmt(58200 * e), note: '2 accounts past 30 days', spark: spark([61, 64, 59, 66, 62, 60, 58]), sparkColor: 'var(--gold-deep)', href: '/reports/ar-aging', delay: '.3s' },
+{ label: 'We owe suppliers', value: fmt(143950 * e), note: '3 bills due this week', spark: spark([120, 131, 128, 140, 152, 149, 144]), sparkColor: 'var(--line)', href: '/reports/ap-aging', delay: '.4s' }
+],
+stores: stores.map(function (s, i) { return { name: s[0], pct: (s[1] * 100).toFixed(0), pctText: (s[1] * 100).toFixed(0) + '%', value: fmt(total * s[1] * e), color: s[2], delay: (0.15 * i) + 's' }; }),
+channels: ch.map(function (c, i) { var o = { name: c[0], pct: c[1], value: fmt(total * c[1] / 100 * e), color: c[2], dash: c[1] + ' ' + (100 - c[1]), offset: String(-acc), delay: (0.2 * i) + 's' }; acc += c[1]; return o; }),
+needs: [
+{ n: 7, label: 'Findings to review', hint: '2 opened today', href: '/findings' },
+{ n: 12, label: 'Items below reorder', hint: 'Lipa 5 · Davao 4 · Malvar 3', href: '/inventory/low-stock' },
+{ n: 3, label: 'Open disputes', hint: 'commissary short-deliveries', href: '/commissary/discrepancies' },
+{ n: 2, label: 'Cash floats still out', hint: 'oldest is 4 days', href: '/cash-requests' }
+],
+dots: dots
+};
+}
+}
+</script>
+</body>
+</html>

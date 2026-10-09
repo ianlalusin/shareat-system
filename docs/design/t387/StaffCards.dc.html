@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Staff ID card wall</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#d40909}a:hover{color:#2b2620}
+.disp{font-family:'Baloo 2',sans-serif;font-weight:800;letter-spacing:-.01em}
+.pill{height:40px;padding:0 16px;border-radius:999px;border:1px solid #94866f;background:#fffdf8;color:#2b2620;font:600 14px 'Plus Jakarta Sans',sans-serif;cursor:pointer}
+.pill.on{background:#2b2620;border-color:#2b2620;color:#fbf4e4}
+.pill:focus-visible,.badge:focus-visible{outline:2px solid #2b2620;outline-offset:3px}
+.hang{display:flex;flex-direction:column;align-items:center;animation:drop .7s cubic-bezier(.16,1,.3,1) both}
+.strap{width:18px;height:34px;background:repeating-linear-gradient(90deg,#d40909 0 6px,#a00606 6px 12px);border-radius:3px 3px 0 0}
+.ring{width:26px;height:12px;border:3px solid #94866f;border-bottom:0;border-radius:14px 14px 0 0;margin-bottom:-2px}
+.badge{position:relative;width:100%;background:#fffdf8;border-radius:18px;overflow:hidden;box-shadow:0 1px 0 rgba(43,38,32,.06),0 18px 30px -20px rgba(43,38,32,.45);text-decoration:none;color:#2b2620;display:flex;flex-direction:column;align-items:center;transform-origin:50% -40px;transition:transform .5s cubic-bezier(.34,1.56,.64,1)}
+.badge:hover{transform:rotate(-3deg)}
+.head{position:absolute;left:-10%;right:-10%;top:0;height:92px;background:#d40909;border-radius:0 0 50% 50%}
+.av{position:relative;margin-top:44px;width:96px;height:96px;border-radius:99px;border:4px solid #fffdf8;display:flex;align-items:center;justify-content:center;font-family:'Baloo 2',sans-serif;font-weight:800;font-size:36px;color:#fff;box-sizing:border-box}
+.state{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:99px;font-size:12px;font-weight:700}
+.state b{width:8px;height:8px;border-radius:99px;background:currentColor}
+.s-on{background:#e2f1e8;color:#0e6b45}
+.s-on b{animation:beat 1.6s infinite}
+.s-br{background:#fce8b8;color:#7a4f00}
+.s-off{background:#efece4;color:#55606e}
+.punch{position:absolute;top:10px;left:50%;margin-left:-14px;width:28px;height:7px;border-radius:99px;background:#fbf4e4;opacity:.9}
+@keyframes drop{from{opacity:0;transform:translateY(-30px)}to{opacity:1;transform:none}}
+@keyframes beat{0%,100%{opacity:1}50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.sw *{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div class="sw" style="box-sizing: border-box; background: #fbf4e4; color: #2b2620; font-family: 'Plus Jakarta Sans', sans-serif; padding: 32px clamp(16px, 4vw, 64px) 64px">
+<div style="max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px">
+<header style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<p style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6b5f4f">People · {{ countText }}</p>
+<h1 class="disp" style="margin: 0; font-size: 56px; line-height: .95">The crew</h1>
+</div>
+<div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
+<label style="display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid #94866f; background: #fff; min-width: 220px; color: #6b5f4f"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><input type="search" placeholder="Find by name or role" aria-label="Find staff" style="border: 0; outline: 0; background: transparent; font: 400 14px 'Plus Jakarta Sans'; color: #2b2620; width: 100%"></label>
+<a href="#" style="display: inline-flex; align-items: center; height: 44px; padding: 0 20px; border-radius: 99px; background: #d40909; color: #fff; font-weight: 700; text-decoration: none">Hire someone</a>
+</div>
+</header>
+<div role="group" aria-label="Store" style="display: flex; gap: 8px; flex-wrap: wrap">
+<sc-for list="{{ stores }}" as="s" hint-placeholder-count="5"><button type="button" class="pill {{ s.cls }}" aria-pressed="{{ s.pressed }}" onClick="{{ s.pick }}">{{ s.label }}</button></sc-for>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 36px 28px">
+<sc-for list="{{ people }}" as="p" hint-placeholder-count="10">
+<div class="hang" style="animation-delay: {{ p.delay }}">
+<span class="strap" aria-hidden="true"></span><span class="ring" aria-hidden="true"></span>
+<a href="#" class="badge" aria-label="{{ p.name }}, {{ p.role }}, {{ p.stateText }}">
+<span class="head" aria-hidden="true"></span><span class="punch" aria-hidden="true"></span>
+<img src="/_blob/e03e260ef5e100156c67ba0cd8aa761f" alt="" style="position: absolute; top: 22px; right: 16px; width: 30px; height: 30px; border-radius: 99px; background: #fbf4e4">
+<span class="av" style="background: {{ p.tone }}">{{ p.ini }}</span>
+<span class="disp" style="margin-top: 12px; font-size: 21px; line-height: 1.05; text-transform: uppercase; text-align: center; padding: 0 12px">{{ p.name }}</span>
+<span style="margin-top: 4px; font-size: 13px; font-weight: 700; color: #d40909; text-transform: uppercase; letter-spacing: .06em">{{ p.role }}</span>
+<span style="margin-top: 2px; font-size: 12px; color: #6b5f4f">{{ p.store }} · {{ p.tenure }}</span>
+<span style="margin: 14px 0 18px"><span class="state {{ p.stateCls }}"><b></b>{{ p.stateText }}</span></span>
+</a>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+constructor(props) { super(props); this.state = { store: 'All' }; }
+renderVals() {
+var self = this;
+var P = [
+['Marites Dela Cruz', 'Store manager', 'Lipa', '4 yrs', 'on', 'since 9:52 am'],
+['Jomar Villanueva', 'Grill master', 'Lipa', '3 yrs', 'on', 'since 4:58 pm'],
+['Kristine Abad', 'Cashier', 'Lipa', '2 yrs', 'br', 'break, 12 min'],
+['Paolo Reyes', 'Server', 'Lipa', '8 mos', 'on', 'since 5:01 pm'],
+['Liza Mendoza', 'Store manager', 'Davao', '2 yrs', 'on', 'since 10:20 am'],
+['Ronnel Bautista', 'Grill master', 'Davao', '1 yr', 'off', 'off today'],
+['Angelica Santos', 'Server', 'Davao', '5 mos', 'on', 'since 4:45 pm'],
+['Dennis Aquino', 'Slicer', 'Commissary', '3 yrs', 'off', 'off at 3:10 pm'],
+['Rowena Castillo', 'Commissary lead', 'Commissary', '4 yrs', 'on', 'since 6:00 am'],
+['Mark Anthony Lim', 'Driver', 'Commissary', '2 yrs', 'on', 'on the road'],
+['Grace Navarro', 'Cashier', 'Malvar', '1 yr', 'on', 'since 4:30 pm'],
+['Joshua Ramos', 'Server', 'Malvar', '3 mos', 'br', 'break, 4 min']
+];
+var tones = ['#2b2620', '#a8730f', '#0e6b45', '#1e4fb8', '#6427c9', '#a00606'];
+var st = this.state.store;
+var list = P.filter(function (p) { return st === 'All' || p[2] === st; });
+var on = list.filter(function (p) { return p[4] === 'on'; }).length;
+return {
+countText: list.length + ' people · ' + on + ' on shift now',
+stores: ['All', 'Lipa', 'Davao', 'Malvar', 'Commissary'].map(function (s) { return { label: s, cls: s === st ? 'on' : '', pressed: s === st ? 'true' : 'false', pick: function () { self.setState({ store: s }); } }; }),
+people: list.map(function (p, i) { var parts = p[0].split(' '); return { name: p[0], role: p[1], store: p[2], tenure: p[3], ini: parts[0][0] + parts[parts.length - 1][0], tone: tones[i % tones.length], stateCls: 's-' + p[4], stateText: p[4] === 'on' ? 'On shift · ' + p[5] : p[5].charAt(0).toUpperCase() + p[5].slice(1), delay: (i * 0.05) + 's' }; })
+};
+}
+}
+</script>
+</body>
+</html>
