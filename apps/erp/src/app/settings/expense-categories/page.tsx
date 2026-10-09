@@ -12,6 +12,8 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { EditableRecord } from '@/components/forms';
 import { FormGrid, Field } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { EXPENSE_CATEGORY_ACCOUNT, EXPENSE_CATEGORY_RENAME } from './typed-forms';
 
 export const metadata = { title: 'Expense categories — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -122,7 +124,7 @@ export default async function ExpenseCategoriesSettingsPage({
                     {c.isSystem ? (
                       c.category
                     ) : (
-                      <EditableRecord action={renameCategoryAction} label={c.category} hidden={{ categoryId: c.id }}>
+                      <EditableRecord action={renameCategoryAction} label={c.category} hidden={{ categoryId: c.id }} typed={typedFor(sp, EXPENSE_CATEGORY_RENAME, c.id, actor.personId)}>
                         <input
                           name="category"
                           defaultValue={c.category}
@@ -175,6 +177,7 @@ export default async function ExpenseCategoriesSettingsPage({
                       action={setCategoryAccountAction}
                       label={`account for ${c.category}`}
                       hidden={{ categoryId: c.id, categoryLabel: c.category }}
+                      typed={typedFor(sp, EXPENSE_CATEGORY_ACCOUNT, c.id, actor.personId)}
                     >
                       <select
                         name="accountCode"

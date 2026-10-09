@@ -10,6 +10,8 @@
  * way the items and commissary-catalogue actions do.
  */
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { STAFF_POSITIONS } from './typed-forms';
 import {
   createEmployment,
   createPerson,
@@ -153,7 +155,7 @@ export async function setPositionsAction(formData: FormData): Promise<void> {
       setEmploymentPositions(tx, actor, { employmentId, positionIds, primaryPositionId }),
     );
   } catch (err) {
-    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err), typed: keepTyping(formData, STAFF_POSITIONS, employmentId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Positions saved.' });
 }

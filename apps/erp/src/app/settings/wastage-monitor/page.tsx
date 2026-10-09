@@ -7,6 +7,8 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { EditableRecord } from '@/components/forms';
 import { FormGrid, Field } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { WASTAGE_MONITOR_EDIT } from './typed-forms';
 
 export const metadata = { title: 'Wastage Monitor — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -152,6 +154,7 @@ export default async function WastageMonitorSettingsPage({
         action={setWastageMonitorAction}
         label="Wastage Monitor"
         hidden={{ storeId, personLabel: monitor?.displayName ?? '' }}
+        typed={typedFor(sp, WASTAGE_MONITOR_EDIT, storeId, actor.personId)}
       >
         <FormGrid className="text-sm">
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Monitor</span>}>

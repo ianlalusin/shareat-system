@@ -31,6 +31,8 @@ import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../../lib/error-shape';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { STORE_DETAILS, STORE_OPENING_DATE, STORE_STOCK_MODEL } from './typed-forms';
 // T-346 Amendment R3.1 — the one date-validity check, never re-derived per call site.
 import { storesRepo } from '@shareat/db';
 
@@ -143,7 +145,7 @@ export async function updateStoreAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err), typed: keepTyping(fd, STORE_DETAILS, storeId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(
     `/admin/stores/${storeId}`,
@@ -168,13 +170,13 @@ export async function setStoreStockModelAction(fd: FormData): Promise<void> {
   // ⚠️ Validated here rather than cast: the value reaches the database through a CHECK constraint
   //    either way, but a refusal that names the two legal values is worth more than a 23514.
   if (raw !== 'single_room' && raw !== 'multi_room') {
-    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: 'Choose either one room or several rooms.' });
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: 'Choose either one room or several rooms.', typed: keepTyping(fd, STORE_STOCK_MODEL, storeId, { actorId: actor.personId }) });
   }
   const model = raw as 'single_room' | 'multi_room';
   try {
     await withOrgPrincipal(actor.orgId, (tx) => setStoreStockModel(tx, actor, storeId, model));
   } catch (err) {
-    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err), typed: keepTyping(fd, STORE_STOCK_MODEL, storeId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(
     `/admin/stores/${storeId}`,
@@ -207,7 +209,10 @@ export async function setStoreOpeningDateAction(fd: FormData): Promise<void> {
     return await redirectWithFlash(
       `/admin/stores/${storeId}`,
       {},
-      { error: invalidDateMessage(openingDate), keep: { openingDate } },
+      {
+        error: invalidDateMessage(openingDate),
+        typed: keepTyping(fd, STORE_OPENING_DATE, storeId, { actorId: actor.personId }),
+      },
     );
   }
   try {
@@ -231,7 +236,7 @@ export async function setStoreOpeningDateAction(fd: FormData): Promise<void> {
         },
       );
     }
-    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: message });
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: message, typed: keepTyping(fd, STORE_OPENING_DATE, storeId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(
     `/admin/stores/${storeId}`,

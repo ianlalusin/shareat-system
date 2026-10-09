@@ -1,0 +1,48 @@
+/**
+ * T-389 (DEF-617): the attendance policy form keeps what was typed after a refused save. Not a 'use server' file,
+ * so the page and the action import one definition. Every named control except the hidden storeId (the record).
+ */
+import { defineTypedForm } from '@/lib/keep-typing';
+
+export const ATTENDANCE_POLICY = defineTypedForm({
+  form: 'attendance.policy',
+  fields: [
+    'effectiveFrom',
+    'allowedShiftStartHours',
+    'anchorWindowMinutes',
+    'autoClockOutHour',
+    'breakEnabled',
+    'credentialFace',
+    'credentialFingerprint',
+    'credentialNfc',
+    'defaultBreakHours',
+    'defaultWorkHours',
+    'earlyOutGraceMinutes',
+    'halfDayHours',
+    'halfDayOnMissingTap',
+    'holidayRegularMultiplier',
+    'holidaySpecialNonWorkingMultiplier',
+    'holidaySpecialWorkingMultiplier',
+    'lateChargePerMinute',
+    'lateGraceMinutes',
+    'lateInfractionPoints',
+    'latePolicy',
+    'maxShiftHours',
+    'nightDiffEnabled',
+    'nightDiffEndHour',
+    'nightDiffMultiplier',
+    'nightDiffStartHour',
+    'overtimeFixedHourly',
+    'overtimeMode',
+    'overtimeMultiplier',
+    'payoutDays',
+    'payoutLagDays',
+    'payoutMode',
+    'payrollPeriodType',
+    'requiredHoursPerShift',
+    'semiMonthlyCutoffDay',
+    'shortShiftHalfDayOt',
+    'timeMode',
+    'undertimeGraceMinutes',
+  ],
+});
