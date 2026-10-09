@@ -4,7 +4,7 @@
 import { eq, inArray } from 'drizzle-orm';
 import { posMappingRepo, posV1Repo, salesDaysRepo, schema, stockUsageRepo } from '@shareat/db';
 import type { PosV1FeedPurpose } from '@shareat/db/schema';
-import { buildPlan } from '@shareat/domain';
+import { buildPlan, pullHolds } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
@@ -54,6 +54,8 @@ export interface PullLineView {
   readonly quantity: string | null;
   readonly usageRecordId: string | null;
   readonly blocked: { reason: string } | null;
+  /** T-388 R12: why this unposted line would be held right now (plain words), or null. Live stock, not the stamp. */
+  readonly hold: string | null;
 }
 
 export interface PullView {
@@ -76,6 +78,7 @@ export async function pullView(orgId: string, pullId: string): Promise<PullView 
     const pull = await posMappingRepo.getPull(tx, pullId);
     if (!pull) return null;
     const lines = await posMappingRepo.listPullLines(tx, pullId);
+    const holds = await pullHolds(tx, orgId, pullId);
     const feed = pull.posV1DayFeedId ? await posV1Repo.getFeedById(tx, orgId, pull.posV1DayFeedId) : undefined;
 
     const itemIds = [...new Set(lines.map((l) => l.itemId).filter((v): v is string => !!v))];
@@ -98,6 +101,7 @@ export async function pullView(orgId: string, pullId: string): Promise<PullView 
       quantity: l.quantity,
       usageRecordId: l.usageRecordId,
       blocked: l.blocked,
+      hold: holds.get(l.lineKey) ?? null,
     });
 
     return {
