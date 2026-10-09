@@ -16,7 +16,7 @@
 --
 -- PRECHECKS (read-only, BEGIN READ ONLY; ... ROLLBACK;, run as doadmin with Ian before the push):
 --   P0189a  SELECT org_id, status, count(*) FROM items GROUP BY 1, 2 ORDER BY 1, 2;          -- informational: what the recode touches
---   P0189b  SELECT count(*) FROM items WHERE code ~ '^[A-Z0-9]{4}-[0-9]{3}$';                 -- informational: already shaped, kept and seeded (expect 0)
+--   P0189b  SELECT count(*) FROM items WHERE upper(code) ~ '^[A-Z0-9]{4}-[0-9]{3}$';          -- informational: already shaped (any case), seeded (expect 0)
 --   P0189c  SELECT org_id, upper(code), count(*) FROM items GROUP BY 1, 2 HAVING count(*) > 1;
 --           -- MUST be 0 rows: the new UNIQUE (org_id, upper(code)) cannot be built over a case-twin. If any, rename one
 --           -- through Rename on the item page (T-383) before the push.
@@ -57,9 +57,9 @@ GRANT SELECT, INSERT, UPDATE ON "item_code_counters" TO "shareat_app";
 SET LOCAL row_security = off;
 --> statement-breakpoint
 INSERT INTO "item_code_counters" ("org_id", "stem", "last_seq")
-SELECT "org_id", left("code", 4), max(right("code", 3)::int)
+SELECT "org_id", left(upper("code"), 4), max(right("code", 3)::int)
   FROM "items"
- WHERE "code" ~ '^[A-Z0-9]{4}-[0-9]{3}$'
+ WHERE upper("code") ~ '^[A-Z0-9]{4}-[0-9]{3}$'
  GROUP BY 1, 2;
 --> statement-breakpoint
 SET LOCAL row_security = on;

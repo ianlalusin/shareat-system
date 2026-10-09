@@ -262,7 +262,7 @@ export default async function ItemsPage({
             <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>} className="text-sm">
               <input id="item-name" name="name" required placeholder="Pork belly" className={`${INPUT} ${FULL}`} />
             </Field>
-            <ItemCodeField nameInputId="item-name" mode="new" canOverride={canOverride} suggestAction={suggestItemCodeAction} />
+            <ItemCodeField nameInputId="item-name" mode="new" canOverride={false} suggestAction={suggestItemCodeAction} />
             <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>} className="text-sm">
               <select name="kind" required defaultValue="" className={`${INPUT} ${FULL}`}>
                 <option value="">Choose a kind</option>
@@ -323,6 +323,20 @@ export default async function ItemsPage({
           </fieldset>
           <div className="flex flex-wrap gap-2">
             <button type="submit" className={BTN}>Request item</button>
+            {/* T-386 R7: the override belongs to the direct add (a super-admin), not to the request fields. */}
+            {canOverride && (
+              <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                Use a different code (super-admin)
+                <input
+                  name="code"
+                  type="text"
+                  autoComplete="off"
+                  pattern="[A-Za-z0-9]{4}-[0-9]{3}"
+                  placeholder="CHWN-001"
+                  className={`${INPUT} font-mono`}
+                />
+              </label>
+            )}
             <button
               type="submit"
               formAction={createItemAction}

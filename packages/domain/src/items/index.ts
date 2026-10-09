@@ -182,8 +182,10 @@ export async function renameItem(
     if (input.adoptSuggestedCode === true) {
       const stem = requireItemCodeStem(name);
       code = parseItemCode(item.code)?.stem === stem ? item.code : await allocateItemCode(trx, actor.orgId, stem);
-    } else if (typed === item.code || typed === '') {
+    } else if (typed === '') {
       code = typed;
+    } else if (typed.toUpperCase() === item.code.toUpperCase()) {
+      code = item.code; // the item's own code typed in another case is unchanged (R9)
     } else {
       code = await validateItemCodeOverride(trx, actor.orgId, typed);
     }
@@ -574,12 +576,17 @@ export async function undeclareSupplierItem(
 // -------------------------------------------------------------------------------------
 
 /** Renders the similarity hits as one sentence a human can act on. */
-function warningFrom(similar: SimilarItem[]): string | null {
+function warningFrom(similar: SimilarItem[], alsoListed: ReadonlySet<string> = new Set()): string | null {
   if (similar.length === 0) return null;
+  // An item that the same-stem sentence already names is not named twice: here it is only its code and score.
   return (
     'Possible duplicate of ' +
     similar
-      .map((s) => `"${s.name}" (${s.code}, per ${s.baseUnit}, ${Math.round(s.similarity * 100)}% alike)`)
+      .map((s) =>
+        alsoListed.has(s.id)
+          ? `${s.code} (per ${s.baseUnit}, ${Math.round(s.similarity * 100)}% alike)`
+          : `"${s.name}" (${s.code}, per ${s.baseUnit}, ${Math.round(s.similarity * 100)}% alike)`,
+      )
       .join('; ')
   );
 }
@@ -632,7 +639,7 @@ export async function requestItem(
 
     const similar = await itemsRepo.findSimilarItems(trx, actor.orgId, name);
     const sameStem = await itemCodesRepo.itemsSharingStem(trx, actor.orgId, stem);
-    const similarWarning = [warningFrom(similar), sameStemWarning(sameStem)].filter((w): w is string => w !== null).join('; ') || null;
+    const similarWarning = [warningFrom(similar, new Set(sameStem.map((s) => s.id))), sameStemWarning(sameStem)].filter((w): w is string => w !== null).join('; ') || null;
 
     const { id } = await itemsRepo.insertItemRequest(trx, {
       orgId: actor.orgId,
