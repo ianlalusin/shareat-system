@@ -1,6 +1,6 @@
 # T-388: a POS usage pull posts every line that has stock and holds back only the short items (DEF-618)
 
-**Status:** SPEC APPROVED WITH CHANGES 2026-10-10 (review applied). Written at `2516b0c` (Opus planner); a fresh
+**Status:** S1+S2 DONE 2026-10-10 (`931c921`, on main; browser smoke on 9008 passed); deploys with the wrap-up PR (bible row 296). Spec approved with review changes; Q1 answered (a).
 Opus review's 13 changes applied the same day, each verified at source. Not started.
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
 **Migration:** **none** (next free stays 0190). No column changes and no backfill. "Finalized" changes meaning

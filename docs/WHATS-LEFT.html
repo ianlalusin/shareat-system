@@ -145,7 +145,7 @@
       <div class="count you"><div class="n">4</div><div class="l">things only you can do</div></div>
       <div class="count done"><div class="n">243</div><div class="l">roadmap tasks done</div></div>
     </div>
-    <p class="src">production at migration 0189 (7489bba, deployed 9 Oct: T-383 S1, T-384, T-385, T-386 S1-S4) &middot; next free migration 0190 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+    <p class="src">production at migration 0189 (7489bba, deployed 9 Oct: T-383 S1, T-384, T-385, T-386 S1-S4) &middot; next free migration 0190 &middot; <b>on main, deploying with the wrap-up PR (row 296):</b> T-383 S2 retire/restore, T-386 S5 recode script, T-388 pull holds short items &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
   </header>
 
   <div class="dates">
@@ -219,9 +219,8 @@
       <div class="item"><div class="id">ADR-015</div><div><b>POS &amp; CUSTOMER on the shared backend:</b> copied POS after 1 Jan 2027. Planned phase.</div></div>
       <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
       <div class="item"><div class="id">POS pulls</div><div>Interim pulls rebuilt per your redesign (T-375 S5-lite, S6). At the shared backend (ADR-015 P2) the pull goes away: usage posts after verify, and refunded or voided items wait for a manager decision (your answers, bible row 282).</div></div>
-      <div class="item"><div class="id">T-383 S2</div><div><b>Retire and restore an item</b>, with the stock warning; a retired item stays usable until its stock is used up (row 290).</div></div>
       <div class="item"><div class="id">DEF-617</div><div>A refused save keeps your typing only on POS link tenders; other forms still reload locked.</div></div>
-      <div class="item"><div class="id">T-386 S5, S6</div><div>Recode existing items to the new shape (with you), then the database shape check.</div></div>
+      <div class="item"><div class="id">T-386 S6</div><div>The database shape check for item codes, after the production recode (S5, built) reads 0 unconverted.</div></div>
       <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
       <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). Done and smoked on 9008 (040e572, c5b0eac; migration 0184); on production since 6 October. Production has no float targets, so nothing to move there.</div></div>
       <div class="item"><div class="id">T-320</div><div>Access that does not come from a position. Number reserved.</div></div>
@@ -285,13 +284,14 @@
           <tr><td class="n">T-380</td><td>No typed amount, reason or banner text in any page address: one signed one-minute message cookie, every screen converted, crafted links show nothing</td><td class="n">476, 603, 604, 605</td></tr>
           <tr><td class="n">T-381</td><td>Two people booking the same missed month take turns; the second gets a sentence</td><td class="n">606</td></tr>
           <tr><td class="n">T-382</td><td>A guarded unlink from POS (super-admin, reason, audit; 0187); a POS store with imported sales never links to another store</td><td class="n">607</td></tr>
+          <tr><td class="n">T-388</td><td>A POS usage pull posts every line that has stock and holds back only the short item, named in words; the day is finalized only when nothing is held (row 297). On main, deploys at wrap-up</td><td class="n">618, 619, 620, 621, 622</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
   <footer>
-    Counted 4 October 2026, updated 9 October, from <code>docs/DEFECTS-REGISTER.md</code> (recounted against git on 3 October), the task status lines,
+    Counted 4 October 2026, updated 10 October, from <code>docs/DEFECTS-REGISTER.md</code> (recounted against git on 3 October), the task status lines,
     <code>docs/ROADMAP.html</code> and the Open Questions page. A defect counts as closed only when its register row says fixed.
   </footer>
 
