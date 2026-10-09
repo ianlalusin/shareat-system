@@ -55,6 +55,7 @@ import { createCustomer, createItem, createTradeOrder, dispatchTradeOrder, recei
 import { receiveDelivery } from '../../../../packages/domain/src/deliveries/receive';
 import { quantity } from '../../../../packages/domain/src/stock/quantity';
 import { paramsOf } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -148,7 +149,7 @@ async function stock(f: Fixture, itemId: string, qty: string): Promise<void> {
 
 /** A dispatched 20-unit order from the commissary to `branch`, received as `received` of 20. Returns the order and its discrepancy row (if any). */
 async function orderTo(f: Fixture, branch: string, received: string) {
-  const itemId = (await asOrg(f.orgId, (tx) => createItem(tx, f.superAdmin, { code: uid('WS'), name: `Prepped ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }))).id;
+  const itemId = (await asOrg(f.orgId, (tx) => createItem(tx, f.superAdmin, { code: testItemCode(), name: `Prepped ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }))).id;
   await stock(f, itemId, '30');
   await sql`
     insert into commissary_item_map (org_id, commissary_store_id, branch_store_id, commissary_item_id, branch_item_id, created_by)

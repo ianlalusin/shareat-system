@@ -36,6 +36,7 @@ import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createCustomer, createItem, createTradeOrder, type TradeLineDraft } from '@shareat/domain';
 import { errorMessage } from '../../src/lib/constraint-messages';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -85,10 +86,10 @@ afterAll(async () => {
 
 async function twoLineOrder(f: Awaited<ReturnType<typeof fixture>>, secondLineNo: number | undefined): Promise<unknown> {
   const item1 = await asOrg(f.orgId, (tx) =>
-    createItem(tx, f.superAdmin, { code: uid('WS'), name: `Item ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }),
+    createItem(tx, f.superAdmin, { code: testItemCode(), name: `Item ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }),
   );
   const item2 = await asOrg(f.orgId, (tx) =>
-    createItem(tx, f.superAdmin, { code: uid('WS'), name: `Item ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }),
+    createItem(tx, f.superAdmin, { code: testItemCode(), name: `Item ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }),
   );
   const customer = await asOrg(f.orgId, (tx) => createCustomer(tx, f.admin, { name: `Buyer ${uid('b')}`, customerGroup: 'wholesale' }));
 

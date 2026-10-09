@@ -28,6 +28,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createCustomer, createItem, createTradeOrder } from '@shareat/domain';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -58,7 +59,7 @@ async function fixture(hint: string) {
 
   const superActor = actor(orgId, superAdmin!.id);
   const item = await asOrg(orgId, (tx) =>
-    createItem(tx, superActor, { code: uid('WS'), name: `Beef ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }),
+    createItem(tx, superActor, { code: testItemCode(), name: `Beef ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }),
   );
 
   const customer = await asOrg(orgId, (tx) =>

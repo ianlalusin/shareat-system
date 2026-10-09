@@ -69,6 +69,7 @@ import {
 } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { paramsOf } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -313,7 +314,7 @@ async function cutoverFixture(hint: string) {
   await sql`insert into person_store_scope (person_id, store_id) values (${superAdmin!.id}, ${storeId})`;
   const admin_ = actor(orgId, admin!.id);
   const item = await asOrg(orgId, (tx) =>
-    createItem(tx, actor(orgId, superAdmin!.id), { code: uid('SKU'), name: 'Probe Item', kind: 'raw_material', baseUnit: 'pcs' }),
+    createItem(tx, actor(orgId, superAdmin!.id), { code: testItemCode(), name: 'Probe Item', kind: 'raw_material', baseUnit: 'pcs' }),
   );
   return { orgId, storeId, admin: admin_, itemId: item.id };
 }

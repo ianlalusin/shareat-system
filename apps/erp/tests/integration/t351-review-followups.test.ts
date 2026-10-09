@@ -51,6 +51,7 @@ import { createItem, createPrepaidItem, createSupplier, recordInvoice } from '@s
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { paramsOf } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -99,7 +100,7 @@ async function fixture(hint: string) {
   const supplier = await asOrg(orgId, (tx) => createSupplier(tx, actor(orgId, admin!.id), { name: `Supplier ${code}` }));
   const itemName = `Pork belly ${uid('n')}`;
   const item = await asOrg(orgId, (tx) =>
-    createItem(tx, actor(orgId, superAdmin!.id), { code: uid('PORK'), name: itemName, kind: 'raw_material', baseUnit: 'kg' }),
+    createItem(tx, actor(orgId, superAdmin!.id), { code: testItemCode(), name: itemName, kind: 'raw_material', baseUnit: 'kg' }),
   );
 
   return {

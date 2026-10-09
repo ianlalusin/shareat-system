@@ -135,7 +135,8 @@ describe('T-271 — mechanism proof: a DEF-279 trigger name can now be mapped', 
     // T-382 (2026-10-08): 37 -> 39, deliberately: pos_v1_store_links_unlink_shape_check and pos_v1_store_links_unlink_reason_check.
     // T-383 S1 (2026-10-08): 39 -> 41, deliberately: items_name_not_blank_check and items_code_not_blank_check.
     // T-385 S2 (2026-10-09): 41 -> 42, deliberately: sales_days_verify_requires_submitted.
-    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(42);
+    // T-386 S2 (2026-10-09): 42 -> 43, deliberately: items_code_never_reused.
+    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(43);
 
     // And the allowlist reads the same after restore as before the mutation ever happened.
     expect(isUnfitForAStranger(err, TEST_SENTENCE)).toBe(true);

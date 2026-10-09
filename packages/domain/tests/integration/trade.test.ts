@@ -46,6 +46,7 @@ import {
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -181,7 +182,7 @@ async function mapSelf(f: Fixture, itemId: string): Promise<void> {
 async function wholesaleItem(f: Fixture, name: string, storeId?: string): Promise<string> {
   const item = await asOrg(f.orgId, (tx) =>
     createItem(tx, f.superAdmin, {
-      code: uid('WS'),
+      code: testItemCode(),
       name: `${name} ${uid('n')}`,
       kind: 'raw_material',
       baseUnit: 'kg',
@@ -294,7 +295,7 @@ describe('what may be sold wholesale, and to whom', () => {
     const f = await fixture('bento');
     const bento = await asOrg(f.orgId, (tx) =>
       createItem(tx, f.superAdmin, {
-        code: uid('BENTO'), name: `Bento ${uid('n')}`, kind: 'retail', baseUnit: 'pcs',
+        code: testItemCode(), name: `Bento ${uid('n')}`, kind: 'retail', baseUnit: 'pcs',
         sellableRetail: true, sellableWholesale: false,
       }),
     );
@@ -596,7 +597,7 @@ describe('an internal transfer is not a sale', () => {
   async function plainItem(f: Fixture): Promise<string> {
     const item = await asOrg(f.orgId, (tx) =>
       createItem(tx, f.superAdmin, {
-        code: uid('TR'), name: `Prepped ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg',
+        code: testItemCode(), name: `Prepped ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg',
         sellableWholesale: false,
       }),
     );

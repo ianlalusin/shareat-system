@@ -62,6 +62,7 @@ import {
   voidUsageRecord,
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -320,7 +321,7 @@ describe('T7 — a LOCKED month says "locked"', () => {
 // -----------------------------------------------------------------------------------------------
 
 async function wholesaleItem(f: Fixture): Promise<string> {
-  const item = await asOrg(f.orgId, (tx) => createItem(tx, f.superAdmin, { code: uid('WS'), name: `Beef ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }));
+  const item = await asOrg(f.orgId, (tx) => createItem(tx, f.superAdmin, { code: testItemCode(), name: `Beef ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }));
   return item.id;
 }
 /** A dispatched external sale (dated 10 Jan 2026) ready to return. */

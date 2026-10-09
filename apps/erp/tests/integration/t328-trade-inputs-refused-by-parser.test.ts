@@ -49,6 +49,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createCustomer, createItem, createTradeOrder } from '@shareat/domain';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -136,7 +137,7 @@ describe('T-328 Test 2(a) — trade\'s inputs are refused by the parser, not by 
     const f = await fixture();
     const item = await asOrg(f.orgId, (tx) =>
       createItem(tx, f.superAdmin, {
-        code: uid('WS'),
+        code: testItemCode(),
         name: `Item ${uid('n')}`,
         kind: 'raw_material',
         baseUnit: 'kg',

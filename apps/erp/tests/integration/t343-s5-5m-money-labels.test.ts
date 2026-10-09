@@ -30,6 +30,7 @@ import type { Actor } from '@shareat/auth';
 import { createCashRequest, createSalesDay, createTradeOrder, createItem, createCustomer, createSupplier, recordPayment } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { errorMessage } from '../../src/lib/constraint-messages';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -173,7 +174,7 @@ describe('H3 — createTradeOrder: deliveryFee "abc" → The delivery fee', () =
   it('delivery fee "abc"', async () => {
     const f = await baseFixture('h3');
     const item = await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, { code: uid('WS'), name: `Item ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }),
+      createItem(tx, f.superAdmin, { code: testItemCode(), name: `Item ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }),
     );
     const customer = await asOrg(f.orgId, (tx) => createCustomer(tx, f.admin, { name: `Buyer ${uid('b')}`, customerGroup: 'wholesale' }));
 

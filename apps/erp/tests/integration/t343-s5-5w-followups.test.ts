@@ -57,6 +57,7 @@ import {
 } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { paramsOf } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -115,7 +116,7 @@ async function orgFixture(hint: string, opts: { superAdmin?: boolean } = {}) {
 async function invoiceFixture(hint: string) {
   const f = await orgFixture(hint, { superAdmin: true });
   const item = await asOrg(f.orgId, (tx) =>
-    createItem(tx, f.superActor!, { code: uid('SKU'), name: 'Probe Item', kind: 'raw_material', baseUnit: 'kg' }),
+    createItem(tx, f.superActor!, { code: testItemCode(), name: 'Probe Item', kind: 'raw_material', baseUnit: 'kg' }),
   );
   const supplier = await asOrg(f.orgId, (tx) => createSupplier(tx, f.admin, { name: 'Probe Supplier' }));
   const invoice = await asOrg(f.orgId, (tx) =>
@@ -161,7 +162,7 @@ describe('Q1 (S5.5w) — ap invoice line1_quantity="1,5"', () => {
 async function cutoverFixture(hint: string) {
   const f = await orgFixture(hint, { superAdmin: true });
   const item = await asOrg(f.orgId, (tx) =>
-    createItem(tx, f.superActor!, { code: uid('SKU'), name: 'Cutover Item', kind: 'raw_material', baseUnit: 'kg' }),
+    createItem(tx, f.superActor!, { code: testItemCode(), name: 'Cutover Item', kind: 'raw_material', baseUnit: 'kg' }),
   );
   return { ...f, itemId: item.id };
 }
