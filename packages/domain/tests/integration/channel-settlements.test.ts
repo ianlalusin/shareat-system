@@ -22,6 +22,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { closeDb, channelSettlementsRepo, loansRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
+import { forceVerifiedSql } from './_fixtures/sales-day-flow';
 import {
   previewChannelSettlement,
   recordChannelSettlement,
@@ -632,7 +633,7 @@ describe('DEF-137 — what the screen needed, and what wiring it found', () => {
   it('the queue lists a verified channel-day and drops it once settled', async () => {
     const f = await fixture('queue');
     // A verified day with a channel breakdown — what the screen actually reads.
-    await sql`update sales_days set status = 'verified' where id = ${f.salesDayId}`;
+    await forceVerifiedSql(sql, f.salesDayId, f.personId);
     await sql`
       insert into sales_day_channels (sales_day_id, channel_id, amount, no_sales)
       values (${f.salesDayId}, ${f.channelId}, 10000, false)`;

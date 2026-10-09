@@ -281,6 +281,8 @@ export type Capability =
    *  is the step that writes real usage records and posts through the ledger. */
   | 'finalize_pos_usage_pull'
   | 'unlink_store_from_pos'
+  /** T-385 S3: the super-admin exception to "the person who submitted a sales day may not verify it". */
+  | 'verify_own_sales_day'
   // Platform — super-admin only
   | 'cross_org_access'
   | 'view_franchise_sales';
@@ -384,6 +386,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'decide_pos_map_request',
   'finalize_pos_usage_pull',
   'unlink_store_from_pos',
+  'verify_own_sales_day',
   'cross_org_access',
   'view_franchise_sales',
 ];
@@ -568,6 +571,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   decide_pos_map_request: 'store',
   finalize_pos_usage_pull: 'store',
   unlink_store_from_pos: 'org',
+  verify_own_sales_day: 'org',
 
   cross_org_access: 'platform',
   view_franchise_sales: 'platform',
@@ -662,6 +666,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   decide_pos_map_request: 'production',
   finalize_pos_usage_pull: 'production',
   unlink_store_from_pos: 'sales',
+  verify_own_sales_day: 'sales',
 
   confirm_receipt: 'commissary',
   resolve_trade_discrepancy: 'commissary',
@@ -977,6 +982,7 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   decide_pos_map_request: { super_admin: true, admin: true, manager: true, staff: false },
   finalize_pos_usage_pull: { super_admin: true, admin: true, manager: true, staff: false },
   unlink_store_from_pos: { super_admin: true, admin: false, manager: false, staff: false },
+  verify_own_sales_day: { super_admin: true, admin: false, manager: false, staff: false },
 
   cross_org_access: { super_admin: true, admin: false, manager: false, staff: false },
   view_franchise_sales: { super_admin: true, admin: false, manager: false, staff: false },
@@ -1004,8 +1010,8 @@ export const ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER: readonly Capability[] = CAPA
 
 /**
  * ⭐ **Exactly the capabilities `super_admin` holds that `admin` does not — DERIVED, never
- * listed.** Today it is five: `approve_item`, `post_journal_entry`, `cross_org_access`, `unlink_store_from_pos` (T-382, backfilled by 0187),
- * `view_franchise_sales`.
+ * listed.** Today it is six: `approve_item`, `post_journal_entry`, `cross_org_access`, `unlink_store_from_pos` (T-382, backfilled by 0187),
+ * `verify_own_sales_day` (T-385, backfilled by 0188), `view_franchise_sales`.
  *
  * Same discipline and same reason as `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` above: computed from
  * the matrix so the two can never silently drift apart. Its sibling — that one is the delta
@@ -1164,6 +1170,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   decide_pos_map_request: 'decide a POS mapping request',
   finalize_pos_usage_pull: "finalise the day's POS usage figures",
   unlink_store_from_pos: 'unlink a store from POS',
+  verify_own_sales_day: 'verify a sales day you submitted yourself',
   cross_org_access: 'access another organisation (break-glass)',
   view_franchise_sales: 'view franchise sales',
 };

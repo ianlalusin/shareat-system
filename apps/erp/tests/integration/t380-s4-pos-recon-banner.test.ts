@@ -41,10 +41,10 @@ vi.mock('@shareat/core/env', async (orig) => {
 });
 
 import { POS_V1_FEED_PATHS } from '@shareat/db';
-import { verifySalesDay } from '../../../../packages/domain/src/sales-days/verify';
 import { posV1SalesBody, posV1SoldItemsBody } from '../../../../packages/db/src/pos-v1/fixtures';
 import { D1_FIGURES, D1_SOLD_ITEMS, importTestDay } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
 import { asOrgOn, DAY, s6Fixture, type S6F } from '../../../../packages/domain/tests/integration/_fixtures/pos-s6';
+import { submitThenVerify } from '../../../../packages/domain/tests/integration/_fixtures/sales-day-flow';
 import * as actions from '../../src/app/sales-days/actions';
 import PosReconciliationPage from '../../src/app/reports/pos-reconciliation/page';
 import { captureRedirect, currentJar, outcomeOf, resetJar } from '../helpers/flash-jar';
@@ -79,7 +79,7 @@ const decoded = (raw: string): string => decodeURIComponent(raw.replace(/\+/g, '
 async function dayFixture(hint: string): Promise<{ f: S6F; dayId: string }> {
   const f = await s6Fixture(sql, hint);
   const { id } = await asOrgOn(f.orgId, (tx) => importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: DAY }));
-  await asOrgOn(f.orgId, (tx) => verifySalesDay(tx, f.manager, id));
+  await asOrgOn(f.orgId, (tx) => submitThenVerify(tx, f.manager, id, f.admin));
   return { f, dayId: id };
 }
 

@@ -1,6 +1,6 @@
 # T-384: POS link screen — tenders that cannot be lost or overwritten, and full width
 
-**Status:** SPEC 2026-10-08 (Opus planner). Written at HEAD `1301c8a`.
+**Status:** DONE 2026-10-09 — S1a, S1b-min, S2a, S3a live via PR #1 (e2451ad); S1b and the S2b/S3b sweep L1-L6 live via PR #2 (daea634). Browser-smoked in 4 rounds. DEF-610..616 fixed; DEF-617 fixed for tenders only (other forms still reload locked). SPEC 2026-10-08 (Opus planner), written at `1301c8a`.
 **Model:** Sonnet for every slice, tester first, then builder. S0 is a tester-only browser slice. Any amendment is
 written in plan mode (Opus).
 **Migration:** **none.** Every change is domain, repo, screen or test. `tenders` already has `updated_at`, the

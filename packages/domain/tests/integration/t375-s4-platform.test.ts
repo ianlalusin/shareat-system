@@ -49,6 +49,7 @@ import { submitSalesDay, verifySalesDay, voidSalesDay } from '../../src/sales-da
 import { getSalesRollup } from '../../src/reports/sales-rollup';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
+import { mkSubmitter } from './_fixtures/sales-day-flow';
 
 const sql = postgres(url, { max: 12 });
 let seq = 0;
@@ -308,7 +309,7 @@ describe('P5 - a typed day of an UNLINKED store verifies with exactly today\'s l
       values (${f.orgId}, ${f.store2Id}, ${D10}, 1000, 600, 400, 500, ${f.adminId}) returning id, source`;
     expect(d!.source).toBe('legacy_typed');
     await sql`insert into sales_day_channels (sales_day_id, channel_id, amount) values (${d!.id}, ${f.walkIn2Id}, 500), (${d!.id}, ${f.foodpanda2Id}, 500)`;
-    await submit(f, f.admin, d!.id);
+    await submit(f, await mkSubmitter(sql, f.orgId, [f.store2Id]), d!.id); // T-385 S3: the submitter is not the verifier
     const { journalEntryId } = await verify(f, f.admin, d!.id);
     expect(lineText(await linesFor(journalEntryId))).toEqual(['Cr 4100 600.00', 'Cr 4150 400.00', 'Dr 1110 500.00', 'Dr 1220 500.00'].sort());
   });

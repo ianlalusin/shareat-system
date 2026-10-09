@@ -188,6 +188,7 @@ export const salesDays = pgTable(
      *  a 31 December sale confirmed on 2 January is December revenue. */
     businessDate: date('business_date').notNull(),
 
+    // NOTE: open -> verified refused by trigger sales_days_verify_requires_submitted, hand-added in migration 0188 (T-385).
     status: text('status', { enum: ['open', 'submitted', 'verified', 'voided'] })
       .notNull()
       .default('open'),

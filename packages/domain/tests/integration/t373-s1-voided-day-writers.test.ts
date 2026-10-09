@@ -31,6 +31,7 @@ import { recordOrderWastage } from '../../src/wastage/orders';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
+import { mkSubmitter, submitThenVerify } from './_fixtures/sales-day-flow';
 import { humanDate } from '../../src/shared/refusal-leaf';
 import type { LocationLike } from '../../src/stock-locations/rules';
 
@@ -229,7 +230,8 @@ async function fixture(hint: string, opts: { instant?: boolean } = {}) {
   await asOrg(orgId, (tx) =>
     D.upsertPosItemMap(tx, manager, { orgId, storeId: storeL, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }),
   );
-  return { orgId, storeId, storeL, kitchenL, storeId2, walkIn, foodpanda, managerId, nobodyId, kitchen, itemCoke, manager, nobody: actor(orgId, nobodyId) };
+  const submitter = await mkSubmitter(sql, orgId, [storeId, storeL, storeId2]);
+  return { orgId, storeId, storeL, kitchenL, storeId2, walkIn, foodpanda, managerId, nobodyId, kitchen, itemCoke, manager, submitter, nobody: actor(orgId, nobodyId) };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
@@ -239,7 +241,7 @@ async function mkUsageDay(f: Fixture, date: string, opts: { verify?: boolean; or
   const { id } = await asOrg(f.orgId, (tx) =>
     importTestDay(tx, f.manager, { storeId: f.storeL, businessDate: date, soldItems }),
   );
-  if (opts.verify) await asOrg(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, id));
+  if (opts.verify) await asOrg(f.orgId, (tx) => submitThenVerify(tx, f.manager, id, f.submitter));
   return id;
 }
 
@@ -250,7 +252,7 @@ async function mkDay(f: Fixture, date: string, opts: { verify?: boolean } = {}):
       cashCollected: '1000.00', channels: [{ channelId: f.walkIn, amount: '1000.00' }],
     }),
   );
-  if (opts.verify) await asOrg(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, id));
+  if (opts.verify) await asOrg(f.orgId, (tx) => submitThenVerify(tx, f.manager, id, f.submitter));
   return id;
 }
 const voidDay = (f: Fixture, id: string, reason = 'Entered wrong') => asOrg(f.orgId, (tx) => D.voidSalesDay(tx, f.manager, id, reason));

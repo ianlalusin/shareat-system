@@ -460,6 +460,13 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: "A linked store's day figures change only inside the derivation (0185, T-375 R6) - reads the store's CURRENT link and the flag.",
   },
+  // T-385 (0188): the order submitted -> verified. Origin: a replay or restore must load historic days verified straight from open.
+  sales_days_verify_requires_submitted: {
+    table: 'sales_days',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'A day reaches verified only from submitted (T-385, 0188). Origin: a replay or restore must load historic days verified straight from open.',
+  },
   sales_day_tenders_lock: {
     table: 'sales_day_tenders',
     mode: 'origin',

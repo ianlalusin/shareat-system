@@ -103,8 +103,14 @@ Import refusals (nothing is saved; fix, then import again):
 - "This store adds VAT on top of its prices in POS..." You chose VAT exclusive: re-save the link with VAT inclusive.
 - "This day was typed in before the store was linked to POS. Ask the office." Should never appear.
 
-**Undo / unlink: it does not exist.** There is no Unlink button, no domain function and no repository delete for a
-link (the database only fixes which store a link row belongs to). You *can* change the POS store,
-channel and tax type of an existing link (Save link on the same card), nothing more. If Lipa must go back to typing,
-that is a code change plus a migration, not a screen: ask Claude. Therefore **do not link until step 0 is fully
-green**. Imported-but-unverified days can be voided on their day page (red void form) if an import was wrong.
+**Undo / unlink (live since 2026-10-08, T-382, migration 0187).** A super-admin can unlink a store from POS on
+/settings/pos-link with a reason; it is audited, refuses while an imported day is still unverified, and the store's
+POS id never links to another store. Imported-but-unverified days can also be voided on their day page.
+
+**Updates 2026-10-09.**
+- Lipa's tenders (production, 8 Oct): Gcash, Bank (POS "Bank Transfer"), QR (POS "QRPH"), all wallets into Cashier
+  online. Still to add before the first import: **Cash** (Kind Cash, no money account, POS name `Cash`) and
+  **Collected off the till** (Kind Cash, no money account, POS name `collected`) — bible row 292. On a day with a
+  "collected" amount, record the same day whether it was an owner drawing or part of that day's remittance.
+- From T-385 (PR #3, migration 0188): **Verify & post only works on a submitted day, and the person who submitted
+  it cannot verify it — except a super-admin** (bible row 293).

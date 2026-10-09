@@ -174,8 +174,9 @@ describe('§B3 did not widen the /setup security allowlist', () => {
   // T-378 S2: 36 -> 37, DELIBERATELY. The items_base_unit_fixed sentence is written for a person and names no record.
   // T-382 S1: 37 -> 39, DELIBERATELY. The two 0187 unlink CHECK sentences are written for a person and name no record.
   // T-383 S1 (2026-10-08): 39 -> 41, DELIBERATELY. items_name_not_blank_check and items_code_not_blank_check: sentences written for a person, naming no record.
-  it('CONSTRAINT_MESSAGES has exactly 41 keys — the count WRITTEN_FOR_A_PERSON is built from (26 plus the T-369 S7 sales-day unique sentence plus the T-370 S3 semi-monthly two-days sentence plus the four T-375 S4 sales-lock keys plus the four T-378 S1 unit/kind keys plus the T-378 S2 items_base_unit_fixed key plus the two T-382 0187 unlink CHECK keys plus the two T-383 items blank-name/blank-code CHECK keys)', () => {
-    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(41);
+  // T-385 S2 (2026-10-09): 41 -> 42, DELIBERATELY. sales_days_verify_requires_submitted (migration 0188): a sentence written for a person, naming no record.
+  it('CONSTRAINT_MESSAGES has exactly 42 keys — the count WRITTEN_FOR_A_PERSON is built from (26 plus the T-369 S7 sales-day unique sentence plus the T-370 S3 semi-monthly two-days sentence plus the four T-375 S4 sales-lock keys plus the four T-378 S1 unit/kind keys plus the T-378 S2 items_base_unit_fixed key plus the two T-382 0187 unlink CHECK keys plus the two T-383 items blank-name/blank-code CHECK keys plus the T-385 S2 sales_days_verify_requires_submitted key)', () => {
+    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(42);
   });
 
   it('none of the 8 locally-mapped names were promoted into CONSTRAINT_MESSAGES', () => {

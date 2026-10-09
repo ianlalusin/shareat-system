@@ -1,6 +1,6 @@
 # T-383: rename an item and retire it, so a wrong-unit item can be replaced under its own name
 
-**Status:** SPEC 2026-10-08 (Opus planner). Written at HEAD `1301c8a`.
+**Status:** S1 DONE 2026-10-08 (rename, super-admin only; live via PR #1, e2451ad; rebuilt on EditableRecord). **S2 (retire/restore with the stock warning, Amendment B1) not started.** SPEC 2026-10-08 (Opus planner), written at `1301c8a`.
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
 **Migration:** **none.** Everything needed exists: `items.status` already admits `inactive` (0050:40), the unique
 indexes are what they must be, and `audit_log` has its writer. If Ian picks Q2(b), that option alone needs **0188**.

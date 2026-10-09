@@ -45,6 +45,7 @@ import * as D from '@shareat/domain';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
+import { mkSubmitter, submitThenVerify } from './_fixtures/sales-day-flow';
 import { closedStockPeriodSentence } from '../../src/stock/period-guard';
 import { humanDate } from '../../src/shared/refusal-leaf';
 import type { LocationLike } from '../../src/stock-locations/rules';
@@ -219,9 +220,10 @@ async function fixture(hint: string) {
     await D.upsertPosItemMap(tx, manager, { orgId, storeId, posItemKey: 'cheese', posItemName: 'Cheese', mode: 'direct', itemId: cheese, quantityPerSale: '1' });
     await D.upsertPosItemMap(tx, manager, { orgId, storeId, posItemKey: 'rice', posItemName: 'Rice', mode: 'direct', itemId: rice, quantityPerSale: '1', locationId: display });
   });
+const submitter = await mkSubmitter(sql, orgId, [storeId]);
   return {
     orgId, storeId, walkIn, managerId, staffId, nobodyId, kitchen, display, cheese, rice, today,
-    manager, staff: actor(orgId, staffId), nobody: actor(orgId, nobodyId),
+    manager, submitter, staff: actor(orgId, staffId), nobody: actor(orgId, nobodyId),
   };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -236,7 +238,7 @@ const SOLD = [
 /** A day IMPORTED from POS (its `sold_items` feed is what the plan reads); was a typed `createSalesDay`. */
 async function mkDay(f: Fixture, date: string, opts: { verify?: boolean } = {}): Promise<string> {
   const { id } = await asOrg(f.orgId, (tx) => importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: date, soldItems: SOLD }));
-  if (opts.verify) await asOrg(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, id));
+  if (opts.verify) await asOrg(f.orgId, (tx) => submitThenVerify(tx, f.manager, id, f.submitter));
   return id;
 }
 const plan = (f: Fixture, salesDayId: string, who: Actor = f.manager) =>

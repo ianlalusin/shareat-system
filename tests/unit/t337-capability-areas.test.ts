@@ -17,7 +17,7 @@ import { CAPABILITIES, CAPABILITY_AREA, CAPABILITY_AREAS, type Capability, type 
 // watching tsc refuse — a runtime `expect` cannot observe a type error.
 // -------------------------------------------------------------------------------------
 
-describe('U1 — CAPABILITY_AREA is keyed on exactly the 100 capabilities; every area is used', () => {
+describe('U1 — CAPABILITY_AREA is keyed on exactly the 101 capabilities; every area is used', () => {
   it('keys set-equal CAPABILITIES', () => {
     expect([...Object.keys(CAPABILITY_AREA)].sort()).toEqual([...CAPABILITIES].sort());
   });
@@ -58,9 +58,10 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 100 capabilities; every
     // builder adds `book_missed_month`.
     // ⭐ 98 -> 99 (T-350/DEF-477): `set_channel_payout` joins CAPABILITY_AREA.
     // ⭐ 99 -> 100 (T-382 S1, A4): `unlink_store_from_pos` joins CAPABILITY_AREA.
-    expect(Object.keys(_control).length, 'positive control: unmutated form has all 100 keys').toBe(100);
-    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(99);
-    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(101);
+    // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day` joins CAPABILITY_AREA.
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 101 keys').toBe(101);
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(100);
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(102);
   });
 });
 
@@ -77,6 +78,8 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
     'reverse_auto_charge',
     // ⭐ T-382 S1 (A4): the unlink sits with the other sales-day / POS-link acts, area `sales`.
     'unlink_store_from_pos',
+    // ⭐ T-385 S3: the super-admin exception to "the submitter may not verify" sits beside verify_sales_day.
+    'verify_own_sales_day',
   ],
   expenses: [
     'create_expense', 'edit_own_expense', 'edit_any_expense', 'void_expense', 'approve_expense',
@@ -126,7 +129,7 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
 };
 
 describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', () => {
-  it('every capability inverts to the oracle\'s area, and the counts match §1 (100 total)', () => {
+  it('every capability inverts to the oracle\'s area, and the counts match §1 (101 total)', () => {
     const inverted: Record<string, string[]> = {};
     for (const [cap, area] of Object.entries(CAPABILITY_AREA)) (inverted[area] ??= []).push(cap);
     const sortedInverted = Object.fromEntries(Object.entries(inverted).map(([k, v]) => [k, [...v].sort()]));
@@ -136,7 +139,8 @@ describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', ()
     // ⛔ T-345 RED — CAPABILITY_AREA still totals 97 until the builder adds `book_missed_month`.
     // ⭐ 98 -> 99 (T-350/DEF-477): `set_channel_payout`.
     const total = Object.values(ORACLE).reduce((sum, caps) => sum + caps.length, 0);
-    expect(total).toBe(100);
+    // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day`.
+    expect(total).toBe(101);
   });
 
   it('NEGATIVE: the oracle is itself a partition — no capability id appears in two areas', () => {
@@ -191,6 +195,18 @@ function countTokenHits(rel: string, token: string): number {
 
 describe('T-382 A4 — unlink_store_from_pos: area sales, and NOT offerable to a position', () => {
   const CAP = 'unlink_store_from_pos' as string as Capability;
+
+  it('is in area `sales`', () => {
+    expect(CAPABILITY_AREA[CAP]).toBe('sales');
+  });
+
+  it('is NOT offerable to a position (it is super_admin-only, so the derivation excludes it)', () => {
+    expect(OFFERABLE_TO_POSITIONS as readonly string[]).not.toContain(CAP);
+  });
+});
+
+describe('T-385 A4 - verify_own_sales_day: area sales, and NOT offerable to a position', () => {
+  const CAP = 'verify_own_sales_day' as string as Capability;
 
   it('is in area `sales`', () => {
     expect(CAPABILITY_AREA[CAP]).toBe('sales');

@@ -131,7 +131,7 @@
 <div class="wrap">
 
   <header class="mast">
-    <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 8 October 2026 &middot; not launched</p>
+    <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 9 October 2026 &middot; not launched</p>
     <h1>What's Left</h1>
     <p class="answer">
       <b>The money push is closed:</b> no open money defects. Phase 2 is closed (T-316 done). Now the POS day feed: sales days from POS, before 15 November.
@@ -142,10 +142,10 @@
       <div class="count money"><div class="n">0</div><div class="l">open money defects (push closed)</div></div>
       <div class="count struct"><div class="n">21</div><div class="l">roadmap items still to build</div></div>
       <div class="count"><div class="n">9</div><div class="l">roadmap items in progress or partly done</div></div>
-      <div class="count you"><div class="n">3</div><div class="l">things only you can do</div></div>
+      <div class="count you"><div class="n">4</div><div class="l">things only you can do</div></div>
       <div class="count done"><div class="n">243</div><div class="l">roadmap tasks done</div></div>
     </div>
-    <p class="src">production at migration 0186 (deployed 7 Oct, d79e754) &middot; local main ahead with T-379, T-380, T-381, T-382 (migration 0187), T-338, DEF-600, pushed to wrapup/2026-10-08, NOT to main &middot; next free migration 0188 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+    <p class="src">production at migration 0187 (daea634, deployed 9 Oct: T-379&ndash;T-384, T-338, T-383 S1) &middot; PR #3 (T-385, migration 0188) open, waits on your 0188 prechecks &middot; next free migration 0189 (item codes) &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
   </header>
 
   <div class="dates">
@@ -164,14 +164,14 @@
         <div class="k">Now</div>
         <h3>Sales days from POS, and the bill override</h3>
         <ul>
-          <li>T-375: POS v1 day feed, ERP sales days from POS, before 15 Nov (S1-S6 built; the POS key works (Lipa, 7 Oct); next the 90-day data check (S0) per store, then linking each store)</li>
+          <li>T-375: POS v1 day feed live; <b>Lipa linked on 8 Oct</b> &mdash; add its Cash and Collected tenders, then import each closed day (Submit, then a different person verifies)</li><li>T-385 (verify only after submit) in PR #3; T-383 S2 (retire with stock warning); item codes after your answers</li>
         </ul>
       </div>
       <div class="step">
         <div class="k">Next</div>
         <h3>Smoke and screens</h3>
         <ul>
-          <li>T-374 / T-367 screen smoke on 9008</li>
+          <li>T-374 / T-367 screen smoke on 9008; link the next stores</li>
           <li>Phase 7 screens, T-343</li>
         </ul>
       </div>
@@ -219,6 +219,9 @@
       <div class="item"><div class="id">ADR-015</div><div><b>POS &amp; CUSTOMER on the shared backend:</b> copied POS after 1 Jan 2027. Planned phase.</div></div>
       <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
       <div class="item"><div class="id">POS pulls</div><div>Interim pulls rebuilt per your redesign (T-375 S5-lite, S6). At the shared backend (ADR-015 P2) the pull goes away: usage posts after verify, and refunded or voided items wait for a manager decision (your answers, bible row 282).</div></div>
+      <div class="item"><div class="id">T-383 S2</div><div><b>Retire and restore an item</b>, with the stock warning; a retired item stays usable until its stock is used up (row 290).</div></div>
+      <div class="item"><div class="id">DEF-617</div><div>A refused save keeps your typing only on POS link tenders; other forms still reload locked.</div></div>
+      <div class="item"><div class="id">Item codes</div><div>Auto-suggested fixed-length code from the name, migration 0189; waits on your four answers.</div></div>
       <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
       <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). Done and smoked on 9008 (040e572, c5b0eac; migration 0184); on production since 6 October. Production has no float targets, so nothing to move there.</div></div>
       <div class="item"><div class="id">T-320</div><div>Access that does not come from a position. Number reserved.</div></div>
@@ -234,10 +237,11 @@
 
   <section>
     <h2>Waiting on you</h2>
-    <p class="lede">Each holds work still. Every question on the Open Questions page is answered.</p>
+    <p class="lede">Each holds work still.</p>
     <div class="items">
-      <div class="item y"><div class="id">Push to main</div><div><b>Everything since 7 Oct waits on main</b>, including the live fixes DEF-601 (voided bills set branch prices) and DEF-605 (sign-in redirect hole). Before it: migration 0187&rsquo;s three read-only checks with you (P0187b shows who gets the new unlink permission; it should be only you).</div></div>
-      <div class="item y"><div class="id">Mon 12 Oct</div><div><b>Link Lipa to POS</b> (runbook docs/ops/lipa-pos-link-runbook.md): map its four payment methods, then press Link. The unlink switch is the way back.</div></div>
+      <div class="item y"><div class="id">0188 prechecks</div><div><b>Run the read-only 0188 checks on the server</b> (command in the 9 Oct chat and the migration header): P0188c must be 0, P0188f must list only you. Then PR #3 (verify only after submit; no self-verify except super-admin) merges when its CI is green.</div></div>
+      <div class="item y"><div class="id">Lipa tenders</div><div><b>Add Cash and &ldquo;Collected off the till&rdquo;</b> (both Kind Cash, no money account; POS names <code>Cash</code> and <code>collected</code>) on Settings &rsaquo; POS link, then import the closed day. A refused import writes nothing.</div></div>
+      <div class="item y"><div class="id">Open Questions</div><div><b>Four item-code questions</b> (format RM-CHWN-01 recommended; who may override; recode existing; rename) and the rest of &ldquo;collected&rdquo; (does the owner keep it, who records it).</div></div>
       <div class="item y"><div class="id">HR data</div><div><b>SSS, PhilHealth, Pag-IBIG and TIN for 126 staff.</b> None on file. <span class="pill y">due 31 Oct</span></div></div>
     </div>
   </section>
@@ -287,7 +291,7 @@
   </section>
 
   <footer>
-    Counted 4 October 2026, updated 7 October, from <code>docs/DEFECTS-REGISTER.md</code> (recounted against git on 3 October), the task status lines,
+    Counted 4 October 2026, updated 9 October, from <code>docs/DEFECTS-REGISTER.md</code> (recounted against git on 3 October), the task status lines,
     <code>docs/ROADMAP.html</code> and the Open Questions page. A defect counts as closed only when its register row says fixed.
   </footer>
 

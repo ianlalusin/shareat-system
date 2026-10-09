@@ -37,6 +37,7 @@ import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import * as D from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { submitThenVerify } from './_fixtures/sales-day-flow';
 
 const sql = postgres(url, { max: 10 });
 let seq = 0;
@@ -207,7 +208,7 @@ function editFn() {
 const edit = (f: Fixture, who: Actor, salesDayId: string, input: Record<string, unknown>) =>
   asOrg(f.orgId, (tx) => editFn()(tx, who, { salesDayId, ...input }));
 const editOp = (who: Actor, salesDayId: string, input: Record<string, unknown>) => (tx: Tx) => editFn()(tx, who, { salesDayId, ...input });
-const verify = (f: Fixture, id: string, who: Actor = f.manager) => asOrg(f.orgId, (tx) => D.verifySalesDay(tx, who, id));
+const verify = (f: Fixture, id: string, who: Actor = f.manager) => asOrg(f.orgId, (tx) => submitThenVerify(tx, who, id, f.staff));
 const withdraw = (f: Fixture, who: Actor, id: string, reason = 'Typed wrong') => asOrg(f.orgId, (tx) => D.voidSalesDay(tx, who, id, reason));
 
 async function rejection(p: Promise<unknown>, what: string): Promise<{ message: string; userMessage?: string; err: unknown }> {
@@ -427,7 +428,7 @@ describe("T8 — an edit naming another store's channel changes nothing", () => 
 describe('T10 (R5) — edit vs verify', () => {
   it("A holds an edit open (channel 500 -> 1,000, uncommitted); B verifies -> B waits on a row lock, then POSTS from A's committed figures — Mutant: plain getById in verify -> B never waits / is refused on stale figures", async () => {
     const f = await fixture('t10a');
-    const id = await lipaShapeDay(f); // stale figures cannot post; edited figures can
+    const id = await lipaShapeDay(f, { submit: true }); // stale figures cannot post; edited figures can (T-385: submitted, verify needs it)
 
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
@@ -444,7 +445,7 @@ describe('T10 (R5) — edit vs verify', () => {
 
   it('reverse order: A verifies (holds), B edits -> B waits, then is refused ("this one is verified"); the figures stay verified', async () => {
     const f = await fixture('t10b');
-    const id = await mkDay(f, D1, '1000.00'); // balanced: it can post
+    const id = await mkDay(f, D1, '1000.00', { submit: true }); // balanced: it can post
 
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
@@ -682,7 +683,7 @@ describe('AUDIT E — the gaps', () => {
 
   it('withdraw vs verify: A withdraws (holds), B verifies -> B waits on the day row, then gets a PLAIN sentence ("This sales day has been voided, so it can\'t be posted.") — no function prefix, no id', async () => {
     const f = await fixture('auditE2');
-    const id = await mkDay(f, D1, '1000.00'); // balanced: it WOULD post if the withdraw had not won
+    const id = await mkDay(f, D1, '1000.00', { submit: true }); // balanced: it WOULD post if the withdraw had not won
 
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,

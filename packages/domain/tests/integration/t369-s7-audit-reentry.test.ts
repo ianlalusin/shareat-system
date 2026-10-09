@@ -15,6 +15,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, salesDaysRepo, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import * as D from '@shareat/domain';
+import { submitThenVerify } from './_fixtures/sales-day-flow';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 const sql = postgres(url, { max: 5 });
@@ -110,7 +111,7 @@ describe('S7 audit A — a posted handover counted against the date blocks re-en
   it('manager re-entry is refused with the handover sentence (no id), nothing is written; reversing the handover lets the SAME re-entry succeed', async () => {
     const f = await fixture('auditA');
     const { id: first } = await create(f, f.staff);
-    await asOrg(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, first));
+    await asOrg(f.orgId, (tx) => submitThenVerify(tx, f.manager, first, f.staff));
     const remittanceId = await postedHandover(f, f.storeId, DATE, first);
     await withdraw(f, first);
 

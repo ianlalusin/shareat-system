@@ -46,6 +46,7 @@ import * as D from '@shareat/domain';
 import { humanDate as humanDateOf } from '../../src/shared/refusal-leaf';
 import { D1_FIGURES, importTestDay, stubFetchers } from './_fixtures/pos-day';
 import { asOrgOn, DAY, insertSalesRecheck, R1_FIGURES, s6Fixture, type S6F } from './_fixtures/pos-s6';
+import { submitThenVerify } from './_fixtures/sales-day-flow';
 
 const hd = (d: string) => humanDateOf(parseBusinessDate(d));
 const sql = postgres(url, { max: 8 });
@@ -65,7 +66,7 @@ const A4B2: readonly PosV1SoldItemInput[] = [
 
 const imp = (f: S6F, date: string, o: { figures?: Parameters<typeof importTestDay>[2]['figures']; soldItems?: readonly PosV1SoldItemInput[] } = {}) =>
   asOrgOn(f.orgId, (tx) => importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: date, ...o }));
-const verify = (f: S6F, dayId: string) => asOrgOn(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, dayId));
+const verify = (f: S6F, dayId: string) => asOrgOn(f.orgId, (tx) => submitThenVerify(tx, f.manager, dayId, f.admin));
 const importVerified = async (f: S6F, date: string, o: Parameters<typeof imp>[2] = {}): Promise<string> => {
   const { id } = await imp(f, date, o);
   await verify(f, id);

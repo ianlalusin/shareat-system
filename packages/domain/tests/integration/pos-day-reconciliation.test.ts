@@ -31,6 +31,7 @@ import { closeDb, type Tx } from '@shareat/db';
 import * as D from '@shareat/domain';
 import { D1_FIGURES, importTestDay } from './_fixtures/pos-day';
 import { asOrgOn, DAY, insertSalesRecheck, R1_FIGURES, s6Fixture, type S6F } from './_fixtures/pos-s6';
+import { submitThenVerify } from './_fixtures/sales-day-flow';
 
 type Side = { status: 'ok'; paidTotal: string; receiptCount: number } | { status: 'not_found' } | { status: 'none' };
 interface Recon {
@@ -62,7 +63,7 @@ afterAll(async () => {
 const reconcile = (f: S6F, date = DAY) => asOrgOn(f.orgId, (tx) => getRecon(tx, { orgId: f.orgId, storeId: f.storeId, businessDate: date }));
 async function importVerified(f: S6F, date = DAY): Promise<string> {
   const { id } = await asOrgOn(f.orgId, (tx) => importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: date }));
-  await asOrgOn(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, id));
+  await asOrgOn(f.orgId, (tx) => submitThenVerify(tx, f.manager, id, f.admin));
   return id;
 }
 const recheck = (f: S6F, figures: Parameters<typeof insertSalesRecheck>[1]['figures']) =>
@@ -144,6 +145,7 @@ describe('getPosDayReconciliation', () => {
     const f = await s6Fixture(sql, 'typed');
     const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${f.orgId}, ${`ty-${Date.now()}`}, 'Batangas') returning id`;
     await sql`insert into person_store_scope (person_id, store_id) values (${f.managerId}, ${store!.id})`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${f.adminId}, ${store!.id})`; // T-385: the submitter
     const [ch] = await sql<{ id: string }[]>`
       insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${f.orgId}, ${store!.id}, 'Walk-in', true) returning id`;
     const day = await asOrgOn(f.orgId, (tx) =>
@@ -152,7 +154,7 @@ describe('getPosDayReconciliation', () => {
         cashCollected: '1000.00', channels: [{ channelId: ch!.id, amount: '1000.00' }],
       }),
     );
-    await asOrgOn(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, day.id));
+    await asOrgOn(f.orgId, (tx) => submitThenVerify(tx, f.manager, day.id, f.admin));
 
     const result = await asOrgOn(f.orgId, (tx) => getRecon(tx, { orgId: f.orgId, storeId: store!.id, businessDate: DAY }));
 

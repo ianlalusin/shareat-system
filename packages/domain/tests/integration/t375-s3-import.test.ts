@@ -38,6 +38,7 @@ import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { createSalesDay } from '../../src/sales-days/create';
+import { mkSubmitter, submitThenVerify } from './_fixtures/sales-day-flow';
 import { editSalesDay } from '../../src/sales-days/edit';
 import { submitSalesDay, verifySalesDay, voidSalesDay } from '../../src/sales-days/verify';
 import { SalesDayBlockedError } from '../../src/sales-days/create';
@@ -617,7 +618,9 @@ describe('I10 - the typed path is gated by the link (R13)', () => {
   it('a verified typed day whose store was linked since: editSalesDay refuses with the same sentence (before the status rule), figures unchanged', async () => {
     const f = await fixture('i10b', { link: false, tenders: false });
     const { id } = await asOrg(f.orgId, (tx) => createSalesDay(tx, f.manager, typed(f.storeId, D10)));
-    await asOrg(f.orgId, (tx) => verifySalesDay(tx, f.manager, id));
+    // T-385 (2026-10-09): a day is verified only after it is submitted, by someone other than the verifier.
+    const submitter = await mkSubmitter(sql, f.orgId, [f.storeId], 'I10 submitter');
+    await asOrg(f.orgId, (tx) => submitThenVerify(tx, f.manager, id, submitter));
     await linkTestStore(sql, { orgId: f.orgId, storeId: f.storeId, channelId: f.walkInId, createdBy: f.adminId });
 
     const s = await sentenceOf(

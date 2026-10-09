@@ -45,6 +45,7 @@ import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import type { LocationLike } from '../../src/stock-locations/rules';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
+import { mkSubmitter, submitThenVerify } from './_fixtures/sales-day-flow';
 import type { PosV1SoldItemInput } from '../../../db/src/pos-v1/fixtures';
 
 const sql = postgres(url, { max: 8 });
@@ -132,7 +133,8 @@ async function fixture(hint: string) {
   await linkTestStore(sql, { orgId, storeId, channelId: ch!.id, createdBy: managerId });
 
   const manager = actorOf(orgId, managerId);
-  const f = { orgId, storeId, kitchen, cheese, buns, recipe, deadRecipe, managerId, manager };
+  const submitter = await mkSubmitter(sql, orgId, [storeId]);
+const f = { orgId, storeId, kitchen, cheese, buns, recipe, deadRecipe, managerId, manager, submitter };
 
   /** Set the map of one POS item key (creates it, or edits the active one). */
   const setMap = async (key: string, mode: MapMode, o: { recipeId?: string } = {}) => {
@@ -166,7 +168,7 @@ async function day(f: F, date: string, items: readonly PosV1SoldItemInput[], opt
       importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: date, soldItems: items, figures: opts.zero ? ZERO_FIGURES : undefined }),
     )
   ).id;
-  if (opts.verify !== false) await asOrg(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, id));
+  if (opts.verify !== false) await asOrg(f.orgId, (tx) => submitThenVerify(tx, f.manager, id, f.submitter));
   return id;
 }
 const plan = (f: F, salesDayId: string) =>

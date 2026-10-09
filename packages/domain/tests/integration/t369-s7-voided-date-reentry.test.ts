@@ -28,6 +28,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, salesDaysRepo, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import * as D from '@shareat/domain';
+import { submitThenVerify } from './_fixtures/sales-day-flow';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 const sql = postgres(url, { max: 5 });
@@ -98,7 +99,7 @@ describe('S7 — void, then create the same date', () => {
     it(`${kind}: a MANAGER creates the date again as a NEW day; the old day stays voided; the date holds one live day`, async () => {
       const f = await fixture(`mgr-${kind.startsWith('an UN') ? 'unv' : 'ver'}`);
       const { id: first } = await create(f, f.staff);
-      if (kind.includes('VERIFIED')) await asOrg(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, first));
+      if (kind.includes('VERIFIED')) await asOrg(f.orgId, (tx) => submitThenVerify(tx, f.manager, first, f.staff));
       await withdraw(f, first);
 
       const { id: second } = await create(f, f.manager);
@@ -163,7 +164,7 @@ describe('S7 — void, then create the same date', () => {
     const { id: first } = await create(f, f.staff);
     await withdraw(f, first);
     const { id: second } = await create(f, f.manager);
-    await asOrg(f.orgId, (tx) => D.submitSalesDay(tx, f.manager, second));
+    await asOrg(f.orgId, (tx) => D.submitSalesDay(tx, f.staff, second));
     const posted = await asOrg(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, second));
     expect(posted.created).toBe(true);
     const [e] = await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where org_id = ${f.orgId} and source_id = ${second}`;

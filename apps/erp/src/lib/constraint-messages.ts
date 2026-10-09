@@ -29,6 +29,8 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
   // T-382 (0187): the unlink's two CHECKs. The screen and the domain check first; these are the database's last word.
   pos_v1_store_links_unlink_shape_check: 'An unlink needs who, when and why together.',
   pos_v1_store_links_unlink_reason_check: 'Say why this store is being unlinked, in under 500 characters.',
+  // T-385 (0188): the order open -> submitted -> verified. The domain refuses first; this is the database's last word.
+  sales_days_verify_requires_submitted: 'A sales day can be verified only after it has been submitted.',
   // T-369 S7: with a voided day freeing its date, two managers can race to re-enter it and the loser meets
   // the unique index (now partial, migration 0177).
   sales_days_org_id_store_id_business_date_unique:

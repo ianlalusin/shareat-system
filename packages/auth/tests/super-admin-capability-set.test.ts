@@ -26,10 +26,11 @@ import { CAPABILITIES, CAPABILITY_MATRIX, SUPER_ADMIN_ONLY_CAPABILITIES } from '
  */
 
 /**
- * The five members, sorted. Four as of 2026-09-08; T-382 (2026-10-08) adds `unlink_store_from_pos`, WITH the
- * backfill in migration 0187 (R6a) in the same slice. ⛔ Do not update this to make the test pass.
+ * The six members, sorted. Four as of 2026-09-08; T-382 (2026-10-08) adds `unlink_store_from_pos`, WITH the
+ * backfill in migration 0187 (R6a) in the same slice; T-385 S3 (2026-10-09) adds `verify_own_sales_day`, WITH the
+ * backfill in migration 0188. ⛔ Do not update this to make the test pass.
  */
-const PINNED = ['approve_item', 'cross_org_access', 'post_journal_entry', 'unlink_store_from_pos', 'view_franchise_sales'];
+const PINNED = ['approve_item', 'cross_org_access', 'post_journal_entry', 'unlink_store_from_pos', 'verify_own_sales_day', 'view_franchise_sales'];
 
 const WHAT_TO_DO =
   'A capability was added to or removed from the super_admin-only set.\n\n' +
@@ -40,7 +41,7 @@ const WHAT_TO_DO =
   'See packages/domain/src/organizations/index.ts (createFirstAdmin) and T-232 §2.2.';
 
 describe('SUPER_ADMIN_ONLY_CAPABILITIES — pinned, because the grants are materialised', () => {
-  it('is exactly the five capabilities existing owners must hold (four granted at creation, the fifth backfilled by 0187)', () => {
+  it('is exactly the six capabilities existing owners must hold (four granted at creation, the fifth backfilled by 0187, the sixth by 0188)', () => {
     expect([...SUPER_ADMIN_ONLY_CAPABILITIES].sort(), WHAT_TO_DO).toEqual(PINNED);
   });
 

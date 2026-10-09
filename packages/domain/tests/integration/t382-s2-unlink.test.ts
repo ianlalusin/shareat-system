@@ -41,6 +41,7 @@ import * as D from '@shareat/domain';
 import { humanDate as humanDateOf } from '../../src/shared/refusal-leaf';
 import { importTestDay, stubFetchers } from './_fixtures/pos-day';
 import { asOrgOn, actorOf, R1_FIGURES, insertSalesRecheck, s6Fixture, uid } from './_fixtures/pos-s6';
+import { submitThenVerify } from './_fixtures/sales-day-flow';
 
 const hd = (d: string) => humanDateOf(parseBusinessDate(d));
 const sql = postgres(url, { max: 12 });
@@ -71,6 +72,7 @@ async function fixture(hint: string, o: { stock?: boolean } = {}) {
   const superId = await mk('Super', 'super_admin');
   // the manager also works at Batangas (typed days there, usage there)
   await sql`insert into person_store_scope (person_id, store_id) values (${base.managerId}, ${store2Id})`;
+  await sql`insert into person_store_scope (person_id, store_id) values (${base.adminId}, ${store2Id})`; // T-385: the submitter of the Batangas typed day
   return { ...base, store2Id, walkIn2Id: c2!.id, superId, superAdmin: actorOf(orgId, superId) };
 }
 type F = Awaited<ReturnType<typeof fixture>>;
@@ -110,7 +112,7 @@ const unlink = (f: F, who: Actor, input: { storeId?: string; reason?: string } =
 
 const imp = (f: F, date: string, o: Partial<Parameters<typeof importTestDay>[2]> = {}) =>
   asOrgOn(f.orgId, (tx) => importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: date, ...o }));
-const verify = (f: F, dayId: string) => asOrgOn(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, dayId));
+const verify = (f: F, dayId: string) => asOrgOn(f.orgId, (tx) => submitThenVerify(tx, f.manager, dayId, f.admin));
 async function verifiedDay(f: F, date: string): Promise<string> {
   const { id } = await imp(f, date);
   await verify(f, id);
@@ -565,7 +567,7 @@ describe('U11 - R7 usage pulls after an unlink (REV-7)', () => {
   it('a typed day of a LINKED store (typed before the link) -> the typed sentence; passes on HEAD', async () => {
     const f = await fixture('u11d', { stock: true });
     const typed = (await typedDay(f, f.store2Id, f.walkIn2Id, NEWDAY)).id;
-    await asOrgOn(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, typed));
+    await asOrgOn(f.orgId, (tx) => submitThenVerify(tx, f.manager, typed, f.admin));
     await relink(f, f.admin, { storeId: f.store2Id, posStoreId: uid('pos-bat'), channelId: f.walkIn2Id });
     expect(reason(await plan(f, typed, f.store2Id, f.manager))).toBe(S.usageTyped('Batangas', NEWDAY));
   });
