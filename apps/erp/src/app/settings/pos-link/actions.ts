@@ -14,7 +14,9 @@ import { createTender, linkStoreToPos, setTenderActive, unlinkStoreFromPos, upda
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { redirectWithFlash } from '../../../lib/flash';
+import { keepTyping } from '../../../lib/keep-typing';
 import { posStoreOptions, withOrgPrincipal } from './lib';
+import { POS_LINK_EDIT, TENDER_EDIT } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -37,9 +39,12 @@ export async function linkStoreToPosAction(fd: FormData): Promise<void> {
   const storeName = str(fd, 'storeName');
   const posStoreId = str(fd, 'posStoreId');
   const taxRaw = str(fd, 'posTaxType');
+  // T-389: only a store that is ALREADY linked has an EditableRecord to reopen; the first link is an add form (N1).
+  let editingLink = false;
   try {
     // Authorise BEFORE any POS bridge call: someone who may not link must not make this server call POS.
     await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'manage_chart_of_accounts', { storeId }));
+    editingLink = (await withOrgPrincipal(actor.orgId, (tx) => posV1Repo.listLinks(tx, actor.orgId))).some((l) => l.storeId === storeId && !l.unlinkedAt);
     // Picker mode (the bridge answers): the id must be one POS listed, and the stored name is POS's, never the
     // form's. Bridge down: the text box path, with the typed name.
     let posStoreName: string;
@@ -64,7 +69,13 @@ export async function linkStoreToPosAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
+    // T-389: a refused Save keeps the typing (signed flash, never the URL) so a linked store's record reopens holding it.
+    return await redirectWithFlash(
+      '/settings/pos-link',
+      storeId ? { store: storeId } : {},
+      { error: errorMessage(err), typed: editingLink ? keepTyping(fd, POS_LINK_EDIT, storeId, { actorId: actor.personId }) : undefined },
+      { anchor: anchorOf(storeId) },
+    );
   }
   revalidatePath('/settings/pos-link');
   return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${storeName || 'The store'} is linked to POS.` }, { anchor: anchorOf(storeId) });
@@ -134,13 +145,16 @@ export async function updateTenderAction(fd: FormData): Promise<void> {
     });
     name = await savedName(actor.orgId, tenderId);
   } catch (err) {
-    // DEF-617: the refused Save carries what was typed in the signed flash (never the URL), so the record reopens in
-    // edit mode holding it. Only this one form's fields, and only when the record is named.
-    // A STALE refusal keeps nothing: the page redraws the tender locked with what is saved (the other user's change).
-    const keep = tenderId && errorMessage(err) !== STALE_SENTENCE
-      ? { tenderId, tenderName: str(fd, 'name'), tenderKind: str(fd, 'kind'), tenderAccount: str(fd, 'moneyAccountId'), tenderAlias: str(fd, 'posV1Alias') }
-      : undefined;
-    return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err), ...(keep ? { keep } : {}) }, { anchor: anchorOf(storeId) });
+    // DEF-617 / T-389: the refused Save carries what was typed in the signed flash (never the URL), so the record
+    // reopens in edit mode holding it. A STALE refusal keeps nothing: the page redraws the tender locked with what is
+    // saved (the other user's change).
+    const message = errorMessage(err);
+    return await redirectWithFlash(
+      '/settings/pos-link',
+      storeId ? { store: storeId } : {},
+      { error: message, typed: keepTyping(fd, TENDER_EDIT, tenderId, { actorId: actor.personId, stale: message === STALE_SENTENCE }) },
+      { anchor: anchorOf(storeId) },
+    );
   }
   revalidatePath('/settings/pos-link');
   return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${name} saved.` }, { anchor: anchorOf(storeId) });

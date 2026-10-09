@@ -10,6 +10,8 @@ import { EditableRecord } from '@/components/forms';
 import { FormGrid } from '@/components/ui';
 import { AutoAllocatePaymentForm } from './AutoAllocatePaymentForm';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { SUPPLIER_EDIT } from '../../typed-forms';
 
 export const metadata = { title: 'Supplier — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -41,6 +43,8 @@ export default async function SupplierDetailPage({
     listInvoices(orgId, { supplierId: id }),
     storesWithOpenItems(orgId, id),
   ]);
+  // T-389: the typing (or the "too long to keep" notice) for THIS supplier's edit record, from the signed flash.
+  const typed = typedFor(sp, SUPPLIER_EDIT, supplier.id, actor.personId);
   const invoiceById = new Map(invoices.map((inv) => [inv.id, inv]));
 
   // ⭐ AP is store-scoped. The store is CHOSEN, never inferred from whichever open item happened
@@ -83,9 +87,9 @@ export default async function SupplierDetailPage({
       {/* ---------------------------------------------------------------- T-188: the record itself.
           ⛔ Until 2026-08-30 a supplier could be CREATED and never EDITED — `updateSupplier`
           existed in the repo with no caller — so a typo in a name was permanent. */}
-      <details className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <details {...(typed ? { open: true } : {})} className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <summary className="cursor-pointer text-sm font-medium">Edit this supplier</summary>
-        <EditableRecord action={editSupplierAction} label={supplier.name} hidden={{ supplierId: supplier.id }}>
+        <EditableRecord action={editSupplierAction} label={supplier.name} hidden={{ supplierId: supplier.id }} typed={typed}>
           <div className="mt-4 space-y-4">
 
           <FormGrid>

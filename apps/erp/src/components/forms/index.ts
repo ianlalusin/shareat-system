@@ -6,6 +6,11 @@ export {
   createEditRegistry,
   runEditableAction,
   selectIsDirty,
+  planApply,
+  changedNames,
+  editableRecordInitialState,
+  TYPED_DROPPED_MESSAGE,
+  notAppliedMessage,
   EDITABLE_RECORD_INITIAL,
   OTHER_DIRTY_MESSAGE,
 } from './EditableRecord';
@@ -16,4 +21,7 @@ export type {
   EditableRecordEvent,
   EditRegistryEntry,
   EditRequestResult,
+  ChangeControl,
+  ApplyControl,
+  ApplyAssignment,
 } from './EditableRecord';

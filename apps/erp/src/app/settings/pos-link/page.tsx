@@ -2,9 +2,11 @@ import { formatBusinessDateTime } from '@shareat/core/datetime';
 import type { BusinessDate } from '@shareat/core/datetime';
 import { humanDate } from '@shareat/domain/refusal-leaf';
 import { requirePageAccess } from '../../../lib/page-access';
-import { withFlash } from '../../../lib/flash';
+import { withFlash, type FlashFields } from '../../../lib/flash';
+import { typedFor, type TypedView } from '../../../lib/keep-typing';
 import { listStores } from '../../expenses/lib';
 import { createTenderAction, linkStoreToPosAction, setTenderActiveAction, unlinkStoreFromPosAction, updateTenderAction } from './actions';
+import { POS_LINK_EDIT, TENDER_EDIT } from './typed-forms';
 import { canUnlink, posLinkRows, posStoreOptions, storeTenders, tenderMapping, type PosLinkStoreRow, type StoreTenders, type TenderAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
@@ -19,21 +21,6 @@ interface SearchParams {
   ok?: string;
   error?: string;
   store?: string;
-  // DEF-617: one tender's typed values after a refused Save, from the signed flash only (never the address).
-  tenderId?: string;
-  tenderName?: string;
-  tenderKind?: string;
-  tenderAccount?: string;
-  tenderAlias?: string;
-}
-
-/** What the user typed into one tender's form before its Save was refused. */
-interface Reopened {
-  readonly tenderId: string;
-  readonly name: string | undefined;
-  readonly kind: string | undefined;
-  readonly account: string | undefined;
-  readonly alias: string | undefined;
 }
 
 /**
@@ -55,9 +42,6 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
 
   // R7: feedback shows on the card of the store it is about; the top banner only when no card matches.
   const cardShowsFeedback = !!sp.store && rows.some((r) => r.storeId === sp.store);
-  const reopened: Reopened | null = sp.tenderId
-    ? { tenderId: sp.tenderId, name: sp.tenderName, kind: sp.tenderKind, account: sp.tenderAccount, alias: sp.tenderAlias }
-    : null;
 
   return (
     <Page density="table">
@@ -98,7 +82,8 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
             canUnlink={mayUnlink}
             tenders={await storeTenders(actor, r.storeId, r.link?.posStoreId ?? null)}
             feedback={sp.store === r.storeId ? { error: sp.error, ok: sp.ok } : null}
-            reopened={sp.store === r.storeId ? reopened : null}
+            flash={sp}
+            actorId={actor.personId}
           />
         )),
       )}
@@ -112,14 +97,17 @@ function StoreCard({
   tenders,
   canUnlink,
   feedback,
-  reopened,
+  flash,
+  actorId,
 }: {
   row: PosLinkStoreRow;
   options: { id: string; name: string }[] | null;
   tenders: StoreTenders;
   canUnlink: boolean;
   feedback: { error?: string; ok?: string } | null;
-  reopened: Reopened | null;
+  /** T-389: the typed slot of the signed flash. `typedFor` picks the one record whose Save was refused. */
+  flash: FlashFields;
+  actorId: string;
 }) {
   const link = row.link;
   return (
@@ -141,7 +129,12 @@ function StoreCard({
         <h3 className="font-medium">Link to POS</h3>
         {link ? (
           // A linked store's link is a saved record: locked until Edit (A0 L1).
-          <EditableRecord action={linkStoreToPosAction} label={row.storeName} hidden={{ storeId: row.storeId, storeName: row.storeName }}>
+          <EditableRecord
+            action={linkStoreToPosAction}
+            label={row.storeName}
+            hidden={{ storeId: row.storeId, storeName: row.storeName }}
+            typed={typedFor(flash, POS_LINK_EDIT, row.storeId, actorId)}
+          >
             <LinkFields row={row} options={options} />
           </EditableRecord>
         ) : (
@@ -168,7 +161,7 @@ function StoreCard({
       {feedback?.error && <Banner tone="error">{feedback.error}</Banner>}
       {feedback?.ok && <Banner tone="ok">{feedback.ok}</Banner>}
 
-      <TendersSection storeId={row.storeId} storeName={row.storeName} linked={!!link} t={tenders} reopened={reopened} />
+      <TendersSection storeId={row.storeId} storeName={row.storeName} linked={!!link} t={tenders} flash={flash} actorId={actorId} />
     </section>
   );
 }
@@ -284,13 +277,15 @@ function TendersSection({
   storeName,
   linked,
   t,
-  reopened,
+  flash,
+  actorId,
 }: {
   storeId: string;
   storeName: string;
   linked: boolean;
   t: StoreTenders;
-  reopened: Reopened | null;
+  flash: FlashFields;
+  actorId: string;
 }) {
   const active = t.tenders.filter((x) => x.isActive);
   const retired = t.tenders.filter((x) => !x.isActive);
@@ -352,7 +347,7 @@ function TendersSection({
       {t.tenders.length === 0 && <p className="text-xs text-neutral-500 dark:text-neutral-400">No tenders yet.</p>}
 
       {active.map((x) => (
-        <TenderRecord key={`${x.id}:${x.version}`} storeId={storeId} x={x} t={t} typed={reopened && reopened.tenderId === x.id ? reopened : null} />
+        <TenderRecord key={`${x.id}:${x.version}`} storeId={storeId} x={x} t={t} typed={typedFor(flash, TENDER_EDIT, x.id, actorId)} />
       ))}
 
       {retired.length > 0 && (
@@ -417,24 +412,16 @@ function TendersSection({
 
 /**
  * One saved tender: a locked EditableRecord (A0). Retire is its `extra`, shown only while editing. After a refused Save
- * (`typed`), the record reopens in edit mode with the user's typing (DEF-617); Cancel then restores the stored values.
+ * (`typed`), the record reopens in edit mode with the user's typing (DEF-617, T-389). The fields below always draw the
+ * STORED values; the browser applies the typing, so Cancel restores what is saved.
  */
-function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdminRow; t: StoreTenders; typed: Reopened | null }) {
-  const name = typed?.name ?? x.name;
-  const kind = typed?.kind || x.kind;
-  const account = typed?.account ?? x.moneyAccountId ?? '';
-  const alias = typed?.alias ?? x.posV1Alias ?? '';
+function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdminRow; t: StoreTenders; typed: TypedView | null }) {
   return (
     <EditableRecord
       action={updateTenderAction}
       label={x.name}
       hidden={{ storeId, tenderId: x.id, version: x.version }}
-      {...(typed
-        ? {
-            initialMode: 'editing' as const,
-            storedValues: { name: x.name, kind: x.kind, moneyAccountId: x.moneyAccountId ?? '', posV1Alias: x.posV1Alias ?? '' },
-          }
-        : {})}
+      typed={typed}
       extra={
         <form action={setTenderActiveAction} className="mt-2">
           <input type="hidden" name="storeId" value={storeId} />
@@ -449,16 +436,16 @@ function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdmi
     >
       <FormGrid>
         <Field label="Name">
-          <input name="name" required defaultValue={name} autoComplete="off" className={FIELD} />
+          <input name="name" required defaultValue={x.name} autoComplete="off" className={FIELD} />
         </Field>
         <Field label="Kind">
-          <select name="kind" required defaultValue={kind} className={FIELD}>
+          <select name="kind" required defaultValue={x.kind} className={FIELD}>
             <option value="cash">Cash</option>
             <option value="wallet">Wallet</option>
           </select>
         </Field>
         <Field label="Money account (wallets only)" hint={ACCOUNT_HINT}>
-          <select name="moneyAccountId" defaultValue={account} className={FIELD}>
+          <select name="moneyAccountId" defaultValue={x.moneyAccountId ?? ''} className={FIELD}>
             <option value="">None</option>
             {x.moneyAccountId && !t.accounts.some((a) => a.id === x.moneyAccountId) && (
               <option value={x.moneyAccountId}>{x.moneyAccountName ?? 'Retired account'}</option>
@@ -471,7 +458,7 @@ function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdmi
           </select>
         </Field>
         <Field label="POS name" hint={POS_NAME_HINT}>
-          <input name="posV1Alias" defaultValue={alias} autoComplete="off" className={FIELD} />
+          <input name="posV1Alias" defaultValue={x.posV1Alias ?? ''} autoComplete="off" className={FIELD} />
         </Field>
       </FormGrid>
     </EditableRecord>

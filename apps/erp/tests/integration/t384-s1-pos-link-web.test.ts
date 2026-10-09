@@ -52,6 +52,20 @@ vi.mock('../../src/lib/session', () => ({
 }));
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+// T-389 S1: a pass-through that records the props every EditableRecord is rendered with, so a test can see what the
+// page handed it as `typed` (the server never draws typed values; the browser applies them, R3).
+const seen = vi.hoisted(() => ({ records: [] as Array<Record<string, unknown>> }));
+vi.mock('@/components/forms', async (orig) => {
+  const real = await orig<typeof import('@/components/forms')>();
+  const { createElement } = await import('react');
+  return {
+    ...real,
+    EditableRecord: (p: Record<string, unknown>) => {
+      seen.records.push(p);
+      return createElement(real.EditableRecord as never, p as never);
+    },
+  };
+});
 vi.mock('@shareat/db', async (orig) => {
   const real = await orig<typeof import('@shareat/db')>();
   return {
@@ -85,7 +99,7 @@ import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { sql as dsql } from 'drizzle-orm';
 import { s6Fixture } from '../../../../packages/domain/tests/integration/_fixtures/pos-s6';
 import PosLinkSettingsPage from '../../src/app/settings/pos-link/page';
-import { captureRedirect, outcomeOf, pageParamsOf, resetJar, seedSearch } from '../helpers/flash-jar';
+import { FLASH_COOKIE, captureRedirect, currentJar, outcomeOf, pageParamsOf, resetJar, seedSearch } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 6 });
 afterAll(async () => {
@@ -180,6 +194,7 @@ const plain = (html: string): string =>
 async function render(f: F, params: Record<string, string> = {}, methods: string[] | null = null): Promise<string> {
   h.actor = f.superAdmin;
   h.methods = methods;
+  seen.records = [];
   const el = await PosLinkSettingsPage({ searchParams: Promise.resolve(params) });
   return renderToStaticMarkup(el as never);
 }
@@ -611,22 +626,128 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
     });
   }
 
-  it('X2: after a NON-stale refusal the page reopens THAT record unlocked, holding the typed name and POS name (stale refusals are Y3)', async () => {
+  type TypedCookie = { form: string; record: string; fields: Record<string, string | string[]> };
+  /** The decoded flash cookie the last action wrote: banner (msg), the closed keep keys, and T-389's typed slot (t / td). */
+  async function cookiePayload(): Promise<{ msg: Record<string, string>; keep: Record<string, string>; t?: TypedCookie; td?: { form: string; record: string } }> {
+    const { decodeFlash } = await import('../../src/lib/flash');
+    return decodeFlash(currentJar().get(FLASH_COOKIE)!.value) as never;
+  }
+  /** The props the page rendered the tender's EditableRecord with (the Retire form in `extra` is not one). */
+  const tenderRecordProps = (tenderId: string) =>
+    seen.records.find((r) => (r.hidden as Record<string, string> | undefined)?.tenderId === tenderId) as { typed?: unknown; hidden: Record<string, string> } | undefined;
+
+  it('X2 (T-389: re-pointed from the five keep keys to the typed slot): after a NON-stale refusal the cookie carries the typing as `typed`, and the page reopens THAT record in edit mode while every other tender stays locked', async () => {
     const f = await fixture('x2');
+    const stored = await tenderRow(f.walletTenderId);
     const r = await refusedNonStale(f);
     expect(r.outcome.flash.error, 'a real refusal, not a save').toBeTruthy();
     expect(r.outcome.flash.error).not.toBe(STALE);
+    // What rides: ONE signed slot, only this form's user-editable fields (not storeId / tenderId / version), none of the five old keep keys.
+    const p = await cookiePayload();
+    expect(p.t).toMatchObject({
+      form: 'tender.edit',
+      record: f.walletTenderId,
+      fields: { name: 'Typed Name Zed', kind: 'wallet', moneyAccountId: f.drawer, posV1Alias: 'TypedAliasQ' },
+    });
+    expect(Object.keys(p.keep), 'the tender keep keys are gone').toEqual([]);
+    expect(decodeURIComponent(r.signal.url), 'and nothing typed is in the address').not.toMatch(/Typed|Zed/);
+    // The page.
     const card = cardOf(await render(f, pageParamsOf(r.signal.url)), f.storeId);
     expect(plain(card), 'the refusal shows on the card').toContain(r.outcome.flash.error!);
     const form = recordForm(card, f.walletTenderId)!;
     expect(form).toBeDefined();
     expect(form, 'reopened: not disabled').not.toContain('<fieldset disabled');
-    expect(form, 'the typed name is still in the box').toContain('value="Typed Name Zed"');
-    expect(form, 'and the typed POS name').toContain('value="TypedAliasQ"');
     expect(form, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*>\s*Save\s*<\/button>/);
     expect(plain(form)).toContain('Cancel');
-    expect(recordForm(card, f.cashTenderId)!, 'the other tenders stay locked').toContain('<fieldset disabled');
-    // Red on HEAD / S1b-min: the record comes back with the stored values; the typed ones are gone.
+    expect(form, 'the page draws the STORED value (so Cancel restores it) ...').toContain(`value="${stored.name}"`);
+    expect(form, '... and never a typed one: the browser applies the typing (R3)').not.toContain('Typed Name Zed');
+    expect(form).not.toContain('TypedAliasQ');
+    expect(tenderRecordProps(f.walletTenderId)?.typed, 'the record is handed the typing').toEqual({ kind: 'typed', fields: p.t!.fields });
+    // Other tenders: handed nothing, rendered locked.
+    for (const id of [f.cashTenderId, f.bankTender, f.qrTender]) {
+      expect(tenderRecordProps(id)?.typed ?? null, `tender ${id} gets no typing`).toBeNull();
+      expect(recordForm(card, id)!, `tender ${id} stays locked`).toContain('<fieldset disabled');
+    }
+    // Red on HEAD: the cookie has the five keep keys and no `t`; the page draws the typed value as the field default.
+    // Mutant: typedFor compares the form only (not the record) -> every tender reopens, the loop above is red.
+  });
+
+  it('X4 (T-389 R1): typing too long to keep -> the cookie says so (td, no t), and the record stays LOCKED with the explaining sentence', async () => {
+    const f = await fixture('x4');
+    const stored = await tenderRow(f.walletTenderId);
+    const r = await act('updateTenderAction', f.superAdmin, {
+      storeId: f.storeId, tenderId: f.walletTenderId, version: await repoVersion(f.walletTenderId), name: 'N'.repeat(5000), kind: 'wallet',
+      moneyAccountId: f.drawer, posV1Alias: 'TypedAliasQ',
+    });
+    expect(r.outcome.flash.error, 'a real refusal').toBeTruthy();
+    const p = await cookiePayload();
+    expect(p.t, 'dropped whole, never shortened').toBeUndefined();
+    expect(p.td).toEqual({ form: 'tender.edit', record: f.walletTenderId, actor: f.superAdmin.personId });
+    const card = cardOf(await render(f, pageParamsOf(r.signal.url)), f.storeId);
+    const form = recordForm(card, f.walletTenderId)!;
+    expect(form).toContain('<fieldset disabled');
+    expect(form).toContain(`value="${stored.name}"`);
+    expect(plain(form)).toContain('What you typed was too long to keep. This shows what is saved. Press Edit and enter your change again.');
+    expect(tenderRecordProps(f.walletTenderId)?.typed).toEqual({ kind: 'dropped' });
+    expect(tenderRecordProps(f.cashTenderId)?.typed ?? null).toBeNull();
+    // Mutant: the page ignores sp.typedDropped -> no sentence, red.
+  });
+
+  it('Z1 (T-389): a refused LINK form (store already linked: a locked record) reopens in edit mode with the typed fields; the tenders under it stay locked', async () => {
+    const f = await fixture('z1');
+    h.actor = f.superAdmin;
+    resetJar();
+    const mod = (await import('../../src/app/settings/pos-link/actions')) as unknown as Record<string, (fd: FormData) => Promise<void>>;
+    const fd = new FormData();
+    for (const [k, v] of Object.entries({
+      storeId: f.storeId, storeName: 'Lipa', posStoreId: f.posStoreId, posStoreName: 'Typed POS Name', salesChannelId: f.foodpandaId, posTaxType: 'non_vat',
+    })) fd.set(k, v);
+    const signal = await captureRedirect(() => mod['linkStoreToPosAction']!(fd));
+    const outcome = outcomeOf(signal);
+    expect(outcome.flash.ok, 'a refusal (Foodpanda is not remitted daily), not a save').toBeUndefined();
+    expect(outcome.flash.error).toBeTruthy();
+    const p = await cookiePayload();
+    expect(p.t?.form, 'a form key in the <area>.<form> shape').toMatch(/^[a-z][a-zA-Z0-9]*\.[a-zA-Z0-9.]+$/);
+    expect(p.t?.form).not.toBe('tender.edit');
+    expect(p.t?.record).toBe(f.storeId);
+    expect(p.t?.fields).toMatchObject({ salesChannelId: f.foodpandaId, posTaxType: 'non_vat' });
+    expect(Object.keys(p.t!.fields), 'ids are not user-editable fields').not.toContain('storeId');
+    expect(Object.keys(p.t!.fields)).not.toContain('storeName');
+    expect(decodeURIComponent(signal.url)).not.toMatch(/Typed POS|foodpanda/i);
+
+    const card = cardOf(await render(f, pageParamsOf(signal.url)), f.storeId);
+    const linkForm = formWith(card, 'salesChannelId')!;
+    expect(linkForm).toBeDefined();
+    expect(linkForm, 'reopened').not.toContain('<fieldset disabled');
+    expect(linkForm, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*>\s*Save\s*<\/button>/);
+    const rec = seen.records.find((r) => (r.hidden as Record<string, string> | undefined)?.storeName === 'Lipa' && !(r.hidden as Record<string, string>).tenderId) as { typed?: { kind: string } } | undefined;
+    expect(rec?.typed?.kind).toBe('typed');
+    for (const id of [f.cashTenderId, f.walletTenderId]) {
+      expect(tenderRecordProps(id)?.typed ?? null, `tender ${id} gets no typing from the link form's flash`).toBeNull();
+      expect(recordForm(card, id)!).toContain('<fieldset disabled');
+    }
+    // Red on HEAD: the link form is never reopened (no typed slot, EditableRecord has no typed prop).
+    // Mutant: typedFor ignores the form key -> the tenders reopen too, red.
+  });
+
+  it('Z2 (T-389 audit): a refused CREATE (add form, not an EditableRecord) and a refused LINK of an unlinked store set no typed slot', async () => {
+    const f = await fixture('z2');
+    const c = await act('createTenderAction', f.superAdmin, { storeId: f.storeId, name: 'Maya', kind: '', moneyAccountId: '', posV1Alias: 'Maya' });
+    expect(c.outcome.flash.error, 'a refusal').toBe(NEED_KIND);
+    let p = await cookiePayload();
+    expect(p.t, 'create sets no t').toBeUndefined();
+    expect(p.td).toBeUndefined();
+    h.actor = f.superAdmin;
+    resetJar();
+    const mod = (await import('../../src/app/settings/pos-link/actions')) as unknown as Record<string, (fd: FormData) => Promise<void>>;
+    const fd = new FormData();
+    for (const [k, v] of Object.entries({ storeId: f.otherId, storeName: 'Other', posStoreId: 'zzz', posStoreName: 'Typed', salesChannelId: f.foodpandaId, posTaxType: 'non_vat' })) fd.set(k, v);
+    const sig = await captureRedirect(() => mod['linkStoreToPosAction']!(fd));
+    expect(outcomeOf(sig).flash.error, 'a refusal').toBeTruthy();
+    p = await cookiePayload();
+    expect(p.t, 'linking an unlinked store (an add form) sets no t').toBeUndefined();
+    expect(p.td).toBeUndefined();
+    // Mutant: wire keepTyping into createTenderAction / the unlinked link -> t present, red.
   });
 
   it('Y3 (audit fix, DEF-617 vs stale): after a STALE refusal the tender renders LOCKED with the stored values (the other user change) - no typed values, no new version for a blind second Save', async () => {

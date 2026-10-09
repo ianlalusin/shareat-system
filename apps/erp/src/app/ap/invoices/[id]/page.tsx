@@ -20,6 +20,8 @@ import { EditableRecord } from '@/components/forms';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor, type TypedView } from '@/lib/keep-typing';
+import { INVOICE_LINES } from '../../typed-forms';
 
 export const metadata = { title: 'Supplier invoice — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -220,6 +222,7 @@ return (
           <LinesShell
             saved={existingLines.length > 0}
             invoiceId={invoice.id}
+            typed={typedFor(sp, INVOICE_LINES, invoice.id, actor.personId)}
           >
             <div className="space-y-2">
             {Array.from({ length: INVOICE_LINE_ROWS }, (_, n) => n + 1).map((i) => {
@@ -610,10 +613,10 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 /** A2/A6: lines already saved show locked (Edit); an invoice with no lines yet is an add, open, with Save. */
-function LinesShell({ saved, invoiceId, children }: { saved: boolean; invoiceId: string; children: React.ReactNode }) {
+function LinesShell({ saved, invoiceId, typed, children }: { saved: boolean; invoiceId: string; typed: TypedView | null; children: React.ReactNode }) {
   if (saved) {
     return (
-      <EditableRecord action={setInvoiceLinesAction} label="invoice lines" hidden={{ invoiceId }}>
+      <EditableRecord action={setInvoiceLinesAction} label="invoice lines" hidden={{ invoiceId }} typed={typed}>
         {children}
       </EditableRecord>
     );

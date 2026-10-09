@@ -104,3 +104,48 @@ describe('REV-6 - the worst-case confirm + plan cookie (S2-R1: at most 10 assets
     expect(flash.decodeFlash(raw)?.keep.reason).toBe('r'.repeat(200));
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// T-389 S1 - K2 (size). The typed slot beside the cookie budget (R1, R5). Spec: docs/tasks/389-refused-save-keeps-typing.md.
+// Red on HEAD: redirectWithFlash ignores `typed`, so nothing is ever stored in `t`.
+// Mutant: lower MAX_COOKIE_BYTES, or shorten typed values instead of dropping the slot -> a leg below goes red.
+// ---------------------------------------------------------------------------------------------------------------
+describe('T-389 K2 - typed fits the budget where it must, and yields to confirm/plan where it must', () => {
+  const REC = '3f2b8c1e-5a4d-4e6f-9a7b-1c2d3e4f5a6b';
+  const payloadOf = (raw: string) => flash.decodeFlash(raw) as unknown as { msg: Record<string, string>; keep: Record<string, string>; t?: { fields: Record<string, unknown> }; td?: unknown } | null;
+
+  it('the largest form (attendance, 37 fields) with every value realistic fits whole even with no __changed filter', async () => {
+    resetJar();
+    const fields: Record<string, string> = {};
+    for (let i = 0; i < 37; i++) fields[`field${String(i).padStart(2, '0')}_hhmm`] = i % 3 === 0 ? '10:45' : `Opening note ${i}`;
+    await captureRedirect(() => flash.redirectWithFlash('/settings/attendance', {}, { error: 'Refused.', typed: { form: 'attendance.policy', record: REC, fields } } as never));
+    const raw = currentJar().get(FLASH_COOKIE)!.value;
+    expect(Buffer.byteLength(raw)).toBeLessThanOrEqual(3000);
+    expect(payloadOf(raw)?.t?.fields, 'kept whole, not dropped').toEqual(fields);
+  });
+
+  it('a long note (500 characters) with three other fields fits whole', async () => {
+    resetJar();
+    const fields = { name: 'Typed Co', notes: 'n'.repeat(500), address: 'Lot 7, Block 3, Somewhere Street, Lipa City', tin: '123-456-789-000' };
+    await captureRedirect(() => flash.redirectWithFlash('/ap/suppliers/x', {}, { error: 'Refused.', typed: { form: 'supplier.edit', record: REC, fields } } as never));
+    const raw = currentJar().get(FLASH_COOKIE)!.value;
+    expect(Buffer.byteLength(raw)).toBeLessThanOrEqual(3000);
+    expect(payloadOf(raw)?.t?.fields).toEqual(fields);
+  });
+
+  it('a typed slot never costs the confirm sentence or the plan token: with a worst-case confirm, typed yields whole and confirm/plan come back byte for byte', async () => {
+    resetJar();
+    const confirm = 'C'.repeat(1500);
+    const plan = 'a1b2c3d4e5f60718';
+    await captureRedirect(() =>
+      flash.redirectWithFlash('/admin/stores/' + REC, {}, { confirm, plan, typed: { form: 'store.edit', record: REC, fields: { name: 'z'.repeat(900) } } } as never),
+    );
+    const raw = currentJar().get(FLASH_COOKIE)!.value;
+    expect(Buffer.byteLength(raw)).toBeLessThanOrEqual(3000);
+    const p = payloadOf(raw);
+    expect(p?.msg.confirm).toBe(confirm);
+    expect(p?.msg.plan).toBe(plan);
+    expect(p?.t, 'typed yielded whole').toBeUndefined();
+    expect(p?.td).toEqual({ form: 'store.edit', record: REC });
+  });
+});
