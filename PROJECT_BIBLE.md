@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1631` 13. Decision log
-- `1632–1651` 14. Amendment protocol
-- `1652–1656` 15. Engineering standards — the industry practices this project follows
-  - `1657–1662` 15.1 Build order: walking skeleton first
-  - `1663–1674` 15.2 Golden-master testing — the most important practice here
-  - `1675–1683` 15.3 Strangler Fig, not big-bang cutover
-  - `1684–1688` 15.4 No dual-write
-  - `1689–1697` 15.5 Expand/contract migrations
-  - `1698–1706` 15.6 Observability from day zero, not later
-  - `1707–1711` 15.7 CI gates
-  - `1712–1716` 15.8 Backups and a tested restore
-  - `1717–1721` 15.9 Twelve-Factor config
-  - `1722–1729` 15.10 Append-only ledgers — but not event sourcing
-  - `1730–1734` 15.11 Defence in depth
-  - `1735–1763` 15.12 Skills are lenses, not assurance
-  - `1764–1770` 15.13 Reconciliation is a permanent feature
-- `1771–1775` 16. The accounting spine
-  - `1776–1807` 16.0 What we are actually fixing — the diagnosis
-  - `1808–1851` 16.1 The ten invariants — non-negotiable
-  - `1852–1866` 16.2 The oracle: how "correct" is tested
-  - `1867–1888` 16.3 The model — header + lines, not legs
-  - `1889–1908` 16.4 Deliberately simpler than ERPNext
-  - `1909–1975` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1976–2000` 16.6 What v1 already gets right — preserve the intent
-  - `2001–2022` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2023–2037` 16.8 What v1's accounting already gets right
-  - `2038–2081` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2082–2132` 16.10 Posting patterns — one canonical pattern per business event
-  - `2133–2164` 16.11 Inventory's accounting integration
+- `1329–1633` 13. Decision log
+- `1634–1653` 14. Amendment protocol
+- `1654–1658` 15. Engineering standards — the industry practices this project follows
+  - `1659–1664` 15.1 Build order: walking skeleton first
+  - `1665–1676` 15.2 Golden-master testing — the most important practice here
+  - `1677–1685` 15.3 Strangler Fig, not big-bang cutover
+  - `1686–1690` 15.4 No dual-write
+  - `1691–1699` 15.5 Expand/contract migrations
+  - `1700–1708` 15.6 Observability from day zero, not later
+  - `1709–1713` 15.7 CI gates
+  - `1714–1718` 15.8 Backups and a tested restore
+  - `1719–1723` 15.9 Twelve-Factor config
+  - `1724–1731` 15.10 Append-only ledgers — but not event sourcing
+  - `1732–1736` 15.11 Defence in depth
+  - `1737–1765` 15.12 Skills are lenses, not assurance
+  - `1766–1772` 15.13 Reconciliation is a permanent feature
+- `1773–1777` 16. The accounting spine
+  - `1778–1809` 16.0 What we are actually fixing — the diagnosis
+  - `1810–1853` 16.1 The ten invariants — non-negotiable
+  - `1854–1868` 16.2 The oracle: how "correct" is tested
+  - `1869–1890` 16.3 The model — header + lines, not legs
+  - `1891–1910` 16.4 Deliberately simpler than ERPNext
+  - `1911–1977` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1978–2002` 16.6 What v1 already gets right — preserve the intent
+  - `2003–2024` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2025–2039` 16.8 What v1's accounting already gets right
+  - `2040–2083` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2084–2134` 16.10 Posting patterns — one canonical pattern per business event
+  - `2135–2166` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -106,7 +106,7 @@
 |---|---|
 | **Version** | 3.21 — **POS and CUSTOMER v1 are copied into this monorepo and moved onto the one Postgres and one auth; sales figures are never typed or edited in the ERP; one Postgres, no hot/cold; POS sells offline 24 h per device; Firebase exit scope PROVISIONAL; `other` retired as an expense method; a push to main is a deploy (§13 rows 269–278, ADR-015).** Carries 3.20 — **push only at wrap-up; every visible refusal names things in words, and only records visible at THIS store; hand grants close-and-replace rather than re-label, staying at that store (supersedes row 188's re-label and T-291 decision 5's mechanism); tests assert the target; number boxes are text with inputMode; blank means not decided; payout account admin-only; descriptions clamp at 3 lines (§13 rows 228–237).** Carries 3.19 (**a POSITION, not a role, decides what a person may do — the `staff` baseline is shrunk to nothing and all 21 everyday capabilities become position grants (§13 row 210); a capability REMOVAL ships backfill-first then flip, never the flip alone, and the backfill is the task rather than a precaution (§13 row 211); and a static census only NOMINATES candidates — running them is what settles it, because three passes of careful reading said 19, 20, and the real number was 22 (§13 row 212).** Carries 3.18 (**prefer a guard to `!` on a regex match; where `!` is used, a comment names what makes it safe, because `!` is the one remedy that silently switches off the `noUncheckedIndexedAccess` this repo turned on deliberately (§13 row 206).** Carries 3.17 (**a remedy is as perishable as a diagnosis: any comment or register row naming a specific token — an identifier, a line number, a secret, a file — and asserting a present-tense fact about it goes stale with nobody editing it, so record the RULING and prefer a NAME to a POSITION (§13 row 204); and production publishes the commit it is running at `/api/health`, the disclosure accepted and named rather than discovered (§13 row 205).** Carries 3.16 (**position access defaults are materialised `person_grants` rows with provenance `'position'`, reconciled at the five moments a human is present and never consulted at check time; a position can only ADD to the role matrix, never subtract; the screen is gated on `grant_capability`, not the `super_admin` literal (§13 row 198).** Carries 3.15 (**the fiscal-period override reaches an elevated manager in an organisation with NO administrator, and that enrolment is intended rather than a leak in row 193 — the adminless fallback is DERIVED from the matrix, so an admin-only capability joins it with no edit to any list (§13 row 196).** Carries 3.14 (**the bootstrap question *“has this system been set up at all?”* joins the closed cross-org caller list at all three sites that ask it, using bootstrap’s own door rather than widening the auth door (§13 row 195); the guard enforcing that list scanned two of nine source roots and now scans all of them (DEF-295).** Carries 3.13 (**an elevated manager's grants are revoked when the organisation gains an active administrator; the elevation ends when the administrator arrives, and is never re-derived at check time (§13 row 188).** Carries 3.12 (a recurring expense drafts itself and never auto-pays; the job acts as its author through the ordinary gates — §13 row 183), 3.11 (§12 gains the sweep-control landmine: a sweep that reports a total must first report a known non-zero control — §13 row 181), 3.10 (the cutover wipes transactional data, not stores and store settings — the Wastage Monitor survives cutover — §13 row 182), 3.9 (the tenancy id never comes from the client, and RLS is the second layer behind the repository filter — never the only one, never absent — §13 row 181), 3.8 (order-wastage tracked-vs-instant is a per-CHANNEL policy, not a per-record choice — §13 row 180), 3.7 (every v1 feature is accounted for in v2 — carried, folded or evolved, never silently dropped — and where v1's data shape drifted over time the most recent shape outweighs the old — §1.2d, §13 row 179), 3.6 (§4.2 rule 7 covers every dashboard tile, not only accounting statements: a separately-accumulated counter is forbidden even when it is called a cache — §13 row 173), 3.5 (discovery has a stated method, §1.2d: synthesize v1's goal in writing, weigh whether the live data is in good shape, then design v2 to beat that goal — v1 is the flawed version, v2 is the improved one), 3.4 (UI/UX is a third authority: familiar-but-upgraded screens, one visual family across ERP/POS/CUSTOMER), 3.3 (an unverified supplier invoice may carry a DRAFT expense), 3.2 (inventory is PERPETUAL from v2's first posting; a return is a credit in both directions), 3.1 (no SC/PWD statutory record is kept) and 3.0 (the card id joins the hot set) — §13 rows 164–173))))))) |
 | **Created** | 2026-08-22 |
-| **Last amended** | 2026-10-04 | <!-- ⚠️ This field read 2026-09-12 while rows 201, 202 and 203 had already landed on 2026-09-13: §14 step 3 says bump it and the bump was missed. The hand-maintained half of any pair is the half that rots (DEF-240), and this field is the hand-maintained half of §13. -->
+| **Last amended** | 2026-10-09 | <!-- ⚠️ This field read 2026-09-12 while rows 201, 202 and 203 had already landed on 2026-09-13: §14 step 3 says bump it and the bump was missed. The hand-maintained half of any pair is the half that rots (DEF-240), and this field is the hand-maintained half of §13. -->
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
 | **Scale being replatformed** | 149 page routes (~53,700 LOC of pages), 20 API routes, 9 cron jobs, ~90 Firestore collection paths, 144 server-action modules / 578 exported functions |
 | **Source project** | `C:\Users\ianla\webapps\ERP-rebuild` (branch `upgrade-next16`) — **READ-ONLY, NEVER MODIFY** |
@@ -1628,6 +1628,8 @@ just a patch.**
 | 293 | 2026-10-09 | ⭐ **A SALES DAY IS VERIFIED AND POSTED ONLY AFTER IT IS SUBMITTED, AND THE PERSON WHO SUBMITTED IT MAY NOT VERIFY IT — EXCEPT A SUPER-ADMIN (T-385, migration 0188).** Ian, 2026-10-09: *"verify and post must be blocked until submitted"*; Open Questions `t385-q1-different-verifier` = a. The domain refuses, a database trigger refuses any change into `verified` that is not from `submitted` with a submitter, and the new super-admin-only capability `verify_own_sales_day` is the one exception. The day page shows Verify & post only where it can succeed and tells the submitter why not | Before this, a draft day could be posted directly and one person could submit and verify their own day (the capability matrix said they should not; nothing enforced it) | Yes — the self-verify exception can be widened by granting the capability; the trigger is additive |
 | 294 | 2026-10-09 | **ITEM CODES ARE SUGGESTED FROM THE NAME IN ONE FIXED 8-CHARACTER SHAPE, `CHWN-001` (4 LETTERS BY A FIXED RULE + A 3-DIGIT NUMBER PER STEM, NEVER REUSED); ONLY A SUPER-ADMIN MAY OVERRIDE, TO THE SAME SHAPE; EXISTING ITEMS ARE RE-CODED ONCE; A RENAME KEEPS THE CODE BUT OFFERS THE NEW SUGGESTION (T-386, migration 0189).** Ian, 2026-10-09: *"item code must be auto suggest based on the typed name fixed length with our own way how to formulate the code this way we can control duplication of code to avoid it"*; Open Questions `item-code-q1-format` = b, `q2-override` = a, `q3-existing` = a, `q4-rename` = a. Codes become unique ignoring case; the number is assigned at creation from a forward-only counter | v1 has no item code; v2 codes were free-typed, case-sensitive, and could collide between pending requests | Yes — the shape check (S6) is added only after production is re-coded |
 | 295 | 2026-10-09 | ⭐ **THE ERP LOOKS LIKE THE BRAND: "SHAREAT WARM" IN LIGHT (CREAM GROUND, WARM INK, BALOO 2 HEADINGS, PLUS JAKARTA SANS BODY, 12PX ROUNDED-RECTANGLE BUTTONS, PILLS ONLY FOR BADGES AND CHIPS) AND "GRILL NIGHT" IN DARK (WARM CHARCOAL). ADR-013 AMENDMENT 7.** Ian, 2026-10-09: *"go with B, C as dark mode"*, chosen from a rendered brand and app sheet (Artifact `L7hn691wjL76rSV2BgPa1A`). Every earlier ADR-013 rule stands: one red primary, outlined danger, warning never as text, one control size, `ring-ink`. New tokens `--field-border`, `--brand-ink`, `--warning-ink`, `--muted` and status softs. This **closes the dark `--brand`-as-text and dark `--warning` gaps** (Amendment 4). C's 52px floor density and its gold focus ring are NOT adopted | v2 had tokens but no brand presence (no logo, font or ground) and no status, toast or field-error language. The Website already declares this palette and these fonts, and v1 staff know Baloo 2 and pills | Yes — tokens and fonts only; components read tokens, so another look is a `globals.css` change |
+| 296 | 2026-10-09 | ⭐ **GITHUB CI RUNS ONCE A DAY, AT WRAP-UP: THE DAY'S SLICES ARE COMMITTED LOCALLY AND GO UP TOGETHER IN ONE PULL REQUEST; MERGE (AND SO DEPLOY) ONLY WHEN ITS CI IS GREEN AND WITH IAN'S GO. AMENDS ROW 291 (WHICH STILL SAYS WHERE THE FULL SUITE RUNS); TWO EXCEPTIONS.** Ian, 2026-10-09: *"new rule only work github ci on wrap up"*, then *"yes, record it with both exceptions"*. **Exception 1 — unblock Ian:** a slice that must be live before Ian can act (e.g. T-386 S5: the production recode dry run needs the script deployed) may go up in its own early PR, only with Ian's go. **Exception 2 — migrations:** a slice carrying a migration goes in its own PR, or at the least has its prechecks (row 278) run with Ian before wrap-up, so one bad precheck cannot hold back the whole day's batch. **The local backstop:** because CI no longer runs per slice, after every local commit the orchestrator runs the guard and census files plus the affected tests (not only the lane's files) — merged lanes breaking each other's guards is the failure this rule would otherwise hide until wrap-up | One CI run takes 20-25 min; per-slice PRs spent hours waiting on CI and on merges. Fits the standing push-once-at-wrap-up practice. Cost: a red batch is harder to attribute (bisect the day's commits), and production changes only once a day — both covered by the backstop and the two exceptions | Yes — Ian may call an early PR at any time; reverting to per-slice PRs is one line here |
+| 297 | 2026-10-10 | ⭐ **A POS USAGE PULL SECTION IS "FINALIZED" ONLY WHEN EVERY CONFIRMED LINE HAS POSTED. A LINE THAT CANNOT POST — ITS ITEM SHORT IN ITS ROOM OR IN THE STORE'S LAYERS, ITS ROOM UNDER COUNT, OR ITS ROOM UNABLE TO TAKE USAGE — IS HELD BACK AND NAMED IN WORDS; EVERY OTHER LINE POSTS; FINALIZING AGAIN POSTS THE HELD LINES ONCE. STOCK NEVER GOES BELOW ZERO, SO A SALE CANNOT BE FORCED OUT OF STOCK THAT IS NOT THERE (T-388; SUPERSEDES T-177 INVARIANTS 4 AND 9).** Ian, 2026-10-10, Open Questions `def-618-pull-short-stock` = a, and `t388-q1-old-dropped-lines` = a (sections finalized before the fix stay as they are) | Before T-388 one short item skipped its whole room's usage, the section was stamped anyway, and the screen blamed a "frozen location" (DEF-618); a closed month stamped with nothing posted (DEF-620); a room short but stocked elsewhere failed with raw trigger text (DEF-619) | Yes — the hold rule is per (item, room); unticking a held line lets the section finalize without it |
 
 ## 14. Amendment protocol
 

@@ -239,7 +239,10 @@ export async function getRecipesForExplosion(tx: Tx, orgId: string, recipeIds: r
     })
     .from(productionRecipeLines)
     .innerJoin(items, eq(items.id, productionRecipeLines.itemId))
-    .where(inArray(productionRecipeLines.recipeId, [...recipeIds]));
+    .where(inArray(productionRecipeLines.recipeId, [...recipeIds]))
+    // DEF-622: the plan keys an ingredient line by its INDEX, so the read order must not be heap order. Line ids are
+    // `uuidv7()` (time-ordered), so id order is the order the lines were written.
+    .orderBy(productionRecipeLines.id);
 
   return recipeRows.map((r) => ({
     id: r.id,
@@ -458,20 +461,38 @@ export async function listPullLines(tx: Tx, pullId: string): Promise<PullLineRow
   return rows as PullLineRow[];
 }
 
-/** Best-effort: a key the fresh rebuild produced that the stored plan does not have (e.g. a brand
- *  new POS item) simply matches zero rows — never a caller's problem, since it was never in
- *  `confirmedKeys` either (the client can only confirm what it was shown). */
+/**
+ * T-388 R10: link every posted line to its usage record, AS POSTED. It writes `item_id`, `location_id` and
+ * `quantity` (what the usage record really holds, which may differ from the plan-time row after a recipe or map
+ * edit) with `usage_record_id`. Returns, per update and in order, how many rows it matched: the caller throws an
+ * internal fault unless every one is exactly 1 (a posted line left unlinked would be posted a second time by the
+ * next finalize). The repo does not throw so the raw-throw ratchet for `packages/db/src/repo` stays where it is.
+ */
 export async function setLineUsageRecord(
   tx: Tx,
   pullId: string,
-  updates: readonly { lineKey: string; quantity: Quantity; usageRecordId: string }[],
-): Promise<void> {
+  updates: readonly { lineKey: string; itemId: string; locationId: string; quantity: Quantity; usageRecordId: string }[],
+): Promise<number[]> {
+  const matched: number[] = [];
   for (const u of updates) {
-    await tx
+    const hit = await tx
       .update(posUsagePullLines)
-      .set({ quantity: u.quantity, usageRecordId: u.usageRecordId })
-      .where(and(eq(posUsagePullLines.pullId, pullId), eq(posUsagePullLines.lineKey, u.lineKey)));
+      .set({ itemId: u.itemId, locationId: u.locationId, quantity: u.quantity, usageRecordId: u.usageRecordId })
+      .where(and(eq(posUsagePullLines.pullId, pullId), eq(posUsagePullLines.lineKey, u.lineKey)))
+      .returning({ id: posUsagePullLines.id });
+    matched.push(hit.length);
   }
+  return matched;
+}
+
+/** T-388 R9: does any line of this pull carry a usage record? (A pull with a posted line is "partly finalized".) */
+export async function hasPostedLine(tx: Tx, pullId: string): Promise<boolean> {
+  const rows = await tx
+    .select({ id: posUsagePullLines.id })
+    .from(posUsagePullLines)
+    .where(and(eq(posUsagePullLines.pullId, pullId), isNotNull(posUsagePullLines.usageRecordId)))
+    .limit(1);
+  return rows.length > 0;
 }
 
 // ---------------------------------------------------------------------------------------------

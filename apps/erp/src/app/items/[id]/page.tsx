@@ -1,12 +1,13 @@
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
 import { authorize, AuthorizationError } from '@shareat/auth';
-import { getItem, itemPrices, peso, sellabilityByStore, soldAsLabel, unitHistoryExists, withOrgPrincipal } from '../lib';
+import { getItem, itemPrices, peso, retireReadout, sellabilityByStore, soldAsLabel, unitHistoryExists, withOrgPrincipal } from '../lib';
 import { whoSells } from '../../ap/lib';
 import {
   changeItemUnitAction,
   clearStoreSellabilityAction,
   renameItemAction,
+  setItemStatusAction,
   setStoreSellabilityAction,
   suggestItemCodeAction,
   updateItemFlagsAction,
@@ -77,6 +78,18 @@ export default async function ItemDetailPage({
       throw err;
     }
   });
+  // T-383 R5/B2.4. Advisory readout for the Retire section: active or retired, never merged, and only for who may use it.
+  const readout =
+    mayApproveItem && (item.status === 'active' || item.status === 'inactive')
+      ? await retireReadout(actor.orgId, id)
+      : null;
+  // A refusal must show where the user acted: the action returns to #retire, so the section repeats its own outcomes.
+  const RETIRE_OUTCOMES = [
+    'Only a super-admin can rename, retire or restore an item.',
+    'This item was merged into another, so it cannot be retired or restored.',
+    'Choose Retire or Restore, then try again.',
+  ];
+  const retireFlash = sp.error && RETIRE_OUTCOMES.includes(sp.error) ? sp.error : null;
   const peak = movement.reduce((m, r) => Math.max(m, Number(r.maxPrice)), 0);
 
   const FLAGS = [
@@ -139,7 +152,7 @@ export default async function ItemDetailPage({
           </EditableRecord>
         ) : (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Only a super-admin can rename an item.
+            Only a super-admin can rename, retire or restore an item.
           </p>
         )}
       </section>
@@ -341,6 +354,54 @@ export default async function ItemDetailPage({
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {/* T-383 R6/B2.4. Retire or restore: super-admin only, never for a merged item. The domain (`setItemStatus`) is the enforcement. */}
+      {mayApproveItem && readout && (
+        <section id="retire" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">Retire or restore</h2>
+          {retireFlash && (
+            <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+              {retireFlash}
+            </p>
+          )}
+          {item.status === 'inactive' && <p className="text-sm font-medium">Retired.</p>}
+          {readout.onHand.length > 0 && (
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              {`Still holds stock at: ${readout.onHand.map((r) => `${r.storeName} (${r.quantity} ${item.baseUnit})`).join(', ')}. ${
+                item.status === 'inactive'
+                  ? 'It can still be used, wasted, moved and counted until it runs out.'
+                  : 'It stays on count sheets until counted out.'
+              }`}
+            </p>
+          )}
+          {readout.activePosMaps > 0 && (
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              {`${readout.activePosMaps} live POS ${readout.activePosMaps === 1 ? 'map' : 'maps'} still use it. Point them at the replacement; sales keep using up this item until its stock runs out.`}
+            </p>
+          )}
+          {readout.activeRecipes > 0 && (
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              {`${readout.activeRecipes} live ${readout.activeRecipes === 1 ? 'recipe' : 'recipes'} still use it.`}
+            </p>
+          )}
+          {item.status === 'active' ? (
+            <form action={setItemStatusAction} className="space-y-2">
+              <input type="hidden" name="itemId" value={item.id} />
+              <input type="hidden" name="status" value="inactive" />
+              <button type="submit" className={BTN}>Retire</button>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                Retiring keeps every record. It can no longer be ordered, received, priced, mapped to a POS item or put on a new recipe. Stock already on hand can still be used, wasted, moved and counted until it runs out. You can restore it.
+              </p>
+            </form>
+          ) : (
+            <form action={setItemStatusAction}>
+              <input type="hidden" name="itemId" value={item.id} />
+              <input type="hidden" name="status" value="active" />
+              <button type="submit" className={BTN}>Restore</button>
+            </form>
+          )}
         </section>
       )}
 

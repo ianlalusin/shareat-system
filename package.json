@@ -30,6 +30,7 @@
     "cutover:purge": "tsx scripts/cutover-purge.ts",
     "toc": "tsx scripts/gen-toc.ts",
     "month-end": "tsx scripts/month-end.ts",
+    "recode-items": "tsx scripts/recode-items.ts",
     "dev:seed": "tsx scripts/dev-seed.ts",
     "storage-smoke": "tsx scripts/storage-smoke.ts",
     "capture:attendance-golden": "tsx scripts/capture-attendance-golden.ts",

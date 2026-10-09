@@ -78,7 +78,7 @@ const CEILINGS: Record<string, number> = {
   // adjacent throws, not one. All four carry a named human sentence in the same item, so all four
   // are in scope; the ceiling is measured against that, not the miscounted "three".
   'packages/domain/src/channel-settlements': 8,
-  'packages/domain/src/commissary': 48, // T-343 S5.3: 64 -> 48, catalogue.ts converted to refuse/gone/internalFault
+  'packages/domain/src/commissary': 46, // T-343 S5.3: 64 -> 48, catalogue.ts converted to refuse/gone/internalFault
   'packages/domain/src/customers': 0, // T-343 S5.2: 11 -> 0, all converted to refuse/gone/internalFault
   'packages/domain/src/cutover': 3, // T-343 S5.5w (RULED EDIT, red until BUILDER lands it): 4 -> 3, recordOpeningCount's quantity < 0 guard converted to refuse(...)
   'packages/domain/src/deliveries': 1, // T-343 S5.3: 11 -> 1, documents.ts converted to refuse/gone/internalFault
@@ -87,7 +87,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/findings': 1,
   'packages/domain/src/fiscal-periods': 15,
   'packages/domain/src/fixed-assets': 17,
-  'packages/domain/src/items': 34,
+  'packages/domain/src/items': 24,
   'packages/domain/src/ledger': 10,
   'packages/domain/src/liabilities': 14, // T-343 S5.5v: 16 -> 14, chargeLiability's and payLiability's <= 0 guards converted to refuse(...)
   'packages/domain/src/loans': 11, // T-343 S5.5v: 13 -> 11, disburseLoan's and recordLoanPayment's <= 0 guards converted to refuse(...)
@@ -115,7 +115,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/stores': 12,
   'packages/domain/src/sync': 0,
   'packages/domain/src/till': 18,
-  'packages/domain/src/trade': 52, // T-343 S5.5r: 53 -> 52, parseQuantityInput converted to refuse(...)
+  'packages/domain/src/trade': 51, // T-343 S5.5r: 53 -> 52, parseQuantityInput converted to refuse(...)
   'packages/domain/src/wastage': 11,
   'packages/auth/src': 0, // T-343 S5a: 7 -> 0, all converted to refuse/gone/AuthorizationError(...,userMessage)
   'packages/db/src/repo': 17, // T-343 S5.2: 20 -> 17, the 3 ap.ts sites converted to refuse(...)

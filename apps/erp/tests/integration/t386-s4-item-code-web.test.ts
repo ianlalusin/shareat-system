@@ -66,7 +66,7 @@ let seq = 0;
 const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 
 const S_SHAPE = 'An item code is 4 letters or numbers, a dash and 3 digits, like CHWN-001.';
-const NOT_SUPER_ADMIN = 'Only a super-admin can rename an item.';
+const NOT_SUPER_ADMIN = 'Only a super-admin can rename, retire or restore an item.';
 const REQUESTED = 'Request submitted for a super-admin to approve.';
 
 afterAll(async () => {

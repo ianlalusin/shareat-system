@@ -454,3 +454,172 @@ describe('auditor additions (T-380 S1a audit): each kills a mutant that survived
     // Mutants: drop the second isSameAppPath(path) check; decodeURIComponent the path -> red.
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// T-389 S1 - K2. The `typed` slot of the flash (R1). Spec: docs/tasks/389-refused-save-keeps-typing.md.
+//
+// CONTRACT PINNED HERE: redirectWithFlash(path, nav, { error, typed: { form, record, fields }, keep? }).
+// The decoded payload gains `t` (the typed slot) and `td` ({ form, record }, "typed dropped"); withFlash returns them
+// as `sp.typed` / `sp.typedDropped`. v stays 1. A typed slot alone (no banner, no keep) still writes the cookie.
+// Red on HEAD: redirectWithFlash ignores `typed`, so the cookie has no `t` and the page gets no `typed`.
+// ---------------------------------------------------------------------------------------------------------------
+describe('T-389 K2 - the typed slot in the signed flash', () => {
+  const TYPED = { form: 'supplier.edit', record: UUID, fields: { name: 'Typed Co', notes: 'a & b = "c"', positionIds: ['p3', 'p1'] as string[] } };
+  type Payload = { n: string; msg: Record<string, string>; keep: Record<string, string>; t?: unknown; td?: unknown };
+  const decoded = () => flash.decodeFlash(cookie()) as unknown as Payload;
+  const readFull = async (p: Record<string, string>) => (await flash.withFlash(Promise.resolve(p))) as unknown as Record<string, unknown>;
+  /** Re-sign a payload we edited ourselves: the signature is valid, so only the shape check can refuse it. */
+  function planted(mutate: (o: Record<string, unknown>) => void): string {
+    const o = JSON.parse(Buffer.from(cookie().split('.')[0]!, 'base64url').toString('utf8')) as Record<string, unknown>;
+    mutate(o);
+    const body = b64(o);
+    return `${body}.${signFlash(body)}`;
+  }
+
+  it('round-trips signed: the cookie holds t exactly; the page gets sp.typed; the URL holds only f', async () => {
+    const { f, u, url } = await post('/ap/suppliers/x', {}, { error: 'No.', typed: TYPED });
+    expect([...u.searchParams.keys()]).toEqual(['f']);
+    for (const needle of ['Typed', 'supplier.edit', encodeURIComponent('a & b'), 'positionIds', 'p3']) expect(url).not.toContain(needle);
+    expect(decoded().t).toEqual(TYPED);
+    const sp = await readFull({ f: f! });
+    expect(sp.error).toBe('No.');
+    expect(sp.typed).toEqual(TYPED);
+    expect(sp.typedDropped).toBeUndefined();
+    // Mutant: do not store `t` -> the first expect is red. Put typed in the query -> the URL leg is red.
+  });
+
+  it('a typed slot alone (no banner, no keep) still writes the cookie and the token', async () => {
+    const { f } = await post('/p', {}, { typed: TYPED });
+    expect(f).not.toBeNull();
+    expect(decoded().t).toEqual(TYPED);
+  });
+
+  it('typed and keep travel together', async () => {
+    const { f } = await post('/p', {}, { error: 'e', keep: { reason: REASON }, typed: TYPED });
+    const sp = await readFull({ f: f! });
+    expect(sp.reason).toBe(REASON);
+    expect(sp.typed).toEqual(TYPED);
+  });
+
+  it('the exact bytes survive: spaces, a mistyped amount, unicode, an empty string, an empty array (unticked box)', async () => {
+    const fields = { amount: '1,0OO', note: '  007.10 ₱ é&=?#  ', blank: '', box: [] as string[] };
+    const { f } = await post('/p', {}, { error: 'e', typed: { form: 'a.b', record: '', fields } });
+    expect((await readFull({ f: f! })).typed).toEqual({ form: 'a.b', record: '', fields });
+    // Mutant: trim, Number() or drop empty values -> red.
+  });
+
+  it('a tampered t (old signature kept) drops the WHOLE flash', async () => {
+    const { f } = await post('/p', {}, { error: 'e', typed: TYPED });
+    const [payload, sig] = cookie().split('.');
+    const forged = { ...unb64(payload!), t: { ...TYPED, fields: { name: 'Pay 0917' } } };
+    currentJar().set(FLASH_COOKIE, `${b64(forged)}.${sig}`, {});
+    const sp = await readFull({ f: f! });
+    expect(sp.typed).toBeUndefined();
+    expect(sp.error).toBeUndefined();
+  });
+
+  it('a validly SIGNED but malformed t is dropped alone; the banner and keep survive', async () => {
+    const { f } = await post('/p', {}, { error: 'e', keep: { reason: REASON }, typed: TYPED });
+    const bad: Array<[string, unknown]> = [
+      ['form with a space', { ...TYPED, form: 'Bad Form!' }],
+      ['form starting with a capital', { ...TYPED, form: 'Supplier.edit' }],
+      ['record that is not a uuid, a slug or blank', { ...TYPED, record: 'a record; drop table' }],
+      ['field name starting with a digit', { ...TYPED, fields: { '1bad': 'x' } }],
+      ['field name with a dash', { ...TYPED, fields: { 'a-b': 'x' } }],
+      ['a number value', { ...TYPED, fields: { name: 5 } }],
+      ['an array holding a number', { ...TYPED, fields: { name: ['a', 1] } }],
+      ['a nested object', { ...TYPED, fields: { name: { x: 1 } } }],
+      ['fields missing', { form: TYPED.form, record: TYPED.record }],
+      ['t is a string', 'oops'],
+    ];
+    for (const [label, t] of bad) {
+      currentJar().set(FLASH_COOKIE, planted((o) => void (o['t'] = t)), {});
+      const sp = await readFull({ f: f! });
+      expect(sp.typed, label).toBeUndefined();
+      expect(sp.error, label).toBe('e');
+      expect(sp.reason, label).toBe(REASON);
+    }
+    // Mutant: skip the shape check in decodeFlash -> a line above is red.
+  });
+
+  it('a blank record and a uuid record are both valid', async () => {
+    for (const record of ['', UUID]) {
+      const { f } = await post('/p', {}, { error: 'e', typed: { form: 'a.b', record, fields: { x: '1' } } });
+      expect((await readFull({ f: f! })).typed, JSON.stringify(record)).toBeTruthy();
+    }
+  });
+
+  it('an old cookie with no t (a deploy mid-minute) decodes as before', async () => {
+    const { f } = await post('/p', {}, { error: 'e', keep: { reason: REASON } });
+    const sp = await readFull({ f: f! });
+    expect(sp.error).toBe('e');
+    expect(sp.reason).toBe(REASON);
+    expect(sp.typed).toBeUndefined();
+    expect(sp.typedDropped).toBeUndefined();
+    expect(decoded().t).toBeUndefined();
+  });
+
+  it('R9: ?typed= and ?typedDropped= in the address are never honoured, with or without a flash', async () => {
+    const urlTyped = JSON.stringify(TYPED);
+    const bare = await readFull({ typed: urlTyped, typedDropped: urlTyped });
+    expect(bare.typed).toBeUndefined();
+    expect(bare.typedDropped).toBeUndefined();
+    const { f } = await post('/p', {}, { error: 'e' });
+    const withCookie = await readFull({ f: f!, typed: urlTyped, typedDropped: urlTyped });
+    expect(withCookie.typed).toBeUndefined();
+    expect(withCookie.typedDropped).toBeUndefined();
+    // Mutant: do not strip `typed` / `typedDropped` in stripFlashKeys -> red.
+  });
+
+  it('size: an over-budget typed slot is dropped WHOLE (never shortened), td names the form and record, keep survives, the warning names fields not values', async () => {
+    const huge = 'LongTypedNote-'.repeat(400); // 5,600 characters
+    const { f } = await post('/p', {}, { error: 'refused', keep: { reason: REASON }, typed: { form: 'supplier.edit', record: UUID, fields: { notes: huge, name: 'Short' } } });
+    expect(Buffer.byteLength(cookie())).toBeLessThanOrEqual(3000);
+    const p = decoded();
+    expect(p.t).toBeUndefined();
+    expect(p.td).toEqual({ form: 'supplier.edit', record: UUID });
+    const sp = await readFull({ f: f! });
+    expect(sp.error).toBe('refused');
+    expect(sp.reason).toBe(REASON); // keep survives: typed goes first
+    expect(sp.typed).toBeUndefined();
+    expect(sp.typedDropped).toEqual({ form: 'supplier.edit', record: UUID });
+    const logged = JSON.stringify(logSpy.warn.mock.calls);
+    expect(logSpy.warn).toHaveBeenCalled();
+    expect(logged).toContain('notes');
+    expect(logged).toContain('supplier.edit');
+    expect(logged).not.toContain('LongTypedNote');
+    expect(logged).not.toContain('Short');
+    // Mutant: shorten each value to fit -> t is present, red. Drop keep before typed -> reason missing, red. Log values -> red.
+  });
+
+  it('size: typed that fits on its own but not beside a large keep is the one dropped; keep (now fitting) survives', async () => {
+    const typedNote = 'T'.repeat(1200);
+    const keepReason = 'K'.repeat(1200);
+    await post('/p', {}, { error: 'e', typed: { form: 'a.b', record: UUID, fields: { notes: typedNote } } });
+    expect(decoded().t, 'fits alone').toBeTruthy();
+    expect(Buffer.byteLength(cookie())).toBeLessThanOrEqual(3000);
+    resetJar();
+    const { f } = await post('/p', {}, { error: 'e', keep: { reason: keepReason }, typed: { form: 'a.b', record: UUID, fields: { notes: typedNote } } });
+    expect(Buffer.byteLength(cookie())).toBeLessThanOrEqual(3000);
+    const sp = await readFull({ f: f! });
+    expect(sp.typed).toBeUndefined();
+    expect(sp.typedDropped).toEqual({ form: 'a.b', record: UUID });
+    expect(sp.reason).toBe(keepReason);
+  });
+
+  it('I5: no typed value is logged on the normal path either', async () => {
+    await post('/p', {}, { error: 'e', typed: { form: 'a.b', record: UUID, fields: { name: 'Very-Private-Typed-Value', pinLike: '4242' } } });
+    const all = JSON.stringify([logSpy.warn.mock.calls, logSpy.info.mock.calls, logSpy.error.mock.calls, logSpy.debug.mock.calls]);
+    expect(all).not.toContain('Very-Private-Typed-Value');
+    expect(all).not.toContain('4242');
+  });
+
+  it('the five tender keep keys are gone from KEEP_KEYS (the tender form moved onto typed); the other keep keys stay', () => {
+    const keys = flash.KEEP_KEYS as readonly string[];
+    for (const gone of ['tenderId', 'tenderName', 'tenderKind', 'tenderAccount', 'tenderAlias']) expect(keys, gone).not.toContain(gone);
+    for (const stays of ['reason', 'refundAmount', 'refundAccountCode', 'writtenOffOn', 'inServiceOn', 'mode', 'openingDate', 'separationDate']) {
+      expect(keys, stays).toContain(stays);
+    }
+    // Red on HEAD: KEEP_KEYS still lists the five tender keys.
+  });
+});

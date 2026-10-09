@@ -83,7 +83,7 @@ function SectionTable({
                   <tr key={l.lineKey} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     {!finalizedAt && (
                       <td className="px-2 py-2">
-                        <input type="checkbox" name="confirmedKeys" value={l.lineKey} defaultChecked />
+                        {!l.usageRecordId && <input type="checkbox" name="confirmedKeys" value={l.lineKey} defaultChecked />}
                       </td>
                     )}
                     <td className="px-3 py-2">
@@ -92,9 +92,16 @@ function SectionTable({
                     {section !== 'orphan' && <td className="px-3 py-2">{l.itemName ?? '—'}</td>}
                     {showQuantity && <td className="px-3 py-2 text-right tabular-nums">{l.quantity ?? '—'}</td>}
                     {section !== 'orphan' && <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{l.locationName ?? '—'}</td>}
-                    <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
-                      {l.usageRecordId ? 'posted' : section === 'orphan' ? 'unmapped' : 'pending'}
-                    </td>
+                    {/* T-388 R12: posted / held (the live sentence, red) / not posted (old data in a stamped section) / pending */}
+                    {l.usageRecordId || section === 'orphan' || (!l.hold && !finalizedAt) ? (
+                      <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
+                        {l.usageRecordId ? 'posted' : section === 'orphan' ? 'unmapped' : 'pending'}
+                      </td>
+                    ) : l.hold && !finalizedAt ? (
+                      <td className="px-3 py-2 text-red-800 dark:text-red-300">{l.hold}</td>
+                    ) : (
+                      <td className="px-3 py-2 text-neutral-500">not posted</td>
+                    )}
                   </tr>
                 ))}
                 {blocked.map((l) => (

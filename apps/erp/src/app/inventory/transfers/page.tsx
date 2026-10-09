@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
-import { schema } from '@shareat/db';
+import { itemsRepo, schema } from '@shareat/db';
 import { listStores } from '../lib';
 import {
   createTransferAction,
@@ -44,11 +44,13 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
       .where(and(eq(schema.stockLocations.storeId, storeId), eq(schema.stockLocations.status, 'active')))
       .orderBy(asc(schema.stockLocations.name));
 
-    const its = await tx
-      .select({ id: schema.items.id, code: schema.items.code, name: schema.items.name, baseUnit: schema.items.baseUnit })
-      .from(schema.items)
-      .where(and(eq(schema.items.orgId, actor.orgId), eq(schema.items.status, 'active')))
-      .orderBy(asc(schema.items.name));
+    // T-383 S2b: a retired item with stock at THIS store stays movable until it runs out, labelled as such.
+    const its = (await itemsRepo.listUsableItems(tx, actor.orgId, storeId)).map((i) => ({
+      id: i.id,
+      code: i.code,
+      name: i.status === 'inactive' ? `${i.name} (retired)` : i.name,
+      baseUnit: i.baseUnit,
+    }));
 
     const openTransfers = await tx
       .select({

@@ -275,17 +275,19 @@ describe('endAllForDevice', () => {
   it('ends only that device\'s live session, not another device\'s session for the same person', async () => {
     const f = await setup('end-device');
     await mkPin(f.orgId, f.personId, f.storeId, '741852');
+    const termA = await mkTerminal(f.orgId, f.storeId, 'end-device-a');
+    const termB = await mkTerminal(f.orgId, f.storeId2, 'end-device-b');
 
-    const onDeviceA = await signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: '741852', deviceId: 'device-A' });
+    const onDeviceA = await signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: '741852', deviceId: termA.personId });
     // Same person, second PIN sign-in from a second tablet — same store, different device.
-    const onDeviceB = await signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: '741852', deviceId: 'device-B' });
+    const onDeviceB = await signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: '741852', deviceId: termB.personId });
 
     // ⚠️ Called under a real principal, the way an admin action would — `sessions` is `derived`
     // RLS (via persons.org_id), so a bare `transaction()` with no principal at all sees no rows
     // to end regardless of the device filter. `endShift` (this function's sibling) has the same
     // `tx: Tx | null` shape and, not coincidentally, zero production callers today; this is not a
     // new limitation this task introduces.
-    const { ended } = await asOrg(f.orgId, (tx) => endAllForDevice(tx, { deviceId: 'device-A' }));
+    const { ended } = await asOrg(f.orgId, (tx) => endAllForDevice(tx, { deviceId: termA.personId }));
     expect(ended).toBe(1);
 
     const [a] = await sql<{ ended_at: Date | null }[]>`select ended_at from sessions where id = ${onDeviceA.sessionId}`;
@@ -328,10 +330,11 @@ describe('pin_attempt_throttle — T-303, 10 misses / 60s window / 2 minute cool
   it('test 1 — ten misses locks the store; the eleventh is refused BEFORE any credential lookup runs', async () => {
     const f = await setup('throttle-lock');
     await mkPin(f.orgId, f.personId, f.storeId, '111111');
+    const term = await mkTerminal(f.orgId, f.storeId, 'throttle-lock');
 
     for (let i = 0; i < 10; i++) {
       await expect(
-        signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: '000000', deviceId: 'd' }),
+        signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: '000000', deviceId: term.personId }),
       ).rejects.toThrow(AuthenticationError);
     }
 
@@ -340,7 +343,7 @@ describe('pin_attempt_throttle — T-303, 10 misses / 60s window / 2 minute cool
     // appears instead, the throttle check ran first and the credential path was never reached at
     // all — invariant 3, checked structurally rather than by timing.
     await expect(
-      signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: 'not-a-pin', deviceId: 'd' }),
+      signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: 'not-a-pin', deviceId: term.personId }),
     ).rejects.toThrow(/paused until/);
   });
 
@@ -487,7 +490,7 @@ describe('pin_attempt_throttle — T-303, 10 misses / 60s window / 2 minute cool
     // nothing to do with RLS. The fix is this: the PRINCIPAL is `f.orgId`, but the write claims
     // `other.orgId` — a genuine mismatch, which `WITH CHECK` must now refuse.
     await expect(
-      withOrgPrincipal(f.orgId, (tx) => pinAttemptsRepo.recordMiss(tx, other.orgId, f.storeId)),
+      withOrgPrincipal(f.orgId, (tx) => pinAttemptsRepo.chargeAttempt(tx, { orgId: other.orgId, storeId: f.storeId, deviceId: null })),
     ).rejects.toThrow();
   });
 });

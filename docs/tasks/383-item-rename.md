@@ -1,6 +1,6 @@
 # T-383: rename an item and retire it, so a wrong-unit item can be replaced under its own name
 
-**Status:** S1 DONE 2026-10-08 (rename, super-admin only; live via PR #1, e2451ad; rebuilt on EditableRecord). **S2 (retire/restore with the stock warning, Amendment B1) not started.** SPEC 2026-10-08 (Opus planner), written at `1301c8a`.
+**Status:** S1 DONE 2026-10-08 (rename, super-admin only; live via PR #1, e2451ad; rebuilt on EditableRecord). **S2a DONE 2026-10-09 locally (`ef6835b`; browser smoke on 9008: retire, restore, manager sees no section); goes up with the wrap-up PR (bible row 296). S2b in progress. S2 was RE-SPECIFIED by Amendment B2 (2026-10-09) as S2a (retire/restore/readout) then S2b (a retired item stays usable for consume/move, refused in words for order/receive/price/map/new recipe). B2 supersedes the "## S2" section and the S2 row of the parallel plan. Still no migration.** SPEC 2026-10-08 (Opus planner), written at `1301c8a`.
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
 **Migration:** **none.** Everything needed exists: `items.status` already admits `inactive` (0050:40), the unique
 indexes are what they must be, and `audit_log` has its writer. If Ian picks Q2(b), that option alone needs **0188**.
@@ -336,3 +336,234 @@ Screenshots of 1-6 at 375px and in dark mode.
 ## Amendment B1 — Ian's answers (2026-10-08, orchestrator)
 - **Q1 = a.** Rename (name and code) is super-admin only (`approve_item`). One name for the entire business: names and codes stay unique org-wide, retired items included (unchanged).
 - **Q2 = a, with Ian's addition: "warning then allow until fully utilized".** Retiring an item that still has stock WARNS (stores holding stock, live POS maps, recipes) and then allows it. A retired item with stock on hand stays usable for everything that CONSUMES or MOVES existing stock — POS usage/recipes depletion, wastage, transfers, counts — until its on-hand reaches zero everywhere. It can no longer be ordered, received or given a new price/map. Tests must cover both halves (consumption still works after retire; a new purchase/receipt of a retired item is refused in words). If any consume/move path today refuses inactive items, that path is in scope and named in the slice report.
+
+## Amendment B2 — S2 reconciled with B1 and T-386 (2026-10-09, Opus planner)
+Supersedes the "## S2: retire, restore, readout" section and the S2 row of §Parallel plan. S1, R1-R7 and the
+invariants stand except where a line below changes them. Census taken at `ec6f3f7`. **No migration** (0190 stays free):
+`items.status` already admits `inactive`, `audit_log.action` is free text (`rename_item` shipped without one), and no
+trigger reads item status.
+
+### B2.1 What changed since S2 was written
+- **T-386 is live (rows 294, 296).** Codes are `CHWN-001` shaped, allocated from the name, and a number is **never
+  given out again** (`items_code_never_reused`, 0189). A rename **keeps** the code unless the adopt tick is set (T-386
+  R8). So the §Goal's "add the replacement ... under the old name and code" is now impossible and wrong. **Corrected
+  Goal line:** *rename the old item (its code stays, e.g. "Coke 1.5 (old)" keeps `CK15-001`), add the replacement
+  under the old name in the right unit (it gets the next number for its stem, `CK15-002`; `-001` is never reused),
+  then retire the old one.* Retire never touches the code. Nothing in S2 frees or reuses a code.
+- **B1 (row 290).** A retired item WARNS then ALLOWS, and stays usable for consume/move until its stock is used up.
+  The original R6 line "It can no longer be picked on new deliveries, invoices, orders, recipes or POS maps" is
+  replaced (B2.4).
+
+### B2.2 The rule (planner ruling)
+- **"Retired" is the screen word for `items.status = 'inactive'`.** No new status, no new column.
+- **CONSUME/MOVE never branches on item status in the domain**: retired or active, the same code runs, as it does
+  today. The "until fully utilized" boundary is drawn where people pick items: a consume/move picker offers a
+  retired item **only while its on-hand at that store is above zero** (`listUsableItems`, B2.5). Once it is zero it
+  drops out of the pickers; counts keep listing it (they already read every status).
+- **Why not refuse consumption at zero in the domain:** (1) transfers already cannot move more than is on hand
+  (`stock/transfers.ts:70-74`), so the move path is already zero-bounded; (2) a manual usage or wastage of a retired
+  item at zero is exactly the "found two more in the back" case a count fixes, and refusing it records nothing;
+  (3) refusing a POS pull line would leave real sales unrecorded in stock (see Q3). A status check on 10 consume
+  paths is 10 places to be wrong; a picker rule is one query.
+- **ORDER / RECEIVE / PRICE / MAP / NEW RECIPE refuse a retired (or merged) item, in words**, through one sentence
+  builder (B2.5). Paths that already refuse with a plain sentence keep their sentence.
+- **Receiving a supplier delivery drafted before the retire is refused too** (Ian: "can no longer be ... received";
+  the supplier invoice for it is already refused by `validateInvoiceLines`, so allowing the receipt would leave a
+  receipt no invoice can match). Commissary deliveries (`kind = 'commissary'`) are a MOVE and are not refused.
+- **Production output of a retired item is left as today** (a warning, `production/validate.ts:152`): the post engine
+  is shared with editing a posted record (`editPostedProduction`), and a refusal there would block correcting
+  history. The output picker keeps hiding retired items, so a new run cannot pick one on screen.
+
+### B2.3 Census (static, grep at `ec6f3f7`; it only NOMINATES: every row marked "test" is proven by a test in S2b)
+**CONSUME / MOVE: must accept a retired item (10 paths; none reads item status in the domain today):**
+| # | Path | file:line | Today | S2b |
+|---|---|---|---|---|
+| C1 | Usage record | `packages/domain/src/stock/usage-records.ts:134` `saveUsageDraft`, `:260` `postUsage` | no status read; picker `apps/erp/src/app/inventory/usage/lib.ts:35` hides retired | picker -> `listUsableItems`; test |
+| C2 | Wastage (a usage record with a wastage `reasonCode`, `isWastageReason`) | same functions, `usage-records.ts:151` | same | same screen; test |
+| C3 | Transfer | `stock/transfers.ts:85` `transferNow`, `:182` `dispatch`, `:233` `receiveTransfer` | no status read; on-hand guard `:70-74`; picker `apps/erp/src/app/inventory/transfers/page.tsx:47-51` hides retired | picker -> `listUsableItems`; test |
+| C4 | Count | `stock/count-workflow.ts:186` `commitCount` | no status read; sheet `inventory/counts/lib.ts:129` reads `includeInactive: true` | none; test |
+| C5 | POS usage pull, direct map | `pos/usage-pull.ts:180` `buildPlan`, `:317` `finalizeSections`; `pos/plan.ts` | no item status read; only recipe status (`usage-pull.ts:65`, `plan.ts:208`); no on-hand check, so it can go below zero like any item | none; test |
+| C6 | POS usage pull, recipe map (recipe depletion) | same; recipe lines from `posMappingRepo.getRecipesForExplosion` | same | none; test |
+| C7 | Production input | `production/index.ts:335-345` -> `production/validate.ts:121` | warning only, posts; picker `inventory/production/lib.ts:32` hides retired | inputs picker -> `listUsableItems`; test |
+| C8 | Supplier return of an earlier delivery line | `stock/supplier-returns.ts:81` `recordReturn` | no status read | none; test |
+| C9 | Branch order filled after the retire (line added before) | `commissary/fulfilment.ts:138` `fulfilLine`, `:303` `dispatchBranchOrder`; `trade/index.ts:841` `receiveTradeOrder` | no status read | none; test |
+| C10 | Customer return of an earlier sale | `trade/returns.ts:169` `recordCustomerReturn` | no status read | none; test |
+
+**ORDER / RECEIVE / PRICE / MAP / NEW RECIPE: must refuse in words (13 paths):**
+| # | Path | file:line | Today | S2b |
+|---|---|---|---|---|
+| X1 | Supplier invoice line (buy/receive) | `items/index.ts:369` `validateInvoiceLines` | refuses with a raw `Error` (engineer text, item name) | sentence; test |
+| X2 | Declare a supplier for an item | `items/index.ts:540` `declareSupplierItem` | raw `Error` | sentence; test |
+| X3 | Branch order line | `commissary/orders.ts:289` `buildBranchLine` | raw `Error` | sentence; test |
+| X4 | Commissary proposes a line | `commissary/fulfilment.ts:193` `proposeLine` | raw `Error` | sentence; test |
+| X5 | Trade order line | `trade/index.ts:237` `createTradeOrder` | raw `Error` | sentence; test |
+| X6 | Supplier delivery drafted | `deliveries/documents.ts:121` `createDeliveryDocument` | **admits it** (picker `inventory/deliveries/lib.ts:49` hides only) | NEW refusal; test |
+| X7 | Supplier delivery received | `deliveries/documents.ts:299` `receiveDeliveryDocument` | **admits it** | NEW refusal unless `delivery.kind = 'commissary'`; test |
+| X8 | Item price | `items/index.ts:909` `setItemPricing` | **admits it** | NEW refusal; test |
+| X9 | POS map | `pos/item-map.ts:41` `upsertPosItemMap` | **admits it** (picker `inventory/pos-map/lib.ts:23` hides only) | NEW refusal (B2.5); test |
+| X10 | New recipe | `production/index.ts:111` `createRecipe` | **admits it** | NEW refusal; test |
+| X11 | Customer price-list rate | `customers/index.ts:186` `setPrice` | refuses in words | unchanged; test |
+| X12 | Commissary offering | `commissary/catalogue.ts:202` `upsertOffering` | refuses in words | unchanged; test |
+| X13 | Commissary item map | `commissary/catalogue.ts:310,319` `upsertMap` | refuses in words | unchanged; test |
+
+**Neutral (reads status, is not a use; unchanged, no test):** low-stock and its findings (`repo/low-stock.ts:59,80`,
+`repo/findings.ts:1151,1211`: no reorder nag for a retired item, correct), cutover opening gaps (`repo/cutover.ts:86`),
+`findSimilarItems` (`repo/items.ts:552`), recode (`items/recode.ts:22`), commissary catalogue SQL
+(`repo/commissary.ts:190`), prepaid (`prepaid/index.ts:238,413` read `prepaid_items`, a different table), production
+output (B2.2), `setStoreSellability` (`items/index.ts:837`: no read; harmless because X5 refuses the order). Pickers
+already hiding retired items on order/receive/price/map screens stay as they are: deliveries, POS map, commissary
+catalogue, trade orders, price lists (`customers/price-lists/[id]/page.tsx:32`), AP (`ap/lib.ts:164`), commissary
+orders (`commissary/orders/lib.ts:183`), production outputs.
+
+**What a POS import does when a live map points at a retired item (C5/C6):** the pull plans and posts the depletion
+against the retired item at the map's location exactly as for an active item, and keeps doing so below zero (there
+is no on-hand check in `plan.ts` or `usage-pull.ts`). Only a retired **recipe** blocks a line (`plan.ts:208`). The
+retired item's page shows the live maps (B2.4) so someone re-points them; Q3 asks whether to block instead.
+
+### B2.4 S2a: retire, restore, readout (the original S2, corrected)
+**BUILDER paths:** `packages/domain/src/items/index.ts` (`setItemStatus` per R3; delete `deactivateItem` `:211`),
+`packages/db/src/repo/items.ts` (`retireReadout` per R5), `apps/erp/src/app/items/lib.ts` (loader),
+`apps/erp/src/app/items/actions.ts` (`setItemStatusAction`; the rename authorization sentence `:246`),
+`apps/erp/src/app/items/[id]/page.tsx` (Retire section; the may-not sentence `:142`).
+**TESTER paths:** `packages/domain/tests/integration/t383-item-rename-retire.test.ts`,
+`apps/erp/tests/integration/t383-item-rename-retire-web.test.ts`, `tests/unit/domain-actions-have-callers.test.ts`
+(delete the `deactivateItem` EXEMPT row `:157-159`), `apps/erp/tests/action-link-sweep.test.ts` and
+`touch-target-baseline.json` (census, dated comment naming Retire/Restore).
+
+Changes to R3-R6 (everything else in them stands):
+- **Sentence.** The authorization sentence becomes R4's **"Only a super-admin can rename, retire or restore an
+  item."** in `actions.ts` (rename, retire, restore) and on the page (`[id]/page.tsx:142`). S1 shipped
+  "Only a super-admin can rename an item." because managers could still reach `deactivateItem`; S2a removes that.
+- **Readout read for `active` AND `inactive`** (never `merged`). R5 unchanged otherwise.
+- **Retire section, `active`:** the readout lines as R6, the POS-map line now: *"{n} live POS map(s) still use it.
+  Point them at the replacement, or sales keep using up this item, even below zero."* The line under the button:
+  *"Retiring keeps every record. It can no longer be ordered, received, priced, mapped to a POS item or put on a new
+  recipe. Stock already on hand can still be used, wasted, moved and counted until it runs out. You can restore it."*
+- **Retire section, `inactive`:** *"Retired."*, then the readout lines (stock line ends *"It can still be used,
+  wasted, moved and counted until it runs out."*), then the Restore form.
+- Audit actions exactly `retire_item` / `restore_item`, entity `items`, before/after `{ status }`, source `web`.
+
+**Tests, domain:** S1-S7 of the original section stand, with S1's effect leg reduced to
+`itemsRepo.listItems(tx, orgId, { includeInactive: false })` omits it (the invoice-line sentence moves to S2b X1).
+**Tests, web:** W4 and W5 stand; add **W4b** an `inactive` item with +5 at store A shows "Retired.", the store line
+with "until it runs out", and the Restore button; **W5b** a manager's rename now gets the combined sentence (update
+`NOT_SUPER_ADMIN` `:56`). Mutant: the loader reads the readout only when `active` -> W4b red.
+
+### B2.5 S2b: a retired item stays usable; the rest refuse in words
+**Domain contract (BUILDER):**
+- New `packages/domain/src/items/not-active.ts`, imported directly by each caller (not via `../items`, to avoid an
+  import cycle with `commissary/catalogue.ts`):
+  ```ts
+  export function notActiveItemSentence(status: string, what: string, where?: string): string {
+    const lead = where ? `${where}: this item` : 'This item';
+    return status === 'merged'
+      ? `${lead} was merged into another, so it cannot be ${what}. Use the item it was merged into.`
+      : `${lead} is retired, so it cannot be ${what}. Use its replacement, or ask a super-admin to restore it.`;
+  }
+  ```
+  No id, no item name (I6). Throwing paths use `throw refuse(<their existing raw text>, notActiveItemSentence(...))`;
+  outcome-returning paths return `{ ok: false, reason: notActiveItemSentence(...) }`. The test is
+  `item.status !== 'active'` everywhere (so merged is refused too).
+- Per path (`what`, `where`):
+  - X1 `validateInvoiceLines`: `'bought or received'`, `` `Line ${i + 1}` ``.
+  - X2 `declareSupplierItem`: `'bought from a supplier'`, none.
+  - X3 `buildBranchLine`: `'ordered'`, none. X4 `proposeLine`: `'added to an order'`, none.
+  - X5 `createTradeOrder`: `'ordered'`, `` `Line ${n}` `` (its existing `n`).
+  - X6 `createDeliveryDocument`: after the per-line parse loop, read each line's item (`itemsRepo.getItemById`);
+    absent -> leave to the FK as today; not active -> `'received'`, `` `Line ${n}` ``.
+  - X7 `receiveDeliveryDocument`: after the draft check, when `delivery.kind !== 'commissary'`, each line's item not
+    active -> `'received'`, `` `Line ${line.lineNo}` ``. Nothing written before the refusal.
+  - X8 `setItemPricing`: after the item read, `'given a new price'`, none.
+  - X9 `upsertPosItemMap`, `mode = 'direct'`: read the item; not active -> refuse with `'mapped to a POS item'`, none,
+    **unless** the map being written already points at that same item (the `editMapId` target via
+    `posMappingRepo.getMapById`, else `posMappingRepo.getActiveMapByKey`), so a quantity edit on an existing map to a
+    retired item still saves. Recipe and no-stock maps unchanged.
+  - X10 `createRecipe`: read output and line items with `productionRepo.getItemsForProduction`; output not active ->
+    `'put on a new recipe'`, `'The output'`; a line not active -> same `what`, `` `Ingredient line ${i + 1}` ``.
+    Checked before `insertRecipe`.
+  - X11-X13 untouched.
+- New repo read `itemsRepo.listUsableItems(tx, orgId, storeId): Promise<ItemRow[]>` in
+  `packages/db/src/repo/items.ts`: `status = 'active'`, plus `status = 'inactive'` items whose
+  `sum(stock_movements.quantity)` for that `store_id` is **> 0**; filtered by `org_id`; ordered by name; same columns
+  as `listItems`.
+- Pickers: `inventory/usage/lib.ts:35` and `inventory/transfers/page.tsx:47-51` use `listUsableItems` for the current
+  store; `inventory/production/lib.ts` adds `inputItems` from `listUsableItems` and `production/page.tsx:132` passes
+  it to the Inputs rows (Outputs keep `items`, active only). A retired option is labelled `"{name} (retired)"`.
+
+**BUILDER paths:** `packages/domain/src/items/not-active.ts` (new), `packages/domain/src/items/index.ts`,
+`packages/domain/src/deliveries/documents.ts`, `packages/domain/src/commissary/orders.ts`,
+`packages/domain/src/commissary/fulfilment.ts`, `packages/domain/src/trade/index.ts`,
+`packages/domain/src/pos/item-map.ts`, `packages/domain/src/production/index.ts`, `packages/db/src/repo/items.ts`,
+`apps/erp/src/app/inventory/usage/lib.ts`, `apps/erp/src/app/inventory/transfers/page.tsx`,
+`apps/erp/src/app/inventory/production/lib.ts`, `apps/erp/src/app/inventory/production/page.tsx`.
+**TESTER paths (disjoint):** new `packages/domain/tests/integration/t383-retired-item-usable.test.ts`, new
+`apps/erp/tests/integration/t383-retired-item-pickers-web.test.ts`. Fixtures are borrowed (copied, not imported
+across files) from `usage-records.test.ts`, `stock-transfers.test.ts`, `count-workflow.test.ts`,
+`pos-usage-pull.test.ts`, `production.test.ts`, `supplier-returns.test.ts`, `branch-orders.test.ts`,
+`customer-returns.test.ts`. Retire with `setItemStatus` (S2a); every stock-bearing item gets its stock **before** the
+retire.
+
+**Tests, domain (`t383-retired-item-usable.test.ts`):**
+- **C1-C10 (the consume half; each red if a status check is added to that path).** For each: an item with stock at
+  store A (and, for C9/C10, a line or sale made while active), retired, then the path runs and succeeds, and the
+  `stock_movements` row lands on the retired item. C1 usage 2 of 5 -> on-hand 3. C2 the same with a wastage
+  `reasonCode`. C3 `transferNow` 1 between two locations of A. C4 count it to 0 -> committed, on-hand 0. C5 a direct
+  map's pull finalised -> the retired item depleted; C5b with on-hand already 0 -> it goes below zero (documents Q3's
+  built answer). C6 a recipe map whose ingredient is retired -> depleted. C7 `postProduction` with the retired item
+  as input -> posted (a warning is allowed). C8 `recordReturn` of its earlier delivery line. C9 an order line
+  accepted while active, item retired, then `fulfilLine` + `dispatchBranchOrder` + `receiveTradeOrder` succeed.
+  C10 `recordCustomerReturn` of a sale made while active.
+- **X1-X13 (the refuse half).** Each refused with exactly its `notActiveItemSentence` (X11-X13: their existing
+  sentence) and nothing written (row counts before/after). X1 also with a `merged` item -> the merged sentence.
+  X7: a draft supplier delivery made while active, item retired, receive -> refused; control leg: a commissary
+  delivery of a retired item receives. X9 control leg: editing the quantity of an existing direct map to the retired
+  item -> ok. Each also has an active-item control leg that succeeds. Mutants: drop each new check -> its leg red;
+  `=== 'inactive'` instead of `!== 'active'` -> the X1 merged leg red; X9 without the same-item exception -> the
+  control leg red; X7 without the commissary exception -> the control leg red.
+- **L1 `listUsableItems`.** At store A: active, no stock -> listed; retired +5 -> listed; retired +3 then -3 -> not;
+  retired -2 -> not; merged with stock -> not; another org's retired item with stock -> not. At store B the +5 item
+  -> not. Mutants: `<> 0` instead of `> 0` -> the -2 leg red; drop the store filter -> the store-B leg red; drop the
+  org filter -> red.
+
+**Tests, web (`t383-retired-item-pickers-web.test.ts`):** **W6** `usageScreenData(orgId, storeA).items` contains
+"{name} (retired)"; for store B it does not. **W7** the transfers page for store A renders that option; for B not.
+**W8** `productionScreenData`: `inputItems` has it, `items` does not. Mutant: the usage loader back on
+`listItems(..., { includeInactive: false })` -> W6 red.
+
+**Smoke (9008), extends the original S2 smoke:** step 3 now: the replacement is accepted under the old name and the
+code field suggests the next number (`...-002`), never the old item's code. After step 4 (retire with stock): on the
+usage screen for that store the old item shows "(retired)" and a usage of it posts; it is absent from the deliveries
+and POS-map pickers; count it to zero, and it leaves the usage picker. Screenshots at 375px and in dark mode.
+
+### B2.6 Order, size, done-when
+- **S2a then S2b** (shared files: `items/index.ts`, `repo/items.ts`). Tester first in each.
+- **Size:** S2a about 2-3 hours as before. S2b about 1 day (tester most of it: 10 consume legs on borrowed fixtures,
+  13 refusal legs, L1). Builder for S2b about 3 hours.
+- Done-when as §Done when, plus: the full suite in CI on the PR (S2b narrows behaviour in 8 domain modules, so other
+  callers are proven by the full run, RULES §2), and the slice report names every census row with the test that
+  proves it, and any row the test showed to be wrong.
+
+### B2.7 Question only Ian can answer
+**Q3 (T-383, priority: low, blocks nothing: built to (a)). A live POS map still points at a retired item whose stock
+has run out.**
+- **Why:** the POS keeps selling the menu item; the pull keeps using up the retired stock item.
+- **Example:** "Coke 1.5 (old)" is retired at 0 at Lipa; the POS item "Coke" still maps to it; tonight's pull takes
+  it to -12.
+- **(a) Keep depleting, below zero, like any item today (recommended).** Sales are always recorded in stock; the
+  retired item's page lists the live map; the next count corrects it; re-pointing the map is one edit.
+- **(b) Block that pull line once the retired item is at zero at that store**, so the day cannot be finalised until
+  someone re-points the map. Stricter, but a forgotten map stops a store's day close; about half a day more.
+
+## B2 errata — orchestrator, 2026-10-09, from the S2b tester's evidence (verified at source)
+- **Stock never goes below zero, for any item.** `consume()` refuses a shortfall (`packages/domain/src/stock/consume.ts`,
+  "A shortfall is refused and nothing is written") and the trigger `stock_movements_no_negative_on_hand_trg` (0063/0142)
+  backs it. So every B2 statement that a pull "keeps depleting below zero" is false: a retired item at zero blocks its
+  pull line exactly as an active item at zero does. Case C5b is dropped; Open Question `t383-q3-retired-map-at-zero` is
+  withdrawn (its option a was never possible).
+- **The S2a page sentence is corrected** (S2b carries it): "{n} live POS map(s) still use it. Point them at the
+  replacement; sales keep using up this item until its stock runs out." (was "... or sales keep using up this item,
+  even below zero.").
+- **What a short line does today is DEF-618** (a short item skips its whole location's lines, finalizes anyway, and says
+  "frozen location"). Not T-383's to fix; Ian's choice is on the Open Questions page (`def-618-pull-short-stock`).
+- B2.2's "found two more in the back" (usage or wastage of a retired item at zero) is refused by the consume engine, not
+  by a status check; do not promise it. L1's "retired -2" leg cannot exist (+3 then -3 is used instead).

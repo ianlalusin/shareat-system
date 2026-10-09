@@ -154,9 +154,6 @@ const EXEMPT: Record<string, string> = {
   depreciationDrift:
     'UNWIRED — DEF-198. The should-versus-does reconciliation T-135 describes as an OIL finding. ' +
     'No detector reads it, so a depreciation outage stays invisible exactly as it did in v1.',
-  deactivateItem:
-    'UNWIRED — DEF-198. `/items` wires create / update / merge / request / approve / reject and ' +
-    'not this, so an item can be created and never retired.',
   declareSupplierItem:
     'UNWIRED — DEF-198. Which supplier sells which item has no screen, so the declaration ' +
     '`validateInvoiceLines` checks against can only be made by hand-run SQL.',
@@ -215,6 +212,11 @@ const EXEMPT: Record<string, string> = {
     'on a brand-new store; there is no human boundary because there is nothing yet for a human to ' +
     'act on. `tests/unit/t336-canonical-position-defaults.test.ts`\'s U3 is the closed-caller-list ' +
     'guard that keeps it that way; it also owns the one required barrel re-export (§7:135).',
+
+  // ---- T-386 R11 — the one-time item recode ---------------------------------------------------
+  recodeItems:
+    'JOB — `scripts/recode-items.ts` (T-386 R11), a one-time run with Ian. Gives every legacy item code the ' +
+    'CHWN-001 shape under a super-admin actor; no screen by design, and this guard scans apps/ only.',
 };
 
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {

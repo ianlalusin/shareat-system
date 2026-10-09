@@ -6,6 +6,7 @@ import {
   type ItemRow,
   type PriceObservation,
   type PriceMonth,
+  type RetireReadout,
   type ResolvedSellability,
   type StoreSellabilityOverrideRow,
   type SupplierPrice,
@@ -61,6 +62,11 @@ export async function listItems(orgId: string, includeInactive = true): Promise<
 /** T-378 R2: the page's courtesy read of the database's one definition of "has history". */
 export async function unitHistoryExists(orgId: string, itemId: string): Promise<boolean> {
   return withOrgPrincipal(orgId, (tx) => itemsRepo.unitHistoryExists(tx, itemId));
+}
+
+/** T-383 R5: the retire readout (advisory). The page reads it for an active or retired item, never a merged one. */
+export async function retireReadout(orgId: string, itemId: string): Promise<RetireReadout> {
+  return withOrgPrincipal(orgId, (tx) => itemsRepo.retireReadout(tx, orgId, itemId));
 }
 
 export async function getItem(orgId: string, id: string): Promise<ItemRow | undefined> {

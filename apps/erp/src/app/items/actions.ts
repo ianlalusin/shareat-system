@@ -22,6 +22,7 @@ import {
   renameItem,
   rejectItemRequest,
   requestItem,
+  setItemStatus,
   setStoreSellability,
   suggestItemCode,
   updateItem,
@@ -243,12 +244,37 @@ export async function renameItemAction(formData: FormData): Promise<void> {
     message = changed ? 'Renamed.' : 'Nothing to change.';
   } catch (err) {
     if (err instanceof AuthorizationError) {
-      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only a super-admin can rename an item.' });
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only a super-admin can rename, retire or restore an item.' });
     }
     // The rename form is on the item's own page, so here (and only here) the way out is the page itself.
     return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err).replace('ask a super-admin to rename the existing item first.', 'rename the existing item on its page first.').replace("ask a super-admin to change the existing item's code first.", "change the existing item's code on its page first.") });
   }
   return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message });
+}
+
+/** Shown in the Retire section when the form arrives without a clear Retire or Restore choice. Nothing is written. */
+const RETIRE_CHOICE_SENTENCE = 'Choose Retire or Restore, then try again.';
+
+/** ⛔ T-383 R3. Retire (`inactive`) or restore (`active`); super-admin only (`approve_item`). Reversible, audited. */
+export async function setItemStatusAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const itemId = str(formData, 'itemId');
+  const requested = str(formData, 'status');
+  if (requested !== 'active' && requested !== 'inactive') {
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: RETIRE_CHOICE_SENTENCE }, { anchor: 'retire' });
+  }
+  const status = requested;
+  let message = '';
+  try {
+    const { changed } = await withOrgPrincipal(actor.orgId, (tx) => setItemStatus(tx, actor, { itemId, status }));
+    message = !changed ? 'No change: it already is.' : status === 'inactive' ? 'Retired. Its records stay.' : 'Restored.';
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only a super-admin can rename, retire or restore an item.' }, { anchor: 'retire' });
+    }
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err) }, { anchor: 'retire' });
+  }
+  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message }, { anchor: 'retire' });
 }
 
 export async function approveItemRequestAction(formData: FormData): Promise<void> {

@@ -29,10 +29,13 @@ import { parseQuantityInput } from '../shared/quantity-input';
 import { isPositiveQuantity, toThousandths, type Quantity } from '../stock/quantity';
 import { parseFourDecimalCost } from '../commissary/catalogue';
 import { gone, refuse } from '../shared/refusal';
+import { notActiveItemSentence } from './not-active';
 import { formatItemCode, itemCodeStem, parseItemCode } from './code';
 import { allocateItemCode, requireItemCodeStem, validateItemCodeOverride } from './code-allocation';
 
 export { ITEM_CODE_RE, formatItemCode, itemCodeStem, parseItemCode } from './code';
+export { recodeItems, type RecodeRow } from './recode';
+export { allocateItemCode, requireItemCodeStem } from './code-allocation';
 
 export interface CreateItemInput {
   /**
@@ -206,10 +209,36 @@ export async function renameItem(
   return transaction(run);
 }
 
-export async function deactivateItem(tx: Tx | null, actor: Actor, itemId: string): Promise<void> {
+/**
+ * ⭐ T-383 R3. Retire (`inactive`) or restore (`active`) an item: one audited, reversible path, super-admin only
+ * (`approve_item`). Not gated on history, stock, maps or recipes (the page shows them). A merged item is refused in words
+ * (the database's `items_merged_shape_check` backs it; this check exists for the sentence). The audit append comes after the UPDATE.
+ */
+export async function setItemStatus(
+  tx: Tx | null,
+  actor: Actor,
+  input: { itemId: string; status: 'active' | 'inactive' },
+): Promise<{ changed: boolean }> {
   const run = async (trx: Tx) => {
-    await authorize(trx, actor, 'manage_items', {});
-    await itemsRepo.updateItem(trx, actor.orgId, itemId, { status: 'inactive' });
+    await authorize(trx, actor, 'approve_item', {});
+    const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
+    if (!item) throw gone(`setItemStatus: item ${input.itemId} does not exist.`, 'item');
+    if (item.status === 'merged') {
+      const S = 'This item was merged into another, so it cannot be retired or restored.';
+      throw refuse(S, S);
+    }
+    if (item.status === input.status) return { changed: false };
+    await itemsRepo.updateItem(trx, actor.orgId, input.itemId, { status: input.status });
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: input.status === 'inactive' ? 'retire_item' : 'restore_item',
+      entity: 'items',
+      entityId: input.itemId,
+      before: { status: item.status },
+      after: { status: input.status },
+      source: 'web',
+    });
+    return { changed: true };
   };
   if (tx) return run(tx);
   return transaction(run);
@@ -365,7 +394,10 @@ export async function validateInvoiceLines(
     const item = await itemsRepo.getItemById(trx, orgId, l.itemId);
     if (!item) throw new Error(`validateInvoiceLines: line ${i + 1} names item ${l.itemId}, which does not exist.`);
     if (item.status !== 'active') {
-      throw new Error(`validateInvoiceLines: line ${i + 1} names ${item.name}, which is inactive.`);
+      throw refuse(
+        `validateInvoiceLines: line ${i + 1} names ${item.name}, which is inactive.`,
+        notActiveItemSentence(item.status, 'bought or received', `Line ${i + 1}`),
+      );
     }
     // ⭐ T-149. A supplier billing us for something we MAKE means either the item is wrong or the
     // flag is — both worth stopping before it becomes a price observation. Resolved at the
@@ -536,7 +568,10 @@ export async function declareSupplierItem(
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw new Error(`declareSupplierItem: item ${input.itemId} does not exist.`);
     if (item.status !== 'active') {
-      throw new Error(`declareSupplierItem: ${item.name} is inactive.`);
+      throw refuse(
+        `declareSupplierItem: ${item.name} is inactive.`,
+        notActiveItemSentence(item.status, 'bought from a supplier'),
+      );
     }
     return itemsRepo.insertSupplierItem(trx, {
       orgId: actor.orgId,
@@ -920,6 +955,12 @@ export async function setItemPricing(
     await authorize(trx, actor, 'manage_items', {});
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw new Error(`setItemPricing: item ${input.itemId} does not exist.`);
+    if (item.status !== 'active') {
+      throw refuse(
+        `setItemPricing: ${item.name} is not active (${item.status}).`,
+        notActiveItemSentence(item.status, 'given a new price'),
+      );
+    }
 
     // ⭐ T-371 (R5, R6) — every figure is parsed AFTER `authorize()`, at its `item_pricing` column's shape. All four
     // columns are NULLABLE with no default, so a blank is stored as null — never a guessed '0'; a blank in the mode's

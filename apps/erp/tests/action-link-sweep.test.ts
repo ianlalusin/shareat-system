@@ -387,7 +387,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // Verified by running the census (1148).
     // 1148 -> 1149, T-386 audit round 2026-10-09. +1: the super-admin "Use a different code" override input moved out of
     // ItemCodeField onto app/items/page.tsx beside "Add directly" (audit #4). FAIL 151 / UNRESOLVED 63 unmoved. Verified (1149).
-    expect(results.length).toBe(1149);
+    // 1149 -> 1151, T-383 S2a 2026-10-09. +2: the Retire section on `items/[id]/page.tsx` (super-admin only) has two submit
+    // `<button>`s, one in the Retire form and one in the Restore form (a static census counts both branches); the hidden
+    // `itemId`/`status` inputs are not controls. FAIL / UNRESOLVED assertions unmoved. Verified by running the census (1151).
+    expect(results.length).toBe(1151);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

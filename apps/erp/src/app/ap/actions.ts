@@ -30,6 +30,8 @@ import { requireActor } from '../../lib/session';
 import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '@/lib/period-override';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { INVOICE_LINES, SUPPLIER_EDIT } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -114,7 +116,9 @@ export async function editSupplierAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await redirectWithFlash(path, {}, { error: errorMessage(err) });
+    // T-389 / DEF-617: a refused save keeps the typing in the signed flash so the record reopens holding it. The
+    // account number is never kept (SUPPLIER_EDIT, Q1).
+    return await redirectWithFlash(path, {}, { error: errorMessage(err), typed: keepTyping(formData, SUPPLIER_EDIT, supplierId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(path, {}, { ok: 'Supplier updated.' });
 }
@@ -230,7 +234,7 @@ export async function setInvoiceLinesAction(formData: FormData): Promise<void> {
     }
     await withOrgPrincipal(actor.orgId, (tx) => setInvoiceLines(tx, actor, invoiceId, lines));
   } catch (err) {
-    return await redirectWithFlash(`/ap/invoices/${invoiceId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(`/ap/invoices/${invoiceId}`, {}, { error: errorMessage(err), typed: keepTyping(formData, INVOICE_LINES, invoiceId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(`/ap/invoices/${invoiceId}`, {}, { ok: 'Lines saved. Prices now feed the item history.' });
 }

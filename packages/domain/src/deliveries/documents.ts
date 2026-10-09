@@ -34,7 +34,7 @@
  * the AP screen's job, not this one.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { deliveriesRepo, filesRepo, stockLedgerRepo, type Tx } from '@shareat/db';
+import { deliveriesRepo, filesRepo, itemsRepo, stockLedgerRepo, type Tx } from '@shareat/db';
 import type { ShortageReason } from '@shareat/db/schema';
 import { duplicateRisk, type DuplicateWarning } from './duplicate-risk';
 import { receiveDelivery, toBaseUnits, type ReceiveLineInput, type ReceiveResult } from './receive';
@@ -42,6 +42,7 @@ import { compareDecimal, decimal, type Decimal } from '@shareat/core/money';
 import { parseFourDecimalCost } from '../commissary/catalogue';
 import { parseDecimalInput } from '../shared/money-input';
 import { gone, internalFault, refuse } from '../shared/refusal';
+import { notActiveItemSentence } from '../items/not-active';
 import {
   addQuantity,
   compareQuantity,
@@ -212,6 +213,19 @@ export async function createDeliveryDocument(
     validatedFactors.push(factor);
   }
 
+  // T-383 S2b (X6): a retired (or merged) item cannot be put on a new delivery. An item that does not exist at all is left
+  // to the foreign key, as before.
+  for (const [i, line] of input.lines.entries()) {
+    const item = await itemsRepo.getItemById(tx, actor.orgId, line.itemId);
+    if (item && item.status !== 'active') {
+      const n = line.lineNo ?? i + 1;
+      throw refuse(
+        `createDeliveryDocument: line ${n} names ${item.name}, which is ${item.status}.`,
+        notActiveItemSentence(item.status, 'received', `Line ${n}`),
+      );
+    }
+  }
+
   // ⭐ Read what already exists BEFORE writing this one, so the new draft never gets compared
   // against itself.
   const recent = await deliveriesRepo.recentDeliveriesForRisk(tx, input.storeId, DUPLICATE_RISK_WINDOW_DAYS);
@@ -315,6 +329,20 @@ export async function receiveDeliveryDocument(
       `receiveDeliveryDocument: delivery ${input.deliveryId} is ${delivery.status}, not draft`,
       `This delivery is ${delivery.status}, not draft.`,
     );
+  }
+
+  // T-383 S2b (X7): a supplier delivery drafted before the retire cannot be received once the item is retired (the supplier
+  // invoice for it is already refused). A commissary delivery is a MOVE of goods another store dispatched, so it is not.
+  if (delivery.kind !== 'commissary') {
+    for (const line of delivery.lines) {
+      const item = await itemsRepo.getItemById(tx, delivery.orgId, line.itemId);
+      if (item && item.status !== 'active') {
+        throw refuse(
+          `receiveDeliveryDocument: line ${line.lineNo} names ${item.name}, which is ${item.status}.`,
+          notActiveItemSentence(item.status, 'received', `Line ${line.lineNo}`),
+        );
+      }
+    }
   }
 
   const draftByLine = new Map(input.lines.map((l) => [l.lineId, l]));

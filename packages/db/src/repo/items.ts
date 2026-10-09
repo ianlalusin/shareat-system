@@ -28,6 +28,7 @@ import {
 import { supplierItems, type CatalogueSource } from '../../schema/supplier-items';
 import type { Decimal, Money, Quantity } from '@shareat/core/money';
 import { storeItemSellability } from '../../schema/items';
+import { stockMovements } from '../../schema/stock-ledger';
 
 export interface ItemRow {
   id: string;
@@ -83,6 +84,29 @@ export async function listItems(
   const conditions = [eq(items.orgId, orgId)];
   if (!filter.includeInactive) conditions.push(eq(items.status, 'active'));
   const rows = await tx.select().from(items).where(and(...conditions)).orderBy(asc(items.name));
+  return rows as ItemRow[];
+}
+
+/**
+ * T-383 S2b (B2.5). The items a CONSUME or MOVE picker offers at one store: every active item, plus a retired
+ * (`inactive`) item only while its on-hand at THAT store is above zero ("usable until it is used up"). A merged item is
+ * never offered. Same columns and order as `listItems`.
+ */
+export async function listUsableItems(tx: Tx, orgId: string, storeId: string): Promise<ItemRow[]> {
+  const rows = await tx
+    .select()
+    .from(items)
+    .where(
+      and(
+        eq(items.orgId, orgId),
+        sql`(${items.status} = 'active' or (${items.status} = 'inactive' and (
+          select coalesce(sum(${stockMovements.quantity}), 0) from ${stockMovements}
+          where ${stockMovements.itemId} = ${items.id} and ${stockMovements.storeId} = ${storeId}
+            and ${stockMovements.orgId} = ${orgId}
+        ) > 0))`,
+      ),
+    )
+    .orderBy(asc(items.name));
   return rows as ItemRow[];
 }
 
@@ -1065,4 +1089,42 @@ export async function costBasisFor(
   }
   const own = await lastTwoLandedMax(tx, orgId, itemId);
   return own == null ? undefined : { basis: own, basisFrom: 'own' };
+}
+
+/**
+ * T-383 R5. The retire readout: what still leans on an item. Advisory display only; no domain code branches on it.
+ * `onHand` is stock per store with a non-zero net, by store name; the two counts are live POS maps and live recipes
+ * (as output or as an ingredient line, counted once per recipe). Every leg is filtered by org (tenancy layered).
+ */
+export interface RetireReadout {
+  onHand: { storeName: string; quantity: string }[];
+  activePosMaps: number;
+  activeRecipes: number;
+}
+
+export async function retireReadout(tx: Tx, orgId: string, itemId: string): Promise<RetireReadout> {
+  const stock = (await tx.execute(sql`
+    select s.name as store_name, sum(m.quantity)::text as quantity
+    from stock_movements m
+    join stores s on s.id = m.store_id and s.org_id = ${orgId}
+    where m.org_id = ${orgId} and m.item_id = ${itemId}
+    group by s.id, s.name
+    having sum(m.quantity) <> 0
+    order by s.name asc, s.id asc
+  `)) as unknown as { store_name: string; quantity: string }[];
+  const maps = (await tx.execute(sql`
+    select count(*)::int as n from pos_item_maps
+    where org_id = ${orgId} and item_id = ${itemId} and status = 'active'
+  `)) as unknown as { n: number }[];
+  const recipes = (await tx.execute(sql`
+    select count(distinct r.id)::int as n from production_recipes r
+    where r.org_id = ${orgId} and r.status = 'active'
+      and (r.output_item_id = ${itemId}
+           or exists (select 1 from production_recipe_lines l where l.recipe_id = r.id and l.item_id = ${itemId}))
+  `)) as unknown as { n: number }[];
+  return {
+    onHand: stock.map((r) => ({ storeName: r.store_name, quantity: r.quantity })),
+    activePosMaps: Number(maps[0]?.n ?? 0),
+    activeRecipes: Number(recipes[0]?.n ?? 0),
+  };
 }

@@ -403,6 +403,13 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'store_id are both known and this is never a pre-authentication write (DEF-333).',
   },
 
+  // T-395 (docs/tasks/395-pin-sign-in-throttle.md).
+  sign_in_attempts: {
+    scope: 'org_column',
+    reason:
+      'A sign-in attempt happens at a store terminal after layer 1, so its org is known; never a pre-auth write (DEF-333).',
+  },
+
   // T-124 — fixed assets (docs/tasks/124-fixed-assets-and-depreciation.md).
   prepaid_items: {
     scope: 'org_column',

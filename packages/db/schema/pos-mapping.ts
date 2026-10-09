@@ -25,14 +25,18 @@
  *    location... For the 'drinks come from the Display Cabinet, sauces from the Kitchen' case."*
  *    Ported verbatim rather than re-derived, and it is what makes invariant 9's *per-line* freeze
  *    behaviour ("refuses its lines" — plural, some but not all) possible: lines sharing a resolved
- *    location succeed or fail together, and different lines may resolve to different locations.
+ *    location post as one usage record, and different lines may resolve to different locations.
+ *    T-388 (DEF-618): a frozen room's lines WAIT (they are held, not lost) and a short item is held per
+ *    item, so the other lines of the room still post.
  * 0. **T-374 S7 (DEF-578, migration 0181): a pull can be voided.** `voided_at`, `voided_by`, `void_reason` record who, when
  *    and why, written only by `voidPosUsagePull` (`domain/src/pos/usage-pull.ts`), which reverses every usage record the
  *    pull made first. `pos_usage_pulls_void_shape_check` refuses `status = 'void'` without all three (and a blank reason).
  * 2. **Three `*_finalized_at` timestamps on `pos_usage_pulls`, plus a stricter uniqueness than
- *    literally stated.** Invariant 4 requires finalize to be idempotent PER SECTION, independent of
- *    whether individual lines within it succeeded (invariant 9's frozen lines are skipped, not
- *    retried) — so "was this section already finalized" cannot be derived from line state alone.
+ *    literally stated.** Invariant 4 requires finalize to be idempotent PER SECTION. T-388 (R7, superseding T-177
+ *    invariants 4 and 9): a section is stamped only when NO confirmed line of it is left unposted, so a
+ *    held line (short stock, a room under count, a room that cannot take usage) keeps the section open
+ *    and finalizing again posts the held lines exactly once. Lines the person left unticked do not hold
+ *    a section. An empty section is stamped by the T-377 sweep, so it too cannot be read from line state alone.
  *    The unique index below is `where status <> 'void'` rather than the literal `where status =
  *    'planned'` invariant 12 states: allowing a SECOND pull once the first is `finalized` risks
  *    double-posting a POS item whose mapping didn't change between the two pulls (the fresh rebuild

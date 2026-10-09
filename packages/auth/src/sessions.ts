@@ -88,36 +88,37 @@ export async function signInWithPin(
 ): Promise<SignInResult> {
   if (tx) return runPinSignInWithThrottle(tx, tx, input);
 
-  const cooldown = await withOrgPrincipal(input.orgId, (ptx) =>
-    pinAttemptsRepo.checkThrottle(ptx, input.storeId),
+  // ⭐ T-395 R14 / DEF-626 - charge BEFORE the lookup, in its own principal'd transaction that
+  // COMMITS before `runPinSignIn` starts. The charge locks the store's throttle row, refuses if
+  // stopped or paused, and otherwise writes the miss and the tier-1 increment, so attempts are
+  // serialised before any scrypt runs and the guess bound is exact under a parallel burst.
+  const charge = await withOrgPrincipal(input.orgId, (ptx) =>
+    pinAttemptsRepo.chargeAttempt(ptx, {
+      orgId: input.orgId,
+      storeId: input.storeId,
+      deviceId: input.deviceId ?? null,
+    }),
   );
-  if (cooldown.locked) throw new AuthenticationError(cooldownMessage(cooldown.lockedUntil!));
+  refuseIfCharged(charge);
 
-  let result: SignInResult;
-  try {
-    // ⭐ T-302 / B1 — **under a real principal, not the auth door.** This line read
-    // `authTransaction((trx) => …)` under the comment *"DEF-288: the credential lookup precedes
-    // knowing the org, so it cannot carry a principal."* That sentence was true of PIN-FIRST
-    // sign-in and stopped being true the moment T-304 landed: `input.orgId` is a parameter,
-    // resolved from the terminal's own credential by `resolveTerminalIdentity` BEFORE this runs.
-    // T-304 §Q4 and its invariant 3 both say this lookup leaves the door; the move is what makes
-    // that true of the code rather than only of the document.
-    //
-    // ⛔ **And T-302 is what makes it necessary, not merely tidy.** Once the lookup key is
-    // `orgId:pin`, the org prefix inside the HMAC is the only thing keeping a PIN inside its
-    // organisation — one layer, for a tenancy risk. Bible §15.11 / RULES §6 item 3: no layer may
-    // be the only one. Under `withOrgPrincipal` the `person_credentials_via_person` RLS policy
-    // (`p.org_id = app_current_org()`) refuses a foreign-org row independently of the hash, so a
-    // key-derivation mistake cannot by itself cross a tenant boundary.
-    result = await withOrgPrincipal(input.orgId, (trx) => runPinSignIn(trx, input));
-  } catch (err) {
-    if (err instanceof AuthenticationError) {
-      // Advances identically for an unknown PIN and a wrong-person PIN — T-303 invariant 2.
-      await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.recordMiss(ptx, input.orgId, input.storeId));
-    }
-    throw err;
-  }
-  await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.clearOnSuccess(ptx, input.storeId));
+  // ⭐ T-302 / B1 - **under a real principal, not the auth door.** This line read
+  // `authTransaction((trx) => …)` under the comment *"DEF-288: the credential lookup precedes
+  // knowing the org, so it cannot carry a principal."* That sentence was true of PIN-FIRST
+  // sign-in and stopped being true the moment T-304 landed: `input.orgId` is a parameter,
+  // resolved from the terminal's own credential by `resolveTerminalIdentity` BEFORE this runs.
+  // T-304 §Q4 and its invariant 3 both say this lookup leaves the door; the move is what makes
+  // that true of the code rather than only of the document.
+  //
+  // ⛔ **And T-302 is what makes it necessary, not merely tidy.** Once the lookup key is
+  // `orgId:pin`, the org prefix inside the HMAC is the only thing keeping a PIN inside its
+  // organisation - one layer, for a tenancy risk. Bible §15.11 / RULES §6 item 3: no layer may
+  // be the only one. Under `withOrgPrincipal` the `person_credentials_via_person` RLS policy
+  // (`p.org_id = app_current_org()`) refuses a foreign-org row independently of the hash, so a
+  // key-derivation mistake cannot by itself cross a tenant boundary.
+  //
+  // On any failure nothing more is written: the charge already counted it.
+  const result = await withOrgPrincipal(input.orgId, (trx) => runPinSignIn(trx, input));
+  await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.refundOnSuccess(ptx, input.storeId, charge));
   return result;
 }
 
@@ -127,18 +128,28 @@ async function runPinSignInWithThrottle(
   credentialTx: Tx,
   input: { orgId: string; storeId: string; pin: string; deviceId?: string },
 ): Promise<SignInResult> {
-  const cooldown = await pinAttemptsRepo.checkThrottle(throttleTx, input.storeId);
-  if (cooldown.locked) throw new AuthenticationError(cooldownMessage(cooldown.lockedUntil!));
-  try {
-    const result = await runPinSignIn(credentialTx, input);
-    await pinAttemptsRepo.clearOnSuccess(throttleTx, input.storeId);
-    return result;
-  } catch (err) {
-    if (err instanceof AuthenticationError) {
-      await pinAttemptsRepo.recordMiss(throttleTx, input.orgId, input.storeId);
-    }
-    throw err;
-  }
+  const charge = await pinAttemptsRepo.chargeAttempt(throttleTx, {
+    orgId: input.orgId,
+    storeId: input.storeId,
+    deviceId: input.deviceId ?? null,
+  });
+  refuseIfCharged(charge);
+  const result = await runPinSignIn(credentialTx, input);
+  await pinAttemptsRepo.refundOnSuccess(throttleTx, input.storeId, charge);
+  return result;
+}
+
+/** T-395 R7: tier 2's sentence. Same text whoever types and whatever was typed (no enumeration);
+ *  it names the way out, as T-303 §Q3 requires. */
+const STOPPED_MESSAGE =
+  'PIN sign-in is stopped at this store after too many wrong PINs today. A manager can reopen it: sign in with email and password, then open Staff.';
+
+/** Narrows a `Charge` to the charged variant, throwing the refusal sentence otherwise. */
+function refuseIfCharged(
+  charge: Awaited<ReturnType<typeof pinAttemptsRepo.chargeAttempt>>,
+): asserts charge is Extract<typeof charge, { refused: null }> {
+  if (charge.refused === 'stopped') throw new AuthenticationError(STOPPED_MESSAGE);
+  if (charge.refused === 'locked') throw new AuthenticationError(cooldownMessage(charge.until!)); // 'locked' always carries locked_until
 }
 
 /** T-303 §Q3.B — names the clock time rather than a duration, so nobody has to do arithmetic
