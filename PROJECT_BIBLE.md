@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1630` 13. Decision log
-- `1631–1650` 14. Amendment protocol
-- `1651–1655` 15. Engineering standards — the industry practices this project follows
-  - `1656–1661` 15.1 Build order: walking skeleton first
-  - `1662–1673` 15.2 Golden-master testing — the most important practice here
-  - `1674–1682` 15.3 Strangler Fig, not big-bang cutover
-  - `1683–1687` 15.4 No dual-write
-  - `1688–1696` 15.5 Expand/contract migrations
-  - `1697–1705` 15.6 Observability from day zero, not later
-  - `1706–1710` 15.7 CI gates
-  - `1711–1715` 15.8 Backups and a tested restore
-  - `1716–1720` 15.9 Twelve-Factor config
-  - `1721–1728` 15.10 Append-only ledgers — but not event sourcing
-  - `1729–1733` 15.11 Defence in depth
-  - `1734–1762` 15.12 Skills are lenses, not assurance
-  - `1763–1769` 15.13 Reconciliation is a permanent feature
-- `1770–1774` 16. The accounting spine
-  - `1775–1806` 16.0 What we are actually fixing — the diagnosis
-  - `1807–1850` 16.1 The ten invariants — non-negotiable
-  - `1851–1865` 16.2 The oracle: how "correct" is tested
-  - `1866–1887` 16.3 The model — header + lines, not legs
-  - `1888–1907` 16.4 Deliberately simpler than ERPNext
-  - `1908–1974` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1975–1999` 16.6 What v1 already gets right — preserve the intent
-  - `2000–2021` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2022–2036` 16.8 What v1's accounting already gets right
-  - `2037–2080` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2081–2131` 16.10 Posting patterns — one canonical pattern per business event
-  - `2132–2163` 16.11 Inventory's accounting integration
+- `1329–1631` 13. Decision log
+- `1632–1651` 14. Amendment protocol
+- `1652–1656` 15. Engineering standards — the industry practices this project follows
+  - `1657–1662` 15.1 Build order: walking skeleton first
+  - `1663–1674` 15.2 Golden-master testing — the most important practice here
+  - `1675–1683` 15.3 Strangler Fig, not big-bang cutover
+  - `1684–1688` 15.4 No dual-write
+  - `1689–1697` 15.5 Expand/contract migrations
+  - `1698–1706` 15.6 Observability from day zero, not later
+  - `1707–1711` 15.7 CI gates
+  - `1712–1716` 15.8 Backups and a tested restore
+  - `1717–1721` 15.9 Twelve-Factor config
+  - `1722–1729` 15.10 Append-only ledgers — but not event sourcing
+  - `1730–1734` 15.11 Defence in depth
+  - `1735–1763` 15.12 Skills are lenses, not assurance
+  - `1764–1770` 15.13 Reconciliation is a permanent feature
+- `1771–1775` 16. The accounting spine
+  - `1776–1807` 16.0 What we are actually fixing — the diagnosis
+  - `1808–1851` 16.1 The ten invariants — non-negotiable
+  - `1852–1866` 16.2 The oracle: how "correct" is tested
+  - `1867–1888` 16.3 The model — header + lines, not legs
+  - `1889–1908` 16.4 Deliberately simpler than ERPNext
+  - `1909–1975` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1976–2000` 16.6 What v1 already gets right — preserve the intent
+  - `2001–2022` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2023–2037` 16.8 What v1's accounting already gets right
+  - `2038–2081` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2082–2132` 16.10 Posting patterns — one canonical pattern per business event
+  - `2133–2164` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1627,6 +1627,7 @@ just a patch.**
 | 292 | 2026-10-09 | **POS'S "COLLECTED" METHOD IS A CASH SALE: MAP IT TO A SECOND CASH TENDER (NO MONEY ACCOUNT), AND RECORD WHERE THE CASH WENT THE SAME DAY — AN OWNER DRAWING OR PART OF THE DAY'S REMITTANCE.** Ian, 2026-10-09: *"collected is cash remitted earlier or collected by owner"*; Open Questions `pos-collected-lipa` = a. POS counts it once, inside total sales, never also under Cash (POS `external/sales/route.ts`). A wallet tender cannot point at a cash account, and a dummy account would hold nothing and double-count with the drawing. Still open on the page: does the owner usually keep it, and who at Lipa records it | Lipa's POS lists "collected" (₱0 for 90 days to 6 Oct); an unmapped method refuses the whole import | Yes — a dedicated tender kind that books straight to the owner or the office could be built later (2-3 days) |
 | 293 | 2026-10-09 | ⭐ **A SALES DAY IS VERIFIED AND POSTED ONLY AFTER IT IS SUBMITTED, AND THE PERSON WHO SUBMITTED IT MAY NOT VERIFY IT — EXCEPT A SUPER-ADMIN (T-385, migration 0188).** Ian, 2026-10-09: *"verify and post must be blocked until submitted"*; Open Questions `t385-q1-different-verifier` = a. The domain refuses, a database trigger refuses any change into `verified` that is not from `submitted` with a submitter, and the new super-admin-only capability `verify_own_sales_day` is the one exception. The day page shows Verify & post only where it can succeed and tells the submitter why not | Before this, a draft day could be posted directly and one person could submit and verify their own day (the capability matrix said they should not; nothing enforced it) | Yes — the self-verify exception can be widened by granting the capability; the trigger is additive |
 | 294 | 2026-10-09 | **ITEM CODES ARE SUGGESTED FROM THE NAME IN ONE FIXED 8-CHARACTER SHAPE, `CHWN-001` (4 LETTERS BY A FIXED RULE + A 3-DIGIT NUMBER PER STEM, NEVER REUSED); ONLY A SUPER-ADMIN MAY OVERRIDE, TO THE SAME SHAPE; EXISTING ITEMS ARE RE-CODED ONCE; A RENAME KEEPS THE CODE BUT OFFERS THE NEW SUGGESTION (T-386, migration 0189).** Ian, 2026-10-09: *"item code must be auto suggest based on the typed name fixed length with our own way how to formulate the code this way we can control duplication of code to avoid it"*; Open Questions `item-code-q1-format` = b, `q2-override` = a, `q3-existing` = a, `q4-rename` = a. Codes become unique ignoring case; the number is assigned at creation from a forward-only counter | v1 has no item code; v2 codes were free-typed, case-sensitive, and could collide between pending requests | Yes — the shape check (S6) is added only after production is re-coded |
+| 295 | 2026-10-09 | ⭐ **THE ERP LOOKS LIKE THE BRAND: "SHAREAT WARM" IN LIGHT (CREAM GROUND, WARM INK, BALOO 2 HEADINGS, PLUS JAKARTA SANS BODY, 12PX ROUNDED-RECTANGLE BUTTONS, PILLS ONLY FOR BADGES AND CHIPS) AND "GRILL NIGHT" IN DARK (WARM CHARCOAL). ADR-013 AMENDMENT 7.** Ian, 2026-10-09: *"go with B, C as dark mode"*, chosen from a rendered brand and app sheet (Artifact `L7hn691wjL76rSV2BgPa1A`). Every earlier ADR-013 rule stands: one red primary, outlined danger, warning never as text, one control size, `ring-ink`. New tokens `--field-border`, `--brand-ink`, `--warning-ink`, `--muted` and status softs. This **closes the dark `--brand`-as-text and dark `--warning` gaps** (Amendment 4). C's 52px floor density and its gold focus ring are NOT adopted | v2 had tokens but no brand presence (no logo, font or ground) and no status, toast or field-error language. The Website already declares this palette and these fonts, and v1 staff know Baloo 2 and pills | Yes — tokens and fonts only; components read tokens, so another look is a `globals.css` change |
 
 ## 14. Amendment protocol
 

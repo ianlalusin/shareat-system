@@ -485,3 +485,91 @@ two days quoted without checking the thing it names. ⛔ **Implement as `ring-in
 are distinguishable at a glance. ⭐ Method note: `ring-ink` did not exist in the built CSS yet, so a
 class swap silently fell back to Tailwind's default blue. The preview was done by overriding
 `--tw-ring-color`. **Amendment 6 is FINAL as `ring-ink`.**
+
+---
+
+## Amendment 7: 2026-10-09. The look: "SharEat Warm" for light, "Grill Night" for dark. RULED by Ian.
+
+**What was put to Ian:** a rendered brand and app sheet (Artifact "Shareat ERP Brand & App Sheet",
+`https://claude.ai/artifact/L7hn691wjL76rSV2BgPa1A`) with an audit board and three option boards. Each
+board drew the palette, type, buttons in five states, a form with an inline error, status badges, banners,
+a toast, a table, KPI cards, an empty state and a void dialog. **A · Clean Ledger** was this ADR as written,
+on white with one typeface. **B · SharEat Warm** was the Website's identity: cream, warm ink, Baloo 2 and
+pills. **C · Grill Night** was charcoal and dark-first.
+**Ian, 2026-10-09, verbatim:** *"go with B, C as dark mode"*.
+
+### What this changes, and what it does not
+
+⭐ **Everything already ruled above still holds.** One brand-red primary per view, `#d40909`. Danger is
+outlined and carries an icon (§1). `--warning` is a surface only (§1). Dark mode is a manual toggle with
+light as the default (§1). One size for controls (Amendment 3). Dark `--danger` is `#f87171` (Amendment 5).
+The focus ring is `ring-ink` (Amendment 6). **This amendment rules the ground, the type, the shapes, and
+the dark values that were still open.**
+
+| Token | Light (B) | Dark (C) | Note |
+|---|---|---|---|
+| `--canvas` | **`#fbf4e4`** cream | **`#121110`** | was `#ffffff` / `#0a0a0a` |
+| `--surface` | **`#fffdf8`** | **`#1c1a18`** | was `#ffffff` / `#171717` |
+| `--surface-border` | **`#eadfc6`** | **`#34302b`** | decorative only (1.30 / 1.32:1), so it never bounds a control |
+| `--field` (new) | `#ffffff` | `#151412` | background of inputs, selects and textareas |
+| `--field-border` (new) | **`#94866f`** (3.56:1 on field) | **`#746b5f`** (3.52:1) | WCAG 1.4.11. ⚠️ The sheet drew `#eadfc6` here at 1.30:1; corrected before ruling |
+| `--ink` | **`#2b2620`** warm ink | **`#f5efe4`** | was `#1a1a1a` / `#fafafa`. `ring-ink` follows it |
+| `--muted` (new) | `#6b5f4f` | `#a89f92` | hints and captions |
+| `--brand` | `#d40909` | `#d40909` **fill only** | white on it is 5.47:1 in both themes |
+| `--brand-ink` (new) | `#d40909` | **`#ff7a70`** | red used AS TEXT (links, the wordmark "E"). `#d40909` on dark is 3.17:1 and fails |
+| `--danger` / `--danger-surface` | `#a00606` / `#fde7e7` | `#f87171` / `#2a0f0f` | unchanged (Amendment 5) |
+| `--warning` | `#f4b942` surface / `#fce8b8` soft | `#2b2210` surface | ⛔ still never text |
+| `--warning-ink` (new) | `#7a4f00` | `#f4b942` | the text that sits ON a warning surface. ⭐ **Closes Amendment 4's open dark-warning gap** |
+| `--success` / soft | `#0e6b45` / `#e2f1e8` | `#4ade80` / `#0f2a1c` | was `#059669`, which fails as small text on cream |
+| `--info` / soft | `#1e4fb8` / `#e7eefb` | `#93b4ff` / `#142038` | draft, open |
+| `--progress` / soft | `#6427c9` / `#eee7fb` | `#c4b5fd` / `#241b3d` | counting, in progress |
+| `--closed` / soft | `#55606e` / `#efece4` | `#aab4c2` / `#23262b` | closed, archived |
+
+**Measured 2026-10-09 (WCAG 2.x, one `node` script, with every pair printed):**
+
+| Light (B) | | Dark (C) | |
+|---|---|---|---|
+| ink on canvas | 13.68 | ink on canvas | 16.48 |
+| ink on surface | 14.75 | ink on surface | 15.16 |
+| muted on canvas | 5.68 | muted on surface | 6.64 |
+| brand on canvas (text) | 4.99 | brand-ink on surface | 6.83 |
+| danger on canvas | 7.59 | danger on surface | 6.27 |
+| warning-ink on warning soft | 5.90 | warning-ink on warning surface | 8.86 |
+| success / info / progress / closed on their soft | 5.61 / 6.29 / 6.53 / 5.42 | same in dark | 8.81 / 7.90 / 8.76 / 7.24 |
+
+⚠️ Brand red as text on cream is **4.99:1**, against 5.47:1 on white. It still passes AA, with less margin.
+The rule that a body-copy link must clear AAA uses `--danger`, as before.
+
+### Type and shape
+
+- **Headings: Baloo 2** (600/700). **Body: Plus Jakarta Sans** (400/500/600/700) with tabular figures for
+  money. Both are self-hosted through `next/font`, the same families the Website uses and the headings
+  v1's staff already know. Dark mode keeps the same fonts. The sheet's Manrope on C was a mock-up variation
+  and is **not** ruled.
+- ⭐ **Buttons are 12px rounded rectangles, across the whole app** (`rounded-[12px]`). **Fields have a 10px
+  radius, cards 14px. Pills (`rounded-full`) are only for things you read or filter by: status badges, filter
+  chips and counts.** Amendment 3's one size holds. ⚠️ This amendment first said "buttons are pills". Ian
+  reopened that the same day (*"pill shaped button or rounded corner rectangle for the entire app let
+  weigh"*), saw both drawn on the same screens (Artifact `9cvfRibBSRuvBbZYe8DfjW`, board `Shapes`), and ruled
+  *"rounded rectangle like your pick"*. The reasons that decided it: a pill button looks like a status badge in
+  the same row; rectangles match the fields and cards (v1's pill-beside-rectangle mismatch was flagged in the
+  audit); and they are about 12px narrower each, which matters in tables and toolbars. The brand still comes
+  from the type, colour and logo.
+- Status badges are a dot plus a word, and keep v1's colour code: draft blue, submitted amber, approved and
+  posted green, in progress violet, voided and overdue red, closed slate.
+- The logo is the Website's `logo-icon` PNG. The wordmark reads "Shar**E**at", with the E in `--brand-ink`.
+
+### ⛔ NOT ruled by this amendment, and why
+
+1. **C's 52px "floor density"** for the clock, till, counts and deliveries. That is a second size, and
+   Amendment 3 makes a second size Ian's call. "C as dark mode" took C's colours, not its geometry.
+2. **C's gold focus ring.** The sheet drew one, but Amendment 6 is final as `ring-ink`. In dark that is
+   `#f5efe4` (15.16:1). The sheet loses to the ruling.
+3. **The sweep.** Moving 283 raw buttons, 790 inputs and 240 selects onto the kit stays T-334 slice 3's
+   job. This amendment only changes what they land on.
+
+⛔ **Computed, not yet seen against the real built CSS.** The sheet is a mock-up. Before the token slice
+ships, §9.4 and Ian's render-first rule require a screenshot in both themes of a primary and a danger
+`Button`, an `invalid` `Input`, a warning banner and a badge.
+
+Task: `docs/tasks/387-warm-theme-and-grill-night-dark.md`. Bible §13 row 295.
