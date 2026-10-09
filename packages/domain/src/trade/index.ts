@@ -83,6 +83,7 @@ import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { closedStockPeriodSentence, closedStockPeriodSentenceToday } from '../stock/period-guard';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { refuse } from '../shared/refusal';
+import { notActiveItemSentence } from '../items/not-active';
 import type { StockMovementKind } from '@shareat/db/schema';
 
 /** The account T-132 adds to the chart. Every 4xxx leaf before it was retail. */
@@ -235,7 +236,10 @@ export async function createTradeOrder(
       const item = await itemsRepo.getItemById(trx, actor.orgId, draft.itemId);
       if (!item) throw new Error(`createTradeOrder: line ${n} names an item that does not exist.`);
       if (item.status !== 'active') {
-        throw new Error(`createTradeOrder: line ${n} names ${item.name}, which is ${item.status}.`);
+        throw refuse(
+          `createTradeOrder: line ${n} names ${item.name}, which is ${item.status}.`,
+          notActiveItemSentence(item.status, 'ordered', `Line ${n}`),
+        );
       }
 
       // ⭐ Resolved AT THE SELLING STORE, not org-wide. Ian's bulgogi case, read from the selling

@@ -32,13 +32,14 @@ export async function usageScreenData(orgId: string, storeId: string): Promise<U
     const [locations, departments, itemRows, records] = await Promise.all([
       stockUsageRepo.listOperatingLocations(tx, storeId),
       stockUsageRepo.listDepartments(tx, orgId),
-      itemsRepo.listItems(tx, orgId, { includeInactive: false }),
+      itemsRepo.listUsableItems(tx, orgId, storeId),
       stockUsageRepo.listUsageRecords(tx, storeId),
     ]);
     return {
       locations,
       departments,
-      items: itemRows.map((i) => ({ id: i.id, code: i.code, name: i.name, baseUnit: i.baseUnit })),
+      // T-383 S2b: a retired item with stock at this store stays usable until it runs out, labelled as such.
+      items: itemRows.map((i) => ({ id: i.id, code: i.code, name: i.status === 'inactive' ? `${i.name} (retired)` : i.name, baseUnit: i.baseUnit })),
       records,
     };
   });

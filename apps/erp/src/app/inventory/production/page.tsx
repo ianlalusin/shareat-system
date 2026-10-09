@@ -47,7 +47,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
     );
   }
 
-  const { locations, items, records } = await productionScreenData(actor.orgId, storeId);
+  const { locations, items, inputItems, records } = await productionScreenData(actor.orgId, storeId);
 
   return (
     <Page density="table" className="space-y-8">
@@ -129,7 +129,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
               </Field>
             </FormGrid>
 
-            <LineRows label="Inputs (what goes out)" prefix="input" items={items} />
+            <LineRows label="Inputs (what goes out)" prefix="input" items={inputItems} />
             <LineRows label="Outputs (what comes in)" prefix="output" items={items} />
 
             <button type="submit" className={BTN_PRIMARY}>

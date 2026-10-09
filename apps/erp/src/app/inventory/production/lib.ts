@@ -20,6 +20,8 @@ export interface ProductionItemOption {
 export interface ProductionScreenData {
   readonly locations: { id: string; code: string; name: string }[];
   readonly items: ProductionItemOption[];
+  /** T-383 S2b: INPUT options only: also a retired item that still has stock here, labelled "(retired)". */
+  readonly inputItems: ProductionItemOption[];
   readonly recipes: Awaited<ReturnType<typeof productionRepo.listRecipes>>;
   readonly records: Awaited<ReturnType<typeof productionRepo.listProductionRecords>>;
 }
@@ -27,15 +29,23 @@ export interface ProductionScreenData {
 /** Everything the register + "New record" form needs, in one org-scoped transaction. */
 export async function productionScreenData(orgId: string, storeId: string): Promise<ProductionScreenData> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const [locations, itemRows, recipes, records] = await Promise.all([
+    const [locations, itemRows, usableRows, recipes, records] = await Promise.all([
       stockUsageRepo.listOperatingLocations(tx, storeId),
       itemsRepo.listItems(tx, orgId, { includeInactive: false }),
+      itemsRepo.listUsableItems(tx, orgId, storeId),
       productionRepo.listRecipes(tx, orgId),
       productionRepo.listProductionRecords(tx, storeId),
     ]);
     return {
       locations,
       items: itemRows.map((i) => ({ id: i.id, code: i.code, name: i.name, kind: i.kind, baseUnit: i.baseUnit })),
+      inputItems: usableRows.map((i) => ({
+        id: i.id,
+        code: i.code,
+        name: i.status === 'inactive' ? `${i.name} (retired)` : i.name,
+        kind: i.kind,
+        baseUnit: i.baseUnit,
+      })),
       recipes,
       records,
     };

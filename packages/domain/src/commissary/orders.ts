@@ -47,6 +47,7 @@ import {
 } from '@shareat/db';
 import { decimal, money, ZERO, type Money } from '@shareat/core/money';
 import { branchPriceFor } from '../items';
+import { notActiveItemSentence } from '../items/not-active';
 import { lineCost } from '../stock/layers';
 import { isPositiveQuantity, quantity, type Quantity } from '../stock/quantity';
 
@@ -286,7 +287,9 @@ async function buildBranchLine(
 ): Promise<{ id: string }> {
   const item = await itemsRepo.getItemById(tx, orgId, draft.itemId);
   if (!item) throw new Error('that item does not exist.');
-  if (item.status !== 'active') throw new Error(`${item.name} is ${item.status}, not active.`);
+  if (item.status !== 'active') {
+    throw refuse(`${item.name} is ${item.status}, not active.`, notActiveItemSentence(item.status, 'ordered'));
+  }
 
   // ⭐ T-171: a branch orders from what its commissary OFFERS — the catalogue, not the whole item
   // master. An item the commissary never said it would dispatch is refused here, by name.
