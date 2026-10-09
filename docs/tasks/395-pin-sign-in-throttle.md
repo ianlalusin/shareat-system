@@ -1,6 +1,6 @@
 # T-395: PIN sign-in, the second tier: a daily guess budget per store, an attempt log, and a finding (DEF-063)
 
-**Status:** SPEC APPROVED WITH CHANGES 2026-10-10 (review applied). Opus planner; lane L3, wave 1, size S
+**Status:** S1 DONE 2026-10-10 (`9264324`, migration 0190, on main; prechecks in docs/ops/README.md run with Ian before the merge — bible row 296 exception 2). S2 (findings, reopen panel, smoke script) next. SPEC APPROVED WITH CHANGES 2026-10-10 (review applied). Accepted audit notes: a pending correct PIN counts toward the 50 until refunded (fails closed at the boundary); a refund clears tier 1 as T-303 did.
 (1.5 days, two slices). Migration **0NNN (allocated at merge)**. Also fixes **DEF-626** (the live tier-1
 burst bypass). One question for Ian (Q1); the recommended option is built.
 
