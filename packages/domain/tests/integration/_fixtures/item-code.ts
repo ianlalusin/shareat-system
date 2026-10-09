@@ -19,12 +19,3 @@ export function testItemCode(): string {
   const stem = ((start + n * 7919) % STEMS).toString(36).toUpperCase().padStart(4, '0');
   return `${stem}-001`;
 }
-
-/**
- * `requestItem` lost its `code` input in T-386 (R6: a request stores only a preview). On HEAD it still requires one. A converted test
- * wraps its input here: the future-shaped input goes in, the result is typed `never` so it fits the parameter before AND after S3, and a throw-away code rides along at runtime so the call
- * works on HEAD; after S3 the extra key is ignored (A6 proves it). The builder may delete this helper and its call sites in S3.
- */
-export function requestInput(input: object): never {
-  return { ...input, code: testItemCode() } as never;
-}

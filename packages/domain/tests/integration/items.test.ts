@@ -43,7 +43,7 @@ import {
   verifyInvoice,
   voidInvoice,
 } from '@shareat/domain';
-import { requestInput, testItemCode } from './_fixtures/item-code';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -687,14 +687,14 @@ describe('it is hard to duplicate an item on purpose, and harder by accident', (
 
     // The pair that genuinely exists in v1 live data, at two different units.
     const dupe = await asOrg(f.orgId, (tx) =>
-      requestItem(tx, f.manager, requestInput({ name: 'Beans Sprout', kind: 'raw_material', baseUnit: 'pcs' })),
+      requestItem(tx, f.manager, { name: 'Beans Sprout', kind: 'raw_material', baseUnit: 'pcs' }),
     );
     expect(dupe.similar).toHaveLength(1);
     expect(dupe.similarWarning).toMatch(/Bean sprout/);
 
     // An unrelated name must NOT be flagged, or the warning becomes noise people click past.
     const fine = await asOrg(f.orgId, (tx) =>
-      requestItem(tx, f.manager, requestInput({ name: 'Charcoal', kind: 'supply', baseUnit: 'kg' })),
+      requestItem(tx, f.manager, { name: 'Charcoal', kind: 'supply', baseUnit: 'kg' }),
     );
     expect(fine.similar).toHaveLength(0);
     expect(fine.similarWarning).toBeNull();
@@ -703,7 +703,7 @@ describe('it is hard to duplicate an item on purpose, and harder by accident', (
   it('a request approved by a super-admin mints the item and links the two', async () => {
     const f = await fixture('approve');
     const req = await asOrg(f.orgId, (tx) =>
-      requestItem(tx, f.manager, requestInput({ name: 'Charcoal', kind: 'supply', baseUnit: 'kg' })),
+      requestItem(tx, f.manager, { name: 'Charcoal', kind: 'supply', baseUnit: 'kg' }),
     );
     const { itemId } = await asOrg(f.orgId, (tx) =>
       approveItemRequest(tx, f.superAdmin, { requestId: req.requestId }),
@@ -718,7 +718,7 @@ describe('it is hard to duplicate an item on purpose, and harder by accident', (
   it('an ADMIN cannot approve — only a super-admin', async () => {
     const f = await fixture('adminapprove');
     const req = await asOrg(f.orgId, (tx) =>
-      requestItem(tx, f.manager, requestInput({ name: 'Charcoal', kind: 'supply', baseUnit: 'kg' })),
+      requestItem(tx, f.manager, { name: 'Charcoal', kind: 'supply', baseUnit: 'kg' }),
     );
     await expect(
       asOrg(f.orgId, (tx) => approveItemRequest(tx, f.admin, { requestId: req.requestId })),
@@ -728,7 +728,7 @@ describe('it is hard to duplicate an item on purpose, and harder by accident', (
   it('a rejection needs a reason, and one request cannot be decided twice', async () => {
     const f = await fixture('reject');
     const req = await asOrg(f.orgId, (tx) =>
-      requestItem(tx, f.manager, requestInput({ name: 'Charcoal', kind: 'supply', baseUnit: 'kg' })),
+      requestItem(tx, f.manager, { name: 'Charcoal', kind: 'supply', baseUnit: 'kg' }),
     );
     await expect(
       asOrg(f.orgId, (tx) => rejectItemRequest(tx, f.superAdmin, { requestId: req.requestId, note: '  ' })),

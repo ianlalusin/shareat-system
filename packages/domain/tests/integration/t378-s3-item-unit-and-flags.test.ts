@@ -33,7 +33,7 @@ import {
   updateItem,
   verifyInvoice,
 } from '@shareat/domain';
-import { requestInput, testItemCode } from './_fixtures/item-code';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -223,7 +223,7 @@ describe('F - the three ticks reach the item through request -> approve (DEF-599
       async () => {
         const f = await fixture(leg.id.toLowerCase());
         const { requestId } = await asOrg(f.orgId, (tx) =>
-          requestItem(tx, f.manager, requestInput({ name: `Req ${uid('n')}`, kind: 'retail', baseUnit: 'pcs', ...leg.input })),
+          requestItem(tx, f.manager, { name: `Req ${uid('n')}`, kind: 'retail', baseUnit: 'pcs', ...leg.input }),
         );
         const { itemId } = await asOrg(f.orgId, (tx) => approveItemRequest(tx, f.superAdmin, { requestId }));
         expect((await itemRow(itemId))![leg.col]).toBe(leg.want);
@@ -237,7 +237,7 @@ describe('F - the three ticks reach the item through request -> approve (DEF-599
     async () => {
       const f = await fixture('f4');
       const { requestId } = await asOrg(f.orgId, (tx) =>
-        requestItem(tx, f.manager, requestInput({ name: `Req ${uid('n')}`, kind: 'retail', baseUnit: 'pcs' })),
+        requestItem(tx, f.manager, { name: `Req ${uid('n')}`, kind: 'retail', baseUnit: 'pcs' }),
       );
       const { itemId } = await asOrg(f.orgId, (tx) => approveItemRequest(tx, f.superAdmin, { requestId }));
       const r = (await itemRow(itemId))!;
@@ -250,7 +250,7 @@ describe('F - the three ticks reach the item through request -> approve (DEF-599
 describe('A - the approver confirms the unit and flags (R5)', () => {
   const request = (f: Fixture, extra: Record<string, unknown> = {}) =>
     asOrg(f.orgId, (tx) =>
-      requestItem(tx, f.manager, requestInput({ name: `Req ${uid('n')}`, kind: 'retail', baseUnit: 'kg', ...extra })),
+      requestItem(tx, f.manager, { name: `Req ${uid('n')}`, kind: 'retail', baseUnit: 'kg', ...extra }),
     );
 
   it(
@@ -287,7 +287,7 @@ describe('A - the approver confirms the unit and flags (R5)', () => {
       const f = await fixture('a3');
       const name = `Req ${uid('n')}`;
       const { requestId } = await asOrg(f.orgId, (tx) =>
-        requestItem(tx, f.manager, requestInput({ name, kind: 'retail', baseUnit: 'kg' })),
+        requestItem(tx, f.manager, { name, kind: 'retail', baseUnit: 'kg' }),
       );
       const err = await failure(
         asOrg(f.orgId, (tx) => approveItemRequest(tx, f.superAdmin, { requestId, baseUnit: '' } as never)),

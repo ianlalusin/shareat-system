@@ -204,10 +204,8 @@ describe('R - renameItem', () => {
       const byName = await failure(rename(f, f.superAdmin, id, 'PEPSI 1.5', 'CK15-001'));
       expect(constraintOf(byName)).toBe('items_org_name_key');
       const byCode = await failure(rename(f, f.superAdmin, id, 'Coke 1.5', 'PEPS-001'));
-      // T-386 S3 (spec R4 leg): at HEAD the unique index speaks (items_org_code_key); once the domain's high-water-mark check lands it
-      // speaks first with the 'cannot be used' sentence. Either is a refusal of a code another item already holds; both must leave no trace.
-      const codeRefusal = constraintOf(byCode) === 'items_org_code_key' || /cannot be used/.test(String((byCode as Error).message));
-      expect(codeRefusal).toBe(true);
+      // T-386 S3: the domain's high-water-mark check speaks before the unique index: the 'cannot be used' sentence, never the constraint.
+      expect((byCode as { userMessage?: string }).userMessage).toMatch(/^PEPS-001 cannot be used: /);
       expect(await itemRow(id)).toMatchObject({ name: 'Coke 1.5', code: 'CK15-001' });
       expect(await auditRows(id)).toHaveLength(0);
     },

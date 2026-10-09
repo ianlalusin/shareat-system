@@ -373,6 +373,39 @@ describe('T-386 S2 - D8: the seed raises the mark for codes that already have th
   });
 });
 
+describe('T-386 S2 - D8b: the seed counts a legacy code that only has the shape once upper-cased', () => {
+  const root = fileURLToPath(new URL('../../../../', import.meta.url));
+
+  it("D8b: the MIGRATION's own seed statement (extracted from 0189 between the B0189 markers, scoped to one org) gives a lower-case legacy chwn-001 the mark 1 under CHWN, stem upper-cased. Mutant: the seed matches the upper-case pattern only -> no CHWN row, red. Red against e0d4b03: the seed pattern is case-sensitive", async () => {
+    const text = readFileSync(`${root}packages/db/migrations/0189_t386_item_codes.sql`, 'utf8');
+    const block = text.slice(text.indexOf('-- B0189:begin'), text.indexOf('-- B0189:end'));
+    const start = block.indexOf('INSERT INTO "item_code_counters"');
+    expect(start, 'the seed INSERT is in the migration').toBeGreaterThan(-1);
+    const insert = block.slice(start, block.indexOf(';', start) + 1);
+    expect(insert).toContain('FROM "items"');
+    const o = await mkOrg('d8b');
+    // Scope the unchanged statement to this org by wrapping its WHERE: WHERE "org_id" = X AND ( <original condition> ) GROUP BY ...
+    const scoped = insert.replace('WHERE', `WHERE "org_id" = '${o.orgId}' AND (`).replace('GROUP BY', ') GROUP BY');
+    const err = await run(
+      o.orgId,
+      async (t) => {
+        await t.unsafe('set local session_replication_role = replica');
+        await t`insert into items (org_id, code, name, kind, base_unit, created_by) values (${o.orgId}, 'chwn-001', ${uid('n')}, 'raw_material', 'kg', ${o.personId})`;
+        await t`insert into items (org_id, code, name, kind, base_unit, created_by) values (${o.orgId}, 'ABCD-003', ${uid('n')}, 'raw_material', 'kg', ${o.personId})`;
+        await t.unsafe('set local session_replication_role = origin');
+        await t.unsafe('set local row_security = off');
+        await t.unsafe(scoped);
+        await t.unsafe('set local row_security = on');
+      },
+      { owner: true },
+    );
+    expect(err, 'the extracted seed must run').toBeNull();
+    expect(await mark(o, 'CHWN'), 'lower-case legacy chwn-001 is counted under the upper-case stem').toBe(1);
+    expect(await mark(o, 'ABCD')).toBe(3);
+    expect(await mark(o, 'chwn'), 'no lower-case stem row').toBeNull();
+  });
+});
+
 describe('T-386 S2 - D9: the triggers exist with the right mode', () => {
   it('D9: items_code_never_reused is origin-enabled (O), BEFORE INSERT OR UPDATE, FOR EACH ROW on items; item_code_counters_forward_only is ENABLE ALWAYS (A), BEFORE UPDATE, FOR EACH ROW on item_code_counters. Red today: neither exists', async () => {
     const rows = await sql<{ tgname: string; tgenabled: string; tgtype: number; relname: string }[]>`

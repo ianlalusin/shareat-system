@@ -56,13 +56,9 @@ const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 const NOT_SUPER_ADMIN = 'Only a super-admin can rename an item.';
 const DUP_NAME =
   'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, rename the existing item on its page first.';
-const DUP_CODE = "That item code is already in use. To reuse it, change the existing item's code on its page first.";
 // Shared by createItem and the request actions: the readers are not all super-admins, so no 'on its page' hint.
 const SHARED_DUP_NAME =
   'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, ask a super-admin to rename the existing item first.';
-const SHARED_DUP_CODE = "That item code is already in use. To reuse it, ask a super-admin to change the existing item's code first.";
-/** The taken-code refusal before and after T-386 S3: the unique-index sentence, or the domain's 'cannot be used' sentence. */
-const codeTaken = (legacy: string, got: string | null) => got === legacy || /cannot be used: /.test(got ?? '');
 const BLANK_NAME = 'Give the item a name people will recognise.';
 const BLANK_CODE = 'Give the item a code.';
 
@@ -225,7 +221,7 @@ describe('W2 - renameItemAction', () => {
       const byName = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'pepsi 1.5', code: 'CK15-001' })));
       expect(param(byName, 'error')).toBe(DUP_NAME);
       const byCode = await redirectOf(() => actions.renameItemAction(form({ itemId: id, name: 'Coke 1.5', code: 'PEPS-001' })));
-      expect(codeTaken(DUP_CODE, param(byCode, 'error'))).toBe(true);
+      expect(param(byCode, 'error')).toMatch(/^PEPS-001 cannot be used: /);
       expect(await rowOf(id)).toEqual({ name: 'Coke 1.5', code: 'CK15-001' });
     },
     60_000,
@@ -277,7 +273,7 @@ describe('W3 - the create form tells you how to reuse a taken name or code', () 
       const byCode = await redirectOf(() =>
         actions.createItemAction(form({ code: 'CK15-001', name: 'Something else', kind: 'raw_material', baseUnit: 'pcs' })),
       );
-      expect(codeTaken(SHARED_DUP_CODE, param(byCode, 'error'))).toBe(true);
+      expect(param(byCode, 'error')).toMatch(/^CK15-001 cannot be used: /);
     },
     60_000,
   );

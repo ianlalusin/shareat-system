@@ -480,6 +480,7 @@ describe('A - the similarity warning lists items that share the code letters', (
       const w = r.similarWarning ?? '';
       expect(w).toContain('Same code letters as: CHWN-001 Chicken wings (active)');
       expect(w.split('CHWN-001 Chicken wings').length - 1, 'once').toBe(1);
+      expect(w.split('Chicken wings').length - 1, "the item's NAME appears once in the whole warning (it is in both lists)").toBe(1);
       expect(w).toContain('Possible duplicate of');
       expect(w).toMatch(/; Same code letters as: /);
       expect((await requestRow(r.requestId)).similar_warning, 'and it is frozen on the request').toBe(w);
@@ -644,6 +645,40 @@ describe('R - renameItem and the code (spec R8)', () => {
         expect(await failure(rename(f, who, id, 'Pork belly sliced', 'PRBL-001', true))).toBeInstanceOf(AuthorizationError);
       }
       expect(await itemRow(id)).toMatchObject({ name: 'Pork belly', code: 'PRBL-001' });
+    },
+    60_000,
+  );
+});
+
+describe('A - legacy lower-case codes and the allocator', () => {
+  it(
+    'A12: an item that holds a lower-case legacy chwn-001 (raw insert, as production data may) reserves the number: a new "Chicken wings" with no code is allocated CHWN-002, not CHWN-001 (the case twin). Mutant: the allocator ignores codes that are not already upper-case -> CHWN-001 -> unique-index error, red. Red against e0d4b03 if the allocator does not see the lower-case row',
+    async () => {
+      const f = await fixture('a12');
+      await sql`insert into items (org_id, code, name, kind, base_unit, created_by)
+                values (${f.orgId}, 'chwn-001', 'Legacy wings', 'raw_material', 'kg', ${f.createdBy})`;
+      const made = await create(f, f.superAdmin, { name: 'Chicken wings' });
+      expect(await codeOf(made.id)).toBe('CHWN-002');
+    },
+    60_000,
+  );
+});
+
+describe("R - rename: the item's own code typed in another case is unchanged", () => {
+  it(
+    'R9: a super-admin typing the item\'s own current code in lower case ("ck15-001" for CK15-001) is treated as unchanged, not refused: name and code unchanged -> {changed:false}, no audit; a name change with the code typed in lower case goes through with the code kept and the mark untouched. Mutant: compare the typed code to item.code case-sensitively -> it is read as an override and refused as "cannot be used", red',
+    async () => {
+      const f = await fixture('ar9');
+      const id = (await create(f, f.superAdmin, { name: 'Coke 1.5' })).id;
+      expect(await codeOf(id)).toBe('CK15-001');
+      expect(await rename(f, f.superAdmin, id, 'Coke 1.5', 'ck15-001')).toEqual({ changed: false });
+      expect(await auditRows(id)).toHaveLength(0);
+      expect(await rename(f, f.superAdmin, id, 'Coke 1.5 (x)', ' ck15-001 ')).toEqual({ changed: true });
+      expect(await itemRow(id)).toMatchObject({ name: 'Coke 1.5 (x)', code: 'CK15-001' });
+      expect(await markOf(f, 'CK15')).toBe(1);
+      const rows = await auditRows(id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ before: { code: 'CK15-001' }, after: { code: 'CK15-001' } });
     },
     60_000,
   );
