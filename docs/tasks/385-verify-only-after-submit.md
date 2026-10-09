@@ -1,6 +1,6 @@
 # T-385: a sales day is verified and posted only after it is submitted
 
-**Status:** BUILT 2026-10-09 on `release/t385` (S1-S4 incl. B1 self-verify); Opus-audited (0 money/auth findings, 1 UI gap fixed); browser-smoked. **PR #3 waits for Ian's 0188 prechecks (P0188c = 0, P0188f only Ian) and its CI.** SPEC 2026-10-09 (Opus planner), written at `release/t384-sweep` `b4e917e`.
+**Status:** DONE 2026-10-09 — live via PR #3 (`462ed8c`, migration 0188); Ian ran the prechecks. SPEC 2026-10-09 (Opus planner), written at `release/t384-sweep` `b4e917e`.
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
 **Migration:** **0188**, hand-authored per ADR-012 §5, gated on the FULL suite (CI on a PR, bible row 291; memory: a
 CHECK/trigger migration is gated on the full suite on a fresh gate DB). Prechecks go in `docs/ops/README.md` before the
