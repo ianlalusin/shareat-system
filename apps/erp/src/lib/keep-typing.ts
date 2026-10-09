@@ -43,7 +43,7 @@ export function isNeverEchoed(name: string): boolean {
 
 /** The shapes the flash accepts (lib/flash.ts). A name outside them would make the cookie's typed slot unreadable. */
 const FORM_KEY = /^[a-z][a-zA-Z0-9.]{0,63}$/;
-const FIELD_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const FIELD_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
 export interface TypedFormDef {
   /** The `<area>.<form>` key, unique app-wide. */

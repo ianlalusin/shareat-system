@@ -16,6 +16,8 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { MONEY_ACCOUNT_RENAME } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
 
 export const metadata = { title: 'Money accounts — Shareat System' };
@@ -139,7 +141,7 @@ export default async function MoneyAccountsPage({
                       Retire button that always errors would teach people to distrust buttons.
                     */}
                     {a.isActive && a.isFoundation && (
-                      <EditableRecord action={renameMoneyAccountAction} label={a.name} hidden={{ moneyAccountId: a.id }}>
+                      <EditableRecord action={renameMoneyAccountAction} label={a.name} hidden={{ moneyAccountId: a.id }} typed={typedFor(sp, MONEY_ACCOUNT_RENAME, a.id, actor.personId)}>
                         <div className="flex flex-wrap justify-end gap-1">
                         <input
                           name="name"

@@ -11,6 +11,8 @@ import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { EXPENSE_DRAFT_EDIT } from '../typed-forms';
 import { EditableRecord } from '@/components/forms';
 import { FormGrid } from '@/components/ui';
 
@@ -215,6 +217,7 @@ export default async function ExpenseDetailPage({
               label="draft"
               hidden={{ storeId: sp.store ?? '', expenseId: expense.id }}
               saveLabel="Save draft"
+              typed={typedFor(sp, EXPENSE_DRAFT_EDIT, expense.id, actor.personId)}
             >
             <FormGrid>
             <label className="flex flex-col gap-1">
