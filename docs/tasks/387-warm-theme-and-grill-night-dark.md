@@ -118,7 +118,8 @@ and confirmation texts"*. Done the same day:
 
 ## Open questions (for Ian)
 - `t387-q1-toast`: ✅ **ANSWERED (a), Ian 2026-10-09.** Success becomes a toast; errors stay as banners.
-- `t387-q2-stamp`: keep v1's "APPROVED / VOID" stamp animation? (a) yes, on approve, verify and void · (b) no.
+- `t387-q2-stamp`: ✅ **ANSWERED (a), Ian 2026-10-09:** *"keep the stamp"*. An APPROVED / VERIFIED / RELEASED / VOID stamp
+  plays on those state changes, for 1.2s, and is skipped under `prefers-reduced-motion` (S4).
 - `t387-q3-shape`: ✅ **ANSWERED (b), Ian 2026-10-09.** A 12px rounded rectangle.
 
 ## Done when
