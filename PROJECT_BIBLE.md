@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1633` 13. Decision log
-- `1634–1653` 14. Amendment protocol
-- `1654–1658` 15. Engineering standards — the industry practices this project follows
-  - `1659–1664` 15.1 Build order: walking skeleton first
-  - `1665–1676` 15.2 Golden-master testing — the most important practice here
-  - `1677–1685` 15.3 Strangler Fig, not big-bang cutover
-  - `1686–1690` 15.4 No dual-write
-  - `1691–1699` 15.5 Expand/contract migrations
-  - `1700–1708` 15.6 Observability from day zero, not later
-  - `1709–1713` 15.7 CI gates
-  - `1714–1718` 15.8 Backups and a tested restore
-  - `1719–1723` 15.9 Twelve-Factor config
-  - `1724–1731` 15.10 Append-only ledgers — but not event sourcing
-  - `1732–1736` 15.11 Defence in depth
-  - `1737–1765` 15.12 Skills are lenses, not assurance
-  - `1766–1772` 15.13 Reconciliation is a permanent feature
-- `1773–1777` 16. The accounting spine
-  - `1778–1809` 16.0 What we are actually fixing — the diagnosis
-  - `1810–1853` 16.1 The ten invariants — non-negotiable
-  - `1854–1868` 16.2 The oracle: how "correct" is tested
-  - `1869–1890` 16.3 The model — header + lines, not legs
-  - `1891–1910` 16.4 Deliberately simpler than ERPNext
-  - `1911–1977` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1978–2002` 16.6 What v1 already gets right — preserve the intent
-  - `2003–2024` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2025–2039` 16.8 What v1's accounting already gets right
-  - `2040–2083` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2084–2134` 16.10 Posting patterns — one canonical pattern per business event
-  - `2135–2166` 16.11 Inventory's accounting integration
+- `1329–1634` 13. Decision log
+- `1635–1654` 14. Amendment protocol
+- `1655–1659` 15. Engineering standards — the industry practices this project follows
+  - `1660–1665` 15.1 Build order: walking skeleton first
+  - `1666–1677` 15.2 Golden-master testing — the most important practice here
+  - `1678–1686` 15.3 Strangler Fig, not big-bang cutover
+  - `1687–1691` 15.4 No dual-write
+  - `1692–1700` 15.5 Expand/contract migrations
+  - `1701–1709` 15.6 Observability from day zero, not later
+  - `1710–1714` 15.7 CI gates
+  - `1715–1719` 15.8 Backups and a tested restore
+  - `1720–1724` 15.9 Twelve-Factor config
+  - `1725–1732` 15.10 Append-only ledgers — but not event sourcing
+  - `1733–1737` 15.11 Defence in depth
+  - `1738–1766` 15.12 Skills are lenses, not assurance
+  - `1767–1773` 15.13 Reconciliation is a permanent feature
+- `1774–1778` 16. The accounting spine
+  - `1779–1810` 16.0 What we are actually fixing — the diagnosis
+  - `1811–1854` 16.1 The ten invariants — non-negotiable
+  - `1855–1869` 16.2 The oracle: how "correct" is tested
+  - `1870–1891` 16.3 The model — header + lines, not legs
+  - `1892–1911` 16.4 Deliberately simpler than ERPNext
+  - `1912–1978` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1979–2003` 16.6 What v1 already gets right — preserve the intent
+  - `2004–2025` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2026–2040` 16.8 What v1's accounting already gets right
+  - `2041–2084` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2085–2135` 16.10 Posting patterns — one canonical pattern per business event
+  - `2136–2167` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1630,6 +1630,7 @@ just a patch.**
 | 295 | 2026-10-09 | ⭐ **THE ERP LOOKS LIKE THE BRAND: "SHAREAT WARM" IN LIGHT (CREAM GROUND, WARM INK, BALOO 2 HEADINGS, PLUS JAKARTA SANS BODY, 12PX ROUNDED-RECTANGLE BUTTONS, PILLS ONLY FOR BADGES AND CHIPS) AND "GRILL NIGHT" IN DARK (WARM CHARCOAL). ADR-013 AMENDMENT 7.** Ian, 2026-10-09: *"go with B, C as dark mode"*, chosen from a rendered brand and app sheet (Artifact `L7hn691wjL76rSV2BgPa1A`). Every earlier ADR-013 rule stands: one red primary, outlined danger, warning never as text, one control size, `ring-ink`. New tokens `--field-border`, `--brand-ink`, `--warning-ink`, `--muted` and status softs. This **closes the dark `--brand`-as-text and dark `--warning` gaps** (Amendment 4). C's 52px floor density and its gold focus ring are NOT adopted | v2 had tokens but no brand presence (no logo, font or ground) and no status, toast or field-error language. The Website already declares this palette and these fonts, and v1 staff know Baloo 2 and pills | Yes — tokens and fonts only; components read tokens, so another look is a `globals.css` change |
 | 296 | 2026-10-09 | ⭐ **GITHUB CI RUNS ONCE A DAY, AT WRAP-UP: THE DAY'S SLICES ARE COMMITTED LOCALLY AND GO UP TOGETHER IN ONE PULL REQUEST; MERGE (AND SO DEPLOY) ONLY WHEN ITS CI IS GREEN AND WITH IAN'S GO. AMENDS ROW 291 (WHICH STILL SAYS WHERE THE FULL SUITE RUNS); TWO EXCEPTIONS.** Ian, 2026-10-09: *"new rule only work github ci on wrap up"*, then *"yes, record it with both exceptions"*. **Exception 1 — unblock Ian:** a slice that must be live before Ian can act (e.g. T-386 S5: the production recode dry run needs the script deployed) may go up in its own early PR, only with Ian's go. **Exception 2 — migrations:** a slice carrying a migration goes in its own PR, or at the least has its prechecks (row 278) run with Ian before wrap-up, so one bad precheck cannot hold back the whole day's batch. **The local backstop:** because CI no longer runs per slice, after every local commit the orchestrator runs the guard and census files plus the affected tests (not only the lane's files) — merged lanes breaking each other's guards is the failure this rule would otherwise hide until wrap-up | One CI run takes 20-25 min; per-slice PRs spent hours waiting on CI and on merges. Fits the standing push-once-at-wrap-up practice. Cost: a red batch is harder to attribute (bisect the day's commits), and production changes only once a day — both covered by the backstop and the two exceptions | Yes — Ian may call an early PR at any time; reverting to per-slice PRs is one line here |
 | 297 | 2026-10-10 | ⭐ **A POS USAGE PULL SECTION IS "FINALIZED" ONLY WHEN EVERY CONFIRMED LINE HAS POSTED. A LINE THAT CANNOT POST — ITS ITEM SHORT IN ITS ROOM OR IN THE STORE'S LAYERS, ITS ROOM UNDER COUNT, OR ITS ROOM UNABLE TO TAKE USAGE — IS HELD BACK AND NAMED IN WORDS; EVERY OTHER LINE POSTS; FINALIZING AGAIN POSTS THE HELD LINES ONCE. STOCK NEVER GOES BELOW ZERO, SO A SALE CANNOT BE FORCED OUT OF STOCK THAT IS NOT THERE (T-388; SUPERSEDES T-177 INVARIANTS 4 AND 9).** Ian, 2026-10-10, Open Questions `def-618-pull-short-stock` = a, and `t388-q1-old-dropped-lines` = a (sections finalized before the fix stay as they are) | Before T-388 one short item skipped its whole room's usage, the section was stamped anyway, and the screen blamed a "frozen location" (DEF-618); a closed month stamped with nothing posted (DEF-620); a room short but stocked elsewhere failed with raw trigger text (DEF-619) | Yes — the hold rule is per (item, room); unticking a held line lets the section finalize without it |
+| 298 | 2026-10-10 | ⭐ **WORK FASTER: SEVEN PRACTICES ARE STANDING.** (1) one worktree per lane, so 2-3 tasks run at once; (2) shared fixture builders for the heavy setups (an item with stock AND its layer, a POS sales day with a pull, a closed month); (3) lane databases created from a pre-migrated template; (4) unit tests run with fewer threads / a longer timeout so heavy guards stop timing out; (5) **the Workflow tool for sweep-shaped work** (the same change over many files, e.g. T-389 S2-S4), one agent per file, with the same tester-first red and the same audit; (6) specs written ahead, several at once, each money/auth spec reviewed by a fresh Opus; (7) the auditor reviews while the builder works. Ian, 2026-10-10: *"approved all including 5"* | Measured 10 Oct: one worktree serialised every task; testers spent 3-16 min per slice on setup and 3 of 4 slices bounced on fixture defects; every full unit run showed 4-15 false timeouts; spec → review → fixes ran one after another | Yes — the practices are process; any one can be dropped by a later row |
 
 ## 14. Amendment protocol
 
