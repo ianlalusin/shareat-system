@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pill or rounded rectangle</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#d40909}
+.disp{font-family:'Baloo 2',sans-serif;font-weight:800;letter-spacing:-.01em}
+.kick{margin:0;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6b5f4f}
+.col{display:flex;flex-direction:column;gap:22px;padding:28px;border-radius:24px;background:#fffdf8;border:1px solid #eadfc6;min-width:0}
+.spec{display:flex;flex-direction:column;gap:10px}
+.lab{font-size:12px;font-weight:700;color:#6b5f4f}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.b{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;font:700 14px 'Plus Jakarta Sans',sans-serif;border:1px solid transparent;white-space:nowrap;cursor:pointer;box-sizing:border-box}
+.b svg{width:16px;height:16px}
+.P .b{border-radius:999px;padding:0 22px}
+.R .b{border-radius:12px;padding:0 16px}
+.P .b.ic,.R .b.ic{width:44px;padding:0}
+.b.sm{height:36px;font-size:13px}
+.P .b.sm{padding:0 14px}
+.R .b.sm{padding:0 11px;border-radius:10px}
+.pr{background:#d40909;color:#fff}
+.se{background:#fff;border-color:#94866f;color:#2b2620}
+.gh{background:transparent;color:#2b2620}
+.dg{background:#fff;border-color:#a00606;color:#a00606}
+.inp{height:44px;border-radius:10px;border:1px solid #94866f;background:#fff;display:flex;align-items:center;padding:0 12px;color:#6b5f4f;font-size:14px;box-sizing:border-box}
+.badge{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700}
+.badge b{width:6px;height:6px;border-radius:99px;background:currentColor}
+.seg{display:inline-flex;padding:3px;gap:2px;border:1px solid #94866f;background:#fbf4e4}
+.P .seg{border-radius:999px}.R .seg{border-radius:12px}
+.seg span{height:36px;display:inline-flex;align-items:center;padding:0 14px;font-weight:700;font-size:13px;color:#6b5f4f}
+.P .seg span{border-radius:999px}.R .seg span{border-radius:9px}
+.seg span.on{background:#2b2620;color:#fbf4e4}
+.v{display:grid;grid-template-columns:minmax(0,2fr) 1fr 1fr;gap:12px;padding:12px 0;border-bottom:1px solid #eadfc6;font-size:14px;line-height:1.45;align-items:start}
+.w{font-weight:800;font-family:'Baloo 2',sans-serif;font-size:18px}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1720px; box-sizing: border-box; padding: 56px 64px; background: #fbf4e4; color: #2b2620; font-family: 'Plus Jakarta Sans', sans-serif; display: flex; flex-direction: column; gap: 32px">
+<div style="display: flex; flex-direction: column; gap: 8px"><p class="kick">For the whole app · weighed for you to decide · the same screens drawn both ways</p><h1 class="disp" style="margin: 0; font-size: 56px; line-height: .95">Pill, or rounded rectangle?</h1></div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px">
+<sc-for list="{{ cols }}" as="c" hint-placeholder-count="2">
+<div class="col {{ c.k }}">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><h2 class="disp" style="margin: 0; font-size: 32px">{{ c.title }}</h2><span class="lab">{{ c.sub }}</span></div>
+
+<div class="spec"><span class="lab">Form footer beside a field</span>
+<div class="inp">₱ 3,200.00</div>
+<div class="row" style="justify-content: flex-end"><span class="b gh">Cancel</span><span class="b se">Save draft</span><span class="b pr">Submit for approval</span></div></div>
+
+<div class="spec"><span class="lab">List toolbar</span>
+<div class="row"><span class="inp" style="flex: 1; min-width: 160px">Search receipts…</span><span class="b se">Filters</span><span class="b se ic" aria-label="Print"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"></path></svg></span><span class="b pr">New expense</span></div></div>
+
+<div class="spec"><span class="lab">Dense table row: a status badge next to row actions</span>
+<div style="display: grid; grid-template-columns: 90px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid #eadfc6; border-bottom: 1px solid #eadfc6; font-size: 14px"><b>EXP-0142</b><span>Charcoal · ₱3,200</span><span class="badge" style="background: #fce8b8; color: #7a4f00"><b></b>Submitted</span><span class="row" style="gap: 6px"><span class="b se sm">Approve</span><span class="b dg sm">Void</span></span></div></div>
+
+<div class="spec"><span class="lab">Segmented control and filter chips</span>
+<div class="row"><span class="seg"><span class="on">Today</span><span>7 days</span><span>30 days</span></span><span class="badge" style="background: #2b2620; color: #fbf4e4; height: 32px; padding: 0 14px">Lipa ×</span><span class="badge" style="background: #efece4; color: #55606e; height: 32px; padding: 0 14px">Submitted ×</span></div></div>
+
+<div class="spec"><span class="lab">Phone, 360 wide: stacked full-width actions</span>
+<div style="width: 300px; display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 20px; border: 1px solid #eadfc6; background: #fbf4e4"><span class="b pr" style="width: 100%">Receive delivery</span><span class="b se" style="width: 100%">Report a problem</span></div></div>
+</div>
+</sc-for>
+</div>
+
+<section style="display: flex; flex-direction: column; gap: 4px; border-top: 2px solid #2b2620; padding-top: 14px">
+<div class="v" style="font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6b5f4f; border-bottom: 2px solid #2b2620"><span>What matters</span><span>Pill</span><span>Rounded rectangle</span></div>
+<div class="v"><span><b>Telling a button from a badge.</b> Status badges and filter chips are pills in every option. If buttons are pills too, "Approve" and "Submitted" in the same row have the same shape, and only colour says which one you can press</span><span>✗ same shape</span><span class="w" style="color: #0e6b45">✓ clearly different</span></div>
+<div class="v"><span><b>Matching the fields.</b> Inputs, selects and cards are rounded rectangles. v1 put pill buttons next to rectangular inputs, and the audit flagged it as a mismatch</span><span>✗ repeats v1's mismatch</span><span class="w" style="color: #0e6b45">✓ one family</span></div>
+<div class="v"><span><b>Density.</b> A pill needs about 6px more padding on each side to look balanced, so a 4-button toolbar is about 48px wider. That matters on tables and toolbars, the ERP's main surface</span><span>wider</span><span class="w" style="color: #0e6b45">✓ tighter</span></div>
+<div class="v"><span><b>Groups and icon buttons.</b> Segmented controls, split buttons and the 44px icon button join and align more cleanly as rectangles. A pill icon button is a circle</span><span>works, looks softer</span><span class="w" style="color: #0e6b45">✓ cleaner</span></div>
+<div class="v"><span><b>Brand match.</b> The Website's buttons are pills, and v1's staff are used to pills</span><span class="w" style="color: #0e6b45">✓ matches</span><span>The brand still shows through Baloo 2, cream, the red and the logo</span></div>
+<div class="v"><span><b>Warmth and approachability.</b> A pill reads friendlier, which suits the clock terminal and the staff app</span><span class="w" style="color: #0e6b45">✓ friendlier</span><span>12px corners are soft, not sharp</span></div>
+</section>
+<div style="display: flex; gap: 18px; align-items: flex-start; padding: 22px 26px; border-radius: 20px; background: #1a1a1a; color: #fbf4e4">
+<span class="disp" style="font-size: 30px; color: #f4b942; line-height: 1">My pick</span>
+<p style="margin: 0; font-size: 16px; line-height: 1.55"><b>Rounded rectangle, 12px, for every button and field across the app.</b> Pills are kept for things you read or filter by: status badges, filter chips and counts. Buttons and badges then never look alike, and buttons, fields and cards share one shape family. The brand still comes from type, colour and the logo. It wins 4 of the 6 points; the pill wins on brand match and warmth. This reverses the "pill buttons" line in ADR-013 Amendment 7, so the decision is yours.</p>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1720}}'>
+class Component extends DCLogic {
+renderVals() {
+return { cols: [
+{ k: 'P', title: 'A · Pill', sub: 'radius 999 · padding 22' },
+{ k: 'R', title: 'B · Rounded rectangle', sub: 'radius 12 · padding 16 · fields 10' }
+] };
+}
+}
+</script>
+</body>
+</html>
