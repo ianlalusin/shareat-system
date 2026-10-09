@@ -385,7 +385,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1146 -> 1148, T-386 S4 2026-10-09. +2: `app/items/ItemCodeField.tsx` adds the super-admin code-override input and the
     // rename "use the suggested code" checkbox (+1 UNRESOLVED baseline entry, touch-target-baseline.json). FAIL unmoved at 151.
     // Verified by running the census (1148).
-    expect(results.length).toBe(1148);
+    // 1148 -> 1149, T-386 audit round 2026-10-09. +1: the super-admin "Use a different code" override input moved out of
+    // ItemCodeField onto app/items/page.tsx beside "Add directly" (audit #4). FAIL 151 / UNRESOLVED 63 unmoved. Verified (1149).
+    expect(results.length).toBe(1149);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

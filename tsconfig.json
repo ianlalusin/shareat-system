@@ -47,7 +47,7 @@
         "./packages/domain/src/index.ts"
       ],
       "@shareat/domain/item-code": [
-        "./packages/domain/src/items/code.ts"
+        "./packages/domain/src/item-code.ts"
       ],
       "@shareat/domain/*": [
         "./packages/domain/src/*"
