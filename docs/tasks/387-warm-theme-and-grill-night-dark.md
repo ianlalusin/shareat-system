@@ -1,8 +1,8 @@
-# T-386: the ERP looks like the brand. SharEat Warm in light, Grill Night in dark
+# T-387: the ERP looks like the brand. SharEat Warm in light, Grill Night in dark
 
 **Status:** SPEC 2026-10-09 (Opus planner). NOT BUILT.
 **Ruling:** Ian, 2026-10-09: *"go with B, C as dark mode"*. The values are recorded in ADR-013 **Amendment 7** and
-bible §13 **row 294**. ⛔ The values are RULED. This task builds them and does not re-pick them.
+bible §13 **row 295**. ⛔ The values are RULED. This task builds them and does not re-pick them.
 **Source:** the rendered sheet, Artifact `https://claude.ai/artifact/L7hn691wjL76rSV2BgPa1A` (boards 00, B and C).
 **Model:** Sonnet per slice, with the tester first and then the builder. An amendment is written in plan mode (Opus).
 **Migration:** none. Tokens, fonts, components and static assets only.
@@ -86,10 +86,31 @@ sweep of 283 raw buttons, 790 inputs and 240 selects, stays T-334's job and land
 - Restyling individual pages. T-334 slice 3 does that, onto this kit.
 - The dark-mode toggle UI. That is T-334's toggle slice, unchanged.
 
-## Open questions (for Ian, before S4)
-- `t386-q1-toast`: should success confirmations become a toast, or stay a banner at the top as now? (a) a toast for
-  success, banners for errors · (b) everything stays a banner.
-- `t386-q2-stamp`: keep v1's "APPROVED / VOIDED" stamp animation? (a) yes, on approve, verify and void · (b) no.
+## Screen picks: Ian, 2026-10-09 (from the sheet "SharEat ERP Screen Looks", Artifact `9cvfRibBSRuvBbZYe8DfjW`)
+Ian, verbatim: *"1. editorial 2. option 3 big state, 3. other i like the id card wall, roster with live stat 4. i like
+the heatmap for pos not erp"*. On the success toast: *"i like this toast notif at the bottom too"*.
+
+| Screen | Chosen look (board) | Becomes |
+|---|---|---|
+| Dashboard `/` | **Editorial** (`DashEditorial`): one huge hero number, supporting figures without cards, a self-drawing line, store bars, a channel donut, outlined "waiting on you" numerals, and a "right now" band | S5 (to spec) |
+| Order and delivery status | **Option 3, the big state** (`OrderStatus`): the animated status icon, a large state word, a chevron progress bar, one line on what happens next, and one action | S6 (to spec), with the animated icon set for every status vocabulary |
+| Staff `/staff` | **ID card wall** (`StaffCards`) as the default view, and **roster with live state** (`StaffRoster`) as the second view | S7 (to spec) |
+| Success feedback | **Toast at the bottom right** (`Feedback`). Errors stay as banners plus the field | S4. Answers `t387-q1` = (a) |
+| Hour-by-day heat map | **Not for the ERP.** Ian wants it in POS (`DashScoreboard`) | POS backlog. Out of this task |
+
+Not chosen: the ticket-rail and day-line dashboards, and the floor board by station. Drawn and waiting for review: the
+till count, clock terminal, leaderboard, checklist photo review, memo kiosk, onboarding exam, payslip, and the 80mm
+delivery receipt.
+
+⛔ **Button shape is reopened by Ian and NOT decided:** *"pill shaped button or rounded corner rectangle for the
+entire app let weigh"*. The `Shapes` board weighs both. The recommendation is a 12px rounded rectangle for every
+button and field, with pills kept for badges and chips. S2's `rounded-full` waits on `t387-q3-shape`.
+Amendment 7's "buttons are pills" line stands until Ian rules.
+
+## Open questions (for Ian)
+- `t387-q1-toast`: ✅ **ANSWERED (a), Ian 2026-10-09.** Success becomes a toast; errors stay as banners.
+- `t387-q2-stamp`: keep v1's "APPROVED / VOID" stamp animation? (a) yes, on approve, verify and void · (b) no.
+- `t387-q3-shape`: should every button in the app be (a) a pill, or (b) a 12px rounded rectangle? Recommended: (b).
 
 ## Done when
 - S1–S3 are merged through a PR with green CI (bible row 291), and the screenshots are attached in both themes.

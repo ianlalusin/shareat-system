@@ -566,4 +566,4 @@ The rule that a body-copy link must clear AAA uses `--danger`, as before.
 ships, §9.4 and Ian's render-first rule require a screenshot in both themes of a primary and a danger
 `Button`, an `invalid` `Input`, a warning banner and a badge.
 
-Task: `docs/tasks/386-warm-theme-and-grill-night-dark.md`. Bible §13 row 294.
+Task: `docs/tasks/387-warm-theme-and-grill-night-dark.md`. Bible §13 row 295.
