@@ -1,6 +1,6 @@
 # T-386: item codes are suggested from the name, fixed length, and never issued twice
 
-**Status:** SPEC 2026-10-09 (Opus planner). Written at main 462ed8c.
+**Status:** S1-S4 DONE 2026-10-09 — live via PR #4 (`7489bba`, migration 0189; prechecks run with Ian: 1 item, no case-twins). **S5 (recode existing items, dry run with Ian first) and S6 (shape CHECK) not started.** SPEC 2026-10-09 (Opus planner), written at main 462ed8c.
 **Model:** Sonnet for each slice, tester first, then builder. Any amendment is written in plan mode (Opus).
 **Migration:** **0189** (allocated to this task), hand-authored per ADR-012 §5; it adds triggers, so it is gated on the
 FULL suite in CI on a PR (bible row 291; memory: a CHECK/trigger migration is gated on the full suite on a fresh gate
