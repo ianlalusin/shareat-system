@@ -145,7 +145,7 @@
       <div class="count you"><div class="n">4</div><div class="l">things only you can do</div></div>
       <div class="count done"><div class="n">243</div><div class="l">roadmap tasks done</div></div>
     </div>
-    <p class="src">production at migration 0189 (7489bba, deployed 9 Oct: T-383 S1, T-384, T-385, T-386 S1-S4) &middot; <b>on main, deploying with the wrap-up PR (row 296):</b> T-383 S2 retire/restore, T-386 S5 recode script, T-388 pull holds short items, T-389 S1 keep-typing, T-395 S1 PIN throttle (migration 0190) &middot; next free migration 0191 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+    <p class="src">production at migration 0190 (PR #8 <code>d1eaede</code>, merged 10 Oct: T-383 S2, T-386 S5, T-388, T-389 S1, T-395 S1) &middot; <b>on main, deploying with the next wrap-up PR (row 296):</b> T-395 S2 wrong-PIN findings and manager reopen &middot; in lanes: T-389 S3, T-390 S1 (migration 0191) &middot; next free migration 0192 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
   </header>
 
   <div class="dates">
@@ -221,7 +221,7 @@
       <div class="item"><div class="id">POS pulls</div><div>Interim pulls rebuilt per your redesign (T-375 S5-lite, S6). At the shared backend (ADR-015 P2) the pull goes away: usage posts after verify, and refunded or voided items wait for a manager decision (your answers, bible row 282).</div></div>
       <div class="item"><div class="id">T-389 S2&ndash;S5</div><div>A refused save keeps your typing: done on supplier, tenders, store link and invoice lines (S1); 29 more forms in 21 pages to sweep (DEF-617).</div></div>
       <div class="item"><div class="id">T-386 S6</div><div>The database shape check for item codes, after the production recode (S5, built) reads 0 unconverted.</div></div>
-      <div class="item"><div class="id">Cutover plan</div><div><b>docs/plans/remaining-build-plan.md:</b> T-390 opening stock (spec reviewed; S2 waits on your cost-basis answer), T-391 master data, T-392 dual-run comparator, T-393 backups, T-394 rehearsal, T-395 PIN throttle (S1 built), T-396 link 3 stores, T-397 payroll bridge.</div></div>
+      <div class="item"><div class="id">Cutover plan</div><div><b>docs/plans/remaining-build-plan.md:</b> T-390 opening stock (spec reviewed; S2 waits on your cost-basis answer), T-391 master data, T-392 dual-run comparator, T-393 backups, T-394 rehearsal, T-395 PIN throttle (done), T-396 link 3 stores, T-397 payroll bridge.</div></div>
       <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
       <div class="item"><div class="id">T-316</div><div>The maintaining balance moves onto the cashier&rsquo;s drawer (you ruled count first). Done and smoked on 9008 (040e572, c5b0eac; migration 0184); on production since 6 October. Production has no float targets, so nothing to move there.</div></div>
       <div class="item"><div class="id">T-320</div><div>Access that does not come from a position. Number reserved.</div></div>
@@ -288,7 +288,7 @@
           <tr><td class="n">T-381</td><td>Two people booking the same missed month take turns; the second gets a sentence</td><td class="n">606</td></tr>
           <tr><td class="n">T-382</td><td>A guarded unlink from POS (super-admin, reason, audit; 0187); a POS store with imported sales never links to another store</td><td class="n">607</td></tr>
           <tr><td class="n">T-388</td><td>A POS usage pull posts every line that has stock and holds back only the short item, named in words; the day is finalized only when nothing is held (row 297). On main, deploys at wrap-up</td><td class="n">618, 619, 620, 621, 622</td></tr>
-          <tr><td class="n">T-395 S1</td><td>PIN sign-in charges each attempt before checking it, so a burst of guesses can no longer slip past the lockout; a store stops after 50 wrong PINs a day. On main, migration 0190</td><td class="n">626</td></tr>
+          <tr><td class="n">T-395</td><td>PIN sign-in charges each attempt before checking it, so a burst of guesses can no longer slip past the lockout; a store stops after 50 wrong PINs a day (live, 0190). Repeated wrong PINs and a stopped store show on Findings, and a manager of that store reopens PIN sign-in on the Staff page (S2 on main)</td><td class="n">063, 626</td></tr>
         </tbody>
       </table>
     </div>
