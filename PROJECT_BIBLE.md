@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1632` 13. Decision log
-- `1633–1652` 14. Amendment protocol
-- `1653–1657` 15. Engineering standards — the industry practices this project follows
-  - `1658–1663` 15.1 Build order: walking skeleton first
-  - `1664–1675` 15.2 Golden-master testing — the most important practice here
-  - `1676–1684` 15.3 Strangler Fig, not big-bang cutover
-  - `1685–1689` 15.4 No dual-write
-  - `1690–1698` 15.5 Expand/contract migrations
-  - `1699–1707` 15.6 Observability from day zero, not later
-  - `1708–1712` 15.7 CI gates
-  - `1713–1717` 15.8 Backups and a tested restore
-  - `1718–1722` 15.9 Twelve-Factor config
-  - `1723–1730` 15.10 Append-only ledgers — but not event sourcing
-  - `1731–1735` 15.11 Defence in depth
-  - `1736–1764` 15.12 Skills are lenses, not assurance
-  - `1765–1771` 15.13 Reconciliation is a permanent feature
-- `1772–1776` 16. The accounting spine
-  - `1777–1808` 16.0 What we are actually fixing — the diagnosis
-  - `1809–1852` 16.1 The ten invariants — non-negotiable
-  - `1853–1867` 16.2 The oracle: how "correct" is tested
-  - `1868–1889` 16.3 The model — header + lines, not legs
-  - `1890–1909` 16.4 Deliberately simpler than ERPNext
-  - `1910–1976` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1977–2001` 16.6 What v1 already gets right — preserve the intent
-  - `2002–2023` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2024–2038` 16.8 What v1's accounting already gets right
-  - `2039–2082` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2083–2133` 16.10 Posting patterns — one canonical pattern per business event
-  - `2134–2165` 16.11 Inventory's accounting integration
+- `1329–1633` 13. Decision log
+- `1634–1653` 14. Amendment protocol
+- `1654–1658` 15. Engineering standards — the industry practices this project follows
+  - `1659–1664` 15.1 Build order: walking skeleton first
+  - `1665–1676` 15.2 Golden-master testing — the most important practice here
+  - `1677–1685` 15.3 Strangler Fig, not big-bang cutover
+  - `1686–1690` 15.4 No dual-write
+  - `1691–1699` 15.5 Expand/contract migrations
+  - `1700–1708` 15.6 Observability from day zero, not later
+  - `1709–1713` 15.7 CI gates
+  - `1714–1718` 15.8 Backups and a tested restore
+  - `1719–1723` 15.9 Twelve-Factor config
+  - `1724–1731` 15.10 Append-only ledgers — but not event sourcing
+  - `1732–1736` 15.11 Defence in depth
+  - `1737–1765` 15.12 Skills are lenses, not assurance
+  - `1766–1772` 15.13 Reconciliation is a permanent feature
+- `1773–1777` 16. The accounting spine
+  - `1778–1809` 16.0 What we are actually fixing — the diagnosis
+  - `1810–1853` 16.1 The ten invariants — non-negotiable
+  - `1854–1868` 16.2 The oracle: how "correct" is tested
+  - `1869–1890` 16.3 The model — header + lines, not legs
+  - `1891–1910` 16.4 Deliberately simpler than ERPNext
+  - `1911–1977` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1978–2002` 16.6 What v1 already gets right — preserve the intent
+  - `2003–2024` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2025–2039` 16.8 What v1's accounting already gets right
+  - `2040–2083` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2084–2134` 16.10 Posting patterns — one canonical pattern per business event
+  - `2135–2166` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1629,6 +1629,7 @@ just a patch.**
 | 294 | 2026-10-09 | **ITEM CODES ARE SUGGESTED FROM THE NAME IN ONE FIXED 8-CHARACTER SHAPE, `CHWN-001` (4 LETTERS BY A FIXED RULE + A 3-DIGIT NUMBER PER STEM, NEVER REUSED); ONLY A SUPER-ADMIN MAY OVERRIDE, TO THE SAME SHAPE; EXISTING ITEMS ARE RE-CODED ONCE; A RENAME KEEPS THE CODE BUT OFFERS THE NEW SUGGESTION (T-386, migration 0189).** Ian, 2026-10-09: *"item code must be auto suggest based on the typed name fixed length with our own way how to formulate the code this way we can control duplication of code to avoid it"*; Open Questions `item-code-q1-format` = b, `q2-override` = a, `q3-existing` = a, `q4-rename` = a. Codes become unique ignoring case; the number is assigned at creation from a forward-only counter | v1 has no item code; v2 codes were free-typed, case-sensitive, and could collide between pending requests | Yes — the shape check (S6) is added only after production is re-coded |
 | 295 | 2026-10-09 | ⭐ **THE ERP LOOKS LIKE THE BRAND: "SHAREAT WARM" IN LIGHT (CREAM GROUND, WARM INK, BALOO 2 HEADINGS, PLUS JAKARTA SANS BODY, PILL BUTTONS) AND "GRILL NIGHT" IN DARK (WARM CHARCOAL). ADR-013 AMENDMENT 7.** Ian, 2026-10-09: *"go with B, C as dark mode"*, chosen from a rendered brand and app sheet (Artifact `L7hn691wjL76rSV2BgPa1A`). Every earlier ADR-013 rule stands: one red primary, outlined danger, warning never as text, one control size, `ring-ink`. New tokens `--field-border`, `--brand-ink`, `--warning-ink`, `--muted` and status softs. This **closes the dark `--brand`-as-text and dark `--warning` gaps** (Amendment 4). C's 52px floor density and its gold focus ring are NOT adopted | v2 had tokens but no brand presence (no logo, font or ground) and no status, toast or field-error language. The Website already declares this palette and these fonts, and v1 staff know Baloo 2 and pills | Yes — tokens and fonts only; components read tokens, so another look is a `globals.css` change |
 | 296 | 2026-10-09 | ⭐ **GITHUB CI RUNS ONCE A DAY, AT WRAP-UP: THE DAY'S SLICES ARE COMMITTED LOCALLY AND GO UP TOGETHER IN ONE PULL REQUEST; MERGE (AND SO DEPLOY) ONLY WHEN ITS CI IS GREEN AND WITH IAN'S GO. AMENDS ROW 291 (WHICH STILL SAYS WHERE THE FULL SUITE RUNS); TWO EXCEPTIONS.** Ian, 2026-10-09: *"new rule only work github ci on wrap up"*, then *"yes, record it with both exceptions"*. **Exception 1 — unblock Ian:** a slice that must be live before Ian can act (e.g. T-386 S5: the production recode dry run needs the script deployed) may go up in its own early PR, only with Ian's go. **Exception 2 — migrations:** a slice carrying a migration goes in its own PR, or at the least has its prechecks (row 278) run with Ian before wrap-up, so one bad precheck cannot hold back the whole day's batch. **The local backstop:** because CI no longer runs per slice, after every local commit the orchestrator runs the guard and census files plus the affected tests (not only the lane's files) — merged lanes breaking each other's guards is the failure this rule would otherwise hide until wrap-up | One CI run takes 20-25 min; per-slice PRs spent hours waiting on CI and on merges. Fits the standing push-once-at-wrap-up practice. Cost: a red batch is harder to attribute (bisect the day's commits), and production changes only once a day — both covered by the backstop and the two exceptions | Yes — Ian may call an early PR at any time; reverting to per-slice PRs is one line here |
+| 297 | 2026-10-10 | ⭐ **A POS USAGE PULL SECTION IS "FINALIZED" ONLY WHEN EVERY CONFIRMED LINE HAS POSTED. A LINE THAT CANNOT POST — ITS ITEM SHORT IN ITS ROOM OR IN THE STORE'S LAYERS, ITS ROOM UNDER COUNT, OR ITS ROOM UNABLE TO TAKE USAGE — IS HELD BACK AND NAMED IN WORDS; EVERY OTHER LINE POSTS; FINALIZING AGAIN POSTS THE HELD LINES ONCE. STOCK NEVER GOES BELOW ZERO, SO A SALE CANNOT BE FORCED OUT OF STOCK THAT IS NOT THERE (T-388; SUPERSEDES T-177 INVARIANTS 4 AND 9).** Ian, 2026-10-10, Open Questions `def-618-pull-short-stock` = a, and `t388-q1-old-dropped-lines` = a (sections finalized before the fix stay as they are) | Before T-388 one short item skipped its whole room's usage, the section was stamped anyway, and the screen blamed a "frozen location" (DEF-618); a closed month stamped with nothing posted (DEF-620); a room short but stocked elsewhere failed with raw trigger text (DEF-619) | Yes — the hold rule is per (item, room); unticking a held line lets the section finalize without it |
 
 ## 14. Amendment protocol
 
