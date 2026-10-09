@@ -34,6 +34,8 @@ const alias = {
   '@shareat/domain/money-lines': `${root}packages/domain/src/shared/money-lines.ts`,
   // T-326 — mirrors '@shareat/domain/money-lines' above; same exact-match-before-bare-name rule.
   '@shareat/domain/money-input': `${root}packages/domain/src/shared/money-input.ts`,
+  // T-386 - the item-code rule is a client-safe leaf (ItemCodeField imports it in the browser); exact entry before the bare name.
+  '@shareat/domain/item-code': `${root}packages/domain/src/items/code.ts`,
   // T-343 S5.0 — mirrors the two subpaths above: `refusal-leaf.ts` has no `@shareat/db` import
   // deliberately (a `'use client'` component may reach for `humanDate`/`internalFault` directly),
   // so it needs its own exact entry the same reason the other leaves above do.

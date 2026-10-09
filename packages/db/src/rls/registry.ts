@@ -907,6 +907,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     via: 'exists (select 1 from pos_usage_pulls p where p.id = pull_id and p.org_id = app_current_org())',
   },
 
+  // ---- T-386: item codes (migration 0189) -----------------------------------------------------
+  item_code_counters: {
+    scope: 'org_column',
+    reason: 'The highest item-code number issued per 4-character stem, per org. Org-scoped like the item master it numbers.',
+  },
+
   // ---- T-375: the POS v1 day feed (migration 0183) --------------------------------------------
   pos_v1_store_links: {
     scope: 'org_column',

@@ -8,8 +8,10 @@ import {
   clearStoreSellabilityAction,
   renameItemAction,
   setStoreSellabilityAction,
+  suggestItemCodeAction,
   updateItemFlagsAction,
 } from '../actions';
+import { ItemCodeField } from '../ItemCodeField';
 import { BASE_UNITS, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
@@ -114,11 +116,20 @@ export default async function ItemDetailPage({
           <EditableRecord action={renameItemAction} label={item.name} hidden={{ itemId: item.id }}>
             <FormGrid>
               <Field label="Name">
-                <input name="name" type="text" required defaultValue={item.name} className={`${SELECT} w-full`} />
+                <input id="rename-name" name="name" type="text" required defaultValue={item.name} className={`${SELECT} w-full`} />
               </Field>
               <Field label="Code">
                 <input name="code" type="text" required defaultValue={item.code} className={`${SELECT} w-full`} />
               </Field>
+              {/* T-386 R10 (q4): the code stays on rename; the tick offers the new suggestion. */}
+              <ItemCodeField
+                nameInputId="rename-name"
+                mode="rename"
+                canOverride
+                currentCode={item.code}
+                itemId={item.id}
+                suggestAction={suggestItemCodeAction}
+              />
             </FormGrid>
             <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
               Past records keep pointing at this item and show its new name. To replace an item measured in the wrong

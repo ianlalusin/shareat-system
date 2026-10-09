@@ -23,7 +23,9 @@ import {
   rejectItemRequest,
   requestItem,
   setStoreSellability,
+  suggestItemCode,
   updateItem,
+  type ItemCodeSuggestion,
 } from '@shareat/domain';
 import { AuthorizationError } from '@shareat/auth';
 import type { BaseUnit, ItemKind } from '@shareat/db';
@@ -76,7 +78,7 @@ export async function requestItemAction(formData: FormData): Promise<void> {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       requestItem(tx, actor, {
         name: str(formData, 'name'),
-        code: str(formData, 'code'),
+        // T-386 R6: a request takes no code (I3); whatever a hand-made form posts is not read.
         kind: str(formData, 'kind') as ItemKind,
         baseUnit: str(formData, 'baseUnit') as BaseUnit,
         reason: str(formData, 'reason') || null,
@@ -105,7 +107,8 @@ export async function createItemAction(formData: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
       createItem(tx, actor, {
-        code: str(formData, 'code'),
+        // T-386 R5/R7: blank or absent allocates from the name; a typed code is a super-admin override.
+        code: str(formData, 'code') || undefined,
         name: str(formData, 'name'),
         kind: str(formData, 'kind') as ItemKind,
         baseUnit: str(formData, 'baseUnit') as BaseUnit,
@@ -229,7 +232,13 @@ export async function renameItemAction(formData: FormData): Promise<void> {
   let message = '';
   try {
     const { changed } = await withOrgPrincipal(actor.orgId, (tx) =>
-      renameItem(tx, actor, { itemId, name: str(formData, 'name'), code: str(formData, 'code') }),
+      renameItem(tx, actor, {
+        itemId,
+        name: str(formData, 'name'),
+        code: str(formData, 'code'),
+        // T-386 R8 (q4): the code stays unless this tick is on.
+        adoptSuggestedCode: flag(formData, 'adoptSuggestedCode'),
+      }),
     );
     message = changed ? 'Renamed.' : 'Nothing to change.';
   } catch (err) {
@@ -247,21 +256,41 @@ export async function approveItemRequestAction(formData: FormData): Promise<void
   // T-378 R5 / REV-11: the approve form always submits `baseUnit`. Absent field -> undefined (the request's
   // value); a blank submitted field stays '' and the CHECK refuses it.
   const confirmed = formData.has('baseUnit');
+  let approvedCode = '';
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
+    const approved = await withOrgPrincipal(actor.orgId, (tx) =>
       approveItemRequest(tx, actor, {
         requestId: str(formData, 'requestId'),
         note: str(formData, 'note') || null,
+        // T-386 R7: blank or absent allocates from the request's name; a typed code is a super-admin override.
+        code: str(formData, 'code') || undefined,
         baseUnit: confirmed ? (str(formData, 'baseUnit') as BaseUnit) : undefined,
         isPurchasable: confirmed ? flag(formData, 'isPurchasable') : undefined,
         sellableRetail: confirmed ? flag(formData, 'sellableRetail') : undefined,
         sellableWholesale: confirmed ? flag(formData, 'sellableWholesale') : undefined,
       }),
     );
+    approvedCode = approved.code;
   } catch (err) {
     return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash('/items', {}, { ok: 'Approved — the item exists now and every store can use it.' });
+  return await redirectWithFlash('/items', {}, { ok: `Approved as ${approvedCode}.` });
+}
+
+/**
+ * T-386 R10. What `ItemCodeField` calls while a name is typed: the suggested code and the items that already share its letters.
+ * Read-only. A person without `manage_items` gets the empty answer rather than a throw (the field simply shows nothing).
+ */
+export async function suggestItemCodeAction(name: string, forItemId?: string): Promise<ItemCodeSuggestion> {
+  const actor = await requireActor();
+  try {
+    return await withOrgPrincipal(actor.orgId, (tx) =>
+      suggestItemCode(tx, actor, { name, ...(forItemId ? { forItemId } : {}) }),
+    );
+  } catch (err) {
+    if (err instanceof AuthorizationError) return { stem: null, code: null, full: false, sameStem: [] };
+    throw err;
+  }
 }
 
 export async function rejectItemRequestAction(formData: FormData): Promise<void> {

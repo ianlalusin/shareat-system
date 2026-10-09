@@ -10,6 +10,8 @@ import {
   type StoreSellabilityOverrideRow,
   type SupplierPrice,
 } from '@shareat/db';
+import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { suggestItemCode, type ItemCodeSuggestion } from '@shareat/domain';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
@@ -84,4 +86,38 @@ export async function pendingRequests(orgId: string): Promise<ItemRequestRow[]> 
 /** The standing near-duplicate alert — a query, so it can never go stale. */
 export async function duplicateCandidates(orgId: string): Promise<DuplicateCandidate[]> {
   return withOrgPrincipal(orgId, (tx) => itemsRepo.findDuplicateCandidates(tx, orgId));
+}
+
+/**
+ * T-386 R6/R10. For each pending request, what it would be coded RIGHT NOW if approved, and the items that already share its letters,
+ * computed at render (the request's stored code is only the requester's frozen preview and is never shown as the code). A viewer
+ * without `manage_items` gets no entries: the list simply shows nothing extra.
+ */
+export async function pendingRequestCodes(
+  actor: Actor,
+  requests: { id: string; name: string }[],
+): Promise<Map<string, ItemCodeSuggestion>> {
+  const out = new Map<string, ItemCodeSuggestion>();
+  if (requests.length === 0) return out;
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    try {
+      for (const r of requests) out.set(r.id, await suggestItemCode(tx, actor, { name: r.name }));
+    } catch (err) {
+      if (!(err instanceof AuthorizationError)) throw err;
+    }
+    return out;
+  });
+}
+
+/** Presentation aid only (the domain stays the enforcement): may this person decide on items, so the override inputs are drawn? */
+export async function mayApproveItem(actor: Actor): Promise<boolean> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    try {
+      await authorize(tx, actor, 'approve_item', {});
+      return true;
+    } catch (err) {
+      if (err instanceof AuthorizationError) return false;
+      throw err;
+    }
+  });
 }

@@ -11,6 +11,7 @@
  */
 import {
   auditLogRepo,
+  itemCodesRepo,
   itemsRepo,
   transaction,
   type InvoiceLineInput,
@@ -19,7 +20,7 @@ import {
   type SimilarItem,
   type Tx,
 } from '@shareat/db';
-import type { BaseUnit, ItemKind, PurchaseUnit } from '@shareat/db/schema';
+import type { BaseUnit, ItemKind, ItemStatus, PurchaseUnit } from '@shareat/db/schema';
 import { computeBranchPrice, type BranchPrice } from './branch-price';
 import { authorize, type Actor } from '@shareat/auth';
 import { decimal, toCentavos, type Decimal } from '@shareat/core/money';
@@ -28,9 +29,17 @@ import { parseQuantityInput } from '../shared/quantity-input';
 import { isPositiveQuantity, toThousandths, type Quantity } from '../stock/quantity';
 import { parseFourDecimalCost } from '../commissary/catalogue';
 import { gone, refuse } from '../shared/refusal';
+import { formatItemCode, itemCodeStem, parseItemCode } from './code';
+import { allocateItemCode, requireItemCodeStem, validateItemCodeOverride } from './code-allocation';
+
+export { ITEM_CODE_RE, formatItemCode, itemCodeStem, parseItemCode } from './code';
 
 export interface CreateItemInput {
-  code: string;
+  /**
+   * ⭐ T-386. Absent or blank: the code is allocated from the name (`CHWN-001`). Present: a super-admin OVERRIDE, validated
+   * (shape, number above the stem's mark) and upper-cased. Only `approve_item` paths accept a code at all.
+   */
+  code?: string;
   name: string;
   kind: ItemKind;
   baseUnit: BaseUnit;
@@ -52,10 +61,14 @@ export interface CreateItemInput {
 export async function createItem(tx: Tx | null, actor: Actor, input: CreateItemInput): Promise<{ id: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_item', {});
-    const code = input.code.trim();
     const name = input.name.trim();
-    if (!code) throw new Error('createItem: an item needs a code.');
     if (!name) throw new Error('createItem: an item needs a name people will recognise.');
+    // T-386 R5: the name must yield a stem even when a code is typed - the name rule is independent of the code.
+    const stem = requireItemCodeStem(name);
+    const typed = (input.code ?? '').trim();
+    const code = typed
+      ? await validateItemCodeOverride(trx, actor.orgId, typed)
+      : await allocateItemCode(trx, actor.orgId, stem);
     return itemsRepo.insertItem(trx, {
       orgId: actor.orgId,
       code,
@@ -148,18 +161,32 @@ export async function changeItemBaseUnit(
  * ⭐ T-383 R1. Rename an item: name and code, one audited path, super-admin only (`approve_item`). A blank is passed
  * to the database as blank so its CHECK speaks; it is never replaced by the old value. The comparison is exact and
  * case-sensitive. `status` is never written. The audit append comes after the UPDATE, so a refused rename writes none.
+ *
+ * ⭐ T-386 R8 (Ian q4 = a: the code stays on rename; the screen OFFERS the new one). `adoptSuggestedCode === true` ignores the
+ * typed code: the code stays when it is of the shape and its stem is the new name's stem, else a new one is allocated.
+ * Otherwise a typed code equal to the current one is unchanged (so a legacy code survives a rename before the recode), a
+ * blank goes to the database as blank, and any other change is an override (shape, number above the stem's mark).
  */
 export async function renameItem(
   tx: Tx | null,
   actor: Actor,
-  input: { itemId: string; name: string; code: string },
+  input: { itemId: string; name: string; code: string; adoptSuggestedCode?: boolean },
 ): Promise<{ changed: boolean }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_item', {});
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw gone(`renameItem: item ${input.itemId} does not exist.`, 'item');
     const name = input.name.trim();
-    const code = input.code.trim();
+    const typed = input.code.trim();
+    let code: string;
+    if (input.adoptSuggestedCode === true) {
+      const stem = requireItemCodeStem(name);
+      code = parseItemCode(item.code)?.stem === stem ? item.code : await allocateItemCode(trx, actor.orgId, stem);
+    } else if (typed === item.code || typed === '') {
+      code = typed;
+    } else {
+      code = await validateItemCodeOverride(trx, actor.orgId, typed);
+    }
     if (name === item.name && code === item.code) return { changed: false };
     await itemsRepo.updateItem(trx, actor.orgId, input.itemId, { name, code });
     await auditLogRepo.append(trx, actor.orgId, {
@@ -557,9 +584,14 @@ function warningFrom(similar: SimilarItem[]): string | null {
   );
 }
 
+/** T-386 R6: the same-stem items as one sentence ("Same code letters as: CHWN-001 Chicken wings (active)"), or null. */
+function sameStemWarning(sameStem: { code: string; name: string; status: string }[]): string | null {
+  if (sameStem.length === 0) return null;
+  return 'Same code letters as: ' + sameStem.map((s) => `${s.code} ${s.name} (${s.status})`).join(', ');
+}
+
 export interface RequestItemInput {
   name: string;
-  code: string;
   kind: ItemKind;
   baseUnit: BaseUnit;
   reason?: string | null;
@@ -591,12 +623,16 @@ export async function requestItem(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_items', {});
     const name = input.name.trim();
-    const code = input.code.trim();
     if (!name) throw new Error('requestItem: an item needs a name people will recognise.');
-    if (!code) throw new Error('requestItem: an item needs a code.');
+    // T-386 R6: a request takes NO code (I3). It stores a frozen preview - the next code at this moment, a preview and not a
+    // promise: approval allocates. Nothing is locked or written to the counters here.
+    const stem = requireItemCodeStem(name);
+    const last = await itemCodesRepo.peekItemCodeStem(trx, actor.orgId, stem);
+    const code = last >= 999 ? `${stem}-???` : formatItemCode(stem, last + 1);
 
     const similar = await itemsRepo.findSimilarItems(trx, actor.orgId, name);
-    const similarWarning = warningFrom(similar);
+    const sameStem = await itemCodesRepo.itemsSharingStem(trx, actor.orgId, stem);
+    const similarWarning = [warningFrom(similar), sameStemWarning(sameStem)].filter((w): w is string => w !== null).join('; ') || null;
 
     const { id } = await itemsRepo.insertItemRequest(trx, {
       orgId: actor.orgId,
@@ -627,13 +663,15 @@ export async function approveItemRequest(
   input: {
     requestId: string;
     note?: string | null;
+    /** ⭐ T-386 R7. A super-admin's override code. Absent or blank: allocated from the request's name at approval. */
+    code?: string;
     /** ⭐ T-378 R5/REV-11. `undefined` falls back to the request's (`??`); a blank string is NOT absent and the CHECK refuses it. */
     baseUnit?: BaseUnit;
     isPurchasable?: boolean;
     sellableRetail?: boolean;
     sellableWholesale?: boolean;
   },
-): Promise<{ itemId: string }> {
+): Promise<{ itemId: string; code: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_item', {});
     const req = await itemsRepo.getItemRequestById(trx, actor.orgId, input.requestId);
@@ -641,9 +679,15 @@ export async function approveItemRequest(
     if (req.status !== 'requested') {
       throw new Error(`approveItemRequest: request is already ${req.status}.`);
     }
+    // T-386 R5: the code is allocated HERE, never copied from the request (its stored code is only the requester's preview).
+    const stem = requireItemCodeStem(req.name);
+    const typed = (input.code ?? '').trim();
+    const code = typed
+      ? await validateItemCodeOverride(trx, actor.orgId, typed)
+      : await allocateItemCode(trx, actor.orgId, stem);
     const { id: itemId } = await itemsRepo.insertItem(trx, {
       orgId: actor.orgId,
-      code: req.code,
+      code,
       name: req.name,
       kind: req.kind,
       baseUnit: input.baseUnit ?? req.baseUnit,
@@ -659,7 +703,42 @@ export async function approveItemRequest(
       decisionNote: input.note?.trim() || null,
       createdItemId: itemId,
     });
-    return { itemId };
+    return { itemId, code };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+export interface ItemCodeSuggestion {
+  stem: string | null;
+  /** The next free code, or the item's own code with `forItemId`; null when the name has no stem or the stem is full. */
+  code: string | null;
+  full: boolean;
+  sameStem: { id: string; code: string; name: string; status: ItemStatus }[];
+}
+
+/**
+ * ⭐ T-386 R9. The live suggestion the item form shows while a name is typed. Read-only (I6): never creates a counter row,
+ * never locks. `forItemId` is the item being renamed: its own code is returned when it is of the shape with that stem, and it is
+ * left out of the same-stem list.
+ */
+export async function suggestItemCode(
+  tx: Tx | null,
+  actor: Actor,
+  input: { name: string; forItemId?: string },
+): Promise<ItemCodeSuggestion> {
+  const run = async (trx: Tx): Promise<ItemCodeSuggestion> => {
+    await authorize(trx, actor, 'manage_items', {});
+    const stem = itemCodeStem(input.name);
+    if (stem === null) return { stem: null, code: null, full: false, sameStem: [] };
+    const sameStem = await itemCodesRepo.itemsSharingStem(trx, actor.orgId, stem, { excludeItemId: input.forItemId });
+    if (input.forItemId) {
+      const own = await itemsRepo.getItemById(trx, actor.orgId, input.forItemId);
+      if (own && parseItemCode(own.code)?.stem === stem) return { stem, code: own.code, full: false, sameStem };
+    }
+    const last = await itemCodesRepo.peekItemCodeStem(trx, actor.orgId, stem);
+    if (last >= 999) return { stem, code: null, full: true, sameStem };
+    return { stem, code: formatItemCode(stem, last + 1), full: false, sameStem };
   };
   if (tx) return run(tx);
   return transaction(run);

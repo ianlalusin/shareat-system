@@ -12,6 +12,7 @@
       "@shareat/db/client": ["../../packages/db/src/client.ts"],
       "@shareat/domain/money-lines": ["../../packages/domain/src/shared/money-lines.ts"],
       "@shareat/domain/money-input": ["../../packages/domain/src/shared/money-input.ts"],
+      "@shareat/domain/item-code": ["../../packages/domain/src/items/code.ts"],
       "@shareat/domain/refusal-leaf": ["../../packages/domain/src/shared/refusal-leaf.ts"],
       "@shareat/domain/attendance/fingerprint": ["../../packages/domain/src/attendance/fingerprint/index.ts"],
       "@shareat/domain": ["../../packages/domain/src/index.ts"]

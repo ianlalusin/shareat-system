@@ -205,6 +205,7 @@ export type { TradeOrderRow, TradeOrderLineRow, TradeOrderListRow } from './repo
 export { AR_DOC_STATUSES } from '../schema/ar';
 export type { ArDocStatus } from '../schema/ar';
 export * as itemsRepo from './repo/items';
+export * as itemCodesRepo from './repo/item-codes';
 export * as stockLedgerRepo from './repo/stock-ledger';
 export * as stockLayersRepo from './repo/stock-layers';
 export * as stockTransfersRepo from './repo/stock-transfers';

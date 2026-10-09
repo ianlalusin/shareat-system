@@ -467,6 +467,22 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: 'A day reaches verified only from submitted (T-385, 0188). Origin: a replay or restore must load historic days verified straight from open.',
   },
+  // T-386 (0189): item codes are never issued twice. Origin validator: reads another row's CURRENT state (the counters).
+  items_code_never_reused: {
+    table: 'items',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      "A shaped item code must be above its stem's high-water mark (T-386, 0189) - reads another row's CURRENT state " +
+      '(item_code_counters); a restore loads the counters with the items, so it stays silent on replay.',
+  },
+  item_code_counters_forward_only: {
+    table: 'item_code_counters',
+    mode: 'always',
+    kind: 'history_guard',
+    reason:
+      'The mark records numbers already issued; lowering it would re-issue them. Decides from OLD/NEW only (T-386, 0189).',
+  },
   sales_day_tenders_lock: {
     table: 'sales_day_tenders',
     mode: 'origin',

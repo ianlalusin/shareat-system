@@ -101,6 +101,11 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
   // T-383 R4 - the blank guards (0047); no ids, no names.
   items_name_not_blank_check: 'Give the item a name people will recognise.',
   items_code_not_blank_check: 'Give the item a code.',
+  // T-386 R5 (0189): a number once given out under an item-code stem is never given out again. The domain refuses first
+  // with the sentence that names the next free code; this is the database's last word. item_code_counters_forward_only
+  // gets no sentence: no screen can reach it.
+  items_code_never_reused:
+    "That code's number has already been given out under those letters. Leave the code blank to get the next free one.",
   // T-378 R2 - the history guard (migration 0186); no ids, no names (I3).
   items_base_unit_fixed:
     "This item's unit can no longer change: it already has stock, counts, invoices, recipes, prices or orders " +
