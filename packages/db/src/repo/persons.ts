@@ -107,17 +107,6 @@ export async function getPersonById(tx: Tx, orgId: string, id: string): Promise<
   return row;
 }
 
-/** The org's oldest persons row, or undefined. Used by scripts/import-items.ts to attribute imported rows. */
-export async function firstPersonId(tx: Tx, orgId: string): Promise<string | undefined> {
-  const [row] = await tx
-    .select({ id: persons.id })
-    .from(persons)
-    .where(eq(persons.orgId, orgId))
-    .orderBy(asc(persons.createdAt))
-    .limit(1);
-  return row?.id;
-}
-
 /**
  * `ilike displayName` (`%query%`), org-scoped, ordered by name, default limit 20. Exists so the
  * hire flow can find "the same Maria who already works Lipa" rather than minting a duplicate
