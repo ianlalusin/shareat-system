@@ -7,7 +7,7 @@
  */
 import type { ButtonHTMLAttributes } from 'react';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly variant?: ButtonVariant;
@@ -27,7 +27,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 // the ring read as an outline rather than as the fill growing by 2px. No new token —
 // `ring-offset-surface` resolves through Tailwind's default `ringOffsetColor`, which spreads
 // `theme('colors')` the same way `ringColor` does.
-const BASE_CLASSES = 'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+const BASE_CLASSES = 'inline-flex items-center gap-2 min-h-11 rounded-[12px] px-4 py-2.5 text-sm font-semibold disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
 // §3: primary is the one solid fill; secondary is the careless-caller-safe default; danger is
 // OUTLINED, never filled (§9 R2 guard 9) and never carries a surface tint either — §3 gives it no
@@ -51,7 +51,8 @@ const BASE_CLASSES = 'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text
 // pattern anywhere else.
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary: 'border border-transparent bg-brand text-white hover:bg-brand-hover',
-  secondary: 'border border-surface-border bg-surface text-ink',
+  secondary: 'border border-surface-border bg-surface text-ink hover:bg-canvas',
+  ghost: 'border border-transparent bg-transparent text-ink hover:bg-canvas',
   danger: 'border border-danger text-danger',
 };
 
@@ -70,7 +71,6 @@ function WarningTriangleIcon() {
       viewBox="0 0 24 24"
       width={16}
       height={16}
-      className="h-4 w-4"
       fill="none"
       stroke="currentColor"
       strokeWidth={1.5}

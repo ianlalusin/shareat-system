@@ -19,7 +19,7 @@ export interface CardProps {
 // §3: "rounding and padding consistent with what the app already uses" — measured from the
 // existing card-like pattern in apps/erp/src/app/admin/*/page.tsx (e.g. access-defaults/page.tsx,
 // stores/page.tsx): `rounded-lg border ... p-4`.
-const BASE_CLASSES = 'rounded-lg border border-surface-border bg-surface p-4';
+const BASE_CLASSES = 'rounded-[14px] border border-surface-border bg-surface p-4';
 
 export function Card({ className, children }: CardProps) {
   return <div className={`${BASE_CLASSES}${className ? ` ${className}` : ''}`}>{children}</div>;

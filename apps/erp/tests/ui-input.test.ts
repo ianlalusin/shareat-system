@@ -34,25 +34,41 @@ describe('Input — T-334 slice 2 contract', () => {
   // ADR-013 Amendment 6, RULED FINAL 2026-09-24 — see ui-button.test.ts's header comment for the
   // full ruling. Same fix, same shared focus idiom as Button (Input.tsx's own header note).
   // -------------------------------------------------------------------------------------------
-  it('emits focus-visible:ring-ink and NOT focus-visible:ring-brand — token-level, both halves; nothing else in the class string changes (ADR-013 Amendment 6, FINAL)', () => {
-    const html = renderToStaticMarkup(createElement(Input, { name: 'x' })); // valid (default) state
-    const tokens = classTokens(html);
+  // T-387 S2 (L2): snapshots rewritten — rounded-[10px] (Amendment 7), bg-field, border-field-border
+  // (valid), a 44px height (t387-q4 = a, `min-h-11`), invalid = a 2px border-danger. Focus unchanged.
+  const VALID_SNAPSHOT =
+    'rounded-[10px] border bg-field px-3 py-2 min-h-11 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface border-field-border';
+  const sorted = (s: string | Set<string>) => [...(typeof s === 'string' ? s.split(/\s+/).filter(Boolean) : s)].sort();
 
+  it('valid state: the rendered class-token set equals the snapshot exactly (T-387 S2)', () => {
+    const tokens = classTokens(renderToStaticMarkup(createElement(Input, { name: 'x' })));
+    expect(sorted(tokens)).toEqual(sorted(VALID_SNAPSHOT));
     expect(tokens.has('focus-visible:ring-ink')).toBe(true);
     expect(tokens.has('focus-visible:ring-brand')).toBe(false);
+  });
 
-    // "Nothing else changes" — a literal snapshot of Input's PRE-Amendment-6, valid-state class
-    // string (R2 base + border-surface-border, captured 2026-09-23), with only the one ring
-    // token swapped.
-    const preAmendment6Valid =
-      'rounded-md border bg-surface px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface border-surface-border';
-    const expectedOthers = new Set(preAmendment6Valid.split(/\s+/).filter(Boolean));
-    expectedOthers.delete('focus-visible:ring-brand');
+  it('invalid state: swaps border-field-border for a 2px border-danger (border-2 border-danger), nothing else moves', () => {
+    const tokens = classTokens(renderToStaticMarkup(createElement(Input, { name: 'x', invalid: true })));
+    const expected = new Set(VALID_SNAPSHOT.split(/\s+/));
+    expected.delete('border-field-border');
+    expected.add('border-2');
+    expected.add('border-danger');
+    expect(sorted(tokens)).toEqual(sorted(expected));
+    // negative half: valid never carries the 2px width or the danger colour
+    const valid = classTokens(renderToStaticMarkup(createElement(Input, { name: 'x' })));
+    expect(valid.has('border-2')).toBe(false);
+    expect(valid.has('border-danger')).toBe(false);
+  });
 
-    const actualOthers = new Set(tokens);
-    actualOthers.delete('focus-visible:ring-ink');
-
-    expect([...actualOthers].sort()).toEqual([...expectedOthers].sort());
+  it('shape and height: rounded-[10px], bg-field, min-h-11; never rounded-md or bg-surface as the fill', () => {
+    const t = classTokens(renderToStaticMarkup(createElement(Input, { name: 'x' })));
+    expect(t.has('rounded-[10px]')).toBe(true);
+    expect(t.has('bg-field')).toBe(true);
+    expect(t.has('border-field-border')).toBe(true);
+    expect(t.has('min-h-11')).toBe(true);
+    expect(t.has('rounded-md')).toBe(false);
+    expect(t.has('bg-surface')).toBe(false);
+    expect(t.has('border-surface-border')).toBe(false);
   });
 
   it('invalid emits both border-danger and aria-invalid="true" — positive/negative control pair (§4.5)', () => {

@@ -17,7 +17,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 // Audit finding 6(b): same ring-offset as Button.tsx's `BASE_CLASSES`, for the same reason — one
 // shared focus idiom across the components this slice ships, not two focus rings sitting at
 // different distances once a form adopts both.
-const BASE_CLASSES = 'rounded-md border bg-surface px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+const BASE_CLASSES = 'rounded-[10px] border bg-field px-3 py-2 min-h-11 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
 export function Input({
   invalid = false,
@@ -38,7 +38,7 @@ export function Input({
       // §4.5: invalid emits BOTH border-danger and aria-invalid="true" — the ARIA half is not
       // optional, colour is never the sole channel. `undefined` (not `false`) so the attribute is
       // omitted entirely when valid, rather than rendering the literal string "false".
-      className={`${BASE_CLASSES} ${invalid ? 'border-danger' : 'border-surface-border'}${className ? ` ${className}` : ''}`}
+      className={`${BASE_CLASSES} ${invalid ? 'border-2 border-danger' : 'border-field-border'}${className ? ` ${className}` : ''}`}
       aria-invalid={invalid ? 'true' : undefined}
       {...rest}
     />
