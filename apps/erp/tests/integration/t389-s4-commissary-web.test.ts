@@ -45,6 +45,7 @@ import { acceptOrder, fulfilLine, saveBranchOrderDraft, submitOrder } from '@sha
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { actor, asOrg, createHarness, LONG, sql, uid, type BaseCtx, type FormCase } from './t389-s4-common';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const { runTypedLegs } = createHarness({ h, seen });
 
@@ -85,7 +86,7 @@ async function orderCtx(hint: string, stage: 'draft' | 'accepted'): Promise<OrdC
   const mkItem = async (name: string) =>
     (await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${orgId}, ${uid('I')}, ${name}, 'raw_material', 'kg', ${admin.personId}) returning id`)[0]!.id;
+      values (${orgId}, ${testItemCode()}, ${name}, 'raw_material', 'kg', ${admin.personId}) returning id`)[0]!.id;
   const pork = await mkItem('Pork belly');
   const porkBr = await mkItem('Pork belly (branch)');
   const sauce = await mkItem('Bulgogi sauce');

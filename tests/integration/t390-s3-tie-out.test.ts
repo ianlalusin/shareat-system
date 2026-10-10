@@ -16,6 +16,7 @@ import {
   mkShell, mkSupplier, moneyAccountOf, need, peso, rawOpeningDraft, reachC3, sentenceWith, sentences, settle3900, sql, tieOut, uid,
   type Fixture, type TieOut,
 } from './t390-s3-common';
+import { testItemCode } from '../../packages/domain/tests/integration/_fixtures/item-code';
 
 afterAll(async () => {
   await closeDb();
@@ -581,7 +582,7 @@ describe('test 18b - F1 verdict: a return of OPENING stock credits 1240, never 2
     const supplier = await mkSupplier(f, 'Return Supplier');
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${uid('IT')}, ${uid('Pork')}, 'raw_material', 'kg', ${f.adminId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, ${uid('Pork')}, 'raw_material', 'kg', ${f.adminId}) returning id`;
     const sourceId = (await sql<{ id: string }[]>`select gen_random_uuid()::text as id`)[0]!.id;
     const [mv] = await sql<{ id: string }[]>`
       insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)

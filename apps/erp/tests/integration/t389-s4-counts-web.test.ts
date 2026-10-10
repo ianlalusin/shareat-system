@@ -40,6 +40,7 @@ vi.mock('@/components/forms', async (orig) => {
 
 import { openCountSession, recordCount } from '@shareat/domain';
 import { asOrg, createHarness, fixture, LONG, sql, uid, type BaseCtx, type FormCase } from './t389-s4-common';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const { runTypedLegs } = createHarness({ h, seen });
 
@@ -65,7 +66,7 @@ async function countCtx(hint: string): Promise<CountCtx> {
   const mk = async (name: string) =>
     (await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${uid('IT')}, ${name}, 'raw_material', 'kg', ${f.admin.personId}) returning id`)[0]!.id;
+      values (${f.orgId}, ${testItemCode()}, ${name}, 'raw_material', 'kg', ${f.admin.personId}) returning id`)[0]!.id;
   const itemA = await mk('Pork Belly');
   const itemB = await mk('Chicken Thigh');
   const opened = await asOrg(f.orgId, (tx) => openCountSession(tx, f.admin, { storeId: f.storeId, locationIds: [room!.id, room2!.id], countedOn: '2026-08-20' }));

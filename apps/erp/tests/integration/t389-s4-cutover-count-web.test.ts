@@ -40,6 +40,7 @@ vi.mock('@/components/forms', async (orig) => {
 });
 
 import { createHarness, fixture, LONG, sql, uid, type BaseCtx, type FormCase } from './t389-s4-common';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const { runTypedLegs } = createHarness({ h, seen });
 
@@ -64,8 +65,8 @@ async function countCtx(hint: string): Promise<CountCtx> {
       values (${org(f)}, ${f.storeId}, ${room!.id}, ${id}, ${qty}, ${cost}, 'typed', ${f.admin.personId})`;
     return id;
   };
-  const itemA = await mk('Pork Belly', `PORK-${uid('').slice(-3)}`.slice(0, 8), '5.000', '10.0000');
-  const itemB = await mk('Chicken Thigh', `CHKN-${uid('').slice(-3)}`.slice(0, 8), '8.000', '20.0000');
+  const itemA = await mk('Pork Belly', testItemCode(), '5.000', '10.0000');
+  const itemB = await mk('Chicken Thigh', testItemCode(), '8.000', '20.0000');
   return { f, record: itemA, storeId: f.storeId, itemA, itemB };
 }
 const org = (f: { orgId: string }) => f.orgId;

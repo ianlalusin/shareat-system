@@ -38,6 +38,7 @@ vi.mock('@/components/forms', async (orig) => {
 });
 
 import { createHarness, fixture, LONG, sql, uid, type BaseCtx, type FormCase } from './t389-s4-common';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const { runTypedLegs } = createHarness({ h, seen });
 
@@ -55,8 +56,8 @@ async function lowCtx(hint: string): Promise<LowCtx> {
     await sql`insert into store_item_thresholds (org_id, store_id, item_id, low_stock_threshold, set_by) values (${f.orgId}, ${f.storeId}, ${id}, ${threshold}, ${f.admin.personId})`;
     return id;
   };
-  const itemA = await mk('Pork Belly', `PORK-${uid('').slice(-3)}`.slice(0, 8), '5.000');
-  const itemB = await mk('Chicken Thigh', `CHKN-${uid('').slice(-3)}`.slice(0, 8), '9.000');
+  const itemA = await mk('Pork Belly', testItemCode(), '5.000');
+  const itemB = await mk('Chicken Thigh', testItemCode(), '9.000');
   return { f, record: itemA, storeId: f.storeId, itemA, itemB };
 }
 
