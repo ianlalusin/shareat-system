@@ -52,7 +52,6 @@ isHeaderCode
 isStartDecisionMaterial
 jobResult
 linkInvoiceToReceipt
-linksFor
 listAdjustments
 listAvailableCommissaries
 listCategoryLives
