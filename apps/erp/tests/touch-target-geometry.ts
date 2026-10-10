@@ -138,7 +138,9 @@ const ANCESTOR_FONT_SIZE_COMPONENTS: Record<string, keyof typeof FONT_SIZE_PX> =
 // gates this on the identifier actually being imported from `@/components/ui` (the barrel every
 // real call site is required to use — R1, test (b)) before trusting the known height; otherwise it
 // falls through to the branches below, same as any other unrecognised capitalised component.
-const KNOWN_COMPONENT_HEIGHT_PX: Record<string, number> = { Input: 38, Button: 42 };
+// T-387 S2 / `t387-q4` (Ian, 2026-10-10): EVERY button and field is 44px. Button and Input both carry
+// `min-h-11` (44px) now, so the hand-measured 38/42 above are superseded.
+const KNOWN_COMPONENT_HEIGHT_PX: Record<string, number> = { Input: 44, Button: 44 };
 
 // Deliberately NOT typed `Record<string, number>` — a generic string index defeats
 // `noUncheckedIndexedAccess`'s point (every read becomes `number | undefined` again). Left to

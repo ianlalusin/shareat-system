@@ -1,12 +1,31 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
+import { Baloo_2, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 import { AppShell } from '../components/shell/AppShell';
 import { THEME_COOKIE_NAME, parseTheme } from '../components/shell/theme-state';
 
+// T-387 S1 — self-hosted at BUILD time (CI); the server never calls Google at runtime.
+const fontDisplay = Baloo_2({
+  subsets: ['latin'],
+  weight: ['600', '700', '800'],
+  variable: '--font-display',
+  display: 'swap',
+});
+const fontBody = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-body',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
-  title: 'Shareat System',
+  title: 'SharEat ERP',
   description: 'Shareat ERP — correct books, simply modelled',
+  icons: {
+    icon: [{ url: '/brand/favicon.ico' }, { url: '/brand/favicon-32.png', sizes: '32x32', type: 'image/png' }],
+    apple: [{ url: '/brand/apple-touch-icon.png' }],
+  },
 };
 
 /**
@@ -26,11 +45,10 @@ export const metadata: Metadata = {
  *      the session. (Confirmed at review: every route still builds as `ƒ (Dynamic)`.)
  *
  * ⛔ **ONE SCREEN IS STILL OUTSIDE THIS, AND SAYING "every screen" WOULD BE FALSE.**
- * `global-error.tsx` renders its own `<html>` and therefore never receives `data-theme`. Harmless
- * while light is the default and the only theme anyone can be in — ⚠️ **but once the toggle slice
- * ships, a dark-mode user hitting a root-layout crash gets a LIGHT error page**, with that file's
- * own `dark:` classes never firing. It is a client error boundary and cannot read cookies, so it
- * needs its own answer in the toggle slice. (Found by review.)
+ * `global-error.tsx` renders its own `<html>` and therefore never receives `data-theme` or the font
+ * variables. T-387 S1 gives it inline light canvas/ink colours so it is readable on its own, but it
+ * is a client error boundary and cannot read the cookie: a dark-mode user hitting a root-layout
+ * crash still gets a LIGHT error page. That gap is documented there and is accepted.
  *
  * ⛔ **Why a cookie rather than `prefers-color-scheme`:** the value must be correct in the FIRST
  * server-rendered paint, before any JS runs, or the "no flash, no layout shift" invariant breaks.
@@ -43,7 +61,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const theme = parseTheme(cookieStore.get(THEME_COOKIE_NAME)?.value);
 
   return (
-    <html lang="en" data-theme={theme}>
+    <html lang="en" data-theme={theme} className={`${fontDisplay.variable} ${fontBody.variable}`}>
       <body>
         {/* ⚠️ Reads the session, so every page under it is dynamic. That is already true of every
             screen in this app — each one calls `requireSession` — so nothing was static to lose. */}

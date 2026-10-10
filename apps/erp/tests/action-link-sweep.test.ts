@@ -393,7 +393,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1151 -> 1152, T-395 S2 2026-10-10. +1 PASS: the "Reopen PIN sign-in" submit `<button>` in the new
     // `app/staff/PinSignInPanel.tsx` (the hidden `storeId` input is not a control). FAIL 151 / UNRESOLVED unmoved, so
     // touch-target-baseline.json needs no entry. Verified by running the census (1152).
-    expect(results.length).toBe(1152);
+    // 1151 -> 1152, T-387 S2 2026-10-10. +1: the new `components/feedback/SubmitButton.tsx` renders one kit `<Button type="submit">`.
+    // FAIL / UNRESOLVED assertions unmoved. Verified by running the census (1152).
+    // 1152 + 1152 -> 1153 at the merge of T-395 S2 and T-387 S2 (both +1). Verified by running the census.
+    expect(results.length).toBe(1153);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
@@ -422,7 +425,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
 });
 
 describe('touch-target-geometry.ts — KNOWN_COMPONENT_HEIGHT_PX is gated on the real import (audit round 2, item 3)', () => {
-  it('a LOCAL component named Input (not from @/components/ui) is not counted as a 38px pass', () => {
+  it('a LOCAL component named Input (not from @/components/ui) is not counted as a 44px pass', () => {
     const tmpRoot = mkdtempSync(join(tmpdir(), 'touch-target-known-component-'));
     try {
       // A real (but empty) barrel, so a genuine `@/components/ui` import would resolve — proves
@@ -445,7 +448,7 @@ describe('touch-target-geometry.ts — KNOWN_COMPONENT_HEIGHT_PX is gated on the
     }
   });
 
-  it('control: the SAME shape, imported from the real @/components/ui, IS counted as a 38px pass', () => {
+  it('control: the SAME shape, imported from the real @/components/ui, IS counted as a 44px pass (t387-q4)', () => {
     const tmpRoot = mkdtempSync(join(tmpdir(), 'touch-target-known-component-control-'));
     try {
       mkdirSync(join(tmpRoot, 'components', 'ui'), { recursive: true });
@@ -459,7 +462,7 @@ describe('touch-target-geometry.ts — KNOWN_COMPONENT_HEIGHT_PX is gated on the
 
       const { results } = runCensus(tmpRoot, globalsCssPath);
       const hits = results.filter((r) => r.tag === 'Input');
-      expect(hits).toEqual([{ file: 'app/fake/page.tsx', line: 2, tag: 'Input', status: 'pass', px: 38 }]);
+      expect(hits).toEqual([{ file: 'app/fake/page.tsx', line: 2, tag: 'Input', status: 'pass', px: 44 }]);
     } finally {
       rmSync(tmpRoot, { recursive: true, force: true });
     }

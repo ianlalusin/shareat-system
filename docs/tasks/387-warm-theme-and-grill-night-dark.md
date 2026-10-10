@@ -89,6 +89,20 @@ need for a migration stops and reports; that would be a spec change.
 - **Seen (§9.4 plus the render-first memory):** `/sign-in`, `/`, `/expenses/new` and `/reports/income-statement`, in
   light and dark. The screenshots go in the PR. Expect stock-hue islands (old banners, `bg-white` cards) to clash on
   cream. That is S8's job. List them; do not fix them here.
+- **Addendum (Opus lead, 2026-10-10, after Ian: *"go on and fix the clash in colors"*): the warm neutral ramp.**
+  - The S1 screenshots showed the clash came mostly from stock `neutral-*` grey: 4,946 utilities in 154 of 171 files.
+    One part of it was a regression, not a look: stock `text-neutral-500` (the caption grey, 575 lines) is 4.34:1 on
+    the new cream canvas, under AA.
+  - Fix: `apps/erp/warm-neutral.ts` re-values Tailwind's `neutral` palette (`tailwind.config.ts`). Six steps ARE
+    ruled tokens, chosen by how the app uses them: 200 = light `--surface-border`, 400 = dark `--muted`, 500 = light
+    `--muted`, 800 = dark `--surface-border`, 900 = dark `--surface`, 950 = dark `--canvas`. The other five keep stock
+    neutral's OKLCH lightness in `--ink`'s warm hue. No ruled value was re-picked; no new token was added.
+  - `t387-s1-warm-neutral.test.ts` reads the anchors from `globals.css`, holds the others within 3% of stock
+    contrast, checks the ramp is monotonic, and asserts captions clear AA on the cream canvas and the dark surface.
+  - ⛔ Not fixed by this, and still S2 + S8: buttons stay near-black (`bg-neutral-900` is now warm `#1c1a18`) until
+    they move onto `Button`; banners and badges keep stock emerald, amber and red until `Banner`/`Badge`; field
+    borders reach `--field-border` only through `Input`/`Select`. ⚠️ S8 removes local `neutral-*` uses file by file;
+    the ramp is what keeps the files S8 has not reached yet on-brand meanwhile.
 
 ### S2: the kit reshaped (Button, Input, Card) plus SubmitButton
 - `Button`:
