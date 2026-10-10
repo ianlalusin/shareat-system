@@ -240,6 +240,28 @@ nothing behind them the moment a second organisation exists.
   watching. `docs/discovery/29` §5.3 has been re-derived by T-300; both of its unknowns are now
   measured.
 
+## Backups (T-393) - built and tested, NOT switched on
+
+Spec: `docs/tasks/393-nightly-backup-and-restore.md`. Ian, 2026-10-10: *no backup for now, set up soon*. Nothing here arms itself.
+
+- **Install the client.** Re-running `provision.sh` adds PGDG's apt repository and `postgresql-client-18` (pg_dump refuses a server newer than itself; production is 18.x). It also installs `shareat-db-backup.{service,timer}` and arms nothing.
+- **Env** in `/srv/shareat-shared/.env.local` (`.env.example` has the block): `SPACES_ENDPOINT`, `SPACES_REGION`, `SPACES_BUCKET=shareat-pg-backups`, `SPACES_KEY`, `SPACES_SECRET`, `BACKUP_HEARTBEAT_URL`. The source is `SYSTEM_DATABASE_URL`, which must be on the **direct** port 25060 (25061, the pooler, is refused). The bucket must be the dedicated one: `shareat-erp-backups` (Frappe) is refused by name.
+- **Prove the key first, writing nothing:** `npm run db-backup -- --store=spaces --dry-run` lists `postgres/`.
+- **First run:** `sudo systemctl start shareat-db-backup.service`, then read `/var/log/shareat/db-backup.log`. Check the object is under `postgres/daily/` in the DO panel and that the heartbeat shows green. Record the dump size and duration for T-394's runbook.
+- Every arm-all loop in this file and in `provision.sh` **skips `shareat-db-backup.timer` explicitly**. Nothing arms backups by accident.
+
+### Switching backups on (only when Ian says so)
+
+Do this only after the env above is in `.env.local`, `--dry-run` listed `postgres/`, and the first manual run was green:
+
+```sh
+sudo systemctl start shareat-db-backup.service        # one manual run first; read /var/log/shareat/db-backup.log
+sudo systemctl enable --now shareat-db-backup.timer   # --now is not optional
+systemctl is-enabled shareat-db-backup.timer && systemctl is-active shareat-db-backup.timer   # never list-timers (DEF-332)
+```
+
+- **Where to look:** `/var/log/shareat/db-backup.log`; the dead-man's switch (alerts when no success arrives in 26 hours, so it also catches a timer nobody armed); `postgres/daily/<Manila date>/` holds `.dump`, `.roles.sql` and `.manifest.json` per night. Retention runs in the script, never as a bucket lifecycle rule.
+
 ## Restores and replica mode (T-354)
 
 DEF-487: 18 history-guard triggers (append-only / posted-immutable / frozen / commit-once /
@@ -385,6 +407,7 @@ domain argument to also set up Caddy + automatic TLS on 80/443 (no traefik confl
 | **Orphan-file sweep (T-272 / DEF-299)** | `npm run orphan-file-sweep` | **Daily, 03:00 Manila** | A day-old unclaimed upload has no wall-clock component of its own; runs after order-wastage-backstop (02:30) so the two don't contend. ⛔ Shipped with NO caller at all until this task — `sweepOrphanedFiles` existed since T-141, was documented in two places as a running cron, and nothing called it, the DEF-186 shape a fourth time. Scoped per org (was global; `scheduler_runs.org_id` is `NOT NULL` and cannot record a global run) |
 | **Budget reissue (T-215 / DEF-303)** | `npm run budget-reissue` | **Daily, 03:30 Manila** | Runs after orphan-file-sweep (03:00) so the two don't contend. ⛔ Registered in `SCHEDULER_JOBS` and reachable by its npm script since T-215, but had no `.service`/`.timer` pair at all until this task — the DEF-186 shape a fifth time, found the day after DEF-299 |
 | **Fiscal-period coverage (T-276 / DEF-305)** | `npm run fiscal-period-seed` | **Monthly, 1st, 04:00 Manila** | Coverage moves in whole calendar months, so a finer cadence buys nothing over the 12-month slack every org already carries. Runs at 04:00, after budget-reissue's own 03:30 slot, so the two don't contend. Keeps every org's fiscal-period coverage 12 months ahead of its current Manila business month, and backfills (option (c)) any month that already elapsed with none — created `open`, never closed retroactively — so a gap surfaces here instead of `postEntry` refusing the next post into it ⏰ Timer armed 2026-10-04 (it was NOT installed; provision.sh re-run, `systemctl enable --now shareat-fiscal-period-seed.timer`). First run seeded SHAREAT OPC 2026-10..2027-09 (12 inserted; the org had no periods at all, so the job exits 1 by design on that gap). Next run 1 Nov 04:00 Manila. No periods exist before Oct 2026 (DEF-585). |
+| **Database backup (T-393)** | `npm run db-backup -- --production` | **Daily, 04:30 Manila** | After every other nightly job, so the dump includes their output. A platform job, not a `SCHEDULER_JOBS` entry (`scheduler_runs.org_id` is `NOT NULL`, a whole-database dump has no org). See *Backups (T-393)* below for the install and the separate switching-on step. |
 
 ⛔⛔ **WHICH UNITS ARE ARMED IS NOT RECORDED HERE, DELIBERATELY — IT IS A FACT THAT MOVES.**
 This paragraph used to name four jobs as *"NOT YET ARMED"*. **That claim went stale and then
@@ -611,6 +634,8 @@ retype it.** A glob cannot be forgotten; a list has to be edited by whoever adds
 sudo systemctl enable --now shareat-erp.service
 # Every timer, derived — never a typed list:
 for f in /etc/systemd/system/shareat-*.timer; do
+  # T-393: backups are NOT switched on (Ian, bible row 306). See "Switching backups on".
+  [ "$(basename "$f")" = shareat-db-backup.timer ] && continue
   sudo systemctl enable --now "$(basename "$f")"
 done
 ```
@@ -628,6 +653,7 @@ systemctl list-timers 'shareat-*'
 # Run each job once, now — derived from the units, not typed:
 for f in /etc/systemd/system/shareat-*.timer; do
   u="$(basename "$f" .timer)"
+  [ "$u" = shareat-db-backup ] && continue   # T-393: not switched on
   # ⚠️ shareat-month-end-retry.timer deliberately has no service of its own — it points at
   # shareat-month-end.service via Unit=. Skip any timer with no matching service file.
   [ -e "/etc/systemd/system/$u.service" ] && sudo systemctl start "$u.service"
@@ -718,6 +744,7 @@ ssh root@159.223.46.224 'bash /root/shareat-ops/provision.sh'
 #     BOOT and not for today. That single missing flag is the shape of every failure in the
 #     table at the top of this file.
 ssh root@159.223.46.224 'for f in /etc/systemd/system/shareat-*.timer; do \
+  [ "$(basename "$f")" = shareat-db-backup.timer ] && continue; \
   systemctl enable --now "$(basename "$f")"; done'
 
 # 4 — ⛔ THE STEP THAT HAS HISTORICALLY NEVER BEEN DONE. NEXT and LEFT must be populated for EVERY

@@ -1,0 +1,14 @@
+# T-393 - DAILY at 04:30 Manila, after every other nightly job (the latest is fiscal-period-seed at 04:00 on
+# the 1st), so the dump includes their output.
+
+[Unit]
+Description=Shareat - nightly off-cluster database backup, daily (T-393)
+
+[Timer]
+OnCalendar=*-*-* 04:30:00 Asia/Manila
+# Catch up after a reboot or an outage rather than skipping silently (DEF-044).
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target
