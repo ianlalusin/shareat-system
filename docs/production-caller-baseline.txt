@@ -114,6 +114,6 @@ updateOwner
 upsertCategoryLife
 upsertPolicy
 validateFingerprintTemplates
-valuateShell
+valueOpeningAsset
 voidShift
 withPrincipal

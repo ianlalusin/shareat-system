@@ -28,9 +28,12 @@ import { parseQuantityInput } from '../shared/quantity-input';
 import { compareQuantity, ZERO_QUANTITY } from '../stock/quantity';
 import { isZero, money } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
+import { openingTieOut, tieOutDetail } from './tie-out';
 
 export * from './steps';
 export * from './opening';
+export * from './tie-out';
+export * from './opening-assets';
 
 export interface StepState {
   def: StepDef;
@@ -165,12 +168,12 @@ async function evaluate(
   if (code === 'C4') {
     const residual = await cutoverRepo.openingEquityResidual(tx, orgId);
     // T-371 C4: re-minted and tested in centavos, never as a float — a malformed residual throws instead of reading as balanced.
-    return isZero(money(residual))
-      ? { holds: true, detail: null }
-      : {
-          holds: false,
-          detail: `3900 carries ₱${residual}. ⛔ This halts — there is no plug account.`,
-        };
+    if (!isZero(money(residual))) {
+      return { holds: false, detail: `3900 carries ₱${residual}. ⛔ This halts — there is no plug account.` };
+    }
+    // T-390 R9: "and every register ties" — the tie-out is a query, so a recorded C4 row can never make it pass.
+    const tie = await openingTieOut(tx, orgId);
+    return tie.holds ? { holds: true, detail: null } : { holds: false, detail: tieOutDetail(tie.lines) };
   }
   return { holds: false, detail: null };
 }
