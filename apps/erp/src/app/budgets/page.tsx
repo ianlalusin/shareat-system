@@ -317,7 +317,7 @@ function CapForm({
       <input type="hidden" name="periodKey" value={periodKey} />
       <input type="hidden" name="categoryId" value={categoryId} />
       {fields}
-      <SubmitButton className="mt-3" pendingLabel="Saving…">
+      <SubmitButton className="mt-3" variant="secondary" pendingLabel="Saving…">
         Save
       </SubmitButton>
     </form>
