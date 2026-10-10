@@ -1,5 +1,7 @@
 import type { Config } from 'tailwindcss';
 
+import { WARM_NEUTRAL } from './warm-neutral';
+
 /**
  * A palette token that still honours Tailwind's `/opacity` modifier.
  *
@@ -48,6 +50,8 @@ export default {
         field: { DEFAULT: alpha('--field'), border: alpha('--field-border') },
         ink: alpha('--ink'),
         muted: alpha('--muted'),
+        // T-387 S1 addendum: the 4,946 stock neutral-* utilities, re-valued warm (see warm-neutral.ts).
+        neutral: WARM_NEUTRAL,
       },
       // next/font sets --font-body and --font-display on <html> (layout.tsx).
       fontFamily: {
