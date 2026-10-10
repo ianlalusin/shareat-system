@@ -37,7 +37,7 @@ describe('Input — T-334 slice 2 contract', () => {
   // T-387 S2 (L2): snapshots rewritten — rounded-[10px] (Amendment 7), bg-field, border-field-border
   // (valid), a 44px height (t387-q4 = a, `min-h-11`), invalid = a 2px border-danger. Focus unchanged.
   const VALID_SNAPSHOT =
-    'rounded-[10px] border bg-field px-3 py-2 min-h-11 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface border-field-border';
+    'rounded-[10px] border bg-field px-3 py-2 min-h-11 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted border-field-border';
   const sorted = (s: string | Set<string>) => [...(typeof s === 'string' ? s.split(/\s+/).filter(Boolean) : s)].sort();
 
   it('valid state: the rendered class-token set equals the snapshot exactly (T-387 S2)', () => {
@@ -58,6 +58,16 @@ describe('Input — T-334 slice 2 contract', () => {
     const valid = classTokens(renderToStaticMarkup(createElement(Input, { name: 'x' })));
     expect(valid.has('border-2')).toBe(false);
     expect(valid.has('border-danger')).toBe(false);
+  });
+
+  it('disabled reads as disabled: the canvas fill and muted text, not an editable white field (S2 §9.4)', () => {
+    // Seen 2026-10-10: a disabled Input rendered identical to an editable one on the S2 screenshot.
+    // --muted on --canvas is 5.68:1 (Amendment 7), so a locked value stays readable.
+    const t = classTokens(renderToStaticMarkup(createElement(Input, { name: 'x', disabled: true })));
+    for (const need of ['disabled:bg-canvas', 'disabled:text-muted', 'disabled:cursor-not-allowed']) {
+      expect(t.has(need), need).toBe(true);
+    }
+    expect(t.has('disabled:opacity-50')).toBe(false); // opacity would also fade the border below 3:1
   });
 
   it('shape and height: rounded-[10px], bg-field, min-h-11; never rounded-md or bg-surface as the fill', () => {
