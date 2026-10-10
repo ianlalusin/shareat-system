@@ -101,7 +101,7 @@ describe('the wizard is a guide, not a checklist', () => {
     // 12 definitions; the three per-store ones expand across the one store here.
     expect(p.steps.length).toBe(CUTOVER_STEPS.length);
     expect(p.byPhase.A!.total).toBe(4);
-    expect(p.byPhase.C!.total).toBe(5);
+    expect(p.byPhase.C!.total).toBe(6); // T-390 R16: C3P joins phase C
   });
 
   it('⭐ a blocked step says WHAT TO GO AND DO, rather than hiding', async () => {
@@ -120,13 +120,14 @@ describe('the wizard is a guide, not a checklist', () => {
     expect((await stepOf(f, 'B1')).blockedBy).toBeNull();
   });
 
-  it('⚠️ only the four named gates are enforced — A2/A3/A4 are free among themselves', async () => {
+  it('⚠️ only the five named gates are enforced — A2/A3/A4 are free among themselves', async () => {
     const f = await fixture('free');
     const p = await progress(f);
     const blocked = p.steps.filter((s) => s.blockedBy !== null).map((s) => s.def.code);
     // B1 (waits A1), C3 (waits C2), C4 (waits C3), C5 (waits C4). Nothing else.
     expect(new Set(blocked)).toEqual(new Set(['B1', 'C3', 'C4', 'C5']));
-    expect(CUTOVER_GATES).toHaveLength(4);
+    expect(CUTOVER_GATES).toHaveLength(5); // T-390 R16: the fifth gate is C3P -> C5
+    expect(CUTOVER_GATES.some((g) => g.after === 'C3P' && g.before === 'C5')).toBe(true);
   });
 });
 
@@ -435,6 +436,7 @@ describe('the opening balances', () => {
         accountCode: '1130', storeId: f.storeId, direction: 'credit', amount: '5000.00', entryDate: DATE,
       }),
     );
+    await asOrg(f.orgId, (tx) => attestStep(tx, f.admin, { stepCode: 'C3P', note: 'T-390 R16 fixture' }));
     const result = await asOrg(f.orgId, (tx) => postOpeningBalances(tx, f.admin));
     expect(result.posted).toBe(2);
 
@@ -459,6 +461,7 @@ describe('the opening balances', () => {
         accountCode: '1130', storeId: f.storeId, direction: 'credit', amount: '400.00', entryDate: DATE,
       }),
     );
+    await asOrg(f.orgId, (tx) => attestStep(tx, f.admin, { stepCode: 'C3P', note: 'T-390 R16 fixture' }));
     await asOrg(f.orgId, (tx) => postOpeningBalances(tx, f.admin));
     await expect(
       asOrg(f.orgId, (tx) => removeOpeningFigure(tx, f.admin, { entryId })),

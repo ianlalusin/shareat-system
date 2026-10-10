@@ -22,7 +22,9 @@ import { cutoverRepo, journalRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { compare, isZero, money, ZERO, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
-import { gone, refuse } from '../shared/refusal';
+import { gone, humanDate, refuse } from '../shared/refusal';
+import { toBusinessDate } from '@shareat/core/datetime';
+import { openingTieOut, tieOutRefusalText } from './tie-out';
 
 export const OPENING_EQUITY_CODE = '3900';
 export const OPENING_SOURCE_TYPE = 'opening_balance';
@@ -65,6 +67,19 @@ export async function addOpeningFigure(
         '3900 is the other half of every opening figure, not a figure of its own. Entering it ' +
           'directly would let the difference be plugged to zero by hand, which is the one thing ' +
           'this is built not to allow.',
+      );
+    }
+    // T-390 R6 / R15: two v2-only accounts are never opened by a typed figure.
+    if (input.accountCode === '2120') {
+      throw refuse(
+        'addOpeningFigure: 2120 (goods received, not invoiced) cannot be opened by a figure.',
+        '2120 (goods received, not yet invoiced) is not opened by a figure. The delivery backlog is cleared in the old system first (step A1), so nothing is received but not invoiced on 31 December.',
+      );
+    }
+    if (input.accountCode === '1340') {
+      throw refuse(
+        'addOpeningFigure: 1340 (inventory in transit) cannot be opened by a figure.',
+        "1340 (inventory in transit) is not opened by a figure. Goods in transit on 31 December are counted in the receiving store's room on count day.",
       );
     }
     const amount = parseMoneyInput(input.amount, 'addOpeningFigure: the amount', 'This amount');
@@ -226,6 +241,29 @@ export async function postOpeningBalances(
           'cannot open on an entry that does not balance.',
         `Debits and credits differ by ₱${drift} across the ledger. The books cannot open on an entry that does not balance.`,
       );
+    }
+
+    // T-390 R16: nobody may open the books until somebody has compared the party balances with v1's aged lists.
+    const c3p = await cutoverRepo.c3pAttestation(trx, actor.orgId);
+    if (!c3p) {
+      throw refuse(
+        'postOpeningBalances: step C3P (party balances agreed with v1) has not been attested.',
+        "Nobody has confirmed the customer, supplier, loan and advance balances against v1's lists (step C3P).",
+      );
+    }
+    if (c3p.fingerprint !== (await cutoverRepo.partyLinesFingerprint(trx, actor.orgId))) {
+      const on = humanDate(toBusinessDate(c3p.completedAt));
+      throw refuse(
+        'postOpeningBalances: the party opening lines changed after C3P was attested.',
+        `The party balances changed since step C3P was confirmed on ${on}. Check them against v1's lists and confirm C3P again.`,
+      );
+    }
+
+    // T-390 R9: every register must tie to its control account. The same query C4 shows; no override, no plug.
+    const tie = await openingTieOut(trx, actor.orgId);
+    if (!tie.holds) {
+      const text = tieOutRefusalText(tie.lines);
+      throw refuse(`postOpeningBalances: the opening does not tie out. ${text}`, text);
     }
 
     for (const d of drafts) await journalRepo.postDraftEntry(trx, d.id, actor.personId);
