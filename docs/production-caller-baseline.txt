@@ -1,4 +1,13 @@
+Badge
+Checkbox
+FlashBanner
 GET
+NumTd
+StatusIcon
+Table
+Td
+Textarea
+Th
 __setPhase5AvailableForTests
 acknowledgementHistory
 activateTerminal
@@ -99,6 +108,7 @@ unclosedShiftCount
 undeclareSupplierItem
 undepositedFunds
 undoWriteOff
+unmappedStatuses
 updateMoneyAccount
 updateOwner
 upsertCategoryLife
