@@ -10,6 +10,8 @@
  * way the items and commissary-catalogue actions do.
  */
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { STAFF_POSITIONS } from './typed-forms';
 import {
   createEmployment,
   createPerson,
@@ -19,9 +21,9 @@ import {
   type CreateEmploymentInput,
 } from '@shareat/domain';
 import type { EmploymentStatus } from '@shareat/db/schema';
-import { authorize, setPin } from '@shareat/auth';
+import { authorize, reopenPinSignIn, setPin } from '@shareat/auth';
 import { employmentRepo } from '@shareat/db';
-import { withOrgPrincipal } from './lib';
+import { listStores, withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../lib/error-shape';
@@ -153,7 +155,7 @@ export async function setPositionsAction(formData: FormData): Promise<void> {
       setEmploymentPositions(tx, actor, { employmentId, positionIds, primaryPositionId }),
     );
   } catch (err) {
-    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err), typed: keepTyping(formData, STAFF_POSITIONS, employmentId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Positions saved.' });
 }
@@ -220,4 +222,31 @@ export async function upsertStorePositionAction(formData: FormData): Promise<voi
     return await redirectWithFlash('/staff', { store: storeId }, { error: errorMessage(err) });
   }
   return await redirectWithFlash('/staff', { store: storeId }, { ok: `Position "${name}" added.` });
+}
+
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * T-395 S2 (R5, R6). A manager reopens a store whose PIN sign-in the daily budget stopped.
+ * ⭐ The actor comes from the session; `storeId` is only the resource. `reopenPinSignIn`'s first
+ * statement is `authorize(enrol_staff, { storeId })`, so nothing is repeated here.
+ */
+export async function reopenPinSignInAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const storeId = str(formData, 'storeId');
+  if (!UUID_SHAPE.test(storeId)) {
+    return await redirectWithFlash('/staff', {}, { error: 'Pick a store to reopen PIN sign-in for.' });
+  }
+
+  let reopened: boolean;
+  try {
+    reopened = (await withOrgPrincipal(actor.orgId, (tx) => reopenPinSignIn(tx, actor, storeId))).reopened;
+  } catch (err) {
+    return await redirectWithFlash('/staff', { store: storeId }, { error: errorMessage(err) });
+  }
+  const name = (await listStores(actor.orgId)).find((s) => s.id === storeId)?.name ?? 'this store';
+  const message = reopened
+    ? `PIN sign-in reopened at ${name}.`
+    : `PIN sign-in was not stopped at ${name}. Nothing changed.`;
+  return await redirectWithFlash('/staff', { store: storeId }, { ok: message });
 }

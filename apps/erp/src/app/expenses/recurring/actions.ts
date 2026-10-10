@@ -17,6 +17,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { RECURRING_TEMPLATE_EDIT } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -71,7 +73,7 @@ export async function updateTemplateAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/expenses/recurring', { store: storeId }, { error: errorMessage(err) });
+    return await redirectWithFlash('/expenses/recurring', { store: storeId }, { error: errorMessage(err), typed: keepTyping(formData, RECURRING_TEMPLATE_EDIT, str(formData, 'templateId'), { actorId: actor.personId }) });
   }
   return await redirectWithFlash('/expenses/recurring', { store: storeId }, { ok: 'Template updated.' });
 }

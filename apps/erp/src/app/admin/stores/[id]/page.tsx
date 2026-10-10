@@ -14,6 +14,8 @@ import { ACTION_LINK } from '@/components/action-link';
 import { EditableRecord } from '@/components/forms';
 import { Banner, Button, FlashBanner, FormGrid, Field, Input, Textarea } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { STORE_DETAILS, STORE_OPENING_DATE, STORE_STOCK_MODEL } from '../typed-forms';
 
 export const metadata = { title: 'Store — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -133,7 +135,7 @@ export default async function StoreDetailPage({
         <section className="space-y-4">
           <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <h2 className="text-sm font-medium">Details</h2>
-            <EditableRecord action={updateStoreAction} label={store.name} hidden={{ storeId: store.id }}>
+            <EditableRecord action={updateStoreAction} label={store.name} hidden={{ storeId: store.id }} typed={typedFor(sp, STORE_DETAILS, store.id, actor.personId)}>
               <FormGrid className="text-sm">
                 <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}>
                   <Input name="name" defaultValue={store.name} required className="mt-1 w-full" />
@@ -220,6 +222,7 @@ export default async function StoreDetailPage({
                   action={setStoreOpeningDateAction}
                   label="opening date"
                   hidden={{ storeId: store.id, ...(sp.confirm ? { confirmedPlan: sp.plan ?? '' } : {}) }}
+                  typed={typedFor(sp, STORE_OPENING_DATE, store.id, actor.personId)}
                 >
                   <FormGrid className="text-sm">
                     <Field
@@ -264,7 +267,7 @@ export default async function StoreDetailPage({
             */}
           <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <h2 className="text-sm font-medium">How this branch keeps stock</h2>
-            <EditableRecord action={setStoreStockModelAction} label="stock model" hidden={{ storeId: store.id }}>
+            <EditableRecord action={setStoreStockModelAction} label="stock model" hidden={{ storeId: store.id }} typed={typedFor(sp, STORE_STOCK_MODEL, store.id, actor.personId)}>
             <div className="space-y-3">
             <p className="text-xs text-neutral-500">
               A Receiving room never counts toward this — every branch needs somewhere to park a

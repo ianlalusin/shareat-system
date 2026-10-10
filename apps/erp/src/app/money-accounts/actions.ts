@@ -16,6 +16,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { MONEY_ACCOUNT_RENAME } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -72,7 +74,7 @@ export async function renameMoneyAccountAction(formData: FormData): Promise<void
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/money-accounts', {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/money-accounts', {}, { error: errorMessage(err), typed: keepTyping(formData, MONEY_ACCOUNT_RENAME, str(formData, 'moneyAccountId'), { actorId: actor.personId }) });
   }
 
   return await redirectWithFlash('/money-accounts', {}, { ok: 'renamed' });

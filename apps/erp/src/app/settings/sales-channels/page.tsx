@@ -13,6 +13,8 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { EditableRecord } from '@/components/forms';
 import { Banner, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { SALES_CHANNEL_EDIT } from './typed-forms';
 
 export const metadata = { title: 'Sales channels — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -122,7 +124,7 @@ export default async function SalesChannelsSettingsPage({
       )}
 
       {active.map((c) => (
-        <ChannelCard key={c.id} channel={c} storeId={storeId} accounts={accounts} walletNames={walletNames} />
+        <ChannelCard key={c.id} channel={c} storeId={storeId} accounts={accounts} walletNames={walletNames} sp={sp} actorId={actor.personId} />
       ))}
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -198,11 +200,15 @@ function ChannelCard({
   storeId,
   accounts,
   walletNames,
+  sp,
+  actorId,
 }: {
   channel: SalesChannelAdminRow;
   storeId: string;
   accounts: { code: string; name: string }[];
   walletNames: Map<string, string>;
+  sp: Parameters<typeof typedFor>[0];
+  actorId: string;
 }) {
   const wallet = channel.destinationMoneyAccountId ? walletNames.get(channel.destinationMoneyAccountId) : null;
   return (
@@ -239,6 +245,7 @@ function ChannelCard({
         action={updateSalesChannelAction}
         label={channel.name}
         hidden={{ storeId, channelId: channel.id }}
+        typed={typedFor(sp, SALES_CHANNEL_EDIT, channel.id, actorId)}
       >
         <ChannelFields accounts={accounts} channel={channel} />
       </EditableRecord>

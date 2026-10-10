@@ -180,7 +180,7 @@ export interface FlashPayload {
 
 const TYPED_FORM = /^[a-z][a-zA-Z0-9.]{0,63}$/;
 const TYPED_RECORD = /^[A-Za-z0-9_-]{0,64}$/; // '' , a UUID, or a short slug
-const TYPED_FIELD = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const TYPED_FIELD = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
 /** Strict shape check of a typed slot. Anything else is not a TypedFlash. */
 function asTyped(v: unknown): TypedFlash | null {

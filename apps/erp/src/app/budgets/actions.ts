@@ -11,6 +11,8 @@ import type { ReissueInterval } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { BUDGET_CAP_EDIT } from './typed-forms';
 import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
@@ -43,7 +45,7 @@ export async function setBudgetAction(formData: FormData): Promise<void> {
       ? 'Cap saved, and it renews on its own from now on.'
       : 'Cap saved. ⚠️ It applies to this period only — tick "renew automatically" if it should carry forward.';
   } catch (err) {
-    return await redirectWithFlash('/budgets', { store: storeId, period: periodKey }, { error: errorMessage(err) });
+    return await redirectWithFlash('/budgets', { store: storeId, period: periodKey }, { error: errorMessage(err), typed: keepTyping(formData, BUDGET_CAP_EDIT, str(formData, 'categoryId'), { actorId: actor.personId }) });
   }
   return await redirectWithFlash('/budgets', { store: storeId, period: periodKey }, { ok: message });
 }

@@ -14,6 +14,8 @@ import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { SALES_CHANNEL_EDIT } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -88,7 +90,7 @@ export async function updateSalesChannelAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err), typed: keepTyping(fd, SALES_CHANNEL_EDIT, str(fd, 'channelId'), { actorId: actor.personId }) });
   }
   revalidatePath('/settings/sales-channels');
   revalidatePath('/wastage');

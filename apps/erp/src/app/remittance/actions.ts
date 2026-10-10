@@ -16,6 +16,8 @@ import {
 import { cashierAccounts, withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { CASH_POLICY_EDIT } from './typed-forms';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { add, compare, isZero, money, ZERO } from '@shareat/core/money';
 import { parseMoneyInput } from '@shareat/domain/money-input';
@@ -275,7 +277,7 @@ export async function setCashPolicyAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/remittance', { store: storeId }, { error: errorMessage(err) });
+    return await redirectWithFlash('/remittance', { store: storeId }, { error: errorMessage(err), typed: keepTyping(formData, CASH_POLICY_EDIT, storeId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash('/remittance', { store: storeId }, { ok: 'Cash policy updated.' });
 }

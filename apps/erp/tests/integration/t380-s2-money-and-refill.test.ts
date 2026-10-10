@@ -431,13 +431,24 @@ describe('M4 / M4b (A3, B1, REV-8) - an invalid opening date is refused before a
       expect(signal.url).toMatch(new RegExp(`^/admin/stores/${f.storeId}\\?f=[\\w-]+$`));
       const out = outcomeOf(signal);
       expect(out.flash.error).toBe('"2026-13-40" is not a valid date. Use the date picker, or type it as YYYY-MM-DD.');
-      expect(out.flash.openingDate, 'the box is refilled with what was typed').toBe('2026-13-40');
+      // T-389 ruling (2026-10-10): the typed slot supersedes the T-380 keep key for record forms. The date rides the
+      // signed cookie's typed slot (bound to the actor), never the address; the server draws only the STORED date.
+      const { decodeFlash } = await import('../../src/lib/flash');
+      const { currentJar } = await import('../helpers/flash-jar');
+      const payload = decodeFlash(currentJar().get('shareat_flash')!.value) as { t?: unknown } | null;
+      expect(payload?.t, 'the typed slot carries the bad date').toEqual({
+        form: 'store.openingDate',
+        record: f.storeId,
+        fields: { openingDate: '2026-13-40' },
+        actor: f.admin.personId,
+      });
 
       const StorePage = (await import('../../src/app/admin/stores/[id]/page')).default;
       const html = renderToStaticMarkup(
         (await StorePage({ params: Promise.resolve({ id: f.storeId }), searchParams: Promise.resolve(pageParamsOf(signal.url)) })) as never,
       );
-      expect(/<input[^>]*name="openingDate"[^>]*value="2026-13-40"/.test(html), 'opening-date box must carry the typed date').toBe(true);
+      expect(/<input[^>]*name="openingDate"[^>]*value="2026-01-01"/.test(html), 'the server-drawn box holds the STORED date').toBe(true);
+      expect(/<input[^>]*name="openingDate"[^>]*value="2026-13-40"/.test(html), 'the server never draws the typed date').toBe(false);
     },
     60_000,
   );

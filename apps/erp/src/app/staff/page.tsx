@@ -1,12 +1,15 @@
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import { upsertStorePositionAction } from './actions';
-import { listStores, positionsForStore, rosterForStore } from './lib';
+import { listStores, positionsForStore, rosterForStore, withOrgPrincipal } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { Button, FlashBanner, Input } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { authorize, AuthorizationError } from '@shareat/auth';
+import { pinAttemptsRepo } from '@shareat/db';
+import { PinSignInPanel } from './PinSignInPanel';
 
 export const metadata = { title: 'Staff — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -39,6 +42,17 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     rosterForStore(actor.orgId, storeId),
     positionsForStore(actor.orgId, storeId),
   ]);
+
+  // T-395 S2 - the PIN sign-in panel is for anyone holding enrol_staff at this store (R5).
+  const pinStatus = await withOrgPrincipal(actor.orgId, async (tx) => {
+    try {
+      await authorize(tx, actor, 'enrol_staff', { storeId });
+    } catch (err) {
+      if (err instanceof AuthorizationError) return null;
+      throw err;
+    }
+    return pinAttemptsRepo.statusForStore(tx, storeId);
+  });
 
   return (
     <Page density="table" className="space-y-8">
@@ -113,6 +127,8 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
           </div>
         )}
       </section>
+
+      {pinStatus && <PinSignInPanel storeId={storeId} status={pinStatus} />}
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">This store&rsquo;s positions</h2>

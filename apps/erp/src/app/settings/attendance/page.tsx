@@ -7,6 +7,8 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { EditableRecord } from '@/components/forms';
 import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { ATTENDANCE_POLICY } from './typed-forms';
 
 export const metadata = { title: 'Attendance & payroll settings — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -87,7 +89,7 @@ export default async function AttendanceSettingsPage({
           This store has no attendance config yet.
         </p>
       ) : (
-        <EditableRecord action={updateAttendanceConfigAction} label="attendance policy" hidden={{ storeId }}>
+        <EditableRecord action={updateAttendanceConfigAction} label="attendance policy" hidden={{ storeId }} typed={typedFor(sp, ATTENDANCE_POLICY, storeId, actor.personId)}>
           <div className="space-y-6">
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Effective from</span>

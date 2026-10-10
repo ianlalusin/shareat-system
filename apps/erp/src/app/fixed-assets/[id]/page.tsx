@@ -11,6 +11,8 @@ import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
 import { withFlash } from '@/lib/flash';
 import { Badge, Banner, Button, FlashBanner, Input, Select, Textarea } from '@/components/ui';
+import { typedFor } from '@/lib/keep-typing';
+import { ASSET_IN_SERVICE_EDIT, ASSET_TERMS_EDIT } from '../typed-forms';
 
 export const dynamic = 'force-dynamic';
 
@@ -185,6 +187,7 @@ export default async function AssetDetailPage({
               action={setAssetInServiceAction}
               label={`${asset.name} in-service date`}
               hidden={{ assetId: asset.id, filterStore: sp.store ?? '' }}
+              typed={typedFor(sp, ASSET_IN_SERVICE_EDIT, asset.id, actor.personId)}
             >
               <div className="space-y-3">
               {/* ⛔ A `<select>`, not radios — a native radio's box is unresolvable-by-construction
@@ -231,6 +234,7 @@ export default async function AssetDetailPage({
               action={updateTermsAction}
               label={asset.name}
               hidden={{ assetId: asset.id, filterStore: sp.store ?? '' }}
+              typed={typedFor(sp, ASSET_TERMS_EDIT, asset.id, actor.personId)}
             >
               <div className="space-y-4">
               <Field label="Name">

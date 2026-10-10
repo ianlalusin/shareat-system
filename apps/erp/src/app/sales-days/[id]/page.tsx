@@ -11,6 +11,8 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { PLATFORM_SALES_EDIT } from '../typed-forms';
 import { EditableRecord } from '@/components/forms';
 import { Badge, Banner, Button, FlashBanner, FormGrid, Input } from '@/components/ui';
 
@@ -426,6 +428,7 @@ export default async function SalesDayDetailPage({
                 action={setPlatformSalesAction}
                 label="platform sales"
                 hidden={{ storeId: sp.store ?? '', salesDayId: day.id }}
+                typed={typedFor(sp, PLATFORM_SALES_EDIT, day.id, actor.personId)}
               >
                 {platformFields}
               </EditableRecord>

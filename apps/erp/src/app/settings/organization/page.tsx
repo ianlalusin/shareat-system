@@ -6,6 +6,8 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { EditableRecord } from '@/components/forms';
 import { Banner, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { ORGANIZATION_IDENTITY } from './typed-forms';
 
 export const metadata = { title: 'Organisation — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -91,7 +93,7 @@ export default async function OrganizationSettingsPage({
         </Banner>
       )}
 
-      <EditableRecord action={setOrganizationIdentityAction} label="Organisation" hidden={{}}>
+      <EditableRecord action={setOrganizationIdentityAction} label="Organisation" hidden={{}} typed={typedFor(sp, ORGANIZATION_IDENTITY, '', actor.personId)}>
         <FormGrid className="text-sm">
           <Field
             span="full"

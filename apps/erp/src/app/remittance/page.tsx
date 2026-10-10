@@ -29,6 +29,8 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { CASH_POLICY_EDIT } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
 import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
@@ -561,7 +563,7 @@ export default async function RemittancePage({
               whatever this says — that is the control, and it is not what this changes.
             </p>
           </div>
-          <EditableRecord action={setCashPolicyAction} label="cash policy" hidden={{ storeId }}>
+          <EditableRecord action={setCashPolicyAction} label="cash policy" hidden={{ storeId }} typed={typedFor(sp, CASH_POLICY_EDIT, storeId, actor.personId)}>
 <FormGrid>
             {/* ⚠️ Both fields carry a hint so the control row lines up. With only one hinted, the
                 select and the text input sat at different heights under `items-end`. */}

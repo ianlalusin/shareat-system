@@ -24,6 +24,8 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { PAYOUT_DESTINATION_EDIT } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
 import { Button, FlashBanner, Input, Select } from '@/components/ui';
 
@@ -274,6 +276,7 @@ export default async function ChannelSettlementsPage({
                                 action={setPayoutDestinationAction}
                                 label={`${c.name} payout account`}
                                 hidden={{ channelId: c.id }}
+                                typed={typedFor(sp, PAYOUT_DESTINATION_EDIT, c.id, actor.personId)}
                               >
                                 <Select
                                   name="moneyAccountId"

@@ -25,6 +25,8 @@ import { FilterRow } from '@/components/FilterRow';
 import { Banner, Button, FlashBanner, FormGrid, Input } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor, type TypedView } from '@/lib/keep-typing';
+import { RECURRING_TEMPLATE_EDIT } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
 
 export const metadata = { title: 'Recurring expenses — Shareat System' };
@@ -205,7 +207,8 @@ export default async function RecurringExpensesPage({
                         )}
                       </p>
 
-                      <details>
+                      {/* T-389: a reopened (or too-long-to-keep) template must be visible, so its <details> opens. */}
+                      <details open={typedFor(sp, RECURRING_TEMPLATE_EDIT, t.id, actor.personId) !== null}>
                         <summary className="cursor-pointer text-xs text-neutral-500 dark:text-neutral-400">
                           Edit, pause or remove
                         </summary>
@@ -219,6 +222,7 @@ export default async function RecurringExpensesPage({
                             suppliers={suppliers}
                             defaults={t}
                             submitLabel="Save"
+                            typed={typedFor(sp, RECURRING_TEMPLATE_EDIT, t.id, actor.personId)}
                           />
                           <div className="flex flex-wrap gap-2">
                             <form action={setTemplateStatusAction}>
@@ -301,6 +305,7 @@ function TemplateForm({
   suppliers,
   defaults,
   submitLabel,
+  typed,
 }: {
   action: (formData: FormData) => Promise<void>;
   storeId: string;
@@ -310,6 +315,8 @@ function TemplateForm({
   suppliers: { id: string; name: string }[];
   defaults?: TemplateDefaults;
   submitLabel: string;
+  /** T-389: the typing of a refused save of THIS template, or the too-long notice. */
+  typed?: TypedView | null;
 }) {
   const fields = (
     <div className="space-y-3">
@@ -416,9 +423,10 @@ function TemplateForm({
   if (templateId) {
     return (
       <EditableRecord
-        action={action}
+        action={updateTemplateAction}
         label={defaults?.name ?? 'template'}
         hidden={{ storeId, templateId }}
+        typed={typed ?? null}
       >
         {fields}
       </EditableRecord>

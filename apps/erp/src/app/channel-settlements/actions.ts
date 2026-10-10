@@ -22,6 +22,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { PAYOUT_DESTINATION_EDIT } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -199,7 +201,7 @@ export async function setPayoutDestinationAction(formData: FormData): Promise<vo
     if (!moneyAccountId) throw new Error('Choose the account this channel pays into.');
     await withOrgPrincipal(actor.orgId, (tx) => setChannelPayoutDestination(tx, actor, { channelId, moneyAccountId }));
   } catch (err) {
-    return await redirectWithFlash('/channel-settlements', {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/channel-settlements', {}, { error: errorMessage(err), typed: keepTyping(formData, PAYOUT_DESTINATION_EDIT, str(formData, 'channelId'), { actorId: actor.personId }) });
   }
 
   // T-350 S5 — the redirect says WHICH channel and nothing else. Whether this was a first set, a
