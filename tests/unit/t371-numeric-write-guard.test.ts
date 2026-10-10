@@ -46,6 +46,7 @@ const RAW_SQL_WRITERS: ReadonlySet<string> = new Set(['insertInvoiceLines', 'mer
  * anything but a `*_dev` database (asserted first); a NEW script or function still trips the guard.
  */
 const RAW_SQL_EXEMPT: Readonly<Record<string, { reason: string; mustContain: string }>> = {
+  'scripts/dev-seed-inventory.ts::item': { reason: 'T-391 S1: dev seed inserts items without purchase_unit or purchase_factor (both stay null); never runs on production', mustContain: "endsWith('_dev')" },
   'scripts/dev-seed-inventory.ts::main': { reason: 'dev-only seed, never runs on production', mustContain: "endsWith('_dev')" },
   'scripts/smoke-pin-throttle.ts::main': { reason: 'T-395 smoke fixture: inserts an org, store and persons (no numeric money columns) and resets a tier-1 counter; refuses any database not named *_test', mustContain: 'shareat_test|_test' },
 };

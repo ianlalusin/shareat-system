@@ -51,6 +51,7 @@ isHeaderCode
 isStartDecisionMaterial
 jobResult
 linkInvoiceToReceipt
+linksFor
 listAdjustments
 listAvailableCommissaries
 listCategoryLives
@@ -98,6 +99,7 @@ scaleRecipeToTarget
 seedCanonicalPositions
 setCostBasisItem
 setItemPricing
+setItemPurchaseUnit
 setTillFloat
 sumTender
 summarizeConversions

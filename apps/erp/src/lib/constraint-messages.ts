@@ -101,6 +101,10 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
   // T-383 R4 - the blank guards (0047); no ids, no names.
   items_name_not_blank_check: 'Give the item a name people will recognise.',
   items_code_not_blank_check: 'Give the item a code.',
+  // T-391 S1 (0193): the item's default buying unit. Written for a person; no ids, no names.
+  items_purchase_pair_check: "Give the buying unit and how many of the item's own unit it holds together, or neither.",
+  items_purchase_unit_check: 'Choose a buying unit that is different from the unit the item is measured in.',
+  items_purchase_factor_check: "How many of the item's own unit one buying unit holds must be more than zero.",
   // T-386 R5 (0189): a number once given out under an item-code stem is never given out again. The domain refuses first
   // with the sentence that names the next free code; this is the database's last word. item_code_counters_forward_only
   // gets no sentence: no screen can reach it.

@@ -115,6 +115,11 @@ export async function updateItem(
       const sentence = "Change the unit with Change unit on the item's page.";
       throw refuse(sentence, sentence);
     }
+    // T-391 S1: one audited path for the buying unit.
+    if ('purchaseUnit' in values || 'purchaseFactor' in values) {
+      const sentence = "Set the buying unit with Buying unit on the item's page.";
+      throw refuse(sentence, sentence);
+    }
     // T-383 R2: one audited path for the name and the code.
     if ('name' in values || 'code' in values) {
       const sentence = "Rename an item with Rename on the item's page.";
@@ -144,6 +149,11 @@ export async function changeItemBaseUnit(
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw gone(`changeItemBaseUnit: item ${input.itemId} does not exist.`, 'item');
     if (item.baseUnit === input.baseUnit) return { changed: false };
+    // T-391 S1: the buying-unit factor is in the OLD base unit; changing the base under it would silently re-read it.
+    if (item.purchaseUnit !== null) {
+      const sentence = "Clear the buying unit first; its factor is in the old unit.";
+      throw refuse(sentence, sentence);
+    }
     await itemsRepo.updateItem(trx, actor.orgId, input.itemId, { baseUnit: input.baseUnit });
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,
@@ -152,6 +162,72 @@ export async function changeItemBaseUnit(
       entityId: input.itemId,
       before: { baseUnit: item.baseUnit },
       after: { baseUnit: input.baseUnit },
+      source: 'web',
+    });
+    return { changed: true };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/** Round a plain decimal string with more than six places to six, half up on the magnitude; anything else is returned as typed. */
+function roundToScale6(raw: string): string {
+  const m = /^(-?)(\d+)\.(\d{7,})$/.exec(String(raw).trim());
+  if (m === null) return raw;
+  const [, sign = '', whole = '0', frac = ''] = m;
+  const extra = frac.length - 6;
+  // BigInt throughout: the kept digits, the dropped digits, and "dropped >= half of one unit in the sixth place".
+  const dropped = BigInt(frac.slice(6));
+  const up = dropped * 2n >= 10n ** BigInt(extra) ? 1n : 0n;
+  const scaled = BigInt(whole + frac.slice(0, 6)) + up;
+  const digits = scaled.toString().padStart(7, '0');
+  return `${sign}${digits.slice(0, -6)}.${digits.slice(-6)}`;
+}
+
+/**
+ * ⭐ T-391 S1. Set (or clear, with both null) an item's default buying unit: `box` / `24` for a box of 24 pcs. Gated on
+ * `approve_item` and audited like `changeItemBaseUnit`, because T-390 divides delivered prices by the factor. The rules
+ * (both or neither; not the base unit; a listed unit; a positive finite factor) are the database's CHECKs, not
+ * re-implemented here, so a refused pair surfaces as the constraint's own error and writes no audit row (the append
+ * comes after the UPDATE, in the same transaction). Setting what is already set writes nothing.
+ */
+export async function setItemPurchaseUnit(
+  tx: Tx | null,
+  actor: Actor,
+  input: { itemId: string; purchaseUnit: PurchaseUnit | null; purchaseFactor: string | null },
+): Promise<{ changed: boolean }> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'approve_item', {});
+    const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
+    if (!item) throw gone(`setItemPurchaseUnit: item ${input.itemId} does not exist.`, 'item');
+    // Parsed AFTER authorize, before any write: a malformed or oversize factor is a sentence, never a column overflow.
+    // Normalised to the column's scale (6) so the comparison, the stored value and the audit `after` are one form.
+    let factor: Decimal<'14,6'> | null = null;
+    if (input.purchaseFactor !== null && input.purchaseFactor !== undefined) {
+      try {
+        factor = parseDecimalInput(roundToScale6(input.purchaseFactor), '14,6', 'setItemPurchaseUnit: the buying-unit factor', 'The buying-unit factor');
+      } catch (e) {
+        const msg = (e as { userMessage?: string }).userMessage ?? (e as Error).message;
+        throw refuse((e as Error).message, msg);
+      }
+    }
+    const same =
+      item.purchaseUnit === input.purchaseUnit &&
+      (item.purchaseFactor === null || factor === null
+        ? item.purchaseFactor === factor
+        : Number(item.purchaseFactor) === Number(factor));
+    if (same) return { changed: false };
+    await itemsRepo.updateItem(trx, actor.orgId, input.itemId, {
+      purchaseUnit: input.purchaseUnit,
+      purchaseFactor: factor,
+    });
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'set_item_purchase_unit',
+      entity: 'items',
+      entityId: input.itemId,
+      before: { purchaseUnit: item.purchaseUnit, purchaseFactor: item.purchaseFactor },
+      after: { purchaseUnit: input.purchaseUnit, purchaseFactor: factor },
       source: 'web',
     });
     return { changed: true };

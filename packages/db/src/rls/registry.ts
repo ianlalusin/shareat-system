@@ -410,6 +410,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'A sign-in attempt happens at a store terminal after layer 1, so its org is known; never a pre-auth write (DEF-333).',
   },
 
+  // T-391 S1 (migration 0193).
+  v1_master_links: {
+    scope: 'org_column',
+    reason: 'A link maps one org’s v1 records to its own v2 rows; another org must never see or write them.',
+  },
+
   // T-124 — fixed assets (docs/tasks/124-fixed-assets-and-depreciation.md).
   prepaid_items: {
     scope: 'org_column',

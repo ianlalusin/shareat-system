@@ -139,6 +139,13 @@ export const items = pgTable(
      * children cannot change unit) is `items_base_unit_fixed`, migration `0186` (T-378).
      */
     parentSlabItemId: uuid('parent_slab_item_id'),
+    /**
+     * T-391 S1 (migration 0193). A DEFAULT buying unit and its ratio to the base unit: box of 24 pcs = `box` / `24`.
+     * Both or neither; never equal to the base unit. A default only: invoice and delivery lines snapshot their own
+     * factor. Written by `setItemPurchaseUnit` alone; `createItem` does not take it.
+     */
+    purchaseUnit: text('purchase_unit', { enum: PURCHASE_UNITS }),
+    purchaseFactor: numeric('purchase_factor', { precision: 14, scale: 6 }),
     notes: text('notes'),
     createdBy: uuid('created_by')
       .notNull()
@@ -155,6 +162,17 @@ export const items = pgTable(
     index('items_org_status_idx').on(t.orgId, t.status),
     check('items_code_not_blank_check', sql`length(trim(${t.code})) > 0`),
     check('items_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+    // T-391 S1 (0193). The unit list is PURCHASE_UNITS; a test reads it back from pg_constraint.
+    check('items_purchase_pair_check', sql`(${t.purchaseUnit} IS NULL) = (${t.purchaseFactor} IS NULL)`),
+    check(
+      'items_purchase_unit_check',
+      sql`${t.purchaseUnit} IS NULL OR (${t.purchaseUnit} in ('pcs','kg','g','ltr','ml','roll','box','pack','case','sack','tray','dozen') AND ${t.purchaseUnit} <> ${t.baseUnit})`,
+    ),
+    check('items_purchase_factor_finite_check', sql`${t.purchaseFactor} > '-Infinity'::numeric and ${t.purchaseFactor} < 'Infinity'::numeric`),
+    check(
+      'items_purchase_factor_check',
+      sql`${t.purchaseFactor} IS NULL OR (${t.purchaseFactor} > 0 AND ${t.purchaseFactor} < 'Infinity'::numeric)`,
+    ),
   ],
 );
 
