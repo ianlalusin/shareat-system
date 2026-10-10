@@ -63,7 +63,7 @@ export async function postPayRunAction(formData: FormData): Promise<void> {
   return await redirectWithFlash(
     '/payroll',
     { store },
-    { ok: `Posted ${out.payslips} payslip(s), ${out.totalNet} net. The days they paid are now frozen.` },
+    { stamp: 'POSTED', ok: `Posted ${out.payslips} payslip(s), ${out.totalNet} net. The days they paid are now frozen.` },
   );
 }
 
@@ -82,6 +82,7 @@ export async function voidPayRunAction(formData: FormData): Promise<void> {
     '/payroll',
     { store },
     {
+      stamp: 'VOID',
       ok: `Voided — ${out.reversed} entry(s) reversed and ${out.unfrozenDays} day(s) unfrozen, so the period is payable again.`,
     },
   );

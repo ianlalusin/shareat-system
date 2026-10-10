@@ -163,7 +163,7 @@ export async function voidPullAction(fd: FormData): Promise<void> {
 
   revalidatePath('/inventory/pos-usage');
   revalidatePath('/inventory/usage');
-  return await redirectWithFlash('/inventory/pos-usage', { store: storeId, day: salesDayId }, { ok: dayVoided
+  return await redirectWithFlash('/inventory/pos-usage', { store: storeId, day: salesDayId }, { stamp: 'VOID', ok: dayVoided
       ? `Pull voided — ${count} usage record(s) reversed. A replacement day can now be pulled.`
       : `Pull voided — ${count} usage record(s) reversed. The day can be pulled again.` });
 }

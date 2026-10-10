@@ -211,7 +211,7 @@ export async function receiveOrderAction(fd: FormData): Promise<void> {
         : null,
     }))
     .filter((l) => l.lineId);
-  return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
+  const flash = await perform(orderId, async (tx, actor) => {
     const result = await receiveTradeOrder(tx, actor, {
       orderId,
       receivedOn: str(fd, 'receivedOn') || undefined,
@@ -227,7 +227,13 @@ export async function receiveOrderAction(fd: FormData): Promise<void> {
         .map((o) => ` ${o.itemName}: ${o.counted} counted, ${o.booked} booked — the extra ${o.excess} is waiting for the commissary to resolve.`)
         .join('')
     );
-  }));
+  });
+  // Stamped only when the receipt went through; a refusal comes back as { error } and carries no word.
+  return await redirectWithFlash(
+    `/commissary/orders/${orderId}`,
+    {},
+    flash.ok !== undefined ? { ok: flash.ok, stamp: 'RECEIVED' } : flash,
+  );
 }
 
 // ---- The commissary's side ------------------------------------------------------------------------

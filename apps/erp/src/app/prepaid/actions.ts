@@ -113,7 +113,7 @@ export async function reverseMonthAction(formData: FormData): Promise<void> {
   return await redirectWithFlash(
     `/prepaid/${id}`,
     {},
-    { ok: `${period} reversed. Run the release again to post a corrected month.` },
+    { stamp: 'REVERSED', ok: `${period} reversed. Run the release again to post a corrected month.` },
   );
 }
 

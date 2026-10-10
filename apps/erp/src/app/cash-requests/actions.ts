@@ -25,11 +25,12 @@ function str(fd: FormData, key: string): string {
 export async function createRequestAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let id = '';
+  // T-387 S4: the two field refusals are judged before the try - a redirect thrown inside it would be caught below.
+  const storeId = str(formData, 'storeId');
+  if (!storeId) return await redirectWithFlash('/cash-requests', {}, { error: 'Choose a store.', field: 'store' });
+  const requestedFor = str(formData, 'requestedFor');
+  if (!requestedFor) return await redirectWithFlash('/cash-requests', {}, { error: 'Say who is holding the money.', field: 'requested-for' });
   try {
-    const storeId = str(formData, 'storeId');
-    if (!storeId) throw new Error('Choose a store.');
-    const requestedFor = str(formData, 'requestedFor');
-    if (!requestedFor) throw new Error('Say who is holding the money.');
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
       createCashRequest(tx, actor, {
         storeId,
@@ -73,7 +74,12 @@ export async function decideAction(formData: FormData): Promise<void> {
   } catch (err) {
     return await redirectWithFlash(`/cash-requests/${id}`, {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/cash-requests/${id}`, {}, { ok: message });
+  // Only an approval is stamped: the q5 table has no word for a refusal.
+  return await redirectWithFlash(
+    `/cash-requests/${id}`,
+    {},
+    decision === 'reject' ? { ok: message } : { stamp: 'APPROVED', ok: message },
+  );
 }
 
 export async function releaseAction(formData: FormData): Promise<void> {
@@ -96,7 +102,7 @@ export async function releaseAction(formData: FormData): Promise<void> {
   } catch (err) {
     return await redirectWithFlash(`/cash-requests/${id}`, {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/cash-requests/${id}`, {}, { ok: message });
+  return await redirectWithFlash(`/cash-requests/${id}`, {}, { stamp: 'RELEASED', ok: message });
 }
 
 export async function settleAction(formData: FormData): Promise<void> {

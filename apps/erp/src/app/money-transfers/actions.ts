@@ -111,5 +111,5 @@ export async function voidMoneyTransferAction(formData: FormData): Promise<void>
     return await redirectWithFlash('/money-transfers', {}, { error: errorMessage(err) });
   }
 
-  return await redirectWithFlash('/money-transfers', {}, { ok: 'voided' });
+  return await redirectWithFlash('/money-transfers', {}, { stamp: 'VOID', ok: 'Money transfer voided.' });
 }

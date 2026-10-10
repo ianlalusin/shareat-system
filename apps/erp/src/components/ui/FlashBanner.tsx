@@ -6,10 +6,26 @@
 import type { Flash } from '@/lib/flash';
 import { Banner } from './Banner';
 
-export function FlashBanner({ flash }: { readonly flash: Pick<Flash, 'error' | 'warning' | 'notice'> }) {
+export function FlashBanner({
+  flash,
+  fieldLabels,
+}: {
+  readonly flash: Pick<Flash, 'error' | 'warning' | 'notice' | 'field'>;
+  /** T-387 S4: element id -> label. A refusal that names a `field` links to it only when its label is listed here. */
+  readonly fieldLabels?: Readonly<Record<string, string>>;
+}) {
+  const label = flash.field ? fieldLabels?.[flash.field] : undefined;
   return (
     <>
-      {flash.error ? <Banner tone="error">{flash.error}</Banner> : null}
+      {flash.error ? (
+        label && flash.field ? (
+          <Banner tone="error" fieldId={flash.field} fieldLabel={label}>
+            {flash.error}
+          </Banner>
+        ) : (
+          <Banner tone="error">{flash.error}</Banner>
+        )
+      ) : null}
       {flash.warning ? <Banner tone="warning">{flash.warning}</Banner> : null}
       {flash.notice ? <Banner tone="info">{flash.notice}</Banner> : null}
     </>
