@@ -1,6 +1,6 @@
 # T-390: Opening stock from the count into FIFO opening layers per room, plus opening subledger tie-out gates
 
-**Status:** S1 DONE 2026-10-10 (`f75201e`, main `783d2b7`, migration 0191 in PR #10; audit round applied: per-(store,item) advisory lock; browser smoke on 9008 passed, 5 checks). DEF-630 (edit of a merged two-room line double-counts) is S5's, and must land before S4's import is used on real data. S3 in a lane. S2 still gated on t390-q2. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (review applied; S2 gated on t390-q2). Written at `main` `a6a9665`
+**Status:** S1 DONE 2026-10-10 (`f75201e`, main `783d2b7`, migration 0191 in PR #10; audit round applied: per-(store,item) advisory lock; browser smoke on 9008 passed, 5 checks). DEF-630 (edit of a merged two-room line double-counts) is S5's, and must land before S4's import is used on real data. S3 in a lane. **S2 UNBLOCKED 2026-10-10** (Ian answered Q8, t390-q2 and Q-T390-1; bible row 304). | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (review applied; S2 gated on t390-q2). Written at `main` `a6a9665`
 by the Opus planner; the money review's 13 findings are applied in §4 R5a, R8, R13, R15-R17, §5, §7, §8 and §11.
 **Model:** Sonnet lanes, **tester first** in every slice, then builder (bible row 184). An amendment is written in plan
 mode (Opus).
@@ -8,12 +8,12 @@ mode (Opus).
 **Migration:** **yes, one** — `0NNN (allocated at merge)`, hand-authored per ADR-012 §5. No new table.
 **Defect:** DEF-623 (🔴): `opening_counts` records the count, but nothing turns it into `source='opening'` layers,
 `kind='opening'` movements or a `1310` line; `postOpeningBalances` never reads it. Plan items C1 + C2.
-**Ian:** Q8 (open on the Open Questions page) is built to its recommendation, **(a) count per room + (c) last v1
-delivery price**, and both halves are made DATA, so a different answer changes no code (§4 R2, R3).
-⛔ **Conflict named:** bible §16.11 (`PROJECT_BIBLE.md:2149`) says the 2027-01-01 opening layer is **weighted
-average**; Q8 (c) is a last price. **The bible wins until Ian rules** on `t390-q2-opening-cost-basis` (Open Questions
-page). The basis is a price-file setting (R2, §5.5 `--basis`), so either ruling is data, but **S2 does not start until
-that question is answered** (S1, S3's asset half, S4 may proceed).
+**Ian (RULED 2026-10-10, bible row 304):** Q8 = *"mirror v1, storage is important for commissary only; for branches
+and others 1 room only"*: **the commissary counts per room; each branch counts ONE room** (R1's default room: a
+branch count row with no room goes to the store's default room; no code change). **t390-q2 = (a) last v1 delivery
+price** (`--basis last`, `cost_source = 'v1_last_delivery'`). **Q-T390-1 = (b): every item v1 never delivered is
+priced by a manager typing it** (`cost_source = 'typed'`; no commissary transfer-price file). The §16.11 "weighted
+average" conflict is resolved: row 304 supersedes it and §16.11 now says so. **S2 may start.**
 
 ---
 
@@ -387,10 +387,10 @@ without (RAISE path). Full suite on a fresh gate DB (memory: a trigger migration
 
 ## 13. Questions for Ian (only his)
 
-- **t390-q2-opening-cost-basis (on the Open Questions page; S2 is gated on it).** Bible §16.11 says weighted average; Q8 (c) says last v1 delivery price. Either is `--basis weighted|last` on the price-list script; no code differs.
-- **Q8 (already open on the Open Questions page; not re-asked).** Built as (a) per room + (c) last v1 delivery price.
+- ✅ **ANSWERED 2026-10-10 (row 304): (a) last v1 delivery price.** Was: **t390-q2-opening-cost-basis.** Bible §16.11 says weighted average; Q8 (c) says last v1 delivery price. Either is `--basis weighted|last` on the price-list script; no code differs.
+- ✅ **ANSWERED 2026-10-10 (row 304): commissary per room, branches one room.** Was: **Q8.** Built as (a) per room + (c) last v1 delivery price.
   Either answer is now data (R1, R2).
-- **Q-T390-1 · Items no v1 delivery ever priced.** Commissary-made (`prepped`) items and anything never delivered
+- ✅ **ANSWERED 2026-10-10 (row 304): (b) the manager types every unpriced item.** Was: **Q-T390-1 · Items no v1 delivery ever priced.** Commissary-made (`prepped`) items and anything never delivered
   have no last v1 delivery price. Options: **(a) the commissary's price file (its transfer price) for prepped items,
   and the store manager types the rest on count day** · (b) the manager types every one · (c) open them at zero.
   **Recommended (a):** a transfer price is the closest thing to cost the commissary has; zero (c) understates the
