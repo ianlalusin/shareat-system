@@ -45,8 +45,9 @@ export async function loadCountSheet(orgId: string, storeId: string): Promise<Co
     const items = await itemsRepo.listItems(tx, orgId);
     // One query for the whole sheet, not a lookup per row.
     const counted = await tx.execute(dsql`
-      select item_id, quantity::text as quantity, unit_cost::text as unit_cost
+      select item_id, sum(quantity)::text as quantity, max(unit_cost)::text as unit_cost
       from opening_counts where org_id = ${orgId} and store_id = ${storeId}
+      group by item_id
     `);
     const byItem = new Map(
       (counted as unknown as Record<string, string>[]).map((r) => [

@@ -21,6 +21,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash, splitReturnTo, type Nav } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { PLATFORM_SALES_EDIT } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -279,7 +281,7 @@ export async function setPlatformSalesAction(formData: FormData): Promise<void> 
   try {
     await withOrgPrincipal(actor.orgId, (tx) => setPlatformSales(tx, actor, { salesDayId: id, rows }));
   } catch (err) {
-    return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
+    return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err), typed: keepTyping(formData, PLATFORM_SALES_EDIT, id, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(`/sales-days/${id}`, nav);
 }

@@ -309,6 +309,8 @@ async function cutoverFixture(hint: string) {
   const [admin] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
   await sql`insert into person_roles (person_id, org_id, role) values (${admin!.id}, ${orgId}, 'admin')`;
   await sql`insert into person_store_scope (person_id, store_id) values (${admin!.id}, ${storeId})`;
+  const [locType] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${orgId}, 'STK', 'Stockroom') returning id`;
+  await sql`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${orgId}, ${storeId}, 'KIT', 'Kitchen', ${locType!.id}, 'operating', true, ${admin!.id})`; // T-390 R1: a count needs a default room
   const [superAdmin] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Super') returning id`;
   await sql`insert into person_roles (person_id, org_id, role) values (${superAdmin!.id}, ${orgId}, 'super_admin')`;
   await sql`insert into person_store_scope (person_id, store_id) values (${superAdmin!.id}, ${storeId})`;

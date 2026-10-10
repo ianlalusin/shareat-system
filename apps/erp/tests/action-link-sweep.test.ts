@@ -394,13 +394,18 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1149 -> 1151, T-383 S2a 2026-10-09. +2: the Retire section on `items/[id]/page.tsx` (super-admin only) has two submit
     // `<button>`s, one in the Retire form and one in the Restore form (a static census counts both branches); the hidden
     // `itemId`/`status` inputs are not controls. FAIL / UNRESOLVED assertions unmoved. Verified by running the census (1151).
+    // 1151 -> 1152, T-395 S2 2026-10-10. +1 PASS: the "Reopen PIN sign-in" submit `<button>` in the new
+    // `app/staff/PinSignInPanel.tsx` (the hidden `storeId` input is not a control). FAIL 151 / UNRESOLVED unmoved, so
+    // touch-target-baseline.json needs no entry. Verified by running the census (1152).
     // 1151 -> 1152, T-387 S2 2026-10-10. +1: the new `components/feedback/SubmitButton.tsx` renders one kit `<Button type="submit">`.
     // FAIL / UNRESOLVED assertions unmoved. Verified by running the census (1152).
+    // 1152 + 1152 -> 1153 at the merge of T-395 S2 and T-387 S2 (both +1). Verified by running the census.
     // 1152 -> 1156, T-387 S3 2026-10-10. +4: Select.tsx `<select>`, Textarea.tsx `<textarea>`, Checkbox.tsx `<input type="checkbox">`
     // (the 3 UNRESOLVED above) and Banner.tsx's "Go to <field>" `<a>` (assumed a PASS: the builder gives it a 24px+ box).
     // FAIL unchanged at 151. If the Banner anchor lands FAIL or UNRESOLVED instead, correct this number and the totals
     // with a measured census, not by guess.
-    expect(results.length).toBe(1156);
+    // 1156 + T-395 S2's reopen button -> 1157 at the merge of PR #10 with T-387 S3. Verified by running the census.
+    expect(results.length).toBe(1157);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

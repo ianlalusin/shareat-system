@@ -19,6 +19,8 @@ import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { ATTENDANCE_POLICY } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -102,7 +104,7 @@ export async function updateAttendanceConfigAction(formData: FormData): Promise<
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/settings/attendance', { store: store }, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/attendance', { store: store }, { error: errorMessage(err), typed: keepTyping(formData, ATTENDANCE_POLICY, store, { actorId: actor.personId }) });
   }
   return await redirectWithFlash('/settings/attendance', { store: store }, { ok: `Saved. The new policy takes effect from ${effectiveFrom}.` });
 }

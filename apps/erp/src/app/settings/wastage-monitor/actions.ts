@@ -14,6 +14,8 @@ import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { WASTAGE_MONITOR_EDIT } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -32,7 +34,7 @@ export async function setWastageMonitorAction(fd: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) => setWastageMonitor(tx, actor, { storeId, personId }));
   } catch (err) {
-    return await redirectWithFlash('/settings/wastage-monitor', { store: storeId }, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/wastage-monitor', { store: storeId }, { error: errorMessage(err), typed: keepTyping(fd, WASTAGE_MONITOR_EDIT, storeId, { actorId: actor.personId }) });
   }
   revalidatePath('/settings/wastage-monitor');
   revalidatePath('/wastage');

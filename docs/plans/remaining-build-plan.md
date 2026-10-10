@@ -24,6 +24,29 @@
 
 ---
 
+## 0b. Progress as at 10 Oct 2026, evening (orchestrator)
+
+| Item | State | Left (lane-days) |
+|---|---|---|
+| C7 PIN throttle (T-395) | **Done.** S1 live (0190, PR #8); S2 on main (PR #10) | 0 |
+| C10 in-flight (T-383 S2, T-386 S5) | **Live** (PR #8). Left: the recode dry run with Ian, `--apply`, T-386 S6 CHECK | 0.5 |
+| C1/C2 opening stock + tie-out (T-390) | S1 count per room done (0191, PR #10). S3 tie-out next; S4 import/price list; S5 screens; **S2 gated on t390-q2** | 5.0 |
+| A12 keep typing (T-389) | S1 live; S2 + S3 on main (19 forms). Left: S4 (10 stock/item forms), S5 close | 1.0 |
+| C5 backups + restore (T-393) | spec not written; **needs Ian's Spaces key (Q7)** | 1.5 |
+| C3 master data (T-391) | spec not written; **needs Q5 rulings, the HR sheet** | 3.0 |
+| C4 comparator (T-392) | spec not written; **needs Q2 (what "ties" means)** | 4.5 |
+| C6 rehearsal + runbook (T-394), DEF-585 | spec not written; after C1, C2, C5 | 2.5 |
+| C8 three stores + timer (T-396) | spec not written; needs POS ids/keys/tenders per store | 1.0 |
+| C9 payroll (T-397 bridge, or T-190 + T-193) | **decided by Q1** | 2.0 (bridge) or 5.0 |
+| **Total cutover build left** | | **≈ 21 (bridge) to 24** |
+
+Measured pace on 10 Oct: three lanes finished ≈ 3.25 lane-days of slices in one session day (T-395 S2, T-389 S2 + S3,
+T-390 S1), each with tester-first red, an audit round and a browser smoke. At that pace the cutover **code** is
+6-8 working days away, i.e. done around 20-24 Oct, ahead of the 6 Nov line in §2.1, **if** the specs are written ahead
+(Opus, in parallel) and Ian's answers arrive. The binding constraints are not code: Q1, Q2, Q5, Q7 and t390-q2; master
+data and staff on production by 23 Oct; at least 15 compared trading days before 15 Nov.
+
+
 ## 1. Inventory
 
 Size is **lane-days** (one lane = the Sonnet builder + tester + auditor subagents, bible row 184).
@@ -39,7 +62,7 @@ S ≤ 1.5 · M 2-4 · L 5+. "Ian" = needs a decision (D), data (Da), hardware (H
 | C4 | **Dual-run comparator (v1 ↔ v2)** — absorbs T-114b | v1 journal/expenses/salesDays in Firestore (19,358 docs, `docs/STORE-ROSTER.md`); v1's own `api/cron/reconcile` | ETL capture, leg mapping and replay are built (T-112, T-113, T-117 done); **T-114b audit report is spec-only and on no board**; nothing compares a v1 period with a v2 period | One report per store per week that says, line by line, where v1 and v2 agree to the centavo and names every difference as a known policy class or a defect, so Ian can sign the dual run | **M-L (4.5)** | C3 (v2 needs real entries) | D: what "ties" means (Q2) |
 | C5 | **Nightly off-cluster backup + rehearsed restore** | n/a (v1 is Firestore) | DO Managed Postgres native backups only; **no dump, no restore ever rehearsed**; bible §15.8, row 274 and ADR-002 §1-3 require both; wizard step C1 asks for it | A dump lands in Spaces every night, a failure alerts, and a scripted restore into a scratch cluster proves the trial balance ties | **S (1.5)** | none | D/Da: Spaces key into the droplet env, scratch-cluster cost (Q7) |
 | C6 | **Purge + opening rehearsal on a restored copy; cutover runbook and rollback** | n/a | `scripts/cutover-purge.ts` + `packages/db/src/cutover/purge.ts` built and tested (T-119, T-347); never run against a copy of production; no hour-by-hour runbook; no written rollback (bible §10 phase 8) | By 13 Nov the whole 1 Jan sequence has run end to end on a restored copy, timed, with the runbook and the "go back to v1" rule written down | **M (2)** | C1, C2, C5 | P: attends the rehearsal; signs the runbook |
-| C7 | **PIN sign-in throttling (DEF-063)** | v1 `(auth)/login` | Register row `reported`: *"must not reach real staff without this"*; no attempt log; lockout PARTLY exists (T-303, 0147: 2-minute pause after 10 wrong PINs in 60 s) — corrected 2026-10-10 by the T-395 planner | Repeated wrong PINs at a store or device lock that pairing for a while and raise a finding, before the first cashier gets a PIN | **S (1.5)** | none | — |
+| C7 | **PIN sign-in throttling (DEF-063)** | v1 `(auth)/login` | **Built 2026-10-10 (T-395 S1+S2; DEF-063 fixed):** wrong PINs charged before the check, 50 a day stop a store, attempt log, two findings, manager reopen on /staff. Earlier: lockout PARTLY existed (T-303, 0147) | Repeated wrong PINs at a store or device lock that pairing for a while and raise a finding, before the first cashier gets a PIN | **S (1.5)** | none | — |
 | C8 | **Other three stores linked to POS + automatic morning import** | POS `external/sales/route.ts`; `docs/ops/lipa-pos-link-runbook.md` | Lipa linked (row 284); import is a button; DEF-586 stays partly open until every store is linked | Malvar, Banay-Banay and Davao import their closed days like Lipa, and every linked store's day is fetched by a timer each morning so a human only submits and verifies | **S (1)** + runbook × 3 | C3 (tenders, money accounts) | Da: POS store ids, keys, tenders · D (Q6) |
 | C9 | **Payroll on 1 Jan, one way or the other** | v1 `operation/payroll`, `operation/attendance/time-clock` | Phase 5 16/18: **T-190 not specced**, T-193 after it, both gated on HR data (0 of 126 staff); T-314 fingerprint blocked on hardware; no bridge entry exists (ADR-005 "Temporary bridges") | The first 2027 payday is computed and posted correctly: either by v2 (T-190, T-193, terminals live) or by v1 with one monthly summary entry in v2 citing the v1 register | **M (2)** bridge · or **M+M (5)** T-190/T-193 + T-314 | Q1; HR data 31 Oct; tablets | **D (Q1)** · Da (HR) · H (tablets, reader) |
 | C10 | **In-flight finishing** — T-386 S5/S6, T-383 S2, DEF-585 (no fiscal period before Oct 2026) | — | On main or specced; DEF-585 open | Item codes final, retire/restore live, every cutover-dated posting has a period | **S (1.5)** | — | P: recode dry run |

@@ -1,6 +1,6 @@
 # T-390: Opening stock from the count into FIFO opening layers per room, plus opening subledger tie-out gates
 
-**Status:** SPEC APPROVED WITH CHANGES 2026-10-10 (review applied; S2 gated on t390-q2). Written at `main` `a6a9665`
+**Status:** S1 DONE 2026-10-10 (`f75201e`, main `783d2b7`, migration 0191 in PR #10; audit round applied: per-(store,item) advisory lock; browser smoke on 9008 passed, 5 checks). DEF-630 (edit of a merged two-room line double-counts) is S5's, and must land before S4's import is used on real data. S3 in a lane. S2 still gated on t390-q2. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (review applied; S2 gated on t390-q2). Written at `main` `a6a9665`
 by the Opus planner; the money review's 13 findings are applied in §4 R5a, R8, R13, R15-R17, §5, §7, §8 and §11.
 **Model:** Sonnet lanes, **tester first** in every slice, then builder (bible row 184). An amendment is written in plan
 mode (Opus).
