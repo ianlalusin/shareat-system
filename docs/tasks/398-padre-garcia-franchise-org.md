@@ -1,6 +1,7 @@
 # T-398: Padre Garcia on v2 as its own organisation (plan C11)
 
-**Status:** SPEC DRAFT 2026-10-10 (Opus planner) — awaiting a fresh Opus review (money/auth).
+**Status:** SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). Amendments A1-A10 in §8 bind and win
+over any earlier sentence they correct; the corrected sentences are also fixed in place.
 **Model:** Sonnet lanes (tester then builder per slice); Opus for the review and for any spec amendment.
 **Why now:** bible row 305 (Ian, 2026-10-10, plan-q4 = (b)): *Padre Garcia runs on v2 by 1 January 2027, as its own
 organisation.* Row 246's trigger ("before a second organisation is onboarded") therefore fires before cutover, so
@@ -62,27 +63,33 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
   `FOREIGN KEY (org_id, col) REFERENCES parent (org_id, id) ON DELETE RESTRICT`, MATCH SIMPLE (a NULL `col` skips the
   check), name `<table>_<col>_same_org_fk` (≤63 chars; where too long, the builder shortens and records the mapping
   in the migration header). Single-column FKs stay. Drizzle mirrors each composite (ADR-012 §5.3).
-  - ⚠️ **Production lock budget.** Each FK is added `NOT VALID`, then `VALIDATE CONSTRAINT` in a later statement of the
-    same migration: the add takes a brief lock, the validate a `SHARE UPDATE EXCLUSIVE` that does not block writes.
-    The migration runs on production **during the dual run**; a blocking 300-FK migration at 06:00 would stall the
-    T-396 timer.
+  - ⚠️ **Production lock budget — corrected by A1.** drizzle applies every pending migration in ONE transaction
+    (`drizzle-orm` pg-core `dialect.js:60`), so `NOT VALID` then `VALIDATE` in the same migration gains nothing: each
+    `ADD FOREIGN KEY` holds `SHARE ROW EXCLUSIVE` on child and parent, and each `UNIQUE (org_id, id)` holds `SHARE`,
+    until commit. The rule is A1: `SET LOCAL lock_timeout`, a timed run on a production-size restore with the budget
+    stated in the migration header, a night window, and `VALIDATE` in a separate deploy where the budget is exceeded.
   - **Pre-flight, fail closed** (T-357 R4): a DO block counts cross-org rows per FK and RAISEs naming each non-zero
     one with *"DEF-491: no silent fix; each row needs a human decision"*. Production holds one org, so its count is
     0 by construction; a lane DB with residue is re-made, never the migration edited (T-357 R7).
 - **R3 — Derived-scope children (the 79) get a trigger, not a new column.** One generic `plpgsql` function,
   `assert_same_org_via_parent()`, parameterised by `TG_ARGV` (child FK column, header table, header FK column,
   target table), raising `23503`-class `foreign_key_violation` with a named message; one `BEFORE INSERT OR UPDATE OF
-  <col>` trigger per FK. Reason: adding `org_id` to ≈40 child tables means backfill + 40 Drizzle schema changes +
-  40 repo writers, for the same guarantee. The trigger runs as the table owner, so RLS does not blind it. The census
+  <col>, <header fk col>` trigger per FK. Reason: adding `org_id` to ≈40 child tables means backfill + 40 Drizzle
+  schema changes + 40 repo writers, for the same guarantee. ⛔ **Corrected by A2:** a trigger runs as the INVOKER;
+  under `shareat_app` with FORCE RLS a cross-org target is invisible, so a plain comparison sees NULL and passes. The
+  function therefore RAISEs when the header or the target is NOT FOUND (precedent: `0185:126`). The census
   test reads the registry of these triggers from `pg_trigger` (`tgargs`), not from a TS list.
 - **R4 — DEF-421: `tx: Tx` is non-nullable in `packages/domain/src`, with a closed allow-list.** The compiler is the
   guard (a `null` argument stops typecheck), plus a source-scanning unit test so the allow-list cannot grow silently.
-  - **Allowed to keep `Tx | null`** (the AUTH door, before any principal exists, and one deliberate case):
-    `signInWithFirebase`, `signInWithPin`, `resolveTerminalIdentity`, `resolveActor`, `signOut`, and
-    `runDepreciation` (DEF-421 note: one tx per asset). The builder confirms each by reading it; any other function
-    found to need it is a **spec defect to report**, not an addition.
+  - **Allowed to keep `Tx | null`.** In `packages/domain/src`: **only `runDepreciation`** (DEF-421 note: one tx per
+    asset). The AUTH door — `signInWithPin`, `signInWithFirebase`, `resolveTerminalIdentity`, `resolveActor`,
+    `signOut` — lives in `packages/auth/src/sessions.ts` (`:85,265,333,395,431`), outside the scan root, and stays
+    as it is. Any other function found to need it is a **spec defect to report**, not an addition.
   - `runDepreciation`'s null branch opens `withOrgPrincipal(orgId, …)` per asset, never a bare `transaction()`.
-  - No `transaction(` import remains in `packages/domain/src` outside the allow-listed files.
+  - No `transaction(` call remains in `packages/domain/src`. That includes the **bare `transaction((trx) => …)`
+    forms** that are not `transaction(run)` (A9 names them, e.g. `files/index.ts:112,282`, `expenses/*`,
+    `ledger/post-entry.ts:148`, `ledger/reverse-entry.ts:92`, `money-accounts/index.ts:77,129`,
+    `money-transfers/index.ts:68,164`, `fixed-assets/*`); each one's principal is ruled in A9.
   - The 12 non-test `null` callers (`apps/erp/src/app/fixed-assets/actions.ts:205`, sign-in, setup, session,
     `scripts/smoke-pin-throttle.ts:51`) are all allow-listed functions; nothing else changes in apps.
   - The ≈100 test call sites (22 files) that pass `null` move to `withOrgPrincipal(org, (tx) => fn(tx, …))`. That is
@@ -99,11 +106,12 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
     the quantity actually received, and the existing delivery path posts `DR 1310 Inventory / CR 2110 AP`, party =
     PG's supplier row for the commissary (`suppliers.counterparty_org_id` = Ian's org, new). The delivery row carries
     `inter_entity_shipment_id` — a cross-org FK **by design**, listed in `CROSS_ORG_BY_DESIGN`.
-  - **Shortage:** PG receives less → its AP is for what it received. The seller learns of it through the
-    reconciliation (below) as a `trade_discrepancies` row in its own org, and resolves it with the existing customer
-    return/credit (`recordCustomerReturn` / `applyCredit`). No automatic cross-org write.
-  - **Reconciliation, scheduled (06:30 Manila) and on demand:** a system job (the scheduler's per-org loop,
-    `packages/domain/src/scheduler`) compares per shipment *seller charged − credits* with *buyer AP posted*, and per
+  - **Shortage — corrected by A7:** PG receives less → its AP is for what it received. The seller sees it through
+    the reconciliation function (A3) and raises a **credit note** (contra-revenue / `CR 1210`) with the lost cost
+    expensed as a loss, modelled on the commissary discrepancy-loss pattern — **not** `recordCustomerReturn`, because
+    nothing comes back. No automatic cross-org write.
+  - **Reconciliation, scheduled (06:30 Manila) and on demand — mechanism ruled by A3** (the per-org loop cannot
+    read the other org): compares per shipment *seller charged − credits* with *buyer AP posted*, and per
     pair *seller AR balance for the franchise customer* with *buyer AP balance for the commissary supplier*. A
     difference raises a finding **in each org, in that org's own words** (the seller does not see the buyer's AP
     detail, only "Padre Garcia has recorded ₱X against shipment N"). This is ADR-008 §4's "the same debt viewed
@@ -143,20 +151,21 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
 
 ## 3. Slices
 
-Order: **S1 ∥ S2 → S3 → S4 → (S5 ∥ S6) → S7.** S1 and S2 touch disjoint trees (db schema/migrations vs domain/tests)
-and share no state if each runs on its own lane DB (row 298 worktrees). S5 and S6 both add a migration: whichever
-merges second renumbers to the next free slot and re-runs `migration-journal.test.ts`.
+Order: **S1 ∥ S2 → S3 → S4 → (S5 ∥ S6, merges serialised: S5 first) → S7.** S1 and S2 touch disjoint trees (db schema/migrations vs domain/tests)
+and share no state if each runs on its own lane DB (row 298 worktrees). S5 and S6 both edit the migration journal, `cutover/classification.ts` and `rls/registry.ts`
+(A10): they build in parallel worktrees but **merge one after the other, S5 first**; S6 rebases, renumbers to the next
+free slot and re-runs `migration-journal.test.ts`, `rls-registry.test.ts` and `cutover-classification.test.ts`.
 
 | Slice | What | Migration | Size | Needed by |
 |---|---|---|---|---|
-| **S1** | Census guard + exemptions file; persons (143) + stores (71) composites | yes | M 1.5 | 13 Nov (plan) |
+| **S1** | Census guard (A8 scope) + exemptions file; persons (143) + stores (71) composites | yes | M 2 | 13 Nov (plan) |
 | **S2** | DEF-421: non-nullable `tx`, allow-list guard, tests moved to principals | none | M 1.5 | 13 Nov |
 | **S3** | DEF-491: the remaining org→org parents (journal_entries, items, stock_locations, suppliers, employments, the rest ≈146) | yes | M 1.5 | 20 Nov |
 | **S4** | DEF-491: the 79 derived-scope FKs by trigger; `OPEN_DEF_491` reaches empty | yes | S-M 1.5 | 24 Nov |
-| **S5** | Inter-entity sale: shipment handoff, buyer receipt, reconciliation | yes | M 2 | 1 Dec |
-| **S6** | Sales-only view + access log + break-glass sign-in logging + screen | yes | M 1.5 | 1 Dec |
+| **S5** | Inter-entity sale: shipment handoff, definer receive/void, credit note, reconciliation fn | yes | L 3.5 | 1 Dec |
+| **S6** | Sales-only view + access log + break-glass sign-in logging + screen (A5 hardening) | yes | M 2 | 2 Dec, merged after S5 |
 | **S7** | Onboarding CLI, split item import, POS link, multi-org job checks, two-org rehearsal data | none expected | M 1.5 | 4 Dec |
-| | **Total** | 5 | **≈ 11** | |
+| | **Total** | 5 | **≈ 13.5** (was 11) | |
 
 ### S1 — the census guard, persons and stores (DEF-491 part 1)
 
@@ -193,8 +202,9 @@ entries need a planner ruling id" assertion.
 `Tx | null` and for `transaction(` imports outside the R4 allow-list); every test file that passes `null` to a
 domain function (≈22 files; the tester lists them) — **only** the `null` → `withOrgPrincipal` change; new
 `packages/domain/tests/integration/t398-s2-depreciation-principal.test.ts`.
-**BUILDER paths:** `packages/domain/src/**` signatures and null branches only; no behaviour change. ⛔ No app, db,
-or test file.
+**BUILDER paths:** `packages/domain/src/**` signatures and null branches only. No behaviour change **except** the
+A9 bare-`transaction((trx) => …)` sites, each of which now opens the principal A9 rules. ⛔ No app, db, auth, or test
+file.
 
 | Id | Case | Target | Red today |
 |---|---|---|---|
@@ -284,7 +294,8 @@ treatment from `customer_group` → E13.
 `packages/auth/src/capabilities.ts` (the new capability, matrix, labels, area); `packages/domain/src/franchise/`
 (new: `viewFranchiseSales`, `listFranchiseAccessLog`); the sign-in path for a person whose org has a
 agreement and who is its `franchisor_person_id` (logs `break_glass_sign_in`) in
-`packages/domain/src/people/` or the session module — the builder names the file; `apps/erp/src/app/franchise/`
+`packages/auth/src/sessions.ts` (A5: also where `app.person_id` is set for this path);
+`packages/db/src/rls/principal.ts` (A5: `openAs` gains the person id); `apps/erp/src/app/franchise/`
 (new screens: sales by day/channel/tender for Ian's org; access log for PG's org); nav entry gated on the
 capability.
 
@@ -368,13 +379,110 @@ through existing screens**, not code; the 18 Dec rehearsal runs with both orgs (
   from today's branch price for each item, then yours to change · (b) the branch price rule as is · (c) cost only.
   **Recommended (a)** — a separate company buys at an agreed price; the price list already exists for wholesale.
 
+- **Q5 — Is the commissary VAT-registered, and are PG's prices VAT-inclusive?** (a) yes / inclusive: output VAT on
+  the commissary side, input VAT on PG's · (b) not registered: no VAT legs · (c) unsure — ask the accountant.
+  **Recommended: answer (a) or (b) by 13 Nov, via (c) if needed**; the S5 posting pattern depends on it.
+- **Q6 — When does the commissary book the sale: at dispatch, or when PG confirms receipt?** (a) at dispatch (today's
+  wholesale path; a shortage becomes a credit note) · (b) at PG's receipt (what v1 does for branches,
+  `branch-sale-ar.ts`). **Recommended (a)** — one posting function owns AR, and PG's receipt runs in PG's org and
+  cannot post Ian's books in the same transaction. Goods in transit are excluded from the AR = AP check.
+- **Q7 — PG's credit limit and payment terms?** (a) a limit and terms on PG's customer row, enforced at dispatch like
+  any buyer · (b) no limit. **Recommended (a)**, figures from the franchise agreement.
+- **Q8 — May the commissary see "PG recorded ₱X against shipment N"?** (a) yes, per shipment only, never PG's AP
+  ledger · (b) no, only "matched / not matched". **Recommended (a)** — the same debt seen from the other side
+  (ADR-008 §4), not PG's cost structure (§5).
+- **Q9 — Who runs the production-migration prechecks and picks the night windows for S1, S3, S4?** (a) Ian with the
+  orchestrator, from precheck SQL in `docs/ops/README.md`, as for 0187 · (b) the orchestrator alone.
+  **Recommended (a)** — the precedent for every production migration.
+- **Q10 — Tell PG in writing that the platform operator (you) can technically reach all data, and that every use is
+  logged?** (a) yes, in the franchise agreement or a privacy notice (Data Privacy Act) · (b) no. **Recommended (a)**.
+
 ## 7. Risks to 4 Dec
 
 | # | Risk | Mitigation |
 |---|---|---|
-| K1 | DEF-491 is ≈440 constraints in three migrations applied to production during the dual run | `NOT VALID` + `VALIDATE` (R2); apply each outside 05:30-07:00; the pre-flight count is 0 with one org |
+| K1 | DEF-491 is ≈440 constraints in three migrations applied to production during the dual run, in one drizzle transaction holding `SHARE ROW EXCLUSIVE` until commit | A1: `lock_timeout`, timed on a production-size restore, night window, `VALIDATE` split into a later deploy if over budget; Q9 names who runs it |
 | K2 | S2's ≈100 test call-site moves collide with lanes editing the same test files before 15 Nov | S2 in its own worktree; merge at a lane boundary; the full suite in CI |
-| K3 | Lanes are needed for C1-C8 before 15 Nov; S1+S2 alone are due 13 Nov | S1/S2 are the plan's "C11 part 1"; S3-S7 start after 15 Nov (≈ 8 lane-days in 13 working days) |
+| K3 | Lanes are needed for C1-C8 before 15 Nov; S1+S2 (3.5) are due 13 Nov | S3-S7 are ≈ 10 lane-days in the 13 working days 16 Nov-4 Dec: **4 Dec holds only with two lanes on C11 from 16 Nov** (S3→S4→S7 on one; S5→S6 on the other). One lane ≈ 18 Dec, i.e. the drop-alone rule fires |
 | K4 | Ian's answers and data: Q1-Q4, a second sign-in email, PG's owner and staff names, POS store id, tenders, money accounts | On the Open Questions page now; needed by 20 Nov for S7 |
 | K5 | T-391 owns `scripts/import-items.ts`; PG's split collides | S7 stops and reports if T-391 is mid-flight; otherwise one flag |
 | K6 | Reconciliation is weaker than a shared transaction (by design) | Daily job + findings in both orgs; E7/E12 pin exactness |
+
+## 8. Amendments (fresh Opus review, 2026-10-10 — these bind)
+
+- **A1 — Migration locks (R2, K1).** drizzle runs every pending migration in one transaction
+  (`drizzle-orm` pg-core `dialect.js:60`). Each DEF-491 migration (S1, S3, S4) therefore:
+  - starts with `SET LOCAL lock_timeout = '5s'` (fail fast rather than queue behind live traffic);
+  - is **timed on a production-size restore** by the builder; the measured time and the locks taken go in the
+    migration header as its budget;
+  - is applied in a **night window** (Q9), never 05:30-07:00 (the T-396 timer);
+  - if the timed run exceeds 60 s, `VALIDATE CONSTRAINT` moves to a **separate later migration and deploy**.
+  - New leg **L1** (S1, S3, S4): the migration text contains `lock_timeout` and its header states the budget (a
+    source assertion in the census test file).
+- **A2 — Triggers fail closed (R3, S4).** The function selects the header's and the target's `org_id` into
+  variables; if either is NOT FOUND it RAISEs `foreign_key_violation` naming DEF-491 (precedent `0185:126`), because
+  under `shareat_app` + FORCE RLS an invisible cross-org row reads as absent. The trigger is `UPDATE OF <fk col>,
+  <header fk col>`. New legs: **D6** as app role, a target in org B (invisible) → rejected, not passed; **D7** UPDATE of
+  the child's header FK to a header in org B → rejected; **D8** D6 as owner (visible, different org) → rejected.
+  Mutant: replace the NOT FOUND RAISE with `RETURN NEW` → D6 red.
+- **A3 — Reconciliation mechanism (R5).** The per-org scheduler loop runs under one org and cannot read the other.
+  Ruling: a `SECURITY DEFINER` function `inter_entity_buyer_posted(shipment_ids uuid[])`, `search_path` pinned,
+  `EXECUTE` to `shareat_app` only, returning **per shipment only** the buyer's received date and posted total, and
+  only for shipments whose `org_id = app_current_org()` (the seller). The seller's job runs under the seller's
+  principal and calls it; the buyer's job reads the seller's billed total through the shipment rows it can already
+  see. No `systemTransaction` caller is added. The AR = AP balance check **excludes shipments in transit**
+  (dispatched, not received, not void). New legs: **E14** a third org calling it gets 0 rows; **E15** it returns no
+  column beyond those two (catalog check); **E16** an in-transit shipment raises no finding. Mutant: drop the
+  `org_id = app_current_org()` filter → E14.
+- **A4 — Void vs receive (R5).** Receipt is `SECURITY DEFINER receive_inter_entity_shipment(shipment_id)`: it locks the
+  shipment row `FOR UPDATE`, refuses if voided or already received, and sets `received_at` / `received_by` (the buyer
+  still cannot UPDATE the table directly — E4 stands). The seller's void takes the same row lock and refuses once
+  `received_at` is set (E10). `UNIQUE (inter_entity_shipments.trade_order_id)` makes dispatch idempotent. New legs:
+  **E17** concurrent void and receive (two connections, a barrier) → exactly one wins, the other refuses in words;
+  **E18** a retried dispatch writes no second shipment. Mutant: drop `FOR UPDATE` → E17 red (run 20 times).
+- **A5 — The "who" cannot be forged (R6, S6).** `openAs` (`packages/db/src/rls/principal.ts:161`) does not set
+  `app.person_id` today; it gains the person id, and the S6 path sets it from the session's actor.
+  `franchise_sales_daily` refuses a NULL `app.person_id` and checks that the person holds an active `super_admin`
+  role in the franchisor org. `REVOKE EXECUTE … FROM PUBLIC` on every T-398 function; no INSERT, UPDATE or DELETE
+  grant on `franchise_access_log` to `shareat_app` (break-glass sign-in writes through a definer function
+  `log_break_glass_sign_in()`); a statement-level trigger refuses TRUNCATE. The log's "who" column names a person of
+  the **reader's** org while the row's `org_id` is the franchisee: it is listed in `CROSS_ORG_BY_DESIGN` with this
+  amendment as its reason. New legs: **V10** NULL person id → refused, no log row; **V11** a non-super-admin person
+  → refused; **V12** `shareat_app` INSERT into the log → permission denied; **V13** TRUNCATE as owner → refused;
+  **V14** `PUBLIC` holds no EXECUTE (catalog). Mutants: grant INSERT to `shareat_app` → V12; drop the super-admin
+  check → V11.
+- **A6 — The buyer's link is a composite too (R5).** `UNIQUE (buyer_org_id, id)` on `inter_entity_shipments`;
+  `deliveries` gets `FOREIGN KEY (org_id, inter_entity_shipment_id) REFERENCES inter_entity_shipments (buyer_org_id,
+  id)`, so a PG delivery can point only at a shipment addressed to PG. The census learns this shape ("composite to a
+  declared counterparty column") instead of an exemption: `CROSS_ORG_BY_DESIGN` does **not** gain
+  `deliveries.inter_entity_shipment_id` (R5's sentence is superseded). New leg **E19**: a delivery in org C pointing
+  at a PG shipment → `23503`.
+- **A7 — Corrections after dispatch (R5, E7).** The planner adds to `docs/POSTING-PATTERNS.md` before S5's tester
+  starts: **`trade_dispatch.franchise`** (seller: the external-sale legs) and
+  **`trade_dispatch.franchise_transit_shortage`** (seller: `DR` sales returns and allowances (contra-revenue) /
+  `CR 1210` at the sale value of the short quantity; and that quantity's cost `DR` the commissary discrepancy-loss
+  account / `CR` the COGS it was relieved to, modelled on the existing commissary discrepancy-loss entry; buyer:
+  nothing — its AP is already for what it received). Rules: **over-receipt is refused** at PG's receipt (received
+  ≤ shipped per line); a **physical return** after receipt is a PG supplier-return paired with a commissary
+  customer-return, each in its own org, matched by the reconciliation; **after receipt the only correction is a
+  return or a credit**, never an edit. E7 is restated against the credit note, not `recordCustomerReturn`. New legs:
+  **E20** over-receipt refused; **E21** a paired return clears the reconciliation.
+- **A8 — Census scope (R1, S1).** The census also covers: `journal_lines.party_id` (text, no FK — asserted against
+  the party tables of the line's own org); `jsonb` reference fields (the tester lists them from the schema, each
+  asserted or declared); org→derived and derived→derived FKs; and a **declared no-FK reference list** (`*_id`
+  columns with no FK) in the exemptions file, each with a reason. `CROSS_ORG_BY_DESIGN` and the `OPEN_DEF_491`
+  baseline are **pinned by value** in the test, so changing either file without the test is red. Every child of a
+  composite asserts `org_id NOT NULL` (catalog). New legs: **C5** a seeded cross-org `party_id` → red; **C6** a new
+  `*_id` column with no FK and no declaration → red; **C7** a nullable `org_id` on a composite child → red.
+- **A9 — DEF-421 scope (R4, S2).** The domain allow-list is `runDepreciation` only; `packages/auth/src/sessions.ts`
+  holds the auth door and is outside the scan. Every bare `transaction((trx) => …)` in `packages/domain/src` (the
+  tester lists each `file:line`, e.g. `files/index.ts:112,282`, `ledger/post-entry.ts:148`) becomes either (a)
+  removed with its `| null`, the caller passing a principal-bearing `tx` — the default — or (b) for a function with a
+  real non-request caller (scheduler, `scripts/`), `withSystemOrgPrincipal(orgId, …)`. The builder states (a) or (b)
+  per site in its report; a (b) not reached from the scheduler or `scripts/` is a defect. T1/T2 scan both forms.
+- **A10 — Merge order and the RLS-registry exception (S5, S6).** `inter_entity_shipments(_lines)` carry a **dual-org
+  SELECT policy** (`org_id = app_current_org() OR buyer_org_id = app_current_org()`), and the franchise tables one
+  keyed on `franchisor_org_id`. `rls-registry.test.ts` expects the single `org_id` shape, so `rls/registry.ts` gains a
+  named policy kind **`dual_org_counterparty`** (counterparty column named per table) that the registry test learns,
+  rather than a per-table skip. S5 introduces it; S6 reuses it. Sizes now S1 2, S5 3.5, S6 2; total ≈ 13.5
+  lane-days (K3).
