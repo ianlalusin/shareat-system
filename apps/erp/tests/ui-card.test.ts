@@ -34,6 +34,12 @@ function classTokens(html: string): Set<string> {
 }
 
 describe('Card — T-334 slice 2 contract', () => {
+  it('T-387 S2: rounded-[14px] bg-surface border border-surface-border p-4, exactly (Amendment 7)', () => {
+    const tokens = classTokens(renderToStaticMarkup(createElement(Card, { children: 'x' })));
+    expect([...tokens].sort()).toEqual(['bg-surface', 'border', 'border-surface-border', 'p-4', 'rounded-[14px]']);
+    expect(tokens.has('rounded-lg')).toBe(false);
+  });
+
   it('appends a passed className to its own classes rather than replacing them (§4.6)', () => {
     // §3 names Card's own classes literally (bg-surface, border-surface-border), unlike the other
     // two components' base states, so those literals double as the append-not-replace proof: a
