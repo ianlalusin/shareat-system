@@ -15,6 +15,7 @@ import {
 } from '@shareat/domain';
 import type { LocationLike } from '../../src/stock-locations/rules';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { testItemCode } from './_fixtures/item-code';
 
 /**
  * T-169 workflow — the layer `count-sessions.ts` (the engine) deliberately does not own: who may
@@ -118,10 +119,10 @@ async function fixture(): Promise<Fixture> {
 
   const [item] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${staff!.id}) returning id`;
+    values (${orgId}, ${testItemCode()}, 'Pork Belly', 'raw_material', 'kg', ${staff!.id}) returning id`;
   const [itemB] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgId}, ${uid('ITEM')}, 'Chicken', 'raw_material', 'kg', ${staff!.id}) returning id`;
+    values (${orgId}, ${testItemCode()}, 'Chicken', 'raw_material', 'kg', ${staff!.id}) returning id`;
 
   const [file] = await sql<{ id: string }[]>`
     insert into stored_files (org_id, storage_path, content_type, byte_size, checksum, purpose, uploaded_by)

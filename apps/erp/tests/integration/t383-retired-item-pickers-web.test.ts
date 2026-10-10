@@ -15,6 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 config({ path: '.env.local' });
 
@@ -98,7 +99,7 @@ async function mkItem(f: Fixture, name: string, kind = 'raw_material'): Promise<
   const full = `${name} ${uid('n')}`;
   const [row] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${f.orgId}, ${uid('CODE').slice(0, 24)}, ${full}, ${kind}, 'kg', ${f.actor.personId}) returning id`;
+    values (${f.orgId}, ${testItemCode()}, ${full}, ${kind}, 'kg', ${f.actor.personId}) returning id`;
   return { id: row!.id, name: full };
 }
 async function stock(f: Fixture, itemId: string, storeId: string, locationId: string, qty: string): Promise<void> {

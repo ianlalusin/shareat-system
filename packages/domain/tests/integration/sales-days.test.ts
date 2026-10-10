@@ -44,6 +44,7 @@ import {
   SalesDayBlockedError,
   InternalFaultError,
 } from '@shareat/domain';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 
@@ -710,7 +711,7 @@ describe('T-174 — an unresolved transit shortfall blocks a new day', () => {
   ): Promise<string> {
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${uid('itm')}, 'Pork', 'raw_material', 'kg', ${f.staffId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, 'Pork', 'raw_material', 'kg', ${f.staffId}) returning id`;
     const [cst] = await sql<{ id: string }[]>`
       insert into customers (org_id, name, customer_group, created_by)
       values (${f.orgId}, ${uid('Branch')}, 'internal', ${f.staffId}) returning id`;

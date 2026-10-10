@@ -154,6 +154,8 @@ export const items = pgTable(
     uniqueIndex('items_org_name_key').on(t.orgId, sql`lower(${t.name})`),
     index('items_org_status_idx').on(t.orgId, t.status),
     check('items_code_not_blank_check', sql`length(trim(${t.code})) > 0`),
+    // T-386 S6 (migration 0192): 4 letters/digits, a dash, 3 digits, never 000. Added NOT VALID then validated.
+    check('items_code_shape_check', sql`${t.code} ~ '^[A-Z0-9]{4}-[0-9]{3}$' and right(${t.code}, 3) <> '000'`),
     check('items_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
   ],
 );

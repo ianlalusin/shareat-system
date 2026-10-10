@@ -6,6 +6,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import type { LocationLike } from '../../src/stock-locations/rules';
+import { testItemCode } from './_fixtures/item-code';
 
 /**
  * T-166 — receiving, and the seam five tasks were waiting for.
@@ -73,10 +74,10 @@ beforeEach(async () => {
   receivingRoom = r1!.id; kitchen = r2!.id;
   const [i1] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgA},'PORK','Pork Belly','raw_material','kg',${personA}) returning id`;
+    values (${orgA},${testItemCode()},'Pork Belly','raw_material','kg',${personA}) returning id`;
   const [i2] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgA},'GLOVE','Gloves','supply','pcs',${personA}) returning id`;
+    values (${orgA},${testItemCode()},'Gloves','supply','pcs',${personA}) returning id`;
   itemA = i1!.id; itemB = i2!.id;
   // ⚠️ `receipt_photo`, not a new purpose: a delivery's proof IS the photo of the supplier's
   // paper, which is exactly what that purpose already means. The storage path must match

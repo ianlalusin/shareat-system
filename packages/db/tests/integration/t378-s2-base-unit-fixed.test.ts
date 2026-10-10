@@ -39,6 +39,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { APP_ROLE } from '../../src/rls/registry';
+import { testItemCode } from '../../../domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 8 });
 let seq = 0;
@@ -103,7 +104,7 @@ async function mkItem(hint: string, o: { kind?: string; unit?: string; parentSla
   const name = uid(`${hint}`);
   const [r] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by, parent_slab_item_id, cost_basis_item_id)
-    values (${orgId}, ${name}, ${name}, ${o.kind ?? 'raw_material'}, ${o.unit ?? 'kg'}, ${personId},
+    values (${orgId}, ${testItemCode()}, ${name}, ${o.kind ?? 'raw_material'}, ${o.unit ?? 'kg'}, ${personId},
             ${o.parentSlab ?? null}, ${o.costBasis ?? null})
     returning id`;
   return { id: r!.id, name };

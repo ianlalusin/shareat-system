@@ -34,6 +34,7 @@ import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-d
 import { mkSubmitter, submitThenVerify } from './_fixtures/sales-day-flow';
 import { humanDate } from '../../src/shared/refusal-leaf';
 import type { LocationLike } from '../../src/stock-locations/rules';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 12 });
 let seq = 0;
@@ -178,7 +179,7 @@ async function fixture(hint: string, opts: { instant?: boolean } = {}) {
     values (${orgId}, ${storeId}, 'KIT', 'Kitchen', ${type!.id}, 'operating', true, ${managerId}) returning id`;
   const kitchen = kit!.id;
   const [coke] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, 'COKE', 'Coke', 'retail', 'pcs', ${managerId}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Coke', 'retail', 'pcs', ${managerId}) returning id`;
   const itemCoke = coke!.id;
   const [file] = await sql<{ id: string }[]>`
     insert into stored_files (org_id, storage_path, content_type, byte_size, checksum, purpose, uploaded_by)

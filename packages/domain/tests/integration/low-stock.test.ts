@@ -6,6 +6,7 @@ import { decimal } from '@shareat/core/money';
 import { ensureAutoOrderLines, replenishAfterUsage, suggestFor } from '../../src/commissary/auto-order';
 import { listOrderMessages, postOrderMessage } from '../../src/commissary/messages';
 import { quantity } from '../../src/stock/quantity';
+import { testItemCode } from './_fixtures/item-code';
 
 /**
  * T-175 — low stock becomes an order, and the order has a conversation.
@@ -75,7 +76,7 @@ beforeEach(async () => {
   const mkItem = async (code: string, name: string) => {
     const [r] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${orgA},${code},${name},'raw_material','kg',${personA}) returning id`;
+      values (${orgA},${testItemCode()},${name},'raw_material','kg',${personA}) returning id`;
     return r!.id;
   };
   pork = await mkItem('PORK', 'Pork'); sauce = await mkItem('SAUCE', 'Bulgogi sauce');
@@ -193,7 +194,7 @@ describe('T-175 — ⭐ the suggested quantity, and why it is not v1’s zero', 
   it('⛔ an item the commissary has no price for is NOT added, and says so', async () => {
     const [nameless] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${orgA},'X','Unpriced thing','raw_material','kg',${personA}) returning id`;
+      values (${orgA},${testItemCode()},'Unpriced thing','raw_material','kg',${personA}) returning id`;
     await threshold(branch, nameless!.id, '10');
 
     const res = await autoOrder();

@@ -30,6 +30,7 @@ import type { Actor } from '@shareat/auth';
 import { acknowledgeFinding, listFindings, seedAttendanceConfig } from '@shareat/domain';
 import * as domain from '@shareat/domain';
 import { postEntry } from '../../src/ledger/post-entry';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -151,7 +152,7 @@ describe('F2 - no non-cash kind', () => {
       insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
       values (${f.orgId}, ${f.storeId}, 'A', 'Stockroom A', ${lt!.id}, 'operating', true, ${f.personId}) returning id`;
     const [item] = await sql<{ id: string }[]>`
-      insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('I')}, 'Rice', 'raw_material', 'kg', ${f.personId}) returning id`;
+      insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${testItemCode()}, 'Rice', 'raw_material', 'kg', ${f.personId}) returning id`;
     await sql`
       insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
       values (${f.orgId}, ${f.storeId}, ${loc!.id}, ${item!.id}, now(), 5, 'opening', 'fixture', ${f.personId}, ${f.personId})`;

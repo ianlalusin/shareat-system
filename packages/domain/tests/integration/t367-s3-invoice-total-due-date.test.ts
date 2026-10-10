@@ -33,6 +33,7 @@ import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import { createSupplier, recordInvoice, setInvoiceLines, lineTotalFromParts } from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -75,7 +76,7 @@ async function fixture(hint: string) {
   const terms30 = await asOrg(orgId, (tx) => createSupplier(tx, manager, { name: 'Thirty Day Supplier', creditTermsDays: 30 }));
   const cod = await asOrg(orgId, (tx) => createSupplier(tx, manager, { name: 'COD Supplier' }));
   const [item] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${managerId}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Pork Belly', 'raw_material', 'kg', ${managerId}) returning id`;
   return { orgId, storeId, manager, staff: actor(orgId, staffId), terms30Id: terms30.id, codId: cod.id, itemId: item!.id };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;

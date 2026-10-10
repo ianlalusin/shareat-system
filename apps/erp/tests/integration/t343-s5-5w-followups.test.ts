@@ -622,7 +622,7 @@ async function deliveryUnitCostAttempt(
     insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
     values (${orgId}, ${storeId}, 'KIT', 'Kitchen', ${locType!.id}, 'operating', true, ${staff!.id}) returning id`;
   const [item] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${uid('SKU')}, 'Probe Item', 'raw_material', 'kg', ${staff!.id}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Probe Item', 'raw_material', 'kg', ${staff!.id}) returning id`;
   const [file] = await sql<{ id: string }[]>`
     insert into stored_files (org_id, storage_path, content_type, byte_size, checksum, purpose, uploaded_by)
     values (${orgId}, ${`orgs/${orgId}/proof.jpg`}, 'image/jpeg', 1024, ${uid('chk')}, 'receipt_photo', ${staff!.id}) returning id`;

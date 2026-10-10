@@ -32,6 +32,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { CONSTRAINT_MESSAGES, errorMessage } from '../../src/lib/constraint-messages';
 import { isUnfitForAStranger } from '../../src/lib/pre-session-message';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -69,7 +70,7 @@ describe('T-271 — mechanism proof: a DEF-279 trigger name can now be mapped', 
       values (${orgId}, ${storeId}, ${uid('LOC')}, 'Main', ${locType!.id}, ${personId}) returning id`;
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${orgId}, ${uid('ITEM')}, 'Test Item', 'raw_material', 'kg', ${personId}) returning id`;
+      values (${orgId}, ${testItemCode()}, 'Test Item', 'raw_material', 'kg', ${personId}) returning id`;
 
     // A real receipt first — pure fixture setup, no refusal expected.
     await sql`
@@ -136,7 +137,8 @@ describe('T-271 — mechanism proof: a DEF-279 trigger name can now be mapped', 
     // T-383 S1 (2026-10-08): 39 -> 41, deliberately: items_name_not_blank_check and items_code_not_blank_check.
     // T-385 S2 (2026-10-09): 41 -> 42, deliberately: sales_days_verify_requires_submitted.
     // T-386 S2 (2026-10-09): 42 -> 43, deliberately: items_code_never_reused.
-    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(43);
+    // T-386 S6: 43 -> 44, deliberately: items_code_shape_check.
+    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(44);
 
     // And the allowlist reads the same after restore as before the mutation ever happened.
     expect(isUnfitForAStranger(err, TEST_SENTENCE)).toBe(true);
@@ -178,7 +180,7 @@ describe('T-271 — mechanism proof: a DEF-279 trigger name can now be mapped', 
       values (${orgId}, ${storeId}, ${uid('LOC')}, 'Main', ${locType!.id}, ${personId}) returning id`;
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${orgId}, ${uid('ITEM')}, 'Test Item', 'raw_material', 'kg', ${personId}) returning id`;
+      values (${orgId}, ${testItemCode()}, 'Test Item', 'raw_material', 'kg', ${personId}) returning id`;
 
     await sql`
       insert into stock_movements

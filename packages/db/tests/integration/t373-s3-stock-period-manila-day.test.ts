@@ -1,6 +1,7 @@
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
+import { testItemCode } from '../../../domain/tests/integration/_fixtures/item-code';
 
 /**
  * T-373 S3 / DEF-555 (TESTER) - the closed-month stock trigger judges a movement by its MANILA business day.
@@ -41,7 +42,7 @@ async function fixture(withMarchApril = true) {
   const [location] = await sql<{ id: string }[]>`
     insert into stock_locations (org_id, store_id, code, name, type_id, created_by) values (${orgId}, ${store!.id}, 'A', 'Room A', ${type!.id}, ${person!.id}) returning id`;
   const [item] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${uid('ITEM')}, 'Test Item', 'raw_material', 'kg', ${person!.id}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Test Item', 'raw_material', 'kg', ${person!.id}) returning id`;
   // March closed, April open. Earlier months do not exist (a date no period covers is allowed by the trigger).
   if (withMarchApril) {
     await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values

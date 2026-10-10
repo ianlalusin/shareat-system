@@ -30,6 +30,7 @@ import { closeDb, findingsRepo, transaction, APP_ROLE, type Tx } from '@shareat/
 import { postEntry } from '../../src/ledger/post-entry';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
 import { forceVerifiedSql } from './_fixtures/sales-day-flow';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -226,7 +227,7 @@ describe('T-213 receiptPriceSpike', () => {
       insert into suppliers (org_id, name, created_by) values (${f.orgId}, ${uid('sup')}, ${f.staffId}) returning id`;
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${uid('item')}, 'Pork', 'raw_material', 'kg', ${f.staffId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, 'Pork', 'raw_material', 'kg', ${f.staffId}) returning id`;
     for (const day of ['2026-01-01', '2026-01-02', '2026-01-03']) {
       await deliveryWithLine(f, item!.id, supplier!.id, day, '100.0000');
     }
@@ -241,7 +242,7 @@ describe('T-213 receiptPriceSpike', () => {
       insert into suppliers (org_id, name, created_by) values (${f.orgId}, ${uid('sup')}, ${f.staffId}) returning id`;
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${uid('item')}, 'Pork', 'raw_material', 'kg', ${f.staffId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, 'Pork', 'raw_material', 'kg', ${f.staffId}) returning id`;
     for (const day of ['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04']) {
       await deliveryWithLine(f, item!.id, supplier!.id, day, '100.0000');
     }
@@ -362,7 +363,7 @@ describe('T-213 meatSlabStale', () => {
     const f = await fixture('mss-fire');
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${uid('item')}, 'Pork Slab', 'meat_slab', 'kg', ${f.staffId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, 'Pork Slab', 'meat_slab', 'kg', ${f.staffId}) returning id`;
     await slabLayer(f, item!.id, '20', '2025-12-01T00:00:00Z');
     const found = await asOrg(f.orgId, (tx) => findingsRepo.meatSlabStale(tx, f.orgId));
     expect(found.map((r) => r.kind)).toContain('meatSlabStale');
@@ -372,7 +373,7 @@ describe('T-213 meatSlabStale', () => {
     const f = await fixture('mss-quiet');
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${uid('item')}, 'Pork Slab', 'meat_slab', 'kg', ${f.staffId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, 'Pork Slab', 'meat_slab', 'kg', ${f.staffId}) returning id`;
     await slabLayer(f, item!.id, '0', '2025-12-01T00:00:00Z');
     const found = await asOrg(f.orgId, (tx) => findingsRepo.meatSlabStale(tx, f.orgId));
     expect(found).toHaveLength(0);

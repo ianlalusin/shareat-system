@@ -1205,6 +1205,13 @@
       "when": 1802575907084,
       "tag": "0191_t390_opening_counts_per_room",
       "breakpoints": true
+    },
+    {
+      "idx": 192,
+      "version": "7",
+      "when": 1802662307084,
+      "tag": "0192_t386_item_code_shape_check",
+      "breakpoints": true
     }
   ]
 }

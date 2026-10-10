@@ -40,6 +40,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { withOrgPrincipal as dbWithOrgPrincipal } from '@shareat/db';
 import { withOrgPrincipal, recordingRefusalsFor } from '../../src/app/expenses/lib';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -292,7 +293,7 @@ describe('T-270 — DEF-279: a negative-on-hand refusal is recorded under its ow
       values (${f.orgId}, ${f.storeId}, ${uid('LOC')}, 'Main', ${locType!.id}, ${f.personId}) returning id`;
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${uid('ITEM')}, 'Test Item', 'raw_material', 'kg', ${f.personId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, 'Test Item', 'raw_material', 'kg', ${f.personId}) returning id`;
 
     // A real receipt first, as the OWNER connection — pure fixture setup, no refusal expected.
     await sql`

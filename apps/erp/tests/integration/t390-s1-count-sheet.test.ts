@@ -18,6 +18,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { closeDb, transaction, APP_ROLE, cutoverRepo, type Tx } from '@shareat/db';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { loadCountSheet } from '../../src/app/cutover/lib';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -54,7 +55,7 @@ async function fixture(hint: string) {
   const freezer = await mkRoom('FRZ', false);
   const [item] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgId}, ${uid('IT')}, ${`Pork ${uid('n')}`}, 'raw_material', 'kg', ${admin!.id}) returning id`;
+    values (${orgId}, ${testItemCode()}, ${`Pork ${uid('n')}`}, 'raw_material', 'kg', ${admin!.id}) returning id`;
   return { orgId, storeId: store!.id, kitchen, freezer, itemId: item!.id, adminId: admin!.id };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;

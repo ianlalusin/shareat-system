@@ -18,6 +18,7 @@ import type { LocationLike } from '../../src/stock-locations/rules';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
 import type { PosV1SoldItemInput } from '../../../db/src/pos-v1/fixtures';
+import { testItemCode } from './_fixtures/item-code';
 
 /**
  * T-177 — buildPlan/finalizeSections, plus the item-map/request workflow they depend on.
@@ -159,10 +160,10 @@ beforeEach(async () => {
   const [rs] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, created_by) values (${orgA},${storeA},'STORE','Stockroom',${t!.id},${staffId}) returning id`;
   kitchen = rk!.id; display = rd!.id; stockroom = rs!.id;
 
-  const [ic] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'COKE','Coke','retail','pcs',${staffId}) returning id`;
-  const [ich] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'CHEESE','Cheese','raw_material','kg',${staffId}) returning id`;
-  const [isc] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'SAUCE','Sauce','raw_material','pcs',${staffId}) returning id`;
-  const [im] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'PORKSLAB','Pork Slab','meat_slab','kg',${staffId}) returning id`;
+  const [ic] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Coke','retail','pcs',${staffId}) returning id`;
+  const [ich] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Cheese','raw_material','kg',${staffId}) returning id`;
+  const [isc] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Sauce','raw_material','pcs',${staffId}) returning id`;
+  const [im] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Pork Slab','meat_slab','kg',${staffId}) returning id`;
   itemCoke = ic!.id; itemCheese = ich!.id; itemSauce = isc!.id; itemMeat = im!.id;
 
   const [r] = await sql<{ id: string }[]>`

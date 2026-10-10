@@ -16,6 +16,7 @@ import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import type { LocationLike } from '../../src/stock-locations/rules';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { testItemCode } from './_fixtures/item-code';
 
 /**
  * T-176 — production: slab -> slice, recipe -> batch, and the payroll lock.
@@ -128,23 +129,23 @@ beforeEach(async () => {
   const [r2] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${orgA},${storeA},'KIT','Kitchen',${t!.id},'operating',true,${staffId}) returning id`;
   kitchen = r2!.id;
 
-  const [slab] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'SLAB','Beef Forequarter','meat_slab','kg',${staffId}) returning id`;
+  const [slab] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Beef Forequarter','meat_slab','kg',${staffId}) returning id`;
   slabItem = slab!.id;
   const mkSlice = async (code: string, name: string) => {
     const [row] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, parent_slab_item_id, created_by)
-      values (${orgA},${code},${name},'meat_sliced','kg',${slabItem},${staffId}) returning id`;
+      values (${orgA},${testItemCode()},${name},'meat_sliced','kg',${slabItem},${staffId}) returning id`;
     return row!.id;
   };
   sliceA = await mkSlice('SLICE-A', 'Beef Slice A');
   sliceB = await mkSlice('SLICE-B', 'Beef Slice B');
   sliceC = await mkSlice('SLICE-C', 'Beef Slice C');
 
-  const [slab2] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'SLAB2','Pork Forequarter','meat_slab','kg',${staffId}) returning id`;
+  const [slab2] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Pork Forequarter','meat_slab','kg',${staffId}) returning id`;
   otherSlab = slab2!.id;
   const [os] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, parent_slab_item_id, created_by)
-    values (${orgA},'OTHER-SLICE','Pork Slice','meat_sliced','kg',${otherSlab},${staffId}) returning id`;
+    values (${orgA},${testItemCode()},'Pork Slice','meat_sliced','kg',${otherSlab},${staffId}) returning id`;
   otherSlice = os!.id;
 
   const [f] = await sql<{ id: string }[]>`
@@ -356,7 +357,7 @@ describe('T-176 test 8 — a sliced child with a different base unit is refused'
   it('the trigger fires on insert', async () => {
     await expect(
       sql`insert into items (org_id, code, name, kind, base_unit, parent_slab_item_id, created_by)
-          values (${orgA}, 'BAD-UNIT', 'Bad Unit Slice', 'meat_sliced', 'g', ${slabItem}, ${staffId})`,
+          values (${orgA}, ${testItemCode()}, 'Bad Unit Slice', 'meat_sliced', 'g', ${slabItem}, ${staffId})`,
     ).rejects.toThrow(/invariant 7/);
   });
 });
@@ -595,7 +596,7 @@ describe('T-176 test 17 — an unresolvable product id is a HARD reject', () => 
     const [otherOrgPerson] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${otherOrg!.id},'Other') returning id`;
     const [foreignItem] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${otherOrg!.id},'FOREIGN','Foreign item','raw_material','kg',${otherOrgPerson!.id}) returning id`;
+      values (${otherOrg!.id},${testItemCode()},'Foreign item','raw_material','kg',${otherOrgPerson!.id}) returning id`;
 
     await stockUpSlab();
     const draft = await asOrg(orgA, (tx) =>

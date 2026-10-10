@@ -36,6 +36,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { saveBranchOrderDraft, voidTradeOrder } from '@shareat/domain';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -91,7 +92,7 @@ describe('R3(d) — authorizeEither surfaces the PRIMARY (first) capability\'s r
     // Item, commissary link, internal customer — `saveBranchOrderDraft`'s own preconditions.
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${orgId}, ${uid('I')}, 'Pork belly', 'raw_material', 'kg', ${branchStaffId}) returning id`;
+      values (${orgId}, ${testItemCode()}, 'Pork belly', 'raw_material', 'kg', ${branchStaffId}) returning id`;
     await sql`
       insert into commissary_links (org_id, commissary_store_id, branch_store_id, created_by)
       values (${orgId}, ${commissaryStoreId}, ${branchStoreId}, ${branchStaffId})`;

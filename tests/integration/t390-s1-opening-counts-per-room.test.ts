@@ -22,6 +22,7 @@ import { closeDb, transaction, APP_ROLE, RefusalError, type Tx } from '@shareat/
 import type { Actor } from '@shareat/auth';
 import { cutoverProgress, recordOpeningCount, postEntry } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../packages/db/seed/chart-of-accounts';
+import { testItemCode } from '../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -109,7 +110,7 @@ async function fixture(hint: string) {
   const mkItem = async (name: string) => {
     const [i] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${orgId}, ${uid('IT')}, ${`${name} ${uid('n')}`}, 'raw_material', 'kg', ${admin!.id}) returning id`;
+      values (${orgId}, ${testItemCode()}, ${`${name} ${uid('n')}`}, 'raw_material', 'kg', ${admin!.id}) returning id`;
     return i!.id;
   };
   const item1 = await mkItem('Pork');

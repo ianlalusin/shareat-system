@@ -18,6 +18,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run agai
 import { closeDb } from '@shareat/db';
 import { createProductionDraft } from '@shareat/domain';
 import { NAN_INPUTS, asOrg, bootstrap, count, expectPlainRefusal, refusalOf, uid } from './_fixtures/t371-nan';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 afterAll(async () => {
@@ -32,7 +33,7 @@ async function fixture(hint: string) {
     insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
     values (${k.orgId}, ${k.storeId}, 'A', 'Stockroom A', ${locType!.id}, 'operating', true, ${k.adminId}) returning id`;
   const [out] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${k.orgId}, ${uid('OUT')}, 'Sliced pork', 'raw_material', 'kg', ${k.adminId}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${k.orgId}, ${testItemCode()}, 'Sliced pork', 'raw_material', 'kg', ${k.adminId}) returning id`;
   const draft = (over: Record<string, unknown> = {}) => ({
     orgId: k.orgId, storeId: k.storeId, locationId: loc!.id, kind: 'slice' as const, producedOn: '2026-01-10', labourCost: '25.00',
     inputs: [{ itemId: k.itemId, quantity: '5', unit: 'kg' }], outputs: [{ itemId: out!.id, quantity: '4', unit: 'kg' }], ...over,
