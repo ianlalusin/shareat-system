@@ -6,6 +6,8 @@ import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { CUTOVER_COUNT } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
 import { FormGrid, Field } from '@/components/ui';
 
@@ -171,6 +173,7 @@ export default async function CountPage({
                   action={recordCountAction}
                   label={r.name}
                   hidden={{ storeId, itemId: r.itemId }}
+                  typed={typedFor(sp, CUTOVER_COUNT, r.itemId, actor.personId)}
                 >
                   <FormGrid>
                     <Field label={<span className="sr-only">Quantity in {r.baseUnit}</span>}>

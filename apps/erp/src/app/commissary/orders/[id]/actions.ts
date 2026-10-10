@@ -35,7 +35,9 @@ import {
 import { outcomeMessage } from '@/lib/constraint-messages';
 import { requireActor } from '../../../../lib/session';
 import { errorMessageOf, withOrgPrincipal } from '../lib';
-import { redirectWithFlash, type Flash } from '@/lib/flash';
+import { redirectWithFlash, type Flash, type TypedFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { COMMISSARY_LINE_FULFIL, COMMISSARY_LINE_UPDATE } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -47,13 +49,18 @@ function strs(fd: FormData, key: string): string[] {
 
 /** One shape for every action: run the domain under the org principal and return what to say. Each exported action
  *  redirects with it itself (`return await redirectWithFlash`), so the guard sees every call (T-380 G1b). */
-async function perform(orderId: string, fn: (tx: Tx, actor: Actor) => Promise<string>): Promise<Flash> {
+async function perform(
+  orderId: string,
+  fn: (tx: Tx, actor: Actor) => Promise<string>,
+  /** T-389 S4: a saved-record form passes its definition so a refusal keeps what was typed. */
+  keep?: (actorId: string) => TypedFlash | undefined,
+): Promise<Flash> {
   const actor = await requireActor(`/commissary/orders/${orderId}`);
   let message: string;
   try {
     message = await withOrgPrincipal(actor.orgId, (tx) => fn(tx, actor));
   } catch (err) {
-    return { error: errorMessageOf(err) };
+    return { error: errorMessageOf(err), typed: keep?.(actor.personId) };
   }
   revalidatePath('/commissary/orders');
   revalidatePath(`/commissary/orders/${orderId}`);
@@ -156,7 +163,7 @@ export async function updateLineAction(fd: FormData): Promise<void> {
       rate: str(fd, 'rate') || null,
     });
     return 'Line updated.';
-  }));
+  }, (actorId) => keepTyping(fd, COMMISSARY_LINE_UPDATE, str(fd, 'lineId'), { actorId })));
 }
 
 export async function removeLineAction(fd: FormData): Promise<void> {
@@ -259,7 +266,7 @@ export async function fulfilLineAction(fd: FormData): Promise<void> {
       sourceLocationId: str(fd, 'sourceLocationId') || null,
     });
     return 'Fulfilment saved.';
-  }));
+  }, (actorId) => keepTyping(fd, COMMISSARY_LINE_FULFIL, str(fd, 'lineId'), { actorId })));
 }
 
 export async function proposeLineAction(fd: FormData): Promise<void> {
