@@ -24,6 +24,29 @@
 
 ---
 
+## 0b. Progress as at 10 Oct 2026, evening (orchestrator)
+
+| Item | State | Left (lane-days) |
+|---|---|---|
+| C7 PIN throttle (T-395) | **Done.** S1 live (0190, PR #8); S2 on main (PR #10) | 0 |
+| C10 in-flight (T-383 S2, T-386 S5) | **Live** (PR #8). Left: the recode dry run with Ian, `--apply`, T-386 S6 CHECK | 0.5 |
+| C1/C2 opening stock + tie-out (T-390) | S1 count per room done (0191, PR #10). S3 tie-out next; S4 import/price list; S5 screens; **S2 gated on t390-q2** | 5.0 |
+| A12 keep typing (T-389) | S1 live; S2 + S3 on main (19 forms). Left: S4 (10 stock/item forms), S5 close | 1.0 |
+| C5 backups + restore (T-393) | spec not written; **needs Ian's Spaces key (Q7)** | 1.5 |
+| C3 master data (T-391) | spec not written; **needs Q5 rulings, the HR sheet** | 3.0 |
+| C4 comparator (T-392) | spec not written; **needs Q2 (what "ties" means)** | 4.5 |
+| C6 rehearsal + runbook (T-394), DEF-585 | spec not written; after C1, C2, C5 | 2.5 |
+| C8 three stores + timer (T-396) | spec not written; needs POS ids/keys/tenders per store | 1.0 |
+| C9 payroll (T-397 bridge, or T-190 + T-193) | **decided by Q1** | 2.0 (bridge) or 5.0 |
+| **Total cutover build left** | | **≈ 21 (bridge) to 24** |
+
+Measured pace on 10 Oct: three lanes finished ≈ 3.25 lane-days of slices in one session day (T-395 S2, T-389 S2 + S3,
+T-390 S1), each with tester-first red, an audit round and a browser smoke. At that pace the cutover **code** is
+6-8 working days away, i.e. done around 20-24 Oct, ahead of the 6 Nov line in §2.1, **if** the specs are written ahead
+(Opus, in parallel) and Ian's answers arrive. The binding constraints are not code: Q1, Q2, Q5, Q7 and t390-q2; master
+data and staff on production by 23 Oct; at least 15 compared trading days before 15 Nov.
+
+
 ## 1. Inventory
 
 Size is **lane-days** (one lane = the Sonnet builder + tester + auditor subagents, bible row 184).
