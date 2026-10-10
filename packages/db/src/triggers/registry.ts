@@ -347,6 +347,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: 'A location with an on-hand balance cannot be deactivated (0122) — reads the CURRENT ledger.',
   },
+  opening_counts_room_in_store: {
+    table: 'opening_counts',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'An opening count\'s room must belong to its store (0191, T-390 R1) — reads the CURRENT stock_locations row.',
+  },
   stock_usage_operating_location_trg: {
     table: 'stock_usage_records',
     mode: 'origin',
