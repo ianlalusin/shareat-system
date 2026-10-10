@@ -140,7 +140,9 @@ const ANCESTOR_FONT_SIZE_COMPONENTS: Record<string, keyof typeof FONT_SIZE_PX> =
 // falls through to the branches below, same as any other unrecognised capitalised component.
 // T-387 S2 / `t387-q4` (Ian, 2026-10-10): EVERY button and field is 44px. Button and Input both carry
 // `min-h-11` (44px) now, so the hand-measured 38/42 above are superseded.
-const KNOWN_COMPONENT_HEIGHT_PX: Record<string, number> = { Input: 44, Button: 44 };
+// T-387 S3 (L3): Select and Textarea carry Input's `min-h-11`; Checkbox's hit target is its `min-h-11` label wrapper.
+// Without these entries a capitalised `<Select>`/`<Textarea>`/`<Checkbox>` call site would silently leave the census.
+const KNOWN_COMPONENT_HEIGHT_PX: Record<string, number> = { Input: 44, Button: 44, Select: 44, Textarea: 44, Checkbox: 44 };
 
 // Deliberately NOT typed `Record<string, number>` — a generic string index defeats
 // `noUncheckedIndexedAccess`'s point (every read becomes `number | undefined` again). Left to

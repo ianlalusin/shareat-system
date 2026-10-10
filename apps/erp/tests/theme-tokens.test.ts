@@ -64,8 +64,13 @@ const LIGHT = {
   '--closed-soft': '#efece4',
 } as const;
 
-/** The ADR gives no dark `--warning-soft` and no dark `--brand-hover`: deliberately not asserted. */
+/**
+ * Dark `--warning-soft` is not in the ADR table; Ian ruled it 2026-10-10 ("keep #2b2210"): it reuses
+ * the dark warning surface, where --warning-ink is 8.86:1. Dark `--brand-hover` is still unruled and
+ * inherits the light value: deliberately not asserted.
+ */
 const DARK = {
+  '--warning-soft': '#2b2210',
   '--canvas': '#121110',
   '--surface': '#1c1a18',
   '--surface-border': '#34302b',

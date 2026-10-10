@@ -328,6 +328,9 @@ with employee and office copies. Checklist, memo kiosk and onboarding were accep
 - `t387-q6-schedule`: ✅ **ANSWERED (a), Ian 2026-10-10.** Build the roster without a scheduled band. "Staff schedules" is now in `docs/CAPABILITY-GAPS.md` (added 2026-10-10). Was: v2 has no shift schedule (neither did v1). Build the
   roster now with worked, break and now, and no scheduled band? (a) yes, and add "staff schedules" to CAPABILITY-GAPS
   as its own feature · (b) wait for schedules. **Recommended: (a).**
+- `t387-dark-warning-soft`: ✅ **RULED by Ian, 2026-10-10: "keep #2b2210".** ADR-013 Amendment 7 gives no dark
+  `--warning-soft`; S1 reused the dark `--warning` surface (`#2b2210`, warning-ink on it 8.86:1). Pinned in
+  `theme-tokens.test.ts`. Dark `--brand-hover` stays unruled (inherits `#b00707`).
 - `t387-q7-sweep`: ✅ **ANSWERED (a), Ian 2026-10-10. S8 runs as a multi-agent Workflow.** This is Ian's explicit opt-in for that slice only. Was: run the sweep as a multi-agent **Workflow** (fast, more tokens), or as ordinary lane
   tranches (slower, fewer tokens)? (a) Workflow · (b) lane tranches.
 
