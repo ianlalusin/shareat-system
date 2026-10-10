@@ -147,8 +147,11 @@ jobs:
       - name: Install
         run: npm ci --no-audit --no-fund
 
+      # DEF-631: tsc outgrew node's ~2 GB default heap on 10 Oct (PR #10: exit 134, heap out of memory).
       - name: Typecheck
         run: npm run typecheck
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Unit tests
         run: npm run test
