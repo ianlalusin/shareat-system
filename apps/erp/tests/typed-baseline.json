@@ -1,8 +1,1 @@
-{
-  "app/commissary/orders/[id]/page.tsx": 2,
-  "app/cutover/count/page.tsx": 1,
-  "app/inventory/counts/[id]/page.tsx": 1,
-  "app/inventory/locations/page.tsx": 1,
-  "app/inventory/low-stock/page.tsx": 1,
-  "app/items/[id]/page.tsx": 4
-}
+{}

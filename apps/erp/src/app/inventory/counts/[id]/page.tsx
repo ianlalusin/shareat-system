@@ -9,6 +9,8 @@ import { FormGrid, Field } from '@/components/ui';
 import { EditableRecord } from '@/components/forms';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor, type TypedView } from '@/lib/keep-typing';
+import { COUNT_LINE } from '../typed-forms';
 
 export const metadata = { title: 'Count sheet — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -38,7 +40,7 @@ function when(d: Date | null): string {
 
 /** One row of the count sheet — its own `<form>`, per T-172's `LineCard` pattern: the phone-portrait
  *  canvas (a stockroom, held in one hand) cannot host a table cell that is also a form. */
-function SheetRow({ line, sessionId, editable }: { line: SheetLine; sessionId: string; editable: boolean }) {
+function SheetRow({ line, sessionId, editable, typed }: { line: SheetLine; sessionId: string; editable: boolean; typed: TypedView | null }) {
   // T-371 C4: the variance's sign in scaled bigint on the minted (14,3) value, never `Number(...) < 0`.
   const varianceSign = line.variance !== null ? compareQuantity(quantity(line.variance), ZERO_QUANTITY) : 0;
   return (
@@ -77,6 +79,7 @@ function SheetRow({ line, sessionId, editable }: { line: SheetLine; sessionId: s
               action={recordCountAction}
               label={line.itemName}
               hidden={{ sessionId, itemId: line.itemId, locationId: line.locationId }}
+              typed={typed}
             >
               <div className="flex items-center gap-2">
                 <input
@@ -185,7 +188,13 @@ export default async function CountSessionPage({
             </thead>
             <tbody>
               {rows.map((line) => (
-                <SheetRow key={`${line.itemId}:${line.locationId}`} line={line} sessionId={detail.id} editable={editable} />
+                <SheetRow
+                  key={`${line.itemId}:${line.locationId}`}
+                  line={line}
+                  sessionId={detail.id}
+                  editable={editable}
+                  typed={line.id ? typedFor(sp, COUNT_LINE, line.id, actor.personId) : null}
+                />
               ))}
             </tbody>
           </table>

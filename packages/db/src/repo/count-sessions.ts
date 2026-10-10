@@ -236,6 +236,16 @@ export async function upsertCountLine(
   return row!;
 }
 
+/** The one count line's id for a (session, item, room), or undefined when nothing has been typed there yet. */
+export async function lineIdFor(tx: Tx, sessionId: string, itemId: string, locationId: string): Promise<string | undefined> {
+  const [row] = await tx
+    .select({ id: countLines.id })
+    .from(countLines)
+    .where(and(eq(countLines.sessionId, sessionId), eq(countLines.itemId, itemId), eq(countLines.locationId, locationId)))
+    .limit(1);
+  return row?.id;
+}
+
 export async function listCountLines(tx: Tx, sessionId: string): Promise<CountLineRow[]> {
   return tx
     .select({
