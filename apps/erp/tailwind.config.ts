@@ -1,5 +1,7 @@
 import type { Config } from 'tailwindcss';
 
+import { WARM_NEUTRAL } from './warm-neutral';
+
 /**
  * A palette token that still honours Tailwind's `/opacity` modifier.
  *
@@ -36,13 +38,25 @@ export default {
       // modifier; the channel-triple form would work too but needs each colour declared twice.
       // With no modifier Tailwind substitutes `1`, so `calc(1 * 100%)` is the colour untouched.
       colors: {
-        brand: { DEFAULT: alpha('--brand'), hover: alpha('--brand-hover') },
+        brand: { DEFAULT: alpha('--brand'), hover: alpha('--brand-hover'), ink: alpha('--brand-ink') },
         danger: { DEFAULT: alpha('--danger'), surface: alpha('--danger-surface') },
-        warning: alpha('--warning'),
-        success: alpha('--success'),
+        warning: { DEFAULT: alpha('--warning'), soft: alpha('--warning-soft'), ink: alpha('--warning-ink') },
+        success: { DEFAULT: alpha('--success'), soft: alpha('--success-soft') },
+        info: { DEFAULT: alpha('--info'), soft: alpha('--info-soft') },
+        progress: { DEFAULT: alpha('--progress'), soft: alpha('--progress-soft') },
+        closed: { DEFAULT: alpha('--closed'), soft: alpha('--closed-soft') },
         canvas: alpha('--canvas'),
         surface: { DEFAULT: alpha('--surface'), border: alpha('--surface-border') },
+        field: { DEFAULT: alpha('--field'), border: alpha('--field-border') },
         ink: alpha('--ink'),
+        muted: alpha('--muted'),
+        // T-387 S1 addendum: the 4,946 stock neutral-* utilities, re-valued warm (see warm-neutral.ts).
+        neutral: WARM_NEUTRAL,
+      },
+      // next/font sets --font-body and --font-display on <html> (layout.tsx).
+      fontFamily: {
+        sans: ['var(--font-body)', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        display: ['var(--font-display)', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
       },
     },
   },
