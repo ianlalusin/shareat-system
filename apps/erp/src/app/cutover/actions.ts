@@ -19,6 +19,8 @@ import {
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { CUTOVER_COUNT } from './count/typed-forms';
 import { recordingRefusalsFor, withOrgPrincipal } from '../expenses/lib';
 
 function str(fd: FormData, key: string): string {
@@ -51,12 +53,13 @@ export async function recordCountAction(formData: FormData): Promise<void> {
   const storeId = str(formData, 'storeId');
   const quantity = str(formData, 'quantity');
   const unitCost = str(formData, 'unitCost');
+  const itemId = str(formData, 'itemId');
   try {
     await recordingRefusalsFor(actor.orgId, () =>
       withOrgPrincipal(actor.orgId, (tx: Tx) =>
         recordOpeningCount(tx, actor, {
           storeId,
-          itemId: str(formData, 'itemId'),
+          itemId,
           // ⭐ An empty box is NOT a zero. The form only submits a row someone actually typed in, so
           // an item nobody counted stays uncounted and keeps showing as missing.
           quantity,
@@ -66,7 +69,7 @@ export async function recordCountAction(formData: FormData): Promise<void> {
       ),
     );
   } catch (err) {
-    return await redirectWithFlash('/cutover/count', { store: storeId }, { error: errorMessage(err) });
+    return await redirectWithFlash('/cutover/count', { store: storeId }, { error: errorMessage(err), typed: keepTyping(formData, CUTOVER_COUNT, itemId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash('/cutover/count', { store: storeId });
 }

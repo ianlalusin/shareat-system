@@ -265,6 +265,10 @@ function applyTyped(form: HTMLFormElement, fields: Record<string, string | strin
     const el = els[a.control];
     if (!el) continue;
     if ('checked' in a && el instanceof HTMLInputElement) {
+      // React's checkbox/radio onChange listens to `click`, not `change`, and a click TOGGLES: click only when the
+      // state differs, and never set `checked` first (DEF-633).
+      if (el.checked !== a.checked) el.click();
+      // A control inside a disabled fieldset ignores clicks: fall back to setting it and firing the events.
       if (el.checked !== a.checked) {
         el.checked = a.checked;
         fire(el);
@@ -308,7 +312,7 @@ export interface EditableRecordProps {
    * `defaultValue`, so Cancel (`form.reset()`) brings them back. A `dropped` view keeps the record locked and says the
    * typing was too long to keep.
    */
-  typed?: TypedView | null;
+  typed: TypedView | null;
 }
 
 export interface EditableRecordViewProps extends EditableRecordProps {

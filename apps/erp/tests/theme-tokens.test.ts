@@ -1,12 +1,12 @@
 /**
- * T-334 slice 1 — the nine tokens, the dark-mode strategy, and contrast as a GATE rather than a
- * reviewer's eye.
+ * T-387 S1 (supersedes the T-334 slice 1 pins) — ADR-013 Amendment 7: "SharEat Warm" for light and
+ * "Grill Night" for dark. Every hex and every measured contrast figure is asserted from the CSS.
  *
- * ⭐ **Why contrast is computed here rather than trusted from the ADR.** ADR-013 records the
- * figures (5.47 / 8.32 / 1.77) because they were measured once. ⛔ A number measured once and
- * written down is a number that goes stale the first time somebody nudges a hex. This file
- * recomputes them FROM THE DECLARED VALUES, so a future palette edit that breaks accessibility
- * fails a gate instead of passing a review.
+ * ⭐ **Why contrast is computed here rather than trusted from the ADR.** The ADR records the figures
+ * because they were measured once. ⛔ A number measured once and written down goes stale the first
+ * time somebody nudges a hex. This file recomputes them FROM THE DECLARED VALUES (read out of the
+ * CSS, never typed as hex into a ratio), so a palette edit that breaks accessibility fails a gate
+ * instead of passing a review.
  *
  * ⚠️ These read the real files rather than importing a TS constant on purpose: the tokens live in
  * CSS, which is what the browser actually consumes, and a TS mirror of them would be a second
@@ -34,21 +34,64 @@ const globalsCss = globalsCssRaw.replace(/\/\*[\s\S]*?\*\//g, '');
 /** The `:root { … }` block only — so a later dark-mode override cannot be mistaken for the
  *  light-mode value these contrast gates exist to check. */
 const lightBlock = globalsCss.match(/:root\s*\{([\s\S]*?)\}/)?.[1] ?? '';
-/** The dark block, which ADR-013 §7 says is deliberately incomplete — asserted, not assumed. */
+/** The dark block. */
 const darkBlock = globalsCss.match(/:root\[data-theme='dark'\]\s*\{([\s\S]*?)\}/)?.[1] ?? '';
 
-/** The ruled palette — ADR-013 A1.1. ⛔ Ian's ruling; this file asserts it, it does not choose it. */
-const RULED = {
+/** ADR-013 Amendment 7 token table. Ian's ruling; this file asserts it, it does not choose it. */
+const LIGHT = {
+  '--canvas': '#fbf4e4',
+  '--surface': '#fffdf8',
+  '--surface-border': '#eadfc6',
+  '--field': '#ffffff',
+  '--field-border': '#94866f',
+  '--ink': '#2b2620',
+  '--muted': '#6b5f4f',
   '--brand': '#d40909',
   '--brand-hover': '#b00707',
+  '--brand-ink': '#d40909',
   '--danger': '#a00606',
   '--danger-surface': '#fde7e7',
   '--warning': '#f4b942',
-  '--success': '#059669',
-  '--canvas': '#ffffff',
-  '--surface': '#ffffff',
-  '--surface-border': '#e5e5e5',
-  '--ink': '#1a1a1a',
+  '--warning-soft': '#fce8b8',
+  '--warning-ink': '#7a4f00',
+  '--success': '#0e6b45',
+  '--success-soft': '#e2f1e8',
+  '--info': '#1e4fb8',
+  '--info-soft': '#e7eefb',
+  '--progress': '#6427c9',
+  '--progress-soft': '#eee7fb',
+  '--closed': '#55606e',
+  '--closed-soft': '#efece4',
+} as const;
+
+/**
+ * Dark `--warning-soft` is not in the ADR table; Ian ruled it 2026-10-10 ("keep #2b2210"): it reuses
+ * the dark warning surface, where --warning-ink is 8.86:1. Dark `--brand-hover` is still unruled and
+ * inherits the light value: deliberately not asserted.
+ */
+const DARK = {
+  '--warning-soft': '#2b2210',
+  '--canvas': '#121110',
+  '--surface': '#1c1a18',
+  '--surface-border': '#34302b',
+  '--field': '#151412',
+  '--field-border': '#746b5f',
+  '--ink': '#f5efe4',
+  '--muted': '#a89f92',
+  '--brand': '#d40909',
+  '--brand-ink': '#ff7a70',
+  '--danger': '#f87171',
+  '--danger-surface': '#2a0f0f',
+  '--warning': '#2b2210',
+  '--warning-ink': '#f4b942',
+  '--success': '#4ade80',
+  '--success-soft': '#0f2a1c',
+  '--info': '#93b4ff',
+  '--info-soft': '#142038',
+  '--progress': '#c4b5fd',
+  '--progress-soft': '#241b3d',
+  '--closed': '#aab4c2',
+  '--closed-soft': '#23262b',
 } as const;
 
 /** WCAG 2.1 relative luminance, then the contrast ratio. Pure, so it can be asserted against. */
@@ -71,133 +114,181 @@ function contrast(a: string, b: string): number {
 /**
  * The value declared for a token **within a given block**, so the assertions test the FILE.
  *
- * ⚠️ Scoped on purpose. A bare first-match search over the whole stylesheet would keep reading the
- * light value once ADR-013 §7's dark-mode reds land in `:root[data-theme='dark']`, and these
- * contrast gates would silently stop covering the palette they exist to guard.
+ * ⚠️ Scoped on purpose, and anchored: `--info` must not match inside `--info-soft`, nor `--brand`
+ * inside `--brand-ink`, so the name has to be preceded by a non-name character.
  */
 function declaredIn(block: string, token: string): string | undefined {
-  const m = block.match(new RegExp(`${token}\\s*:\\s*(#[0-9a-fA-F]{6})`));
+  const m = block.match(new RegExp(`(?<![\\w-])${token}\\s*:\\s*(#[0-9a-fA-F]{6})`));
   return m?.[1]?.toLowerCase();
 }
 
 const declared = (token: string): string | undefined => declaredIn(lightBlock, token);
+const darkDeclared = (token: string): string | undefined => declaredIn(darkBlock, token);
 
-describe('T-334 slice 1 — the ruled tokens are declared', () => {
-  for (const [token, value] of Object.entries(RULED)) {
-    it(`${token} is declared as ${value}`, () => {
+/** One row of the ADR's "Measured 2026-10-09" table: fg on bg, the printed figure, the WCAG floor. */
+type Pair = { fg: string; bg: string; figure: number; floor: number };
+const LIGHT_PAIRS: Pair[] = [
+  { fg: '--ink', bg: '--canvas', figure: 13.68, floor: 7 },
+  { fg: '--ink', bg: '--surface', figure: 14.75, floor: 7 },
+  { fg: '--muted', bg: '--canvas', figure: 5.68, floor: 4.5 },
+  { fg: '--brand', bg: '--canvas', figure: 4.99, floor: 4.5 },
+  { fg: '--danger', bg: '--canvas', figure: 7.59, floor: 7 },
+  { fg: '--warning-ink', bg: '--warning-soft', figure: 5.9, floor: 4.5 },
+  { fg: '--success', bg: '--success-soft', figure: 5.61, floor: 4.5 },
+  { fg: '--info', bg: '--info-soft', figure: 6.29, floor: 4.5 },
+  { fg: '--progress', bg: '--progress-soft', figure: 6.53, floor: 4.5 },
+  { fg: '--closed', bg: '--closed-soft', figure: 5.42, floor: 4.5 },
+  { fg: '--field-border', bg: '--field', figure: 3.56, floor: 3 },
+];
+const DARK_PAIRS: Pair[] = [
+  { fg: '--ink', bg: '--canvas', figure: 16.48, floor: 7 },
+  { fg: '--ink', bg: '--surface', figure: 15.16, floor: 7 }, // also the dark ring-ink figure
+  { fg: '--muted', bg: '--surface', figure: 6.64, floor: 4.5 },
+  { fg: '--brand-ink', bg: '--surface', figure: 6.83, floor: 4.5 },
+  { fg: '--danger', bg: '--surface', figure: 6.27, floor: 4.5 },
+  { fg: '--warning-ink', bg: '--warning', figure: 8.86, floor: 4.5 },
+  { fg: '--success', bg: '--success-soft', figure: 8.81, floor: 4.5 },
+  { fg: '--info', bg: '--info-soft', figure: 7.9, floor: 4.5 },
+  { fg: '--progress', bg: '--progress-soft', figure: 8.76, floor: 4.5 },
+  { fg: '--closed', bg: '--closed-soft', figure: 7.24, floor: 4.5 },
+  { fg: '--field-border', bg: '--field', figure: 3.52, floor: 3 },
+];
+
+describe('T-387 S1 — Amendment 7 light tokens are declared', () => {
+  for (const [token, value] of Object.entries(LIGHT)) {
+    it(`light ${token} is ${value}`, () => {
       expect(declared(token)).toBe(value);
     });
   }
 });
 
-describe('T-334 slice 1 — the OS no longer decides', () => {
-  it('⛔ color-scheme is light, NOT "light dark" — this is the defect being fixed', () => {
-    expect(globalsCss).toMatch(/color-scheme:\s*light\s*;/);
-    expect(globalsCss).not.toMatch(/color-scheme:\s*light\s+dark/);
+describe('T-387 S1 — Amendment 7 dark tokens are declared', () => {
+  for (const [token, value] of Object.entries(DARK)) {
+    it(`dark ${token} is ${value}`, () => {
+      expect(darkDeclared(token)).toBe(value);
+    });
+  }
+});
+
+describe('T-387 S1 — the OS no longer decides', () => {
+  it('color-scheme is light in the light block and dark in the dark block', () => {
+    expect(lightBlock).toMatch(/color-scheme:\s*light\s*;/);
+    expect(lightBlock).not.toMatch(/color-scheme:\s*light\s+dark/);
+    expect(darkBlock).toMatch(/color-scheme:\s*dark\s*;/);
   });
 
-  it('⭐ dark is reachable ONLY under the attribute selector — asserted on the RULE, not on prose', () => {
-    // ⛔ Against comment-stripped CSS, and matching the selector as actually written. The first
-    // version of this assertion matched a comment and survived deleting the whole block.
+  it('dark is reachable only under the attribute selector, and no media query follows the OS', () => {
+    // ⛔ Asserted on comment-stripped CSS, against the selector as actually written.
     expect(globalsCss).toMatch(/:root\[data-theme='dark'\]\s*\{/);
-    expect(darkBlock).toMatch(/color-scheme:\s*dark/);
-    // ⛔ And there is no media-query route back to OS-following anywhere in the stylesheet.
     expect(globalsCss).not.toMatch(/prefers-color-scheme/);
-  });
-
-  it('⚠️ --brand still has no dark value — that gap is DELIBERATE and remains OPEN', () => {
-    // Corrected 2026-09-23 (audit finding F3): #d40909 is 3.84:1 on BLACK (ADR-013 §7's original,
-    // symbolic figure) — on the REAL dark surface --surface #171717 it is 3.28:1, computed here
-    // with this file's own contrast()/luminance(), not copied from a document. Both fail AA
-    // (4.5:1) as text, and dark-mode brand red has not been ruled. Amendment 5 (below) ruled
-    // --danger's dark value; --brand's is a separate, still-open decision. This pins the gap: if
-    // someone adds --brand to the dark block, they must consciously update this expectation
-    // rather than ship a failing contrast silently.
-    expect(contrast('#d40909', '#000000')).toBeCloseTo(3.84, 1);
-    expect(contrast('#d40909', declaredIn(darkBlock, '--surface')!)).toBeCloseTo(3.28, 1);
-    expect(declaredIn(darkBlock, '--brand')).toBeUndefined();
-  });
-
-  it('⚠️ --warning still has no dark value — globals.css claims a test pins this; this is that test (audit round 2)', () => {
-    expect(declaredIn(darkBlock, '--warning')).toBeUndefined();
-  });
-
-  it('⭐ --danger and --danger-surface now HAVE a dark value — ADR-013 Amendment 5, ruled 2026-09-23', () => {
-    // Corrected 2026-09-23: this used to pin dark --danger as undefined (ADR-013 §7's original open
-    // gap). Ian ruled it — #f87171 / #2a0f0f, a lighter red for dark only, light unchanged — so the
-    // gap this test guards moved from "does a value exist" to "is it the RULED value and does it
-    // clear the WCAG floor" (family (c): the old assertion's claim outlived the code it described).
-    expect(declaredIn(darkBlock, '--danger')).toBe('#f87171');
-    expect(declaredIn(darkBlock, '--danger-surface')).toBe('#2a0f0f');
-    expect(contrast(declaredIn(darkBlock, '--danger')!, declaredIn(darkBlock, '--surface')!)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(declaredIn(darkBlock, '--danger')!, declaredIn(darkBlock, '--danger-surface')!)).toBeGreaterThanOrEqual(4.5);
-    // NEGATIVE — a "fix" that changed the light red instead of adding a dark one must fail this.
-    expect(declaredIn(lightBlock, '--danger')).toBe('#a00606');
-  });
-
-  it("the dark block's own ink/canvas pair is AAA — the part that IS ruled must still be legible", () => {
-    const ink = declaredIn(darkBlock, '--ink');
-    const canvas = declaredIn(darkBlock, '--canvas');
-    expect(ink).toBeDefined();
-    expect(canvas).toBeDefined();
-    expect(contrast(ink!, canvas!)).toBeGreaterThanOrEqual(7);
-  });
-
-  it('⛔ every palette colour keeps its /opacity modifier — a bare var() silently emits NOTHING', () => {
-    // Measured during review by compiling the real config: with plain `var(--brand)` values,
-    // `bg-brand` emits a rule but `text-brand/50` and `bg-warning/20` emit NO RULE AT ALL — no
-    // warning, no build error. ⚠️ Slice 4 routes 11 existing amber opacity usages onto --warning;
-    // they would lose their background or border with the build still green.
-    // ⭐ The real proof is a compile (verified: `/20` → `calc(0.2 * 100%)`). This is the cheap
-    // guard against regressing to the bare form, which is the only way it breaks.
-    expect(tailwindConfig).toContain('<alpha-value>');
-    const colours = tailwindConfig.match(/colors:\s*\{[\s\S]*?\n {6}\},/)?.[0] ?? '';
-    expect(colours).not.toBe('');
-    expect(colours).not.toMatch(/:\s*'var\(--/);
-  });
-
-  it("⭐ tailwind's darkMode is the SELECTOR strategy — what keeps 3,485 dark: classes alive", () => {
-    // ⛔ Without this, slice 1 silently neutralises every `dark:` class in the app and every other
-    // test still passes. The class stops firing from the OS and starts firing from the attribute;
-    // it must not simply stop firing.
-    expect(tailwindConfig).toMatch(/darkMode:\s*\[\s*'selector'\s*,\s*'\[data-theme="dark"\]'\s*\]/);
   });
 });
 
-describe('T-334 slice 1 — contrast is a gate, computed from the declared values', () => {
-  it('--brand on --canvas meets AA for normal text (>= 4.5:1)', () => {
-    const ratio = contrast(declared('--brand')!, declared('--canvas')!);
-    expect(ratio).toBeGreaterThanOrEqual(4.5);
-    expect(Number(ratio.toFixed(2))).toBe(5.47); // ADR-013's measured figure, reproduced
+describe('T-387 S1 — contrast is a gate, recomputed from the declared values', () => {
+  const run = (label: string, block: string, pairs: Pair[]): void => {
+    for (const p of pairs) {
+      it(`${label} ${p.fg} on ${p.bg} reproduces the ADR figure ${p.figure} and clears ${p.floor}:1`, () => {
+        const fg = declaredIn(block, p.fg);
+        const bg = declaredIn(block, p.bg);
+        expect(fg).toBeDefined();
+        expect(bg).toBeDefined();
+        const ratio = contrast(fg!, bg!);
+        expect(Number(ratio.toFixed(2))).toBe(p.figure);
+        expect(ratio).toBeGreaterThanOrEqual(p.floor);
+      });
+    }
+  };
+  run('light', lightBlock, LIGHT_PAIRS);
+  run('dark', darkBlock, DARK_PAIRS);
+
+  it('⛔ --warning stays surface-only: light warning on canvas is under 3:1', () => {
+    expect(contrast(declared('--warning')!, declared('--canvas')!)).toBeLessThan(3);
+  });
+});
+
+describe('T-387 S1 — negatives: the rejected values really fail the helper', () => {
+  it("#eadfc6 as field-border on a #ffffff field is under 3:1 (the sheet's mistake)", () => {
+    expect(contrast('#eadfc6', '#ffffff')).toBeLessThan(3);
   });
 
-  it('--danger on --canvas meets AAA (>= 7:1) — the escape hatch when brand is not enough', () => {
-    const ratio = contrast(declared('--danger')!, declared('--canvas')!);
-    expect(ratio).toBeGreaterThanOrEqual(7);
-    expect(Number(ratio.toFixed(2))).toBe(8.32);
+  it('#d40909 as dark brand-ink on the dark surface is under 4.5:1', () => {
+    expect(contrast('#d40909', '#1c1a18')).toBeLessThan(4.5);
   });
 
-  it('⛔ --warning FAILS as text and is therefore surface-only — asserted so nobody "fixes" it', () => {
-    // 1.77:1. This is not an accident to be corrected; it is the reason the ruling says gold is a
-    // surface and never a foreground. Asserting the failure keeps the rule and its reason together.
-    const ratio = contrast(declared('--warning')!, declared('--canvas')!);
-    expect(ratio).toBeLessThan(3);
-    expect(Number(ratio.toFixed(2))).toBe(1.77);
+  it('the declared dark brand-ink is not the failing #d40909', () => {
+    expect(darkDeclared('--brand-ink')).toBeDefined();
+    expect(darkDeclared('--brand-ink')).not.toBe('#d40909');
   });
 
-  it('--ink on --canvas is comfortably AAA — it carries every word in the app', () => {
-    expect(contrast(declared('--ink')!, declared('--canvas')!)).toBeGreaterThanOrEqual(7);
+  it('the declared field-border is not the decorative surface-border, in either theme', () => {
+    expect(declared('--field-border')).toBeDefined();
+    expect(declared('--field-border')).not.toBe(declared('--surface-border'));
+    expect(darkDeclared('--field-border')).toBeDefined();
+    expect(darkDeclared('--field-border')).not.toBe(darkDeclared('--surface-border'));
+  });
+});
+
+describe('T-387 S1 — base layer (comment-stripped CSS)', () => {
+  /** Every `selector { body }` rule, including ones nested in `@layer base { … }`. */
+  const rules = [...globalsCss.matchAll(/([^{}@;]+)\{([^{}]*)\}/g)].map((m) => ({
+    selectors: m[1]!.split(',').map((x) => x.trim()),
+    body: m[2]!,
+  }));
+  const bodyOf = (sel: string): string =>
+    rules
+      .filter((r) => r.selectors.includes(sel))
+      .map((r) => r.body)
+      .join(';');
+
+  it('body uses var(--canvas), var(--ink) and var(--font-body)', () => {
+    const body = bodyOf('body');
+    expect(body).toMatch(/background(-color)?:\s*var\(--canvas\)/);
+    expect(body).toMatch(/(^|[;\s])color:\s*var\(--ink\)/);
+    expect(body).toMatch(/font-family:\s*var\(--font-body\)/);
   });
 
-  it('⚠️ the LIGHT reds FAIL AA as text on a symbolic black background — ADR-013 §7\'s original figure, still true, no longer about "is dark supported"', () => {
-    // Corrected 2026-09-23: this is NOT a check against the real dark surface (that is
-    // --surface #171717, asserted separately above) — it is the original ADR-013 §7 figure, kept
-    // as a historical/symbolic "what if the light value were reused verbatim on pure black"
-    // check. Both LIGHT values are unchanged by Amendment 5, so both numbers are unchanged too.
-    // ⛔ --brand's real dark-mode gap is still open (asserted above) — but --danger's is now ruled
-    // (Amendment 5, asserted above with the real surface); this line is not where that lives
-    // any more, and must not be read as "dark mode has no danger value".
-    expect(contrast(declared('--brand')!, '#000000')).toBeLessThan(4.5);
-    expect(contrast(declared('--danger')!, '#000000')).toBeLessThan(4.5);
+  for (const tag of ['h1', 'h2', 'h3']) {
+    it(`${tag} uses var(--font-display)`, () => {
+      expect(bodyOf(tag)).toMatch(/font-family:\s*var\(--font-display\)/);
+    });
+  }
+});
+
+describe('T-387 S1 — tailwind config', () => {
+  const colours = tailwindConfig.match(/colors:\s*\{[\s\S]*?\n {6}\},/)?.[0] ?? '';
+
+  it('the colors block is found, never uses a bare var(), and keeps <alpha-value>', () => {
+    expect(colours).not.toBe('');
+    expect(colours).not.toMatch(/:\s*'var\(--/);
+    expect(tailwindConfig).toContain('<alpha-value>');
+  });
+
+  for (const token of [
+    '--field',
+    '--field-border',
+    '--muted',
+    '--brand-ink',
+    '--warning-ink',
+    '--warning-soft',
+    '--success-soft',
+    '--info',
+    '--info-soft',
+    '--progress',
+    '--progress-soft',
+    '--closed',
+    '--closed-soft',
+  ]) {
+    it(`has a colour key for ${token} in the alpha() shape`, () => {
+      expect(colours).toContain(`alpha('${token}')`);
+    });
+  }
+
+  it('fontFamily.sans starts with var(--font-body) and display with var(--font-display)', () => {
+    expect(tailwindConfig).toMatch(/fontFamily:\s*\{[\s\S]*?sans:\s*\[\s*'var\(--font-body\)'/);
+    expect(tailwindConfig).toMatch(/fontFamily:\s*\{[\s\S]*?display:\s*\[\s*'var\(--font-display\)'/);
+  });
+
+  it('darkMode is the SELECTOR strategy — what keeps the existing dark: classes alive', () => {
+    expect(tailwindConfig).toMatch(/darkMode:\s*\[\s*'selector'\s*,\s*'\[data-theme="dark"\]'\s*\]/);
   });
 });

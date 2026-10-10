@@ -1,4 +1,13 @@
+Badge
+Checkbox
+FlashBanner
 GET
+NumTd
+StatusIcon
+Table
+Td
+Textarea
+Th
 __setPhase5AvailableForTests
 acknowledgementHistory
 activateTerminal
@@ -15,6 +24,7 @@ checkValuesMatch
 childLogger
 closeAsLateReceipt
 closeYear
+compareFingerprints
 confirmTradeOrder
 convertSpecimen
 countedVariances
@@ -70,6 +80,7 @@ previewDrawingClose
 proxy
 purgeComplete
 rateFor
+readManifestFile
 realSourceTypesForSpecName
 recentRuns
 reconcileSupplier
@@ -99,11 +110,12 @@ unclosedShiftCount
 undeclareSupplierItem
 undepositedFunds
 undoWriteOff
+unmappedStatuses
 updateMoneyAccount
 updateOwner
 upsertCategoryLife
 upsertPolicy
 validateFingerprintTemplates
-valuateShell
+valueOpeningAsset
 voidShift
 withPrincipal

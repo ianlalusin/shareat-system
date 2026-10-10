@@ -16,6 +16,8 @@ import { FormGrid, Field } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { LOCATION_EDIT } from './typed-forms';
 
 export const metadata = { title: 'Stock locations — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -159,6 +161,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                           action={updateLocationAction}
                           label={loc.name}
                           hidden={{ storeId, id: loc.id }}
+                          typed={typedFor(sp, LOCATION_EDIT, loc.id, actor.personId)}
                         >
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                             <input

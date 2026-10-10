@@ -31,7 +31,10 @@ export function TopBar() {
   return (
     <header className="shell-nav-row sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 bg-white px-2 dark:border-neutral-800 dark:bg-neutral-950 md:hidden">
       <MenuButton />
-      <span className="text-sm font-semibold tracking-tight">Shareat</span>
+      <img src="/brand/logo-icon.png" alt="" width={32} height={32} className="brand-logo h-8 w-8 shrink-0" />
+      <span className="font-display text-lg font-bold">
+        Shar<span className="text-brand-ink">E</span>at
+      </span>
       {/* The page-title slot — empty until slice 2 wires a real value through. */}
       <span className="flex-1 truncate text-sm text-neutral-500" />
       <form action={signOutAction}>

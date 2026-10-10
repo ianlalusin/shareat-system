@@ -207,7 +207,11 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   it('accepted-baseline totals: 151 FAIL / 63 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 63 });
+    // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
+    // take a caller className through a template like Input.tsx's (same reason string), and Checkbox.tsx's native
+    // `<input type="checkbox">` is the intrinsic checkbox box (Ian's ruling, section 6.1). touch-target-baseline.json gains the
+    // three entries. FAIL unmoved at 151: the new boxes are 44px (min-h-11).
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 66 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -393,7 +397,15 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1151 -> 1152, T-395 S2 2026-10-10. +1 PASS: the "Reopen PIN sign-in" submit `<button>` in the new
     // `app/staff/PinSignInPanel.tsx` (the hidden `storeId` input is not a control). FAIL 151 / UNRESOLVED unmoved, so
     // touch-target-baseline.json needs no entry. Verified by running the census (1152).
-    expect(results.length).toBe(1152);
+    // 1151 -> 1152, T-387 S2 2026-10-10. +1: the new `components/feedback/SubmitButton.tsx` renders one kit `<Button type="submit">`.
+    // FAIL / UNRESOLVED assertions unmoved. Verified by running the census (1152).
+    // 1152 + 1152 -> 1153 at the merge of T-395 S2 and T-387 S2 (both +1). Verified by running the census.
+    // 1152 -> 1156, T-387 S3 2026-10-10. +4: Select.tsx `<select>`, Textarea.tsx `<textarea>`, Checkbox.tsx `<input type="checkbox">`
+    // (the 3 UNRESOLVED above) and Banner.tsx's "Go to <field>" `<a>` (assumed a PASS: the builder gives it a 24px+ box).
+    // FAIL unchanged at 151. If the Banner anchor lands FAIL or UNRESOLVED instead, correct this number and the totals
+    // with a measured census, not by guess.
+    // 1156 + T-395 S2's reopen button -> 1157 at the merge of PR #10 with T-387 S3. Verified by running the census.
+    expect(results.length).toBe(1157);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
@@ -422,7 +434,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
 });
 
 describe('touch-target-geometry.ts — KNOWN_COMPONENT_HEIGHT_PX is gated on the real import (audit round 2, item 3)', () => {
-  it('a LOCAL component named Input (not from @/components/ui) is not counted as a 38px pass', () => {
+  it('a LOCAL component named Input (not from @/components/ui) is not counted as a 44px pass', () => {
     const tmpRoot = mkdtempSync(join(tmpdir(), 'touch-target-known-component-'));
     try {
       // A real (but empty) barrel, so a genuine `@/components/ui` import would resolve — proves
@@ -445,7 +457,7 @@ describe('touch-target-geometry.ts — KNOWN_COMPONENT_HEIGHT_PX is gated on the
     }
   });
 
-  it('control: the SAME shape, imported from the real @/components/ui, IS counted as a 38px pass', () => {
+  it('control: the SAME shape, imported from the real @/components/ui, IS counted as a 44px pass (t387-q4)', () => {
     const tmpRoot = mkdtempSync(join(tmpdir(), 'touch-target-known-component-control-'));
     try {
       mkdirSync(join(tmpRoot, 'components', 'ui'), { recursive: true });
@@ -459,7 +471,7 @@ describe('touch-target-geometry.ts — KNOWN_COMPONENT_HEIGHT_PX is gated on the
 
       const { results } = runCensus(tmpRoot, globalsCssPath);
       const hits = results.filter((r) => r.tag === 'Input');
-      expect(hits).toEqual([{ file: 'app/fake/page.tsx', line: 2, tag: 'Input', status: 'pass', px: 38 }]);
+      expect(hits).toEqual([{ file: 'app/fake/page.tsx', line: 2, tag: 'Input', status: 'pass', px: 44 }]);
     } finally {
       rmSync(tmpRoot, { recursive: true, force: true });
     }

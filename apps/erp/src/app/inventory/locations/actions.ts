@@ -11,6 +11,8 @@
  * `commissary/catalogue/actions.ts` established.
  */
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { LOCATION_EDIT } from './typed-forms';
 import { revalidatePath } from 'next/cache';
 import {
   createLocation,
@@ -137,7 +139,7 @@ export async function updateLocationAction(fd: FormData): Promise<void> {
     );
     message = 'Room updated.';
   } catch (err) {
-    return await redirectWithFlash('/inventory/locations', { store: storeId }, { error: errorMessage(err) });
+    return await redirectWithFlash('/inventory/locations', { store: storeId }, { error: errorMessage(err), typed: keepTyping(fd, LOCATION_EDIT, id, { actorId: actor.personId }) });
   }
   revalidatePath('/inventory/locations');
   return await redirectWithFlash('/inventory/locations', { store: storeId }, { ok: message });

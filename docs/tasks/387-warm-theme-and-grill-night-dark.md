@@ -89,6 +89,20 @@ need for a migration stops and reports; that would be a spec change.
 - **Seen (§9.4 plus the render-first memory):** `/sign-in`, `/`, `/expenses/new` and `/reports/income-statement`, in
   light and dark. The screenshots go in the PR. Expect stock-hue islands (old banners, `bg-white` cards) to clash on
   cream. That is S8's job. List them; do not fix them here.
+- **Addendum (Opus lead, 2026-10-10, after Ian: *"go on and fix the clash in colors"*): the warm neutral ramp.**
+  - The S1 screenshots showed the clash came mostly from stock `neutral-*` grey: 4,946 utilities in 154 of 171 files.
+    One part of it was a regression, not a look: stock `text-neutral-500` (the caption grey, 575 lines) is 4.34:1 on
+    the new cream canvas, under AA.
+  - Fix: `apps/erp/warm-neutral.ts` re-values Tailwind's `neutral` palette (`tailwind.config.ts`). Six steps ARE
+    ruled tokens, chosen by how the app uses them: 200 = light `--surface-border`, 400 = dark `--muted`, 500 = light
+    `--muted`, 800 = dark `--surface-border`, 900 = dark `--surface`, 950 = dark `--canvas`. The other five keep stock
+    neutral's OKLCH lightness in `--ink`'s warm hue. No ruled value was re-picked; no new token was added.
+  - `t387-s1-warm-neutral.test.ts` reads the anchors from `globals.css`, holds the others within 3% of stock
+    contrast, checks the ramp is monotonic, and asserts captions clear AA on the cream canvas and the dark surface.
+  - ⛔ Not fixed by this, and still S2 + S8: buttons stay near-black (`bg-neutral-900` is now warm `#1c1a18`) until
+    they move onto `Button`; banners and badges keep stock emerald, amber and red until `Banner`/`Badge`; field
+    borders reach `--field-border` only through `Input`/`Select`. ⚠️ S8 removes local `neutral-*` uses file by file;
+    the ramp is what keeps the files S8 has not reached yet on-brand meanwhile.
 
 ### S2: the kit reshaped (Button, Input, Card) plus SubmitButton
 - `Button`:
@@ -314,6 +328,9 @@ with employee and office copies. Checklist, memo kiosk and onboarding were accep
 - `t387-q6-schedule`: ✅ **ANSWERED (a), Ian 2026-10-10.** Build the roster without a scheduled band. "Staff schedules" is now in `docs/CAPABILITY-GAPS.md` (added 2026-10-10). Was: v2 has no shift schedule (neither did v1). Build the
   roster now with worked, break and now, and no scheduled band? (a) yes, and add "staff schedules" to CAPABILITY-GAPS
   as its own feature · (b) wait for schedules. **Recommended: (a).**
+- `t387-dark-warning-soft`: ✅ **RULED by Ian, 2026-10-10: "keep #2b2210".** ADR-013 Amendment 7 gives no dark
+  `--warning-soft`; S1 reused the dark `--warning` surface (`#2b2210`, warning-ink on it 8.86:1). Pinned in
+  `theme-tokens.test.ts`. Dark `--brand-hover` stays unruled (inherits `#b00707`).
 - `t387-q7-sweep`: ✅ **ANSWERED (a), Ian 2026-10-10. S8 runs as a multi-agent Workflow.** This is Ian's explicit opt-in for that slice only. Was: run the sweep as a multi-agent **Workflow** (fast, more tokens), or as ordinary lane
   tranches (slower, fewer tokens)? (a) Workflow · (b) lane tranches.
 

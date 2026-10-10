@@ -97,35 +97,78 @@ describe('Button — T-334 slice 2 contract', () => {
   // (barely). Verified on screen first (RENDER-E4, 2026-09-23): light ring-ink = #1a1a1a, dark
   // ring-ink = #fafafa, both distinguishable from the invalid border in both themes.
   // -------------------------------------------------------------------------------------------
-  it('emits focus-visible:ring-ink and NOT focus-visible:ring-brand — token-level, both halves; nothing else in the class string changes (ADR-013 Amendment 6, FINAL)', () => {
-    const html = renderToStaticMarkup(createElement(Button, { children: 'Save' })); // default (secondary) variant
-    const tokens = classTokens(html);
+  // T-387 S2 (docs/tasks/387-...md "### S2", L2): the exact class-token snapshots are REWRITTEN, on
+  // purpose — rounded-[12px] (t387-q3 = b), font-semibold, one 44px height (t387-q4 = a, `min-h-11`:
+  // the census reads `min-h-N` as N*4 px, touch-target-geometry.ts:439), secondary hover:bg-canvas,
+  // and the new `ghost` variant. The focus idiom is Amendment 6 (`ring-ink`) and is unchanged.
+  const BASE_SNAPSHOT =
+    'inline-flex items-center gap-2 min-h-11 rounded-[12px] px-4 py-2.5 text-sm font-semibold disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+  const VARIANT_SNAPSHOT = {
+    primary: 'border border-transparent bg-brand text-white hover:bg-brand-hover',
+    secondary: 'border border-surface-border bg-surface text-ink hover:bg-canvas',
+    ghost: 'border border-transparent bg-transparent text-ink hover:bg-canvas',
+    danger: 'border border-danger text-danger',
+  } as const;
+  const sorted = (s: string | Set<string>) => [...(typeof s === 'string' ? s.split(/\s+/).filter(Boolean) : s)].sort();
 
-    expect(tokens.has('focus-visible:ring-ink')).toBe(true);
-    expect(tokens.has('focus-visible:ring-brand')).toBe(false);
+  for (const variant of ['primary', 'secondary', 'ghost', 'danger'] as const) {
+    it(`${variant}: the rendered class-token set equals the BASE + variant snapshot exactly (T-387 S2)`, () => {
+      const html = renderToStaticMarkup(createElement(Button, { variant, children: 'X' }));
+      expect(sorted(classTokens(html))).toEqual(sorted(`${BASE_SNAPSHOT} ${VARIANT_SNAPSHOT[variant]}`));
+    });
+  }
 
-    // "Nothing else changes" — a literal snapshot of Button's PRE-Amendment-6 default-variant
-    // class string (captured 2026-09-23 from Button.tsx/BASE_CLASSES + secondary's
-    // VARIANT_CLASSES), with only the one ring token swapped. If the real rendered token set
-    // (minus ring-ink) differs from this (minus ring-brand), something OTHER than the ring
-    // colour moved too.
-    const preAmendment6DefaultVariant =
-      'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface border border-surface-border bg-surface text-ink';
-    const expectedOthers = new Set(preAmendment6DefaultVariant.split(/\s+/).filter(Boolean));
-    expectedOthers.delete('focus-visible:ring-brand');
-
-    const actualOthers = new Set(tokens);
-    actualOthers.delete('focus-visible:ring-ink');
-
-    expect([...actualOthers].sort()).toEqual([...expectedOthers].sort());
+  it('emits focus-visible:ring-ink and NOT focus-visible:ring-brand on every variant (ADR-013 Amendment 6, kept)', () => {
+    for (const variant of ['primary', 'secondary', 'ghost', 'danger'] as const) {
+      const tokens = classTokens(renderToStaticMarkup(createElement(Button, { variant, children: 'X' })));
+      expect(tokens.has('focus-visible:ring-ink'), variant).toBe(true);
+      expect(tokens.has('focus-visible:ring-brand'), variant).toBe(false);
+    }
   });
 
-  it('mutation check: the snapshot comparison catches an UNRELATED token changing alongside the ring swap', () => {
-    const preAmendment6 = new Set('rounded-md px-4 py-2.5 focus-visible:ring-brand'.split(' '));
-    preAmendment6.delete('focus-visible:ring-brand');
-    const mutantAfter = new Set('rounded-lg px-4 py-2.5 focus-visible:ring-ink'.split(' ')); // rounded-md -> rounded-lg, unrelated to the ring
-    mutantAfter.delete('focus-visible:ring-ink');
-    expect([...mutantAfter].sort()).not.toEqual([...preAmendment6].sort());
+  const FORBIDDEN_SHAPE = /^rounded-(full|md|lg|xl|2xl|3xl)$/;
+  it('shape and weight: rounded-[12px] + font-semibold + min-h-11, and NEVER rounded-full / rounded-md / font-medium (t387-q3, t387-q4)', () => {
+    for (const variant of ['primary', 'secondary', 'ghost', 'danger'] as const) {
+      const tokens = classTokens(renderToStaticMarkup(createElement(Button, { variant, children: 'X' })));
+      expect(tokens.has('rounded-[12px]'), variant).toBe(true);
+      expect(tokens.has('font-semibold'), variant).toBe(true);
+      expect(tokens.has('min-h-11'), variant).toBe(true);
+      expect([...tokens].filter((t) => FORBIDDEN_SHAPE.test(t)), variant).toEqual([]);
+      expect(tokens.has('font-medium'), variant).toBe(false);
+    }
+  });
+
+  // NEGATIVE: the same absence predicate the test above uses, applied to a mutated class string.
+  it('mutation check: a rounded-full (or rounded-md) Button class string is caught by the shape predicate', () => {
+    const hasForbiddenShape = (cls: string) => cls.split(/\s+/).some((t) => FORBIDDEN_SHAPE.test(t));
+    expect(hasForbiddenShape(`${BASE_SNAPSHOT} ${VARIANT_SNAPSHOT.primary}`)).toBe(false);
+    expect(hasForbiddenShape(BASE_SNAPSHOT.replace('rounded-[12px]', 'rounded-full'))).toBe(true);
+    expect(hasForbiddenShape(BASE_SNAPSHOT.replace('rounded-[12px]', 'rounded-md'))).toBe(true);
+  });
+
+  it('secondary has hover:bg-canvas; primary keeps hover:bg-brand-hover and has no hover:bg-canvas', () => {
+    const sec = classTokens(renderToStaticMarkup(createElement(Button, { variant: 'secondary', children: 'X' })));
+    const pri = classTokens(renderToStaticMarkup(createElement(Button, { variant: 'primary', children: 'X' })));
+    expect(sec.has('hover:bg-canvas')).toBe(true);
+    expect(pri.has('hover:bg-canvas')).toBe(false);
+  });
+
+  it('ghost (Cancel): transparent fill and border, text-ink, hover:bg-canvas; no bg-brand, no border-danger, no icon', () => {
+    const html = renderToStaticMarkup(createElement(Button, { variant: 'ghost', children: 'Cancel' }));
+    const t = classTokens(html);
+    for (const need of ['border-transparent', 'bg-transparent', 'text-ink', 'hover:bg-canvas']) expect(t.has(need), need).toBe(true);
+    expect(t.has('bg-brand')).toBe(false);
+    expect(t.has('border-danger')).toBe(false);
+    expect(t.has('text-danger')).toBe(false);
+    expect(html).not.toContain('<svg');
+  });
+
+  it('danger stays OUTLINED with its icon: border-danger text-danger, no solid bg-danger, keeps <svg> (ADR-013 §1)', () => {
+    const html = renderToStaticMarkup(createElement(Button, { variant: 'danger', children: 'Delete' }));
+    const t = classTokens(html);
+    expect(t.has('border-danger') && t.has('text-danger')).toBe(true);
+    expect(t.has('bg-danger')).toBe(false);
+    expect(html).toContain('<svg');
   });
 
   it('primary emits a solid brand fill and a hover class (§4.1)', () => {

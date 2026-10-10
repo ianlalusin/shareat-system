@@ -111,11 +111,13 @@ export function SidebarProvider({
 function Wordmark() {
   return (
     <Link href="/" className={`flex h-14 shrink-0 items-center px-4 text-sm font-semibold tracking-tight ${FOCUS_RING}`}>
-      <span className="shell-sidebar-expanded-only">Shareat</span>
-      {/* Rail-width fallback — a bare wordmark full text would clip exactly like the rest did
-          before this review round; a single initial is the same shape §2.3's "SharEat" wordmark
-          idea already uses elsewhere in this codebase's chrome. */}
-      <span aria-hidden="true" className="shell-sidebar-collapsed-only">S</span>
+      {/* T-387 S1 — the logo always shows; the 4rem rail shows ONLY the logo, since the wordmark
+          text would clip there. Decorative (alt=""); the link's text is its accessible name. */}
+      <img src="/brand/logo-icon.png" alt="" width={32} height={32} className="brand-logo h-8 w-8 shrink-0" />
+      <span className="shell-sidebar-expanded-only ml-2 font-display text-lg font-bold">
+        Shar<span className="text-brand-ink">E</span>at
+      </span>
+      <span className="sr-only shell-sidebar-collapsed-only">SharEat</span>
     </Link>
   );
 }
@@ -258,7 +260,12 @@ function Drawer({ allowedHrefs }: { allowedHrefs: readonly string[] }) {
         className={`fixed inset-y-0 left-0 z-50 flex w-[min(18rem,85vw)] flex-col bg-white shadow-xl transition-transform dark:bg-neutral-950 ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 pl-4 pr-2 dark:border-neutral-800">
-          <span className="text-sm font-semibold tracking-tight">Shareat</span>
+          <span className="flex items-center gap-2">
+            <img src="/brand/logo-icon.png" alt="" width={32} height={32} className="brand-logo h-8 w-8 shrink-0" />
+            <span className="font-display text-lg font-bold">
+              Shar<span className="text-brand-ink">E</span>at
+            </span>
+          </span>
           <button
             type="button"
             onClick={closeDrawer}

@@ -199,7 +199,10 @@ describe('Guard 7 — no raw hex, no stock Tailwind hue utility (§4.7, §9 R2)'
 // Guard 8 — --warning never carries text (§4.8)
 // ---------------------------------------------------------------------------------------------
 
-const WARNING_TEXT_RE = /\btext-warning\b/;
+// T-387 S3: an allowlist of exactly one suffix, `-ink` (Badge, Banner). Everything else that starts
+// `text-warning` still trips it: bare `text-warning`, `text-warning/50`, and `text-warning-soft` (a surface
+// token used as text, which a `(?![\w-])` lookahead would have let through — S3 audit finding 1).
+const WARNING_TEXT_RE = /\btext-warning(?!-ink(?![\w-]))[\w/-]*/;
 
 function findWarningTextToken(source: string): string | null {
   return stripComments(source).match(WARNING_TEXT_RE)?.[0] ?? null;
@@ -216,6 +219,16 @@ describe('Guard 8 — --warning never carries text (§4.8)', () => {
     expect(findWarningTextToken('<span className="text-warning">Pending</span>')).toBe(
       'text-warning',
     );
+  });
+
+  it('mutation check: text-warning-ink (the sanctioned warning text) does not trip this guard', () => {
+    expect(findWarningTextToken('<span className="text-warning-ink">Pending</span>')).toBeNull();
+  });
+
+  it('mutation check: a surface token or opacity variant used as text still trips it', () => {
+    expect(findWarningTextToken('<span className="text-warning-soft">Pending</span>')).toBe('text-warning-soft');
+    expect(findWarningTextToken('<span className="text-warning/50">Pending</span>')).toBe('text-warning/50');
+    expect(findWarningTextToken('<span className="text-warning-inkish">x</span>')).toBe('text-warning-inkish');
   });
 
   it('mutation check: bg-warning (the permitted surface use) does not trip this guard', () => {

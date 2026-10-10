@@ -3,79 +3,129 @@
 @tailwind utilities;
 
 /*
- * T-334 slice 1 — the v2 palette. ⛔ RULED by Ian 2026-09-19; see docs/decisions/ADR-013.
- * These values are NOT invented here: --brand, --danger and --danger-surface are the Shareat
- * brand's own declared tokens (Shareat Website/src/styles/global.css:10-12), and --ink is its
- * shareat-black. The ERP is adopting the brand's palette, not choosing a new one.
+ * The v2 palette. ADR-013 Amendment 7 (2026-10-09, RULED by Ian): "SharEat Warm" for light and
+ * "Grill Night" for dark. Every value below is copied from that amendment's token table; none is
+ * chosen here, and apps/erp/tests/theme-tokens.test.ts recomputes the contrast figures from them.
  *
- * ⛔ color-scheme is `light`, NOT `light dark`. That one word is the defect this slice fixes: v2
- * followed the operating system into dark mode and v1 never did, and nobody chose that — with no
- * `darkMode` key in tailwind.config.ts, Tailwind sat on its default `media` strategy by omission.
- * Dark is now reachable ONLY under [data-theme="dark"], which layout.tsx sets server-side from a
- * cookie, so the first server-rendered paint is already correct and there is no flash.
+ * ⛔ color-scheme is `light` here and `dark` in the dark block, never `light dark`: the OS does not
+ * decide. Dark is reachable ONLY under [data-theme="dark"], which layout.tsx sets server-side from
+ * a cookie, so the first server-rendered paint is already correct and there is no flash. A
+ * media-query rule cannot be read on the server, which is why the cookie exists.
+ *
+ * The tokens are consumed: `body` takes --canvas, --ink and --font-body below, headings take
+ * --font-display, and tailwind.config.ts maps every token to a utility (bg-canvas, text-ink, ...).
  */
 :root {
   color-scheme: light;
 
-  /* The ONE primary action per view, active nav, focus ring, wordmark. Nothing else.
-     5.47:1 on white — AA for normal text, NOT AAA. Anything needing AAA uses --danger. */
+  --canvas: #fbf4e4;
+  --surface: #fffdf8;
+  /* Decorative only (1.30:1): it never bounds a control. Controls use --field-border. */
+  --surface-border: #eadfc6;
+  /* Background and 3:1 boundary of inputs, selects and textareas (WCAG 1.4.11). */
+  --field: #ffffff;
+  --field-border: #94866f;
+  --ink: #2b2620;
+  --muted: #6b5f4f;
+
+  /* The ONE primary action per view, active nav, focus ring. 4.99:1 as text on cream, AA. */
   --brand: #d40909;
   --brand-hover: #b00707;
+  /* Brand red used AS TEXT (links, the wordmark "E"). */
+  --brand-ink: #d40909;
 
-  /* ⛔ Destructive actions and error text. ALWAYS outlined, never filled, always with an icon —
-     brand red can no longer double as the error colour, so danger is distinguished by TREATMENT
-     rather than by hue. 8.32:1 on white. */
+  /* ⛔ Destructive actions and error text. ALWAYS outlined, never filled, always with an icon:
+     danger is distinguished by TREATMENT rather than by hue. */
   --danger: #a00606;
   --danger-surface: #fde7e7;
 
-  /* Pending, attention, needs-review — where today's 649 ambers go.
-     ⛔ 1.77:1 on white: SURFACE ONLY, NEVER TEXT. Not an oversight to be corrected. */
+  /* Pending, attention, needs-review. ⛔ --warning is a SURFACE ONLY, NEVER TEXT (under 3:1 on
+     canvas). Text that sits on it uses --warning-ink. */
   --warning: #f4b942;
+  --warning-soft: #fce8b8;
+  --warning-ink: #7a4f00;
 
-  --success: #059669;
-
-  --canvas: #ffffff;
-  --surface: #ffffff;
-  --surface-border: #e5e5e5;
-  --ink: #1a1a1a;
+  --success: #0e6b45;
+  --success-soft: #e2f1e8;
+  --info: #1e4fb8;
+  --info-soft: #e7eefb;
+  --progress: #6427c9;
+  --progress-soft: #eee7fb;
+  --closed: #55606e;
+  --closed-soft: #efece4;
 }
 
 /*
- * ⚠️ Dark is OPT-IN and still PARTIALLY INCOMPLETE. ADR-013 §1/Amendment 1: #d40909 (--brand) is
- * 3.84:1 on black, and 3.28:1 on the theme's REAL dark surface #171717. --brand has no dark
- * treatment or ruling yet. --danger is no longer in that state —
- * ADR-013 Amendment 5 (2026-09-23) ruled a dark-only value for it (#f87171, in the dark block
- * below) once Amendment 4 corrected the "on black" figure to 2.15:1 against the theme's real
- * dark surface. --warning remains unruled for dark (Amendment 4's gap, still open) and a test
- * pins that absence open so the next author must update an expectation consciously.
- * ⛔ Do not present dark mode as FULLY supported until --brand and --warning are also ruled.
+ * Dark ("Grill Night") is OPT-IN, a manual toggle: light is the default and the OS never decides.
+ * Amendment 7 rules every dark value, including --brand and --warning, which were open before it.
  *
- * ⛔⛔ WHAT ACTUALLY DARKENS THE PAGE TODAY IS `color-scheme: dark`, NOT THESE VARIABLES. An
- * earlier version of this comment claimed the tokens below give the existing `dark:` utilities "a
- * surface to sit on". They do not — as of slice 1 NOTHING consumes them: `body` sets only
- * `font-family`, and there is not one `bg-canvas`/`text-ink`/`var(--canvas)` anywhere in `src`.
- * They are declared here so slices 2–4 have something to migrate ONTO. ⚠️ So do not delete
- * `color-scheme: dark` on the assumption `--canvas` covers it: that would leave the page on the
- * user-agent's LIGHT canvas with every `dark:` utility firing on top of it. (Found by review.)
+ * ⛔ Dark --brand is #d40909 as a FILL only (white on it is 5.47:1). As text on a dark surface it
+ * is 3.17:1 and fails, so text uses --brand-ink (#ff7a70). Dark --warning is a deep surface, with
+ * --warning-ink as the text on it. Dark --warning-soft is not in the ADR table: Ian ruled it
+ * 2026-10-10 as the dark warning surface, #2b2210. Dark --brand-hover inherits the light value.
+ *
+ * ⚠️ `color-scheme: dark` MUST STAY. The existing `dark:` utilities (~3,485 of them) still sit on
+ * top of it, and it is what makes the user-agent's own canvas, scrollbars and form controls dark.
+ * Deleting it on the assumption that --canvas covers it would leave unmigrated parts of the page
+ * on the user-agent's light colours.
  */
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --canvas: #0a0a0a;
-  --surface: #171717;
-  --surface-border: #2e2e2e;
-  --ink: #fafafa;
+  --canvas: #121110;
+  --surface: #1c1a18;
+  --surface-border: #34302b;
+  --field: #151412;
+  --field-border: #746b5f;
+  --ink: #f5efe4;
+  --muted: #a89f92;
 
-  /* ADR-013 Amendment 5 — Ian ruled the dark-mode red 2026-09-23. #f87171 on #171717 is 6.48:1
-     (clears both 4.5:1 text and 3:1 non-text); on #2a0f0f it is 6.47:1. Light mode is unchanged;
-     do not copy #f87171 into a component or a dark: utility — Button/Input keep using
-     text-danger/border-danger/bg-danger-surface and the theme swaps the value underneath them. */
+  --brand: #d40909; /* fill only, text uses --brand-ink */
+  --brand-ink: #ff7a70;
+
+  /* ADR-013 Amendment 5: #f87171 on #1c1a18 clears 4.5:1. Components keep using text-danger,
+     border-danger and bg-danger-surface; the theme swaps the value underneath them. */
   --danger: #f87171;
   --danger-surface: #2a0f0f;
+
+  --warning: #2b2210;
+  --warning-soft: #2b2210;
+  --warning-ink: #f4b942;
+
+  --success: #4ade80;
+  --success-soft: #0f2a1c;
+  --info: #93b4ff;
+  --info-soft: #142038;
+  --progress: #c4b5fd;
+  --progress-soft: #241b3d;
+  --closed: #aab4c2;
+  --closed-soft: #23262b;
 }
 
-body {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+@layer base {
+  body {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+}
+
+/*
+ * T-387 S1 — the logo is black ink on a transparent PNG, so on Grill Night's charcoal only the red
+ * "S" survived (seen in the §9.4 screenshots). The dark board (docs/design/t387/brand-dark-grill-
+ * night.dc.html) sits it on a cream disc; this does the same with the dark --ink, which is that
+ * cream, so no new hex enters the stylesheet.
+ */
+:root[data-theme='dark'] .brand-logo {
+  background: var(--ink);
+  border-radius: 9999px;
+  padding: 2px;
 }
 
 /*
@@ -158,4 +208,40 @@ body {
   .shell-nav-row {
     min-height: 44px;
   }
+}
+
+/*
+ * T-387 S3: the animated status icons (StatusIcon) and the empty-state flame. Every keyframe and every
+ * `animation` lives inside this one no-preference block, so reduced motion gets still icons.
+ * Shapes and timings are copied from docs/design/t387/OrderStatus.dc.html and Feedback.dc.html.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .status-icon-draft .si-ink { stroke-dasharray: 14; animation: si-ink 1.6s ease-in-out infinite; }
+  .status-icon-draft .si-pen { animation: si-pen 1.6s ease-in-out infinite; }
+  .status-icon-submitted .si-plane { animation: si-plane 2s cubic-bezier(.5, 0, .5, 1) infinite; }
+  .status-icon-preparing .si-steam { animation: si-steam 1.8s ease-out infinite; }
+  .status-icon-preparing .si-steam-late { animation: si-steam 1.8s ease-out 0.6s infinite; }
+  .status-icon-ready .si-check { stroke-dasharray: 20; animation: si-check 2.2s ease-out infinite; }
+  .status-icon-dispatched .si-road { stroke-dasharray: 4 6; animation: si-road 0.6s linear infinite; }
+  .status-icon-dispatched .si-truck { animation: si-truck 0.5s ease-in-out infinite alternate; }
+  .status-icon-received .si-drop { animation: si-drop 2.2s cubic-bezier(.5, 0, .75, 0) infinite; }
+  .status-icon-disputed .si-shake { transform-box: fill-box; transform-origin: 50% 100%; animation: si-shake 1.4s ease-in-out infinite; }
+  .status-icon-cancelled .si-x { stroke-dasharray: 12; animation: si-check 2s ease-out infinite; }
+  .status-icon-rejected .si-stamp { animation: si-stamp 1.8s cubic-bezier(.5, 0, .5, 1) infinite; }
+  .status-icon-void .si-strike { stroke-dasharray: 18; animation: si-check 2s ease-out infinite; }
+  .status-icon-counting .si-spin { transform-box: fill-box; transform-origin: center; animation: si-spin 2.4s linear infinite; }
+  .empty-flame { transform-box: fill-box; transform-origin: 50% 100%; animation: si-flick 1.2s ease-in-out infinite alternate; }
+
+  @keyframes si-pen { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(5px, 1px); } }
+  @keyframes si-ink { 0% { stroke-dashoffset: 14; } 60%, 100% { stroke-dashoffset: 0; } }
+  @keyframes si-plane { 0% { transform: translate(-6px, 6px); opacity: 0; } 20% { opacity: 1; } 80% { opacity: 1; } 100% { transform: translate(10px, -10px); opacity: 0; } }
+  @keyframes si-steam { 0% { transform: translateY(3px); opacity: 0; } 40% { opacity: 1; } 100% { transform: translateY(-6px); opacity: 0; } }
+  @keyframes si-check { 0% { stroke-dashoffset: 20; } 40%, 80% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+  @keyframes si-truck { from { transform: translateY(0); } to { transform: translateY(-1px); } }
+  @keyframes si-road { to { stroke-dashoffset: 10; } }
+  @keyframes si-drop { 0% { transform: translateY(-14px); opacity: 0; } 30% { opacity: 1; } 55% { transform: translateY(0); } 65% { transform: translateY(-2px); } 75%, 100% { transform: translateY(0); } }
+  @keyframes si-shake { 0%, 60%, 100% { transform: rotate(0); } 10%, 30%, 50% { transform: rotate(-8deg); } 20%, 40% { transform: rotate(8deg); } }
+  @keyframes si-stamp { 0% { transform: translateY(-10px) scale(1.2); opacity: 0; } 35% { transform: translateY(0) scale(1); opacity: 1; } 45% { transform: scale(.95); } 55%, 100% { transform: scale(1); } }
+  @keyframes si-spin { to { transform: rotate(360deg); } }
+  @keyframes si-flick { from { transform: scaleY(.94); } to { transform: scaleY(1.06); } }
 }
