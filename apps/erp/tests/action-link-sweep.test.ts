@@ -204,7 +204,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 148 FAIL / 49 UNRESOLVED', () => {
+  it('accepted-baseline totals: 147 FAIL / 49 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -219,7 +219,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // money-transfers, owners) now sit inside a kit <Banner>, whose text-sm the census cannot see through a component.
     // They were briefly UNRESOLVED; each got an explicit `text-sm` (visually a no-op, the Banner is text-sm) and is
     // again the same accepted 20px inline-link FAIL it was before, entry restored unchanged.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 148, unresolved: 49 });
+    // 148 -> 147 FAIL, T-387 S7 2026-10-11: app/staff/page.tsx's 20px name link in the old table is gone (the page is now the
+    // ID-card wall plus the live roster, every control min-h-11); its touch-target-baseline.json entry is removed.
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 147, unresolved: 49 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -415,7 +417,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1156 -> 1148, T-387 S8 2026-10-10. -8 net: the sweep removed controls it replaced with kit components; FAIL 151 -> 141, UNRESOLVED 66 -> 56.
     // 1156 + T-395 S2's reopen button -> 1157 at the merge of PR #10 with T-387 S3. Verified by running the census.
     // T-387 S8 merged onto main (1157): measured 1149 (S8's kit swaps net -8 against main's 1157); FAIL 148 / UNRESOLVED 49 unmoved. Verified by running the census.
-    expect(results.length).toBe(1149);
+    // 1149 -> 1154, T-387 S7 2026-10-11. +5 net: /staff gains two segmented-control links, the card links and roster-row
+    // links (kit-sized, resolved) and loses the old table's name link; FAIL 148 -> 147 (that link), UNRESOLVED 49 unmoved.
+    // Verified by running the census (1154).
+    expect(results.length).toBe(1154);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
