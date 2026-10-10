@@ -48,9 +48,12 @@
     "backfill-fiscal-periods": "tsx scripts/backfill-fiscal-periods.ts",
     "backfill-canonical-positions": "tsx scripts/backfill-canonical-positions.ts",
     "backfill-store-attendance-config": "tsx scripts/backfill-store-attendance-config.ts",
-    "deploy-preflight": "tsx scripts/deploy-preflight.ts"
+    "deploy-preflight": "tsx scripts/deploy-preflight.ts",
+    "db-backup": "tsx scripts/db-backup.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1149.0",
+    "@aws-sdk/lib-storage": "^3.1149.0",
     "dotenv": "^16.4.7",
     "tsx": "^4.19.2"
   },
