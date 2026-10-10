@@ -27,3 +27,7 @@ export { StatusIcon, STATUS_ICON_KINDS } from './StatusIcon';
 export type { StatusIconKind } from './StatusIcon';
 export { statusTone, statusLabel, STATUS_TONE, unmappedStatuses } from './status-tone';
 export type { Tone } from './status-tone';
+// T-387 S6: the big state.
+export { StatusHero } from './StatusHero';
+export type { StatusHeroProps } from './StatusHero';
+export * from './status-steps';

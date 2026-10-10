@@ -19,10 +19,24 @@ import {
   updateLineAction,
   withdrawOrderAction,
 } from './actions';
-import { BRANCH_ORDER_STAGE_LABEL, actorStoreIds, orderView, peso, today, type OrderView } from '../lib';
+import { actorStoreIds, orderView, peso, today, type OrderView } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import {
+  Button,
+  FlashBanner,
+  FormGrid,
+  Input,
+  Select,
+  StatusHero,
+  branchOrderSteps,
+  exitStepFromTimestamps,
+  isExitStage,
+  nextLineFor,
+  stepIndexFor,
+  type StatusIconKind,
+  type Tone,
+} from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -40,6 +54,18 @@ const REASON_LABEL: Record<string, string> = {
   quality_reject: 'Quality reject',
   count_correction: 'Count correction',
   other: 'Other',
+};
+
+/** The hero's icon, word and tone per derived stage. An exit stage is `danger` (greyed chevrons, red word). */
+const STAGE_HERO: Record<string, { kind: StatusIconKind; word: string; tone: Tone }> = {
+  draft: { kind: 'draft', word: 'Draft', tone: 'info' },
+  submitted: { kind: 'submitted', word: 'Submitted', tone: 'warning' },
+  accepted: { kind: 'preparing', word: 'Being packed', tone: 'progress' },
+  ready: { kind: 'ready', word: 'Ready to dispatch', tone: 'progress' },
+  dispatched: { kind: 'dispatched', word: 'In transit', tone: 'progress' },
+  received: { kind: 'received', word: 'Received', tone: 'success' },
+  rejected: { kind: 'rejected', word: 'Rejected', tone: 'danger' },
+  cancelled: { kind: 'cancelled', word: 'Cancelled', tone: 'danger' },
 };
 
 function when(d: Date | null): string {
@@ -70,6 +96,18 @@ export default async function BranchOrderPage({
   const receiving = stage === 'dispatched' && branchSide;
   const goods = lines.filter((l) => l.approval === 'not_required' || l.approval === 'approved');
 
+  // The big state. The side is the page's own: a person who holds both stores reads the commissary line.
+  const hero = STAGE_HERO[stage];
+  if (!hero) throw new Error(`BranchOrderPage: no hero for stage ${stage}`);
+  const heroStep = isExitStage(stage)
+    ? exitStepFromTimestamps(
+        'branch',
+        { acceptedAt: order.acceptedAt, readyAt: order.readyAt, dispatchedAt: order.dispatchedAt, receivedAt: order.receivedAt },
+        stepIndexFor(stage),
+      )
+    : stepIndexFor(stage);
+  const heroLine = nextLineFor(stage, commissarySide ? 'commissary' : 'branch');
+
   return (
     <Page density="table">
       <div>
@@ -80,7 +118,7 @@ export default async function BranchOrderPage({
           {commissary.name} → {branch.name}
         </h1>
         <PageDescription className="mt-1">
-          {order.orderDate} · <strong>{BRANCH_ORDER_STAGE_LABEL[stage]}</strong> · {peso(order.totalAmount)}
+          {order.orderDate} · {peso(order.totalAmount)}
           {order.referenceNo && <> · ref {order.referenceNo}</>}
         </PageDescription>
         {order.notes && <p className="mt-1 text-xs text-neutral-500">{order.notes}</p>}
@@ -99,6 +137,46 @@ export default async function BranchOrderPage({
 
       <FlashBanner flash={sp} />
 
+      <StatusHero kind={hero.kind} word={hero.word} step={heroStep} steps={branchOrderSteps} line={heroLine} tone={hero.tone}>
+        {draft && branchSide && (
+          <form action={submitOrderAction}>
+            <input type="hidden" name="orderId" value={order.id} />
+            <Button type="submit" variant="primary">
+              Submit to {commissary.name}
+            </Button>
+          </form>
+        )}
+        {stage === 'submitted' && commissarySide && (
+          <form action={acceptOrderAction}>
+            <input type="hidden" name="orderId" value={order.id} />
+            <Button type="submit" variant="primary">
+              Accept
+            </Button>
+          </form>
+        )}
+        {stage === 'accepted' && commissarySide && (
+          <form action={markReadyAction}>
+            <input type="hidden" name="orderId" value={order.id} />
+            <Button type="submit" variant="primary">
+              Mark ready
+            </Button>
+          </form>
+        )}
+        {stage === 'ready' && commissarySide && (
+          <form action={dispatchOrderAction}>
+            <input type="hidden" name="orderId" value={order.id} />
+            <Button type="submit" variant="primary">
+              Dispatch
+            </Button>
+          </form>
+        )}
+        {receiving && (
+          <Button type="submit" form="receive-order-form" variant="primary">
+            Receive
+          </Button>
+        )}
+      </StatusHero>
+
       {/* ---- The lines ------------------------------------------------------------------------ */}
       <section className="space-y-3">
         <div className="flex items-baseline justify-between">
@@ -111,7 +189,7 @@ export default async function BranchOrderPage({
         {lines.length === 0 && <p className="text-sm text-neutral-500">Nothing on this order yet.</p>}
 
         {receiving ? (
-          <form action={receiveOrderAction} className="space-y-3">
+          <form id="receive-order-form" action={receiveOrderAction} className="space-y-3">
             <input type="hidden" name="orderId" value={order.id} />
             {lines.map((l) => (
               <LineCard key={l.id} line={l} view={view} branchSide={branchSide} commissarySide={commissarySide} receiving />
@@ -129,9 +207,6 @@ export default async function BranchOrderPage({
                 Received on
                 <Input name="receivedOn" type="date" defaultValue={today()} />
               </label>
-              <Button type="submit" variant="primary">
-                Receive
-              </Button>
             </div>
           </form>
         ) : (
@@ -184,12 +259,6 @@ export default async function BranchOrderPage({
             </Button>
           </form>
           <div className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
-            <form action={submitOrderAction}>
-              <input type="hidden" name="orderId" value={order.id} />
-              <Button type="submit" variant="primary">
-                Submit to {commissary.name}
-              </Button>
-            </form>
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               Submit is refused while any line is unmapped or has no expense category — fix those under{' '}
               <Link href={`/commissary/catalogue?commissary=${commissary.id}&branch=${branch.id}`} className="underline underline-offset-4">
@@ -209,12 +278,6 @@ export default async function BranchOrderPage({
             Accepting copies every asked quantity into the packing list; you adjust from there. Nothing posts.
           </p>
           <div className="flex flex-wrap items-end gap-3">
-            <form action={acceptOrderAction}>
-              <input type="hidden" name="orderId" value={order.id} />
-              <Button type="submit" variant="primary">
-                Accept
-              </Button>
-            </form>
             <RejectForm orderId={order.id} />
           </div>
         </section>
@@ -287,22 +350,6 @@ export default async function BranchOrderPage({
       {packing && commissarySide && (
         <section className={PANEL}>
           <div className="flex flex-wrap items-end gap-3">
-            {stage === 'accepted' && (
-              <form action={markReadyAction}>
-                <input type="hidden" name="orderId" value={order.id} />
-                <Button type="submit" variant="primary">
-                  Mark ready
-                </Button>
-              </form>
-            )}
-            {stage === 'ready' && (
-              <form action={dispatchOrderAction}>
-                <input type="hidden" name="orderId" value={order.id} />
-                <Button type="submit" variant="primary">
-                  Dispatch
-                </Button>
-              </form>
-            )}
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               {stage === 'accepted'
                 ? 'Ready means the list is final — after it the order can only be dispatched or rejected.'
