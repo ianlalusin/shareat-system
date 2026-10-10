@@ -246,6 +246,9 @@ export async function listFindings(
     // The exact complement of the line above (A1.5): a store with no live config has no cadence
     // to judge, so DEF-249's state is a second detector, not a branch inside the first.
     ...(await findingsRepo.attendanceConfigMissing(tx, orgId)),
+    // T-395 S2 (R12) - repeated wrong PINs at a terminal, and a store whose PIN sign-in is stopped. Both soft.
+    ...(await findingsRepo.pinSignInFailures(tx, orgId)),
+    ...(await findingsRepo.pinSignInStopped(tx, orgId)),
   ];
 
   return decorateFindings(tx, orgId, detected);

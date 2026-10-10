@@ -16,6 +16,8 @@ import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { ORGANIZATION_IDENTITY } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -37,7 +39,7 @@ export async function setOrganizationIdentityAction(fd: FormData): Promise<void>
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/settings/organization', {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/organization', {}, { error: errorMessage(err), typed: keepTyping(fd, ORGANIZATION_IDENTITY, '', { actorId: actor.personId }) });
   }
   revalidatePath('/settings/organization');
   return await redirectWithFlash('/settings/organization', {}, { ok: 'Saved. This is what a document printed from these books will carry.' });

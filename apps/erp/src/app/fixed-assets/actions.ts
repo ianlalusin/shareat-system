@@ -25,6 +25,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash, type Nav } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { ASSET_IN_SERVICE_EDIT, ASSET_TERMS_EDIT } from './typed-forms';
 import { recordingRefusalsFor } from '../expenses/lib';
 
 function str(fd: FormData, key: string): string {
@@ -106,7 +108,7 @@ export async function updateTermsAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { error: errorMessage(err) });
+    return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { error: errorMessage(err), typed: keepTyping(formData, ASSET_TERMS_EDIT, assetId, { actorId: actor.personId }) });
   }
 
   return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { ok: 'terms' });
@@ -156,7 +158,7 @@ export async function setAssetInServiceAction(formData: FormData): Promise<void>
         },
       });
     }
-    return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { error: message });
+    return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { error: message, typed: keepTyping(formData, ASSET_IN_SERVICE_EDIT, assetId, { actorId: actor.personId }) });
   }
 
   return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { ok: 'inservice' });

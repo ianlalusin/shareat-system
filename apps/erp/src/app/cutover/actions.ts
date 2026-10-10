@@ -61,6 +61,7 @@ export async function recordCountAction(formData: FormData): Promise<void> {
           // an item nobody counted stays uncounted and keeps showing as missing.
           quantity,
           unitCost: unitCost || null,
+          costSource: unitCost ? 'typed' : null,
         }),
       ),
     );

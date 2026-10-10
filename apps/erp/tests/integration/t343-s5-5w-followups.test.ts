@@ -164,6 +164,8 @@ async function cutoverFixture(hint: string) {
   const item = await asOrg(f.orgId, (tx) =>
     createItem(tx, f.superActor!, { code: testItemCode(), name: 'Cutover Item', kind: 'raw_material', baseUnit: 'kg' }),
   );
+  const [locType] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${f.orgId}, 'STK', 'Stockroom') returning id`;
+  await sql`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${f.orgId}, ${f.storeId}, 'KIT', 'Kitchen', ${locType!.id}, 'operating', true, ${f.admin.personId})`; // T-390 R1: a count needs a default room
   return { ...f, itemId: item.id };
 }
 
@@ -541,7 +543,7 @@ async function recordOpeningCountCaught(
   let caught: unknown;
   try {
     await asOrg(f.orgId, (tx) =>
-      recordOpeningCount(tx, f.admin, { storeId: f.storeId, itemId: f.itemId, quantity: overrides.quantity, unitCost: overrides.unitCost }),
+      recordOpeningCount(tx, f.admin, { storeId: f.storeId, itemId: f.itemId, quantity: overrides.quantity, unitCost: overrides.unitCost, costSource: 'typed' }),
     );
   } catch (err) {
     caught = err;

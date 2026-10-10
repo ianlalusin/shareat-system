@@ -8,6 +8,8 @@ import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
 import { Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { STAFF_POSITIONS } from '../typed-forms';
 
 export const metadata = { title: 'Employment — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -92,7 +94,7 @@ export default async function EmploymentDetailPage({
             )}
           </ul>
         ) : (
-          <EditableRecord action={setPositionsAction} label="positions" hidden={{ employmentId }}>
+          <EditableRecord action={setPositionsAction} label="positions" hidden={{ employmentId }} typed={typedFor(sp, STAFF_POSITIONS, employmentId, actor.personId)}>
             <div className="space-y-2">
             {positions.map((p) => (
               <div key={p.id} className="flex items-center gap-3 text-sm">

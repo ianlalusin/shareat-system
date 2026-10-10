@@ -525,7 +525,9 @@ describe('T-389 K2 - the typed slot in the signed flash', () => {
       ['form starting with a capital', { ...TYPED, form: 'Supplier.edit' }],
       ['record that is not a uuid, a slug or blank', { ...TYPED, record: 'a record; drop table' }],
       ['field name starting with a digit', { ...TYPED, fields: { '1bad': 'x' } }],
-      ['field name with a dash', { ...TYPED, fields: { 'a-b': 'x' } }],
+      // T-389 S3 ruling: a dash is allowed in a field name (channel_<uuid>); a space or a quote still is not.
+      ['field name with a space', { ...TYPED, fields: { 'a b': 'x' } }],
+      ['field name with a quote', { ...TYPED, fields: { 'a"b': 'x' } }],
       ['a number value', { ...TYPED, fields: { name: 5 } }],
       ['an array holding a number', { ...TYPED, fields: { name: ['a', 1] } }],
       ['a nested object', { ...TYPED, fields: { name: { x: 1 } } }],
