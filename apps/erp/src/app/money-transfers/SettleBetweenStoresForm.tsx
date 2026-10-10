@@ -7,9 +7,7 @@
  * `settlementId` is generated when the page renders, so a double click is a replay, not a second settlement.
  */
 import { useState } from 'react';
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+import { Button, Input, Select } from '@/components/ui';
 
 export interface SettlePairOption {
   /** "Lipa owes Malvar ₱650.00" - in words. */
@@ -50,8 +48,8 @@ export function SettleBetweenStoresForm({
       <input type="hidden" name="settlementId" value={settlementId} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Who owes whom">
-          <select
-            className={INPUT}
+          <Select
+            className="w-full"
             value={index}
             onChange={(e) => setIndex(Number(e.target.value))}
             aria-label="Who owes whom"
@@ -61,62 +59,59 @@ export function SettleBetweenStoresForm({
                 {p.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <div />
 
         {/* Re-keyed on the pair so the amount and the account lists reset when another pair is chosen. */}
         <Field label="From — the paying store's account" hint="An office account of the store that owes">
-          <select key={`from-${index}`} name="fromMoneyAccountId" required className={INPUT} defaultValue={pair.from[0]?.id}>
+          <Select key={`from-${index}`} name="fromMoneyAccountId" required className="w-full" defaultValue={pair.from[0]?.id}>
             {pair.from.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="To — the receiving store's account" hint="An office account of the store that is owed">
-          <select key={`to-${index}`} name="toMoneyAccountId" required className={INPUT} defaultValue={pair.to[0]?.id}>
+          <Select key={`to-${index}`} name="toMoneyAccountId" required className="w-full" defaultValue={pair.to[0]?.id}>
             {pair.to.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
 
         <Field label="Amount that left" hint="Up to what is owed — a smaller amount settles part of it">
-          <input
+          <Input
             key={`out-${index}`}
             name="amountOut"
             required
             inputMode="decimal"
             defaultValue={pair.owed}
-            className={INPUT}
+            className="w-full"
           />
         </Field>
         <Field label="Amount that arrived" hint="Leave blank unless a bank fee was deducted">
-          <input name="amountIn" inputMode="decimal" placeholder="Same as above" className={INPUT} />
+          <Input name="amountIn" inputMode="decimal" placeholder="Same as above" className="w-full" />
         </Field>
 
         <Field label="Date">
-          <input name="transferDate" type="date" required defaultValue={today} className={INPUT} />
+          <Input name="transferDate" type="date" required defaultValue={today} className="w-full" />
         </Field>
         <Field label="Reference" hint="The bank or wallet reference, if there is one">
-          <input name="reference" maxLength={120} className={INPUT} />
+          <Input name="reference" maxLength={120} className="w-full" />
         </Field>
       </div>
 
       <Field label="Notes">
-        <input name="notes" className={INPUT} />
+        <Input name="notes" className="w-full" />
       </Field>
 
-      <button
-        type="submit"
-        className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-      >
+      <Button type="submit" variant="secondary">
         Settle
-      </button>
+      </Button>
     </form>
   );
 }

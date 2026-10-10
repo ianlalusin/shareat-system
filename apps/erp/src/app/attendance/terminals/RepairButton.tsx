@@ -12,6 +12,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { TokenReveal } from './TokenReveal';
 import type { MintTokenActionResult } from './actions';
+import { Button } from '@/components/ui';
 
 export function RepairButton({
   terminalId,
@@ -47,8 +48,9 @@ export function RepairButton({
 
   return (
     <div className="space-y-1">
-      <button
+      <Button
         type="button"
+        variant="secondary"
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
@@ -58,11 +60,10 @@ export function RepairButton({
             else setError(res.error);
           })
         }
-        className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-900"
       >
         {pending ? 'Minting…' : 'Re-pair (new token)'}
-      </button>
-      {error && <p className="max-w-xs text-xs text-red-700 dark:text-red-400">{error}</p>}
+      </Button>
+      {error && <p className="max-w-xs text-xs text-danger">{error}</p>}
     </div>
   );
 }

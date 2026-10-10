@@ -3,6 +3,7 @@ import { currentSession, readSetupIdentity } from '../../lib/session';
 import { createFirstRunAction } from './actions';
 import { setupView, systemIsAlreadySetUp } from './lib';
 import { SubmitButton } from './SubmitButton';
+import { FlashBanner, Input } from '@/components/ui';
 
 export const metadata = { title: 'Set up Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -17,8 +18,6 @@ interface SearchParams {
 const WINDOW_CLOSED = 'Your setup window has closed. Sign in again to continue.';
 const ALREADY_SET_UP = 'This system is already set up.';
 
-const FIELD =
-  'rounded border border-neutral-300 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-950';
 const LABEL = 'text-xs font-medium text-neutral-500 dark:text-neutral-400';
 
 /**
@@ -75,11 +74,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
           </p>
         </div>
 
-        {sp.error && (
-          <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-            {sp.error}
-          </div>
-        )}
+        <FlashBanner flash={sp} />
 
         {/* ⭐ Shown so Ian can see WHICH account is about to become the owner — the uid behind it
             is what will sign him in from now on, and it is not something he can change here. */}
@@ -94,7 +89,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
         <form action={createFirstRunAction} className="space-y-4 text-sm">
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Organisation code</span>
-            <input name="code" required autoComplete="off" placeholder="SHAREAT_OPC" className={FIELD} />
+            <Input name="code" required autoComplete="off" placeholder="SHAREAT_OPC" className="w-full" />
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               Short, unique and permanent — it is the stable handle for this business.
             </span>
@@ -102,17 +97,17 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
 
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Organisation name</span>
-            <input name="name" required autoComplete="off" placeholder="SHAREAT OPC" className={FIELD} />
+            <Input name="name" required autoComplete="off" placeholder="SHAREAT OPC" className="w-full" />
           </label>
 
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Your name</span>
-            <input
+            <Input
               name="adminDisplayName"
               required
               autoComplete="name"
               defaultValue={view.suggestedName}
-              className={FIELD}
+              className="w-full"
             />
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               Your real name. Every entry in the books is attributed to it, so it is not a login
@@ -122,17 +117,17 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
 
           <label className="flex flex-col gap-1">
             <span className={LABEL}>First store code</span>
-            <input name="storeCode" required autoComplete="off" placeholder="LIPA" className={FIELD} />
+            <Input name="storeCode" required autoComplete="off" placeholder="LIPA" className="w-full" />
           </label>
 
           <label className="flex flex-col gap-1">
             <span className={LABEL}>First store name</span>
-            <input
+            <Input
               name="storeName"
               required
               autoComplete="off"
               placeholder="SharEat Lipa"
-              className={FIELD}
+              className="w-full"
             />
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               You can add the rest from Stores once you are in.
@@ -152,7 +147,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
               placeholder="••••••"
               // Touch-first, and copied from `sign-in/page.tsx:79-90` on purpose: this is the same
               // credential, typed on the same tablet, and it should not look like a different one.
-              className="rounded border border-neutral-300 bg-white px-3 py-3 text-center text-2xl tracking-[0.5em] tabular-nums dark:border-neutral-700 dark:bg-neutral-950"
+              className="rounded-[10px] border border-field-border bg-field px-3 py-3 text-center text-2xl tracking-[0.5em] tabular-nums text-ink"
             />
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               Choose it now — this is what signs you in at the store terminal. It is never shown

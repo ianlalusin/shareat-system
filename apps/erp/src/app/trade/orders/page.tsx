@@ -2,10 +2,11 @@ import Link from 'next/link';
 import { requireSession } from '../../../lib/session';
 import { createOrderAction } from './actions';
 import { NewOrderForm } from './NewOrderForm';
-import { STATUS_LABEL, listStores, orderFormData, orderRegister, peso, today } from './lib';
+import { listStores, orderFormData, orderRegister, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Badge, FlashBanner, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Trade orders — Shareat System' };
@@ -50,31 +51,18 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
         transit at cost, and both stores&rsquo; books move when the branch confirms what arrived.
       </PageDescription>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select
-            name="store"
-            defaultValue={storeId}
-            className="mt-1 rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          >
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
@@ -112,7 +100,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
                   <td className="px-3 py-2">
                     {o.customerName}
                     {o.counterpartyStoreId && (
-                      <span className="ml-2 text-xs text-sky-700 dark:text-sky-400">internal</span>
+                      <span className="ml-2 text-xs text-info">internal</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs text-neutral-600 dark:text-neutral-400">
@@ -120,7 +108,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
                     {' → '}
                     {o.counterpartyStoreId ? (storeName.get(o.counterpartyStoreId) ?? '—') : o.customerName}
                   </td>
-                  <td className="px-3 py-2">{STATUS_LABEL[o.status]}</td>
+                  <td className="px-3 py-2"><Badge status={o.status} /></td>
                   <td className="px-3 py-2 text-right tabular-nums">{o.lineCount}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(o.totalAmount)}</td>
                 </tr>

@@ -12,7 +12,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid } from '@/components/ui';
+import { Badge, Banner, Button, FlashBanner, FormGrid, Input } from '@/components/ui';
 
 export const metadata = { title: 'Sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -161,22 +161,18 @@ export default async function SalesDayDetailPage({
           </PageDescription>
         </div>
         <div className="text-right">
-          <StatusBadge status={day.status} />
+          <Badge status={day.status} />
           <p className="mt-2 text-2xl font-semibold tabular-nums">{formatMoney(money(day.totalSales))}</p>
         </div>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          <strong className="font-medium">Refused:</strong> {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {day.status !== 'verified' && day.status !== 'voided' && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           ⚠️ <strong>This day recognises no revenue yet.</strong> Nothing is posted to the ledger
           until it is verified, and no newer day can be created for this store meanwhile.
-        </div>
+        </Banner>
       )}
 
       {compare(capExcess, ZERO) > 0 && (
@@ -336,27 +332,21 @@ export default async function SalesDayDetailPage({
               <input type="hidden" name="feedId" value={drift.latestFeedId} />
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Dated</span>
-                <input
+                <Input
                   type="date"
                   name="entryDate"
                   required
                   min={day.businessDate}
                   defaultValue={toBusinessDate().localeCompare(day.businessDate) < 0 ? day.businessDate : toBusinessDate()}
-                  className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
                 />
               </label>
               <label className="flex min-w-[16rem] flex-1 flex-col gap-1">
                 <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Reason</span>
-                <input
-                  name="reason"
-                  required
-                  placeholder="What changed in POS?"
-                  className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-                />
+                <Input name="reason" required placeholder="What changed in POS?" />
               </label>
-              <button type="submit" className="rounded bg-neutral-900 px-4 py-1.5 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300">
+              <Button type="submit" variant="secondary">
                 Post correction
-              </button>
+              </Button>
             </form>
           )}
         </section>
@@ -365,12 +355,9 @@ export default async function SalesDayDetailPage({
       {isFeedDay && day.status !== 'voided' && can.verify && (
         <form action={recheckPosDayAction} className="space-y-2 text-sm">
           {hiddenIds}
-          <button
-            type="submit"
-            className="inline-flex min-h-[44px] items-center rounded border border-neutral-300 px-4 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
+          <Button type="submit" variant="secondary">
             Check POS again
-          </button>
+          </Button>
           <p className="text-neutral-600 dark:text-neutral-400">
             Asks POS what it says about this day now and stores the answer. Nothing is posted by checking.
           </p>
@@ -380,12 +367,9 @@ export default async function SalesDayDetailPage({
       {unverified && can.edit && isFeedDay && (
         <form action={reimportSalesDayAction} className="space-y-2 text-sm">
           {hiddenIds}
-          <button
-            type="submit"
-            className="inline-flex min-h-[44px] items-center rounded border border-neutral-300 px-4 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
+          <Button type="submit" variant="secondary">
             Re-import from POS
-          </button>
+          </Button>
           <p className="text-neutral-600 dark:text-neutral-400">
             Brings in whatever POS says now. Platform sales you entered stay as they are.
           </p>
@@ -396,7 +380,7 @@ export default async function SalesDayDetailPage({
         <div>
           <a
             href={`/sales-days/${day.id}/edit?${carry.toString()}`}
-            className="inline-flex min-h-[44px] items-center rounded border border-neutral-300 px-4 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
           >
             Edit this day
           </a>
@@ -420,12 +404,12 @@ export default async function SalesDayDetailPage({
                     <label htmlFor={`channel_${c.id}`} className="block">
                       {c.name}
                     </label>
-                    <input
+                    <Input
                       id={`channel_${c.id}`}
                       name={`channel_${c.id}`}
                       inputMode="decimal"
                       defaultValue={row && !row.noSales ? row.amount : ''}
-                      className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-right tabular-nums dark:border-neutral-700 dark:bg-neutral-950"
+                      className="w-full text-right tabular-nums"
                     />
                     <label className="flex items-center gap-1 text-neutral-600 dark:text-neutral-400">
                       <input type="checkbox" name={`nosales_${c.id}`} defaultChecked={row?.noSales ?? false} />
@@ -450,9 +434,9 @@ export default async function SalesDayDetailPage({
                 <input type="hidden" name="storeId" value={sp.store ?? ''} />
                 <input type="hidden" name="salesDayId" value={day.id} />
                 {platformFields}
-                <button type="submit" className="rounded border border-neutral-300 px-4 py-1.5 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+                <Button type="submit" variant="secondary">
                   Save
-                </button>
+                </Button>
               </form>
             );
           })()}
@@ -471,9 +455,9 @@ export default async function SalesDayDetailPage({
             <p className="text-neutral-600 dark:text-neutral-400">
               Verify &amp; post comes after this, on the submitted day.
             </p>
-            <button type="submit" className="rounded border border-neutral-300 px-4 py-1.5 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+            <Button type="submit" variant="primary">
               Submit
-            </button>
+            </Button>
           </form>
         )}
 
@@ -494,17 +478,17 @@ export default async function SalesDayDetailPage({
                 {day.businessDate}, not today.
               </p>
             </div>
-            <button type="submit" className="rounded bg-neutral-900 px-4 py-1.5 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300">
+            <Button type="submit" variant="primary">
               Verify &amp; post
-            </button>
+            </Button>
           </form>
         )}
       </section>
 
       {unverified && can.void && (
-        <form action={voidSalesDayAction} className="space-y-3 rounded-lg border border-red-200 p-4 text-sm dark:border-red-900">
+        <form action={voidSalesDayAction} className="space-y-3 rounded-lg border border-danger p-4 text-sm">
           {hiddenIds}
-          <h2 className="font-medium text-red-800 dark:text-red-300">Withdraw this unverified day</h2>
+          <h2 className="font-medium text-danger">Withdraw this unverified day</h2>
           <p className="text-neutral-600 dark:text-neutral-400">
             Nothing was posted for this day, so <strong>nothing is reversed</strong> — it is simply
             taken off the books. Anything else attached to it (a POS usage pull, recorded wastage, a
@@ -512,37 +496,27 @@ export default async function SalesDayDetailPage({
             date again afterwards.
           </p>
           <div className="flex gap-2">
-            <input
-              name="reason"
-              required
-              placeholder="Why is this being withdrawn?"
-              className="flex-1 rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-            />
-            <button type="submit" className="rounded border border-red-300 px-4 py-1.5 font-medium text-red-800 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950">
+            <Input name="reason" required placeholder="Why is this being withdrawn?" className="flex-1" />
+            <Button type="submit" variant="danger">
               Withdraw day
-            </button>
+            </Button>
           </div>
         </form>
       )}
 
       {day.status === 'verified' && can.void && (
-        <form action={voidSalesDayAction} className="space-y-3 rounded-lg border border-red-200 p-4 text-sm dark:border-red-900">
+        <form action={voidSalesDayAction} className="space-y-3 rounded-lg border border-danger p-4 text-sm">
           {hiddenIds}
-          <h2 className="font-medium text-red-800 dark:text-red-300">Void (reverses the posting)</h2>
+          <h2 className="font-medium text-danger">Void (reverses the posting)</h2>
           <p className="text-neutral-600 dark:text-neutral-400">
             A verified day is voided by <strong>reversing</strong> its entry — the original stays
             visible and both sides remain in the ledger. A reason is required.
           </p>
           <div className="flex gap-2">
-            <input
-              name="reason"
-              required
-              placeholder="Why is this being voided?"
-              className="flex-1 rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-            />
-            <button type="submit" className="rounded border border-red-300 px-4 py-1.5 font-medium text-red-800 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950">
+            <Input name="reason" required placeholder="Why is this being voided?" className="flex-1" />
+            <Button type="submit" variant="danger">
               Void
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -604,17 +578,4 @@ function Row({ label, value, strong }: { label: string; value: React.ReactNode; 
       <dd className="text-right tabular-nums">{value}</dd>
     </div>
   );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cls =
-    status === 'verified'
-      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-      : status === 'voided'
-        ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-        : status === 'submitted'
-          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-          : 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300';
-  const label = status.charAt(0).toUpperCase() + status.slice(1);
-  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>;
 }

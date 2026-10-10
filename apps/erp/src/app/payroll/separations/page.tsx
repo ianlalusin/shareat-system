@@ -3,7 +3,7 @@ import { SEPARATION_CAUSES } from '@shareat/db/schema';
 import { postSeparationAction, voidSeparationAction } from './actions';
 import { cashAccountsFor, listStores, peso, preview, separationsFor, worklistFor } from './lib';
 import { Page } from '@/components/shell/Page';
-import { FormGrid, Field } from '@/components/ui';
+import { Badge, Button, FlashBanner, Banner, Field, FormGrid, Input, Select } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -84,21 +84,20 @@ export default async function SeparationsPage({
       <form method="get" className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
           <span className={LABEL}>Store</span>
-          <select name="store" defaultValue={storeId} className={`${FIELD} w-full`}>
+          <Select name="store" defaultValue={storeId} className="w-full">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
-        <button type="submit" className={BTN}>
+        <Button type="submit" variant="secondary">
           Switch
-        </button>
+        </Button>
       </form>
 
-      {sp.error && <Banner tone="error">{sp.error}</Banner>}
-      {sp.ok && <Banner tone="ok">{sp.ok}</Banner>}
+      <FlashBanner flash={sp} />
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
         <h2 className="text-sm font-medium">Worklist — ended, not yet processed</h2>
@@ -134,11 +133,11 @@ export default async function SeparationsPage({
             <input type="hidden" name="employmentId" value={selected.employmentId} />
             <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1">
               <span className={LABEL}>Separation date</span>
-              <input name="separationDate" type="date" defaultValue={separationDate} className={`${FIELD} w-full`} />
+              <Input name="separationDate" type="date" defaultValue={separationDate} className="w-full" />
             </label>
-            <button type="submit" className={BTN}>
+            <Button type="submit" variant="secondary">
               Preview
-            </button>
+            </Button>
           </form>
 
           {pvResult?.error && <Banner tone="error">{pvResult.error}</Banner>}
@@ -157,25 +156,25 @@ export default async function SeparationsPage({
 
               <FormGrid>
                 <Field label="Cause">
-                  <select name="cause" defaultValue="resignation" className={`${FIELD} mt-1 w-full`}>
+                  <Select name="cause" defaultValue="resignation" className="mt-1 w-full">
                     {SEPARATION_CAUSES.map((c) => (
                       <option key={c} value={c}>
                         {CAUSE_LABELS[c] ?? c}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="Separation pay (₱)" hint="A decision, not a calculation — see above.">
-                  <input name="separationPayAmount" inputMode="decimal" defaultValue="0" className={`${FIELD} mt-1 w-full`} />
+                  <input name="separationPayAmount" inputMode="decimal" defaultValue="0" className="mt-1 w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
                 </Field>
                 <Field label="Pay from">
-                  <select name="moneyAccountId" className={`${FIELD} mt-1 w-full`}>
+                  <Select name="moneyAccountId" className="mt-1 w-full">
                     {accounts.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
               </FormGrid>
 
@@ -188,12 +187,12 @@ export default async function SeparationsPage({
                   </span>
                 </span>
               </label>
-              <input name="clearanceNotes" placeholder="Clearance notes (optional)" className={`${FIELD} w-full`} />
-              <input name="notes" placeholder="Notes (optional)" className={`${FIELD} w-full`} />
+              <Input name="clearanceNotes" placeholder="Clearance notes (optional)" className="w-full" />
+              <Input name="notes" placeholder="Notes (optional)" className="w-full" />
 
-              <button type="submit" className={BTN_PRIMARY}>
+              <Button type="submit" variant="primary">
                 Post separation
-              </button>
+              </Button>
             </form>
           )}
         </section>
@@ -211,7 +210,7 @@ export default async function SeparationsPage({
               <div className="flex flex-wrap items-baseline gap-2">
                 <span className="text-sm font-medium">{s.personName}</span>
                 <span className="text-xs text-neutral-500">{CAUSE_LABELS[s.cause] ?? s.cause} · {s.separationDate}</span>
-                <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-xs dark:bg-neutral-800">{s.status}</span>
+                <Badge status={s.status} />
                 {s.voidReason && <span className="text-xs text-neutral-500">voided — {s.voidReason}</span>}
               </div>
               <p className="text-xs text-neutral-600 dark:text-neutral-400">
@@ -222,10 +221,10 @@ export default async function SeparationsPage({
                 <form action={voidSeparationAction} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="id" value={s.id} />
-                  <input name="reason" placeholder="Why void it?" className={`${FIELD} min-w-0 flex-1 basis-48`} />
-                  <button type="submit" className={BTN}>
+                  <Input name="reason" placeholder="Why void it?" className="min-w-0 flex-1 basis-48" />
+                  <Button type="submit" variant="danger">
                     Void
-                  </button>
+                  </Button>
                 </form>
               )}
             </div>
@@ -236,18 +235,4 @@ export default async function SeparationsPage({
   );
 }
 
-function Banner({ tone, children }: { tone: 'error' | 'ok'; children: React.ReactNode }) {
-  const cls =
-    tone === 'error'
-      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
-      : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-  return <div className={`rounded-lg border p-4 text-sm ${cls}`}>{children}</div>;
-}
-
-const FIELD =
-  'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const LABEL = 'text-xs font-medium text-neutral-600 dark:text-neutral-400';
-const BTN =
-  'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';
-const BTN_PRIMARY =
-  'rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300';

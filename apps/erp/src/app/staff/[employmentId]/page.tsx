@@ -6,7 +6,7 @@ import { endEmploymentAction, issuePinAction, setPositionsAction } from '../acti
 import { employmentDetail, livePinFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { Input } from '@/components/ui';
+import { Banner, Button, FlashBanner, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Employment — Shareat System' };
@@ -14,8 +14,6 @@ export const dynamic = 'force-dynamic';
 
 const INPUT =
   'rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
 
 export default async function EmploymentDetailPage({
   params,
@@ -62,16 +60,7 @@ export default async function EmploymentDetailPage({
         )}
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Positions</h2>
@@ -126,7 +115,7 @@ export default async function EmploymentDetailPage({
             {detail.storeName}.
           </p>
         ) : (
-          <p className="text-sm text-amber-700 dark:text-amber-400">
+          <p className="text-sm text-warning-ink">
             No sign-in PIN issued yet — this person cannot sign in.
           </p>
         )}
@@ -137,13 +126,13 @@ export default async function EmploymentDetailPage({
           somewhere else" is not something an admin can act on — so it names the branches.
         */}
         {!isEnded && otherBranches.length > 0 && (
-          <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-300">
+          <Banner tone="warning">
             ⚠️ This person also works at{' '}
             <strong>{otherBranches.map((b) => b.storeName).join(', ')}</strong>. They have one PIN
             for the whole business, so issuing a new one here{' '}
             <strong>changes the PIN they use there too</strong> — tell them the new digits before
             their next shift at either branch.
-          </p>
+          </Banner>
         )}
         {!isEnded && (
           <form action={issuePinAction} className="flex flex-wrap items-end gap-3">
@@ -162,9 +151,9 @@ export default async function EmploymentDetailPage({
                 className="w-full font-mono"
               />
             </label>
-            <button type="submit" className={BTN}>
+            <Button type="submit" variant="primary">
               {livePin ? 'Re-issue PIN' : 'Issue PIN'}
-            </button>
+            </Button>
           </form>
         )}
         {livePin && (
@@ -226,12 +215,9 @@ export default async function EmploymentDetailPage({
                 ))}
               </select>
             </label>
-            <button
-              type="submit"
-              className="rounded-md border border-red-300 px-4 py-2.5 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
-            >
+            <Button type="submit" variant="danger">
               End employment
-            </button>
+            </Button>
           </form>
         )}
       </section>

@@ -12,7 +12,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid } from '@/components/ui';
+import { Badge, Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
 // that reader returns, so the two cannot drift.
@@ -127,16 +127,12 @@ export default async function ExpenseDetailPage({
           </PageDescription>
         </div>
         <div className="text-right">
-          <StatusBadge status={expense.status} />
+          <Badge status={expense.status} />
           <p className="mt-2 text-2xl font-semibold tabular-nums">{formatMoney(money(expense.totalAmount))}</p>
         </div>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          <strong className="font-medium">Refused:</strong> {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <section className="grid gap-4 md:grid-cols-2">
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
@@ -219,11 +215,7 @@ export default async function ExpenseDetailPage({
             <FormGrid>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Category</span>
-              <select
-                name="categoryId"
-                defaultValue={expense.categoryId}
-                className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-              >
+              <Select name="categoryId" defaultValue={expense.categoryId}>
                 {/* ⭐ T-229 slice 2 — retired categories are hidden UNLESS this expense already
                     carries one. Filtering them out unconditionally would silently re-point the
                     expense at whatever option happened to be first when the form was saved. */}
@@ -235,15 +227,11 @@ export default async function ExpenseDetailPage({
                       {c.isActive ? '' : ' (retired)'}
                     </option>
                   ))}
-              </select>
+              </Select>
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Particulars</span>
-              <input
-                name="particulars"
-                defaultValue={expense.particulars}
-                className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-              />
+              <Input name="particulars" defaultValue={expense.particulars} />
             </label>
             </FormGrid>
             </EditableRecord>
@@ -267,12 +255,9 @@ export default async function ExpenseDetailPage({
                 <ClosedMonthOverride closedMonths={[closedMonth]} dateFieldName="expenseDate" initialDate={expense.businessDate} />
               </>
             )}
-            <button
-              type="submit"
-              className="rounded bg-neutral-900 px-4 py-1.5 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-            >
+            <Button type="submit" variant="primary">
               Approve &amp; post
-            </button>
+            </Button>
           </form>
         </section>
       )}
@@ -292,39 +277,28 @@ export default async function ExpenseDetailPage({
             <strong className="text-neutral-900 dark:text-neutral-100">Delete this draft.</strong> Nothing
             has posted, so there is nothing to reverse — it is removed outright.
           </p>
-          <button
-            type="submit"
-            className="rounded border border-neutral-300 px-4 py-1.5 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
+          <Button type="submit" variant="danger">
             Delete draft
-          </button>
+          </Button>
         </form>
       )}
 
       {isPosted && (
         <form
           action={voidExpenseAction}
-          className="space-y-3 rounded-lg border border-red-200 p-4 text-sm dark:border-red-900"
+          className="space-y-3 rounded-lg border border-danger p-4 text-sm"
         >
           {hiddenIds}
-          <h2 className="font-medium text-red-800 dark:text-red-300">Void</h2>
+          <h2 className="font-medium text-danger">Void</h2>
           <p className="text-neutral-600 dark:text-neutral-400">
             A posted expense is voided by <strong>reversing</strong> its entry — the original stays
             visible, and both sides remain in the ledger. A reason is required.
           </p>
           <div className="flex gap-2">
-            <input
-              name="reason"
-              required
-              placeholder="Why is this being voided?"
-              className="flex-1 rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-            />
-            <button
-              type="submit"
-              className="rounded border border-red-300 px-4 py-1.5 font-medium text-red-800 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
-            >
+            <Input name="reason" required placeholder="Why is this being voided?" className="flex-1" />
+            <Button type="submit" variant="danger">
               Void
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -339,17 +313,6 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
       <dd className="text-right">{value}</dd>
     </div>
   );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cls =
-    status === 'posted'
-      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-      : status === 'voided'
-        ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-        : 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300';
-  const label = status === 'posted' ? 'Posted' : status === 'voided' ? 'Voided' : 'Draft';
-  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>;
 }
 
 function LedgerTable({ lines }: { lines: EntryLineWithAccountCode[] }) {

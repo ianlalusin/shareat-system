@@ -13,7 +13,7 @@ import {
 } from './lib';
 import { selectDefaultCommissaryStoreId } from './default-store';
 import { Page } from '@/components/shell/Page';
-import { FormGrid } from '@/components/ui';
+import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -27,13 +27,6 @@ interface SearchParams {
   error?: string;
   ok?: string;
 }
-
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
-const BTN_SM =
-  'rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 export default async function CommissaryCataloguePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
@@ -87,27 +80,18 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Commissary</span>
-          <select name="commissary" defaultValue={commissaryStoreId} className={INPUT}>
+          <Select name="commissary" defaultValue={commissaryStoreId}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
@@ -159,7 +143,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           <input type="hidden" name="commissaryStoreId" value={commissaryStoreId} />
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Branch</span>
-            <select name="branchStoreId" required defaultValue="" className={INPUT}>
+            <Select name="branchStoreId" required defaultValue="">
               <option value="" disabled>
                 Select a store
               </option>
@@ -168,18 +152,18 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                   {s.name} ({s.code})
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Status</span>
-            <select name="status" defaultValue="active" className={INPUT}>
+            <Select name="status" defaultValue="active">
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
-            </select>
+            </Select>
           </label>
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="primary">
             Save
-          </button>
+          </Button>
         </form>
       </section>
 
@@ -221,9 +205,9 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                         <input type="hidden" name="itemId" value={o.itemId} />
                         <input type="hidden" name="manualCost" value={o.manualCost ?? ''} />
                         <input type="hidden" name="status" value={o.status === 'active' ? 'inactive' : 'active'} />
-                        <button type="submit" className={BTN_SM}>
+                        <Button type="submit" variant="ghost">
                           {o.status === 'active' ? 'Deactivate' : 'Reactivate'}
-                        </button>
+                        </Button>
                       </form>
                     </td>
                   </tr>
@@ -240,7 +224,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           <input type="hidden" name="commissaryStoreId" value={commissaryStoreId} />
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Item</span>
-            <select name="itemId" required defaultValue="" className={INPUT}>
+            <Select name="itemId" required defaultValue="">
               <option value="" disabled>
                 Select an item
               </option>
@@ -249,15 +233,15 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                   {i.name} ({i.baseUnit})
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Manual cost (optional)</span>
-            <input name="manualCost" inputMode="decimal" placeholder="tier 3 of the price fallback" className={`${INPUT} w-full`} />
+            <Input name="manualCost" inputMode="decimal" placeholder="tier 3 of the price fallback" className="w-full" />
           </label>
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="secondary">
             Save
-          </button>
+          </Button>
         </form>
       </section>
 
@@ -273,7 +257,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           <input type="hidden" name="commissary" value={commissaryStoreId} />
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Branch</span>
-            <select name="branch" defaultValue={branchStoreId ?? ''} className={INPUT}>
+            <Select name="branch" defaultValue={branchStoreId ?? ''}>
               <option value="" disabled>
                 Pick a linked branch
               </option>
@@ -282,7 +266,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                   {l.branchName}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         </FilterRow>
 
@@ -327,9 +311,9 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                             <input type="hidden" name="id" value={m.id} />
                             <input type="hidden" name="commissaryStoreId" value={commissaryStoreId} />
                             <input type="hidden" name="branchStoreId" value={branchStoreId} />
-                            <button type="submit" className={BTN_SM}>
+                            <Button type="submit" variant="danger">
                               Remove
-                            </button>
+                            </Button>
                           </form>
                         </td>
                       </tr>
@@ -348,7 +332,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
               <FormGrid>
               <label className="min-w-0 text-sm">
                 <span className="block text-neutral-600 dark:text-neutral-400">Commissary item</span>
-                <select name="commissaryItemId" required defaultValue="" className={`${INPUT} w-full`}>
+                <Select name="commissaryItemId" required defaultValue="" className="w-full">
                   <option value="" disabled>
                     Select an offering
                   </option>
@@ -357,11 +341,11 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                       {i.name} ({i.baseUnit})
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="min-w-0 text-sm">
                 <span className="block text-neutral-600 dark:text-neutral-400">Branch item</span>
-                <select name="branchItemId" required defaultValue="" className={`${INPUT} w-full`}>
+                <Select name="branchItemId" required defaultValue="" className="w-full">
                   <option value="" disabled>
                     Select an item
                   </option>
@@ -370,7 +354,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                       {i.name} ({i.baseUnit})
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="isLedgerOnly" />
@@ -378,7 +362,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
               </label>
               <label className="min-w-0 text-sm">
                 <span className="block text-neutral-600 dark:text-neutral-400">Expense category (optional)</span>
-                <select name="expenseCategoryId" defaultValue="" className={`${INPUT} w-full`}>
+                <Select name="expenseCategoryId" defaultValue="" className="w-full">
                   <option value="">None</option>
                   {/* ⭐ T-229 slice 2 — active only: this mapping governs FUTURE receipts. */}
                   {EXPENSE_GROUPS.map((g) => {
@@ -394,12 +378,12 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                       </optgroup>
                     );
                   })}
-                </select>
+                </Select>
               </label>
               </FormGrid>
-              <button type="submit" className={BTN}>
+              <Button type="submit" variant="secondary">
                 Save
-              </button>
+              </Button>
             </form>
           </>
         )}

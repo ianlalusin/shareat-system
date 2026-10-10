@@ -5,7 +5,7 @@ import { liveConfigFor, listStores } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid } from '@/components/ui';
+import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Attendance & payroll settings — Shareat System' };
@@ -67,21 +67,20 @@ export default async function AttendanceSettingsPage({
       <form className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 flex-col gap-1">
           <span className={LABEL}>Store</span>
-          <select name="store" defaultValue={storeId} className={`${FIELD} w-full`}>
+          <Select name="store" defaultValue={storeId} className="w-full">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
-        <button type="submit" className={BTN}>
+        <Button type="submit" variant="secondary">
           Switch
-        </button>
+        </Button>
       </form>
 
-      {sp.error && <Banner tone="error">{sp.error}</Banner>}
-      {sp.ok && <Banner tone="ok">{sp.ok}</Banner>}
+      <FlashBanner flash={sp} />
 
       {!cfg ? (
         <p className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
@@ -92,12 +91,12 @@ export default async function AttendanceSettingsPage({
           <div className="space-y-6">
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Effective from</span>
-            <input
+            <Input
               name="effectiveFrom"
               type="date"
               required
               defaultValue={defaultEffectiveFrom}
-              className={`${FIELD} w-full`}
+              className="w-full"
             />
             <span className="text-xs text-neutral-500">
               ⛔ Must be after {cfg.effectiveFrom} (today&rsquo;s live policy) and cannot fall on or
@@ -272,7 +271,7 @@ function NumField({
 }) {
   return (
     <FieldShell label={label} hint={hint}>
-      <input name={name} inputMode="decimal" defaultValue={defaultValue} className={`${FIELD} w-full`} />
+      <input name={name} inputMode="decimal" defaultValue={defaultValue} className={RAW_FIELD} />
     </FieldShell>
   );
 }
@@ -290,7 +289,7 @@ function IntField({
 }) {
   return (
     <FieldShell label={label} hint={hint}>
-      <input name={name} inputMode="numeric" defaultValue={defaultValue} className={`${FIELD} w-full`} />
+      <input name={name} inputMode="numeric" defaultValue={defaultValue} className={RAW_FIELD} />
     </FieldShell>
   );
 }
@@ -308,7 +307,7 @@ function TextField({
 }) {
   return (
     <FieldShell label={label} hint={hint}>
-      <input type="text" name={name} defaultValue={defaultValue} className={`${FIELD} w-full`} />
+      <Input type="text" name={name} defaultValue={defaultValue} className="w-full" />
     </FieldShell>
   );
 }
@@ -328,13 +327,13 @@ function SelectField({
 }) {
   return (
     <FieldShell label={label} hint={hint}>
-      <select name={name} defaultValue={defaultValue} className={`${FIELD} w-full`}>
+      <Select name={name} defaultValue={defaultValue} className="w-full">
         {options.map(([value, text]) => (
           <option key={value} value={value}>
             {text}
           </option>
         ))}
-      </select>
+      </Select>
     </FieldShell>
   );
 }
@@ -361,16 +360,7 @@ function CheckField({
   );
 }
 
-function Banner({ tone, children }: { tone: 'error' | 'ok'; children: React.ReactNode }) {
-  const cls =
-    tone === 'error'
-      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
-      : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-  return <div className={`rounded-lg border p-4 text-sm ${cls}`}>{children}</div>;
-}
-
-const FIELD =
-  'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+// Raw <input> kept: t343-s5-5w-number-boxes.test.ts reads the helper's element text, so it cannot become <Input>.
+const RAW_FIELD =
+  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 const LABEL = 'text-xs font-medium text-neutral-600 dark:text-neutral-400';
-const BTN =
-  'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';

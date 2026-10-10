@@ -29,7 +29,7 @@ import { MenuButton } from './Sidebar';
 
 export function TopBar() {
   return (
-    <header className="shell-nav-row sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 bg-white px-2 dark:border-neutral-800 dark:bg-neutral-950 md:hidden">
+    <header className="shell-nav-row sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 bg-surface px-2 dark:border-neutral-800 md:hidden">
       <MenuButton />
       <img src="/brand/logo-icon.png" alt="" width={32} height={32} className="brand-logo h-8 w-8 shrink-0" />
       <span className="font-display text-lg font-bold">

@@ -25,6 +25,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { EditableRecord } from '@/components/forms';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Channel settlements — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -153,11 +154,7 @@ export default async function ChannelSettlementsPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
       {okMessage && (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
           {okMessage}
@@ -166,8 +163,8 @@ export default async function ChannelSettlementsPage({
 
       {/* ── ⛔ The configuration that makes everything else impossible ────────────────── */}
       {unwired.length > 0 && (
-        <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
-          <div className="text-sm text-amber-900 dark:text-amber-300">
+        <section className="space-y-3 rounded-lg border border-warning bg-warning-soft p-4">
+          <div className="text-sm text-warning-ink">
             <strong className="font-medium">
               {unwired.length === 1 ? 'One channel has' : `${unwired.length} channels have`} nowhere
               to bank a payout.
@@ -185,15 +182,10 @@ export default async function ChannelSettlementsPage({
                   className="flex flex-wrap items-center gap-2"
                 >
                   <input type="hidden" name="channelId" value={c.id} />
-                  <span className="min-w-40 text-sm font-medium text-amber-900 dark:text-amber-200">
+                  <span className="min-w-40 text-sm font-medium text-warning-ink">
                     {c.storeName} — {c.name}
                   </span>
-                  <select
-                    name="moneyAccountId"
-                    required
-                    defaultValue=""
-                    className="rounded border border-amber-300 bg-white px-2 py-1.5 text-sm dark:border-amber-700 dark:bg-neutral-950"
-                  >
+                  <Select name="moneyAccountId" required defaultValue="">
                     <option value="" disabled>
                       Choose an account…
                     </option>
@@ -204,24 +196,21 @@ export default async function ChannelSettlementsPage({
                           {a.name} ({a.custodian} · {a.glAccountCode})
                         </option>
                       ))}
-                  </select>
-                  <button
-                    type="submit"
-                    className="rounded border border-amber-400 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900"
-                  >
+                  </Select>
+                  <Button type="submit" variant="secondary">
                     Save
-                  </button>
+                  </Button>
                 </form>
               ) : (
                 // T-350: a non-holder sees the channel named, but no picker — an admin has to do this.
                 <div
                   key={c.id}
-                  className="flex flex-wrap items-center gap-2 text-sm text-amber-900 dark:text-amber-200"
+                  className="flex flex-wrap items-center gap-2 text-sm text-warning-ink"
                 >
                   <span className="min-w-40 font-medium">
                     {c.storeName} — {c.name}
                   </span>
-                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                  <span className="text-xs text-warning-ink">
                     An admin must set it.
                   </span>
                 </div>
@@ -250,7 +239,7 @@ export default async function ChannelSettlementsPage({
                     <span className="text-sm font-medium">{c.name}</span>
                     <span
                       className={`font-mono text-sm tabular-nums ${
-                        compare(money(c.outstanding), ZERO) < 0 ? 'text-amber-600 dark:text-amber-400' : ''
+                        compare(money(c.outstanding), ZERO) < 0 ? 'text-warning-ink' : ''
                       }`}
                     >
                       {peso(c.outstanding)}
@@ -286,11 +275,11 @@ export default async function ChannelSettlementsPage({
                                 label={`${c.name} payout account`}
                                 hidden={{ channelId: c.id }}
                               >
-                                <select
+                                <Select
                                   name="moneyAccountId"
                                   required
                                   defaultValue={currentRetired ? '' : c.destinationMoneyAccountId}
-                                  className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                                  className="w-full"
                                 >
                                   {currentRetired && (
                                     <option value="" disabled>
@@ -302,7 +291,7 @@ export default async function ChannelSettlementsPage({
                                       {a.name} ({a.custodian} · {a.glAccountCode})
                                     </option>
                                   ))}
-                                </select>
+                                </Select>
                               </EditableRecord>
                             )}
                           </div>
@@ -360,7 +349,7 @@ export default async function ChannelSettlementsPage({
                           ₱9,000 waiting since yesterday (bible row 147). */}
                       <td
                         className={`px-3 py-2 text-right tabular-nums ${
-                          d.ageDays >= 14 ? 'font-medium text-amber-700 dark:text-amber-400' : ''
+                          d.ageDays >= 14 ? 'font-medium text-warning-ink' : ''
                         }`}
                       >
                         {d.ageDays}d
@@ -368,7 +357,7 @@ export default async function ChannelSettlementsPage({
                       <td className="px-3 py-2 text-right">
                         <Link
                           href={`/channel-settlements?channel=${d.channelId}&day=${d.salesDayId}#record`}
-                          className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-800 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                          className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
                         >
                           Settle
                         </Link>
@@ -379,7 +368,7 @@ export default async function ChannelSettlementsPage({
               </table>
             </div>
             {oldest >= 14 && (
-              <p className="text-xs text-amber-700 dark:text-amber-400">
+              <p className="text-xs text-warning-ink">
                 The oldest is {oldest} days old. A platform receivable that keeps ageing is either a
                 payout nobody recorded or money that never arrived — both are worth chasing before
                 the month closes.
@@ -495,11 +484,11 @@ export default async function ChannelSettlementsPage({
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {Number(s.variance) !== 0 ? (
-                        <span className="text-amber-700 dark:text-amber-400">
+                        <span className="text-warning-ink">
                           −{peso(s.variance)}
                         </span>
                       ) : Number(s.settlementGain) !== 0 ? (
-                        <span className="text-emerald-700 dark:text-emerald-400">
+                        <span className="text-success">
                           +{peso(s.settlementGain)}
                         </span>
                       ) : (
@@ -515,18 +504,10 @@ export default async function ChannelSettlementsPage({
                           <input type="hidden" name="settlementId" value={s.id} />
                           {/* A void without a reason is a gap, so the reason is part of the same
                               control rather than a confirmation step that can be skipped. */}
-                          <input
-                            name="reason"
-                            required
-                            placeholder="Reason…"
-                            className="w-28 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
-                          />
-                          <button
-                            type="submit"
-                            className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-800 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
-                          >
+                          <Input name="reason" required placeholder="Reason…" className="w-28" />
+                          <Button type="submit" variant="danger">
                             Void
-                          </button>
+                          </Button>
                         </form>
                       )}
                     </td>

@@ -6,11 +6,11 @@ import { buildSchedule } from '@shareat/domain';
 import { requirePageAccess } from '../../../lib/page-access';
 import { disposeAssetAction, setAssetInServiceAction, updateTermsAction } from '../actions';
 import { CATEGORY_LABEL, INTERVAL_LABEL, getAsset, listStores } from '../lib';
-import { StatusBadge } from '../page';
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
 import { withFlash } from '@/lib/flash';
+import { Badge, Banner, Button, FlashBanner, Input, Select, Textarea } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,11 +79,12 @@ export default async function AssetDetailPage({
           </a>
           <h1 className="mt-1 flex flex-wrap items-center gap-3 text-2xl font-semibold">
             {asset.name}
-            <StatusBadge status={asset.status} />
+            <Badge status={asset.status} />
             {asset.needsReview && (
-              <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                Needs review
-              </span>
+              <Badge
+                tone="warning"
+                label="Needs review"
+              />
             )}
           </h1>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -93,34 +94,15 @@ export default async function AssetDetailPage({
         </div>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok === 'terms' && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          Terms updated, and the review flag is cleared.
-        </div>
-      )}
-      {sp.ok === 'disposed' && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          Disposed. The remaining book value was written off to 7400.
-        </div>
-      )}
-      {sp.ok === 'inservice' && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          In-service date updated.
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {asset.needsReview && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong className="font-medium">These terms are a default, not a decision.</strong> This
           asset was capitalised automatically from an expense, so its life and salvage were applied
           from policy without anyone looking at the thing itself. Editing them below confirms them
           and clears this flag.
-        </div>
+        </Banner>
       )}
 
       <DetailLayout
@@ -156,7 +138,7 @@ export default async function AssetDetailPage({
       <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">In service</h2>
         {isHeld ? (
-          <p className="text-sm text-amber-800 dark:text-amber-300">
+          <p className="text-sm text-warning-ink">
             <strong className="font-medium">Not yet in service.</strong> This asset is on the
             books at cost and depreciates nothing until its store opens, or a date is set below.
           </p>
@@ -173,9 +155,7 @@ export default async function AssetDetailPage({
         {isActive && (
           <>
             {sp.confirm && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                {sp.confirm}
-              </div>
+              <Banner tone="warning">{sp.confirm}</Banner>
             )}
             {sp.confirm && sp.reason === undefined && (
               <p className="text-xs text-neutral-500">
@@ -192,16 +172,13 @@ export default async function AssetDetailPage({
                   <input type="hidden" name="reason" value={sp.reason} />
                 ) : (
                   <Field label="Reason" hint="Required — an audit trail with no reason is unauditable">
-                    <input name="reason" required className={INPUT} />
+                    <Input name="reason" required className="w-full" />
                   </Field>
                 )}
                 <input type="hidden" name="confirmedPlan" value={sp.plan ?? ''} />
-                <button
-                  type="submit"
-                  className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-                >
+                <Button type="submit" variant="primary">
                   Confirm change
-                </button>
+                </Button>
               </form>
             )}
             <EditableRecord
@@ -214,27 +191,27 @@ export default async function AssetDetailPage({
                   for the touch-target sweep (Ian's ruling §6.1, T-262); a `<select>` sizes from its
                   own classes exactly like this file's other pickers. */}
               <Field label="Choice">
-                <select
+                <Select
                   name="mode"
                   defaultValue={sp.mode ?? asset.inServiceSource ?? 'acquired'}
-                  className={INPUT}
+                  className="w-full"
                 >
                   <option value="acquired">On the acquisition date ({asset.acquiredOn ?? '—'})</option>
                   <option value="store_opening">When the store opens</option>
                   <option value="set">A specific date —</option>
-                </select>
+                </Select>
               </Field>
               <Field label="Specific date" hint="Only used when 'A specific date' is chosen above">
-                <input
+                <Input
                   type="date"
                   name="inServiceOn"
                   min={asset.acquiredOn ?? undefined}
                   defaultValue={sp.inServiceOn ?? asset.inServiceOn ?? ''}
-                  className={INPUT}
+                  className="w-full"
                 />
               </Field>
               <Field label="Reason" hint="Required — an audit trail with no reason is unauditable">
-                <input name="reason" required defaultValue={sp.reason ?? ''} className={INPUT} />
+                <Input name="reason" required defaultValue={sp.reason ?? ''} className="w-full" />
               </Field>
               {/* ⛔ A hidden input, not a checkbox — clicking "Confirm change" IS the confirmation
                   (same one-button shape as the dispose form below); a checkbox here would be a
@@ -257,17 +234,17 @@ export default async function AssetDetailPage({
             >
               <div className="space-y-4">
               <Field label="Name">
-                <input name="name" required defaultValue={asset.name} maxLength={200} className={INPUT} />
+                <Input name="name" required defaultValue={asset.name} maxLength={200} className="w-full" />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Category">
-                  <select name="category" defaultValue={asset.category} className={INPUT}>
+                  <Select name="category" defaultValue={asset.category} className="w-full">
                     {ASSET_CATEGORIES.map((c) => (
                       <option key={c} value={c}>
                         {CATEGORY_LABEL[c] ?? c}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="Useful life (months)">
                   <input
@@ -275,29 +252,29 @@ export default async function AssetDetailPage({
                     inputMode="numeric"
                     required
                     defaultValue={asset.usefulLifeMonths}
-                    className={INPUT}
+                    className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
                   />
                 </Field>
                 <Field label="Interval">
-                  <select name="interval" defaultValue={asset.interval} className={INPUT}>
+                  <Select name="interval" defaultValue={asset.interval} className="w-full">
                     {(['monthly', 'quarterly', 'semiannual', 'annually'] as const).map((i) => (
                       <option key={i} value={i}>
                         {INTERVAL_LABEL[i]}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="Salvage value">
-                  <input
+                  <Input
                     name="salvageValue"
                     inputMode="decimal"
                     defaultValue={asset.salvageValue ?? ''}
-                    className={INPUT}
+                    className="w-full"
                   />
                 </Field>
               </div>
               <Field label="Notes">
-                <textarea name="notes" rows={2} defaultValue={asset.notes ?? ''} className={INPUT} />
+                <Textarea name="notes" rows={2} defaultValue={asset.notes ?? ''} className="w-full" />
               </Field>
               {/* ⚠️ Changing a life does NOT rewrite what has already posted. Past periods are
                   history; the remaining ones re-derive from the new terms. */}
@@ -331,7 +308,7 @@ export default async function AssetDetailPage({
             ) : (
               <div className="max-h-80 overflow-y-auto">
                 <table className="w-full border-collapse text-sm">
-                  <thead className="sticky top-0 bg-white dark:bg-neutral-950">
+                  <thead className="sticky top-0 bg-surface">
                     <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
                       <th className="px-2 py-1.5 font-medium">Period</th>
                       <th className="px-2 py-1.5 text-right font-medium">Charge</th>
@@ -350,7 +327,7 @@ export default async function AssetDetailPage({
                         </td>
                         <td className="px-2 py-1.5 text-xs">
                           {postedSet.has(p.period) ? (
-                            <span className="text-emerald-700 dark:text-emerald-400">Posted</span>
+                            <span className="text-success">Posted</span>
                           ) : (
                             <span className="text-neutral-400 dark:text-neutral-600">—</span>
                           )}
@@ -364,8 +341,8 @@ export default async function AssetDetailPage({
           </div>
 
           {isActive && (
-            <section className="space-y-3 rounded-lg border border-red-200 p-4 dark:border-red-900">
-              <h2 className="font-medium text-red-800 dark:text-red-300">Dispose / write off</h2>
+            <section className="space-y-3 rounded-lg border border-danger p-4">
+              <h2 className="font-medium text-danger">Dispose / write off</h2>
               <p className="text-sm text-neutral-600 dark:text-neutral-400">
                 Clears the accumulated depreciation, removes the cost, and writes the remaining{' '}
                 <strong>{formatMoney(bookValue)}</strong> off to loss on disposal (7400). This is a
@@ -376,26 +353,23 @@ export default async function AssetDetailPage({
                 <input type="hidden" name="filterStore" value={sp.store ?? ''} />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Disposed on">
-                    <input
+                    <Input
                       type="date"
                       name="disposedOn"
                       required
                       max={toBusinessDate()}
                       min={asset.acquiredOn ?? undefined}
                       defaultValue={toBusinessDate()}
-                      className={INPUT}
+                      className="w-full"
                     />
                   </Field>
                   <Field label="Reason" hint="Required — a write-off with no reason is unauditable">
-                    <input name="reason" required placeholder="Compressor failed" className={INPUT} />
+                    <Input name="reason" required placeholder="Compressor failed" className="w-full" />
                   </Field>
                 </div>
-                <button
-                  type="submit"
-                  className="rounded bg-red-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-800"
-                >
+                <Button type="submit" variant="danger">
                   Dispose this asset
-                </button>
+                </Button>
               </form>
             </section>
           )}
@@ -405,9 +379,6 @@ export default async function AssetDetailPage({
     </Page>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (

@@ -5,6 +5,7 @@ import { attestStepAction } from './actions';
 import { PHASE_TITLE, kindLabel, listStores, loadGaps, loadProgress, peso } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Badge, Banner, Button, FlashBanner, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'The conversion — Shareat System' };
@@ -49,11 +50,7 @@ export default async function CutoverPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/*
         ⭐ THE RUNNING RESIDUAL IS THE WHOLE DESIGN.
@@ -70,25 +67,21 @@ export default async function CutoverPage({
       <section
         className={`rounded-lg border p-4 sm:p-5 ${
           balanced
-            ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950'
-            : 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950'
+            ? 'border-success bg-success-soft'
+            : 'border-warning-ink bg-warning-soft'
         }`}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <span
             className={`text-sm font-medium ${
-              balanced
-                ? 'text-emerald-900 dark:text-emerald-300'
-                : 'text-amber-900 dark:text-amber-300'
+              balanced ? 'text-success' : 'text-warning-ink'
             }`}
           >
             {balanced ? 'The opening entry balances' : 'Difference still to explain'}
           </span>
           <span
             className={`font-mono text-2xl font-semibold tabular-nums ${
-              balanced
-                ? 'text-emerald-900 dark:text-emerald-300'
-                : 'text-amber-900 dark:text-amber-300'
+              balanced ? 'text-success' : 'text-warning-ink'
             }`}
           >
             {peso(Math.abs(residual))}
@@ -96,7 +89,7 @@ export default async function CutoverPage({
         </div>
         <p
           className={`mt-1 text-xs ${
-            balanced ? 'text-emerald-800 dark:text-emerald-400' : 'text-amber-800 dark:text-amber-400'
+            balanced ? 'text-success' : 'text-warning-ink'
           }`}
         >
           {balanced
@@ -138,7 +131,7 @@ export default async function CutoverPage({
             </div>
           )}
           {gaps.doubleCounted.length > 0 && (
-            <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+            <Banner tone="error">
               <strong className="font-medium">
                 {gaps.doubleCounted.length} part
                 {gaps.doubleCounted.length === 1 ? 'y has' : 'ies have'} the same money twice.
@@ -147,7 +140,7 @@ export default async function CutoverPage({
                 An opening balance was entered for them, and a document dated before the conversion
                 also exists. One of the two has to go, or the balance is double what is owed.
               </p>
-            </div>
+            </Banner>
           )}
         </section>
       )}
@@ -166,7 +159,7 @@ export default async function CutoverPage({
                   key={`${s.def.code}:${s.storeId ?? ''}`}
                   className={`rounded-lg border p-4 ${
                     s.done
-                      ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20'
+                      ? 'border-success bg-success-soft'
                       : s.blockedBy
                         ? 'border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40'
                         : 'border-neutral-200 dark:border-neutral-800'
@@ -186,15 +179,11 @@ export default async function CutoverPage({
                         )}
                       </h3>
                     </div>
-                    <span
-                      className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${
-                        s.done
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                          : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400'
-                      }`}
-                    >
-                      {s.done ? 'Done' : 'Outstanding'}
-                    </span>
+                    <Badge
+                      tone={s.done ? 'success' : 'closed'}
+                      label={s.done ? 'Done' : 'Outstanding'}
+                      className="shrink-0"
+                    />
                   </div>
 
                   <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">
@@ -220,9 +209,9 @@ export default async function CutoverPage({
 
                   {/* ⭐ Blocked steps say what to go and do. Hidden steps do not. */}
                   {s.blockedBy && (
-                    <p className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                    <Banner tone="warning" className="mt-2">
                       {s.blockedBy}
-                    </p>
+                    </Banner>
                   )}
 
                   {s.detail && !s.blockedBy && (
@@ -238,7 +227,7 @@ export default async function CutoverPage({
                   {(s.def.code === 'C3' || s.def.code === 'C5') && !s.blockedBy && (
                     <Link
                       href="/cutover/opening"
-                      className="mt-3 inline-block rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+                      className="mt-3 inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
                     >
                       {s.def.code === 'C3' ? 'Enter opening balances' : 'Review and post'}
                     </Link>
@@ -247,7 +236,7 @@ export default async function CutoverPage({
                   {s.def.code === 'B3' && s.storeId && !s.done && (
                     <Link
                       href={`/cutover/count?store=${s.storeId}`}
-                      className="mt-3 inline-block rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+                      className="mt-3 inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
                     >
                       Enter the count
                     </Link>
@@ -259,18 +248,15 @@ export default async function CutoverPage({
                     <form action={attestStepAction} className="mt-3 space-y-2">
                       <input type="hidden" name="stepCode" value={s.def.code} />
                       <input type="hidden" name="storeId" value={s.storeId ?? ''} />
-                      <input
+                      <Input
                         type="text"
                         name="note"
                         placeholder="What you did, in your words (optional)"
-                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        className="w-full"
                       />
-                      <button
-                        type="submit"
-                        className="w-full rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white sm:w-auto dark:bg-neutral-100 dark:text-neutral-900"
-                      >
+                      <Button type="submit" variant="secondary" className="w-full sm:w-auto">
                         I confirm this is done
-                      </button>
+                      </Button>
                     </form>
                   )}
 
@@ -280,18 +266,15 @@ export default async function CutoverPage({
                     <form action={attestStepAction} className="mt-3 space-y-2">
                       <input type="hidden" name="stepCode" value={s.def.code} />
                       <input type="hidden" name="storeId" value={s.storeId ?? ''} />
-                      <input
+                      <Input
                         type="text"
                         name="note"
                         placeholder="What you did, in your words (optional)"
-                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        className="w-full"
                       />
-                      <button
-                        type="submit"
-                        className="w-full rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white sm:w-auto dark:bg-neutral-100 dark:text-neutral-900"
-                      >
+                      <Button type="submit" variant="secondary" className="w-full sm:w-auto">
                         I confirm this is done
-                      </button>
+                      </Button>
                     </form>
                   )}
                 </article>

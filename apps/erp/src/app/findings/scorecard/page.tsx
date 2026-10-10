@@ -3,6 +3,7 @@ import { requireSession } from '../../../lib/session';
 import { scorecardFor, scorecardRange } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Banner } from '@/components/ui';
 
 export const metadata = { title: 'Responsiveness scorecard — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -44,7 +45,7 @@ export default async function ScorecardPage() {
           cannot be one: findings carry no clock, so anything older than this date is shown as
           starting then. A number that silently understates how long a problem has been ignored is
           worse than no number. */}
-      <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+      <Banner tone="warning">
         {card.recordBeganOn ? (
           <>
             Ages are measured from <strong>{card.recordBeganOn}</strong>, when this record began.
@@ -57,7 +58,7 @@ export default async function ScorecardPage() {
             started — not because everything is fine.
           </>
         )}
-      </p>
+      </Banner>
 
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
         {card.lastViewedBy ? (
@@ -124,7 +125,7 @@ export default async function ScorecardPage() {
                     '—'
                   ) : (
                     <span
-                      className={s.oldestAcknowledgementDays != null && s.oldestAcknowledgementDays > 21 ? 'text-amber-600' : ''}
+                      className={s.oldestAcknowledgementDays != null && s.oldestAcknowledgementDays > 21 ? 'text-warning-ink' : ''}
                       title="Accepted, not fixed — the condition still holds"
                     >
                       {s.acknowledged}

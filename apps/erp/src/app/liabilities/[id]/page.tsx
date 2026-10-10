@@ -17,6 +17,7 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Liability — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -62,21 +63,12 @@ export default async function LiabilityPage({
           {CATEGORY_LABEL[liability.category] ?? liability.category} · {store?.name ?? '—'} ·{' '}
           {liability.dueOn ? `due ${liability.dueOn}` : 'no due date'}
           {liability.overdue && (
-            <span className="text-amber-700 dark:text-amber-400"> · overdue</span>
+            <span className="text-warning-ink"> · overdue</span>
           )}
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <DetailLayout
         summary={
@@ -114,7 +106,7 @@ export default async function LiabilityPage({
               <input name="amount" required inputMode="decimal" className={INPUT} />
             </Field>
             <Field label="For">
-              <select name="againstAccountCode" required defaultValue="" className={INPUT}>
+              <Select name="againstAccountCode" required defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -123,17 +115,14 @@ export default async function LiabilityPage({
                     {a.code} — {a.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="On">
-              <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+              <Input name="on" type="date" required defaultValue={today()} className="w-full" />
             </Field>
-            <button
-              type="submit"
-              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-            >
+            <Button type="submit" variant="secondary">
               Charge
-            </button>
+            </Button>
           </form>
         </section>
 
@@ -164,7 +153,7 @@ export default async function LiabilityPage({
                 />
               </Field>
               <Field label="From" hint="Balances shown are derived from the ledger.">
-                <select name="fromMoneyAccountId" required defaultValue="" className={INPUT}>
+                <Select name="fromMoneyAccountId" required defaultValue="" className="w-full">
                   <option value="" disabled>
                     Choose…
                   </option>
@@ -173,17 +162,14 @@ export default async function LiabilityPage({
                       {a.name} — {peso(a.balance)}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label="On">
-                <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+                <Input name="on" type="date" required defaultValue={today()} className="w-full" />
               </Field>
-              <button
-                type="submit"
-                className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-              >
+              <Button type="submit" variant="primary">
                 Pay
-              </button>
+              </Button>
             </form>
           )}
         </section>
@@ -229,17 +215,10 @@ export default async function LiabilityPage({
                       <form action={reverseAction} className="flex items-center gap-2">
                         <input type="hidden" name="liabilityId" value={liability.id} />
                         <input type="hidden" name="entryId" value={e.entryId} />
-                        <input
-                          name="reason"
-                          placeholder="Reason…"
-                          className="w-32 rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
-                        />
-                        <button
-                          type="submit"
-                          className="rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700"
-                        >
+                        <Input name="reason" placeholder="Reason…" className="w-32" />
+                        <Button type="submit" variant="danger">
                           Reverse
-                        </button>
+                        </Button>
                       </form>
                     </td>
                   </tr>
@@ -270,12 +249,9 @@ export default async function LiabilityPage({
           </div>
           <form action={retireAction}>
             <input type="hidden" name="liabilityId" value={liability.id} />
-            <button
-              type="submit"
-              className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700"
-            >
+            <Button type="submit" variant="secondary">
               Retire
-            </button>
+            </Button>
           </form>
         </section>
       )}
@@ -285,7 +261,7 @@ export default async function LiabilityPage({
 }
 
 const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
 function Figure({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
   return (

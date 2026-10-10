@@ -30,6 +30,7 @@ import {
   type MirroredRoster,
   type PunchIntent,
 } from '../../lib/terminal/lane';
+import { Badge, Banner, Button, Textarea } from '@/components/ui';
 
 /**
  * ⛔ **Per-PERSON, and 30 seconds — copied from v1 with its reason, not just its number.**
@@ -294,24 +295,12 @@ export default function ClockTerminalPage() {
             offline, and it will not be able to record anything until this succeeds once.
           </p>
         </div>
-        {pairError && (
-          <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-            {pairError}
-          </p>
-        )}
+        {pairError && <Banner tone="error">{pairError}</Banner>}
         <form action={pair} className="space-y-3">
-          <textarea
-            name="token"
-            rows={4}
-            placeholder="Pairing token"
-            className="w-full rounded border border-neutral-300 p-3 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900"
-          />
-          <button
-            type="submit"
-            className="w-full rounded bg-neutral-900 px-4 py-3 text-base font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
-          >
+          <Textarea name="token" rows={4} placeholder="Pairing token" className="w-full font-mono text-xs" />
+          <Button type="submit" variant="primary" className="w-full justify-center">
             Pair
-          </button>
+          </Button>
         </form>
       </main>
     );
@@ -322,15 +311,10 @@ export default function ClockTerminalPage() {
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-xl font-semibold">Clock in / out</h1>
         {/* ⭐ Offline is a NORMAL state here, not an error — the whole design assumes it. */}
-        <span
-          className={`rounded px-2 py-0.5 text-xs font-medium ${
-            online
-              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-              : 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300'
-          }`}
-        >
-          {online ? 'Online' : 'Offline — punches are saved here'}
-        </span>
+        <Badge
+          tone={online ? 'success' : 'warning'}
+          label={online ? 'Online' : 'Offline — punches are saved here'}
+        />
       </div>
 
       {/* ⭐ The number that tells a cashier whether their clock-in is SAFE. v1's equivalent is a
@@ -346,11 +330,7 @@ export default function ClockTerminalPage() {
         {durable === false && ' · ⚠️ This browser would not promise to keep offline data.'}
       </p>
 
-      {mirrorError && (
-        <p className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          {mirrorError}
-        </p>
-      )}
+      {mirrorError && <Banner tone="warning">{mirrorError}</Banner>}
 
       {/*
         ⛔ **THE IN/OUT TOGGLE IS GONE, deliberately.** It asked the staffer to declare an intent
@@ -379,29 +359,16 @@ export default function ClockTerminalPage() {
               autoFocus
               aria-label="Scan or tap your badge"
               placeholder="Scan or tap your badge"
-              className="w-full rounded-lg border border-neutral-300 p-4 text-center text-lg dark:border-neutral-700 dark:bg-neutral-900"
+              className="w-full rounded-[10px] border border-field-border bg-field p-4 text-center text-lg text-ink"
             />
-            <button
-              type="submit"
-              className="min-h-[3rem] w-full rounded-lg bg-neutral-900 px-4 text-base font-medium text-white transition-opacity duration-150 ease-out hover:opacity-90 dark:bg-neutral-100 dark:text-neutral-900"
-            >
+            <Button type="submit" variant="primary" className="min-h-[3rem] w-full justify-center text-base">
               Record
-            </button>
+            </Button>
           </form>
         )}
       </div>
 
-      {message && (
-        <p
-          className={`rounded-lg border p-3 text-sm ${
-            message.tone === 'ok'
-              ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-              : 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
-          }`}
-        >
-          {message.text}
-        </p>
-      )}
+      {message && <Banner tone={message.tone === 'ok' ? 'success' : 'error'}>{message.text}</Banner>}
 
       {/* ⭐ HOT-SET ITEM 4, RENDERED AT LAST. The mirror has carried this since T-181 and nothing
           had ever read it (DEF-116, DEF-118). Two panels, stacked on a phone and side by side on a
@@ -474,26 +441,28 @@ export default function ClockTerminalPage() {
       */}
       {process.env.NODE_ENV !== 'production' && (
         <div className="flex gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
-          <button
+          <Button
             type="button"
+            variant="secondary"
             onClick={async () => {
               await disableNetwork(terminalFirebase().db);
               setOnline(false);
             }}
-            className="rounded border border-neutral-300 px-3 py-2 text-xs dark:border-neutral-700"
+            className="text-xs"
           >
             Simulate offline
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="secondary"
             onClick={async () => {
               await enableNetwork(terminalFirebase().db);
               setOnline(true);
             }}
-            className="rounded border border-neutral-300 px-3 py-2 text-xs dark:border-neutral-700"
+            className="text-xs"
           >
             Reconnect
-          </button>
+          </Button>
         </div>
       )}
     </main>

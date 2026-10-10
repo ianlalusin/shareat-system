@@ -4,7 +4,7 @@ import { upsertStorePositionAction } from './actions';
 import { listStores, positionsForStore, rosterForStore } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { Input } from '@/components/ui';
+import { Button, FlashBanner, Input } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -19,8 +19,6 @@ interface SearchParams {
 
 const INPUT =
   'rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
 
 export default async function StaffPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
@@ -53,21 +51,12 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
             created (DEF-131).
           </PageDescription>
         </div>
-        <Link href={`/staff/hire?store=${storeId}`} className={BTN}>
+        <Link href={`/staff/hire?store=${storeId}`} className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas">
           Hire
         </Link>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow>
         <label className="text-sm">
@@ -151,9 +140,9 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
             <span className="block text-neutral-600 dark:text-neutral-400">Add a position</span>
             <Input name="name" required placeholder="Barista" />
           </label>
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="primary">
             Save
-          </button>
+          </Button>
         </form>
       </section>
     </Page>

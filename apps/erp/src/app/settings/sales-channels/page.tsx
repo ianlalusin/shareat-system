@@ -11,7 +11,7 @@ import { FilterRow } from '@/components/FilterRow';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid, Field } from '@/components/ui';
+import { Banner, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Sales channels — Shareat System' };
@@ -101,25 +101,24 @@ export default async function SalesChannelsSettingsPage({
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className={`${FIELD} mt-1`}>
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
-      {sp.error && <Banner tone="error">{sp.error}</Banner>}
-      {sp.ok && <Banner tone="ok">{sp.ok}</Banner>}
+      <FlashBanner flash={sp} />
 
       {active.length === 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong>This store has no active sales channel, so it cannot trade.</strong> A sales day
           has nowhere to land without one. Add the first below — for most branches that is a
           walk-in channel whose money reaches the till.
-        </div>
+        </Banner>
       )}
 
       {active.map((c) => (
@@ -131,9 +130,9 @@ export default async function SalesChannelsSettingsPage({
         <form action={createSalesChannelAction} className="space-y-4 text-sm">
           <input type="hidden" name="storeId" value={storeId} />
           <ChannelFields accounts={accounts} />
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="primary">
             Save
-          </button>
+          </Button>
         </form>
       </section>
 
@@ -161,9 +160,9 @@ export default async function SalesChannelsSettingsPage({
                 <input type="hidden" name="channelId" value={c.id} />
                 <input type="hidden" name="name" value={c.name} />
                 <input type="hidden" name="isActive" value="true" />
-                <button type="submit" className={BTN}>
+                <Button type="submit" variant="secondary">
                   Reactivate
-                </button>
+                </Button>
               </form>
             </div>
           ))}
@@ -282,12 +281,12 @@ function ChannelFields({
     <div className="space-y-4 text-sm">
       <FormGrid>
         <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel name</span>}>
-          <input
+          <Input
             name="name"
             required
             defaultValue={channel?.name ?? ''}
             placeholder="Walk-in, Foodpanda, GrabFood…"
-            className={`${FIELD} mt-1 w-full`}
+            className="mt-1 w-full"
           />
         </Field>
       </FormGrid>
@@ -320,10 +319,10 @@ function ChannelFields({
             </span>
           }
         >
-          <select
+          <Select
             name="receivableAccountCode"
             defaultValue={channel?.receivableAccountCode ?? ''}
-            className={`${FIELD} mt-1 w-full`}
+            className="mt-1 w-full"
           >
             <option value="">— none (only valid when it reaches the till) —</option>
             {accounts.map((a) => (
@@ -331,7 +330,7 @@ function ChannelFields({
                 {a.code} · {a.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       </FormGrid>
 
@@ -405,20 +404,7 @@ function Radio({
 function Pill({ tone, children }: { tone: 'neutral' | 'amber'; children: React.ReactNode }) {
   const cls =
     tone === 'amber'
-      ? 'bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100'
+      ? 'bg-warning-soft text-warning-ink'
       : 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300';
   return <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${cls}`}>{children}</span>;
 }
-
-function Banner({ tone, children }: { tone: 'error' | 'ok'; children: React.ReactNode }) {
-  const cls =
-    tone === 'error'
-      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
-      : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-  return <div className={`rounded-lg border p-4 text-sm ${cls}`}>{children}</div>;
-}
-
-const FIELD =
-  'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';

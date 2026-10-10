@@ -18,7 +18,7 @@ import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { FormGrid, Field } from '@/components/ui';
+import { Banner, Button, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Opening balances — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -64,17 +64,13 @@ export default async function OpeningPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {sp.posted === '1' && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+        <Banner tone="success">
           <strong className="font-medium">The books are open.</strong> The opening entry is posted
           and can no longer be edited — a correction from here is a reversal.
-        </div>
+        </Banner>
       )}
 
       {/* ⭐ The same running difference as the wizard, because it is the same question. Watching it
@@ -82,21 +78,21 @@ export default async function OpeningPage({
       <section
         className={`rounded-lg border p-4 sm:p-5 ${
           balanced
-            ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950'
-            : 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950'
+            ? 'border-success bg-success-soft'
+            : 'border-warning-ink bg-warning-soft'
         }`}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <span
             className={`text-sm font-medium ${
-              balanced ? 'text-emerald-900 dark:text-emerald-300' : 'text-amber-900 dark:text-amber-300'
+              balanced ? 'text-success' : 'text-warning-ink'
             }`}
           >
             {balanced ? 'Everything balances' : 'Difference still to explain'}
           </span>
           <span
             className={`font-mono text-2xl font-semibold tabular-nums ${
-              balanced ? 'text-emerald-900 dark:text-emerald-300' : 'text-amber-900 dark:text-amber-300'
+              balanced ? 'text-success' : 'text-warning-ink'
             }`}
           >
             {peso(Math.abs(residual))}
@@ -104,7 +100,7 @@ export default async function OpeningPage({
         </div>
         <p
           className={`mt-1 text-xs ${
-            balanced ? 'text-emerald-800 dark:text-emerald-400' : 'text-amber-800 dark:text-amber-400'
+            balanced ? 'text-success' : 'text-warning-ink'
           }`}
         >
           {balanced
@@ -117,7 +113,7 @@ export default async function OpeningPage({
 
       {/* ── What is still needed ─────────────────────────────────────────────────────── */}
       {gaps.doubleCounted.length > 0 && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+        <Banner tone="error">
           <strong className="font-medium">
             {gaps.doubleCounted.length} part
             {gaps.doubleCounted.length === 1 ? 'y has' : 'ies have'} the same money twice.
@@ -126,7 +122,7 @@ export default async function OpeningPage({
             An opening balance was entered for them, and a document dated before the conversion also
             exists. One of the two has to go.
           </p>
-        </div>
+        </Banner>
       )}
 
       {/* ── Add a figure ─────────────────────────────────────────────────────────────── */}
@@ -136,41 +132,29 @@ export default async function OpeningPage({
           <input type="hidden" name="entryDate" value={CONVERSION_DATE} />
           <FormGrid>
             <Field label="Account">
-              <select
-                name="accountCode"
-                required
-                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-              >
+              <Select name="accountCode" required className="mt-1 w-full">
                 {accounts.map((a) => (
                   <option key={a.code} value={a.code}>
                     {a.code} — {a.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Store">
-              <select
-                name="storeId"
-                required
-                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-              >
+              <Select name="storeId" required className="mt-1 w-full">
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Owns or owes">
-              <select
-                name="direction"
-                required
-                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-              >
+              <Select name="direction" required className="mt-1 w-full">
                 {/* Plain words, because "debit" and "credit" are the thing people get backwards. */}
                 <option value="debit">We have this (asset)</option>
                 <option value="credit">We owe this (liability)</option>
-              </select>
+              </Select>
             </Field>
             <Field label="Amount">
               <input
@@ -178,22 +162,14 @@ export default async function OpeningPage({
                 required
                 inputMode="decimal"
                 placeholder="0.00"
-                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                className="mt-1 w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
               />
             </Field>
           </FormGrid>
-          <input
-            type="text"
-            name="memo"
-            placeholder="What this is (optional)"
-            className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          />
-          <button
-            type="submit"
-            className="w-full rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white sm:w-auto dark:bg-neutral-100 dark:text-neutral-900"
-          >
+          <Input type="text" name="memo" placeholder="What this is (optional)" className="w-full" />
+          <Button type="submit" variant="secondary" className="w-full sm:w-auto">
             Save
-          </button>
+          </Button>
         </form>
       </section>
 
@@ -231,12 +207,9 @@ export default async function OpeningPage({
                 {/* A draft was never final, so removing one is a delete rather than a reversal. */}
                 <form action={removeOpeningFigureAction}>
                   <input type="hidden" name="entryId" value={d.id} />
-                  <button
-                    type="submit"
-                    className="rounded border border-neutral-300 px-3 py-2 text-xs dark:border-neutral-700"
-                  >
+                  <Button type="submit" variant="danger">
                     Remove
-                  </button>
+                  </Button>
                 </form>
               </div>
             </div>
@@ -257,19 +230,16 @@ export default async function OpeningPage({
         */}
         {balanced && drafts.length > 0 ? (
           <form action={postOpeningBalancesAction} className="mt-3">
-            <button
-              type="submit"
-              className="w-full rounded bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white sm:w-auto dark:bg-emerald-600"
-            >
+            <Button type="submit" variant="primary" className="w-full sm:w-auto">
               Post the opening balances
-            </button>
+            </Button>
           </form>
         ) : (
-          <p className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          <Banner tone="warning" className="mt-3">
             {drafts.length === 0
               ? 'Nothing to post yet.'
               : `₱${Math.abs(residual).toFixed(2)} is still unexplained, so this cannot be posted. There is no holding account to put it in — the difference has to be found.`}
-          </p>
+          </Banner>
         )}
       </section>
     </Page>

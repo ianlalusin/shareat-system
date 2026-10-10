@@ -22,7 +22,7 @@ import {
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { FormGrid, Input } from '@/components/ui';
+import { Banner, Button, FlashBanner, FormGrid, Input } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { EditableRecord } from '@/components/forms';
@@ -101,7 +101,7 @@ export default async function RecurringExpensesPage({
       </p>
 
       {unsetSupplier.length > 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong className="font-medium">
             {unsetSupplier.length === 1
               ? '1 template cannot draft yet.'
@@ -112,19 +112,10 @@ export default async function RecurringExpensesPage({
           intentions and the nightly run refuses them by name:{' '}
           <strong>{unsetSupplier.map((t) => t.name).join(', ')}</strong>. Edit each one and choose a
           supplier.
-        </div>
+        </Banner>
       )}
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          <strong className="font-medium">Refused:</strong> {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {stores.length === 0 ? (
         <p className="rounded-lg border border-neutral-200 p-4 text-sm text-neutral-500 dark:border-neutral-800">
@@ -178,18 +169,18 @@ export default async function RecurringExpensesPage({
                       </div>
                       <p className="text-xs text-neutral-500 dark:text-neutral-400">
                         next due <strong>{t.nextDueDate}</strong>
-                        {overdue && <span className="ml-1 text-amber-700 dark:text-amber-400">· due now</span>}
+                        {overdue && <span className="ml-1 text-warning-ink">· due now</span>}
                         {/* ⭐ The job catches up ONE period per nightly run, deliberately — three
                             drafts on one morning is noise. Saying how far behind a template is
                             stops a normal catch-up being read as a stuck job. */}
                         {periodsBehind(t.interval, t.anchorDay, t.nextDueDate, now) > 1 && (
-                          <span className="ml-1 text-amber-700 dark:text-amber-400">
+                          <span className="ml-1 text-warning-ink">
                             · {periodsBehind(t.interval, t.anchorDay, t.nextDueDate, now)} periods behind,
                             catching up one per night
                           </span>
                         )}
                         {!t.supplierId && (
-                          <span className="ml-1 text-amber-700 dark:text-amber-400">
+                          <span className="ml-1 text-warning-ink">
                             · no supplier, so it cannot draft
                           </span>
                         )}
@@ -197,7 +188,7 @@ export default async function RecurringExpensesPage({
                         {t.tillIsDeliberate && (
                           // ⚠️ Called out on the row, because it is the one setting v1 built a whole
                           // routing module to prevent happening by accident.
-                          <span className="ml-1 text-amber-700 dark:text-amber-400">
+                          <span className="ml-1 text-warning-ink">
                             · pays from the CASHIER TILL, deliberately
                           </span>
                         )}
@@ -238,9 +229,9 @@ export default async function RecurringExpensesPage({
                                 name="status"
                                 value={t.status === 'active' ? 'paused' : 'active'}
                               />
-                              <button type="submit" className={BTN}>
+                              <Button type="submit" variant="secondary">
                                 {t.status === 'active' ? 'Pause' : 'Resume'}
-                              </button>
+                              </Button>
                             </form>
                             {/* ⛔ Offered only while it has never produced anything. Once it has, it
                                 is history and the answer is Pause — deleting it would strand the
@@ -249,9 +240,9 @@ export default async function RecurringExpensesPage({
                               <form action={deleteTemplateAction}>
                                 <input type="hidden" name="storeId" value={storeId} />
                                 <input type="hidden" name="templateId" value={t.id} />
-                                <button type="submit" className={BTN}>
+                                <Button type="submit" variant="danger">
                                   Delete
-                                </button>
+                                </Button>
                               </form>
                             )}
                           </div>
@@ -289,8 +280,6 @@ export default async function RecurringExpensesPage({
 
 const INPUT =
   'rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 interface TemplateDefaults {
   name: string;
@@ -439,12 +428,9 @@ function TemplateForm({
     <form action={action} className="space-y-3">
       <input type="hidden" name="storeId" value={storeId} />
       {fields}
-      <button
-        type="submit"
-        className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-      >
+      <Button type="submit" variant={templateId ? 'secondary' : 'primary'}>
         {submitLabel}
-      </button>
+      </Button>
     </form>
   );
 }

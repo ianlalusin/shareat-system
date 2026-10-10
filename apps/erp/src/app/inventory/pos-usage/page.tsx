@@ -7,6 +7,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Daily POS usage pull — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -18,11 +19,6 @@ interface SearchParams {
   error?: string;
   ok?: string;
 }
-
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN_SM =
-  'rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 function SectionTable({
   title,
@@ -54,7 +50,7 @@ function SectionTable({
         <h2 className="text-sm font-medium">
           {title} ({lines.length})
         </h2>
-        {finalizedAt && <span className="text-xs text-emerald-700 dark:text-emerald-400">Finalized {formatBusinessDateTime(finalizedAt)}</span>}
+        {finalizedAt && <span className="text-xs text-success">Finalized {formatBusinessDateTime(finalizedAt)}</span>}
       </div>
 
       {lines.length === 0 ? (
@@ -98,14 +94,14 @@ function SectionTable({
                         {l.usageRecordId ? 'posted' : section === 'orphan' ? 'unmapped' : 'pending'}
                       </td>
                     ) : l.hold && !finalizedAt ? (
-                      <td className="px-3 py-2 text-red-800 dark:text-red-300">{l.hold}</td>
+                      <td className="px-3 py-2 text-danger">{l.hold}</td>
                     ) : (
                       <td className="px-3 py-2 text-neutral-500">not posted</td>
                     )}
                   </tr>
                 ))}
                 {blocked.map((l) => (
-                  <tr key={l.lineKey} className="border-b border-neutral-100 bg-red-50 last:border-0 dark:border-neutral-900 dark:bg-red-950">
+                  <tr key={l.lineKey} className="border-b border-neutral-100 bg-danger-surface last:border-0 dark:border-neutral-900">
                     {!finalizedAt && <td className="px-2 py-2"></td>}
                     <td className="px-3 py-2">
                       {l.posItemName} <span className="text-neutral-500">({l.posItemKey})</span>
@@ -113,7 +109,7 @@ function SectionTable({
                     {section !== 'orphan' && <td className="px-3 py-2">{l.itemName ?? '—'}</td>}
                     {showQuantity && <td className="px-3 py-2 text-right tabular-nums">—</td>}
                     {section !== 'orphan' && <td className="px-3 py-2">—</td>}
-                    <td className="px-3 py-2 text-red-800 dark:text-red-300">{l.blocked?.reason}</td>
+                    <td className="px-3 py-2 text-danger">{l.blocked?.reason}</td>
                   </tr>
                 ))}
               </tbody>
@@ -121,9 +117,9 @@ function SectionTable({
           </div>
 
           {!finalizedAt && !viewOnly && confirmable.length > 0 && (
-            <button type="submit" className={BTN_SM}>
+            <Button type="submit" variant="secondary">
               Finalize {title.toLowerCase()}
-            </button>
+            </Button>
           )}
         </form>
       )}
@@ -138,10 +134,10 @@ function SectionTable({
             <input type="hidden" name="posItemKey" value={l.posItemKey} />
             <input type="hidden" name="posItemName" value={l.posItemName} />
             <span>{l.posItemName}:</span>
-            <input name="note" placeholder="note (optional)" className={`${INPUT} flex-1`} />
-            <button type="submit" className={BTN_SM}>
+            <Input name="note" placeholder="note (optional)" className="flex-1" />
+            <Button type="submit" variant="secondary">
               Flag as unmappable
-            </button>
+            </Button>
           </form>
         ))}
     </section>
@@ -203,52 +199,43 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
         </Link>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className={INPUT}>
+          <Select name="store" defaultValue={storeId}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Sales day</span>
-          <select name="day" defaultValue={salesDayId} className={INPUT}>
+          <Select name="day" defaultValue={salesDayId}>
             {salesDays.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.businessDate} ({d.viewOnly ? 'voided — view only' : d.status})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
       {!salesDayId ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           This store has no sales days yet — record one first.
-        </p>
+        </Banner>
       ) : locations.length === 0 ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           This store has no active operating room yet — a pull needs one to consume from.
-        </p>
+        </Banner>
       ) : viewOnly ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           This sales day was voided. Its pull is shown for reference only — nothing more can be built or finalized against it.
-        </p>
+        </Banner>
       ) : (
         <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="text-sm font-medium">{pull ? 'Refresh plan' : 'Build plan'}</h2>
@@ -257,17 +244,17 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
             <input type="hidden" name="salesDayId" value={salesDayId} />
             <label className="text-sm">
               <span className="block text-neutral-600 dark:text-neutral-400">Operating location</span>
-              <select name="locationId" className={INPUT}>
+              <Select name="locationId">
                 {locations.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
-            <button type="submit" className={BTN_SM}>
+            <Button type="submit" variant="primary">
               {pull ? 'Refresh' : 'Build plan'}
-            </button>
+            </Button>
           </form>
           {pull && (
             <p className="mt-2 text-xs text-neutral-500">
@@ -321,9 +308,9 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
                 <input type="hidden" name="salesDayId" value={pull.salesDayId} />
                 <input type="hidden" name="pullId" value={pull.id} />
                 <input type="hidden" name="finish" value="1" />
-                <button type="submit" className={BTN_SM}>
+                <Button type="submit" variant="secondary">
                   Finish this pull — nothing left to post
-                </button>
+                </Button>
               </form>
             </section>
           )}
@@ -339,11 +326,11 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
                 <input type="hidden" name="pullId" value={pull.id} />
                 <label className="grow text-sm">
                   <span className="block text-neutral-600 dark:text-neutral-400">Why is it being voided?</span>
-                  <input name="reason" required className={`${INPUT} w-full`} />
+                  <Input name="reason" required className="w-full" />
                 </label>
-                <button type="submit" className={BTN_SM}>
+                <Button type="submit" variant="danger">
                   Void this pull
-                </button>
+                </Button>
               </form>
             </section>
           )}

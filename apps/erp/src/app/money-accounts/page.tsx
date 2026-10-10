@@ -17,6 +17,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { EditableRecord } from '@/components/forms';
+import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'Money accounts — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -59,27 +61,14 @@ export default async function MoneyAccountsPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok === 'created'
-            ? 'Money account added.'
-            : sp.ok === 'renamed'
-              ? 'Saved.'
-              : 'Money account retired.'}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {active.length === 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong className="font-medium">No money accounts yet.</strong> Until a store has at
           least one, online money cannot be recorded at all — an online payment and a day&apos;s
           online sales both have to say <em>which</em> account they moved.
-        </div>
+        </Banner>
       )}
 
       {/* ── The register ─────────────────────────────────────────────────────────────── */}
@@ -107,12 +96,12 @@ export default async function MoneyAccountsPage({
                   <td className="px-3 py-2">
                     {a.name}
                     {!a.isActive && (
-                      <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-xs font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                      <span className="ml-2 rounded bg-closed-soft px-1.5 py-0.5 text-xs font-medium text-closed">
                         Retired
                       </span>
                     )}
                     {a.isFoundation && (
-                      <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                      <span className="ml-2 rounded bg-info-soft px-1.5 py-0.5 text-xs font-medium text-info">
                         Always present
                       </span>
                     )}
@@ -141,12 +130,12 @@ export default async function MoneyAccountsPage({
                     {a.isActive && a.isFoundation && (
                       <EditableRecord action={renameMoneyAccountAction} label={a.name} hidden={{ moneyAccountId: a.id }}>
                         <div className="flex flex-wrap justify-end gap-1">
-                        <input
+                        <Input
                           name="name"
                           required
                           defaultValue={a.name}
                           maxLength={120}
-                          className="w-40 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                          className="w-40 text-xs"
                         />
                         {/* ⭐ Only a cashier drawer consults this — office and staff balances are
                             complete and block at zero regardless (row 154), so offering the field
@@ -165,7 +154,7 @@ export default async function MoneyAccountsPage({
                             inputMode="decimal"
                             defaultValue={a.overdraftLimit}
                             title="How far below zero this drawer may go before a draw is refused. Entered positive; 0 means never."
-                            className="w-24 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                            className="w-24 rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-ink text-xs"
                           />
                         )}
                         </div>
@@ -174,12 +163,9 @@ export default async function MoneyAccountsPage({
                     {a.isActive && !a.isFoundation && (
                       <form action={retireMoneyAccountAction}>
                         <input type="hidden" name="moneyAccountId" value={a.id} />
-                        <button
-                          type="submit"
-                          className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                        >
+                        <Button type="submit" variant="danger" className="text-xs">
                           Retire
-                        </button>
+                        </Button>
                       </form>
                     )}
                   </td>
@@ -203,42 +189,42 @@ export default async function MoneyAccountsPage({
         <form action={createMoneyAccountAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name" hint="What staff call it — “GCash — cashier”, “BDO — office”">
-              <input name="name" required maxLength={120} placeholder="GCash — cashier" className={INPUT} />
+              <Input name="name" required maxLength={120} placeholder="GCash — cashier" className="w-full" />
             </Field>
             <Field label="Store">
-              <select name="storeId" required defaultValue="" className={INPUT}>
+              <Select name="storeId" required defaultValue="" className="w-full">
                 <option value="">Choose a store…</option>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.code})
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Kind">
-              <select name="instrument" defaultValue="ewallet" className={INPUT}>
+              <Select name="instrument" defaultValue="ewallet" className="w-full">
                 {MONEY_INSTRUMENTS.map((i) => (
                   <option key={i} value={i}>
                     {INSTRUMENT_LABEL[i] ?? i}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field
               label="Held by"
               hint="A staff float is per person — the ledger names which one on each line"
             >
-              <select name="custodian" defaultValue="cashier" className={INPUT}>
+              <Select name="custodian" defaultValue="cashier" className="w-full">
                 {CUSTODIANS.map((c) => (
                   <option key={c} value={c}>
                     {CUSTODIAN_LABEL[c] ?? c}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
           </div>
           <Field label="Notes">
-            <input name="notes" className={INPUT} />
+            <Input name="notes" className="w-full" />
           </Field>
 
           {/* ⭐ No GL-code field, deliberately. The books account is DERIVED from kind + holder —
@@ -250,20 +236,12 @@ export default async function MoneyAccountsPage({
             the line names which one.
           </p>
 
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-          >
-            Save
-          </button>
+          <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
         </form>
       </section>
     </Page>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function Field({
   label,
@@ -286,10 +264,10 @@ function Field({
 function CustodianBadge({ custodian }: { custodian: string }) {
   const cls =
     custodian === 'cashier'
-      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+      ? 'bg-info-soft text-info'
       : custodian === 'office'
-        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-        : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+        ? 'bg-success-soft text-success'
+        : 'bg-warning-soft text-warning-ink';
   return (
     <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>
       {CUSTODIAN_LABEL[custodian] ?? custodian}

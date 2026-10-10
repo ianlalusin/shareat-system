@@ -18,6 +18,7 @@ import { MoneyLines } from '@/components/money/MoneyLines';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
 import { ACTION_LINK } from '@/components/action-link';
+import { Badge, Button, FlashBanner, Input, Select } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -147,7 +148,7 @@ return (
           </PageDescription>
         </div>
         <div className="text-right">
-          <StatusBadge status={invoice.status} />
+          <Badge status={invoice.status} />
           <p className="mt-2 text-2xl font-semibold tabular-nums">{peso(invoice.totalAmount)}</p>
           {(compare(deliveryFee, ZERO) !== 0 || compare(otherFees, ZERO) !== 0) && (
             <dl className="mt-1 space-y-0.5 text-sm text-neutral-500 dark:text-neutral-400">
@@ -158,21 +159,7 @@ return (
         </div>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          <strong className="font-medium">Refused:</strong> {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
-      {sp.warning && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          ⚠️ {sp.warning}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <section className="grid gap-4 md:grid-cols-2">
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
@@ -186,7 +173,7 @@ return (
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
           <h2 className="mb-3 font-medium">Evidence</h2>
           {invoice.receiptFileId ? (
-            <span className="text-green-700 dark:text-green-400">
+            <span className="text-success">
               photo attached &mdash; uploaded, not typed{' '}
               {canViewReceipt && (
                 <a href={`/files/${invoice.receiptFileId}`} target="_blank" rel="noopener noreferrer" className={ACTION_LINK}>
@@ -195,7 +182,7 @@ return (
               )}
             </span>
           ) : (
-            <span className="text-amber-700 dark:text-amber-400">none &mdash; required to verify</span>
+            <span className="text-warning-ink">none &mdash; required to verify</span>
           )}
         </div>
       </section>
@@ -229,10 +216,10 @@ return (
               const prior = existingLines[i - 1];
               return (
                 <div key={i} className="grid grid-cols-2 gap-2 sm:grid-cols-6">
-                  <select
+                  <Select
                     name={`line${i}_itemId`}
                     defaultValue={prior?.itemId ?? ''}
-                    className={`${INPUT} col-span-2`}
+                    className="w-full col-span-2"
                   >
                     <option value="">&mdash;</option>
                     {picker.known.length > 0 && (
@@ -252,32 +239,32 @@ return (
                         </option>
                       ))}
                     </optgroup>
-                  </select>
+                  </Select>
                   <input
                     name={`line${i}_quantity`}
                     inputMode="decimal"
                     placeholder="qty"
                     defaultValue={prior?.quantity ?? ''}
-                    className={INPUT}
+                    className={FIELD}
                   />
-                  <select name={`line${i}_purchaseUnit`} defaultValue={prior?.purchaseUnit ?? 'pcs'} className={INPUT}>
+                  <Select name={`line${i}_purchaseUnit`} defaultValue={prior?.purchaseUnit ?? 'pcs'} className="w-full">
                     {['pcs', 'kg', 'g', 'ltr', 'ml', 'roll', 'box', 'pack', 'case', 'sack', 'tray', 'dozen'].map((u) => (
                       <option key={u} value={u}>{u}</option>
                     ))}
-                  </select>
+                  </Select>
                   <input
                     name={`line${i}_conversionFactor`}
                     inputMode="decimal"
                     placeholder="per unit"
                     defaultValue={prior?.conversionFactor ?? '1'}
-                    className={INPUT}
+                    className={FIELD}
                   />
                   <input
                     name={`line${i}_unitPrice`}
                     inputMode="decimal"
                     placeholder="₱ each"
                     defaultValue={prior?.unitPrice ?? ''}
-                    className={INPUT}
+                    className={FIELD}
                   />
                 </div>
               );
@@ -322,7 +309,7 @@ return (
       )}
 
       {invoice.status === 'pending' && draftExpenses.length > 0 && (
-        <section className="space-y-2 rounded-lg border border-amber-200 p-4 dark:border-amber-900">
+        <section className="space-y-2 rounded-lg border border-warning p-4">
           <h2 className="font-medium">What verifying will post</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             The four checks below attest the DOCUMENT is genuine. Posting attests the CODING is
@@ -351,7 +338,7 @@ return (
                       <tr key={e.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                         <td className="px-3 py-2">{cat?.category ?? e.categoryId}</td>
                         <td className="px-3 py-2 font-mono text-xs text-neutral-500 dark:text-neutral-400">
-                          {cat?.accountCode ?? <span className="text-red-600 dark:text-red-400">unmapped — will block</span>}
+                          {cat?.accountCode ?? <span className="text-danger">unmapped — will block</span>}
                         </td>
                         <td className="px-3 py-2">
                           <a href={`/expenses/${e.id}`} className="underline hover:no-underline">{e.particulars}</a>
@@ -404,12 +391,9 @@ return (
               />
             </>
           )}
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-          >
+          <Button type="submit" variant="primary">
             Verify &mdash; all four must be checked
-          </button>
+          </Button>
         </form>
       )}
 
@@ -476,22 +460,19 @@ return (
                         {p.otherBills.length > 0 && ` This also re-opens ${p.otherBills.map(billName).join(', ')}.`}
                       </p>
                       <Field label="Reason">
-                        <input name="reason" required className={INPUT} />
+                        <Input name="reason" required className="w-full" />
                       </Field>
                       {!p.periodOpen && (
                         <Field
                           label="Reversal date"
                           hint="This payment is in a closed month. The reversal is dated in an open month."
                         >
-                          <input name="voidOn" type="date" required defaultValue={today} className={INPUT} />
+                          <Input name="voidOn" type="date" required defaultValue={today} className="w-full" />
                         </Field>
                       )}
-                      <button
-                        type="submit"
-                        className="rounded border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
-                      >
+                      <Button type="submit" variant="danger">
                         Void payment
-                      </button>
+                      </Button>
                     </form>
                   </details>
                 )}
@@ -514,7 +495,7 @@ return (
             <input type="hidden" name="storeId" value={invoice.storeId} />
             <div className="grid grid-cols-2 gap-3">
               <Field label="Category">
-                <select name="categoryId" required defaultValue="" className={INPUT}>
+                <Select name="categoryId" required defaultValue="" className="w-full">
                   <option value="" disabled>Select…</option>
                   {/* ⭐ T-229 slice 2 — active only: this select adds a NEW line. The same
                       `categories` list still labels the EXISTING lines above, retired ones
@@ -530,10 +511,10 @@ return (
                       </optgroup>
                     );
                   })}
-                </select>
+                </Select>
               </Field>
               <Field label="Particulars">
-                <input name="particulars" required className={INPUT} />
+                <Input name="particulars" required className="w-full" />
               </Field>
             </div>
             <div>
@@ -558,30 +539,30 @@ return (
                 <ClosedMonthOverride closedMonths={[closedMonth]} dateFieldName="invoiceDate" initialDate={invoice.invoiceDate} />
               </>
             )}
-            <button type="submit" className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900">
+            <Button type="submit" variant="secondary">
               Record expense
-            </button>
+            </Button>
           </form>
         </section>
       )}
 
       {invoice.status !== 'voided' && (
-        <form action={voidInvoiceAction} className="flex flex-wrap items-end gap-3 rounded-lg border border-red-200 p-4 text-sm dark:border-red-900 gap-y-2">
+        <form action={voidInvoiceAction} className="flex flex-wrap items-end gap-3 rounded-lg border border-danger p-4 text-sm gap-y-2">
           <input type="hidden" name="invoiceId" value={invoice.id} />
           <Field label="Void reason">
-            <input name="reason" required className={INPUT} />
+            <Input name="reason" required className="w-full" />
           </Field>
-          <button type="submit" className="rounded border border-red-300 px-4 py-2 font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950">
+          <Button type="submit" variant="danger">
             Void — cascades through every linked expense
-          </button>
+          </Button>
         </form>
       )}
     </Page>
   );
 }
 
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+// The three number boxes stay raw <input>s: t343-s5-5t-number-boxes reads their source text. Kit field tokens.
+const FIELD = 'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -602,16 +583,6 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const cls =
-    status === 'verified'
-      ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'
-      : status === 'voided'
-        ? 'bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
-        : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
-  return <span className={`rounded px-2 py-1 text-xs font-medium ${cls}`}>{status}</span>;
-}
-
 /** A2/A6: lines already saved show locked (Edit); an invoice with no lines yet is an add, open, with Save. */
 function LinesShell({ saved, invoiceId, typed, children }: { saved: boolean; invoiceId: string; typed: TypedView | null; children: React.ReactNode }) {
   if (saved) {
@@ -625,9 +596,9 @@ function LinesShell({ saved, invoiceId, typed, children }: { saved: boolean; inv
     <form action={setInvoiceLinesAction} className="space-y-2">
       <input type="hidden" name="invoiceId" value={invoiceId} />
       {children}
-      <button type="submit" className="rounded border border-neutral-300 px-4 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+      <Button type="submit" variant="secondary">
         Save
-      </button>
+      </Button>
     </form>
   );
 }

@@ -4,7 +4,7 @@ import { identityView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid, Field } from '@/components/ui';
+import { Banner, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Organisation — Shareat System' };
@@ -77,19 +77,18 @@ export default async function OrganizationSettingsPage({
         </PageDescription>
       </div>
 
-      {sp.error && <Banner tone="error">{sp.error}</Banner>}
-      {sp.ok && <Banner tone="ok">{sp.ok}</Banner>}
+      <FlashBanner flash={sp} />
 
       {/* ⭐ The insistence the nullable columns deliberately do not provide. */}
       {missing.length > 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong>
             This organisation has no {missing.join(', no ')} recorded.
           </strong>{' '}
           Anything printed from these books will carry the trading name{' '}
           <strong>{identity.name}</strong> and nothing else — which is not the identity the business
           is registered under.
-        </div>
+        </Banner>
       )}
 
       <EditableRecord action={setOrganizationIdentityAction} label="Organisation" hidden={{}}>
@@ -105,11 +104,11 @@ export default async function OrganizationSettingsPage({
               </span>
             }
           >
-            <input
+            <Input
               name="legalName"
               defaultValue={identity.legalName ?? ''}
               placeholder="Shareat Food Corporation"
-              className={`${FIELD} mt-1 w-full`}
+              className="mt-1 w-full"
             />
           </Field>
 
@@ -120,22 +119,22 @@ export default async function OrganizationSettingsPage({
               </span>
             }
           >
-            <input
+            <Input
               name="tin"
               defaultValue={identity.tin ?? ''}
               inputMode="numeric"
               placeholder="123-456-789"
-              className={`${FIELD} mt-1 w-full tabular-nums`}
+              className="mt-1 w-full tabular-nums"
             />
           </Field>
 
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Tax type</span>}>
-            <select name="taxType" defaultValue={identity.taxType ?? ''} className={`${FIELD} mt-1 w-full`}>
+            <Select name="taxType" defaultValue={identity.taxType ?? ''} className="mt-1 w-full">
               {/* ⭐ A real choice, not a placeholder: blank means "not stated" and is stored as null. */}
               <option value="">— not stated —</option>
               <option value="vat">VAT-registered</option>
               <option value="non_vat">Non-VAT</option>
-            </select>
+            </Select>
           </Field>
         </FormGrid>
       </EditableRecord>
@@ -148,14 +147,3 @@ export default async function OrganizationSettingsPage({
     </Page>
   );
 }
-
-function Banner({ tone, children }: { tone: 'error' | 'ok'; children: React.ReactNode }) {
-  const cls =
-    tone === 'error'
-      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
-      : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-  return <div className={`rounded-lg border p-4 text-sm ${cls}`}>{children}</div>;
-}
-
-const FIELD =
-  'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';

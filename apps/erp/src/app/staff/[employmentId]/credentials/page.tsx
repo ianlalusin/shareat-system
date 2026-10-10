@@ -8,7 +8,7 @@ import { listStores, withOrgPrincipal } from '../../../expenses/lib';
 import { enrolCardAction, enrolFingerprintAction, revokeCredentialAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
-import { Input } from '@/components/ui';
+import { Button, FlashBanner, Input, Textarea } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -19,9 +19,6 @@ interface SearchParams {
   error?: string;
   ok?: string;
 }
-
-const BTN =
-  'rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
 
 function fmt(d: Date): string {
   return d.toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
@@ -89,16 +86,7 @@ export default async function CredentialsPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <section className="space-y-3">
         <h2 className="font-medium">
@@ -120,12 +108,9 @@ export default async function CredentialsPage({
                   <input type="hidden" name="credentialId" value={c.id} />
                   <input type="hidden" name="employmentId" value={employmentId} />
                   <Input name="reason" required placeholder="Reason to revoke" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
-                  <button
-                    type="submit"
-                    className="rounded border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
-                  >
+                  <Button type="submit" variant="danger">
                     Revoke
-                  </button>
+                  </Button>
                 </form>
               </li>
             ))}
@@ -145,17 +130,17 @@ export default async function CredentialsPage({
             <span className="block text-neutral-600 dark:text-neutral-400">Card id</span>
             <Input name="cardId" required autoFocus placeholder="Scan or type" className="w-full" />
           </label>
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="primary">
             Enrol card
-          </button>
+          </Button>
         </form>
       </section>
 
-      <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
-        <h2 className="font-medium text-amber-900 dark:text-amber-200">
+      <section className="space-y-3 rounded-lg border border-warning bg-warning-soft p-4">
+        <h2 className="font-medium text-warning-ink">
           Enrol a fingerprint — not a working capture flow
         </h2>
-        <p className="text-xs text-amber-800 dark:text-amber-300">
+        <p className="text-xs text-warning-ink">
           ⚠️ There is no fingerprint reader wired into this app anywhere — that needs the native
           reader in the APK D2 parked. This form accepts raw template text, typed or pasted, one per
           line. It is useful only for seeding test data or as a target for a future reader
@@ -163,18 +148,15 @@ export default async function CredentialsPage({
         </p>
         <form action={enrolFingerprintAction} className="space-y-2">
           <input type="hidden" name="employmentId" value={employmentId} />
-          <textarea
+          <Textarea
             name="templates"
             rows={3}
             placeholder={`Up to ${MAX_TEMPLATES} templates, one per line`}
-            className="w-full rounded border border-amber-300 bg-white p-2 font-mono text-xs dark:border-amber-800 dark:bg-neutral-950"
+            className="w-full font-mono text-xs"
           />
-          <button
-            type="submit"
-            className="rounded border border-amber-400 bg-white px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:bg-neutral-950 dark:text-amber-200 dark:hover:bg-neutral-900"
-          >
+          <Button type="submit" variant="secondary">
             Enrol fingerprint (test/dev only)
-          </button>
+          </Button>
         </form>
       </section>
     </Page>

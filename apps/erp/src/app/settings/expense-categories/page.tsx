@@ -10,7 +10,7 @@ import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid, Field } from '@/components/ui';
+import { Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Expense categories — Shareat System' };
@@ -74,8 +74,7 @@ export default async function ExpenseCategoriesSettingsPage({
         </PageDescription>
       </div>
 
-      {sp.error && <Banner tone="error">{sp.error}</Banner>}
-      {sp.ok && <Banner tone="ok">{sp.ok}</Banner>}
+      <FlashBanner flash={sp} />
 
       <p className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
         {unmapped.length === 0 ? (
@@ -111,7 +110,7 @@ export default async function ExpenseCategoriesSettingsPage({
                 <tr
                   key={c.id}
                   className={`border-b border-neutral-100 align-middle dark:border-neutral-900 ${
-                    !c.isActive ? 'opacity-60' : isUnmapped ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''
+                    !c.isActive ? 'opacity-60' : isUnmapped ? 'bg-warning-soft' : ''
                   }`}
                 >
                   <td className="py-2 pr-3">
@@ -123,17 +122,17 @@ export default async function ExpenseCategoriesSettingsPage({
                       c.category
                     ) : (
                       <EditableRecord action={renameCategoryAction} label={c.category} hidden={{ categoryId: c.id }}>
-                        <input
+                        <Input
                           name="category"
                           defaultValue={c.category}
                           required
                           aria-label={`Name of ${c.category}`}
-                          className={`${FIELD} w-full py-1`}
+                          className="w-full py-1"
                         />
                       </EditableRecord>
                     )}
                     {isUnmapped && (
-                      <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900 dark:text-amber-100">
+                      <span className="ml-2 rounded bg-warning-soft px-1.5 py-0.5 text-[11px] font-medium text-warning-ink">
                         unmapped
                       </span>
                     )}
@@ -164,7 +163,7 @@ export default async function ExpenseCategoriesSettingsPage({
                     {c.blockedDraftCount === 0 ? (
                       '—'
                     ) : (
-                      <span className="font-medium text-amber-800 dark:text-amber-300">
+                      <span className="font-medium text-warning-ink">
                         {c.blockedDraftCount} draft{c.blockedDraftCount === 1 ? '' : 's'}
                       </span>
                     )}
@@ -176,10 +175,10 @@ export default async function ExpenseCategoriesSettingsPage({
                       label={`account for ${c.category}`}
                       hidden={{ categoryId: c.id, categoryLabel: c.category }}
                     >
-                      <select
+                      <Select
                         name="accountCode"
                         defaultValue={c.accountCode ?? ''}
-                        className={`${FIELD} w-full`}
+                        className="w-full"
                         aria-label={`Account for ${c.category}`}
                       >
                         {/* ⭐ A real choice, not a placeholder: picking it CLEARS the mapping.
@@ -191,17 +190,17 @@ export default async function ExpenseCategoriesSettingsPage({
                             {a.code} · {a.name}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </EditableRecord> 
                     ) : (
                       /* No account saved yet: an ADD, open with Save (A6 rule 1). */
                       <form action={setCategoryAccountAction} className="space-y-2">
                         <input type="hidden" name="categoryId" value={c.id} />
                         <input type="hidden" name="categoryLabel" value={c.category} />
-                        <select
+                        <Select
                         name="accountCode"
                         defaultValue=""
-                        className={`${FIELD} w-full`}
+                        className="w-full"
                         aria-label={`Account for ${c.category}`}
                       >
                         {/* ⭐ A real choice, not a placeholder: picking it CLEARS the mapping.
@@ -213,10 +212,10 @@ export default async function ExpenseCategoriesSettingsPage({
                             {a.code} · {a.name}
                           </option>
                         ))}
-                      </select>
-                        <button type="submit" className={BTN}>
+                      </Select>
+                        <Button type="submit" variant="secondary">
                           Save
-                        </button>
+                        </Button>
                       </form>
                     )}
                   </td>
@@ -235,30 +234,30 @@ export default async function ExpenseCategoriesSettingsPage({
         <form action={createCategoryAction} className="mt-3 space-y-3 text-sm">
           <FormGrid>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}>
-              <input name="category" required placeholder="Scooter rental" className={`${FIELD} w-full`} />
+              <Input name="category" required placeholder="Scooter rental" className="w-full" />
             </Field>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Group</span>}>
-              <select name="group" defaultValue="OPEX" className={`${FIELD} w-full`}>
+              <Select name="group" defaultValue="OPEX" className="w-full">
                 <option value="OPEX">OPEX — running cost</option>
                 <option value="COGS">COGS — cost of goods sold</option>
                 <option value="CAPEX">CAPEX — equipment</option>
                 <option value="PERSONAL">PERSONAL — owner&apos;s drawings</option>
-              </select>
+              </Select>
             </Field>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Posts to</span>}>
-              <select name="accountCode" defaultValue="" className={`${FIELD} w-full`}>
+              <Select name="accountCode" defaultValue="" className="w-full">
                 <option value="">— none (blocks posting) —</option>
                 {accounts.map((a) => (
                   <option key={a.code} value={a.code}>
                     {a.code} · {a.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
           </FormGrid>
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="primary">
             Save
-          </button>
+          </Button>
         </form>
         <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
           Names are compared ignoring case and spacing, so <code>Rent</code> and{' '}
@@ -278,16 +277,3 @@ export default async function ExpenseCategoriesSettingsPage({
     </Page>
   );
 }
-
-function Banner({ tone, children }: { tone: 'error' | 'ok'; children: React.ReactNode }) {
-  const cls =
-    tone === 'error'
-      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
-      : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-  return <div className={`rounded-lg border p-4 text-sm ${cls}`}>{children}</div>;
-}
-
-const FIELD =
-  'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';
