@@ -22,6 +22,7 @@ import {
   itemRequests,
   type ItemRequestStatus,
   type BaseUnit,
+  type PurchaseUnit,
   type ItemKind,
   type ItemStatus,
 } from '../../schema/items';
@@ -44,6 +45,9 @@ export interface ItemRow {
   sellableRetail: boolean;
   sellableWholesale: boolean;
   notes: string | null;
+  /** T-391 S1: the default buying unit and its ratio to the base unit; both null or both set. */
+  purchaseUnit: PurchaseUnit | null;
+  purchaseFactor: string | null;
   createdBy: string;
   createdAt: Date;
 }
@@ -125,6 +129,8 @@ export async function updateItem(
     sellableRetail: boolean;
     sellableWholesale: boolean;
     costBasisItemId: string | null;
+    purchaseUnit: PurchaseUnit | null;
+    purchaseFactor: Decimal<'14,6'> | null;
   }>,
 ): Promise<void> {
   const updated = await tx

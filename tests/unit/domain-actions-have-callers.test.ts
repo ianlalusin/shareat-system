@@ -89,6 +89,9 @@ function actionShapedExports(): Map<string, string> {
  * off the same day** by T-226, and the stale-exemption rule below is what forced their rows out.
  */
 const EXEMPT: Record<string, string> = {
+  setItemPurchaseUnit:
+    'UNWIRED — T-391 S3 item apply is its caller (the master-data load script); there is no screen for the buying unit yet, ' +
+    'and the load is the only writer planned.',
   // ---- 1. internal: called by another domain function that is itself wired -------------------
   recordCharge:
     'INTERNAL — `dispatchTradeOrder` calls it (`trade/index.ts:460`); dispatch IS the billing ' +

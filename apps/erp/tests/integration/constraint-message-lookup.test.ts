@@ -621,10 +621,35 @@ describe('T-386 S6 - the item-code shape CHECK', () => {
   });
 });
 
+// T-391 S1 (0193): the three item buying-unit CHECKs, provoked for real; the person reads the sentence, not the raw error.
+describe('T-391 S1 - the item buying-unit CHECKs', () => {
+  const legs = [
+    { key: 'items_purchase_pair_check', unit: 'box', factor: null as string | null },
+    { key: 'items_purchase_unit_check', unit: 'kg', factor: '1' },
+    { key: 'items_purchase_factor_check', unit: 'box', factor: '0' },
+  ];
+  for (const leg of legs) {
+    it(leg.key, async () => {
+      const code = uid('t391-lookup');
+      const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
+      const orgId = org!.id;
+      const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
+      const [item] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by)
+                values (${orgId}, 'PRCH-001', 'Pork', 'raw_material', 'kg', ${person!.id}) returning id`;
+      const err = await provoke(
+        () => sql`update items set purchase_unit = ${leg.unit}, purchase_factor = ${leg.factor} where id = ${item!.id}`,
+      );
+      const row = record(leg.key, err);
+      expect(row.constraintName).toBe(leg.key);
+      expect(row.message, `a raw driver error reached the person: ${row.message}`).toBe(CONSTRAINT_MESSAGES[leg.key as keyof typeof CONSTRAINT_MESSAGES]);
+    });
+  }
+});
+
 it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   const exercised = new Set(rows.map((r) => r.key));
   const missing = Object.keys(CONSTRAINT_MESSAGES).filter((k) => !exercised.has(k));
   expect(missing).toEqual([]);
   // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys + T-383 S1's items blank-name and blank-code CHECK keys + T-385 S2's sales_days_verify_requires_submitted + T-386 S2's items_code_never_reused + T-386 S6's items_code_shape_check = 44 rows provoked above.
-  expect(rows.length).toBe(44);
+  expect(rows.length).toBe(47);
 });
