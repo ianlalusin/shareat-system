@@ -11,6 +11,7 @@ import { check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } fr
 import { items } from './items';
 import { organizations } from './organizations';
 import { persons } from './persons';
+import { stockLocations } from './stock-locations';
 import { stores } from './stores';
 
 export const STEP_COMPLETIONS = ['verified', 'attested', 'performed'] as const;
@@ -69,6 +70,10 @@ export const openingCounts = pgTable(
     storeId: uuid('store_id')
       .notNull()
       .references(() => stores.id, { onDelete: 'restrict' }),
+    // NOTE: trigger hand-added in migration 0191 (opening_counts_room_in_store: the room must be a room of store_id).
+    locationId: uuid('location_id')
+      .notNull()
+      .references(() => stockLocations.id, { onDelete: 'restrict' }),
     itemId: uuid('item_id')
       .notNull()
       .references(() => items.id, { onDelete: 'restrict' }),
@@ -76,6 +81,9 @@ export const openingCounts = pgTable(
     quantity: numeric('quantity', { precision: 14, scale: 3 }).notNull(),
     /** Null until the count is valued. C3 lists these as gaps, by name. */
     unitCost: numeric('unit_cost', { precision: 14, scale: 4 }),
+    /** T-390 R2: where the cost came from ('typed', 'v1_last_delivery', ...). Null together with unit_cost. */
+    costSource: text('cost_source'),
+    costEvidence: text('cost_evidence'),
     note: text('note'),
     countedBy: uuid('counted_by')
       .notNull()
@@ -86,7 +94,10 @@ export const openingCounts = pgTable(
   (t) => [
     check('opening_counts_quantity_non_negative_check', sql`${t.quantity} >= 0`),
     check('opening_counts_unit_cost_non_negative_check', sql`${t.unitCost} is null or ${t.unitCost} >= 0`),
-    uniqueIndex('opening_counts_store_item_key').on(t.storeId, t.itemId),
+    uniqueIndex('opening_counts_store_location_item_key').on(t.storeId, t.locationId, t.itemId),
+    index('opening_counts_location_idx').on(t.locationId),
+    check('opening_counts_cost_source_pair_check', sql`(${t.unitCost} is null) = (${t.costSource} is null)`),
+    check('opening_counts_cost_source_not_blank_check', sql`${t.costSource} is null or length(trim(${t.costSource})) > 0`),
     index('opening_counts_org_idx').on(t.orgId),
     check('opening_counts_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
     check('opening_counts_unit_cost_finite_check', sql`${t.unitCost} > '-Infinity'::numeric and ${t.unitCost} < 'Infinity'::numeric`),

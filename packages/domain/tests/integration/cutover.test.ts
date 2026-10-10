@@ -74,6 +74,8 @@ async function fixture(hint: string) {
   const adminId = await mk('Admin', 'admin');
   const superId = await mk('Super', 'super_admin');
   const staffId = await mk('Staff', 'staff');
+  const [locType] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${orgId}, 'STK', 'Stockroom') returning id`;
+  await sql`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${orgId}, ${store!.id}, 'KIT', 'Kitchen', ${locType!.id}, 'operating', true, ${adminId})`; // T-390 R1: a count needs a default room
 
   return {
     orgId, storeId: store!.id,
@@ -227,7 +229,7 @@ describe('B3 — an item silently absent is not an item counted as zero', () => 
     const f = await fixture('costed');
     const itemId = await anItem(f, 'Squid');
     await asOrg(f.orgId, (tx) =>
-      recordOpeningCount(tx, f.admin, { storeId: f.storeId, itemId, quantity: '4', unitCost: '250' }),
+      recordOpeningCount(tx, f.admin, { storeId: f.storeId, itemId, quantity: '4', unitCost: '250', costSource: 'typed' }),
     );
     const gaps = await asOrg(f.orgId, (tx) => openingGaps(tx, f.orgId, '2027-01-01'));
     expect(gaps.countsWithoutCost).toHaveLength(0);

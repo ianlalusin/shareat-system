@@ -4,8 +4,8 @@
  * ⭐ Every `*Holds` function is a QUERY over real state. **None of them can be satisfied by a
  * click**, which is invariant 1 and the difference between a verified step and an honest tick.
  */
-import { and, eq, sql } from 'drizzle-orm';
-import type { Decimal, Quantity } from '@shareat/core/money';
+import { and, eq, ne, sql } from 'drizzle-orm';
+import { decimal, type Decimal, type Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
 import { cutoverSteps, openingCounts } from '../../schema/cutover';
 import { tablesInClass } from '../cutover/classification';
@@ -102,7 +102,9 @@ export async function countsWithoutCost(
     select oc.item_id, i.name, oc.store_id
     from opening_counts oc
     join items i on i.id = oc.item_id
-    where oc.org_id = ${orgId} and oc.unit_cost is null and oc.quantity > 0
+    where oc.org_id = ${orgId}
+    group by oc.item_id, i.name, oc.store_id
+    having sum(oc.quantity) > 0 and bool_and(oc.unit_cost is null)
     order by i.name
   `)) as unknown as Record<string, string>[];
   return rows.map((r) => ({
@@ -157,29 +159,136 @@ export async function recordStep(
 // The opening count
 // -------------------------------------------------------------------------------------
 
+/** T-390 R13: the SHARED opening lock. Writers run side by side; `postOpeningBalances` (S2) takes the EXCLUSIVE twin. Taken BEFORE the R8 check. */
+export async function lockOpeningShared(tx: Tx, orgId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock_shared(390001, hashtext(${orgId}::text))`);
+}
+
+/**
+ * T-390 R3: serialise writers of ONE item in ONE store (cost propagation reads and writes every room row of the item).
+ * LOCK ORDER, always: (1) shared org opening lock (390001), (2) this item lock (390002), (3) row writes. The exclusive C5 lock is
+ * taken first by its own transaction, so no cycle exists.
+ */
+export async function lockOpeningItem(tx: Tx, storeId: string, itemId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(390002, hashtext(${storeId}::text || ':' || ${itemId}::text))`);
+}
+
+/** T-390 R8: has the opening been posted? A posted `opening_balance` entry exists. */
+export async function openingPosted(tx: Tx, orgId: string): Promise<{ posted: boolean; entryDate: string | null }> {
+  const [row] = (await tx.execute(sql`
+    select min(entry_date)::text as entry_date
+    from journal_entries
+    where org_id = ${orgId} and source_type = 'opening_balance' and status = 'posted'
+  `)) as unknown as Record<string, string | null>[];
+  const entryDate = row?.entry_date ?? null;
+  return { posted: entryDate !== null, entryDate };
+}
+
+/** A room's store and status, or null when there is no such room in this org. */
+export async function roomOf(
+  tx: Tx,
+  orgId: string,
+  locationId: string,
+): Promise<{ storeId: string; status: string } | null> {
+  const [row] = (await tx.execute(sql`
+    select store_id, status from stock_locations where id = ${locationId} and org_id = ${orgId}
+  `)) as unknown as Record<string, string>[];
+  return row ? { storeId: String(row.store_id), status: String(row.status) } : null;
+}
+
+/** The store's one active default room, or null when it has none (or, defensively, more than one). */
+export async function defaultRoomId(tx: Tx, orgId: string, storeId: string): Promise<string | null> {
+  const rows = (await tx.execute(sql`
+    select id from stock_locations
+    where org_id = ${orgId} and store_id = ${storeId} and is_default and status = 'active'
+  `)) as unknown as Record<string, string>[];
+  return rows.length === 1 ? String(rows[0]!.id) : null;
+}
+
+/**
+ * T-390 R1-R3. One row per (store, room, item).
+ *
+ * - A cost (with its source) is written on this row AND on every other room row of that item in that store: one cost per item
+ *   per store.
+ * - A count WITHOUT a cost never changes any cost: an existing row keeps its own, and a NEW room row takes the cost and source
+ *   the item already has in this store (if any).
+ */
 export async function upsertOpeningCount(
   tx: Tx,
   input: Pick<SafeInsert<typeof openingCounts>, 'orgId' | 'storeId' | 'itemId'> & {
+    locationId: string;
     // T-371 C2/R3: each numeric column takes its own minted shape — quantity (14,3), unit_cost (14,4), nullable.
     quantity: Quantity;
     unitCost: Decimal<'14,4'> | null;
+    costSource: string | null;
+    costEvidence: string | null;
     note: string | null;
     countedBy: string;
   },
 ): Promise<void> {
+  let { unitCost, costSource, costEvidence } = input;
+  const withCost = unitCost !== null;
+  if (!withCost) {
+    const [sib] = (await tx.execute(sql`
+      select unit_cost::text as unit_cost, cost_source, cost_evidence from opening_counts
+      where org_id = ${input.orgId} and store_id = ${input.storeId} and item_id = ${input.itemId} and unit_cost is not null
+      order by counted_at desc limit 1
+    `)) as unknown as Record<string, string | null>[];
+    if (sib) {
+      unitCost = sib.unit_cost == null ? null : decimal(sib.unit_cost, '14,4');
+      costSource = sib.cost_source ?? null;
+      costEvidence = sib.cost_evidence ?? null;
+    }
+  }
+  const { locationId, quantity, note, countedBy } = input;
+  // Leg 2: a cost-less recount of a row that has no cost of its own takes the sibling cost found above.
+  let inherit = false;
+  if (!withCost && unitCost !== null) {
+    const [own] = (await tx.execute(sql`
+      select unit_cost is not null as costed from opening_counts
+      where store_id = ${input.storeId} and location_id = ${locationId} and item_id = ${input.itemId}
+    `)) as unknown as { costed: boolean }[];
+    inherit = own !== undefined && !own.costed;
+  }
   await tx
     .insert(openingCounts)
-    .values(input)
+    .values({
+      orgId: input.orgId,
+      storeId: input.storeId,
+      locationId,
+      itemId: input.itemId,
+      quantity,
+      unitCost,
+      costSource,
+      costEvidence,
+      note,
+      countedBy,
+    })
     .onConflictDoUpdate({
-      target: [openingCounts.storeId, openingCounts.itemId],
+      target: [openingCounts.storeId, openingCounts.locationId, openingCounts.itemId],
       set: {
-        quantity: input.quantity,
-        unitCost: input.unitCost,
-        note: input.note,
-        countedBy: input.countedBy,
+        quantity,
+        // A typed cost overwrites. A cost-less recount never changes a costed row; a row with NO cost of its own takes the
+        // store's existing cost and source from a costed sibling (`inherit`, computed above; absent when there is none).
+        ...(withCost || inherit ? { unitCost, costSource, costEvidence } : {}),
+        note,
+        countedBy,
         countedAt: sql`now()`,
       },
     });
+  if (withCost) {
+    await tx
+      .update(openingCounts)
+      .set({ unitCost, costSource, costEvidence })
+      .where(
+        and(
+          eq(openingCounts.orgId, input.orgId),
+          eq(openingCounts.storeId, input.storeId),
+          eq(openingCounts.itemId, input.itemId),
+          ne(openingCounts.locationId, locationId),
+        ),
+      );
+  }
 }
 
 /** The valued total of everything counted — what the inventory opening figure should come to. */

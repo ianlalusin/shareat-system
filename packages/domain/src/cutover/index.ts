@@ -216,27 +216,81 @@ export async function attestStep(
   return transaction(run);
 }
 
-/** Enter, or correct, a counted quantity. ⭐ Zero is a real answer and must be entered on purpose. */
+/**
+ * Enter, or correct, a counted quantity. Zero is a real answer and must be entered on purpose.
+ *
+ * T-390 R1: the count belongs to a room; no room means the store's default room. R2: a cost needs a source. R8/R13: refused once the
+ * opening is posted, after taking the shared opening lock.
+ */
 export async function recordOpeningCount(
   tx: Tx | null,
   actor: Actor,
-  input: { storeId: string; itemId: string; quantity: string; unitCost?: string | null; note?: string | null },
+  input: {
+    storeId: string;
+    locationId?: string | null;
+    itemId: string;
+    quantity: string;
+    unitCost?: string | null;
+    costSource?: string | null;
+    costEvidence?: string | null;
+    note?: string | null;
+  },
 ): Promise<void> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'run_cutover', { storeId: input.storeId });
+    // Lock order: shared org lock, then the (store, item) lock, then row writes (see repo lockOpeningItem).
+    await cutoverRepo.lockOpeningShared(trx, actor.orgId);
+    await cutoverRepo.lockOpeningItem(trx, input.storeId, input.itemId);
+    const opened = await cutoverRepo.openingPosted(trx, actor.orgId);
+    if (opened.posted) {
+      throw refuse(
+        'recordOpeningCount: a posted opening_balance entry exists.',
+        `The books were opened on ${opened.entryDate}. A correction is now a reversal or an ordinary stock document.`,
+      );
+    }
     const quantity = parseQuantityInput(input.quantity, 'recordOpeningCount: the quantity', 'The count');
     if (compareQuantity(quantity, ZERO_QUANTITY) < 0) throw refuse('recordOpeningCount: a count cannot be negative.', 'A count cannot be negative.');
     const unitCost =
-      // T-371 R13: unit_cost is nullable, so a blank cost is null — never a guessed zero.
+      // T-371 R13: unit_cost is nullable, so a blank cost is null, never a guessed zero.
       input.unitCost != null && input.unitCost.trim() !== ''
         ? parseFourDecimalCost(input.unitCost, 'recordOpeningCount: the unit cost', 'The cost per unit')
         : null;
+    const costSource = input.costSource?.trim() || null;
+    if (unitCost !== null && costSource === null) {
+      throw refuse(
+        'recordOpeningCount: a cost needs a source.',
+        'A cost needs a source (where it came from), for example "typed".',
+      );
+    }
+    let locationId: string;
+    if (input.locationId) {
+      const room = await cutoverRepo.roomOf(trx, actor.orgId, input.locationId);
+      if (!room || room.storeId !== input.storeId) {
+        throw refuse('recordOpeningCount: the room is not a room of this store.', 'That room does not belong to this store.');
+      }
+      if (room.status !== 'active') {
+        throw refuse('recordOpeningCount: the room is not active.', 'That room is not active, so it cannot be counted.');
+      }
+      locationId = input.locationId;
+    } else {
+      const def = await cutoverRepo.defaultRoomId(trx, actor.orgId, input.storeId);
+      if (!def) {
+        throw refuse(
+          'recordOpeningCount: the store has no default room.',
+          'This store has no default room, so choose the room this count belongs to.',
+        );
+      }
+      locationId = def;
+    }
     await cutoverRepo.upsertOpeningCount(trx, {
       orgId: actor.orgId,
       storeId: input.storeId,
+      locationId,
       itemId: input.itemId,
       quantity,
       unitCost,
+      costSource: unitCost === null ? null : costSource,
+      costEvidence: unitCost === null ? null : input.costEvidence?.trim() || null,
       note: input.note?.trim() || null,
       countedBy: actor.personId,
     });
