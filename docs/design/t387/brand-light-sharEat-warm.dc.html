@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Option B SharEat Warm</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#d40909}a:hover{color:#1a1a1a}
+.s{--bg:#fbf4e4;--surface:#fffdf8;--border:#eadfc6;--ink:#2b2620;--muted:#6b5f4f;--brand:#d40909;--brand-h:#a00606;--on-brand:#ffffff;--danger:#a00606;--danger-s:#fde7e7;--warn-t:#7a4f00;--warn-s:#fce8b8;--warn-b:#f4b942;--ok:#0e6b45;--ok-s:#e2f1e8;--info:#1e4fb8;--info-s:#e7eefb;--vio:#6427c9;--vio-s:#eee7fb;--sla:#55606e;--sla-s:#efece4;--r:10px;--btn-r:999px;--head:'Baloo 2',sans-serif;--head-w:700;--body:'Plus Jakarta Sans',sans-serif;--focus:#2b2620;--field:#ffffff;--shadow:0 1px 0 rgba(43,38,32,.04),0 6px 18px -10px rgba(43,38,32,.18)}
+.s{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px}
+.s h1,.s h2,.s h3{font-family:var(--head);font-weight:var(--head-w);margin:0;letter-spacing:-.01em}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:calc(var(--r) + 4px);padding:24px;display:flex;flex-direction:column;gap:16px;box-shadow:var(--shadow);min-width:0}
+.eb{margin:0;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 18px;border-radius:var(--btn-r);font:600 14px var(--body);cursor:pointer;border:1px solid transparent;white-space:nowrap}
+.btn svg{width:16px;height:16px}
+.p{background:var(--brand);color:var(--on-brand)}
+.p.h{background:var(--brand-h)}
+.sec{background:var(--surface);border-color:var(--border);color:var(--ink)}
+.sec.h{background:var(--bg)}
+.gh{background:transparent;color:var(--ink)}
+.gh.h{background:var(--bg)}
+.dg{background:var(--surface);border-color:var(--danger);color:var(--danger)}
+.dg.h{background:var(--danger-s)}
+.dis{opacity:.45;cursor:not-allowed}
+.fr{outline:2px solid var(--focus);outline-offset:2px}
+.sm{height:36px;padding:0 12px;font-size:13px}
+.ic{width:44px;padding:0}
+.lbl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.lt{font-size:13px;font-weight:600;color:var(--ink)}
+.lt i{font-style:normal;color:var(--danger);margin-left:2px}
+.inp{height:44px;box-sizing:border-box;width:100%;border:1px solid var(--border);border-radius:var(--r);background:var(--field);padding:0 12px;font:400 14px var(--body);color:var(--ink);display:flex;align-items:center;justify-content:space-between}
+.inp.f{border-color:var(--ink);outline:2px solid var(--focus);outline-offset:2px}
+.inp.e{border-color:var(--danger);border-width:2px}
+.inp.d{background:var(--bg);color:var(--muted)}
+.ta{height:88px;align-items:flex-start;padding-top:10px}
+.hint{font-size:12px;color:var(--muted)}
+.err{font-size:12px;color:var(--danger);font-weight:600;display:flex;gap:6px;align-items:center}
+.err svg{width:14px;height:14px;flex:none}
+.bd{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:600}
+.bd b{width:6px;height:6px;border-radius:99px;background:currentColor}
+.b-dr{background:var(--info-s);color:var(--info)}
+.b-su{background:var(--warn-s);color:var(--warn-t)}
+.b-ok{background:var(--ok-s);color:var(--ok)}
+.b-vo{background:var(--danger-s);color:var(--danger)}
+.b-vi{background:var(--vio-s);color:var(--vio)}
+.b-sl{background:var(--sla-s);color:var(--sla)}
+.ban{display:grid;grid-template-columns:20px minmax(0,1fr);gap:12px;padding:14px 16px;border-radius:var(--r);font-size:14px;line-height:1.45;border:1px solid}
+.ban svg{width:20px;height:20px}
+.ban p{margin:0}
+.bn-e{background:var(--danger-s);border-color:var(--danger);color:var(--danger)}
+.bn-o{background:var(--ok-s);border-color:var(--ok);color:var(--ok)}
+.bn-w{background:var(--warn-s);border-color:var(--warn-b);color:var(--warn-t)}
+.bn-i{background:var(--info-s);border-color:var(--info);color:var(--info)}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th{text-align:left;font-size:12px;font-weight:600;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--border);background:var(--bg)}
+.tbl td{padding:12px;border-bottom:1px solid var(--border)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.chip{height:56px;border-radius:var(--r);border:1px solid rgba(0,0,0,.08)}
+.swl{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600}
+.chk{width:20px;height:20px;border-radius:5px;border:2px solid var(--ink);display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;background:var(--ink);color:var(--surface)}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:var(--btn-r);padding:3px;background:var(--bg);gap:2px}
+.seg span{height:36px;padding:0 14px;display:inline-flex;align-items:center;border-radius:calc(var(--btn-r) - 2px);font-weight:600;font-size:13px;color:var(--muted)}
+.seg span.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.toast{display:flex;gap:12px;align-items:center;background:var(--ink);color:var(--surface);border-radius:var(--r);padding:12px 16px;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.toast svg{width:18px;height:18px;color:#34d399;flex:none}
+.stamp{display:inline-flex;border:3px solid var(--ok);color:var(--ok);font:800 22px var(--body);letter-spacing:.14em;padding:6px 14px;border-radius:6px;transform:rotate(-8deg)}
+.kpi{display:flex;flex-direction:column;gap:6px}
+.kv{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+</style>
+</helmet>
+<div class="s" style="width: 1440px; height: 2360px; box-sizing: border-box; padding: 56px 64px; display: flex; flex-direction: column; gap: 24px">
+
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<p class="eb">Option B</p>
+<h1 style="font-size: 60px; line-height: 1">SharEat Warm</h1>
+<p style="margin: 0; font-size: 16px; color: var(--muted); max-width: 720px">The Website's identity carried into the back office: cream ground, warm ink, Baloo 2 headings and pill buttons. Gold marks attention and red still marks the one primary action. It reads as the same company as the menu and the website.</p>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 18px">
+<img src="/_blob/798085d5efe3297566097d0e356b9a3c" alt="SharEat logo" style="width: 48px; height: 48px">
+<span style="font-family: 'Baloo 2'; font-weight: 700; font-size: 26px; letter-spacing: -.01em; line-height: 1">Shar<span style="color: var(--brand)">E</span>at <span style="font-family: 'Plus Jakarta Sans'; font-size: 14px; font-weight: 600; color: var(--muted)">Back Office</span></span>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px">
+<div class="card">
+<p class="eb">Palette and roles</p>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px">
+<div class="swl"><div class="chip" style="background: #d40909"></div>Brand · 1 per view<span class="mono">#d40909 · 5.5:1</span></div>
+<div class="swl"><div class="chip" style="background: #a00606"></div>Danger<span class="mono">#a00606 · 8.3:1</span></div>
+<div class="swl"><div class="chip" style="background: #2b2620"></div>Warm ink<span class="mono">#2b2620 · 14:1</span></div>
+<div class="swl"><div class="chip" style="background: #f4b942"></div>Gold · attention<span class="mono">#f4b942 · fill only</span></div>
+<div class="swl"><div class="chip" style="background: #fbf4e4"></div>Cream canvas<span class="mono">#fbf4e4</span></div>
+<div class="swl"><div class="chip" style="background: #fffdf8"></div>Surface<span class="mono">#fffdf8</span></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px">
+<div class="swl"><div class="chip" style="background: #fce8b8; border-color: #f4b942"></div>Warning surface<span class="mono">text #7a4f00</span></div>
+<div class="swl"><div class="chip" style="background: #e2f1e8"></div>Success<span class="mono">#0e6b45</span></div>
+<div class="swl"><div class="chip" style="background: #e7eefb"></div>Info / draft<span class="mono">#1e4fb8</span></div>
+<div class="swl"><div class="chip" style="background: #eee7fb"></div>In progress<span class="mono">#6427c9</span></div>
+<div class="swl"><div class="chip" style="background: #efece4"></div>Closed<span class="mono">#55606e</span></div>
+<div class="swl"><div class="chip" style="background: #eadfc6"></div>Border<span class="mono">#eadfc6</span></div>
+</div>
+</div>
+<div class="card">
+<p class="eb">Type · Baloo 2 headings, Plus Jakarta Sans body</p>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-family: 'Baloo 2'; font-size: 38px; font-weight: 700; line-height: 1">Page title 38 / Baloo 2</div>
+<div style="font-family: 'Baloo 2'; font-size: 22px; font-weight: 700; line-height: 1.1">Section 22 / Baloo 2</div>
+<div style="font-size: 14px; line-height: 1.5">Body 14 / 400. Approve after the receipt matches the amount.</div>
+<div style="font-size: 12px; color: var(--muted)">Hint 12 / 400 · labels 13 / 600</div>
+<div style="font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums">₱ 184,320.00 <span class="mono">tabular</span></div>
+</div>
+<div class="row"><span class="mono">Pill buttons · fields radius 10 · cards 14 · control height 44 · warm soft shadow</span></div>
+</div>
+</div>
+
+<div class="card">
+<p class="eb">Buttons · default, hover, focus, disabled, pending</p>
+<div style="display: grid; grid-template-columns: 140px repeat(5, minmax(0, 1fr)); gap: 16px; align-items: center">
+<span class="mono"></span><span class="mono">Default</span><span class="mono">Hover</span><span class="mono">Keyboard focus</span><span class="mono">Disabled</span><span class="mono">Pending</span>
+<span class="lt">Primary</span>
+<div><button type="button" class="btn p">Submit</button></div>
+<div><button type="button" class="btn p h">Submit</button></div>
+<div><button type="button" class="btn p fr">Submit</button></div>
+<div><button type="button" class="btn p dis" disabled>Submit</button></div>
+<div><button type="button" class="btn p" aria-busy="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-9-9"></path></svg>Submitting…</button></div>
+<span class="lt">Secondary</span>
+<div><button type="button" class="btn sec">Save draft</button></div>
+<div><button type="button" class="btn sec h">Save draft</button></div>
+<div><button type="button" class="btn sec fr">Save draft</button></div>
+<div><button type="button" class="btn sec dis" disabled>Save draft</button></div>
+<div><button type="button" class="btn sec" aria-busy="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-9-9"></path></svg>Saving…</button></div>
+<span class="lt">Ghost</span>
+<div><button type="button" class="btn gh">Cancel</button></div>
+<div><button type="button" class="btn gh h">Cancel</button></div>
+<div><button type="button" class="btn gh fr">Cancel</button></div>
+<div><button type="button" class="btn gh dis" disabled>Cancel</button></div>
+<div class="row"><button type="button" class="btn sec ic" aria-label="Print"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"></path></svg></button><button type="button" class="btn sec sm">Small 36</button></div>
+<span class="lt">Danger</span>
+<div><button type="button" class="btn dg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 21h20L12 3zM12 10v5M12 18v.5"></path></svg>Void</button></div>
+<div><button type="button" class="btn dg h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 21h20L12 3zM12 10v5M12 18v.5"></path></svg>Void</button></div>
+<div><button type="button" class="btn dg fr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 21h20L12 3zM12 10v5M12 18v.5"></path></svg>Void</button></div>
+<div><button type="button" class="btn dg dis" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 21h20L12 3zM12 10v5M12 18v.5"></path></svg>Void</button></div>
+<div><a href="#" style="font-weight: 600">Text link</a></div>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px">
+<div class="card">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 4px"><p class="eb">Form · inline errors at the field</p><h2 style="font-size: 22px">Record an expense</h2></div>
+<span class="bd b-dr"><b></b>Draft</span>
+</div>
+<div class="ban bn-e" role="alert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.5"></path></svg><p><b>1 field needs fixing before you can submit.</b> <a href="#amt" style="color: inherit">Go to Amount</a></p></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 20px">
+<label class="lbl"><span class="lt">Store<i>*</i></span><span class="inp">Lipa <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"></path></svg></span></label>
+<label class="lbl"><span class="lt">Date<i>*</i></span><span class="inp f">09 Oct 2026 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg></span><span class="hint">Focused: 2px ink ring</span></label>
+<label class="lbl"><span class="lt">Category<i>*</i></span><span class="inp">Charcoal and LPG <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"></path></svg></span></label>
+<label class="lbl" id="amt"><span class="lt">Amount<i>*</i></span><span class="inp e" aria-invalid="true"><span><span style="color: var(--muted)">₱</span> 0.00</span></span><span class="err"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.5"></path></svg>Enter an amount greater than ₱0.00.</span></label>
+<label class="lbl"><span class="lt">Paid from</span><span class="inp d">Lipa petty cash · locked by till</span><span class="hint">Disabled: set by the open till</span></label>
+<label class="lbl"><span class="lt">Receipt no.</span><span class="inp" style="color: var(--muted)">e.g. OR-004512</span></label>
+<label class="lbl" style="grid-column: 1 / -1"><span class="lt">Notes</span><span class="inp ta" style="color: var(--muted)">What was bought, and why it wasn't on the PO</span></label>
+<div class="lbl"><span class="lt">Paid by</span><div class="seg"><span class="on">Store cash</span><span>Staff (reimburse)</span><span>Card</span></div></div>
+<div class="row" style="align-self: end; min-height: 44px"><span class="chk"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><path d="m5 12 5 5 9-10"></path></svg></span><span>Attach the receipt photo before I submit</span></div>
+</div>
+<div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border); padding-top: 16px">
+<button type="button" class="btn gh">Cancel</button>
+<button type="button" class="btn sec">Save draft</button>
+<button type="button" class="btn p">Submit for approval</button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 24px; min-width: 0">
+<div class="card">
+<p class="eb">Status badges · v1's colour code kept</p>
+<div class="row">
+<span class="bd b-dr"><b></b>Draft</span>
+<span class="bd b-su"><b></b>Submitted</span>
+<span class="bd b-ok"><b></b>Approved</span>
+<span class="bd b-ok"><b></b>Posted</span>
+<span class="bd b-vi"><b></b>Counting</span>
+<span class="bd b-vo"><b></b>Voided</span>
+<span class="bd b-vo"><b></b>Overdue</span>
+<span class="bd b-sl"><b></b>Closed</span>
+</div>
+<p class="hint" style="margin: 0">Every badge has a dot and a word, so colour is never the only signal.</p>
+</div>
+<div class="card">
+<p class="eb">Messages</p>
+<div class="ban bn-o" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 3 3 5-6"></path></svg><p><b>Delivery DR-2291 received.</b> 14 lines were added to Lipa stock.</p></div>
+<div class="ban bn-w"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 21h20L12 3zM12 10v5M12 18v.5"></path></svg><p><b>The till closes in 15 minutes.</b> Expenses after that go to tomorrow.</p></div>
+<div class="ban bn-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7.5v.5"></path></svg><p>Another person has to verify this after you submit it.</p></div>
+<div class="toast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m5 12 5 5 9-10"></path></svg><span style="flex: 1">Expense EXP-0142 submitted.</span><a href="#" style="color: #fbbf24; font-weight: 600">View</a></div>
+</div>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px">
+<div class="card">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 4px"><p class="eb">Table · list page</p><h2 style="font-size: 22px">Expenses · Lipa</h2></div>
+<div class="row"><span class="inp" style="width: 240px; color: var(--muted)">Search receipts…</span><button type="button" class="btn sec">This week</button><button type="button" class="btn p">New expense</button></div>
+</div>
+<table class="tbl">
+<thead><tr><th>No.</th><th>Date</th><th>Category</th><th>Status</th><th class="num">Amount</th></tr></thead>
+<tbody>
+<tr><td style="font-weight: 600">EXP-0142</td><td>09 Oct</td><td>Charcoal and LPG</td><td><span class="bd b-su"><b></b>Submitted</span></td><td class="num">₱ 3,200.00</td></tr>
+<tr><td style="font-weight: 600">EXP-0141</td><td>09 Oct</td><td>Ice delivery</td><td><span class="bd b-ok"><b></b>Posted</span></td><td class="num">₱ 640.00</td></tr>
+<tr><td style="font-weight: 600">EXP-0139</td><td>08 Oct</td><td>Repairs</td><td><span class="bd b-vo"><b></b>Voided</span></td><td class="num" style="color: var(--muted); text-decoration: line-through">₱ 1,150.00</td></tr>
+<tr><td style="font-weight: 600">EXP-0138</td><td>08 Oct</td><td>Cleaning supplies</td><td><span class="bd b-dr"><b></b>Draft</span></td><td class="num">₱ 875.50</td></tr>
+</tbody>
+</table>
+<div style="display: flex; justify-content: space-between; align-items: center"><span class="hint">4 of 128</span><div class="row"><button type="button" class="btn sec sm">Previous</button><button type="button" class="btn sec sm">Next</button></div></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 24px; min-width: 0">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<div class="card kpi" style="background: #1a1a1a; border-color: #1a1a1a; color: #fbf4e4"><p class="eb" style="color: #f4b942">Net sales today</p><span class="kv">₱ 184,320</span><span class="hint" style="color: #d9cfbd"><b style="color: #6ee7b7">▲ 6.2%</b> vs last Thursday</span></div>
+<div class="card kpi"><p class="eb">Waiting on you</p><span class="kv">7</span><span class="hint">3 expenses · 4 deliveries</span></div>
+</div>
+<div class="card" style="align-items: center; text-align: center; padding: 32px 24px">
+<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--muted)"><path d="M3 7h13v10H3zM16 10h3l2 3v4h-5M7 19.5a1.5 1.5 0 1 0 0-.1M17 19.5a1.5 1.5 0 1 0 0-.1"></path></svg>
+<h3 style="font-size: 16px">No deliveries yet this week</h3>
+<p class="hint" style="margin: 0">When the commissary dispatches to Lipa, it shows up here to receive.</p>
+<button type="button" class="btn sec">Record a delivery</button>
+</div>
+<div class="card" style="flex-direction: row; align-items: center; justify-content: space-between">
+<div style="display: flex; flex-direction: column; gap: 4px"><p class="eb">Stamp on approve</p><span class="hint">A paper feel kept from v1, shown for 1.2s</span></div>
+<span class="stamp">APPROVED</span>
+</div>
+</div>
+</div>
+
+<div class="card" style="flex-direction: row; gap: 32px; align-items: stretch">
+<div style="flex: 1; display: flex; flex-direction: column; gap: 12px; min-width: 0">
+<p class="eb">Confirm dialog · destructive</p>
+<div style="border: 1px solid var(--border); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 20px 50px rgba(0,0,0,.12); max-width: 520px; background: var(--surface)">
+<h3 style="font-size: 20px">Void EXP-0139?</h3>
+<p style="margin: 0; line-height: 1.5">This reverses the ₱1,150.00 posting to Repairs. The record stays on file, marked void.</p>
+<label class="lbl"><span class="lt">Reason<i>*</i></span><span class="inp f">Duplicate of EXP-0137</span></label>
+<div style="display: flex; justify-content: flex-end; gap: 12px"><button type="button" class="btn gh">Keep it</button><button type="button" class="btn dg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 21h20L12 3zM12 10v5M12 18v.5"></path></svg>Void expense</button></div>
+</div>
+</div>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 12px; min-width: 0">
+<p class="eb">What this option means</p>
+<p style="margin: 0; line-height: 1.6"><b>For:</b> one brand across the Website, menu and ERP. Baloo 2 and pills are what v1 staff already know, and cream is easier on the eyes than white during long count sessions. ADR-013's rules (one red, outlined danger, amber only as a surface) still hold.</p>
+<p style="margin: 0; line-height: 1.6"><b>Against:</b> cream lowers contrast on dense tables slightly; it's still 14:1 for ink, but the zebra and border steps need care. Pills take more width in tight toolbars.</p>
+<p style="margin: 0; line-height: 1.6"><b>Cost:</b> Option A's work, plus a second font, cream and gold tokens, and a rule on ADR-013 amendment 3 (radius).</p>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2360}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
