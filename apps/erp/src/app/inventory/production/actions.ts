@@ -94,7 +94,7 @@ export async function postProductionAction(fd: FormData): Promise<void> {
   revalidatePath('/inventory/production');
   revalidatePath(`/inventory/production/${recordId}`);
   const warn = result.warnings.length > 0 ? ` Warnings: ${result.warnings.join('; ')}.` : '';
-  return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { ok: `Posted${result.journalEntryId ? ` — journal ${result.journalEntryId}` : ' (a convert posts no journal entry)'}.${warn}` });
+  return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { stamp: 'POSTED', ok: `Posted${result.journalEntryId ? ` — journal ${result.journalEntryId}` : ' (a convert posts no journal entry)'}.${warn}` });
 }
 
 export async function editPostedProductionAction(fd: FormData): Promise<void> {
@@ -134,7 +134,7 @@ export async function voidProductionAction(fd: FormData): Promise<void> {
 
   revalidatePath('/inventory/production');
   revalidatePath(`/inventory/production/${recordId}`);
-  return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { ok: result.ledgerGap
+  return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { stamp: 'VOID', ok: result.ledgerGap
       ? `Voided. Stock is restored. ⚠️ The ledger entry could not be reversed and the gap is reported: ${result.ledgerGapReason}`
       : 'Voided. Stock is restored and the entry is reversed.' });
 }

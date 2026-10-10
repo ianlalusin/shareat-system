@@ -81,6 +81,15 @@ function carryNav(fd: FormData): Nav {
   return store ? { store } : {};
 }
 
+/** T-387 S4: a refusal that names the control it is about (an element id), so the banner can link to it. The message is the same sentence as before. */
+class FieldError extends Error {
+  readonly field: string;
+  constructor(message: string, opts: { field: string }) {
+    super(message);
+    this.field = opts.field;
+  }
+}
+
 interface ParsedExpenseForm {
   storeId: string;
   supplierId: string;
@@ -115,7 +124,7 @@ async function parseExpenseForm(
   capabilities: readonly Capability[],
 ): Promise<ParsedExpenseForm> {
   const storeId = str(formData, 'storeId');
-  if (!storeId) throw new Error('Choose a store.');
+  if (!storeId) throw new FieldError('Choose a store.', { field: 'store' });
   // An empty list would authorise nothing while every read below still runs — an unreachable
   // invariant (both callers pass a fixed, non-empty list), never a user-facing refusal.
   if (capabilities.length === 0) throw internalFault('parseExpenseForm: capabilities must not be empty');
@@ -237,7 +246,11 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
     parsed = await parseExpenseForm(formData, actor, '/expenses/new', ['create_expense']);
   } catch (err) {
     const returned = splitReturnTo(str(formData, 'returnTo'), '/expenses/new');
-    return await redirectWithFlash(returned.path, { ...returned.nav, ...carryNav(formData) }, { error: errorMessage(err) });
+    return await redirectWithFlash(
+      returned.path,
+      { ...returned.nav, ...carryNav(formData) },
+      { error: errorMessage(err), ...(err instanceof FieldError ? { field: err.field } : {}) },
+    );
   }
 
   let newId: string;
@@ -336,7 +349,7 @@ export async function approveExpenseAction(formData: FormData): Promise<void> {
   } catch (err) {
     return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/expenses/${expenseId}`, nav);
+  return await redirectWithFlash(`/expenses/${expenseId}`, nav, { ok: 'Expense posted.', stamp: 'POSTED' });
 }
 
 export async function voidExpenseAction(formData: FormData): Promise<void> {
@@ -350,7 +363,7 @@ export async function voidExpenseAction(formData: FormData): Promise<void> {
   } catch (err) {
     return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/expenses/${expenseId}`, nav);
+  return await redirectWithFlash(`/expenses/${expenseId}`, nav, { ok: 'Expense voided.', stamp: 'VOID' });
 }
 
 /** The one edit surface this UI exposes: category, particulars and the receipt photo —

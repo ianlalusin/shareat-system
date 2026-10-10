@@ -95,9 +95,10 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
   const storeId = str(formData, 'storeId');
   const nav = carryNav(formData);
 
+  // T-387 S4: checked before the try - a redirect thrown inside it would be caught below and redirect again.
+  if (!storeId) return await redirectWithFlash('/sales-days/new', nav, { error: 'Choose a store.', field: 'store' });
   let newId: string;
   try {
-    if (!storeId) throw new Error('Choose a store.');
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       createSalesDay(tx, actor, {
         storeId,
@@ -243,7 +244,7 @@ export async function verifySalesDayAction(formData: FormData): Promise<void> {
   } catch (err) {
     return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/sales-days/${id}`, nav);
+  return await redirectWithFlash(`/sales-days/${id}`, nav, { ok: 'Sales day verified.', stamp: 'VERIFIED' });
 }
 
 export async function voidSalesDayAction(formData: FormData): Promise<void> {
@@ -255,7 +256,7 @@ export async function voidSalesDayAction(formData: FormData): Promise<void> {
   } catch (err) {
     return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/sales-days/${id}`, nav);
+  return await redirectWithFlash(`/sales-days/${id}`, nav, { ok: 'Sales day voided.', stamp: 'VOID' });
 }
 
 /**

@@ -81,7 +81,7 @@ export async function voidReturnAction(fd: FormData): Promise<void> {
   if (!result.ok) return await redirectWithFlash('/trade/returns', keep, { error: errorMessage(new Error(result.reason ?? 'The return could not be voided.')) });
 
   revalidatePath('/trade/returns');
-  return await redirectWithFlash('/trade/returns', keep, { ok: 'Return voided. The stock and the posting it made are reversed.' });
+  return await redirectWithFlash('/trade/returns', keep, { stamp: 'VOID', ok: 'Return voided. The stock and the posting it made are reversed.' });
 }
 
 export async function applyCreditAction(fd: FormData): Promise<void> {

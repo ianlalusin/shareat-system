@@ -118,7 +118,8 @@ export async function verifyDayAction(formData: FormData): Promise<void> {
     formData,
     () => ({ kind: 'verify' }),
   );
-  return await redirectWithFlash(`/attendance/${r.dayId}`, {}, r.error ? { error: r.error } : { ok: 'Day verified. ⭐ This is the only thing that can rescue a flagged day — payroll can now pay it.' });
+  if (r.error) return await redirectWithFlash(`/attendance/${r.dayId}`, {}, { error: r.error });
+  return await redirectWithFlash(`/attendance/${r.dayId}`, {}, { stamp: 'VERIFIED', ok: 'Day verified. ⭐ This is the only thing that can rescue a flagged day — payroll can now pay it.' });
 }
 
 export async function voidDayAction(formData: FormData): Promise<void> {
@@ -126,5 +127,6 @@ export async function voidDayAction(formData: FormData): Promise<void> {
     formData,
     (fd) => ({ kind: 'void', reason: str(fd, 'reason') }),
   );
-  return await redirectWithFlash(`/attendance/${r.dayId}`, {}, r.error ? { error: r.error } : { ok: 'Day voided. ⛔ It contributes nothing to payroll. The punches are untouched — the evidence survives the decision.' });
+  if (r.error) return await redirectWithFlash(`/attendance/${r.dayId}`, {}, { error: r.error });
+  return await redirectWithFlash(`/attendance/${r.dayId}`, {}, { stamp: 'VOID', ok: 'Day voided. ⛔ It contributes nothing to payroll. The punches are untouched — the evidence survives the decision.' });
 }

@@ -144,7 +144,7 @@ export async function postUsageAction(fd: FormData): Promise<void> {
     : replenish.appended.length > 0
       ? ` Low stock: ${replenish.appended.length} line(s) added to the open commissary order.`
       : '';
-  return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { ok: posted + replenishNote });
+  return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { stamp: 'POSTED', ok: posted + replenishNote });
 }
 
 export async function deleteUsageDraftAction(fd: FormData): Promise<void> {
@@ -183,7 +183,7 @@ export async function voidUsageAction(fd: FormData): Promise<void> {
 
   revalidatePath('/inventory/usage');
   revalidatePath(`/inventory/usage/${recordId}`);
-  return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { ok: result.reversalEntryIds.length > 0
+  return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { stamp: 'VOID', ok: result.reversalEntryIds.length > 0
         ? `Voided. Stock and the FIFO layers are restored, and the entry is reversed — journal ${result.reversalEntryIds.join(', ')}.`
         : 'Voided. Stock and the FIFO layers are restored.' });
 }

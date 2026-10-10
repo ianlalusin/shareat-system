@@ -10,7 +10,7 @@ import { BudgetHint } from './BudgetHint';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { FormGrid } from '@/components/ui';
+import { FlashBanner, FormGrid, Select } from '@/components/ui';
 
 export const metadata = { title: 'New expense — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -62,11 +62,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {decodeURIComponent(sp.error)}
-        </div>
-      )}
+      <FlashBanner flash={sp} fieldLabels={{ store: 'Store' }} />
 
       {!storeId ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
@@ -93,17 +89,13 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
           <FormGrid>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Store</span>
-              <select
-                name="storeId"
-                defaultValue={storeId}
-                className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-              >
+              <Select id="store" name="storeId" defaultValue={storeId} invalid={sp.field === 'store'}>
                 {storeRows.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.code})
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
 
 
