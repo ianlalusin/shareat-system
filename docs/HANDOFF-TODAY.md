@@ -52,6 +52,7 @@ before the next cutover smoke.
 - The prechecks P0192a / P0193 / (later) P0194.
 
 ## Traps that have actually bitten
+- **CI runs on the self-hosted runner `ians-pc` (Ian: "keep", 11 Oct).** When the PC is short of RAM, integration tests stall into lock/hook timeouts (PR #14: 83 min, 8 timeout failures). Before re-running CI, keep the PC quiet: no dev server, no lane suites.
 - Pushing main deploys. Use the release branch / PR.
 - `node -e` with backticks in bash leaves stray files named like `{console.log(r)`; write a script file.
 - Two agents on one lane DB truncate each other's fixtures. A crashed drill test leaves `foo_drill` behind, and the
