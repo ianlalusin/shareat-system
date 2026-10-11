@@ -53,6 +53,8 @@ import type { Heartbeat } from '../../scripts/lib/backup/heartbeat';
 const sql = postgres(adminUrl, { max: 4, onnotice: () => {} });
 const sourceDbName = decodeURIComponent(new URL(adminUrl).pathname.slice(1));
 const adminPassword = decodeURIComponent(new URL(adminUrl).password);
+/** The drill redacts the DB password wherever it appears; when it is also an ordinary word in a key (CI: `postgres`), the report holds the redacted form. */
+const asReported = (k: string): string => (adminPassword ? k.split(adminPassword).join('***') : k);
 
 // ---------------------------------------------------------------------------------------------- helpers
 
@@ -330,7 +332,7 @@ describe('T-393 S2 - runDrill', () => {
     await store.get(reports[0]!, f);
     const text = readFileSync(f, 'utf8');
     const rep = JSON.parse(text) as Record<string, any>;
-    expect(text).toContain(await keyOf(store, '.dump'));
+    expect(text).toContain(asReported(await keyOf(store, '.dump')));
     const flat: Record<string, unknown> = { ...rep, ...(typeof rep.durations === 'object' && rep.durations ? rep.durations : {}) };
     for (const re of [/download/i, /restore/i, /check/i]) {
       const hit = Object.entries(flat).find(([k, v]) => re.test(k) && typeof v === 'number');
@@ -471,7 +473,7 @@ describe('T-393 S2 - runDrill', () => {
     const rf = path.join(freshDir('rep'), 'r.json');
     await store.get(reports[0]!, rf);
     const text = readFileSync(rf, 'utf8');
-    expect(text).toContain(await keyOf(store, '20261010T203000Z.dump'));
+    expect(text).toContain(asReported(await keyOf(store, '20261010T203000Z.dump')));
     expect(text).not.toContain('20261011T203000Z');
   });
 
