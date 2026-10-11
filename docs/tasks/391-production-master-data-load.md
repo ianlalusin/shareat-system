@@ -1,6 +1,6 @@
 # T-391: Production master-data load (items, suppliers, customers, staff), with sheets Ian fills
 
-**Status:** SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). Drafted 2026-10-10 by the Opus planner.
+**Status:** S1 (0193), S2, S3 DONE (S3 `ee32d86`, on main and in PR #16). **S4 in audit fixes** on lane/t391-s4 (wt-t385, DB shareat_test_t391s4, uncommitted): built green (unit 37/37, integration 93/93). Audit round found 4 fixes (ruling P13); the tester's new RED cases are written and the builder is mid-fix. Rulings P9-P13 added 2026-10-11. Next: S4 green → re-audit → commit, then S5, S6. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). Drafted 2026-10-10 by the Opus planner.
 (≈4.0 lane-days, six slices; the plan says M 3, see §Research "Where this spec disagrees with the plan").
 Migration **0NNN (allocated at merge)**. Seven questions for Ian; the recommended option is what gets built.
 **T-390 S4 depends on this task's apply, per store** (its price list reads `v1_master_links`).
