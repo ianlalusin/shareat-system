@@ -181,15 +181,16 @@ jobs:
         run: npm run db:migrate
 
       # T-400: one cloned DB per vitest worker. Remove INTEGRATION_WORKERS to roll back to serial.
+      # 2 workers, not 4: the self-hosted runner's WSL VM is capped at 8 CPUs / 6 GB (11 Oct), and
+      # 2 x ~22 connections stays far under max_connections=100, so DATABASE_POOL_MAX stays default.
       - name: Create integration worker DBs (T-400)
         if: needs.changes.outputs.docs_only != 'true'
-        run: node scripts/make-integration-worker-dbs.mjs 4
+        run: node scripts/make-integration-worker-dbs.mjs 2
 
       - name: Integration tests (real Postgres)
         if: needs.changes.outputs.docs_only != 'true'
         env:
-          INTEGRATION_WORKERS: '4'
-          DATABASE_POOL_MAX: '4'
+          INTEGRATION_WORKERS: '2'
         run: npm run test:integration
 
       # PROJECT_BIBLE.md §2 rule 10 / §8 Rule 1:

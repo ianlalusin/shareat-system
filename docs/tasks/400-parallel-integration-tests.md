@@ -1,7 +1,13 @@
 # T-400 — Run the integration suite on several workers, one database each
 
-> **Status: SPEC.** From Ian, 2026-10-11: *"continue with optimization"*, after T-399.
-> Branch `lane/t400-parallel-integration`.
+> **Status: BUILT, CI runs with 2 WORKERS.** From Ian, 2026-10-11: *"continue with optimization"*,
+> after T-399, then *"push T-400 with 2 workers and open the PR"*. Branch `lane/t400-parallel-integration`.
+>
+> ⚠️ **Amended 11 Oct: N=2, not 4.** The self-hosted runner stalled from memory starvation (an 83-minute
+> run with 9 timeouts, on a host with 0.4 GB free). Its WSL VM is now capped at 8 CPUs and 6 GB. At N=2,
+> 2 × ~22 connections stays far under `max_connections = 100`, so the §4 `DATABASE_POOL_MAX` override is
+> dropped. The §6 "4" values read as 2. Revised target: integration under **12 minutes**. Raise N only
+> after two green runs at 2.
 
 ## The goal, with the numbers that set it
 
