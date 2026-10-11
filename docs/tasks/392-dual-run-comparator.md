@@ -350,3 +350,13 @@ disposition from any script.
 - [ ] **Run against real data:** Lipa's week of 19 Oct extracted and compared on production, and its verdict, line
       count by class and top 5 deltas reported. *The report against real data is the deliverable, not the code.*
 - [ ] Any spec defect reported, not worked around.
+
+## S3 rulings (fresh Opus planner, 2026-10-12, binding; supersede the text above where they differ)
+1. **Correction dating.** `postPosCorrection` posts `source_type 'sale'`, `source_id = sales_day_pos_corrections.id`. Resolve, in order: (a) `reversal_of_entry_id` → the original's resolved date, recursively; (b) `source_type 'sale'` and the source_id found in `sales_day_pos_corrections` → that sales day's `business_date`; (c) same source as an earlier POSTED entry → the earliest one's `entry_date`. Unresolvable entries keep their own date and are listed in `datedLater`. Only `sales_tender` and `expense_category` re-date; `cash_bank` and `ap_supplier` keep the entry's own date. (R5a's "e.g. `sale.pos-correction`" under same-source is wrong per the posting code.)
+2. **Staff cash** is its own kind `staff_cash`, keyed by the GL code of the store's `custodian='staff'` money account. Employee-party lines are summed per store. Any other party on that code goes to `staff_cash` under its real party, and S2 classes it UNEXPLAINED. The 1110 cash line excludes staff cash.
+3. **no_data `=>` compared_days = 0**, not iff. `ties`, `open` or `explained` with 0 compared days are valid. R12 should read "no data on either side" (inv 17).
+4. Disposition `ref` is NOT NULL plus the regex CHECK.
+5. **Expense key is per category**, joined via `source_type='expense_payment'`, `source_id = expenses.id` → `category_id`. A line with no expense source carries no `categoryId`, is keyed by GL code, and S2 classes it UNMAPPED_KEY.
+6. `kind` CHECK on lines and dispositions: `cash_bank, staff_cash, sales_tender, expense_category, ap_supplier, inventory_basis, unassigned_store`. `v2Figures` also returns `inventory_basis` (1310 + GRNI receipts, COGS; §2).
+7. **Store and person FKs use 0194's same-org composite FKs** (`<table>_store_id_same_org_fk`, `created_by` → persons `(org_id, id)`). S3 does not add its own and does not use a trigger. **S3 = migration 0195 and merges after 0194 (T-398 S1).** If 0194 slips, S3 waits.
+Money columns, `v1_counter` and `opening_gap` included, are `numeric(14,2)`.
