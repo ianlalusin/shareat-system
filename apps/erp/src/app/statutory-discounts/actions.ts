@@ -92,5 +92,5 @@ export async function voidStatutoryDiscountAction(formData: FormData): Promise<v
   } catch (err) {
     return await redirectWithFlash('/statutory-discounts', navOf(formData), { error: errorMessage(err) });
   }
-  return await redirectWithFlash('/statutory-discounts', navOf(formData));
+  return await redirectWithFlash('/statutory-discounts', navOf(formData), { ok: 'Statutory discount voided.', stamp: 'VOID' });
 }

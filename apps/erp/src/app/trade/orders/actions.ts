@@ -134,7 +134,7 @@ export async function receiveOrderAction(fd: FormData): Promise<void> {
   }
   revalidatePath('/trade/orders');
   revalidatePath(`/trade/orders/${orderId}`);
-  return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { ok: message });
+  return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { stamp: 'RECEIVED', ok: message });
 }
 
 export async function voidOrderAction(fd: FormData): Promise<void> {
@@ -153,5 +153,5 @@ export async function voidOrderAction(fd: FormData): Promise<void> {
   }
   revalidatePath('/trade/orders');
   revalidatePath(`/trade/orders/${orderId}`);
-  return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { ok: message });
+  return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { stamp: 'VOID', ok: message });
 }

@@ -1,6 +1,5 @@
 Badge
 Checkbox
-FlashBanner
 GET
 NumTd
 StatusIcon

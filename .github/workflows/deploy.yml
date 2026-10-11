@@ -41,7 +41,9 @@ env:
 jobs:
   deploy:
     name: build, ship, migrate, restart
-    runs-on: ubuntu-latest
+    # Same switch as ci.yml (docs/ops/self-hosted-runner.md). Building on Ian's machine is still "build
+    # in CI, never on the droplet" (bible §2.10): the droplet receives the finished artifact either way.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
 
     steps:
@@ -171,3 +173,11 @@ jobs:
             echo "health check failed after 30s — restart did not bring the app up" >&2
             exit 1
           REMOTE
+
+      # A GitHub-hosted runner is thrown away after the job, taking the key with it. A self-hosted
+      # runner (docs/ops/self-hosted-runner.md) is not, so the production SSH key and the artifact
+      # are removed explicitly, pass or fail.
+      - name: Remove the deploy key and artifact from the runner
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key /tmp/shareat-artifact.tar.gz

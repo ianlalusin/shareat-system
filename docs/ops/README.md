@@ -13,6 +13,10 @@
 
 ---
 
+## CI and deploy can run on Ian's PC (added 2026-10-11)
+
+Setting the repository variable `CI_RUNNER=shareat-local` moves every CI and deploy job onto a self-hosted runner on Ian's PC, which saves GitHub-hosted minutes; deleting the variable moves them back. Setup, caveats (the PC must be on; port 5435) and rollback: [`self-hosted-runner.md`](./self-hosted-runner.md).
+
 ## ⛔ Deploy gate — read-only prechecks for migrations not yet on production (added 2026-10-03)
 
 **2026-10-07: production is at 0186.** Prechecks P0186a/b run with Ian (see the 0186 row); main pushed at `d79e754`; CI 37588901078 green; Deploy 37591334281 green; `https://erp2.shareat.net/sign-in` → 200. Next free migration 0187.

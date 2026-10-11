@@ -3,6 +3,8 @@ import { cookies } from 'next/headers';
 import { Baloo_2, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 import { AppShell } from '../components/shell/AppShell';
+import { Toaster } from '../components/feedback/Toaster';
+import { readToastFlash } from '../lib/flash-toast';
 import { THEME_COOKIE_NAME, parseTheme } from '../components/shell/theme-state';
 
 // T-387 S1 — self-hosted at BUILD time (CI); the server never calls Google at runtime.
@@ -59,6 +61,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const theme = parseTheme(cookieStore.get(THEME_COOKIE_NAME)?.value);
+  const toast = await readToastFlash();
 
   return (
     <html lang="en" data-theme={theme} className={`${fontDisplay.variable} ${fontBody.variable}`}>
@@ -66,6 +69,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* ⚠️ Reads the session, so every page under it is dynamic. That is already true of every
             screen in this app — each one calls `requireSession` — so nothing was static to lose. */}
         <AppShell>{children}</AppShell>
+        {/* T-387 S4: outside AppShell on purpose (L13) - sign-in and the kiosk get bare children and still need toasts. */}
+        <Toaster token={toast?.token} ok={toast?.ok} stamp={toast?.stamp} />
       </body>
     </html>
   );

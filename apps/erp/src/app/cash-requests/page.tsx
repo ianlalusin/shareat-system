@@ -12,6 +12,7 @@ import {
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { FlashBanner, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Cash requests — Shareat System' };
@@ -55,11 +56,7 @@ export default async function CashRequestsPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} fieldLabels={{ store: 'Store', 'requested-for': 'Who holds the money' }} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
@@ -164,7 +161,7 @@ export default async function CashRequestsPage({
         <form action={createRequestAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Store">
-              <select name="storeId" required defaultValue="" className={INPUT}>
+              <Select id="store" name="storeId" required defaultValue="" invalid={sp.field === 'store'} className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -173,13 +170,13 @@ export default async function CashRequestsPage({
                     {s.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field
               label="Who holds the money"
               hint="The person the float is charged to — a shortage lands on them by name."
             >
-              <select name="requestedFor" required defaultValue="" className={INPUT}>
+              <Select id="requested-for" name="requestedFor" required defaultValue="" invalid={sp.field === 'requested-for'} className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -188,7 +185,7 @@ export default async function CashRequestsPage({
                     {p.displayName}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="What it is for">
               <input

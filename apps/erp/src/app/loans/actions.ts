@@ -112,5 +112,5 @@ export async function reverseEntryAction(formData: FormData): Promise<void> {
   } catch (err) {
     return await redirectWithFlash(`/loans/${id}`, {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/loans/${id}`, {}, { ok: 'Reversed. The debt is back to what it was.' });
+  return await redirectWithFlash(`/loans/${id}`, {}, { stamp: 'REVERSED', ok: 'Reversed. The debt is back to what it was.' });
 }

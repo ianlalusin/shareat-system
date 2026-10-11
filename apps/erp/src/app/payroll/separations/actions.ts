@@ -64,6 +64,6 @@ export async function voidSeparationAction(formData: FormData): Promise<void> {
   return await redirectWithFlash(
     '/payroll/separations',
     { store },
-    { ok: 'Voided — that employment can be separated again if this was a correction.' },
+    { stamp: 'VOID', ok: 'Voided — that employment can be separated again if this was a correction.' },
   );
 }
