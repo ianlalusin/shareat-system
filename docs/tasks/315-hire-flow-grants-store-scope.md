@@ -1,6 +1,8 @@
 # T-315 — the hire flow grants a `person_store_scope` row, and somebody decides about everyone already hired
 
-> **STATUS: NUMBER RESERVED 2026-09-14 by the orchestrator (`system32-85`), SPEC NOT YET WRITTEN.**
+> ✅ **STATUS: CLOSED AS MOOT 2026-10-10 (Ian, plan-q13 = (a); bible row 302): production has no staff hired before the fix, so there is nothing to backfill.** Do not implement.
+>
+> Was: **STATUS: NUMBER RESERVED 2026-09-14 by the orchestrator (`system32-85`), SPEC NOT YET WRITTEN.**
 > Reserved so the number cannot be taken twice — that happened on 2026-08-31, when two sessions
 > took task 196 and DEF-117 within 2m40s. **Do not implement from this file.**
 >

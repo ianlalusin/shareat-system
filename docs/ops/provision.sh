@@ -47,6 +47,10 @@ usermod -s /bin/bash shareat
 mkdir -p /srv/shareat-releases
 mkdir -p /srv/shareat-shared/secrets
 mkdir -p /var/log/shareat
+# T-393: the nightly dump is staged here, not in a small /tmp (BACKUP_TMP_DIR in shareat-db-backup.service).
+mkdir -p /var/lib/shareat-backup/tmp
+chown -R shareat:shareat /var/lib/shareat-backup
+chmod 700 /var/lib/shareat-backup /var/lib/shareat-backup/tmp
 chown -R shareat:shareat /srv/shareat-releases /srv/shareat-shared /var/log/shareat
 chmod 700 /srv/shareat-shared/secrets
 
@@ -97,6 +101,39 @@ for f in "$UNIT_DIR"/shareat-*.service "$UNIT_DIR"/shareat-*.timer; do
   install -m 644 "$f" "/etc/systemd/system/$(basename "$f")"
 done
 systemctl daemon-reload
+
+# --- 5b. PostgreSQL 18 client for the nightly backup (T-393) -------------------------------
+# pg_dump refuses a server NEWER than itself and production is PostgreSQL 18.x, so Ubuntu's stock client will
+# not do: this adds PGDG's apt repository and installs postgresql-client-18 (the client only, no server).
+# Placed AFTER the unit install and NON-FATAL on purpose: a PGDG outage or a key mismatch must never stop the
+# units and the Caddy step above/below from being set up. It warns and carries on. Idempotent. Installing the
+# client arms nothing: shareat-db-backup.timer is enabled by Ian, later (docs/ops/README.md, "Switching backups on").
+install_pg_client() (
+  set -euo pipefail
+  if [ -x /usr/lib/postgresql/18/bin/pg_dump ]; then
+    echo "postgresql-client-18 already installed - skipping"
+    return 0
+  fi
+  apt-get update -y
+  apt-get install -y curl ca-certificates gnupg
+  install -d /usr/share/postgresql-common/pgdg
+  KEY=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+  curl -fsSL -o "$KEY.tmp" https://www.postgresql.org/media/keys/ACCC4CF8.asc
+  # Do not trust a downloaded key blindly: its fingerprint must be PGDG's published one (ACCC4CF8).
+  if ! gpg --show-keys --with-colons "$KEY.tmp" | grep -q '^fpr:::::::::B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8:'; then
+    rm -f "$KEY.tmp"
+    echo "PGDG key fingerprint does not match ACCC4CF8 - refusing to trust it" >&2
+    return 1
+  fi
+  mv "$KEY.tmp" "$KEY"
+  . /etc/os-release
+  echo "deb [signed-by=$KEY] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+  apt-get update -y
+  apt-get install -y postgresql-client-18
+)
+if ! install_pg_client; then
+  echo "WARNING: could not install postgresql-client-18 (T-393). The backup cannot run until it is installed; everything else continues." >&2
+fi
 
 # --- 6. Reverse proxy — Caddy, only if a domain was given ----------------------------------
 if [ -n "$DOMAIN" ]; then
@@ -154,6 +191,9 @@ if [ -L /srv/shareat ] && [ -s /srv/shareat-shared/.env.local ]; then
   echo "      systemctl enable --now shareat-erp.service"
   for f in "$UNIT_DIR"/shareat-*.timer; do
     [ -e "$f" ] || continue
+    # T-393: backups are NOT switched on (Ian, bible row 306); see docs/ops/README.md "Switching backups on".
+    [ "$(basename "$f")" = shareat-db-backup.timer ] && continue
+    [ "$(basename "$f")" = shareat-restore-drill.timer ] && continue
     echo "      systemctl enable --now $(basename "$f")"
   done
   echo "    Then verify each is actually armed — 'systemctl list-timers' — per docs/ops/README.md."

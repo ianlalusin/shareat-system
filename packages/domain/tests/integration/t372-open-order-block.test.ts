@@ -34,6 +34,7 @@ import { ensureAutoOrderLines } from '../../src/commissary/auto-order';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -110,7 +111,7 @@ async function fixture() {
   const mkItem = async (name: string, unit = 'kg') => {
     const [i] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${orgId}, ${uid('I')}, ${name}, 'raw_material', ${unit}, ${superAdmin.personId}) returning id`;
+      values (${orgId}, ${testItemCode()}, ${name}, 'raw_material', ${unit}, ${superAdmin.personId}) returning id`;
     return i!.id;
   };
   const pork = await mkItem('Pork belly');

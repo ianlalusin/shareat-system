@@ -39,6 +39,8 @@ import {
 } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor, type TypedView } from '@/lib/keep-typing';
+import { COMMISSARY_LINE_FULFIL, COMMISSARY_LINE_UPDATE } from './typed-forms';
 
 export const metadata = { title: 'Branch order — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -192,7 +194,7 @@ export default async function BranchOrderPage({
           <form id="receive-order-form" action={receiveOrderAction} className="space-y-3">
             <input type="hidden" name="orderId" value={order.id} />
             {lines.map((l) => (
-              <LineCard key={l.id} line={l} view={view} branchSide={branchSide} commissarySide={commissarySide} receiving />
+              <LineCard key={l.id} line={l} view={view} branchSide={branchSide} commissarySide={commissarySide} receiving typedUpdate={typedFor(sp, COMMISSARY_LINE_UPDATE, l.id, actor.personId)} typedFulfil={typedFor(sp, COMMISSARY_LINE_FULFIL, l.id, actor.personId)} />
             ))}
             <div className="flex flex-wrap items-end gap-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
               <div className="grow">
@@ -211,7 +213,7 @@ export default async function BranchOrderPage({
           </form>
         ) : (
           lines.map((l) => (
-            <LineCard key={l.id} line={l} view={view} branchSide={branchSide} commissarySide={commissarySide} receiving={false} />
+            <LineCard key={l.id} line={l} view={view} branchSide={branchSide} commissarySide={commissarySide} receiving={false} typedUpdate={typedFor(sp, COMMISSARY_LINE_UPDATE, l.id, actor.personId)} typedFulfil={typedFor(sp, COMMISSARY_LINE_FULFIL, l.id, actor.personId)} />
           ))
         )}
 
@@ -485,12 +487,16 @@ function LineCard({
   branchSide,
   commissarySide,
   receiving,
+  typedUpdate,
+  typedFulfil,
 }: {
   line: OrderView['lines'][number];
   view: OrderView;
   branchSide: boolean;
   commissarySide: boolean;
   receiving: boolean;
+  typedUpdate: TypedView | null;
+  typedFulfil: TypedView | null;
 }) {
   const { order, stage, rooms } = view;
   const packed = l.fulfilledQuantity ?? null;
@@ -552,7 +558,7 @@ function LineCard({
       {editAsk && (
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <div className="min-w-[14rem] flex-1">
-            <EditableRecord action={updateLineAction} label={`${l.itemName} line`} hidden={{ orderId: order.id, lineId: l.id }}>
+            <EditableRecord action={updateLineAction} label={`${l.itemName} line`} hidden={{ orderId: order.id, lineId: l.id }} typed={typedUpdate}>
               <FormGrid>
                 <label className={`${LABEL} min-w-0`}>
                   Quantity ({l.unit})
@@ -578,7 +584,7 @@ function LineCard({
       {editPack && (
         <div className="mt-3">
           {packed !== null ? (
-            <EditableRecord action={fulfilLineAction} label={`${l.itemName} packing`} hidden={{ orderId: order.id, lineId: l.id }}>
+            <EditableRecord action={fulfilLineAction} label={`${l.itemName} packing`} hidden={{ orderId: order.id, lineId: l.id }} typed={typedFulfil}>
               <FormGrid>
               <label className={`${LABEL} min-w-0`}>
                 Send ({l.unit}) — 0 means none

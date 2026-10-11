@@ -58,6 +58,7 @@ import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accou
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { FLASH_COOKIE, captureRedirect, currentJar, outcomeOf, pageParamsOf, resetJar } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -102,7 +103,7 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 
 async function item(f: Fixture, name: string): Promise<string> {
   const [row] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('ITEM')}, ${name}, 'raw_material', 'kg', ${f.admin.personId}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${testItemCode()}, ${name}, 'raw_material', 'kg', ${f.admin.personId}) returning id`;
   return row!.id;
 }
 

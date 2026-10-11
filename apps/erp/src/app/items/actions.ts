@@ -33,6 +33,8 @@ import type { BaseUnit, ItemKind } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT } from './typed-forms';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../lib/error-shape';
 
@@ -143,7 +145,7 @@ export async function updateItemFlagsAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err), typed: keepTyping(formData, ITEM_FLAGS, itemId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(`/items/${itemId}`, {}, { ok: 'Saved. Every store follows this unless it has its own answer below.' });
 }
@@ -184,7 +186,7 @@ export async function setStoreSellabilityAction(formData: FormData): Promise<voi
       message = 'Store override saved. Only the answers you set here differ; the rest still track the organisation.';
     }
   } catch (err) {
-    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err), typed: keepTyping(formData, ITEM_STORE_SELLABILITY, storeId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message });
 }
@@ -219,9 +221,9 @@ export async function changeItemUnitAction(formData: FormData): Promise<void> {
   } catch (err) {
     // T-378 S4-R2 (DEF-600): the generic approve_item sentence names the wrong verb; say the real reason.
     if (err instanceof AuthorizationError) {
-      return await redirectWithFlash(`/items/${itemId}`, {}, { error: "Only a super-admin can change an item's unit." });
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: "Only a super-admin can change an item's unit.", typed: keepTyping(formData, ITEM_UNIT, itemId, { actorId: actor.personId }) });
     }
-    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err), typed: keepTyping(formData, ITEM_UNIT, itemId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message });
 }
@@ -244,10 +246,10 @@ export async function renameItemAction(formData: FormData): Promise<void> {
     message = changed ? 'Renamed.' : 'Nothing to change.';
   } catch (err) {
     if (err instanceof AuthorizationError) {
-      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only a super-admin can rename, retire or restore an item.' });
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only a super-admin can rename, retire or restore an item.', typed: keepTyping(formData, ITEM_RENAME, itemId, { actorId: actor.personId }) });
     }
     // The rename form is on the item's own page, so here (and only here) the way out is the page itself.
-    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err).replace('ask a super-admin to rename the existing item first.', 'rename the existing item on its page first.').replace("ask a super-admin to change the existing item's code first.", "change the existing item's code on its page first.") });
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err).replace('ask a super-admin to rename the existing item first.', 'rename the existing item on its page first.').replace("ask a super-admin to change the existing item's code first.", "change the existing item's code on its page first."), typed: keepTyping(formData, ITEM_RENAME, itemId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message });
 }

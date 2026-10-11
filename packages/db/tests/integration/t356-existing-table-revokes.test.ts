@@ -23,6 +23,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { APP_ROLE } from '../../src/rls/registry';
 import { transaction, type Tx } from '../../src/client';
 import * as stockLedgerRepo from '../../src/repo/stock-ledger';
+import { testItemCode } from '../../../domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -147,7 +148,7 @@ async function stockMovementFixture(hint: string) {
   const locationId = loc!.id;
   const [item] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgId}, 'ITM', 'Item', 'raw_material', 'kg', ${personId}) returning id`;
+    values (${orgId}, ${testItemCode()}, 'Item', 'raw_material', 'kg', ${personId}) returning id`;
   const itemId = item!.id;
   const [movement] = await sql<{ id: string }[]>`
     insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)

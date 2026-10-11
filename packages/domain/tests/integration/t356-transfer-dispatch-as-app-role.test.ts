@@ -21,6 +21,7 @@ import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { dispatch, quantity, saveDraft, transferNow } from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { testItemCode } from './_fixtures/item-code';
 
 config({ path: '.env.local' });
 
@@ -86,7 +87,7 @@ async function fixture(): Promise<Fixture> {
 
   const [item] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${staff!.id}) returning id`;
+    values (${orgId}, ${testItemCode()}, 'Pork Belly', 'raw_material', 'kg', ${staff!.id}) returning id`;
 
   await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgId}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2025-01-01'::date, '2026-12-01'::date, '1 month') d`;
 

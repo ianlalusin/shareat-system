@@ -19,6 +19,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { APP_ROLE } from '../../src/rls/registry';
+import { testItemCode } from '../../../domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 
@@ -97,10 +98,10 @@ beforeEach(async () => {
 
   const [i] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgA},'PORK','Pork Belly','raw_material','kg',${personA}) returning id`;
+    values (${orgA},${testItemCode()},'Pork Belly','raw_material','kg',${personA}) returning id`;
   const [i2] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgB},'BEEF','Beef','raw_material','kg',${pb!.id}) returning id`;
+    values (${orgB},${testItemCode()},'Beef','raw_material','kg',${pb!.id}) returning id`;
   itemA = i!.id; itemB = i2!.id;
 });
 

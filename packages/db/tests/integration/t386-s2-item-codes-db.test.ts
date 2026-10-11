@@ -110,26 +110,20 @@ function expectRefused(err: PgErr, what: string, code: string, constraint: strin
 const NEVER_REUSED = 'items_code_never_reused';
 const FORWARD_ONLY = 'item_code_counters_forward_only';
 
-describe('T-386 S2 - D1: the code is unique ignoring case', () => {
-  it('D1: legacy ABCD-EFG exists; another item with abcd-efg -> 23505 items_org_code_key. Mutant: index on code (not upper(code)) -> red. Red today: the index is case-sensitive, the insert succeeds', async () => {
+describe('T-386 S2 - D1: the code is unique ignoring case (S6: the lower-case twin is now refused by the shape CHECK first)', () => {
+  it('D1 (S6, converted): a lower-case twin abcd-123 of an existing ABCD-123 is refused - by items_code_shape_check (23514), before the case-insensitive unique index can speak. Replaces the 23505 case-twin leg, whose "legacy" fixture can no longer exist. Mutant: lower-case allowed in the CHECK -> the refusal moves to the never-reused trigger / index, red. Red before S6: the 23514 comes from items_code_never_reused or the insert succeeds', async () => {
     const o = await mkOrg('d1');
-    expect(await insertItem(o, 'ABCD-EFG'), 'the legacy-shaped code is a fixture').toBeNull();
-    expectRefused(await insertItem(o, 'abcd-efg'), 'case twin', '23505', 'items_org_code_key');
+    expect(await insertItem(o, 'ABCD-123'), 'the shaped code is a fixture').toBeNull();
+    expectRefused(await insertItem(o, 'abcd-123'), 'case twin', '23514', 'items_code_shape_check');
   });
 
-  it('D1 (control): the exact same code is still 23505 items_org_code_key (same index name, so errorMessage and T-383 R4 keep working). Green today and after', async () => {
-    const o = await mkOrg('d1c');
-    expect(await insertItem(o, 'ABCD-EFG')).toBeNull();
-    expectRefused(await insertItem(o, 'ABCD-EFG'), 'exact twin', '23505', 'items_org_code_key');
-  });
-
-  it('D1b: the index is on (org_id, upper(code)) under the SAME name, and the same code in ANOTHER org is fine. Red today: the index definition has no upper()', async () => {
+  it('D1b: the index is on (org_id, upper(code)) under the SAME name, and the same shaped code in ANOTHER org is fine (its own mark). Red today: the index definition has no upper()', async () => {
     const [def] = await sql<{ indexdef: string }[]>`select indexdef from pg_indexes where tablename = 'items' and indexname = 'items_org_code_key'`;
     expect(def?.indexdef ?? '(index missing)').toMatch(/UNIQUE INDEX items_org_code_key ON public\.items USING btree \(org_id, upper\(code\)\)/);
     const a = await mkOrg('d1ba');
     const b = await mkOrg('d1bb');
-    expect(await insertItem(a, 'ABCD-EFG')).toBeNull();
-    expect(await insertItem(b, 'abcd-efg'), 'a different org may use the same code').toBeNull();
+    expect(await insertItem(a, 'ABCD-123')).toBeNull();
+    expect(await insertItem(b, 'ABCD-123'), 'a different org may use the same code').toBeNull();
   });
 });
 
@@ -167,10 +161,10 @@ describe('T-386 S2 - D2: a number once given out under a stem is never given out
     expectRefused(await insertItem(o, 'ABCD-999'), 'nothing is above 999', '23514', NEVER_REUSED);
   });
 
-  it('D2d: a lower-case code is not "of the shape" - the domain upper-cases before it writes; the database only guards the upper-case form, and the unique index still stops a case twin of an issued code. Red today: the case twin is accepted', async () => {
+  it('D2d (S6: the case twin is now refused by items_code_shape_check): a lower-case code is not "of the shape" - the domain upper-cases before it writes; the database only guards the upper-case form, and the unique index still stops a case twin of an issued code. Red today: the case twin is accepted', async () => {
     const o = await mkOrg('d2d');
     expect(await insertItem(o, 'CHWN-001')).toBeNull();
-    expectRefused(await insertItem(o, 'chwn-001'), 'lower-case twin of an issued code', '23505', 'items_org_code_key');
+    expectRefused(await insertItem(o, 'chwn-001'), 'lower-case twin of an issued code', '23514', 'items_code_shape_check');
   });
 
   it('D2e: a failed statement inside a transaction does not consume a number: insert CHWN-005 then fail the transaction -> mark and items unchanged. Red today: no counter table', async () => {
@@ -241,16 +235,16 @@ describe('T-386 S2 - D4: an update that does not change the code is not this tri
   });
 });
 
-describe('T-386 S2 - D5: legacy codes pass untouched until S6', () => {
-  it('D5 (control + trigger): PORK-BELLY inserts and updates to PORK-BELLY-2 and creates NO counter row; lower-case and 3-letter-stem codes too. Mutant: trigger without the shape WHEN -> the counter appears / the insert is refused. Red today: the counter table does not exist', async () => {
+describe('T-386 S2 - D5 (S6, converted): codes not of the shape are refused by items_code_shape_check', () => {
+  it('D5 (S6, converted): PORK-BELLY, pork-2, CHW-001, CHWN-0001, CHWN-0 each refused on insert; an update of a shaped item to PORK-BELLY-2 is refused; no counter row is created by any of them. Replaces "legacy codes pass untouched until S6". Red before S6: they all succeed', async () => {
     const o = await mkOrg('d5');
-    const id = await itemId(o, 'PORK-BELLY');
-    expect(await run(o.orgId, (t) => t`update items set code = 'PORK-BELLY-2' where id = ${id}`)).toBeNull();
-    expect(await insertItem(o, 'pork-2')).toBeNull();
-    expect(await insertItem(o, 'CHW-001'), 'a 3-letter stem is not of the shape').toBeNull();
-    expect(await insertItem(o, 'CHWN-0001'), 'a 4-digit number is not of the shape').toBeNull();
-    expect(await insertItem(o, 'CHWN-0'), 'a short number is not of the shape').toBeNull();
-    expect(await counterRows(o), 'no shaped code, no counter row').toBe(0);
+    const id = await itemId(o, 'ABCD-001');
+    for (const bad of ['PORK-BELLY', 'pork-2', 'CHW-001', 'CHWN-0001', 'CHWN-0']) {
+      expectRefused(await insertItem(o, bad), bad, '23514', 'items_code_shape_check');
+    }
+    expectRefused(await run(o.orgId, (t) => t`update items set code = 'PORK-BELLY-2' where id = ${id}`), 'update to a legacy shape', '23514', 'items_code_shape_check');
+    expect(await mark(o, 'ABCD'), 'only the one shaped insert raised a mark').toBe(1);
+    expect(await counterRows(o)).toBe(1);
   });
 });
 
@@ -355,7 +349,6 @@ describe('T-386 S2 - D8: the seed raises the mark for codes that already have th
         await t.unsafe(`set local session_replication_role = replica`);
         await t`insert into items (org_id, code, name, kind, base_unit, created_by) values (${o.orgId}, 'ABCD-007', ${uid('n')}, 'raw_material', 'kg', ${o.personId})`;
         await t`insert into items (org_id, code, name, kind, base_unit, created_by) values (${o.orgId}, 'ABCD-003', ${uid('n')}, 'raw_material', 'kg', ${o.personId})`;
-        await t`insert into items (org_id, code, name, kind, base_unit, created_by) values (${o.orgId}, 'PORK-BELLY', ${uid('n')}, 'raw_material', 'kg', ${o.personId})`;
         await t.unsafe(`set local session_replication_role = origin`);
         await t.unsafe(`set local row_security = off`);
         await t`insert into item_code_counters (org_id, stem, last_seq)
@@ -367,42 +360,9 @@ describe('T-386 S2 - D8: the seed raises the mark for codes that already have th
     );
     expect(err, 'the seed legs need a superuser test role; if this is 42501, prove the seed on the scratch DB instead and say so').toBeNull();
     expect(await mark(o, 'ABCD')).toBe(7);
-    expect(await counterRows(o), 'PORK-BELLY is legacy and seeds nothing').toBe(1);
+    expect(await counterRows(o)).toBe(1);
     expectRefused(await insertItem(o, 'ABCD-005'), 'a number below the seeded mark', '23514', NEVER_REUSED);
     expect(await insertItem(o, 'ABCD-008')).toBeNull();
-  });
-});
-
-describe('T-386 S2 - D8b: the seed counts a legacy code that only has the shape once upper-cased', () => {
-  const root = fileURLToPath(new URL('../../../../', import.meta.url));
-
-  it("D8b: the MIGRATION's own seed statement (extracted from 0189 between the B0189 markers, scoped to one org) gives a lower-case legacy chwn-001 the mark 1 under CHWN, stem upper-cased. Mutant: the seed matches the upper-case pattern only -> no CHWN row, red. Red against e0d4b03: the seed pattern is case-sensitive", async () => {
-    const text = readFileSync(`${root}packages/db/migrations/0189_t386_item_codes.sql`, 'utf8');
-    const block = text.slice(text.indexOf('-- B0189:begin'), text.indexOf('-- B0189:end'));
-    const start = block.indexOf('INSERT INTO "item_code_counters"');
-    expect(start, 'the seed INSERT is in the migration').toBeGreaterThan(-1);
-    const insert = block.slice(start, block.indexOf(';', start) + 1);
-    expect(insert).toContain('FROM "items"');
-    const o = await mkOrg('d8b');
-    // Scope the unchanged statement to this org by wrapping its WHERE: WHERE "org_id" = X AND ( <original condition> ) GROUP BY ...
-    const scoped = insert.replace('WHERE', `WHERE "org_id" = '${o.orgId}' AND (`).replace('GROUP BY', ') GROUP BY');
-    const err = await run(
-      o.orgId,
-      async (t) => {
-        await t.unsafe('set local session_replication_role = replica');
-        await t`insert into items (org_id, code, name, kind, base_unit, created_by) values (${o.orgId}, 'chwn-001', ${uid('n')}, 'raw_material', 'kg', ${o.personId})`;
-        await t`insert into items (org_id, code, name, kind, base_unit, created_by) values (${o.orgId}, 'ABCD-003', ${uid('n')}, 'raw_material', 'kg', ${o.personId})`;
-        await t.unsafe('set local session_replication_role = origin');
-        await t.unsafe('set local row_security = off');
-        await t.unsafe(scoped);
-        await t.unsafe('set local row_security = on');
-      },
-      { owner: true },
-    );
-    expect(err, 'the extracted seed must run').toBeNull();
-    expect(await mark(o, 'CHWN'), 'lower-case legacy chwn-001 is counted under the upper-case stem').toBe(1);
-    expect(await mark(o, 'ABCD')).toBe(3);
-    expect(await mark(o, 'chwn'), 'no lower-case stem row').toBeNull();
   });
 });
 

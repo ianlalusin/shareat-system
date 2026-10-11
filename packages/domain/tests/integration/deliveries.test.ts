@@ -7,6 +7,7 @@ import type { Actor } from '@shareat/auth';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { createDeliveryDocument, receiveDeliveryDocument } from '../../src/deliveries/documents';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { testItemCode } from './_fixtures/item-code';
 
 /**
  * T-166 / DEF-135 — the DOCUMENT layer over `receive.ts`'s already-tested engine
@@ -112,10 +113,10 @@ async function fixture(): Promise<Fixture> {
 
   const [itemA] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgId}, ${uid('PORK')}, 'Pork Belly', 'raw_material', 'kg', ${staffP!.id}) returning id`;
+    values (${orgId}, ${testItemCode()}, 'Pork Belly', 'raw_material', 'kg', ${staffP!.id}) returning id`;
   const [itemB] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgId}, ${uid('MILKIS')}, 'Milkis', 'retail', 'pcs', ${staffP!.id}) returning id`;
+    values (${orgId}, ${testItemCode()}, 'Milkis', 'retail', 'pcs', ${staffP!.id}) returning id`;
 
   const [supplier] = await sql<{ id: string }[]>`
     insert into suppliers (org_id, name, created_by) values (${orgId}, 'Batangas Meat Supply', ${staffP!.id}) returning id`;

@@ -33,6 +33,7 @@ vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/con
 
 import { setThresholdAction } from '../../src/app/inventory/low-stock/actions';
 import { urlOf } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 3 });
 let seq = 0;
@@ -50,7 +51,7 @@ async function fixture() {
   await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${orgId}, 'admin')`;
   await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${store!.id})`;
   const [item] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${uid('IT')}, 'Pork', 'raw_material', 'kg', ${p!.id}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Pork', 'raw_material', 'kg', ${p!.id}) returning id`;
   ACTOR_HOLDER.actor = { orgId, personId: p!.id };
   return { orgId, storeId: store!.id, itemId: item!.id };
 }

@@ -15,6 +15,8 @@ import {
 import { ItemCodeField } from '../ItemCodeField';
 import { BASE_UNITS, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT } from '../typed-forms';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
 import { Banner, Button, Checkbox, FlashBanner, Input, Select, FormGrid, Field } from '@/components/ui';
@@ -110,7 +112,7 @@ export default async function ItemDetailPage({
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Name and code</h2>
         {mayApproveItem ? (
-          <EditableRecord action={renameItemAction} label={item.name} hidden={{ itemId: item.id }}>
+          <EditableRecord action={renameItemAction} label={item.name} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_RENAME, item.id, actor.personId)}>
             <FormGrid>
               <Field label="Name">
                 <Input id="rename-name" name="name" type="text" required defaultValue={item.name} className="w-full" />
@@ -154,7 +156,7 @@ export default async function ItemDetailPage({
             Only a super-admin can change an item&apos;s unit. It is measured in {item.baseUnit}.
           </p>
         ) : (
-          <EditableRecord action={changeItemUnitAction} label={`${item.name} unit`} hidden={{ itemId: item.id }}>
+          <EditableRecord action={changeItemUnitAction} label={`${item.name} unit`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_UNIT, item.id, actor.personId)}>
             <FormGrid>
               <Field label="Unit">
                 <Select name="baseUnit" required defaultValue={item.baseUnit} className="w-full">
@@ -189,7 +191,7 @@ export default async function ItemDetailPage({
           </p>
         </div>
 
-        <EditableRecord action={updateItemFlagsAction} label={`${item.name} organisation default`} hidden={{ itemId: item.id }}>
+        <EditableRecord action={updateItemFlagsAction} label={`${item.name} organisation default`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_FLAGS, item.id, actor.personId)}>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
             {FLAGS.map((f) => (
               <Checkbox key={f.key} name={f.key} defaultChecked={f.org} label={f.label} />
@@ -223,6 +225,7 @@ export default async function ItemDetailPage({
                       action={setStoreSellabilityAction}
                       label={`${s.storeName} sellability`}
                       hidden={{ itemId: item.id, storeId: s.storeId }}
+                      typed={typedFor(sp, ITEM_STORE_SELLABILITY, s.storeId, actor.personId)}
                       extra={
                         s.override ? (
                           <form action={clearStoreSellabilityAction}>

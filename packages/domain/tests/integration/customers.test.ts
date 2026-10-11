@@ -31,6 +31,7 @@ import {
   setPrice,
   treatmentOf,
 } from '@shareat/domain';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 
@@ -282,7 +283,21 @@ describe('the reconciliation anchor', () => {
 describe('price lists', () => {
 
 /** ⭐ T-145: a price list quotes an ITEM, not a text code. One helper mints one. */
-async function item(f: Fixture, code: string, name: string, baseUnit = 'kg'): Promise<string> {
+// T-386 S6: the label a test passes ('PORK-BELLY') is a handle, not the code - the same handle in the same org is the same item,
+// so it maps to one shaped code.
+const shapedByLabel = new WeakMap<object, Map<string, string>>(); // per Fixture object: a fresh fixture is a fresh org, so no cross-test reuse
+async function item(f: Fixture, label: string, name: string, baseUnit = 'kg'): Promise<string> {
+  const labels = shapedByLabel.get(f) ?? new Map<string, string>();
+  shapedByLabel.set(f, labels);
+  const known = labels.get(label);
+  if (known) {
+    // Same handle, same org: the same item. (The old ON CONFLICT upsert below cannot do this for a shaped code: the 0189 never-reused trigger
+    // fires BEFORE the conflict check and refuses the second insert of an issued number.)
+    const [again] = await sql<{ id: string }[]>`select id from items where org_id = ${f.orgId} and code = ${known}`;
+    if (again) return again.id;
+  }
+  const code = known ?? testItemCode();
+  labels.set(label, code);
   const [row] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by, sellable_wholesale)
     -- ⭐ T-149: a price list is a WHOLESALE instrument, so anything quoted on one must be sold

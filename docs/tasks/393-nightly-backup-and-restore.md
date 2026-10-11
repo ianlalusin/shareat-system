@@ -1,6 +1,6 @@
 # T-393: Nightly off-cluster backup to Spaces, a failure alert, and a restore drill that proves the trial balance ties
 
-**Status:** SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied).
+**Status:** SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). **Ian, 2026-10-10, answering Q1-Q5: "no backup for now, we'll set up soon" (bible row 306).** Build and test S1-S2 as specced; **do NOT switch it on in production** until Ian sets it up. ⚠️ **Open point for that day, not resolved here:** plan-q7 = (a) says the existing `shareat-erp-backups` bucket under `postgres/` with prefix-scoped 30-day retention; this spec says a dedicated `shareat-pg-backups` bucket with 35 days + 13 monthly + yearly (R5, R12). Ian picks one when he sets it up; both are config-contract values.
 
 (≈1.75 days, two slices, lane L3). **No migration** (R11). Five questions for Ian (Q1-Q5) plus a short list of facts to confirm. The
 recommended option of each is what this spec builds, and the code runs and is tested locally

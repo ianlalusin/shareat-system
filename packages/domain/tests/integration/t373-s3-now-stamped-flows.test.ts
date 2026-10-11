@@ -138,13 +138,13 @@ async function fixture(hint: string) {
   const otherLocationId = await mkLoc(otherStoreId, 'B');
 
   const [item] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${adminId}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Pork Belly', 'raw_material', 'kg', ${adminId}) returning id`;
   const [slab] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${uid('SLAB')}, 'Beef Forequarter', 'meat_slab', 'kg', ${adminId}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Beef Forequarter', 'meat_slab', 'kg', ${adminId}) returning id`;
   const mkSlice = async (c: string) =>
     (await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, parent_slab_item_id, created_by)
-      values (${orgId}, ${uid(c)}, ${`Beef Slice ${c}`}, 'meat_sliced', 'kg', ${slab!.id}, ${adminId}) returning id`)[0]!.id;
+      values (${orgId}, ${testItemCode()}, ${`Beef Slice ${c}`}, 'meat_sliced', 'kg', ${slab!.id}, ${adminId}) returning id`)[0]!.id;
   const sliceA = await mkSlice('A');
   const sliceB = await mkSlice('B');
   const sliceC = await mkSlice('C');

@@ -172,8 +172,8 @@
       payroll once the statutory data arrives, the remaining admin screens, and then the cutover itself.
     </p>
     <div class="facts">
-      <div class="fact done"><span class="n">251</span><span class="l">tasks done</span></div>
-      <div class="fact active"><span class="n">9</span><span class="l">in progress or partly done</span></div>
+      <div class="fact done"><span class="n">252</span><span class="l">tasks done</span></div>
+      <div class="fact active"><span class="n">8</span><span class="l">in progress or partly done</span></div>
       <div class="fact"><span class="n">20</span><span class="l">still to build</span></div>
       <div class="fact crit"><span class="n">0</span><span class="l">open money defects (push closed; 2 deferred by your ruling)</span></div>
     </div>
@@ -225,8 +225,8 @@
         <h3>Cutover machinery, three lanes</h3>
         <ul>
           <li>T-390 opening stock: S1 count per room (0191) in its gate run; S3 tie-out next; S2 waits on your cost-basis answer (t390-q2)</li>
-          <li>T-389 keep-typing: S4 (stock and items) then S5 close</li>
-          <li>T-386 recode dry run on production with you, then --apply and S6</li>
+          <li>T-389 keep-typing: DONE (33 forms; DEF-617, 633 fixed)</li>
+          <li>T-386: recode applied on production (post-check 0); S6 shape rule (0192) in its sweep</li>
           <li>Specs to write: T-393 backups + restore, T-391 master-data load</li>
         </ul>
       </div>
@@ -428,11 +428,11 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-384</div><div class="task-what">POS link tender screen redone; every page full width; saved records locked behind Edit, adds end in Save (rows 288-289)</div><div class="task-note">Live 9 Oct (PRs #1, #2). DEF-610..616 fixed; DEF-617 fixed for tenders</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-385</div><div class="task-what">Verify &amp; post only after Submit; the submitter cannot verify except a super-admin (migration 0188)</div><div class="task-note">Built, audited, smoked; Live 9 Oct (PR #3, 0188)</div></div>
         <div class="task t-active"><div class="task-id"><span class="dot"></span>T-386</div><div class="task-what">Item codes suggested from the name (CHWN-001), never reused; super-admin override; migration 0189</div><div class="task-note">S1-S4 live 9 Oct (PR #4). S5 recode script live 10 Oct (PR #8); next the dry run on production with Ian, --apply, then S6</div></div>
-        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-387</div><div class="task-what">Theme: SharEat Warm (light) and Grill Night (dark), ADR-013 Am. 7</div><div class="task-note">Docs live (PR #6); build plan in PR #7; S2/S4/S7/S8 wait on t387-q4..q7</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-387</div><div class="task-what">Theme: SharEat Warm (light) and Grill Night (dark), ADR-013 Am. 7</div><div class="task-note">S1–S4 on main (PRs #9, #11, #12, #13); S8 in PR #14 (CI); S5–S7 built on release/t387-s5-s7, one PR after #14. Rulings: bible rows 308–312</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-388</div><div class="task-what">A POS usage pull posts every line with stock and holds back only the short item, named in words; finalized only when nothing is held (row 297)</div><div class="task-note">Built and smoked 10 Oct (931c921); DEF-618..622 fixed; live 10 Oct (PR #8)</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-389</div><div class="task-what">A refused save keeps what you typed, on every saved record (DEF-617); guard G10</div><div class="task-note">S1 live 10 Oct (PR #8). S2 (10 admin/settings/staff forms, 1da8e60) and S3 (9 money forms, a4d533f) done and smoked 10 Oct, on main. Left: S4 (stock and items, 10 forms) after T-390 S1; S5 makes it required</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-390</div><div class="task-what">Opening stock per room from the count; opening sub-ledger tie-out; count sheets (DEF-623)</div><div class="task-note">S1 (count per room, R1-R3, migration 0191) built, audited (R3 concurrency lock added), full gate run 10 Oct; needs the 0191 precheck with Ian. S3 tie-out next; S2 waits on t390-q2 (cost basis)</div></div>
-        <div class="task"><div class="task-id"><span class="dot"></span>T-391..T-394, T-396, T-397</div><div class="task-what">Master data load · dual-run comparator · nightly backup + restore · purge/opening rehearsal · link 3 stores + morning import · payroll bridge</div><div class="task-note">Reserved 10 Oct from docs/plans/remaining-build-plan.md; specs next</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-389</div><div class="task-what">A refused save keeps what you typed, on every saved record (DEF-617); guard G10</div><div class="task-note">Done 10 Oct: S1-S5, all 33 saved-record forms keep typing; typed required; DEF-617, 633 fixed. S1 live (PR #8); S2/S3 in PR #10; S4/S5 on main</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-390</div><div class="task-what">Opening stock per room from the count; opening sub-ledger tie-out; count sheets (DEF-623)</div><div class="task-note">S1 (0191, live), S2, S3, S5 done; S5 screens smoked 11 Oct (count → value → red/green tie-out → POST; asset valuation unmet). S1-S5 in PR #16 except S1 (live). S4 waits on the T-391 apply</div></div>
+        <div class="task"><div class="task-id"><span class="dot"></span>T-391..T-394, T-396, T-397</div><div class="task-what">Master data load · dual-run comparator · nightly backup + restore · purge/opening rehearsal · link 3 stores + morning import · payroll bridge</div><div class="task-note">T-391 master data: S1 (0193), S2, S3 done; S4 in audit fixes. T-392 comparator: S1, S2 done (pure). T-393 backups built, NOT switched on. T-398 franchise: S1 (0194) on its lane, own PR next</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-395</div><div class="task-what">PIN sign-in: each attempt charged before the check (DEF-626); 50 wrong PINs a day stop a store; attempt log</div><div class="task-note">Done 10 Oct. S1 live (PR #8, 0190); S2 (3954f31) on main: wrong-PIN findings and a manager reopens on /staff; smoked. DEF-063, DEF-626 fixed</div></div>
       </div>
     </div>

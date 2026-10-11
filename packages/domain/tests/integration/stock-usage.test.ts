@@ -8,6 +8,7 @@ import { receiveDelivery } from '../../src/deliveries/receive';
 import { postUsageRecord, voidUsageRecord } from '../../src/stock/usage';
 import { quantity } from '../../src/stock/quantity';
 import type { LocationLike } from '../../src/stock-locations/rules';
+import { testItemCode } from './_fixtures/item-code';
 
 /**
  * T-168 — usage, wastage and the loop closing.
@@ -91,7 +92,7 @@ beforeEach(async () => {
   const [r2] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${orgA},${storeA},'KIT','Kitchen',${t!.id},'operating',true,${personA}) returning id`;
   const [r3] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, created_by) values (${orgA},${storeA},'STORE','Stockroom',${t!.id},${personA}) returning id`;
   receivingRoom = r1!.id; kitchen = r2!.id; stockroom = r3!.id;
-  const [i] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'PORK','Pork Belly','raw_material','kg',${personA}) returning id`;
+  const [i] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Pork Belly','raw_material','kg',${personA}) returning id`;
   itemA = i!.id;
   const [f] = await sql<{ id: string }[]>`
     insert into stored_files (org_id, storage_path, content_type, byte_size, checksum, purpose, uploaded_by)
@@ -166,7 +167,7 @@ describe('T-168 — a multi-line post is all or nothing (review 2026-09-03)', ()
     await stockUp();
     const [rice] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${orgA},'RICE','Rice','raw_material','kg',${personA}) returning id`;
+      values (${orgA},${testItemCode()},'Rice','raw_material','kg',${personA}) returning id`;
     await expect(
       withOrgPrincipal(orgA, (tx) =>
         postUsageRecord(tx, usageInput({

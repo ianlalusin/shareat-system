@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
 
@@ -19,7 +19,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb, cutoverRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   CUTOVER_GATES,
@@ -35,6 +35,8 @@ import {
 } from '@shareat/domain';
 import { postEntry } from '../../src/ledger/post-entry';
 import { testItemCode } from './_fixtures/item-code';
+import * as domain from '@shareat/domain';
+import { realPurge } from '../../../../tests/integration/t390-real-purge';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -51,7 +53,7 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 
 const actor = (orgId: string, personId: string): Actor => ({ personId, orgId });
 
-async function fixture(hint: string) {
+async function build(hint: string) {
   const code = uid(`cu-${hint}`);
   const [org] = await sql<{ id: string }[]>`
     insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
@@ -83,7 +85,33 @@ async function fixture(hint: string) {
     adminId,
   };
 }
-type Fixture = Awaited<ReturnType<typeof fixture>>;
+type Fixture = Awaited<ReturnType<typeof build>>;
+
+/**
+ * T-390 R8: addOpeningFigure, removeOpeningFigure, valueOpeningStock and postOpeningBalances refuse until the purge (C2) has run, and
+ * only the REAL `applyPurge` records C2 as `performed` (`attestStep('C2')` is refused). A real purge truncates every purge-class table
+ * of the database and costs seconds, so the fixtures that need C2 come from a pool built before ONE purge. `fixture(hint)` is the
+ * un-purged org the wizard-shape tests use; `fixture(hint, true)` is an org whose purge has run.
+ */
+const pool: Fixture[] = [];
+async function primePool(n: number): Promise<void> {
+  const made: Fixture[] = [];
+  for (let i = 0; i < n; i++) made.push(await build(`pool${i}`));
+  await realPurge(sql, made[0]!.adminId);
+  pool.push(...made);
+}
+async function fixture(hint: string, purged = false): Promise<Fixture> {
+  if (!purged) return build(hint);
+  const pooled = pool.shift();
+  if (pooled) return pooled;
+  const f = await build(hint);
+  await realPurge(sql, f.adminId);
+  return f;
+}
+
+beforeAll(async () => {
+  await primePool(20);
+}, 300_000);
 
 const progress = (f: Fixture) => asOrg(f.orgId, (tx) => cutoverProgress(tx, f.orgId, [f.storeId]));
 const stepOf = async (f: Fixture, code: string) =>
@@ -101,7 +129,7 @@ describe('the wizard is a guide, not a checklist', () => {
     // 12 definitions; the three per-store ones expand across the one store here.
     expect(p.steps.length).toBe(CUTOVER_STEPS.length);
     expect(p.byPhase.A!.total).toBe(4);
-    expect(p.byPhase.C!.total).toBe(5);
+    expect(p.byPhase.C!.total).toBe(6); // T-390 R16: C3P joins phase C
   });
 
   it('⭐ a blocked step says WHAT TO GO AND DO, rather than hiding', async () => {
@@ -120,13 +148,14 @@ describe('the wizard is a guide, not a checklist', () => {
     expect((await stepOf(f, 'B1')).blockedBy).toBeNull();
   });
 
-  it('⚠️ only the four named gates are enforced — A2/A3/A4 are free among themselves', async () => {
+  it('⚠️ only the five named gates are enforced — A2/A3/A4 are free among themselves', async () => {
     const f = await fixture('free');
     const p = await progress(f);
     const blocked = p.steps.filter((s) => s.blockedBy !== null).map((s) => s.def.code);
     // B1 (waits A1), C3 (waits C2), C4 (waits C3), C5 (waits C4). Nothing else.
     expect(new Set(blocked)).toEqual(new Set(['B1', 'C3', 'C4', 'C5']));
-    expect(CUTOVER_GATES).toHaveLength(4);
+    expect(CUTOVER_GATES).toHaveLength(5); // T-390 R16: the fifth gate is C3P -> C5
+    expect(CUTOVER_GATES.some((g) => g.after === 'C3P' && g.before === 'C5')).toBe(true);
   });
 });
 
@@ -226,15 +255,20 @@ describe('B3 — an item silently absent is not an item counted as zero', () => 
   });
 
   it('and it stops being a gap once valued', async () => {
-    const f = await fixture('costed');
+    const f = await fixture('costed', true);
     const itemId = await anItem(f, 'Squid');
     await asOrg(f.orgId, (tx) =>
       recordOpeningCount(tx, f.admin, { storeId: f.storeId, itemId, quantity: '4', unitCost: '250', costSource: 'typed' }),
     );
     const gaps = await asOrg(f.orgId, (tx) => openingGaps(tx, f.orgId, '2027-01-01'));
     expect(gaps.countsWithoutCost).toHaveLength(0);
-    const value = await asOrg(f.orgId, (tx) => cutoverRepo.countedValue(tx, f.orgId));
-    expect(Number(value)).toBe(1000);
+    // T-390 R17: the float `countedValue` is gone; the count's value is whatever `valueOpeningStock` generates (one implementation).
+    const valueOpeningStock = (domain as unknown as Record<string, unknown>).valueOpeningStock as
+      | ((tx: Tx, a: Actor, i: { storeId: string }) => Promise<{ byAccount: { code: string; amount: string }[] } | null>)
+      | undefined;
+    if (typeof valueOpeningStock !== 'function') throw new Error('MISSING EXPORT: @shareat/domain does not export valueOpeningStock (T-390 S2 has not been built).');
+    const stock = await asOrg(f.orgId, (tx) => valueOpeningStock(tx, f.admin, { storeId: f.storeId }));
+    expect(stock!.byAccount.map((l) => [l.code, Number(l.amount)])).toEqual([['1310', 1000]]);
   });
 });
 
@@ -275,7 +309,7 @@ describe('the residual halts, and is visible the whole time', () => {
   });
 
   it('⭐ C4 holds only when 3900 nets to EXACTLY zero', async () => {
-    const f = await fixture('netszero');
+    const f = await fixture('netszero', true);
     await openingLeg(f, '1110', '5000.00', null, uid('k'));
     // The matching side, consuming the equity. ⚠️ Uses an account with NO requires_party — 2110
     // and 2500 both demand one, and the point of this test is the residual, not the subledger.
@@ -292,10 +326,11 @@ describe('the residual halts, and is visible the whole time', () => {
     expect(c4.blockedBy).toMatch(/C4 waits on C3/);
 
     // Once the opening entry step is recorded, the check is allowed to count.
-    await asOrg(f.orgId, (tx) => attestStep(tx, f.admin, { stepCode: 'C2' }));
+    // C2 was recorded by the real purge (the fixture); C3 is the attestation.
     await asOrg(f.orgId, (tx) => attestStep(tx, f.admin, { stepCode: 'C3' }));
     const after = await progress(f);
-    expect(after.steps.find((s) => s.def.code === 'C4')!.done).toBe(true);
+    const c4After = after.steps.find((s) => s.def.code === 'C4')!;
+    expect(c4After.done, `C4 is not done: ${c4After.blockedBy ?? c4After.detail ?? 'no reason given'} (C2 must be recorded by the real purge)`).toBe(true);
   });
 
   it('⛔ the double-counting guard finds a party with BOTH an opening lump and a pre-cutover doc', async () => {
@@ -342,7 +377,7 @@ describe('the opening balances', () => {
   const DATE = '2027-01-01';
 
   it('⭐ a figure is a BALANCED draft against 3900, and the residual moves', async () => {
-    const f = await fixture('openfig');
+    const f = await fixture('openfig', true);
     await asOrg(f.orgId, (tx) =>
       addOpeningFigure(tx, f.admin, {
         accountCode: '1110', storeId: f.storeId, direction: 'debit',
@@ -358,7 +393,7 @@ describe('the opening balances', () => {
   });
 
   it('the matching side nets 3900 to zero, and C4 then holds', async () => {
-    const f = await fixture('opennets');
+    const f = await fixture('opennets', true);
     await asOrg(f.orgId, (tx) =>
       addOpeningFigure(tx, f.admin, {
         accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '5000.00', entryDate: DATE,
@@ -375,7 +410,7 @@ describe('the opening balances', () => {
   });
 
   it('⛔ 3900 itself cannot be entered as a figure — that would be plugging the difference', async () => {
-    const f = await fixture('noplug');
+    const f = await fixture('noplug', true);
     await expect(
       asOrg(f.orgId, (tx) =>
         addOpeningFigure(tx, f.admin, {
@@ -386,7 +421,7 @@ describe('the opening balances', () => {
   });
 
   it('re-entering the same figure updates rather than doubling it', async () => {
-    const f = await fixture('openidem');
+    const f = await fixture('openidem', true);
     const args = {
       accountCode: '1110', storeId: f.storeId, direction: 'debit' as const,
       amount: '5000.00', entryDate: DATE,
@@ -400,7 +435,7 @@ describe('the opening balances', () => {
   });
 
   it('a draft figure can simply be deleted — it was never final', async () => {
-    const f = await fixture('openremove');
+    const f = await fixture('openremove', true);
     const { entryId } = await asOrg(f.orgId, (tx) =>
       addOpeningFigure(tx, f.admin, {
         accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '900.00', entryDate: DATE,
@@ -412,7 +447,7 @@ describe('the opening balances', () => {
   });
 
   it('⛔ posting refuses while 3900 still carries a residual — and there is no override', async () => {
-    const f = await fixture('openhalt');
+    const f = await fixture('openhalt', true);
     await asOrg(f.orgId, (tx) =>
       addOpeningFigure(tx, f.admin, {
         accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '5000.00', entryDate: DATE,
@@ -424,7 +459,7 @@ describe('the opening balances', () => {
   });
 
   it('⭐ posting a balanced set opens the books, and records C5', async () => {
-    const f = await fixture('openpost');
+    const f = await fixture('openpost', true);
     await asOrg(f.orgId, (tx) =>
       addOpeningFigure(tx, f.admin, {
         accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '5000.00', entryDate: DATE,
@@ -435,6 +470,7 @@ describe('the opening balances', () => {
         accountCode: '1130', storeId: f.storeId, direction: 'credit', amount: '5000.00', entryDate: DATE,
       }),
     );
+    await asOrg(f.orgId, (tx) => attestStep(tx, f.admin, { stepCode: 'C3P', note: 'T-390 R16 fixture' }));
     const result = await asOrg(f.orgId, (tx) => postOpeningBalances(tx, f.admin));
     expect(result.posted).toBe(2);
 
@@ -448,7 +484,7 @@ describe('the opening balances', () => {
   });
 
   it('⛔ a POSTED figure can no longer be deleted — invariant 5 starts at the post', async () => {
-    const f = await fixture('openposted');
+    const f = await fixture('openposted', true);
     const { entryId } = await asOrg(f.orgId, (tx) =>
       addOpeningFigure(tx, f.admin, {
         accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '400.00', entryDate: DATE,
@@ -459,14 +495,15 @@ describe('the opening balances', () => {
         accountCode: '1130', storeId: f.storeId, direction: 'credit', amount: '400.00', entryDate: DATE,
       }),
     );
+    await asOrg(f.orgId, (tx) => attestStep(tx, f.admin, { stepCode: 'C3P', note: 'T-390 R16 fixture' }));
     await asOrg(f.orgId, (tx) => postOpeningBalances(tx, f.admin));
     await expect(
       asOrg(f.orgId, (tx) => removeOpeningFigure(tx, f.admin, { entryId })),
-    ).rejects.toThrow(/already been posted/);
+    ).rejects.toThrow(/already been posted|books were opened/);
   });
 
   it('⛔ posting nothing is refused, rather than quietly succeeding', async () => {
-    const f = await fixture('opennone');
+    const f = await fixture('opennone', true);
     await expect(
       asOrg(f.orgId, (tx) => postOpeningBalances(tx, f.admin)),
     ).rejects.toThrow(/no opening figures to post/);
@@ -481,7 +518,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
   // journal lines, with nothing refusing it (no `Number(x)<=0` bypass involved at all — the guard
   // was `!(amount > 0)` on a variable, not a literal comparison the old census could spot).
   it('addOpeningFigure refuses "0.004"', async () => {
-    const f = await fixture('def272-open');
+    const f = await fixture('def272-open', true);
     await expect(
       asOrg(f.orgId, (tx) =>
         addOpeningFigure(tx, f.admin, {
@@ -492,7 +529,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
   });
 
   it('addOpeningFigure refuses "1.234" — previously silently truncated to "1.23" via toFixed(2)', async () => {
-    const f = await fixture('def272-precision');
+    const f = await fixture('def272-precision', true);
     await expect(
       asOrg(f.orgId, (tx) =>
         addOpeningFigure(tx, f.admin, {
@@ -503,7 +540,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
   });
 
   it('an ordinary figure still works, and the exact value posts on both legs', async () => {
-    const f = await fixture('def272-happy');
+    const f = await fixture('def272-happy', true);
     const { entryId } = await asOrg(f.orgId, (tx) =>
       addOpeningFigure(tx, f.admin, {
         accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '0.01', entryDate: DATE,
@@ -518,7 +555,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
 
 describe('T-343 S5.3 — removeOpeningFigure’s gone-entry refusal, in human terms', () => {
   it('userMessage is the S3 gone sentence, no UUID', async () => {
-    const f = await fixture('s5-3-opening');
+    const f = await fixture('s5-3-opening', true);
     const missingEntryId = crypto.randomUUID();
 
     const caught = await asOrg(f.orgId, (tx) => removeOpeningFigure(tx, f.admin, { entryId: missingEntryId })).then(
@@ -537,7 +574,7 @@ describe('T-343 S5.3 — removeOpeningFigure’s gone-entry refusal, in human te
 
 describe('T-343 S5.3b — R2: addOpeningFigure’s amount refusal carries a human userMessage', () => {
   it('amount "1.234": userMessage is capitalised, names neither addOpeningFigure nor the lower-case "the amount —" fragment (was no userMessage at all)', async () => {
-    const f = await fixture('s5-3b-r2');
+    const f = await fixture('s5-3b-r2', true);
 
     const caught = await asOrg(f.orgId, (tx) =>
       addOpeningFigure(tx, f.admin, {

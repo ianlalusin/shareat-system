@@ -9,6 +9,7 @@ import { commitCountSession } from '../../src/stock/count-sessions';
 import { postUsageRecord } from '../../src/stock/usage';
 import { quantity } from '../../src/stock/quantity';
 import type { LocationLike } from '../../src/stock-locations/rules';
+import { testItemCode } from './_fixtures/item-code';
 
 /**
  * T-169 — the freeze, the count, and the variance that finally posts.
@@ -87,7 +88,7 @@ beforeEach(async () => {
   const [r2] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${orgA},${storeA},'KIT','Kitchen',${t!.id},'operating',true,${personA}) returning id`;
   const [r3] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, created_by) values (${orgA},${storeA},'STORE','Stockroom',${t!.id},${personA}) returning id`;
   kitchen = r2!.id; stockroom = r3!.id;
-  const [i] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'PORK','Pork','raw_material','kg',${personA}) returning id`;
+  const [i] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Pork','raw_material','kg',${personA}) returning id`;
   itemA = i!.id;
   const [f] = await sql<{ id: string }[]>`
     insert into stored_files (org_id, storage_path, content_type, byte_size, checksum, purpose, uploaded_by)
@@ -284,7 +285,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
     await stockUp('10', '100.0000');
     const [box] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${orgA},'BOX','Takeout box','supply','pcs',${personA}) returning id`;
+      values (${orgA},${testItemCode()},'Takeout box','supply','pcs',${personA}) returning id`;
     const [d] = await sql<{ id: string }[]>`
       insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
       values (${orgA},${storeA},'purchase','2026-08-02',${fileA},${personA}) returning id`;

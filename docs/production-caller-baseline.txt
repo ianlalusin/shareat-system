@@ -14,16 +14,20 @@ arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
+buildSnapshot
 capitalizeFromExpense
 checkValuesMatch
 childLogger
 closeAsLateReceipt
 closeYear
+compareStoreWeek
+computeV1Figures
 confirmTradeOrder
 convertSpecimen
 countedVariances
 createRecipe
 customerReturnableQuantity
+datesInWeek
 declareSupplierItem
 depreciateAsset
 depreciationDrift
@@ -56,6 +60,7 @@ listPunchesForDay
 listRecipeLines
 listRoster
 listWriteOffsForCharge
+loadCountSheet
 markReviewed
 mintUniqueToken
 newCorrelationId
@@ -93,6 +98,7 @@ seedCanonicalPositions
 setCostBasisItem
 setItemPricing
 setTillFloat
+signOffPack
 sumTender
 summarizeConversions
 tablesWithScope
@@ -108,6 +114,6 @@ updateOwner
 upsertCategoryLife
 upsertPolicy
 validateFingerprintTemplates
-valuateShell
 voidShift
+weekStartOf
 withPrincipal

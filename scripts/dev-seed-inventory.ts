@@ -119,8 +119,8 @@ async function main(): Promise<void> {
       `;
       return created!.id;
     };
-    const comPork = await item('DEV-PORK', 'Pork belly', 'kg');
-    const brPork = await item('DEV-PORK-BR', 'Pork belly (branch)', 'kg');
+    const comPork = await item('DVPK-001', 'Pork belly', 'kg');
+    const brPork = await item('DVPB-001', 'Pork belly (branch)', 'kg');
 
     // ── A fiscal period the postings can land in ────────────────────────────────────────
     const today = new Date().toISOString().slice(0, 10);

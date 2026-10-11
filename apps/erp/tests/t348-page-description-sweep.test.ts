@@ -206,7 +206,8 @@ describe('T-348 S2 — SW6: class B/C/D sites keep their exact class strings (mu
     'commissary/catalogue/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'commissary/discrepancies/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'commissary/orders/page.tsx': ['mt-4 text-sm text-neutral-600'],
-    'cutover/count/page.tsx': ['mt-2 text-sm text-neutral-600 dark:text-neutral-400'],
+    // T-390 S5 added a second class B empty state here (a store with no stock room).
+    'cutover/count/page.tsx': ['mt-2 text-sm text-neutral-600 dark:text-neutral-400', 'mt-2 text-sm text-neutral-600 dark:text-neutral-400'],
     'inventory/counts/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'inventory/deliveries/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'inventory/locations/page.tsx': ['mt-4 text-sm text-neutral-600', 'mt-4 text-sm text-neutral-600'],

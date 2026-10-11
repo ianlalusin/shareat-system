@@ -63,6 +63,7 @@ import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accou
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { paramsOf } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -162,7 +163,7 @@ async function supplier(f: Fixture, hint: string) {
 }
 async function item(f: Fixture): Promise<string> {
   const [row] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${f.admin.personId}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${testItemCode()}, 'Pork Belly', 'raw_material', 'kg', ${f.admin.personId}) returning id`;
   return row!.id;
 }
 function recordForm(f: Fixture, supplierId: string, over: Record<string, string>): FormData {

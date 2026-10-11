@@ -16,3 +16,4 @@ export * from './audit/balances';
 export * from './audit/groups';
 export * from './audit/compare';
 export * from './audit/report';
+export * from './dual-run';

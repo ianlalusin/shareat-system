@@ -48,6 +48,7 @@ export * from './prepaid';
 export * from './suppliers';
 export * from './ap-payments';
 export * from './items';
+export * from './v1-master-links';
 export * from './supplier-items';
 export * from './ar';
 export * from './trade';

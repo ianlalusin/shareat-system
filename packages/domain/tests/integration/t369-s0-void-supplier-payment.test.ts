@@ -629,6 +629,7 @@ describe("T8 (S0·N4) — voiding a payment funded from Malvar's safe", () => {
 // -----------------------------------------------------------------------------------------------
 
 import { refundSupplierCredit, recordReturn, voidReturn, setInvoiceLines, receiveDelivery, quantity } from '@shareat/domain';
+import { testItemCode } from './_fixtures/item-code';
 
 const succeeded = (s: Settled<unknown>) => s.status === 'fulfilled' && (s.value as { ok?: boolean } | undefined)?.ok !== false;
 
@@ -670,7 +671,7 @@ async function returnCredit(f: Fixture, unitCost: string): Promise<string> {
     insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
     values (${f.orgId}, ${f.storeId}, ${uid('R')}, 'Room R', ${type!.id}, 'operating', true, ${f.managerId}) returning id`;
   const [item] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${f.managerId}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${testItemCode()}, 'Pork Belly', 'raw_material', 'kg', ${f.managerId}) returning id`;
   // The stock movement of a return is dated NOW: make sure an OPEN period covers today.
   const today = new Date().toISOString().slice(0, 7);
   const [has] = await sql<{ n: string }[]>`select count(*)::text as n from fiscal_periods where org_id = ${f.orgId} and starts_on <= current_date and ends_on >= current_date`;

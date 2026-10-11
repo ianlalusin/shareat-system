@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1637` 13. Decision log
-- `1638–1657` 14. Amendment protocol
-- `1658–1662` 15. Engineering standards — the industry practices this project follows
-  - `1663–1668` 15.1 Build order: walking skeleton first
-  - `1669–1680` 15.2 Golden-master testing — the most important practice here
-  - `1681–1689` 15.3 Strangler Fig, not big-bang cutover
-  - `1690–1694` 15.4 No dual-write
-  - `1695–1703` 15.5 Expand/contract migrations
-  - `1704–1712` 15.6 Observability from day zero, not later
-  - `1713–1717` 15.7 CI gates
-  - `1718–1722` 15.8 Backups and a tested restore
-  - `1723–1727` 15.9 Twelve-Factor config
-  - `1728–1735` 15.10 Append-only ledgers — but not event sourcing
-  - `1736–1740` 15.11 Defence in depth
-  - `1741–1769` 15.12 Skills are lenses, not assurance
-  - `1770–1776` 15.13 Reconciliation is a permanent feature
-- `1777–1781` 16. The accounting spine
-  - `1782–1813` 16.0 What we are actually fixing — the diagnosis
-  - `1814–1857` 16.1 The ten invariants — non-negotiable
-  - `1858–1872` 16.2 The oracle: how "correct" is tested
-  - `1873–1894` 16.3 The model — header + lines, not legs
-  - `1895–1914` 16.4 Deliberately simpler than ERPNext
-  - `1915–1981` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1982–2006` 16.6 What v1 already gets right — preserve the intent
-  - `2007–2028` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2029–2043` 16.8 What v1's accounting already gets right
-  - `2044–2087` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2088–2138` 16.10 Posting patterns — one canonical pattern per business event
-  - `2139–2170` 16.11 Inventory's accounting integration
+- `1329–1648` 13. Decision log
+- `1649–1668` 14. Amendment protocol
+- `1669–1673` 15. Engineering standards — the industry practices this project follows
+  - `1674–1679` 15.1 Build order: walking skeleton first
+  - `1680–1691` 15.2 Golden-master testing — the most important practice here
+  - `1692–1700` 15.3 Strangler Fig, not big-bang cutover
+  - `1701–1705` 15.4 No dual-write
+  - `1706–1714` 15.5 Expand/contract migrations
+  - `1715–1723` 15.6 Observability from day zero, not later
+  - `1724–1728` 15.7 CI gates
+  - `1729–1733` 15.8 Backups and a tested restore
+  - `1734–1738` 15.9 Twelve-Factor config
+  - `1739–1746` 15.10 Append-only ledgers — but not event sourcing
+  - `1747–1751` 15.11 Defence in depth
+  - `1752–1780` 15.12 Skills are lenses, not assurance
+  - `1781–1787` 15.13 Reconciliation is a permanent feature
+- `1788–1792` 16. The accounting spine
+  - `1793–1824` 16.0 What we are actually fixing — the diagnosis
+  - `1825–1868` 16.1 The ten invariants — non-negotiable
+  - `1869–1883` 16.2 The oracle: how "correct" is tested
+  - `1884–1905` 16.3 The model — header + lines, not legs
+  - `1906–1925` 16.4 Deliberately simpler than ERPNext
+  - `1926–1992` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1993–2017` 16.6 What v1 already gets right — preserve the intent
+  - `2018–2039` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2040–2054` 16.8 What v1's accounting already gets right
+  - `2055–2098` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2099–2149` 16.10 Posting patterns — one canonical pattern per business event
+  - `2150–2182` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1634,6 +1634,17 @@ just a patch.**
 | 299 | 2026-10-10 | ⭐ **PIN SIGN-IN HAS A DAILY BUDGET: EVERY ATTEMPT IS CHARGED AS A MISS BEFORE THE PIN IS CHECKED, AND A SUCCESS REFUNDS ONLY ITS OWN CHARGE; 50 MISSES IN THE ROLLING 24 HOURS STOP PIN SIGN-IN AT THAT STORE; A CORRECT PIN DOES NOT RESET THE BUDGET; THE ATTEMPT LOG FEEDS TWO SOFT FINDINGS; A STOPPED STORE STAYS STOPPED UNTIL ANYONE HOLDING `enrol_staff` AT THAT STORE REOPENS IT (T-395 R2-R5, R12, R14).** Spec `docs/tasks/395-pin-sign-in-throttle.md` §Rulings. Two rulings at build (orchestrator, 2026-10-10): *"the last 7 Manila days"* means today and the 6 days before; a stopped store's figure counts the 24 hours before the stop, not before now. Tier 1 (10 / 60 s / 2 min) is unchanged. Findings are `soft`, never `hard`, so a sign-in problem never blocks a period close. Commits `9264324` (S1, migration 0190), `3954f31` (S2) | Tier 1 alone allowed about 13,000 guesses a day per store (about 32 % to hit a 6-digit PIN); 50 a day is about 0.15 %. Checking before charging let parallel attempts race past the count (DEF-626). A budget that refills on its own is a slower tier 1: a human looking is the point | Yes — `DAILY_MISS_BUDGET` and `STOP_AUTO_REOPEN_MINUTES` are constants (Q1 option b sets the latter to 60) |
 | 300 | 2026-10-10 | ⭐ **A REFUSED SAVE KEEPS WHAT WAS TYPED THROUGH ONE TYPED SLOT IN THE FLASH (SIGNED, ONE MINUTE, BOUND TO THE PERSON, THE RECORD AND THE FORM). FOR RECORD FORMS IT SUPERSEDES T-380'S PER-FIELD `keep`. THE SERVER DRAWS ONLY STORED VALUES, SO CANCEL RESTORES THEM; THE TYPING COMES BACK THROUGH THE TYPED VIEW (T-389 R1-R5).** Spec `docs/tasks/389-refused-save-keeps-typing.md`. T-380's mutant M4 was re-pointed to the typed slot. Field names may contain a hyphen (`/^[A-Za-z][A-Za-z0-9_-]{0,63}$/`) so per-channel rows are kept. **Business identifiers may be kept** (organisation TIN, store branch code); **personal statutory ids, PINs, credentials and bank account numbers never are** (the deny list, R4, guard G10). Only fields named in `__changed` ride the cookie. Commits `1da8e60` (S2), `a4d533f` (S3) | Losing a whole form to one refused field is the defect. A per-field `keep` had to be wired form by form and mixed typed and stored values in one view, so Cancel could not tell them apart. One slot, one helper, one guard covers every record form | Yes — the slot is one helper; the deny list only grows by a row here |
 | 301 | 2026-10-10 | **AN OPENING COUNT BELONGS TO A ROOM, AND EVERY COUNT ROW CARRIES THE SOURCE OF ITS COST; THERE IS ONE COST PER ITEM PER STORE (T-390 S1, R1-R3, migration 0191).** Spec `docs/tasks/390-opening-stock-and-subledger-tieout.md`. Orchestrator ruling at build, 2026-10-10: **a count without a cost never changes any cost**, and a new or null-cost room row takes the store's existing cost and its source. **Writers serialise per (store, item)** with a transaction advisory lock taken after the shared org lock. Commit `f75201e` | Stock is counted room by room, and an opening layer is one per movement. Without a recorded source a cost cannot be audited at cutover. The audit found two concurrent writers left two different costs for one item in one store; the lock closes that | Yes — the lock and the inherit rule live in `recordOpeningCount`; the per-room key is a migration |
+| 302 | 2026-10-10 | ⭐ **V2 RUNS EVERYTHING BUILT FROM 1 JANUARY 2027, ATTENDANCE AND PAYROLL INCLUDED; T-190 AND T-193 ARE THE PRIMARY PAYROLL PATH AND T-397 (THE MONTHLY BRIDGE ENTRY) IS THE FALLBACK ONLY. IF THE HR SHEET IS NOT COMPLETE ON 31 OCTOBER, PAYROLL STAYS ON V1 AND STAFF WITHOUT STATUTORY IDS ARE HIRED WITHOUT THEM. PHASE 7 AND THE THEME WORK FOLLOW CUTOVER WITH V1 KEPT LIVE FOR THEM; THE REVOLVING FUND (T-136 §2) FOLLOWS CUTOVER; T-315 IS CLOSED AS MOOT.** Ian, Open Questions page, 2026-10-10: plan-q1 = (a), plan-q10 = (a), plan-q11 = (a), plan-q9 = (a), plan-q13 = (a). Plan `docs/plans/remaining-build-plan.md` §0b, §1.1 C9, §3.2 | Ian chose (a) over the recommended (b) for q1: one cutover, not a second one on 1 Mar. The 31 Oct HR sheet is therefore the hinge: on time, T-190/T-193 are specced and built in waves 2-4; late, q10 (a) applies and T-397 is built instead. Production has no pre-fix staff, so T-315's backfill has nothing to fix. Standing floats (T-366) cover store cash on 1 Jan | Yes — q10 (a) is itself the fallback; switching to T-397 is a plan change, not a code change |
+| 303 | 2026-10-10 | ⭐ **THE DUAL RUN "TIES" WHEN CASH AND BANK, SALES BY TENDER, EXPENSES BY CATEGORY AND AP PER SUPPLIER AGREE TO THE CENTAVO PER STORE-WEEK; INVENTORY AND COGS ARE SHOWN AS ONE NAMED POLICY DIFFERENCE, NEVER AS A FAILURE. LIPA DOUBLE-ENTERS FROM 19 OCTOBER, ALL FOUR STORES FROM 2 NOVEMBER, ONE OFFICE ENCODER PER STORE. CASHIERS AND OTHER POSITIONS WITH STAFF ROLES ENCODE; THE MANAGER VERIFIES. EACH LINKED STORE'S CLOSED DAY IS FETCHED BY A TIMER AT 06:00 MANILA; SUBMIT AND VERIFY STAY HUMAN.** Ian, 2026-10-10: plan-q2 = (b), plan-q3 = (b), plan-q6 = (a), plan-q12 (free text): *"cashiers and other positions with staff roles encode; the manager verifies"*. Binds T-392 (comparator) and T-396 (timer) | v1 expenses stock on purchase; v2 is perpetual FIFO, so a whole-trial-balance tie is impossible by design. Lipa first finds the friction before four stores do. The encoder/verifier split is row 293's separation of duties in operational terms | Yes — the tie set is the comparator's configuration; the timer is one unit file |
+| 304 | 2026-10-10 | ⭐ **OPENING STOCK IS COUNTED PER ROOM AT THE COMMISSARY AND IN ONE ROOM AT EACH BRANCH, AND IS VALUED AT THE LAST V1 DELIVERY PRICE; AN ITEM V1 NEVER DELIVERED IS PRICED BY A MANAGER TYPING IT. THIS SUPERSEDES §16.11's "THE 2027-01-01 OPENING LAYER IS WEIGHTED AVERAGE" (AND ADR-009's opening-layer row).** Ian, 2026-10-10: plan-q8 (free text): *"mirror v1, storage is important for commissary only; for branches and others 1 room only"*; t390-q2 = (a) last v1 delivery price; t390-q1 (Q-T390-1) = (b) the manager types every unpriced item. T-390 S2 is unblocked. Built as data, no code change: T-390 R1 (a branch count with no room goes to the store's default room), R2 (`--basis last`, `cost_source = 'v1_last_delivery'`; a typed cost is `'typed'`) | v1 keeps a per-room ledger and storage matters only at the commissary. The last delivery price is the closest to a FIFO layer cost that exists, and it is auditable per row; a weighted average over v1 data that holds no inventory value had no defensible input. The basis still changes exactly once, at the boundary | Yes — a different price file, before C5 posts; after it, never |
+| 305 | 2026-10-10 | ⭐ **THE PADRE GARCIA FRANCHISE RUNS ON V2 BY 1 JANUARY 2027, AS ITS OWN ORGANISATION. ROW 246'S TRIGGER ("before a second organisation is onboarded") THEREFORE FIRES BEFORE CUTOVER: DEF-491 AND DEF-421 BECOME CUTOVER SCOPE. PLAN ITEM C11, TASK T-398 (RESERVED).** Ian, 2026-10-10: plan-q4 = (b), against the recommended (a). Plan §1.1 C11 | ADR-008 §4-§7 and rows 111, 114, 175 already design the second org (own books, franchisor sees SALES only, commissary dispatch to a franchise is a sale). What is missing is the onboarding itself and the guards a second org needs. ⚠️ `scripts/import-items.ts` reads every v1 store, Padre Garcia included, into one org: under this row Padre Garcia's items belong to its own org (T-391 must split them) | Yes, until Padre Garcia's first posting; after it, leaving v2 is a franchise-by-franchise data migration |
+| 306 | 2026-10-10 | **BACKUPS: T-393 IS BUILT AND TESTED BUT NOT SWITCHED ON UNTIL IAN SETS IT UP ("no backup for now, we'll set up soon", Ian 2026-10-10, answering every T-393 question). OPEN POINT, NOT RESOLVED HERE: plan-q7 = (a) (the existing `shareat-erp-backups` bucket under `postgres/`, prefix-scoped 30-day retention, never touching the Frappe objects) conflicts with the T-393 spec as reviewed (a dedicated `shareat-pg-backups` bucket, 35 days + 13 monthly + yearly, R5/R12). Ian picks one when he sets it up.** Ian, 2026-10-10: plan-q7 = (a); T-393 Q1-Q5 answered "no backup for now" | ⚠️ Until it is switched on, production has only DO's native 7-day backups and no restore has ever been rehearsed. The 13 Nov rehearsal (T-394) needs a restored copy and wizard step C1 attests a drill: **the 15 Nov go/no-go cannot pass without it** (R4) | Yes — it is configuration; the spec's bucket and retention are config-contract constants |
+| 307 | 2026-10-11 | ⭐ **POS V2 AND CUSTOMER V2 HAVE NO ADMIN PANELS OF THEIR OWN. MASTER DATA (MENU/CATALOG WITH VARIANTS, FLAVORS, REFILLS, PACKAGES, OPTION GROUPS AND PER-STORE PRICE; STORES; STAFF AND USERS; DISCOUNTS, CHARGES AND TENDERS; LOYALTY REWARDS; STORE SETTINGS — SCHEDULES, TABLES, KITCHEN ROUTING, FORECAST, CUSTOMER ORDERING), DINER CONTENT (FLASH ADS, GAMES MODERATION, FEEDBACK) AND REPORTS ARE EDITED IN ERP V2 ONLY. FLOOR OPERATIONS STAY ON THE APP: TABLE PINS, THE ONLINE-ORDER QUEUE, RECEIPT REPRINT AND REFUND, AND MARKING AN ITEM SOLD OUT (AVAILABILITY) ON THE POS. DEVICE SETTINGS (THERMAL PRINTERS, OFFLINE DEVICE IDENTITY) STAY ON THE DEVICE. CUSTOMER'S SEPARATE `categories` MASTER IS FOLDED INTO THE ONE ERP MENU. V1's REPAIR SCREENS (reconcile, backfill, rebuild caches) ARE NOT CARRIED.** Ian, 2026-10-11, brainstorm session: accepted the three-way split, sold-out on the POS, and categories folded into the menu. Narrows row 269: the POS/CUSTOMER UI copy excludes their admin areas | v1 keeps stores, staff, payment methods and menu groupings in two or three apps, synced one way or by hand (POS `admin/*`, `manager/*` ≈26 pages; CUSTOMER `admin/*`, `manager/*` ≈13 pages; ERP-rebuild `inventory/pos-mappings`). ADR-003/004 (one product master, one store table) and ADR-015 §2 / row 130 (the till only reads menu, prices, tenders, discounts) already imply one editor; this row names it. Floor actions stay on the till because seconds matter mid-service (row 270 already puts corrections there); printers are a device concern (CAPABILITY-GAPS.md "printer"). Repair screens exist only to fix Firestore projections, which v2 does not have (row 280). Branch managers reach ERP on a store device, with navigation scoped by role and store. Industry pattern: web back office owns master data; the register keeps availability and device setup | Yes, until the ERP menu screens are built; moving an editor later is a UI move, not a data move — one table either way |
+| 308 | 2026-10-11 | **WARM NEUTRALS (T-387).** Ian: *"go on and fix the clash in colors."* Tailwind's `neutral` ramp is re-valued warm in `apps/erp/warm-neutral.ts`: steps 200/400/500/800/900/950 ARE the ruled Amendment 7 tokens; the other steps keep stock lightness in the ink hue. Side effect, intended: the stock caption grey (4.34:1 on cream, an AA failure) now passes. | Ian's ruling; the stock ramp clashed with the warm tokens and failed AA | Yes — one file |
+| 309 | 2026-10-11 | **DARK `--warning-soft` = `#2b2210` (T-387).** Ian: *"keep #2b2210."* ADR-013 A7 had no dark warning-soft; this is it, pinned in `theme-tokens.test.ts`. | Ian's ruling; the token was missing | Yes — one token |
+| 310 | 2026-10-11 | **ACTIVE NAV IS RED (T-387).** Ian: *"make active nav red."* The current nav item fills with `--brand`, white text, in both themes. | Ian's ruling | Yes — CSS only |
+| 311 | 2026-10-11 | **ONE RED PRIMARY PER VIEW (T-387).** Ian: *"demote extras."* A view has one red primary action; a repeated Save is secondary. `SubmitButton` gained a `variant` prop. Ian also ruled *"merge when green"* for every T-387 PR. | Ian's ruling; several red buttons on one view diluted the primary action | Yes — per-call `variant` |
+| 312 | 2026-10-11 | **TWO T-387 SPEC NOTES.** (1) `useFormStatus` exists in the App Router (Next's bundled React 19) but not in the react-dom 18.3.1 Vitest loads, so tests use the shim `apps/erp/tests/helpers/form-status-setup.ts` — a test-only bridge, never imported by source. (2) `attendance_days` RLS is org-level; the store boundary is the repo filter (§15.11 layering), not RLS. | Recorded so the next reader does not "fix" the shim or add store RLS | Yes |
 
 ## 14. Amendment protocol
 
@@ -2150,9 +2161,10 @@ most likely to compound.
 - ⭐ **Valuation is FIFO** (row 110) — cost **layers**, a remaining quantity and unit cost
   per receipt, consumed oldest-first. Layers are held **per item per store**; a movement is
   per location, so a room-to-room transfer moves quantity and not cost.
-  ⚠️ **The one exception, by design:** the 2027-01-01 opening layer is **weighted average**,
-  because that is what the counted data supports and a single opening layer at an average
-  cost is the standard way to open FIFO books (ADR-009). **The basis changes exactly once,
+  ⚠️ **The one exception, by design:** the 2027-01-01 opening layer is valued at the **last v1
+  delivery price** per item (a manager types the price of an item v1 never delivered), one
+  layer per counted room, all at one cost per item per store — **row 304, superseding the
+  "weighted average" this paragraph and ADR-009 used to say**. **The basis changes exactly once,
   at the boundary** — a year-on-year comparison spanning the cutover compares two bases.
 - ⭐ **A return is a credit, not a reversal of the sale that caused it** (row 166). Goods we
   return to a supplier become a credit we hold against that supplier; goods a customer

@@ -44,6 +44,7 @@ import { setThresholdAction } from '../../src/app/inventory/low-stock/actions';
 import { updateTermsAction } from '../../src/app/fixed-assets/actions';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { urlOf } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -66,7 +67,7 @@ async function fixture(hint: string) {
   await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${orgId}, 'admin')`;
   await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${store!.id})`;
   const [item] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${uid('IT')}, 'Pork', 'raw_material', 'kg', ${p!.id}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Pork', 'raw_material', 'kg', ${p!.id}) returning id`;
   ACTOR_HOLDER.actor = { orgId, personId: p!.id };
   return { orgId, storeId: store!.id, personId: p!.id, itemId: item!.id };
 }

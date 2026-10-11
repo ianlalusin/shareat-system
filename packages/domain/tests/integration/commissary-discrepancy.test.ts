@@ -9,6 +9,7 @@ import { confirmReceipt, dispatchOrder } from '../../src/commissary/transfer';
 import { deferDiscrepancy, resolveDiscrepancy } from '../../src/commissary/discrepancy';
 import { quantity } from '../../src/stock/quantity';
 import type { LocationLike } from '../../src/stock-locations/rules';
+import { testItemCode } from './_fixtures/item-code';
 
 /**
  * T-174 — what happens to the goods that never arrived.
@@ -104,8 +105,8 @@ beforeEach(async () => {
   const [r1] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${orgA},${commissary},'KIT','Kitchen',${t!.id},'operating',true,${personA}) returning id`;
   const [r2] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${orgA},${branch},'KIT','Kitchen',${t!.id},'operating',true,${personA}) returning id`;
   comKitchen = r1!.id; brKitchen = r2!.id;
-  const [i] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'PORK','Pork','raw_material','kg',${personA}) returning id`;
-  const [i2] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'PORK-BR','Pork (branch)','raw_material','kg',${personA}) returning id`;
+  const [i] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Pork','raw_material','kg',${personA}) returning id`;
+  const [i2] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Pork (branch)','raw_material','kg',${personA}) returning id`;
   itemA = i!.id; brItemA = i2!.id;
   const [f] = await sql<{ id: string }[]>`
     insert into stored_files (org_id, storage_path, content_type, byte_size, checksum, purpose, uploaded_by)

@@ -1,0 +1,41 @@
+# T-393 - the nightly off-cluster database backup. INSTALL INSTRUCTIONS: docs/ops/README.md (Backups)
+#
+# NOT ARMED BY ANYTHING IN THIS REPO. provision.sh installs this unit and enables nothing. Ian arms it
+# (systemctl enable --now shareat-db-backup.timer) after creating the Spaces bucket and key (bible row 306).
+#
+# What it does: one pg_dump -Fc of the whole database (through SYSTEM_DATABASE_URL, the RLS-bypassing role, on
+# the DIRECT port 25060), a roles-only file, and a manifest with a trial-balance fingerprint taken in the SAME
+# snapshot, uploaded to the dedicated Spaces bucket under postgres/daily/. The alert is a dead-man's switch
+# (BACKUP_HEARTBEAT_URL), because nothing on this box sends mail.
+
+[Unit]
+Description=Shareat - nightly off-cluster database backup to Spaces (T-393)
+After=network-online.target
+Wants=network-online.target
+# No After=postgresql.service - the database is DO Managed Postgres, off-box (ADR-002 s1).
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/shareat
+ExecStart=/usr/bin/npm run db-backup -- --production
+User=shareat
+Group=shareat
+
+# NEVER build here. This is a 4 GB droplet; a build OOMs it. This unit runs an already-installed tree
+# shipped by CI - bible 2.10.
+Environment=NODE_ENV=production
+# pg_dump refuses a server newer than itself: the client must be PGDG's postgresql-client-18 (provision.sh).
+Environment=PG_BIN_DIR=/usr/lib/postgresql/18/bin
+# The dump goes here, not to a small /tmp. provision.sh creates it (owned by shareat, mode 700).
+Environment=BACKUP_TMP_DIR=/var/lib/shareat-backup/tmp
+
+# A dump must never starve the app that shares this box.
+Nice=10
+IOSchedulingClass=idle
+MemoryMax=1G
+TimeoutStartSec=2h
+
+# The exit code is load-bearing: non-zero when anything failed. It is NOT the alarm (no mailer is
+# installed); the heartbeat's absence is.
+StandardOutput=append:/var/log/shareat/db-backup.log
+StandardError=append:/var/log/shareat/db-backup.log
