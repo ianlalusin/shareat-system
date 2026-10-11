@@ -109,7 +109,7 @@ describe('A1 - items page: the super-admin bypass keeps its verb', () => {
 
   it('source: the label of the button bound to formAction={createItemAction} is "Add directly (super-admin)" (the render shows no action identity)', () => {
     const src = readFileSync(resolve(__dirname, '..', '..', 'src', 'app', 'items', 'page.tsx'), 'utf8');
-    const m = /formAction=\{createItemAction\}[\s\S]*?>\s*([^<{]+?)\s*<\/button>/.exec(src);
+    const m = /formAction=\{createItemAction\}[\s\S]*?>\s*([^<{]+?)\s*<\/(?:button|Button|SubmitButton)>/.exec(src);
     expect(m, 'a button with formAction={createItemAction}').not.toBeNull();
     expect(m![1]).toBe('Add directly (super-admin)');
   });
