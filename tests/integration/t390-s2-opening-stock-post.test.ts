@@ -1,3 +1,4 @@
+import { testItemCode } from '../../packages/domain/tests/integration/_fixtures/item-code';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
@@ -121,7 +122,7 @@ describe('R5 - valueOpeningStock writes one generated draft per store (test 8, k
     for (let i = 0; i < 7; i++) {
       const nm = `Unpriced ${i} ${uid('x')}`;
       const [it] = await sql<{ id: string }[]>`
-        insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('IT')}, ${nm}, 'raw_material', 'kg', ${f.adminId}) returning id`;
+        insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${testItemCode()}, ${nm}, 'raw_material', 'kg', ${f.adminId}) returning id`;
       extra.push(nm);
       await count(f, { store: f.storeB, room: f.barB, item: it!.id, qty: '2' });
     }
@@ -682,7 +683,7 @@ describe('T1 - the stock register, per store x 1310/1320/1330 (kills M17 for T1)
     const mk = async (label: string) => {
       const nm = `${label} ${uid('u')}`;
       const [i] = await sql<{ id: string }[]>`
-        insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('IT')}, ${nm}, 'raw_material', 'kg', ${f.adminId}) returning id`;
+        insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${testItemCode()}, ${nm}, 'raw_material', 'kg', ${f.adminId}) returning id`;
       return { id: i!.id, nm };
     };
     const items = [await mk('Tuna'), await mk('Squid'), await mk('Crab')];
