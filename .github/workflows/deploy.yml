@@ -64,7 +64,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          # T-399: on the self-hosted runner ~/.npm persists between jobs; GitHub's cache service would
+          # only download and re-upload it over a slow link. Hosted runners keep the GitHub cache.
+          cache: ${{ vars.CI_RUNNER == '' && 'npm' || '' }}
 
       - name: Install (full — needed to build)
         run: npm ci --no-audit --no-fund
@@ -101,7 +103,9 @@ jobs:
           # apps/erp/public is optional — Next only needs it if it exists (no static assets today)
           PATHS="apps/erp/.next apps/erp/package.json apps/erp/next.config.js packages scripts package.json package-lock.json node_modules"
           [ -d apps/erp/public ] && PATHS="$PATHS apps/erp/public"
+          # T-399: production never reads the Turbopack build cache; do not ship it over the slow link.
           tar -czf /tmp/shareat-artifact.tar.gz \
+            --exclude='apps/erp/.next/cache' \
             --exclude='.git' \
             --exclude='secrets' \
             --exclude='**/*.test.ts' \

@@ -116,6 +116,18 @@ name `CI_RUNNER`, value `shareat-local`.
 Check it: open any PR (or re-run the latest CI run). The job page shows *Runner: ians-pc*. The
 first run is slower while npm and Docker caches fill; later runs are usually faster than hosted.
 
+## Caches on the runner
+
+T-399. Two caches live on the runner's own disk, so jobs do not pull them over the slow link:
+
+- **npm:** `~/.npm`. `setup-node` skips GitHub's cache service when `CI_RUNNER` is set.
+- **Next build (CI only):** `~/.cache/shareat/next-ci`, saved after a green `Build` and restored before the next one.
+
+Clear both with `rm -rf ~/.cache/shareat/next-ci ~/.npm`. The next job is slower, never broken.
+
+Deploy builds are never cached, deliberately: the production artifact comes from a cold build, so a stale
+CI cache can never reach production. `deploy.yml` also leaves `apps/erp/.next/cache` out of the artifact.
+
 ## Rollback
 
 Delete the `CI_RUNNER` variable. The next job runs on GitHub-hosted runners again. Nothing else

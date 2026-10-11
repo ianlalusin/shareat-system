@@ -116,3 +116,28 @@ Put the numbers in this file under `## Outcome`. They are the evidence; "it felt
 - `docs/ops/self-hosted-runner.md`: one short section, "Caches on the runner": where they live,
   how to clear them (`rm -rf ~/.cache/shareat/next-ci ~/.npm`), and the fact that deploy is never
   cached.
+
+## Outcome
+
+**Status: BUILT, not yet merged or measured after the change.**
+
+**Baseline (acceptance item 1).** This is the first self-hosted `verify` run, before T-399: run
+38142220182, PR branch `release/t387-s8`, runner `ians-pc`, 11 Oct.
+
+| Step | Time |
+|---|---|
+| `Initialize containers` (postgres:18 pull) | 35 s |
+| `setup-node` (`cache: npm` download, plus the one-time Node 22 install) | **3 m 19 s** |
+| `Install` (`npm ci`) | 31 s |
+| `Typecheck` | 1 m 24 s |
+| `Unit tests` | 2 m 13 s |
+| `Integration tests` / `Build` | _pending; fill in from the run_ |
+
+Review fixes applied on top of the builder's diff:
+- The restore step had been inserted under the bible §2.10 comment that belongs to `Build`. It now
+  sits above that comment.
+- A failed restore `cp` used to leave a half-copied `.next/cache` in place (`|| true`). It now
+  removes the partial copy and builds cold.
+
+Both workflow files parse (PyYAML in `shareat-runner`): `ci.yml` jobs `changes` (2 steps) and
+`verify` (11 steps); `deploy.yml` job `deploy` (14 steps).
