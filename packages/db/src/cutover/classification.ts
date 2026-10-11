@@ -28,6 +28,8 @@ interface BaseEntry {
 
 export interface KeepEntry extends BaseEntry {
   readonly class: 'keep';
+  /** Only a `purge` entry carries `notBefore`; declared here so a reader of the union can ask any entry for it. */
+  readonly notBefore?: undefined;
 }
 
 export interface PurgeEntry extends BaseEntry {
@@ -39,6 +41,8 @@ export interface PurgeEntry extends BaseEntry {
 
 export interface KeepShellEntry extends BaseEntry {
   readonly class: 'keep_shell';
+  /** Only a `purge` entry carries `notBefore`; declared here so a reader of the union can ask any entry for it. */
+  readonly notBefore?: undefined;
   /** The row survives; these columns are set NULL and re-entered at cutover. */
   readonly clearColumns: readonly string[];
   /** T-347 (DEF-437) §3.2 — literal values the shell step writes instead of NULL, in the SAME
@@ -54,6 +58,8 @@ export interface KeepShellEntry extends BaseEntry {
 
 export interface DateScopedEntry extends BaseEntry {
   readonly class: 'date_scoped';
+  /** Only a `purge` entry carries `notBefore`; declared here so a reader of the union can ask any entry for it. */
+  readonly notBefore?: undefined;
   readonly dateColumn: string;
   /** Rows on or after this date survive; earlier rows are purged. */
   readonly keepFrom: string;
@@ -1191,6 +1197,25 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'A posting document: it names a journal entry (purge) and a sales day (purge). Append-only by trigger. Purged ' +
       'BEFORE sales_days (PURGE_ORDER_HINT).',
   },
+
+  // ---- T-392 S3: the dual-run comparator (migration 0195) -------------------------------------
+  dual_run_reports: {
+    class: 'purge',
+    notBefore: '2027-01-31',
+    reason:
+      'Pilot data per ADR-007, but it is the 15 Nov go/no-go evidence, so it is kept past cutover as etl_* is: not purged ' +
+      'before 2027-01-31. Append-only (the app role has no UPDATE or DELETE). Purged AFTER its lines (PURGE_ORDER_HINT).',
+  },
+  dual_run_lines: {
+    class: 'purge',
+    notBefore: '2027-01-31',
+    reason: 'As dual_run_reports: the lines of a kept comparison report. Purged BEFORE dual_run_reports (PURGE_ORDER_HINT).',
+  },
+  dual_run_dispositions: {
+    class: 'purge',
+    notBefore: '2027-01-31',
+    reason: 'As dual_run_reports: the defect refs a person recorded against a delta; part of the same evidence.',
+  },
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */
@@ -1233,6 +1258,10 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   'sales_day_channels',
   // T-375: corrections cite a sales day, two feeds and a journal entry; usage pulls cite a sales day and a feed.
   'sales_day_pos_corrections',
+  // T-392 S3: lines cite their report; dispositions cite nothing purged.
+  'dual_run_lines',
+  'dual_run_reports',
+  'dual_run_dispositions',
   'pos_usage_pulls',
   'sales_days',
   'pos_v1_day_feeds',

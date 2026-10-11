@@ -56,7 +56,7 @@ const OPEN_BASELINE = { count: 223, sha256: '341d656a156ce5e35006ba7dfba23171f82
 const BY_DESIGN_PIN: readonly string[] = [];
 const ORG_LESS_PIN: readonly string[] = ['etl_quarantine', 'etl_reconciliation', 'etl_runs', 'etl_source_documents'];
 const NO_FK_PIN = { count: 26, sha256: 'aa5b1c19e4f13d6746cee042c9d7a05c11fb6c22f4a612863e90d5cb4914491d' } as const;
-const JSONB_PIN = { count: 8, sha256: '13dd5a5b6db1b96ff5028398cf4f3d5a2dca8d1bdb865dd1a41c156a9b1eaaec' } as const;
+const JSONB_PIN = { count: 9, sha256: 'c6ed3b6390ba20d384ed7ad17b22b6fc66e2ade9b0cb2867c115aa36f7d8d16b' } as const;
 
 const openKeys = (l: readonly OpenFkEntry[]) => l.map((e) => e.fk);
 const noFkKeys = (l: readonly { column: string; kind: string }[]) => l.map((e) => `${e.column}|${e.kind}`);

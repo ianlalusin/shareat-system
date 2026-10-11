@@ -45,10 +45,13 @@ getItemForProduction
 getRecipe
 hasFingerprint
 hasOtherActiveAdmin
+insertDisposition
+insertReport
 isConvertibleUnit
 isHeaderCode
 isStartDecisionMaterial
 jobResult
+linesOf
 linkInvoiceToReceipt
 listAdjustments
 listAvailableCommissaries
@@ -113,6 +116,7 @@ updateMoneyAccount
 updateOwner
 upsertCategoryLife
 upsertPolicy
+v2Figures
 validateFingerprintTemplates
 voidShift
 weekStartOf

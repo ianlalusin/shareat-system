@@ -943,6 +943,21 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'A correcting posting for an org’s own sales day; org-scoped like the journal entry it names.',
   },
+
+  // ---- T-392 S3: the dual-run comparator (migration 0195) -------------------------------------
+  dual_run_reports: {
+    scope: 'org_column',
+    reason: 'One store-week comparison of v1 against v2 books: an org’s own evidence, never another franchisee’s.',
+  },
+  dual_run_lines: {
+    scope: 'org_column',
+    reason:
+      'A report’s lines. Carries org_id, copied from its report by the repo; the composite (org_id, report_id) FK keeps it equal.',
+  },
+  dual_run_dispositions: {
+    scope: 'org_column',
+    reason: 'What a person asserted about one delta (V1_DEFECT or V2_DEFECT with a DEF ref); org-scoped like its report.',
+  },
 };
 
 export function rlsScopeOf(table: string): RlsEntry | undefined {
