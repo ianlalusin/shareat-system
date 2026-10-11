@@ -36,8 +36,8 @@ export interface ApplyItemsResult {
 
 /** The plan still has rows held for Ian (also when it turned held while this apply waited for the org lock). */
 export class HeldError extends Error {
-  constructor(readonly held: number) {
-    super(`applyItems: ${held} row(s) are held for Ian. Answer the sheets and run again; nothing was written.`);
+  constructor(readonly held: number, message?: string) {
+    super(message ?? `applyItems: ${held} row(s) are held for Ian. Answer the sheets and run again; nothing was written.`);
   }
 }
 
@@ -224,6 +224,7 @@ async function applyParties(entity: PartyEntity, input: ApplyPartiesInput): Prom
       links: [...sup.links, ...cus.links],
       answers: input.answers,
     });
+    // `held` is a whole-run count BY DESIGN: a held customer refuses the suppliers apply too.
     if (plan.held > 0) throw new HeldError(plan.held);
 
     // a store link goes through the store map: store_code -> this org's stores.code (P5)
@@ -343,13 +344,27 @@ export async function applyMasterData(input: ApplyMasterDataInput): Promise<Part
   if (!actor) throw new Error('applyMasterData: an actor is required (--actor <person uuid>). The load never writes as nobody (R8).');
   if (actor.orgId !== input.orgId) throw new Error('applyMasterData: the actor belongs to another organisation than --org. Refused (R6, I1).');
   const order: MasterDataEntity[] = ['items', 'suppliers', 'customers'];
+  for (const n of input.only ?? []) {
+    if (!(order as string[]).includes(n)) throw new Error(`applyMasterData: unknown entity "${n}" in only. Allowed: ${order.join(', ')}.`);
+  }
   const wanted = input.only ? order.filter((x) => input.only!.includes(x)) : order;
   await withOrgPrincipal(input.orgId, async (tx) => {
     for (const x of wanted) await authorize(tx, actor, ENTITY_CAPABILITY[x], {});
   });
   const out: Partial<Record<MasterDataEntity, ApplyItemsResult>> = {};
   for (const x of wanted) {
-    out[x] = x === 'items' ? await applyItems(input) : x === 'suppliers' ? await applySuppliers(input) : await applyCustomers(input);
+    try {
+      out[x] = x === 'items' ? await applyItems(input) : x === 'suppliers' ? await applySuppliers(input) : await applyCustomers(input);
+    } catch (e) {
+      if (e instanceof HeldError && Object.keys(out).length > 0) {
+        const done = Object.entries(out).map(([n, r]) => `${n}: created ${r.created}, linked ${r.linked}`).join('; ');
+        throw new HeldError(
+          e.held,
+          `applyMasterData: ${x} is held (${e.held} row(s) for Ian). Already committed: ${done}. Answer the sheets and rerun to finish; nothing of ${x} was written.`,
+        );
+      }
+      throw e;
+    }
   }
   return out;
 }

@@ -150,6 +150,7 @@ async function run(): Promise<number> {
         return 2;
       }
       // no sheet rewrite and no "dry run" text on the way: the apply is the run
+      for (const x of parties.listed) console.log(`LISTED: ${x.note}`); // the real apply reports them too
       const all = await applyMasterData({ ...common, apply: true });
       for (const [name, r] of Object.entries(all)) console.log(`APPLIED: ${r.created} ${name} created, ${r.linked} links written.`);
       return 0;

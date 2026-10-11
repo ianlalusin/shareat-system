@@ -456,8 +456,10 @@ export function planParties(input: PlanPartiesInput): PartiesPlan {
 
       const bankRec = newest(e.recs).find((r) => r.src.bankAccount && (str(r.src.bankAccount.bankName) || str(r.src.bankAccount.accountNumberMasked)));
       const bank = bankRec?.src.bankAccount;
-      const terms = newest(e.recs).find((r) => r.src.lastCreditDueDays !== undefined && r.src.lastCreditDueDays !== null && r.src.lastCreditDueDays !== '');
-      const termsN = terms === undefined ? NaN : Number(terms.src.lastCreditDueDays);
+      const terms = newest(e.recs).find((r) => r.src.lastCreditDueDays !== undefined && r.src.lastCreditDueDays !== null);
+      const rawTerms: unknown = terms?.src.lastCreditDueDays;
+      const termsN =
+        typeof rawTerms === 'number' ? rawTerms : typeof rawTerms === 'string' && /^\d+$/.test(rawTerms.trim()) ? Number(rawTerms.trim()) : NaN;
       const termsOk = Number.isInteger(termsN) && termsN >= 0 && termsN <= 365;
       if (inScope && terms && !termsOk) {
         listed.push({ entity, name: e.name, note: `${e.name}: v1 credit term "${String(terms.src.lastCreditDueDays)}" is not a whole number of days from 0 to 365; left as cash on delivery (blank)` });
