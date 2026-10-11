@@ -1,0 +1,41 @@
+# T-393 S2 - the weekly restore drill. INSTALL INSTRUCTIONS: docs/ops/README.md (Backups)
+#
+# NOT ARMED BY ANYTHING IN THIS REPO. provision.sh installs this unit and enables nothing. Ian arms it with the
+# backup (systemctl enable --now shareat-restore-drill.timer), after the first manual run is green.
+#
+# What it does: downloads the newest COMPLETE dump (one with a manifest) from Spaces, checks its sha256, restores it
+# into the scratch database shareat_restore_drill (RESTORE_DRILL_DATABASE_URL, a CREATEDB role on the direct port),
+# compares the trial balance, row counts and sequences with the manifest, writes postgres/drills/<date>.json, and drops
+# the scratch database. It never connects to the production database (it only reads the name from SYSTEM_DATABASE_URL).
+# The alert is a dead-man's switch (DRILL_HEARTBEAT_URL, 8-day grace).
+
+[Unit]
+Description=Shareat - weekly restore drill of the newest database backup (T-393)
+After=network-online.target
+Wants=network-online.target
+# No After=postgresql.service - the database is DO Managed Postgres, off-box (ADR-002 s1).
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/shareat
+ExecStart=/usr/bin/npm run restore-drill -- --production
+User=shareat
+Group=shareat
+
+# NEVER build here. This is a 4 GB droplet; a build OOMs it. This unit runs an already-installed tree
+# shipped by CI - bible 2.10.
+Environment=NODE_ENV=production
+# pg_restore must be PGDG's postgresql-client-18 (provision.sh).
+Environment=PG_BIN_DIR=/usr/lib/postgresql/18/bin
+# The downloaded dump goes here, not to a small /tmp (same directory as the backup; provision.sh creates it).
+Environment=BACKUP_TMP_DIR=/var/lib/shareat-backup/tmp
+
+# A drill must never starve the app that shares this box.
+Nice=10
+IOSchedulingClass=idle
+MemoryMax=1G
+TimeoutStartSec=2h
+
+# The exit code is load-bearing: non-zero when anything failed. It is NOT the alarm; the heartbeat's absence is.
+StandardOutput=append:/var/log/shareat/restore-drill.log
+StandardError=append:/var/log/shareat/restore-drill.log

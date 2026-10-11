@@ -24,7 +24,6 @@ checkValuesMatch
 childLogger
 closeAsLateReceipt
 closeYear
-compareFingerprints
 confirmTradeOrder
 convertSpecimen
 countedVariances
@@ -81,7 +80,6 @@ previewDrawingClose
 proxy
 purgeComplete
 rateFor
-readManifestFile
 realSourceTypesForSpecName
 recentRuns
 reconcileSupplier

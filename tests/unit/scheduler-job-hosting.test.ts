@@ -78,14 +78,18 @@ const NAMED_SECONDARY_TIMER_ONLY = ['month-end-retry'];
  * T-393 S1 - platform jobs: a unit pair that runs a script which is NOT a per-org `SCHEDULER_JOBS`
  * entry. `scheduler_runs.org_id` is NOT NULL, so a cluster-wide run (a whole-database dump) cannot be
  * recorded there, and widening it needs a migration (`docs/tasks/393-nightly-backup-and-restore.md`
- * R11). Each entry needs BOTH units and a reason citing a T-/DEF- number. S1 names `db-backup` ONLY;
- * S2 adds `restore-drill` when its units exist (adding it earlier would be a named job with no units).
+ * R11). Each entry needs BOTH units and a reason citing a T-/DEF- number. S1 named `db-backup`;
+ * S2 adds `restore-drill` with its units.
  */
 const NAMED_PLATFORM_JOB: Record<string, string> = {
   'db-backup':
     'T-393: the nightly whole-database pg_dump to Spaces is cluster-wide, so it cannot be a per-org ' +
     'SCHEDULER_JOBS entry (scheduler_runs.org_id is NOT NULL); its run record is the object in Spaces ' +
     'plus its manifest and the heartbeat.',
+  'restore-drill':
+    'T-393 S2: the weekly restore of the newest complete dump into a scratch database, with the trial-balance ' +
+    'tie check, is cluster-wide, so it cannot be a per-org SCHEDULER_JOBS entry (scheduler_runs.org_id is NOT ' +
+    'NULL); its run record is the drill report in Spaces and the heartbeat.',
 };
 
 /**
@@ -177,8 +181,8 @@ describe('T-273 — every scheduler job is hosted by a docs/ops/ unit pair, or a
     expect(unexplained).toEqual([]);
   });
 
-  it('T-393 S1: the named platform jobs are exactly db-backup (restore-drill is S2) and none is a SCHEDULER_JOBS script', () => {
-    expect(Object.keys(NAMED_PLATFORM_JOB)).toEqual(['db-backup']);
+  it('T-393 S2: the named platform jobs are exactly db-backup and restore-drill and none is a SCHEDULER_JOBS script', () => {
+    expect(Object.keys(NAMED_PLATFORM_JOB)).toEqual(['db-backup', 'restore-drill']);
     for (const name of Object.keys(NAMED_PLATFORM_JOB)) {
       expect(knownScripts(), `${name} is a per-org job script; it does not belong in NAMED_PLATFORM_JOB`).not.toContain(name);
     }
