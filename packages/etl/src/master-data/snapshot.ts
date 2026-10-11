@@ -128,6 +128,8 @@ const STAFF_FIELDS = ['staffCode', 'fullName', 'positions', 'employmentStatus', 
 
 export interface RunExtractResult {
   storeCount: number;
+  /** Names of grouped people whose records carry different pay in v1. Never a rate. The rates file keeps every record. */
+  rateConflicts: string[];
 }
 
 const byStoreThenId = (a: Rec, b: Rec): number =>
@@ -169,6 +171,7 @@ export async function runExtract(
       const x = d.data();
       staff.push(pick(x, STAFF_FIELDS, { id: d.id, store: s.id }));
       rates.push({
+        person_ref: d.id, // replaced by the identity group key below, once the groups are read
         v1_store_id: s.id,
         v1_staff_id: d.id,
         staff_code: cell(x.staffCode),
@@ -177,7 +180,9 @@ export async function runExtract(
         daily_rate: cell(x.dailyRate),
         hourly_rate: cell(x.hourlyRate),
         monthly_rate: cell(x.monthlyRate),
+        daily_rate_effective_from: cell(x.dailyRateEffectiveFrom),
         hourly_rate_effective_from: cell(x.hourlyRateEffectiveFrom),
+        monthly_rate_effective_from: cell(x.monthlyRateEffectiveFrom),
       });
     }
   }
@@ -189,6 +194,21 @@ export async function runExtract(
       staffRefs: (Array.isArray(refs) ? (refs as Rec[]) : []).map((r) => ({ storeId: r.storeId, staffId: r.staffId })),
     };
   });
+
+  // S13/S14c: person_ref is the group key for a grouped person, else the v1 staff id (the key staff-roster carries)
+  const groupOf = new Map<string, string>();
+  for (const g of staffIdentities) for (const r of g.staffRefs) groupOf.set(`${r.storeId}|${r.staffId}`, g.id);
+  for (const r of rates) r.person_ref = groupOf.get(`${r.v1_store_id}|${r.v1_staff_id}`) ?? r.v1_staff_id!;
+  // members of one group with different pay: named (never the rate) so nobody is silently picked
+  const payOf = (r: Record<string, string>): string =>
+    ['pay_type', 'daily_rate', 'hourly_rate', 'monthly_rate', 'daily_rate_effective_from', 'hourly_rate_effective_from', 'monthly_rate_effective_from']
+      .map((c) => r[c])
+      .join('|');
+  const rateConflicts: string[] = [];
+  for (const g of staffIdentities) {
+    const members = rates.filter((r) => r.person_ref === g.id);
+    if (new Set(members.map(payOf)).size > 1) rateConflicts.push(members[0]!.full_name!);
+  }
 
   for (const l of [items, suppliers, arCustomers, staff]) l.sort(byStoreThenId);
   rates.sort((a, b) => a.v1_store_id!.localeCompare(b.v1_store_id!) || a.v1_staff_id!.localeCompare(b.v1_staff_id!));
@@ -211,7 +231,20 @@ export async function runExtract(
     stores.map((s) => ({ v1_store_id: s.id, name: s.name, role: roleOf(s.id), org_code: '', store_code: '' })),
   );
   const ratesCsv = toCsv(
-    ['v1_store_id', 'v1_staff_id', 'staff_code', 'full_name', 'pay_type', 'daily_rate', 'hourly_rate', 'monthly_rate', 'hourly_rate_effective_from'],
+    [
+      'person_ref',
+      'v1_store_id',
+      'v1_staff_id',
+      'staff_code',
+      'full_name',
+      'pay_type',
+      'daily_rate',
+      'hourly_rate',
+      'monthly_rate',
+      'daily_rate_effective_from',
+      'hourly_rate_effective_from',
+      'monthly_rate_effective_from',
+    ],
     rates,
   );
 
@@ -222,7 +255,7 @@ export async function runExtract(
   put('stores.csv', storesCsv);
   mkdirSync(opts.ratesDir, { recursive: true });
   writeFileSync(join(opts.ratesDir, 'v1-staff-rates.local.csv'), ratesCsv, { mode: 0o600 });
-  return { storeCount: stores.length };
+  return { storeCount: stores.length, rateConflicts };
 }
 
 /** The service account key as it sits in .env.local: JSON, or base64 of JSON. A bad value prints a fixed message. */
