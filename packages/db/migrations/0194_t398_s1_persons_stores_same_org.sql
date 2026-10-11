@@ -772,3 +772,6 @@ ALTER TABLE "trade_orders" ADD CONSTRAINT "trade_orders_store_id_same_org_fk" FO
 ALTER TABLE "trade_orders" ADD CONSTRAINT "trade_orders_voided_by_same_org_fk" FOREIGN KEY ("org_id", "voided_by") REFERENCES "persons" ("org_id", "id") ON DELETE RESTRICT;
 --> statement-breakpoint
 ALTER TABLE "v1_master_links" ADD CONSTRAINT "v1_master_links_created_by_same_org_fk" FOREIGN KEY ("org_id", "created_by") REFERENCES "persons" ("org_id", "id") ON DELETE RESTRICT;
+--> statement-breakpoint
+-- Audit 2026-10-12: SET LOCAL lasts to COMMIT, and drizzle applies every pending migration in ONE transaction, so undo it here.
+RESET lock_timeout;
