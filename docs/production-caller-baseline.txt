@@ -19,17 +19,20 @@ arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
+buildSnapshot
 capitalizeFromExpense
 checkValuesMatch
 childLogger
 closeAsLateReceipt
 closeYear
 compareFingerprints
+computeV1Figures
 confirmTradeOrder
 convertSpecimen
 countedVariances
 createRecipe
 customerReturnableQuantity
+datesInWeek
 declareSupplierItem
 depreciateAsset
 depreciationDrift
@@ -119,4 +122,5 @@ upsertPolicy
 validateFingerprintTemplates
 valueOpeningAsset
 voidShift
+weekStartOf
 withPrincipal
