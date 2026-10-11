@@ -152,6 +152,8 @@ export async function updateSupplier(
     bankAccountNumber: string | null;
     // ---- T-362
     creditTermsDays: number | null;
+    // ---- T-391 S4: system-managed; only setSupplierCounterpartyStore passes it
+    counterpartyStoreId: string | null;
   }>,
 ): Promise<void> {
   const updated = await tx

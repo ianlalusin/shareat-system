@@ -75,7 +75,8 @@ async function run(): Promise<number> {
   const { verifySnapshotSha } = await import('../packages/etl/src/master-data/snapshot');
   const { planItems, staleAnswersCsv, ITEM_SHEETS, ITEM_SHEET_COLUMNS } = await import('../packages/etl/src/master-data/items-plan');
   const { closeDb, organizationsRepo, withOrgPrincipal } = await import('@shareat/db');
-  const { applyItems, HeldError, loadItemState } = await import('./lib/master-data-apply');
+  const { PARTY_SHEETS, PARTY_SHEET_COLUMNS, planParties } = await import('../packages/etl/src/master-data/parties-plan');
+  const { applyMasterData, HeldError, loadItemState, loadPartyState } = await import('./lib/master-data-apply');
 
   const sha = verifySnapshotSha(snapshotPath); // refuses a snapshot that no longer matches its .sha256
   console.log(`Snapshot sha256 ${sha}`);
@@ -91,9 +92,29 @@ async function run(): Promise<number> {
     if (existsSync(p)) answers[s] = parseCsv(readFileSync(p, 'utf8'));
   }
 
+  for (const s of PARTY_SHEETS) {
+    const p = join(sheetsDir, `${s}.csv`);
+    if (existsSync(p)) answers[s] = parseCsv(readFileSync(p, 'utf8'));
+  }
+
   const { existing, links } = await withOrgPrincipal(orgId, (tx) => loadItemState(tx, orgId));
+  const partyState = await withOrgPrincipal(orgId, async (tx) => ({
+    sup: await loadPartyState(tx, orgId, 'supplier'),
+    cus: await loadPartyState(tx, orgId, 'customer'),
+  }));
 
   const plan = planItems({ snapshot, map, orgCode, storeCodes, existing, links, answers });
+  const parties = planParties({
+    snapshot,
+    map,
+    orgCode,
+    storeCodes,
+    existingSuppliers: partyState.sup.existing,
+    existingCustomers: partyState.cus.existing,
+    links: [...partyState.sup.links, ...partyState.cus.links],
+    answers,
+  });
+  const totalHeld = plan.held + parties.held;
 
   const actor = actorId ? { orgId, personId: actorId } : undefined;
   const common = { snapshot, snapshotSha: sha, map, orgId, orgCode, storeCodes, answers, actor };
@@ -111,31 +132,40 @@ async function run(): Promise<number> {
       writeFileSync(p, toCsv(ITEM_SHEET_COLUMNS[s], plan.sheets[s]), { mode: 0o600 });
       chmodSync(p, 0o600);
     }
+    for (const s of PARTY_SHEETS) {
+      const p = join(sheetsDir, `${s}.csv`);
+      writeFileSync(p, toCsv(PARTY_SHEET_COLUMNS[s], parties.sheets[s]), { mode: 0o600 });
+      chmodSync(p, 0o600);
+    }
+    for (const x of parties.listed) console.log(`LISTED: ${x.note}`);
+    for (const x of parties.stale) console.log(`STALE ANSWER (ignored): ${x.sheet} ${x.row_key} ${x.item}`);
+    for (const d of parties.drift) console.log(`DRIFT (reported, not written): ${d.entity} ${d.v1Id} ${d.field}: v1 "${d.v1}" v2 "${d.v2}"`);
   };
 
   try {
     if (doApply) {
-      if (plan.held > 0) {
+      if (totalHeld > 0) {
         writeSheets(); // the sheets still show Ian what is open
-        console.error(`--apply refused: ${plan.held} row(s) are held for Ian. Nothing was written. Sheets written to ${resolve(sheetsDir)}.`);
+        console.error(`--apply refused: ${totalHeld} row(s) are held for Ian. Nothing was written. Sheets written to ${resolve(sheetsDir)}.`);
         return 2;
       }
       // no sheet rewrite and no "dry run" text on the way: the apply is the run
-      const r = await applyItems({ ...common, apply: true });
-      console.log(`APPLIED: ${r.created} items created, ${r.linked} links written.`);
+      for (const x of parties.listed) console.log(`LISTED: ${x.note}`); // the real apply reports them too
+      const all = await applyMasterData({ ...common, apply: true });
+      for (const [name, r] of Object.entries(all)) console.log(`APPLIED: ${r.created} ${name} created, ${r.linked} links written.`);
       return 0;
     }
 
     writeSheets();
-    if (actor && plan.held === 0) {
-      const r = await applyItems({ ...common, apply: false }); // the real writes, rolled back
-      console.log(`DRY RUN (rolled back, nothing committed): ${r.created} items created, ${r.linked} links written.`);
+    if (actor && totalHeld === 0) {
+      const all = await applyMasterData({ ...common, apply: false }); // the real writes, rolled back
+      for (const [name, r] of Object.entries(all)) console.log(`DRY RUN (rolled back, nothing committed): ${r.created} ${name} created, ${r.linked} links written.`);
     } else {
       const creates = plan.writes.filter((w) => w.op === 'create').length;
       const linkOps = plan.writes.filter((w) => w.op === 'link').length;
       console.log(`DRY RUN (plan only; add --actor to run the writes rolled back): ${creates} items to create, ${linkOps} existing items to link.`);
     }
-    console.log(`Held for Ian: ${plan.held}. Stale answers: ${plan.stale.length}. Sheets written to ${resolve(sheetsDir)}.`);
+    console.log(`Held for Ian: ${totalHeld}. Stale answers: ${plan.stale.length + parties.stale.length}. Sheets written to ${resolve(sheetsDir)}.`);
   } catch (e) {
     if (e instanceof HeldError) {
       console.error(`${e.message} (the plan changed while waiting for the org lock)`);
@@ -145,7 +175,7 @@ async function run(): Promise<number> {
   } finally {
     await closeDb();
   }
-  return plan.held > 0 ? 2 : 0;
+  return totalHeld > 0 ? 2 : 0;
 }
 
 async function main(): Promise<void> {
