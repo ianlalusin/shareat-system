@@ -6,6 +6,7 @@ import { requireSession } from '../../lib/session';
 import { withOrgPrincipal } from '../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Badge, Banner, Button, Select } from '@/components/ui';
 
 export const metadata = { title: 'Sales days — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -14,13 +15,6 @@ interface SearchParams {
   store?: string;
   status?: string;
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  open: 'Open',
-  submitted: 'Submitted',
-  verified: 'Verified',
-  voided: 'Voided',
-};
 
 export default async function SalesDaysPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
@@ -64,21 +58,21 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
         </div>
         <a
           href={`/sales-days/new?${carry.toString()}`}
-          className="shrink-0 rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+          className="inline-flex min-h-11 shrink-0 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
         >
           New sales day
         </a>
       </div>
 
       {oldestUnverified && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong className="font-medium">{oldestUnverified.businessDate}</strong> is still{' '}
           {oldestUnverified.status} and recognises no revenue.{' '}
           <a href={`/sales-days/${oldestUnverified.id}?${carry.toString()}`} className="underline hover:no-underline">
             Verify it
           </a>{' '}
           — a newer day cannot be created for that store until it is done (admins excepted).
-        </div>
+        </Banner>
       )}
 
       <form
@@ -104,12 +98,9 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
             { v: 'voided', t: 'Voided' },
           ]}
         />
-        <button
-          type="submit"
-          className="rounded bg-neutral-900 px-4 py-1.5 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-        >
+        <Button type="submit" variant="secondary">
           Apply
-        </button>
+        </Button>
       </form>
 
       {days.length === 0 ? (
@@ -149,7 +140,7 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
                     {d.source === 'pos_v1_day_feed' ? 'POS' : 'Typed'}
                   </td>
                   <td className="px-3 py-2">
-                    <StatusBadge status={d.status} />
+                    <Badge status={d.status} />
                   </td>
                 </tr>
               ))}
@@ -179,29 +170,13 @@ function Picker({
   return (
     <label className="flex flex-col gap-1">
       <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{label}</span>
-      <select
-        name={name}
-        defaultValue={value}
-        className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-      >
+      <Select name={name} defaultValue={value}>
         {options.map((o) => (
           <option key={o.v} value={o.v}>
             {o.t}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
-}
-
-export function StatusBadge({ status }: { status: string }) {
-  const cls =
-    status === 'verified'
-      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-      : status === 'voided'
-        ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-        : status === 'submitted'
-          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-          : 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300';
-  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{STATUS_LABEL[status] ?? status}</span>;
 }

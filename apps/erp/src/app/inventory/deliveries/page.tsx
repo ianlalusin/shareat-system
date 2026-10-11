@@ -6,6 +6,7 @@ import { createDeliveryAction } from './actions';
 import { deliveryFormData, deliveryRegister, listStores } from './lib';
 import { NewDeliveryForm } from './NewDeliveryForm';
 import { Page } from '@/components/shell/Page';
+import { Badge, FlashBanner, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -20,16 +21,7 @@ interface SearchParams {
   warning?: string;
 }
 
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-
 const KIND_LABEL: Record<string, string> = { supplier: 'Supplier', purchase: 'Cash purchase', commissary: 'Commissary' };
-const STATUS_LABEL: Record<string, string> = { draft: 'Draft', received: 'Received', void: 'Void' };
-const STATUS_TONE: Record<string, string> = {
-  draft: 'text-neutral-600 dark:text-neutral-400',
-  received: 'text-emerald-700 dark:text-emerald-400',
-  void: 'text-red-700 dark:text-red-400',
-};
 
 export default async function DeliveriesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
@@ -67,32 +59,18 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
         </Link>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
-      {sp.warning && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          ⚠️ {sp.warning}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className={`mt-1 ${INPUT}`}>
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
@@ -139,8 +117,8 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
                     <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{d.referenceNo ?? '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{d.lineCount}</td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(d.total)}</td>
-                    <td className={`px-3 py-2 font-medium ${STATUS_TONE[d.status] ?? ''}`}>
-                      {STATUS_LABEL[d.status] ?? d.status}
+                    <td className="px-3 py-2">
+                      <Badge status={d.status} />
                     </td>
                   </tr>
                 ))}

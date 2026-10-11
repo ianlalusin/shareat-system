@@ -127,7 +127,7 @@ function Wordmark() {
 function PersistentSidebar({ allowedHrefs }: { allowedHrefs: readonly string[] }) {
   const { toggleCollapse, isRailNow, expandFromRail, state } = useSidebarContext();
   return (
-    <div className="shell-sidebar hidden shrink-0 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950 md:sticky md:top-0 md:flex md:h-dvh">
+    <div className="shell-sidebar hidden shrink-0 flex-col border-r border-neutral-200 bg-surface dark:border-neutral-800 md:sticky md:top-0 md:flex md:h-dvh">
       <Wordmark />
       <button
         type="button"
@@ -257,7 +257,7 @@ function Drawer({ allowedHrefs }: { allowedHrefs: readonly string[] }) {
         // orchestrator and lane C): tsc clean, `inert=""` present in the rendered DOM, 0/40 Tab
         // stops reaching the closed drawer. Do not "fix" this a third time.
         inert={!drawerOpen}
-        className={`fixed inset-y-0 left-0 z-50 flex w-[min(18rem,85vw)] flex-col bg-white shadow-xl transition-transform dark:bg-neutral-950 ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed inset-y-0 left-0 z-50 flex w-[min(18rem,85vw)] flex-col bg-surface shadow-xl transition-transform ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 pl-4 pr-2 dark:border-neutral-800">
           <span className="flex items-center gap-2">

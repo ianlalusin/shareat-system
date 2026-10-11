@@ -37,7 +37,7 @@ export function JournalLinesTable({ rows, totalDebit, totalCredit }: { rows: Jou
               <td className="px-3 py-1.5 font-mono text-xs text-neutral-500">
                 {r.sourceType}
                 {r.status === 'reversed' ? (
-                  <span className="ml-2 rounded bg-red-100 px-1 py-0.5 text-red-800 dark:bg-red-950 dark:text-red-300">
+                  <span className="ml-2 rounded bg-danger-surface px-1 py-0.5 text-danger">
                     reversed
                   </span>
                 ) : null}

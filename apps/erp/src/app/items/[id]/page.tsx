@@ -19,7 +19,7 @@ import { typedFor } from '@/lib/keep-typing';
 import { ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT } from '../typed-forms';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid, Field } from '@/components/ui';
+import { Banner, Button, Checkbox, FlashBanner, Input, Select, FormGrid, Field } from '@/components/ui';
 
 export const metadata = { title: 'Item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -37,13 +37,6 @@ function barWidth(avgPrice: string, peak: number): string {
 function per(value: string): string {
   return peso(Number(value).toFixed(2));
 }
-
-const SELECT =
-  'rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-white dark:text-neutral-900';
-const BTN_QUIET =
-  'rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 /** Renders a tri-state override as its select value. `null` is "follow the org", never "no". */
 function triValue(v: boolean | null | undefined): string {
@@ -113,16 +106,7 @@ export default async function ItemDetailPage({
         </p>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/* T-383 R6. Rename: name and code, super-admin only; the domain (`renameItem`) is the enforcement. */}
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -131,10 +115,10 @@ export default async function ItemDetailPage({
           <EditableRecord action={renameItemAction} label={item.name} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_RENAME, item.id, actor.personId)}>
             <FormGrid>
               <Field label="Name">
-                <input id="rename-name" name="name" type="text" required defaultValue={item.name} className={`${SELECT} w-full`} />
+                <Input id="rename-name" name="name" type="text" required defaultValue={item.name} className="w-full" />
               </Field>
               <Field label="Code">
-                <input name="code" type="text" required defaultValue={item.code} className={`${SELECT} w-full`} />
+                <Input name="code" type="text" required defaultValue={item.code} className="w-full" />
               </Field>
               {/* T-386 R10 (q4): the code stays on rename; the tick offers the new suggestion. */}
               <ItemCodeField
@@ -175,11 +159,11 @@ export default async function ItemDetailPage({
           <EditableRecord action={changeItemUnitAction} label={`${item.name} unit`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_UNIT, item.id, actor.personId)}>
             <FormGrid>
               <Field label="Unit">
-                <select name="baseUnit" required defaultValue={item.baseUnit} className={`${SELECT} w-full`}>
+                <Select name="baseUnit" required defaultValue={item.baseUnit} className="w-full">
                   {BASE_UNITS.map((u) => (
                     <option key={u} value={u}>{u}</option>
                   ))}
-                </select>
+                </Select>
               </Field>
             </FormGrid>
             <p className="mt-3 w-full text-xs text-neutral-500 dark:text-neutral-400">
@@ -210,10 +194,7 @@ export default async function ItemDetailPage({
         <EditableRecord action={updateItemFlagsAction} label={`${item.name} organisation default`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_FLAGS, item.id, actor.personId)}>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
             {FLAGS.map((f) => (
-              <label key={f.key} className="flex items-center gap-2">
-                <input type="checkbox" name={f.key} defaultChecked={f.org} className="h-4 w-4" />
-                {f.label}
-              </label>
+              <Checkbox key={f.key} name={f.key} defaultChecked={f.org} label={f.label} />
             ))}
           </div>
         </EditableRecord>
@@ -250,9 +231,9 @@ export default async function ItemDetailPage({
                           <form action={clearStoreSellabilityAction}>
                             <input type="hidden" name="itemId" value={item.id} />
                             <input type="hidden" name="storeId" value={s.storeId} />
-                            <button type="submit" className={BTN_QUIET}>
+                            <Button type="submit" variant="ghost">
                               Clear
-                            </button>
+                            </Button>
                           </form>
                         ) : null
                       }
@@ -269,20 +250,20 @@ export default async function ItemDetailPage({
                         {FLAGS.map((f) => (
                           <label key={f.key} className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
                             {f.label}
-                            <select name={f.key} defaultValue={triValue(s.override?.[f.key])} className={SELECT}>
+                            <Select name={f.key} defaultValue={triValue(s.override?.[f.key])}>
                               <option value="">Follow the organisation ({f.org ? 'yes' : 'no'})</option>
                               <option value="yes">Yes, here</option>
                               <option value="no">No, here</option>
-                            </select>
+                            </Select>
                           </label>
                         ))}
                         <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
                           Why
-                          <input
+                          <Input
                             name="note"
                             defaultValue={s.override?.note ?? ''}
                             placeholder="made in-house here"
-                            className={`${SELECT} w-full min-w-[10rem]`}
+                            className="w-full min-w-[10rem]"
                           />
                         </label>
                       </div>
@@ -303,26 +284,26 @@ export default async function ItemDetailPage({
                       {FLAGS.map((f) => (
                         <label key={f.key} className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
                           {f.label}
-                          <select name={f.key} defaultValue={triValue(undefined)} className={SELECT}>
+                          <Select name={f.key} defaultValue={triValue(undefined)}>
                             <option value="">Follow the organisation ({f.org ? 'yes' : 'no'})</option>
                             <option value="yes">Yes, here</option>
                             <option value="no">No, here</option>
-                          </select>
+                          </Select>
                         </label>
                       ))}
                       <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
                         Why
-                        <input
+                        <Input
                           name="note"
                           defaultValue=""
                           placeholder="made in-house here"
-                          className={`${SELECT} w-full min-w-[10rem]`}
+                          className="w-full min-w-[10rem]"
                         />
                       </label>
                     </div>
-                    <button type="submit" className={`${BTN} mt-3`}>
+                    <Button type="submit" variant="secondary" className="mt-3">
                       Save
-                    </button>
+                    </Button>
                   </form>
                   )}
                 </li>
@@ -336,7 +317,7 @@ export default async function ItemDetailPage({
         <section className="space-y-2">
           <h2 className="font-medium">Who sells this</h2>
           {sellers.length === 1 && (
-            <p className="text-xs text-amber-700 dark:text-amber-400">
+            <p className="text-xs text-warning-ink">
               ⚠️ Only one supplier &mdash; a single point of supply for this item.
             </p>
           )}
@@ -365,9 +346,7 @@ export default async function ItemDetailPage({
         <section id="retire" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Retire or restore</h2>
           {retireFlash && (
-            <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-              {retireFlash}
-            </p>
+            <Banner tone="error">{retireFlash}</Banner>
           )}
           {item.status === 'inactive' && <p className="text-sm font-medium">Retired.</p>}
           {readout.onHand.length > 0 && (
@@ -393,7 +372,7 @@ export default async function ItemDetailPage({
             <form action={setItemStatusAction} className="space-y-2">
               <input type="hidden" name="itemId" value={item.id} />
               <input type="hidden" name="status" value="inactive" />
-              <button type="submit" className={BTN}>Retire</button>
+              <Button type="submit" variant="danger">Retire</Button>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
                 Retiring keeps every record. It can no longer be ordered, received, priced, mapped to a POS item or put on a new recipe. Stock already on hand can still be used, wasted, moved and counted until it runs out. You can restore it.
               </p>
@@ -402,7 +381,7 @@ export default async function ItemDetailPage({
             <form action={setItemStatusAction}>
               <input type="hidden" name="itemId" value={item.id} />
               <input type="hidden" name="status" value="active" />
-              <button type="submit" className={BTN}>Restore</button>
+              <Button type="submit" variant="secondary">Restore</Button>
             </form>
           )}
         </section>

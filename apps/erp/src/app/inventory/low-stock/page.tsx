@@ -6,6 +6,7 @@ import { setThresholdAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { EditableRecord } from '@/components/forms';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -71,26 +72,18 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
         low-stock alert is indistinguishable from a real one.
       </PageDescription>
 
-      {sp.error && (
-        <div className="mt-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow className="mt-6">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select
-            name="store"
-            defaultValue={storeId}
-            className="mt-1 rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          >
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
@@ -117,7 +110,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
                   {row.onHand} {row.baseUnit}
                 </td>
                 <td className="py-2 pr-4 text-right tabular-nums">{row.threshold}</td>
-                <td className="py-2 text-right tabular-nums font-medium text-amber-700 dark:text-amber-500">
+                <td className="py-2 text-right tabular-nums font-medium text-warning-ink">
                   {row.shortfall}
                 </td>
               </tr>
@@ -133,7 +126,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
         never block the person who cannot.
       */}
       {missing.length > 0 && (
-        <section className="mt-8 rounded-lg border border-amber-400 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950">
+        <section className="mt-8 rounded-lg border border-warning bg-warning-soft p-4">
           <h2 className="text-sm font-medium">
             ⚠️ {missing.length} item{missing.length === 1 ? '' : 's'} moving in this store with no
             threshold
@@ -180,33 +173,30 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
                     hidden={{ storeId, itemId: item.id }}
                     typed={typedFor(sp, LOW_STOCK_THRESHOLD, item.id, actor.personId)}
                   >
-                    <input
+                    <Input
                       name="threshold"
                       aria-label={`${item.name} threshold`}
                       inputMode="decimal"
                       defaultValue={thresholdByItem.get(item.id) ?? ''}
                       placeholder="none"
-                      className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-sm tabular-nums dark:border-neutral-700 dark:bg-neutral-900"
+                      className="w-28 tabular-nums"
                     />
                   </EditableRecord>
                 ) : (
                   <form action={setThresholdAction} className="flex items-center gap-2">
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="itemId" value={item.id} />
-                    <input
+                    <Input
                       name="threshold"
                       aria-label={`${item.name} threshold`}
                       inputMode="decimal"
                       defaultValue={thresholdByItem.get(item.id) ?? ''}
                       placeholder="none"
-                      className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-sm tabular-nums dark:border-neutral-700 dark:bg-neutral-900"
+                      className="w-28 tabular-nums"
                     />
-                    <button
-                      type="submit"
-                      className="rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                    >
+                    <Button type="submit" variant="secondary" className="text-xs">
                       Save
-                    </button>
+                    </Button>
                   </form>
                 )}
               </td>

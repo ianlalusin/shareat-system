@@ -3,7 +3,7 @@ import { countsRegister, listStores } from './lib';
 import { openCountSessionAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { Page } from '@/components/shell/Page';
-import { FormGrid, Field } from '@/components/ui';
+import { Badge, Button, FlashBanner, FormGrid, Field, Input, Select, statusTone } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -63,31 +63,18 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
         posts to <strong>5400</strong> at FIFO cost — the gap v1 never closed.
       </PageDescription>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select
-            name="store"
-            defaultValue={storeId}
-            className="mt-1 rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          >
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
@@ -98,7 +85,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
           it are refused until this count is committed or cancelled.
         </p>
         {locations.length === 0 ? (
-          <p className="mt-3 text-sm text-amber-700 dark:text-amber-500">This store has no active rooms yet.</p>
+          <p className="mt-3 text-sm text-warning-ink">This store has no active rooms yet.</p>
         ) : (
           <form action={openCountSessionAction} className="mt-3 space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
@@ -108,7 +95,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
                   <input type="checkbox" name="locationIds" value={l.id} disabled={l.frozen} />
                   <span>{l.name}</span>
                   {l.frozen && (
-                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900 dark:bg-amber-900 dark:text-amber-100">
+                    <span className="rounded bg-warning-soft px-1.5 py-0.5 text-xs text-warning-ink">
                       frozen — already counting
                     </span>
                   )}
@@ -117,26 +104,15 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
             </fieldset>
             <FormGrid>
               <Field label="Counted on" className="text-xs text-neutral-600 dark:text-neutral-400">
-                <input
-                  name="countedOn"
-                  type="date"
-                  defaultValue={today()}
-                  className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-                />
+                <Input name="countedOn" type="date" defaultValue={today()} className="mt-1 block w-full" />
               </Field>
               <Field label="Note (optional)" span="wide" className="text-xs text-neutral-600 dark:text-neutral-400">
-                <input
-                  name="note"
-                  className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-                />
+                <Input name="note" className="mt-1 block w-full" />
               </Field>
             </FormGrid>
-            <button
-              type="submit"
-              className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-            >
+            <Button type="submit" variant="primary">
               Open count
-            </button>
+            </Button>
           </form>
         )}
       </section>
@@ -166,7 +142,9 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
                     {s.note && <div className="text-xs text-neutral-500">{s.note}</div>}
                   </td>
                   <td className="py-2 pr-4 tabular-nums">{s.countedOn}</td>
-                  <td className="py-2 pr-4">{STATUS_LABEL[s.status] ?? s.status}</td>
+                  <td className="py-2 pr-4">
+                    <Badge tone={statusTone(s.status)} label={STATUS_LABEL[s.status] ?? s.status} />
+                  </td>
                   <td className="py-2 pr-4 tabular-nums">{s.lineCount}</td>
                   <td className="py-2 text-xs text-neutral-500">
                     {s.openedByName} · {when(s.openedAt)}

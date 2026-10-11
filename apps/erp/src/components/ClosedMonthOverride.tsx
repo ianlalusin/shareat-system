@@ -12,7 +12,7 @@
  * ⛔ I5: never on a stock screen. A native `<details>`, no dialogs.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Input } from '@/components/ui';
+import { Input, Select } from '@/components/ui';
 
 export interface ClosedMonthOption {
   startsOn: string;
@@ -26,9 +26,6 @@ const REASONS: { value: string; label: string }[] = [
   { value: 'data_entry_error', label: 'Fixing a mistake' },
   { value: 'other', label: 'Other' },
 ];
-
-const SELECT =
-  'rounded-md border border-surface-border bg-surface px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
 
 export function ClosedMonthOverride({
   closedMonths,
@@ -63,7 +60,7 @@ export function ClosedMonthOverride({
   const month = closedMonths.find((m) => date >= m.startsOn && date <= m.endsOn);
 
   return (
-    <details ref={ref} data-closed-month-override="" hidden={!month} className="sm:col-span-2 rounded-md border border-amber-300 p-3 dark:border-amber-800">
+    <details ref={ref} data-closed-month-override="" hidden={!month} className="sm:col-span-2 rounded-md border border-warning p-3">
       <summary className="inline-flex min-h-[44px] cursor-pointer items-center text-sm font-medium">
         {month ? `${month.label} is closed — post ${many ? `these ${count} expenses` : 'this one entry'} anyway` : 'Post into a closed month'}
       </summary>
@@ -74,7 +71,7 @@ export function ClosedMonthOverride({
         </p>
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Reason</span>
-          <select name="periodOverrideReason" defaultValue="" className={SELECT}>
+          <Select name="periodOverrideReason" defaultValue="">
             <option value="" disabled>
               Choose a reason…
             </option>
@@ -83,7 +80,7 @@ export function ClosedMonthOverride({
                 {r.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Note (required for “Other”)</span>

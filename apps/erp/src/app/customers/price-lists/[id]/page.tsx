@@ -7,6 +7,7 @@ import { listItems } from '../../../items/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Price list — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -45,16 +46,7 @@ export default async function PriceListPage({
         )}
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {list.items.length > 0 ? (
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
@@ -107,7 +99,7 @@ export default async function PriceListPage({
           <input type="hidden" name="priceListId" value={list.id} />
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Item" hint="From the item master. No item? Add it under /items first.">
-              <select name="itemId" required defaultValue="" className={INPUT}>
+              <Select name="itemId" required defaultValue="" className="w-full">
                 <option value="" disabled>
                   {allItems.length === 0 ? 'No items yet' : 'Select…'}
                 </option>
@@ -116,29 +108,23 @@ export default async function PriceListPage({
                     {it.name} ({it.code}) — priced per {it.baseUnit}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Rate" hint="Zero is allowed — a sample is genuinely free.">
-              <input name="rate" required inputMode="decimal" className={INPUT} />
+              <input name="rate" required inputMode="decimal" className="w-full min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink" />
             </Field>
             <Field label="Unit" hint="Optional.">
-              <input name="unit" placeholder="kg" className={INPUT} />
+              <Input name="unit" placeholder="kg" className="w-full" />
             </Field>
           </div>
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-          >
+          <Button type="submit" variant="primary">
             Save
-          </button>
+          </Button>
         </form>
       </section>
     </Page>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function Field({
   label,

@@ -3,11 +3,12 @@ import { notFound } from 'next/navigation';
 import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../../lib/page-access';
 import { disburseLoanAction, recordPaymentAction, reverseEntryAction } from '../actions';
-import { METHOD_LABEL, STATUS_LABEL, getDetail, moneyAccounts, peso, today } from '../lib';
+import { METHOD_LABEL, getDetail, moneyAccounts, peso, today } from '../lib';
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
 
 export const metadata = { title: 'Loan — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -46,21 +47,12 @@ export default async function LoanPage({
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{loan.name}</h1>
         <PageDescription>
-          {loan.lenderName} · {STATUS_LABEL[loan.status]} · {Number(loan.interestRate)}% per{' '}
+          {loan.lenderName} · {statusLabel(loan.status)} · {Number(loan.interestRate)}% per{' '}
           {loan.ratePeriod} · {METHOD_LABEL[loan.interestMethod]}
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <DetailLayout
         summary={
@@ -107,24 +99,21 @@ export default async function LoanPage({
               />
             </Field>
             <Field label="Into">
-              <select name="intoMoneyAccountId" required defaultValue={accounts[0]?.id} className={INPUT}>
+              <Select name="intoMoneyAccountId" required defaultValue={accounts[0]?.id} className="w-full">
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="On">
-              <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+              <Input name="on" type="date" required defaultValue={today()} className="w-full" />
             </Field>
             <div className="sm:col-span-3">
-              <button
-                type="submit"
-                className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-              >
+              <Button type="submit" variant="secondary">
                 Record the draw
-              </button>
+              </Button>
             </div>
           </form>
         </section>
@@ -171,24 +160,21 @@ export default async function LoanPage({
               />
             </Field>
             <Field label="From">
-              <select name="fromMoneyAccountId" required defaultValue={accounts[0]?.id} className={INPUT}>
+              <Select name="fromMoneyAccountId" required defaultValue={accounts[0]?.id} className="w-full">
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name} — {peso(a.balance)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="On">
-              <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+              <Input name="on" type="date" required defaultValue={today()} className="w-full" />
             </Field>
             <div className="sm:col-span-3">
-              <button
-                type="submit"
-                className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-              >
+              <Button type="submit" variant="primary">
                 Record payment
-              </button>
+              </Button>
             </div>
           </form>
         </section>
@@ -227,18 +213,10 @@ export default async function LoanPage({
                       <form action={reverseEntryAction} className="flex justify-end gap-1">
                         <input type="hidden" name="loanId" value={loan.id} />
                         <input type="hidden" name="entryId" value={p.entryId} />
-                        <input
-                          name="reason"
-                          required
-                          placeholder="Reason…"
-                          className="w-28 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
-                        />
-                        <button
-                          type="submit"
-                          className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                        >
+                        <Input name="reason" required placeholder="Reason…" className="w-28" />
+                        <Button type="submit" variant="danger">
                           Reverse
-                        </button>
+                        </Button>
                       </form>
                     </td>
                   </tr>
@@ -261,7 +239,7 @@ export default async function LoanPage({
 }
 
 const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
 function Figure({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
   return (

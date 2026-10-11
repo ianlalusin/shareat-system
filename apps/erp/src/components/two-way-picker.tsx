@@ -12,6 +12,7 @@
  * transfer screen inherits the fix instead of reintroducing the gap.
  */
 import { useState } from 'react';
+import { Select } from '@/components/ui';
 
 export interface PickerOption {
   readonly id: string;
@@ -107,7 +108,7 @@ export function TwoWayPicker({
     <>
       <label className={labelClassName}>
         {fromLabel}
-        <select
+        <Select
           name={fromName}
           required
           value={from}
@@ -116,11 +117,11 @@ export function TwoWayPicker({
         >
           {blankPlaceholder && <option value="">{blankPlaceholder}</option>}
           <Options options={options} />
-        </select>
+        </Select>
       </label>
       <label className={labelClassName}>
         {toLabel}
-        <select
+        <Select
           name={toName}
           required
           value={to}
@@ -130,7 +131,7 @@ export function TwoWayPicker({
           {blankPlaceholder && <option value="">{blankPlaceholder}</option>}
           {/* ⭐ The thing already picked as "From" is not offered here at all. */}
           <Options options={options} exclude={from} />
-        </select>
+        </Select>
       </label>
     </>
   );

@@ -73,9 +73,9 @@ export function BudgetHint({ caps, periodKey }: { caps: BudgetCap[]; periodKey: 
   const after = remaining - entered;
   const tone =
     after < 0
-      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
+      ? 'border-danger bg-danger-surface text-danger'
       : after < Number(cap.amount) * 0.1
-        ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'
+        ? 'border-warning bg-warning-soft text-warning-ink'
         : 'border-neutral-200 bg-neutral-50 text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300';
 
   return (

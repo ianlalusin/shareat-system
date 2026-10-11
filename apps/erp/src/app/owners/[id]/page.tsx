@@ -21,6 +21,7 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Owner — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -72,16 +73,7 @@ export default async function OwnerPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <DetailLayout
         summary={
@@ -127,14 +119,14 @@ export default async function OwnerPage({
             <input type="hidden" name="ownerId" value={owner.id} />
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="How">
-                <select name="how" required defaultValue="" className={INPUT}>
+                <Select name="how" required defaultValue="" className="w-full">
                   <option value="" disabled>
                     Choose…
                   </option>
                   <option value="cash">Cash back — the money returns to an account</option>
                   <option value="pay">Recover from pay — becomes a salary advance</option>
                   <option value="writeoff">Write off — it becomes a drawing</option>
-                </select>
+                </Select>
               </Field>
               <Field label="Amount">
                 <input
@@ -146,28 +138,25 @@ export default async function OwnerPage({
                 />
               </Field>
               <Field label="Into (cash back only)">
-                <select name="intoMoneyAccountId" defaultValue="" className={INPUT}>
+                <Select name="intoMoneyAccountId" defaultValue="" className="w-full">
                   <option value="">—</option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name} — {peso(a.balance)}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label="Because (write-off only)" hint="A write-off with no reason is indistinguishable from nobody collecting.">
-                <input name="reason" className={INPUT} />
+                <Input name="reason" className="w-full" />
               </Field>
               <Field label="On">
-                <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+                <Input name="on" type="date" required defaultValue={today()} className="w-full" />
               </Field>
             </div>
-            <button
-              type="submit"
-              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-            >
+            <Button type="submit" variant="secondary">
               Settle
-            </button>
+            </Button>
           </form>
         </section>
       )}
@@ -187,7 +176,7 @@ export default async function OwnerPage({
               <input name="amount" required inputMode="decimal" className={INPUT} />
             </Field>
             <Field label="Into">
-              <select name="intoMoneyAccountId" required defaultValue="" className={INPUT}>
+              <Select name="intoMoneyAccountId" required defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -196,17 +185,14 @@ export default async function OwnerPage({
                     {a.name} — {peso(a.balance)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="On">
-              <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+              <Input name="on" type="date" required defaultValue={today()} className="w-full" />
             </Field>
-            <button
-              type="submit"
-              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-            >
+            <Button type="submit" variant="secondary">
               Record contribution
-            </button>
+            </Button>
           </form>
         </section>
 
@@ -230,7 +216,7 @@ export default async function OwnerPage({
               <input name="amount" required inputMode="decimal" className={INPUT} />
             </Field>
             <Field label="From">
-              <select name="fromMoneyAccountId" required defaultValue="" className={INPUT}>
+              <Select name="fromMoneyAccountId" required defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -239,17 +225,14 @@ export default async function OwnerPage({
                     {a.name} — {peso(a.balance)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="On">
-              <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+              <Input name="on" type="date" required defaultValue={today()} className="w-full" />
             </Field>
-            <button
-              type="submit"
-              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-            >
+            <Button type="submit" variant="primary">
               Record drawing
-            </button>
+            </Button>
           </form>
         </section>
       </div>
@@ -272,10 +255,10 @@ export default async function OwnerPage({
             <input type="hidden" name="month" value={owner.closableMonth} />
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Month">
-                <input
+                <Input
                   disabled
                   value={owner.closableMonth.slice(0, 7)}
-                  className={`${INPUT} opacity-70`}
+                  className={`w-full opacity-70`}
                 />
               </Field>
               <Field
@@ -290,18 +273,15 @@ export default async function OwnerPage({
                 />
               </Field>
               <Field label="Difference because" hint="Required only if your figure differs.">
-                <input name="adjustmentReason" className={INPUT} />
+                <Input name="adjustmentReason" className="w-full" />
               </Field>
               <Field label="On">
-                <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+                <Input name="on" type="date" required defaultValue={today()} className="w-full" />
               </Field>
             </div>
-            <button
-              type="submit"
-              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-            >
+            <Button type="submit" variant="secondary">
               Close {owner.closableMonth.slice(0, 7)}
-            </button>
+            </Button>
           </form>
         ) : (
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -353,7 +333,7 @@ export default async function OwnerPage({
 }
 
 const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
 function Figure({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
   return (

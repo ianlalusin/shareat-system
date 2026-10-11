@@ -13,6 +13,7 @@ import { CATEGORY_LABEL, STATUS_LABEL, getDetail, peso, thisPeriod } from '../li
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Banner, Button, FlashBanner, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Prepaid item — Shareat System' };
@@ -62,16 +63,7 @@ export default async function PrepaidItemPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <DetailLayout
         summary={
@@ -96,8 +88,9 @@ export default async function PrepaidItemPage({
       >
       {/* ── The review, when the term was guessed ────────────────────────────────────── */}
       {item.needsReview && active && (
-        <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
-          <div className="text-sm text-amber-900 dark:text-amber-300">
+        <Banner tone="warning">
+        <section className="space-y-3">
+          <div className="text-sm">
             <strong className="font-medium">This term was a guess.</strong> The amount and date came
             off the invoice — only a person can say how long the cover actually runs. Confirm it or
             correct it.
@@ -117,17 +110,17 @@ export default async function PrepaidItemPage({
           <form action={confirmTermAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="prepaidItemId" value={item.id} />
             <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-amber-900 dark:text-amber-300">Starts</span>
-              <input
+              <span className="text-xs font-medium text-warning-ink">Starts</span>
+              <Input
                 name="coverageStartDate"
                 type="date"
                 required
                 defaultValue={item.coverageStartDate}
-                className={INPUT}
+                className="w-full"
               />
             </label>
             <label className="flex min-w-[6rem] flex-1 flex-col gap-1">
-              <span className="text-xs font-medium text-amber-900 dark:text-amber-300">Months</span>
+              <span className="text-xs font-medium text-warning-ink">Months</span>
               <input
                 name="coverageMonths"
                 inputMode="numeric"
@@ -136,14 +129,10 @@ export default async function PrepaidItemPage({
                 className={INPUT}
               />
             </label>
-            <button
-              type="submit"
-              className="rounded bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
-            >
-              Confirm term
-            </button>
+            <Button type="submit" variant="primary">Confirm term</Button>
           </form>
         </section>
+        </Banner>
       )}
 
       {/* ── The schedule ─────────────────────────────────────────────────────────────── */}
@@ -157,20 +146,17 @@ export default async function PrepaidItemPage({
                 <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
                   Release through
                 </span>
-                <input
+                <Input
                   name="asOfPeriod"
                   type="month"
                   required
                   defaultValue={thisPeriod()}
-                  className={INPUT}
+                  className="w-full"
                 />
               </label>
-              <button
-                type="submit"
-                className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-              >
+              <Button type="submit" variant="secondary">
                 Release
-              </button>
+              </Button>
             </form>
           )}
         </div>
@@ -205,7 +191,7 @@ export default async function PrepaidItemPage({
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(p.amount)}</td>
                   <td className="px-3 py-2 text-xs">
                     {p.posted ? (
-                      <span className="text-emerald-700 dark:text-emerald-400">Released</span>
+                      <span className="text-success">Released</span>
                     ) : (
                       <span className="text-neutral-400 dark:text-neutral-600">Not yet</span>
                     )}
@@ -223,18 +209,10 @@ export default async function PrepaidItemPage({
                       <form action={reverseMonthAction} className="flex justify-end gap-1">
                         <input type="hidden" name="prepaidItemId" value={item.id} />
                         <input type="hidden" name="period" value={p.period} />
-                        <input
-                          name="reason"
-                          required
-                          placeholder="Reason…"
-                          className="w-28 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
-                        />
-                        <button
-                          type="submit"
-                          className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-800 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
-                        >
+                        <Input name="reason" required placeholder="Reason…" className="w-28 text-xs" />
+                        <Button type="submit" variant="danger">
                           Reverse
-                        </button>
+                        </Button>
                       </form>
                     )}
                   </td>
@@ -259,35 +237,35 @@ export default async function PrepaidItemPage({
             <input type="hidden" name="prepaidItemId" value={item.id} />
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Date">
-                <input
+                <Input
                   name="writtenOffOn"
                   type="date"
                   required
                   defaultValue={sp.writtenOffOn ?? toBusinessDate()}
-                  className={INPUT}
+                  className="w-full"
                 />
               </Field>
               <Field label="Reason">
-                <input name="reason" required maxLength={200} defaultValue={sp.reason ?? ''} className={INPUT} />
+                <Input name="reason" required maxLength={200} defaultValue={sp.reason ?? ''} className="w-full" />
               </Field>
               <Field
                 label="Refunded"
                 hint={`Leave blank if nothing came back. At most ${peso(item.remaining)}`}
               >
-                <input
+                <Input
                   name="refundAmount"
                   inputMode="decimal"
                   defaultValue={sp.refundAmount ?? ''}
-                  className={INPUT}
+                  className="w-full"
                 />
               </Field>
               <Field label="Refund landed in" hint="Account code, e.g. 1110 cash or 1140 e-wallet">
-                <input
+                <Input
                   name="refundAccountCode"
                   maxLength={8}
                   placeholder="1110"
                   defaultValue={sp.refundAccountCode ?? ''}
-                  className={INPUT}
+                  className="w-full"
                 />
               </Field>
             </div>
@@ -298,12 +276,9 @@ export default async function PrepaidItemPage({
               Only the part that did <strong>not</strong> come back reaches the P&amp;L. The refund
               moves from one balance-sheet account to another.
             </p>
-            <button
-              type="submit"
-              className="rounded border border-neutral-300 px-4 py-2.5 text-sm font-medium text-neutral-800 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
-            >
+            <Button type="submit" variant="danger">
               Write it off
-            </button>
+            </Button>
           </form>
         </section>
       )}
@@ -319,8 +294,9 @@ export default async function PrepaidItemPage({
   );
 }
 
+// Kept raw: t343-s5-5w-number-boxes.test.ts reads this box's `<input` source text.
 const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
 function Figure({
   label,

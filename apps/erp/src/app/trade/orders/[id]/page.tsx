@@ -4,21 +4,15 @@ import { SHORTAGE_REASONS } from '@shareat/db/schema';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../../../lib/session';
 import { dispatchOrderAction, receiveOrderAction, voidOrderAction } from '../actions';
-import { STATUS_LABEL, orderDetail, peso, today } from '../lib';
+import { orderDetail, peso, today } from '../lib';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Button, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Trade order — Shareat System' };
 export const dynamic = 'force-dynamic';
-
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
-const BTN_DANGER =
-  'rounded-md border border-red-300 px-4 py-2.5 text-sm text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950';
 
 const REASON_LABEL: Record<string, string> = {
   not_received: 'Not received',
@@ -69,7 +63,7 @@ export default async function TradeOrderPage({
           {sellingStore?.name ?? '—'} → {isInternal ? (receivingStore?.name ?? '—') : customer.name}
         </h1>
         <PageDescription className="mt-1">
-          {order.orderDate} · <strong>{STATUS_LABEL[order.status]}</strong> · {peso(order.totalAmount)}
+          {order.orderDate} · <strong>{statusLabel(order.status)}</strong> · {peso(order.totalAmount)}
           {order.referenceNo && <> · ref {order.referenceNo}</>}
         </PageDescription>
         <p className={`mt-1 text-xs ${TREATMENT_TONE[treatment] ?? ''}`}>
@@ -77,16 +71,7 @@ export default async function TradeOrderPage({
         </p>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/*
         ⭐ For a DISPATCHED internal transfer this table is also the receive form: what the branch
@@ -133,20 +118,20 @@ export default async function TradeOrderPage({
                         {canReceive ? (
                           <div className="flex flex-col items-end gap-1">
                             <input type="hidden" name="lineId" value={l.id} />
-                            <input
+                            <Input
                               name="receivedQuantity"
                               inputMode="decimal"
                               defaultValue={packed}
-                              className={`${INPUT} w-24 text-right tabular-nums`}
+                              className="w-24 text-right tabular-nums"
                             />
-                            <select name="shortageReason" className={`${INPUT} text-xs`} defaultValue="">
+                            <Select name="shortageReason" className="text-xs" defaultValue="">
                               <option value="">If short: why?</option>
                               {SHORTAGE_REASONS.map((r) => (
                                 <option key={r} value={r}>
                                   {REASON_LABEL[r] ?? r}
                                 </option>
                               ))}
-                            </select>
+                            </Select>
                           </div>
                         ) : (
                           (l.receivedQuantity ?? '—')
@@ -189,11 +174,11 @@ export default async function TradeOrderPage({
             </div>
             <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
               Received on
-              <input name="receivedOn" type="date" defaultValue={today()} className={INPUT} />
+              <Input name="receivedOn" type="date" defaultValue={today()} />
             </label>
-            <button type="submit" className={BTN}>
+            <Button type="submit" variant="primary">
               Receive
-            </button>
+            </Button>
           </div>
         )}
       </form>
@@ -221,12 +206,12 @@ export default async function TradeOrderPage({
           {!isInternal && customer.creditLimit !== null && (
             <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
               Reason to exceed the {peso(customer.creditLimit)} limit (only if it does)
-              <input name="creditOverrideReason" placeholder="say why, on the record" className={`${INPUT} w-full`} />
+              <Input name="creditOverrideReason" placeholder="say why, on the record" className="w-full" />
             </label>
           )}
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="primary">
             Dispatch
-          </button>
+          </Button>
         </form>
       )}
 
@@ -270,11 +255,11 @@ export default async function TradeOrderPage({
           <input type="hidden" name="orderId" value={order.id} />
           <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
             Void — say why
-            <input name="reason" required placeholder="reason" className={`${INPUT} w-full`} />
+            <Input name="reason" required placeholder="reason" className="w-full" />
           </label>
-          <button type="submit" className={BTN_DANGER}>
+          <Button type="submit" variant="danger">
             Void order
-          </button>
+          </Button>
           {order.status !== 'draft' && order.status !== 'confirmed' && (
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               The posting is <strong>reversed</strong>, never deleted; the ledger keeps both halves.

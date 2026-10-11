@@ -12,8 +12,10 @@ import {
   peso,
   reviewCount,
 } from './lib';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Badge, Banner, FlashBanner, Input, Select, statusTone } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Prepaid expenses — Shareat System' };
@@ -60,11 +62,7 @@ export default async function PrepaidPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/* ⭐ Is anybody keeping these books? Reads scheduler_runs, not the ledger — a run that
           posts nothing looks exactly like a run that never happened (T-140, DEF-044). */}
@@ -82,22 +80,24 @@ export default async function PrepaidPage({
         to do, because a counter that is only ever present is a counter people stop seeing.
       */}
       {needingReview > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          <div>
-            <strong className="font-medium">
-              {needingReview} item{needingReview === 1 ? '' : 's'} need
-              {needingReview === 1 ? 's' : ''} a term confirmed.
-            </strong>{' '}
-            The amount and date came off the invoice; the coverage length was a guess. A wrong term
-            is wrong in every month it posts.
+        <Banner tone="warning">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <strong className="font-medium">
+                {needingReview} item{needingReview === 1 ? '' : 's'} need
+                {needingReview === 1 ? 's' : ''} a term confirmed.
+              </strong>{' '}
+              The amount and date came off the invoice; the coverage length was a guess. A wrong
+              term is wrong in every month it posts.
+            </div>
+            <Link
+              href={onlyReview ? '/prepaid' : '/prepaid?review=1'}
+              className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
+            >
+              {onlyReview ? 'Show all items' : 'Show only these'}
+            </Link>
           </div>
-          <Link
-            href={onlyReview ? '/prepaid' : '/prepaid?review=1'}
-            className="rounded border border-amber-400 px-3 py-1.5 text-xs font-medium hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-900"
-          >
-            {onlyReview ? 'Show all items' : 'Show only these'}
-          </Link>
-        </div>
+        </Banner>
       ) : (
         <p className="text-xs text-neutral-400 dark:text-neutral-600">
           Nothing is waiting for review.
@@ -141,9 +141,7 @@ export default async function PrepaidPage({
                       {i.name}
                     </Link>
                     {i.needsReview && i.status === 'active' && (
-                      <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                        Term unconfirmed
-                      </span>
+                      <Badge tone="warning" label="Term unconfirmed" className="ml-2" />
                     )}
                     <div className="text-xs text-neutral-400 dark:text-neutral-600">
                       {CATEGORY_LABEL[i.category] ?? i.category}
@@ -156,7 +154,9 @@ export default async function PrepaidPage({
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(i.totalCost)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(i.amortised)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(i.remaining)}</td>
-                  <td className="px-3 py-2 text-xs">{STATUS_LABEL[i.status] ?? i.status}</td>
+                  <td className="px-3 py-2 text-xs">
+                    <Badge tone={statusTone(i.status)} label={STATUS_LABEL[i.status] ?? i.status} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -181,26 +181,26 @@ export default async function PrepaidPage({
         <form action={createPrepaidItemAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name" hint="What it is, as somebody would say it out loud">
-              <input name="name" required maxLength={120} placeholder="Fire insurance 2026" className={INPUT} />
+              <Input name="name" required maxLength={120} placeholder="Fire insurance 2026" className="w-full" />
             </Field>
             <Field label="Store">
-              <select name="storeId" required defaultValue="" className={INPUT}>
+              <Select name="storeId" required defaultValue="" className="w-full">
                 <option value="">Choose a store…</option>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.code})
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Kind">
-              <select name="category" defaultValue="insurance" className={INPUT}>
+              <Select name="category" defaultValue="insurance" className="w-full">
                 {PREPAID_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
                     {CATEGORY_LABEL[c] ?? c}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Total cost">
               <input
@@ -212,7 +212,7 @@ export default async function PrepaidPage({
               />
             </Field>
             <Field label="Coverage starts" hint="The first month the cover actually applies to">
-              <input name="coverageStartDate" type="date" required className={INPUT} />
+              <Input name="coverageStartDate" type="date" required className="w-full" />
             </Field>
             <Field
               label="Coverage months"
@@ -228,7 +228,7 @@ export default async function PrepaidPage({
             </Field>
           </div>
           <Field label="Notes">
-            <input name="notes" className={INPUT} />
+            <Input name="notes" className="w-full" />
           </Field>
 
           {/* ⭐ No interval selector, deliberately (§10). A 12-month policy covers 12 months;
@@ -239,20 +239,16 @@ export default async function PrepaidPage({
             the final month so the total is exact.
           </p>
 
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-          >
-            Record prepaid item
-          </button>
+          <SubmitButton pendingLabel="Recording…">Record prepaid item</SubmitButton>
         </form>
       </section>
     </Page>
   );
 }
 
+// Kept raw: t343-s5-5w-number-boxes.test.ts reads these two boxes' `<input` source text.
 const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
 function Field({
   label,

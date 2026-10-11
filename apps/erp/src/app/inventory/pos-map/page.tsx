@@ -3,7 +3,7 @@ import { requireSession } from '../../../lib/session';
 import { upsertPosItemMapAction, decideMapRequestAction } from './actions';
 import { listStores, posMapScreenData } from './lib';
 import { Page } from '@/components/shell/Page';
-import { FormGrid, Field } from '@/components/ui';
+import { Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -17,11 +17,6 @@ interface SearchParams {
   ok?: string;
   needsConfirmation?: string;
 }
-
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN_SM =
-  'rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 const MODE_LABEL: Record<string, string> = { direct: 'Direct → stock item', recipe: 'Recipe → ingredients', no_stock: 'Sells, no stock consumed' };
 
@@ -58,33 +53,29 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
         </Link>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-          {sp.needsConfirmation && ' Tick "confirm sharing" below and save again if that is intended.'}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner
+        flash={
+          sp.needsConfirmation && sp.error
+            ? { ...sp, error: `${sp.error} Tick "confirm sharing" below and save again if that is intended.` }
+            : sp
+        }
+      />
 
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className={INPUT}>
+          <Select name="store" defaultValue={storeId}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
       {openRequests.length > 0 && (
-        <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+        <section className="rounded-lg border border-warning bg-warning-soft p-4">
           <h2 className="text-sm font-medium">Requests waiting on a decision ({openRequests.length})</h2>
           <div className="mt-3 space-y-3">
             {openRequests.map((r) => (
@@ -94,13 +85,13 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
                 <span className="font-medium">{r.posItemName}</span>
                 <span className="text-neutral-500">({r.posItemKey})</span>
                 {r.note && <span className="text-neutral-600 dark:text-neutral-400">— {r.note}</span>}
-                <input name="note" placeholder="decision note (optional)" className={`${INPUT} flex-1 min-w-[10rem]`} />
-                <button type="submit" name="decision" value="approved" className={BTN_SM}>
+                <Input name="note" placeholder="decision note (optional)" className="flex-1 min-w-[10rem]" />
+                <Button type="submit" name="decision" value="approved" variant="secondary">
                   Approve (no stock)
-                </button>
-                <button type="submit" name="decision" value="rejected" className={BTN_SM}>
+                </Button>
+                <Button type="submit" name="decision" value="rejected" variant="secondary">
                   Reject
-                </button>
+                </Button>
               </form>
             ))}
           </div>
@@ -113,59 +104,56 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
           <input type="hidden" name="storeId" value={storeId} />
           <FormGrid>
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">POS item key</span>} className="text-sm">
-            <input name="posItemKey" required className={`${INPUT} w-full`} />
+            <Input name="posItemKey" required className="w-full" />
           </Field>
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">POS item name</span>} className="text-sm">
-            <input name="posItemName" required className={`${INPUT} w-full`} />
+            <Input name="posItemName" required className="w-full" />
           </Field>
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Mode</span>} className="text-sm">
-            <select name="mode" className={`${INPUT} w-full`} defaultValue="direct">
+            <Select name="mode" className="w-full" defaultValue="direct">
               <option value="direct">Direct → one stock item</option>
               <option value="recipe">Recipe → ingredients</option>
               <option value="no_stock">Sells, consumes no stock</option>
-            </select>
+            </Select>
           </Field>
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Stock item (direct)</span>} className="text-sm">
-            <select name="itemId" className={`${INPUT} w-full`}>
+            <Select name="itemId" className="w-full">
               <option value="">—</option>
               {items.map((i) => (
                 <option key={i.id} value={i.id}>
                   {i.code} — {i.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Quantity per sale (direct)</span>} className="text-sm">
-            <input name="quantityPerSale" defaultValue="1" className={`${INPUT} w-full`} />
+            <Input name="quantityPerSale" defaultValue="1" className="w-full" />
           </Field>
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Recipe</span>} className="text-sm">
-            <select name="recipeId" className={`${INPUT} w-full`}>
+            <Select name="recipeId" className="w-full">
               <option value="">—</option>
               {recipes.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Location override (optional)</span>} className="text-sm">
-            <select name="locationId" className={`${INPUT} w-full`}>
+            <Select name="locationId" className="w-full">
               <option value="">— use the pull&apos;s own location —</option>
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="confirmShared" value="true" />
-            <span>Confirm sharing this stock item across POS items</span>
-          </label>
+          <Checkbox name="confirmShared" value="true" label="Confirm sharing this stock item across POS items" />
           </FormGrid>
-          <button type="submit" className={BTN_SM}>
+          <Button type="submit" variant="primary">
             Save
-          </button>
+          </Button>
         </form>
       </section>
 

@@ -13,7 +13,7 @@
  */
 import { PhotoInput } from '@/components/PhotoInput';
 import { useState } from 'react';
-import { FormGrid, Field } from '@/components/ui';
+import { Button, FormGrid, Field, Input, Select } from '@/components/ui';
 
 interface ItemOption {
   id: string;
@@ -94,12 +94,11 @@ export function NewDeliveryForm({
   const FULL = 'mt-1 block w-full';
   const FLABEL = 'text-xs text-neutral-600 dark:text-neutral-400';
   const label = 'flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
-  const field =
-    'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  const photo = 'rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm';
 
   if (items.length === 0) {
     return (
-      <p className="mt-3 text-sm text-amber-700 dark:text-amber-500">
+      <p className="mt-3 text-sm text-warning-ink">
         No purchasable items yet — mark one purchasable under Items first.
       </p>
     );
@@ -111,20 +110,20 @@ export function NewDeliveryForm({
 
       <FormGrid>
         <Field label="Kind" className={FLABEL}>
-          <select
+          <Select
             name="kind"
             required
             value={kind}
             onChange={(e) => setKind(e.target.value === 'purchase' ? 'purchase' : 'supplier')}
-            className={`${field} ${FULL}`}
+            className={FULL}
           >
             <option value="supplier">Supplier delivery</option>
             <option value="purchase">Cash purchase</option>
-          </select>
+          </Select>
         </Field>
         {kind === 'supplier' ? (
           <Field label="Supplier" className={FLABEL}>
-            <select name="supplierId" required defaultValue="" className={`${field} ${FULL}`}>
+            <Select name="supplierId" required defaultValue="" className={FULL}>
               <option value="" disabled>
                 Choose…
               </option>
@@ -133,25 +132,25 @@ export function NewDeliveryForm({
                   {s.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         ) : (
           <Field label="Supplier (optional)" className={FLABEL}>
-            <select name="supplierId" defaultValue="" className={`${field} ${FULL}`}>
+            <Select name="supplierId" defaultValue="" className={FULL}>
               <option value="">— none, cash purchase —</option>
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         )}
         <Field label="Reference no. (DR/invoice)" className={FLABEL}>
-          <input name="referenceNo" placeholder="DR-0001" className={`${field} ${FULL}`} />
+          <Input name="referenceNo" placeholder="DR-0001" className={FULL} />
         </Field>
         <Field label="Delivered on" className={FLABEL}>
-          <input name="deliveredOn" type="date" required defaultValue={today} className={`${field} ${FULL}`} />
+          <Input name="deliveredOn" type="date" required defaultValue={today} className={FULL} />
         </Field>
         <Field label="Photo of the paper" span="full" className={FLABEL}>
           {/* ⭐ T-296 — compressed to under 1 MB before submit; a PDF passes through untouched. */}
@@ -159,7 +158,7 @@ export function NewDeliveryForm({
             name="proofPhoto"
             accept="image/jpeg,image/png,image/webp,application/pdf"
             required
-            className={`${field} ${FULL}`}
+            className={`${photo} ${FULL}`}
           />
         </Field>
       </FormGrid>
@@ -171,13 +170,9 @@ export function NewDeliveryForm({
       <div className="space-y-2">
         <div className="flex items-baseline justify-between">
           <h3 className="text-sm font-medium">Lines</h3>
-          <button
-            type="button"
-            onClick={addLine}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
+          <Button type="button" variant="secondary" onClick={addLine} className="text-xs">
             + Add line
-          </button>
+          </Button>
         </div>
         {lines.map((l) => (
           <div
@@ -186,7 +181,7 @@ export function NewDeliveryForm({
           >
             <label className={`${label} col-span-2 lg:col-span-2`}>
               Item
-              <select
+              <Select
                 name="itemId"
                 required
                 value={l.itemId}
@@ -200,67 +195,64 @@ export function NewDeliveryForm({
                     purchaseUnit: shouldDefaultUnit ? (item?.baseUnit ?? l.purchaseUnit) : l.purchaseUnit,
                   });
                 }}
-                className={field}
               >
                 {items.map((i) => (
                   <option key={i.id} value={i.id}>
                     {i.name} ({i.baseUnit})
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className={label}>
               Quantity
-              <input
+              <Input
                 name="orderedQuantity"
                 required
                 inputMode="decimal"
                 placeholder="0.000"
                 value={l.orderedQuantity}
                 onChange={(e) => update(l.key, { orderedQuantity: e.target.value })}
-                className={`${field} tabular-nums`}
+                className="tabular-nums"
               />
             </label>
             <label className={label}>
               Purchase unit
-              <input
+              <Input
                 name="purchaseUnit"
                 required
                 value={l.purchaseUnit}
                 onChange={(e) => update(l.key, { purchaseUnit: e.target.value })}
-                className={field}
               />
             </label>
             <label className={label}>
               Conversion (÷ base)
-              <input
+              <Input
                 name="conversionFactor"
                 required
                 inputMode="decimal"
                 value={l.conversionFactor}
                 onChange={(e) => update(l.key, { conversionFactor: e.target.value })}
-                className={`${field} tabular-nums`}
+                className="tabular-nums"
               />
             </label>
             <label className={label}>
               Unit cost ₱
-              <input
+              <Input
                 name="unitCost"
                 required
                 inputMode="decimal"
                 placeholder="0.0000"
                 value={l.unitCost}
                 onChange={(e) => update(l.key, { unitCost: e.target.value })}
-                className={`${field} tabular-nums`}
+                className="tabular-nums"
               />
             </label>
             <label className={label}>
               Room (blank = Receiving)
-              <select
+              <Select
                 name="locationId"
                 value={l.locationId}
                 onChange={(e) => update(l.key, { locationId: e.target.value })}
-                className={field}
               >
                 <option value="">— park in Receiving —</option>
                 {locations.map((loc) => (
@@ -268,27 +260,25 @@ export function NewDeliveryForm({
                     {loc.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
-            <button
+            <Button
               type="button"
+              variant="danger"
               onClick={() => removeLine(l.key)}
               disabled={lines.length === 1}
               aria-label="Remove line"
-              className="rounded-md border border-neutral-300 px-3 py-2 text-xs hover:bg-neutral-50 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-900"
+              className="text-xs"
             >
               Remove
-            </button>
+            </Button>
           </div>
         ))}
       </div>
 
-      <button
-        type="submit"
-        className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-      >
+      <Button type="submit" variant="primary">
         Save
-      </button>
+      </Button>
     </form>
   );
 }

@@ -85,15 +85,6 @@ export const STATUS_LABEL: Record<string, string> = {
   cancelled: 'Withdrawn',
 };
 
-export const STATUS_TONE: Record<string, string> = {
-  requested: 'text-amber-700 dark:text-amber-400',
-  approved: 'text-sky-700 dark:text-sky-400',
-  rejected: 'text-neutral-500 dark:text-neutral-500',
-  released: 'text-red-700 dark:text-red-400',
-  liquidated: 'text-emerald-700 dark:text-emerald-400',
-  cancelled: 'text-neutral-500 dark:text-neutral-500',
-};
-
 export function today(): string {
   return toBusinessDate();
 }

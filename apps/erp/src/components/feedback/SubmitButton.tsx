@@ -20,6 +20,7 @@
 import { useFormStatus } from 'react-dom';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui';
+import type { ButtonVariant } from '@/components/ui/Button';
 import { submitButtonState } from './submit-button-state';
 
 export interface SubmitButtonProps {
@@ -27,6 +28,9 @@ export interface SubmitButtonProps {
   readonly pendingLabel?: string;
   readonly className?: string;
   readonly disabled?: boolean;
+  /** `primary` by default. A Save repeated on one view (one per row or per category) is `secondary`:
+   *  ADR-013 allows one brand-red primary per view. */
+  readonly variant?: Extract<ButtonVariant, 'primary' | 'secondary'>;
 }
 
 function Spinner(): ReactNode {
@@ -48,14 +52,14 @@ function Spinner(): ReactNode {
   );
 }
 
-export function SubmitButton({ children, pendingLabel, className, disabled }: SubmitButtonProps) {
+export function SubmitButton({ children, pendingLabel, className, disabled, variant = 'primary' }: SubmitButtonProps) {
   const { pending } = useFormStatus();
   const state = submitButtonState({ pending, label: children, pendingLabel });
 
   return (
     <Button
       type="submit"
-      variant="primary"
+      variant={variant}
       className={className}
       disabled={state.disabled || disabled}
       aria-busy={state.ariaBusy ? 'true' : undefined}

@@ -5,6 +5,7 @@ import { listLists } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input } from '@/components/ui';
 
 export const metadata = { title: 'Price lists — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -38,16 +39,7 @@ export default async function PriceListsPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {lists.length > 0 ? (
         <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 dark:divide-neutral-900 dark:border-neutral-800">
@@ -76,25 +68,19 @@ export default async function PriceListsPage({
         <form action={createPriceListAction} className="space-y-3">
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Name</span>
-            <input name="name" required placeholder="Wholesale — meat" className={INPUT} />
+            <Input name="name" required placeholder="Wholesale — meat" className="w-full" />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
               Description
             </span>
-            <input name="description" className={INPUT} />
+            <Input name="description" className="w-full" />
           </label>
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-          >
+          <Button type="submit" variant="primary">
             Save
-          </button>
+          </Button>
         </form>
       </section>
     </Page>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';

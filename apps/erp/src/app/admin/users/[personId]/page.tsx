@@ -18,17 +18,11 @@ import {
   userDetail,
 } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'User access — Shareat System' };
 export const dynamic = 'force-dynamic';
-
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
-const LINK_BTN =
-  'rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 const MANILA = { timeZone: 'Asia/Manila' } as const;
 
@@ -95,21 +89,12 @@ export default async function UserAccessPage({
         </p>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Role</h2>
         {isSelf ? (
-          <p className="text-sm text-amber-700 dark:text-amber-400">
+          <p className="text-sm text-warning-ink">
             This is you. You cannot change your own role — that is what stops one mis-click locking
             the organisation out of user management. Ask another admin.
           </p>
@@ -119,7 +104,7 @@ export default async function UserAccessPage({
               <input type="hidden" name="personId" value={personId} />
               <label className="min-w-0 flex-1 text-sm">
                 <span className="block text-neutral-600 dark:text-neutral-400">Role</span>
-                <select name="role" required defaultValue={person.role ?? ''} className={`${INPUT} w-full`}>
+                <Select name="role" required defaultValue={person.role ?? ''} className="w-full">
                   <option value="" disabled>
                     Select
                   </option>
@@ -128,11 +113,11 @@ export default async function UserAccessPage({
                       {ROLE_LABEL[r]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
-              <button type="submit" className={BTN}>
+              <Button type="submit" variant="primary">
                 {person.role ? 'Change role' : 'Assign role'}
-              </button>
+              </Button>
             </form>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               Appointing an <strong>admin</strong> requires super-admin, and grants them scope for
@@ -164,16 +149,16 @@ export default async function UserAccessPage({
                   <input type="hidden" name="personId" value={personId} />
                   <input type="hidden" name="storeId" value={s.id} />
                   <input type="hidden" name="granted" value={s.inScope ? 'false' : 'true'} />
-                  <button type="submit" className={LINK_BTN}>
+                  <Button type="submit" variant={s.inScope ? 'danger' : 'secondary'}>
                     {s.inScope ? 'In scope — remove' : 'Add'}
-                  </button>
+                  </Button>
                 </form>
               </li>
             ))}
           </ul>
         )}
         {person.role !== 'admin' && scopedCount === stores.length && stores.length > 0 && (
-          <p className="text-xs text-amber-700 dark:text-amber-400">
+          <p className="text-xs text-warning-ink">
             This person still holds scope for every store. If they were recently demoted from admin,
             those rows were deliberately left in place rather than cut silently — remove any they
             should no longer have.
@@ -221,10 +206,10 @@ export default async function UserAccessPage({
                       <input type="hidden" name="personId" value={personId} />
                       <input type="hidden" name="grantId" value={g.id} />
                       <input type="hidden" name="granted" value="false" />
-                      <input name="reason" required placeholder="Reason to revoke" className={`${INPUT} min-w-0 flex-1`} />
-                      <button type="submit" className={LINK_BTN}>
+                      <Input name="reason" required placeholder="Reason to revoke" className="min-w-0 flex-1" />
+                      <Button type="submit" variant="danger">
                         Revoke
-                      </button>
+                      </Button>
                     </form>
                   ) : (
                     // T-291 §C2 — a `'position'` row offers no revoke control here: the next
@@ -278,9 +263,9 @@ export default async function UserAccessPage({
                               this branch is, by construction, uncovered — `g.id` names exactly the
                               job row the hold is made from. */}
                           <input type="hidden" name="positionGrantId" value={g.id} />
-                          <button type="submit" className={LINK_BTN}>
+                          <Button type="submit" variant="secondary">
                             Hold in their own right
-                          </button>
+                          </Button>
                         </form>
                       )}
                     </div>
@@ -384,15 +369,15 @@ export default async function UserAccessPage({
                     >
                       <input type="hidden" name="personId" value={personId} />
                       <input type="hidden" name="credentialId" value={c.id} />
-                      <input
+                      <Input
                         name="reason"
                         required
                         placeholder="Reason to unlink"
-                        className={`${INPUT} min-w-0 flex-1`}
+                        className="min-w-0 flex-1"
                       />
-                      <button type="submit" className={LINK_BTN}>
+                      <Button type="submit" variant="danger">
                         Unlink
-                      </button>
+                      </Button>
                     </form>
                   )}
                 </li>
@@ -407,11 +392,11 @@ export default async function UserAccessPage({
             <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
               Link an email account
             </span>
-            <input name="uid" required placeholder="Firebase uid" className={`${INPUT} font-mono`} />
+            <Input name="uid" required placeholder="Firebase uid" className="font-mono" />
           </label>
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="secondary">
             Link
-          </button>
+          </Button>
         </form>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           From the Firebase console — this is not an email address. The person signs in with their
@@ -500,9 +485,9 @@ function GrantPicker({ personId, offerable }: { personId: string; offerable: rea
         </fieldset>
       ))}
 
-      <button type="submit" className={BTN}>
+      <Button type="submit" variant="secondary">
         Grant selected
-      </button>
+      </Button>
     </form>
   );
 }

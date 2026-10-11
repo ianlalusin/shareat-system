@@ -2,10 +2,11 @@ import Link from 'next/link';
 import { INTEREST_METHODS, PAYMENT_FREQUENCIES, RATE_PERIODS } from '@shareat/db';
 import { requirePageAccess } from '../../lib/page-access';
 import { createLoanAction } from './actions';
-import { METHOD_LABEL, STATUS_LABEL, listRegister, listStores, peso, today } from './lib';
+import { METHOD_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Badge, Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Loans — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -41,11 +42,7 @@ export default async function LoansPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {loans.length > 0 && (
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
@@ -101,7 +98,7 @@ export default async function LoansPage({
                   <td className="px-3 py-2 text-right font-mono tabular-nums">
                     {peso(l.position.outstanding)}
                   </td>
-                  <td className="px-3 py-2 text-xs">{STATUS_LABEL[l.status] ?? l.status}</td>
+                  <td className="px-3 py-2 text-xs"><Badge status={l.status} /></td>
                 </tr>
               ))}
             </tbody>
@@ -124,20 +121,20 @@ export default async function LoansPage({
         <form action={createLoanAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="What it is called">
-              <input name="name" required maxLength={120} placeholder="Grab cash advance" className={INPUT} />
+              <Input name="name" required maxLength={120} placeholder="Grab cash advance" className="w-full" />
             </Field>
             <Field label="Lender">
-              <input name="lenderName" required maxLength={120} placeholder="Grab" className={INPUT} />
+              <Input name="lenderName" required maxLength={120} placeholder="Grab" className="w-full" />
             </Field>
             <Field label="Store">
-              <select name="storeId" required defaultValue="" className={INPUT}>
+              <Select name="storeId" required defaultValue="" className="w-full">
                 <option value="">Choose a store…</option>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.code})
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Amount agreed">
               <input
@@ -161,52 +158,49 @@ export default async function LoansPage({
                 MONTHLY on new ones, with nothing on the row to tell them apart — so the same "2"
                 described two very different debts. */}
             <Field label="…per" hint="A month is 30 days and a year is 365. Say which.">
-              <select name="ratePeriod" required defaultValue="" className={INPUT}>
+              <Select name="ratePeriod" required defaultValue="" className="w-full">
                 <option value="">Choose…</option>
                 {RATE_PERIODS.map((p) => (
                   <option key={p} value={p}>
                     {p}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
 
             <Field label="How interest is charged">
-              <select name="interestMethod" defaultValue="straight" className={INPUT}>
+              <Select name="interestMethod" defaultValue="straight" className="w-full">
                 {INTEREST_METHODS.map((m) => (
                   <option key={m} value={m}>
                     {METHOD_LABEL[m] ?? m}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Repaid">
-              <select name="paymentFrequency" defaultValue="monthly" className={INPUT}>
+              <Select name="paymentFrequency" defaultValue="monthly" className="w-full">
                 {PAYMENT_FREQUENCIES.map((f) => (
                   <option key={f} value={f}>
                     {f}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
 
             <Field label="Number of payments">
               <input name="termPeriods" inputMode="numeric" required defaultValue={12} className={INPUT} />
             </Field>
             <Field label="Starts">
-              <input name="startDate" type="date" required defaultValue={today()} className={INPUT} />
+              <Input name="startDate" type="date" required defaultValue={today()} className="w-full" />
             </Field>
           </div>
           <Field label="Notes">
-            <input name="notes" className={INPUT} />
+            <Input name="notes" className="w-full" />
           </Field>
 
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-          >
+          <Button type="submit" variant="primary">
             Record loan
-          </button>
+          </Button>
         </form>
       </section>
     </Page>
@@ -214,7 +208,7 @@ export default async function LoansPage({
 }
 
 const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
 function Field({
   label,

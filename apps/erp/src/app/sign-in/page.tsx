@@ -3,6 +3,7 @@ import { safeNext } from './lib';
 import { TerminalSignInForm } from './TerminalSignInForm';
 import { EmailSignInForm } from './EmailSignInForm';
 import { currentSession } from '../../lib/session';
+import { FlashBanner } from '@/components/ui';
 
 export const metadata = { title: 'Sign in — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -52,11 +53,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           </p>
         </div>
 
-        {sp.error && (
-          <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-            {sp.error}
-          </div>
-        )}
+        <FlashBanner flash={sp} />
 
         <TerminalSignInForm next={sp.next ?? ''} />
 

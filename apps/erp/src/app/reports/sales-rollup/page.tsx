@@ -15,6 +15,7 @@ import {
 } from '@/components/reports/SalesRollupTable';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Button, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Sales Rollup — Shareat System' };
 
@@ -84,32 +85,32 @@ export default async function SalesRollupPage({
       >
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId ?? ''} className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950">
+          <Select name="store" defaultValue={storeId ?? ''}>
             <option value="">All stores</option>
             {storeRows.map((s) => (
               <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">From</span>
-          <input type="date" name="from" defaultValue={fromDate} className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950" />
+          <Input type="date" name="from" defaultValue={fromDate} />
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">To</span>
-          <input type="date" name="to" defaultValue={toDate} className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950" />
+          <Input type="date" name="to" defaultValue={toDate} />
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Group by</span>
-          <select name="groupBy" defaultValue={groupBy} className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950">
+          <Select name="groupBy" defaultValue={groupBy}>
             <option value="day">Day</option>
             <option value="month">Month</option>
             <option value="store">Store</option>
-          </select>
+          </Select>
         </label>
-        <button type="submit" className="rounded bg-neutral-900 px-4 py-1.5 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300">
+        <Button type="submit" variant="primary">
           Apply
-        </button>
+        </Button>
       </form>
 
       <div className="flex items-center justify-between gap-4">

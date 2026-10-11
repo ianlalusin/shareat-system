@@ -5,7 +5,7 @@ import { getCountSessionDetail, type SheetLine } from '../lib';
 import { advanceCountAction, cancelCountAction, commitCountAction, recordCountAction } from '../actions';
 import { requireSession } from '../../../../lib/session';
 import { Page } from '@/components/shell/Page';
-import { FormGrid, Field } from '@/components/ui';
+import { Button, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
 import { EditableRecord } from '@/components/forms';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -14,17 +14,6 @@ import { COUNT_LINE } from '../typed-forms';
 
 export const metadata = { title: 'Count sheet — Shareat System' };
 export const dynamic = 'force-dynamic';
-
-const INPUT =
-  'w-24 rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm tabular-nums dark:border-neutral-700 dark:bg-neutral-950';
-const INPUT_FULL =
-  'mt-1 block w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm tabular-nums dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
-const BTN_SECONDARY =
-  'rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
-const BTN_DANGER =
-  'rounded-md border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950';
 
 const STATUS_LABEL: Record<string, string> = {
   open: 'Open — no lines counted yet',
@@ -51,7 +40,7 @@ function SheetRow({ line, sessionId, editable, typed }: { line: SheetLine; sessi
       </td>
       <td className="py-2 pr-4">{line.locationName}</td>
       <td className="py-2 pr-4 tabular-nums text-neutral-500">
-        {line.ledgerQuantity !== null ? `${line.ledgerQuantity} ${line.baseUnit}` : <span className="text-amber-700 dark:text-amber-400">not expected</span>}
+        {line.ledgerQuantity !== null ? `${line.ledgerQuantity} ${line.baseUnit}` : <span className="text-warning-ink">not expected</span>}
       </td>
       <td className="py-2 pr-4">
         {editable ? (
@@ -60,18 +49,18 @@ function SheetRow({ line, sessionId, editable, typed }: { line: SheetLine; sessi
               <input type="hidden" name="sessionId" value={sessionId} />
               <input type="hidden" name="itemId" value={line.itemId} />
               <input type="hidden" name="locationId" value={line.locationId} />
-              <input
+              <Input
                 name="countedQuantity"
                 required
                 inputMode="decimal"
                 placeholder="0.000"
                 defaultValue={line.countedQuantity ?? ''}
-                className={INPUT}
+                className="w-24 tabular-nums"
               />
               <span className="text-xs text-neutral-500">{line.baseUnit}</span>
-              <button type="submit" className={BTN_SECONDARY}>
+              <Button type="submit" variant="secondary">
                 Save
-              </button>
+              </Button>
             </form>
           ) : (
             <EditableRecord
@@ -82,13 +71,13 @@ function SheetRow({ line, sessionId, editable, typed }: { line: SheetLine; sessi
               typed={typed}
             >
               <div className="flex items-center gap-2">
-                <input
+                <Input
                   name="countedQuantity"
                   required
                   inputMode="decimal"
                   placeholder="0.000"
                   defaultValue={line.countedQuantity}
-                  className={INPUT}
+                  className="w-24 tabular-nums"
                 />
                 <span className="text-xs text-neutral-500">{line.baseUnit}</span>
               </div>
@@ -101,7 +90,7 @@ function SheetRow({ line, sessionId, editable, typed }: { line: SheetLine; sessi
       <td className="py-2 pr-4 tabular-nums">{line.expectedQuantity ?? '—'}</td>
       <td className="py-2 pr-4 tabular-nums">
         {line.variance !== null ? (
-          <span className={varianceSign === -1 ? 'text-red-700 dark:text-red-400' : varianceSign === 1 ? 'text-green-700 dark:text-green-400' : ''}>
+          <span className={varianceSign === -1 ? 'text-danger' : varianceSign === 1 ? 'text-success' : ''}>
             {line.variance}
           </span>
         ) : (
@@ -146,23 +135,14 @@ export default async function CountSessionPage({
           {detail.note && <> · {detail.note}</>}
         </PageDescription>
         {editable && (
-          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+          <p className="mt-1 text-xs text-warning-ink">
             ⛔ Frozen — {detail.locations.map((l) => l.name).join(', ')} refuse every other stock post until
             this count is committed or cancelled.
           </p>
         )}
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <section className="overflow-x-auto">
         <h2 className="font-medium">
@@ -212,7 +192,7 @@ export default async function CountSessionPage({
             <input type="hidden" name="sessionId" value={detail.id} />
             <FormGrid>
               <Field label="Item">
-                <select name="itemId" required defaultValue="" className={INPUT_FULL}>
+                <Select name="itemId" required defaultValue="" className="mt-1 block w-full tabular-nums">
                   <option value="" disabled>
                     — pick —
                   </option>
@@ -221,24 +201,24 @@ export default async function CountSessionPage({
                       {i.name} ({i.baseUnit})
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label="Room">
-                <select name="locationId" required defaultValue={detail.locations[0]?.id ?? ''} className={INPUT_FULL}>
+                <Select name="locationId" required defaultValue={detail.locations[0]?.id ?? ''} className="mt-1 block w-full tabular-nums">
                   {detail.locations.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label="Quantity">
-                <input name="countedQuantity" required inputMode="decimal" placeholder="0.000" className={INPUT_FULL} />
+                <Input name="countedQuantity" required inputMode="decimal" placeholder="0.000" className="mt-1 block w-full tabular-nums" />
               </Field>
             </FormGrid>
-            <button type="submit" className={BTN_SECONDARY}>
+            <Button type="submit" variant="secondary">
               Save
-            </button>
+            </Button>
           </form>
         </section>
       )}
@@ -248,17 +228,17 @@ export default async function CountSessionPage({
           {canAdvance && (
             <form action={advanceCountAction}>
               <input type="hidden" name="sessionId" value={detail.id} />
-              <button type="submit" className={BTN_SECONDARY}>
+              <Button type="submit" variant="secondary">
                 → Move to reviewing
-              </button>
+              </Button>
             </form>
           )}
           {canCommit && (
             <form action={commitCountAction}>
               <input type="hidden" name="sessionId" value={detail.id} />
-              <button type="submit" className={BTN}>
+              <Button type="submit" variant="primary">
                 Commit
-              </button>
+              </Button>
             </form>
           )}
           {canCommit && (
@@ -269,9 +249,9 @@ export default async function CountSessionPage({
           {canCancel && (
             <form action={cancelCountAction} className="ml-auto">
               <input type="hidden" name="sessionId" value={detail.id} />
-              <button type="submit" className={BTN_DANGER}>
+              <Button type="submit" variant="danger">
                 Cancel count
-              </button>
+              </Button>
             </form>
           )}
         </section>
