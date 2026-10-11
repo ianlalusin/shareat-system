@@ -148,6 +148,7 @@ A row answered on two sheets (a twin that is also a box) is held until both are 
 | P10 | *(orchestrator, 2026-10-11)* A blank `tin`/`vat_status` on one copy is not a disagreement (P3's newest non-empty applies); only two different non-blank values hold the row |
 | P11 | *(orchestrator, 2026-10-11)* A merged party with mixed active/inactive copies is `active` if any copy is active (refines P7) |
 | P12 | *(orchestrator, 2026-10-11)* Audit actions: `set_supplier_counterparty_store`, `set_customer_status`, `set_supplier_status` (before/after, only on a real change); load rows `master_data_load`, source `etl` |
+| P13 | *(orchestrator, at S4 audit, 2026-10-11)* An unmapped non-blank `vat_status` (`Exempt`, `Zero-rated`, a typo) is a distinct value: it holds the row on `suppliers-tax` for Ian, never silently blank. A non-integer or negative `lastCreditDueDays` becomes null and is listed. A manager's apply with customers in scope is refused before anything is written. The report says a stored bank number is masked and must be re-entered |
 
 ### Positions and staff
 
