@@ -242,13 +242,49 @@ async function validateHr(): Promise<number> {
   return result.errors.length > 0 ? 2 : 0;
 }
 
+/**
+ * S6 / S8: the per-store readiness report. Read-only: no write, no audit row. `--actor` is an operator-supplied person id, trusted
+ * only as far as the operator's database access: authorize() checks what that person may do, not who is typing.
+ */
+async function readinessCmd(): Promise<number> {
+  const orgId = arg('--org');
+  const mapPath = arg('--map');
+  const actorId = arg('--actor');
+  const snapshotPath = arg('--snapshot');
+  if (!orgId || !mapPath || !actorId) fail('Pass --org <uuid> --map <stores.csv> --actor <person uuid> [--org-code <code>] [--stores LIPA,MLVR] [--snapshot <file>].');
+  const { parseStoreMap, assertRunTarget } = await import('../packages/etl/src/master-data/store-map');
+  const { closeDb, organizationsRepo, withOrgPrincipal } = await import('@shareat/db');
+  const { readiness } = await import('./lib/master-data-readiness');
+  const map = parseStoreMap(readFileSync(mapPath, 'utf8'));
+  const storeCodes = arg('--stores')?.split(',').map((s) => s.trim()).filter(Boolean);
+  const snapshot = snapshotPath ? JSON.parse(readFileSync(snapshotPath, 'utf8')) : undefined;
+  try {
+    const report = await withOrgPrincipal(orgId, async (tx) => {
+      const orgRowCode = (await organizationsRepo.identityOf(tx, orgId))?.code ?? '';
+      const orgCode = arg('--org-code') ?? orgRowCode;
+      assertRunTarget(map, { orgCode, orgRowCode });
+      return readiness(tx, { orgId, personId: actorId }, { orgId, orgCode, map, storeCodes, snapshot });
+    });
+    for (const s of report.stores) {
+      console.log(`${s.ready ? 'READY    ' : 'NOT READY'} ${s.storeCode}${s.reasons.length ? `  ${s.reasons.join(', ')}` : ''}`);
+      console.log(`  encoders: ${s.encoders.map((p) => p.displayName).join(', ') || '-'}; verifiers: ${s.verifiers.map((p) => p.displayName).join(', ') || '-'}`);
+      const l = s.loaded;
+      console.log(`  loaded: items ${l.items}, suppliers ${l.suppliers}, customers ${l.customers}, staff ${l.staff}${s.planned ? ` of ${s.planned.staff} planned` : ''}, positions ${l.positions}`);
+    }
+    return report.stores.every((s) => s.ready) ? 0 : 2;
+  } finally {
+    await closeDb();
+  }
+}
+
 async function main(): Promise<void> {
   const cmd = process.argv[2];
   if (cmd === 'extract') return extract();
   if (cmd === 'run') process.exit(await run());
   if (cmd === 'validate-hr') process.exit(await validateHr());
+  if (cmd === 'readiness') process.exit(await readinessCmd());
   fail(
-    'Usage: npm run master-data -- extract --out <dir> | run --snapshot <file> --map <stores.csv> --org <uuid> --org-code <code> --sheets <dir> | validate-hr --roster <file> --rates <file>',
+    'Usage: npm run master-data -- extract --out <dir> | run --snapshot <file> --map <stores.csv> --org <uuid> --org-code <code> --sheets <dir> | validate-hr --roster <file> --rates <file> | readiness --org <uuid> --map <stores.csv> --actor <operator-supplied person uuid, trusted only as far as DB access>',
   );
 }
 
