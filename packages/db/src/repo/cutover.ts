@@ -654,3 +654,106 @@ export async function c3pAttestation(
   const m = /\[party-lines:([^\]]*)\]/.exec(row.note ?? '');
   return { completedAt: new Date(row.completed_at), fingerprint: m ? (m[1] ?? null) : null };
 }
+
+// -------------------------------------------------------------------------------------
+// T-390 S5: the reads behind the cutover screens (the screens' lib.ts holds no SQL)
+// -------------------------------------------------------------------------------------
+
+type Row = Record<string, string | null>;
+
+/** The store's active rooms, default first. */
+export async function activeRoomsOf(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+): Promise<{ id: string; code: string; name: string; isDefault: boolean }[]> {
+  const rows = (await tx.execute(sql`
+    select id, code, name, is_default from stock_locations
+    where org_id = ${orgId} and store_id = ${storeId} and status = 'active'
+    order by is_default desc, name, id
+  `)) as unknown as Record<string, unknown>[];
+  return rows.map((r) => ({ id: String(r.id), code: String(r.code), name: String(r.name), isDefault: Boolean(r.is_default) }));
+}
+
+/** One room's counts (quantity, cost, cost source) keyed by item id. */
+export async function countsForRoom(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  roomId: string,
+): Promise<Map<string, { quantity: string; unitCost: string | null; costSource: string | null }>> {
+  const rows = (await tx.execute(sql`
+    select item_id, quantity::text as quantity, unit_cost::text as unit_cost, cost_source
+    from opening_counts where org_id = ${orgId} and store_id = ${storeId} and location_id = ${roomId}
+  `)) as unknown as Row[];
+  return new Map(
+    rows.map((r) => [String(r.item_id), { quantity: String(r.quantity), unitCost: r.unit_cost ?? null, costSource: r.cost_source ?? null }]),
+  );
+}
+
+/** Per item across every room of the store: summed quantity (as text) and the cost. */
+export async function countTotalsByItem(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+): Promise<Map<string, { quantity: string; unitCost: string | null }>> {
+  const rows = (await tx.execute(sql`
+    select item_id, sum(quantity)::text as quantity, max(unit_cost)::text as unit_cost
+    from opening_counts where org_id = ${orgId} and store_id = ${storeId}
+    group by item_id
+  `)) as unknown as Row[];
+  return new Map(rows.map((r) => [String(r.item_id), { quantity: String(r.quantity), unitCost: r.unit_cost ?? null }]));
+}
+
+export interface SheetItemRow {
+  code: string;
+  name: string;
+  baseUnit: string;
+  purchaseUnit: string | null;
+  purchaseFactor: string | null;
+}
+
+/** ACTIVE items with a stock movement in this room in the last 90 days. Reads no quantity: the count sheet is blind. */
+export async function itemsMovedInRoom(tx: Tx, orgId: string, storeId: string, roomId: string): Promise<SheetItemRow[]> {
+  const rows = (await tx.execute(sql`
+    select i.code, i.name, i.base_unit, i.purchase_unit, i.purchase_factor::text as purchase_factor
+    from items i
+    where i.org_id = ${orgId} and i.status = 'active'
+      and exists (
+        select 1 from stock_movements m
+        where m.org_id = ${orgId} and m.store_id = ${storeId} and m.location_id = ${roomId}
+          and m.item_id = i.id and m.moved_at >= now() - interval '90 days'
+      )
+    order by i.name, i.id
+  `)) as unknown as Row[];
+  return rows.map((r) => ({
+    code: String(r.code),
+    name: String(r.name),
+    baseUnit: String(r.base_unit),
+    purchaseUnit: r.purchase_unit ?? null,
+    purchaseFactor: r.purchase_factor ?? null,
+  }));
+}
+
+/** Suppliers and customers by name, for the opening-figure party picker. */
+export async function partyOptions(tx: Tx, orgId: string): Promise<{ type: 'supplier' | 'customer'; id: string; name: string }[]> {
+  const sup = (await tx.execute(sql`select id, name from suppliers where org_id = ${orgId} order by name, id`)) as unknown as Row[];
+  const cus = (await tx.execute(sql`select id, name from customers where org_id = ${orgId} order by name, id`)) as unknown as Row[];
+  return [
+    ...sup.map((r) => ({ type: 'supplier' as const, id: String(r.id), name: String(r.name) })),
+    ...cus.map((r) => ({ type: 'customer' as const, id: String(r.id), name: String(r.name) })),
+  ];
+}
+
+/** Postable accounts an opening figure may be entered against. 3900 is excluded at the source. */
+export async function postableOpeningAccounts(
+  tx: Tx,
+  orgId: string,
+): Promise<{ code: string; name: string; requiresParty: boolean }[]> {
+  const rows = (await tx.execute(sql`
+    select code, name, requires_party from accounts
+    where org_id = ${orgId} and is_postable = true and status = 'active' and code <> '3900'
+    order by code
+  `)) as unknown as Record<string, unknown>[];
+  return rows.map((r) => ({ code: String(r.code), name: String(r.name), requiresParty: Boolean(r.requires_party) }));
+}

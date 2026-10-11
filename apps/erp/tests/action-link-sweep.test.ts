@@ -405,7 +405,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // FAIL unchanged at 151. If the Banner anchor lands FAIL or UNRESOLVED instead, correct this number and the totals
     // with a measured census, not by guess.
     // 1156 + T-395 S2's reopen button -> 1157 at the merge of PR #10 with T-387 S3. Verified by running the census.
-    expect(results.length).toBe(1157);
+    // 1157 -> 1169, T-390 S5 2026-10-11. +12 from the new cutover UI (room selector, Value the count, asset valuation forms, party picker,
+    // sheet links). Verified by running the census.
+    expect(results.length).toBe(1169);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

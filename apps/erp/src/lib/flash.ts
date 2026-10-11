@@ -89,6 +89,7 @@ const ANCHOR = /^store-[0-9a-f-]{36}$/;
 
 const NAV_SHAPES = {
   store: UUID,
+  room: UUID,
   day: UUID,
   pull: UUID,
   supplier: UUID,
@@ -164,7 +165,7 @@ export interface FlashPayload {
 }
 
 const TYPED_FORM = /^[a-z][a-zA-Z0-9.]{0,63}$/;
-const TYPED_RECORD = /^[A-Za-z0-9_-]{0,64}$/; // '' , a UUID, or a short slug
+const TYPED_RECORD = /^[A-Za-z0-9_:-]{0,80}$/; // '' , a UUID, a short slug, or `<uuid>:<uuid>` (T-390 S5: an item in a room)
 const TYPED_FIELD = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
 /** Strict shape check of a typed slot. Anything else is not a TypedFlash. */

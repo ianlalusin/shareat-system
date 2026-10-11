@@ -4,9 +4,8 @@
  * ⭐ Everything here is DERIVED on every read. There is no "wizard state" beyond the recorded
  * completions — the progress you see is the ledger's own answer, asked again.
  */
-import { sql as dsql } from 'drizzle-orm';
 import { cutoverRepo, itemsRepo } from '@shareat/db';
-import { countedStockValue, cutoverProgress, openingGaps, type CutoverProgress, type OpeningGaps } from '@shareat/domain';
+import { countedStockValue, cutoverProgress, openingGaps, openingTieOut, addQuantity, quantity, type CutoverProgress, type OpeningGaps, type TieOut } from '@shareat/domain';
 import type { OpeningDraft } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
 
@@ -43,27 +42,10 @@ export interface CountRow {
 export async function loadCountSheet(orgId: string, storeId: string): Promise<CountRow[]> {
   return withOrgPrincipal(orgId, async (tx) => {
     const items = await itemsRepo.listItems(tx, orgId);
-    // One query for the whole sheet, not a lookup per row.
-    const counted = await tx.execute(dsql`
-      select item_id, sum(quantity)::text as quantity, max(unit_cost)::text as unit_cost
-      from opening_counts where org_id = ${orgId} and store_id = ${storeId}
-      group by item_id
-    `);
-    const byItem = new Map(
-      (counted as unknown as Record<string, string>[]).map((r) => [
-        String(r.item_id),
-        { quantity: r.quantity, unitCost: r.unit_cost },
-      ]),
-    );
+    const byItem = await cutoverRepo.countTotalsByItem(tx, orgId, storeId);
     return items.map((i) => {
       const c = byItem.get(i.id);
-      return {
-        itemId: i.id,
-        name: i.name,
-        baseUnit: i.baseUnit,
-        quantity: c?.quantity ?? null,
-        unitCost: c?.unitCost ?? null,
-      };
+      return { itemId: i.id, name: i.name, baseUnit: i.baseUnit, quantity: c?.quantity ?? null, unitCost: c?.unitCost ?? null };
     });
   });
 }
@@ -113,17 +95,111 @@ export interface PostableAccount {
  * offering it in a dropdown is offering somebody a way to plug the difference to zero.
  */
 export async function loadPostableAccounts(orgId: string): Promise<PostableAccount[]> {
+  return withOrgPrincipal(orgId, (tx) => cutoverRepo.postableOpeningAccounts(tx, orgId));
+}
+
+// ---- T-390 S5: rooms, per-room count lines, the print sheet, the party picker, the tie-out panel ----------------------------
+
+export interface RoomOption {
+  id: string;
+  code: string;
+  name: string;
+  isDefault: boolean;
+}
+
+/** The store's active rooms, default first. */
+export async function loadRooms(orgId: string, storeId: string): Promise<RoomOption[]> {
+  return withOrgPrincipal(orgId, (tx) => cutoverRepo.activeRoomsOf(tx, orgId, storeId));
+}
+
+export interface RoomCountRow {
+  itemId: string;
+  name: string;
+  baseUnit: string;
+  quantity: string | null;
+  unitCost: string | null;
+  costSource: string | null;
+}
+
+/** One room's lines: every active item, with THIS ROOM's count (never the store total). DEF-630. */
+export async function loadRoomCountSheet(orgId: string, storeId: string, roomId: string): Promise<RoomCountRow[]> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const rows = await tx.execute(dsql`
-      select code, name, requires_party
-      from accounts
-      where org_id = ${orgId} and is_postable = true and status = 'active' and code <> '3900'
-      order by code
-    `);
-    return (rows as unknown as Record<string, unknown>[]).map((r) => ({
-      code: String(r.code),
-      name: String(r.name),
-      requiresParty: Boolean(r.requires_party),
+    const items = await itemsRepo.listItems(tx, orgId);
+    const byItem = await cutoverRepo.countsForRoom(tx, orgId, storeId, roomId);
+    return items.map((i) => {
+      const c = byItem.get(i.id);
+      return {
+        itemId: i.id,
+        name: i.name,
+        baseUnit: i.baseUnit,
+        quantity: c?.quantity ?? null,
+        unitCost: c?.unitCost ?? null,
+        costSource: c?.costSource ?? null,
+      };
+    });
+  });
+}
+
+export interface MergedLine {
+  itemId: string;
+  name: string;
+  baseUnit: string;
+  total: string;
+  parts: { room: string; quantity: string }[];
+}
+
+/** Items counted in more than one room, summed: shown read-only. Edits are per room (DEF-630). */
+export async function loadMergedLines(orgId: string, storeId: string): Promise<MergedLine[]> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const rows = await cutoverRepo.countsForStore(tx, orgId, storeId);
+    const items = await itemsRepo.listItems(tx, orgId);
+    const unit = new Map(items.map((i) => [i.id, i.baseUnit]));
+    const by = new Map<string, MergedLine>();
+    for (const r of rows) {
+      const cur = by.get(r.itemId) ?? { itemId: r.itemId, name: r.itemName, baseUnit: unit.get(r.itemId) ?? '', total: '0.000', parts: [] };
+      cur.parts.push({ room: r.locationName, quantity: r.quantity });
+      cur.total = addQuantity(quantity(cur.total), quantity(r.quantity)).toString();
+      by.set(r.itemId, cur);
+    }
+    return [...by.values()].filter((l) => l.parts.length > 1);
+  });
+}
+
+export interface SheetItem {
+  code: string;
+  name: string;
+  baseUnit: string;
+  purchaseHint: string | null;
+}
+
+/** Items with any stock movement in this room in the last 90 days. ⛔ No quantity is read: the sheet is a blind count. */
+export async function loadSheetItems(orgId: string, storeId: string, roomId: string): Promise<SheetItem[]> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const rows = await cutoverRepo.itemsMovedInRoom(tx, orgId, storeId, roomId);
+    return rows.map((r) => ({
+      code: r.code,
+      name: r.name,
+      baseUnit: r.baseUnit,
+      purchaseHint: r.purchaseUnit ? `1 ${r.purchaseUnit} = ${Number(r.purchaseFactor)} ${r.baseUnit}` : null,
     }));
   });
+}
+
+export interface PartyOption {
+  type: 'supplier' | 'customer';
+  id: string;
+  name: string;
+}
+
+/** The R12 party picker: suppliers and customers, by name. */
+export async function loadPartyOptions(orgId: string): Promise<PartyOption[]> {
+  return withOrgPrincipal(orgId, (tx) => cutoverRepo.partyOptions(tx, orgId));
+}
+
+export async function loadPendingShells(orgId: string): Promise<{ id: string; storeId: string; name: string }[]> {
+  return withOrgPrincipal(orgId, (tx) => cutoverRepo.pendingAssetShells(tx, orgId));
+}
+
+export async function loadTieOut(orgId: string): Promise<TieOut> {
+  return withOrgPrincipal(orgId, (tx) => openingTieOut(tx, orgId));
 }
