@@ -1,6 +1,6 @@
 import { getApAgingReport, getArAgingReport, getBalanceSheet, getIncomeStatement, getSalesRollup } from '@shareat/domain';
 import { attendanceDaysRepo, cashRequestsRepo, commissaryKpisRepo, lowStockRepo } from '@shareat/db';
-import { add, money, negate, subtract } from '@shareat/core/money';
+import { add, compare, isZero, money, negate, subtract, ZERO } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { reportScope, runReport } from './reports/lib';
@@ -112,8 +112,8 @@ export default async function DashboardPage({
   const totalNow = money(salesNow.ledgerTotal);
   const totalPrev = money(salesPrev.ledgerTotal);
   const diff = subtract(totalNow, totalPrev);
-  const up = Number(diff) >= 0;
-  const pctNum = Number(totalPrev) !== 0 ? (Number(diff) / Number(totalPrev)) * 100 : null;
+  const up = compare(diff, ZERO) !== -1;
+  const pctNum = !isZero(totalPrev) ? (Number(diff) / Number(totalPrev)) * 100 : null;
   const pct = pctNum === null ? null : `${Math.abs(pctNum).toFixed(1).replace(/\.0$/, '')}%`;
   const against = days === 1 ? 'the day before' : `the previous ${days} days`;
 
@@ -186,7 +186,7 @@ export default async function DashboardPage({
             kicker={`Sales · ${rangeText} · ${storeLabel.toLowerCase()}`}
             value={Number(totalNow)}
             text={fmtNum(totalNow)}
-            delta={{ same: Number(diff) === 0, pct, abs: fmtNum(Number(up ? diff : negate(diff))), up, against }}
+            delta={{ same: isZero(diff), pct, abs: fmtNum(Number(up ? diff : negate(diff))), up, against }}
             lede={lede}
           />
           <SalesLine

@@ -8,6 +8,7 @@
  */
 import Link from 'next/link';
 import { Badge } from '@/components/ui';
+import { businessDayRange, toBusinessDate } from '@shareat/core/datetime';
 import { formatTenure } from './tenure';
 
 export type LiveState = 'on' | 'break' | 'off';
@@ -153,14 +154,14 @@ export function CardWall({
 // ---- the live roster ----------------------------------------------------------------------------
 
 const ROW_LINK = 'inline-flex min-h-11 items-center font-semibold text-ink hover:text-brand-ink';
-const DAY_MS = 24 * 3_600_000;
 const STRIP_FROM = 6;
 const STRIP_SPAN = 18; // 6a .. 12a
 
 /** Percent along the 6a-to-midnight strip for an instant (Manila clock), clamped to the strip. */
 function stripPct(at: Date): number {
-  const manilaMs = (((at.getTime() + 8 * 3_600_000) % DAY_MS) + DAY_MS) % DAY_MS;
-  const h = manilaMs / 3_600_000;
+  // Hours since the start of this instant's business day (Asia/Manila), from the shared datetime helpers
+  // rather than a hand-written +8h offset (t374 guard).
+  const h = (at.getTime() - businessDayRange(toBusinessDate(at)).start.getTime()) / 3_600_000;
   const shifted = h < STRIP_FROM ? h + 24 : h;
   return Math.max(0, Math.min(100, ((shifted - STRIP_FROM) / STRIP_SPAN) * 100));
 }

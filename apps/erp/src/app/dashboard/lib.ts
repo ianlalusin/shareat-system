@@ -1,29 +1,25 @@
 /**
  * T-387 S5. Pure date helpers for the editorial dashboard.
- * Business dates are inclusive 'YYYY-MM-DD' strings; arithmetic is UTC-only so no zone can move a day.
+ * Business dates are inclusive 'YYYY-MM-DD' strings. Validation and day stepping come from
+ * `@shareat/core/datetime` (`parseBusinessDate`, `addDays`); no helper here reads the clock or lifts a
+ * date out of an instant.
  */
+import { addDays, parseBusinessDate } from '@shareat/core/datetime';
+
 const DAY_MS = 86_400_000;
 
-function parse(d: string): number {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
-  if (!m) throw new Error(`Not a business date: ${d}`);
-  const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  const back = new Date(t).toISOString().slice(0, 10);
-  if (back !== d) throw new Error(`Not a real calendar date: ${d}`);
-  return t;
-}
-
-function fmt(t: number): string {
-  return new Date(t).toISOString().slice(0, 10);
+/** Whole days since the epoch for a validated business date. Integer arithmetic only. */
+function epochDay(d: string): number {
+  const [y, m, dd] = parseBusinessDate(d).split('-').map(Number) as [number, number, number];
+  return Date.UTC(y, m - 1, dd) / DAY_MS;
 }
 
 /** The range of the same day count that ends the day before `from`. Reversed or malformed input throws. */
 export function previousRange(from: string, to: string): { from: string; to: string } {
-  const f = parse(from);
-  const t = parse(to);
-  if (f > t) throw new Error(`Reversed range: ${from}..${to}`);
-  const days = Math.round((t - f) / DAY_MS) + 1;
-  return { from: fmt(f - days * DAY_MS), to: fmt(f - DAY_MS) };
+  const days = dayCount(from, to);
+  if (days < 1) throw new Error(`Reversed range: ${from}..${to}`);
+  const f = parseBusinessDate(from);
+  return { from: addDays(f, -days), to: addDays(f, -1) };
 }
 
 export type RangePreset = 'today' | '7d' | '30d' | 'mtd';
@@ -37,14 +33,14 @@ export const RANGE_PRESETS: ReadonlyArray<{ key: RangePreset; label: string }> =
 
 /** Resolve a preset against today's business date. Unknown keys return null. */
 export function presetRange(key: string | undefined, today: string): { from: string; to: string } | null {
-  const t = parse(today);
+  const t = parseBusinessDate(today);
   switch (key) {
     case 'today':
       return { from: today, to: today };
     case '7d':
-      return { from: fmt(t - 6 * DAY_MS), to: today };
+      return { from: addDays(t, -6), to: today };
     case '30d':
-      return { from: fmt(t - 29 * DAY_MS), to: today };
+      return { from: addDays(t, -29), to: today };
     case 'mtd':
       return { from: `${today.slice(0, 7)}-01`, to: today };
     default:
@@ -54,16 +50,17 @@ export function presetRange(key: string | undefined, today: string): { from: str
 
 /** Every business date from `from` to `to` inclusive. Throws on a reversed or malformed range. */
 export function eachDay(from: string, to: string): string[] {
-  const f = parse(from);
-  const t = parse(to);
-  if (f > t) throw new Error(`Reversed range: ${from}..${to}`);
+  const n = dayCount(from, to);
+  if (n < 1) throw new Error(`Reversed range: ${from}..${to}`);
+  const f = parseBusinessDate(from);
   const out: string[] = [];
-  for (let x = f; x <= t; x += DAY_MS) out.push(fmt(x));
+  for (let i = 0; i < n; i++) out.push(addDays(f, i));
   return out;
 }
 
+/** Inclusive day count; zero or negative when `to` is before `from`. Throws on malformed input. */
 export function dayCount(from: string, to: string): number {
-  return Math.round((parse(to) - parse(from)) / DAY_MS) + 1;
+  return epochDay(to) - epochDay(from) + 1;
 }
 
 const MAX_RANGE_DAYS = 366;
