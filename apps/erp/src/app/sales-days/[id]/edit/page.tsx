@@ -10,6 +10,7 @@ import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { FlashBanner } from '@/components/ui';
 
 export const metadata = { title: 'Edit sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -153,11 +154,7 @@ export default async function EditSalesDayPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          <strong className="font-medium">Refused:</strong> {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <form action={editSalesDayAction} className="space-y-6 text-sm">
         <input type="hidden" name="storeId" value={day.storeId} />

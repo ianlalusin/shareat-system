@@ -8,6 +8,8 @@
  * Component page with the new searchParams. No client JavaScript, no "use client",
  * nothing to hydrate — this is presentation, matching this file's Scope note.
  */
+import { Button, Input, Select } from '@/components/ui';
+
 export interface FilterOption {
   id: string;
   label: string;
@@ -42,25 +44,23 @@ export function ReportFilters({
     >
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Organization</span>
-        <select
+        <Select
           name="org"
           defaultValue={currentOrgId}
-          className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
         >
           {orgs.map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
 
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Store</span>
-        <select
+        <Select
           name="store"
           defaultValue={currentStoreId ?? ''}
-          className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
         >
           <option value="">All stores</option>
           {stores.map((s) => (
@@ -68,26 +68,24 @@ export function ReportFilters({
               {s.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
 
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">From</span>
-        <input
+        <Input
           type="date"
           name="from"
           defaultValue={fromDate}
-          className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
         />
       </label>
 
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">To</span>
-        <input
+        <Input
           type="date"
           name="to"
           defaultValue={toDate}
-          className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
         />
       </label>
 
@@ -99,23 +97,19 @@ export function ReportFilters({
           wasn't submitted" and would make the current state impossible to represent
           faithfully in the URL. An explicit value has no such ambiguity.
         */}
-        <select
+        <Select
           name="yearClose"
           defaultValue={includeYearClose ? 'include' : 'exclude'}
-          className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
         >
           <option value="include">Included</option>
           <option value="exclude">Excluded</option>
-        </select>
+        </Select>
         <span className="text-xs text-neutral-400 dark:text-neutral-600">{yearCloseHelp}</span>
       </label>
 
-      <button
-        type="submit"
-        className="rounded bg-neutral-900 px-4 py-1.5 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-      >
+      <Button type="submit" variant="primary">
         Apply
-      </button>
+      </Button>
     </form>
   );
 }

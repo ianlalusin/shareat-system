@@ -8,7 +8,7 @@ import { requireSession } from '../../lib/session';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
 import { recordOrderWastageAction } from './actions';
 import { Page } from '@/components/shell/Page';
-import { FormGrid, Field } from '@/components/ui';
+import { Badge, Banner, Button, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -21,8 +21,6 @@ interface SearchParams {
   error?: string;
   ok?: string;
 }
-
-const STATUS_LABEL: Record<string, string> = { open: 'Open', disputed: 'Disputed', resolved: 'Resolved' };
 
 export default async function WastagePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
@@ -101,20 +99,15 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className="mt-1 rounded-md border border-neutral-300 px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950">
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">{sp.error}</div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">{sp.ok}</div>
-      )}
+      <FlashBanner flash={sp} />
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Record a wastage</h2>
@@ -128,26 +121,26 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                 name nothing matched used to create a tracked wastage that no human and no backstop
                 could ever resolve, and it only surfaced days later at posting time. */}
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel</span>}>
-              <select name="channel" required defaultValue="" className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950">
+              <Select name="channel" required defaultValue="" className="mt-1 block w-full">
                 <option value="" disabled>Choose a channel…</option>
                 {channels.map((c) => (
                   <option key={c.id} value={c.name}>
                     {c.name} — {c.wastageTypeMode === 'tracked' ? 'reviewed' : 'decided on the spot'}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Business date</span>}>
-              <input type="date" name="businessDate" defaultValue={toBusinessDate()} required className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950" />
+              <Input type="date" name="businessDate" defaultValue={toBusinessDate()} required className="mt-1 block w-full" />
             </Field>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Platform order ref (optional)</span>}>
-              <input name="orderRef" className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950" />
+              <Input name="orderRef" className="mt-1 block w-full" />
             </Field>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Amount</span>}>
-              <input name="amount" inputMode="decimal" required placeholder="0.00" className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-2 tabular-nums dark:border-neutral-700 dark:bg-neutral-950" />
+              <Input name="amount" inputMode="decimal" required placeholder="0.00" className="mt-1 block w-full tabular-nums" />
             </Field>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Reason</span>} span="wide">
-              <input name="reason" required className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950" />
+              <Input name="reason" required className="mt-1 block w-full" />
             </Field>
           {/* ⛔ THE TWO MODE RADIOS ARE GONE — bible §13 row 180, Ian 2026-09-07. They let the
               person recording a loss mark it `instant` + `absorbed` and skip the Wastage Monitor,
@@ -165,7 +158,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                 </span>
               }
             >
-              <select name="disposition" defaultValue="" className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-900">
+              <select name="disposition" defaultValue="" className="mt-1 block w-full min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink">
                 <option value="">(reviewed channel — leave blank)</option>
                 <option value="platform_paid">Platform paid — posts nothing</option>
                 <option value="absorbed">Store absorbs — Dr 5300</option>
@@ -204,14 +197,15 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
             </a>
             .
           </p>
-          <button type="submit" className="rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200">Save</button>
+          <Button type="submit" variant="primary">Save</Button>
         </form>
       </section>
 
       {matches.length > 0 && (
-        <section className="rounded-lg border border-amber-400 bg-amber-50 p-4 text-sm dark:border-amber-700 dark:bg-amber-950">
+        <Banner tone="warning">
+        <section className="text-sm">
           <h2 className="font-medium">⭐ {matches.length} possible settlement match{matches.length === 1 ? '' : 'es'}</h2>
-          <p className="mt-1 text-neutral-700 dark:text-neutral-300">
+          <p className="mt-1">
             A posted channel settlement exists for the same store, channel and business date as
             these open wastages. Review each before deciding — this list proposes; nothing here
             posts on its own.
@@ -227,6 +221,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
             ))}
           </ul>
         </section>
+        </Banner>
       )}
 
       {open.length === 0 ? (
@@ -254,7 +249,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                   <td className="px-3 py-2">{w.channel}</td>
                   <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{w.orderRef ?? '—'}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(w.amount)}</td>
-                  <td className="px-3 py-2">{STATUS_LABEL[w.status] ?? w.status}</td>
+                  <td className="px-3 py-2"><Badge status={w.status} /></td>
                 </tr>
               ))}
             </tbody>

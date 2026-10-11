@@ -1,3 +1,4 @@
+import { testItemCode } from '../../packages/domain/tests/integration/_fixtures/item-code';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
@@ -125,7 +126,7 @@ describe('leg 5 - unmapped kind by name; sub-centavo fixture compared in centavo
     let itemId: string | undefined;
     try {
       const [it] = await sql<{ id: string }[]>`
-        insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('IT')}, ${nm}, 'mystery_kind', 'kg', ${f.adminId}) returning id`;
+        insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${testItemCode()}, ${nm}, 'mystery_kind', 'kg', ${f.adminId}) returning id`;
       itemId = it!.id;
       await count(f, { store: f.storeA, room: f.kitA, item: itemId, qty: '2', cost: '10.0000' });
       const err = await errorOf(value(f, f.storeA));

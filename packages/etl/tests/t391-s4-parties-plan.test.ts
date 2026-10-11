@@ -547,3 +547,14 @@ describe('13l. audit round: unmapped tax values, bad credit terms, franchise nam
     expect(p.writes).toEqual([]);
   });
 });
+
+describe('13m. re-audit: non-numeric credit terms', () => {
+  it.each([[' '], [''], [true]])('lastCreditDueDays %j: creditTermsDays null (never 0 or 1) and the supplier is listed by name', async (bad) => {
+    const p = await plan(snap([sup(L, 'Acme Foods', { lastCreditDueDays: bad })]));
+    const w = createOf(p, 'supplier', 'Acme Foods');
+    expect(w).toBeTruthy();
+    expect(w.creditTermsDays).toBeNull();
+    expect(p.held).toBe(0);
+    expect(JSON.stringify(p.listed ?? [])).toContain('Acme Foods');
+  });
+});

@@ -15,6 +15,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Badge, Banner, Button, FlashBanner, Select, Input } from '@/components/ui';
 
 export const metadata = { title: 'Fixed assets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -78,31 +79,25 @@ export default async function FixedAssetsPage({
         </div>
         <a
           href={`/fixed-assets/new?${carry.toString()}`}
-          className="shrink-0 rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+          className="inline-flex min-h-11 shrink-0 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
         >
           Add asset
         </a>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
       {/* ⚠️ A run that failed must not LOOK like a run that worked. The first version of this
           banner was always green, and the message "1 failed: ... no fiscal period covers
           2026-06-30" was rendered in success colours — which is the precise shade of reporting
           that let v1's two dead months go unnoticed. */}
       {sp.ran &&
         (Number(sp.failed ?? '0') > 0 ? (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          <Banner tone="warning">
             <strong className="font-medium">Depreciation run finished with failures.</strong>{' '}
             {sp.ran}
-          </div>
+          </Banner>
         ) : (
-          <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-            Depreciation run: {sp.ran}
-          </div>
+          <Banner tone="success">Depreciation run: {sp.ran}</Banner>
         ))}
 
       {/* ⭐ Is anybody keeping these books? Reads scheduler_runs, not the ledger — a run that
@@ -111,7 +106,7 @@ export default async function FixedAssetsPage({
       <SchedulerStatus orgId={actor.orgId} job="depreciation" label="Depreciation" />
 
       {reviewCount > 0 && !needsReviewOnly && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong className="font-medium">
             {reviewCount} asset{reviewCount === 1 ? '' : 's'} still carry default terms nobody has
             confirmed.
@@ -124,7 +119,7 @@ export default async function FixedAssetsPage({
           >
             Review them
           </a>
-        </div>
+        </Banner>
       )}
 
       {/* ⭐ The run. Safe to press twice — every period is idempotent on (asset, period), so a
@@ -140,19 +135,11 @@ export default async function FixedAssetsPage({
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
             Run depreciation through
           </span>
-          <input
-            type="month"
-            name="through"
-            defaultValue={currentPeriod()}
-            className="rounded border border-neutral-300 bg-white px-2 py-1.5 dark:border-neutral-700 dark:bg-neutral-950"
-          />
+          <Input type="month" name="through" defaultValue={currentPeriod()} />
         </label>
-        <button
-          type="submit"
-          className="rounded bg-neutral-900 px-4 py-2 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-        >
+        <Button type="submit" variant="secondary">
           Run
-        </button>
+        </Button>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Safe to run more than once — periods already posted are skipped, and a month that was
           missed is caught up by running it again.
@@ -193,12 +180,9 @@ export default async function FixedAssetsPage({
             { v: '1', t: 'Needs review' },
           ]}
         />
-        <button
-          type="submit"
-          className="rounded bg-neutral-900 px-4 py-2 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-        >
+        <Button type="submit" variant="primary">
           Apply
-        </button>
+        </Button>
       </form>
 
       {rows.length === 0 ? (
@@ -234,15 +218,9 @@ export default async function FixedAssetsPage({
                     >
                       {r.name}
                     </a>
-                    {r.needsReview && (
-                      <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                        Needs review
-                      </span>
-                    )}
+                    {r.needsReview && <Badge tone="warning" label="Needs review" className="ml-2" />}
                     {r.status === 'active' && r.inServiceOn === null && (
-                      <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                        Not yet in service
-                      </span>
+                      <Badge tone="warning" label="Not yet in service" className="ml-2" />
                     )}
                   </td>
                   <td className="px-3 py-2">{CATEGORY_LABEL[r.category] ?? r.category}</td>
@@ -261,14 +239,14 @@ export default async function FixedAssetsPage({
                     {r.usefulLifeMonths} mo · {INTERVAL_LABEL[r.interval] ?? r.interval}
                   </td>
                   <td className="px-3 py-2">
-                    <StatusBadge status={r.status} />
+                    <Badge status={r.status} />
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               {heldRows.length > 0 && (
-                <tr className="border-t border-neutral-200 bg-amber-50 text-amber-900 dark:border-neutral-800 dark:bg-amber-950 dark:text-amber-300">
+                <tr className="border-t border-neutral-200 bg-warning-soft text-warning-ink dark:border-neutral-800">
                   <td className="px-3 py-2" colSpan={4}>
                     Not yet in service — {heldRows.length} asset{heldRows.length === 1 ? '' : 's'}
                   </td>
@@ -321,29 +299,13 @@ function Picker({
   return (
     <label className="flex flex-col gap-1">
       <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{label}</span>
-      <select
-        name={name}
-        defaultValue={value}
-        className="rounded border border-neutral-300 bg-white px-2 py-1.5 dark:border-neutral-700 dark:bg-neutral-950"
-      >
+      <Select name={name} defaultValue={value}>
         {options.map((o) => (
           <option key={o.v} value={o.v}>
             {o.t}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
-}
-
-export function StatusBadge({ status }: { status: string }) {
-  const cls =
-    status === 'active'
-      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-      : status === 'disposed'
-        ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300'
-        : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
-  const label =
-    status === 'pending_valuation' ? 'Pending valuation' : status[0]!.toUpperCase() + status.slice(1);
-  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>;
 }

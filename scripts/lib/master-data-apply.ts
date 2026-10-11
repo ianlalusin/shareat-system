@@ -51,8 +51,9 @@ export class HeldError extends Error {
   constructor(
     readonly held: number,
     readonly entity: string = 'items',
+    message?: string,
   ) {
-    super(`${entity}: ${held} row(s) are held for Ian. Answer the sheets and run again; nothing was written for ${entity}.`);
+    super(message ?? `${entity}: ${held} row(s) are held for Ian. Answer the sheets and run again; nothing was written for ${entity}.`);
   }
 }
 
@@ -245,6 +246,7 @@ async function partiesBody(tx: Tx, entity: PartyEntity, input: ApplyPartiesInput
   });
   if (plan.held > 0) throw new HeldError(plan.held, entity === 'supplier' ? 'suppliers' : 'customers');
 
+  // `held` is a whole-run count BY DESIGN: a held customer refuses the suppliers apply too.
   // a store link goes through the store map: store_code -> this org's stores.code (P5)
   const storeIdOf = new Map((await storesRepo.listForOrg(tx, input.orgId)).map((s) => [s.code, s.id]));
   const v2StoreFor = (v1StoreId: string | null): string | null => {
@@ -392,19 +394,29 @@ function storeFor(stores: ReadonlyMap<string, string>, code: string, orgCode: st
 }
 
 /** enrol_staff at EVERY store in scope, before anything is written (R8). */
-async function authorizeAtEveryStore(tx: Tx, actor: Actor, capability: 'manage_store_settings' | 'enrol_staff', stores: ReadonlyMap<string, string>): Promise<void> {
+/**
+ * A load with no v1 staff record in scope has nothing to hire and no position to create, so it asks nothing of the staff
+ * capabilities: an items-and-parties-only run by someone with no store scope is not refused for staff it does not touch.
+ */
+function hasStaffInScope(input: ApplyStaffInput): boolean {
+  const scope = new Set(selectTargetStores(input.map, { orgCode: input.orgCode, storeCodes: input.storeCodes }).map((r) => r.v1StoreId));
+  return (input.snapshot.staff ?? []).some((x) => scope.has(x.store));
+}
+
+async function authorizeAtEveryStore(tx: Tx, actor: Actor, capability: 'manage_store_settings' | 'enrol_staff', stores: ReadonlyMap<string, string>, input: ApplyStaffInput): Promise<void> {
+  if (!hasStaffInScope(input)) return;
   for (const storeId of stores.values()) await authorize(tx, actor, capability, { storeId });
 }
 
-async function authorizeEnrolAtEveryStore(tx: Tx, actor: Actor, stores: ReadonlyMap<string, string>): Promise<void> {
-  for (const storeId of stores.values()) await authorize(tx, actor, 'enrol_staff', { storeId });
+async function authorizeEnrolAtEveryStore(tx: Tx, actor: Actor, stores: ReadonlyMap<string, string>, input: ApplyStaffInput): Promise<void> {
+  await authorizeAtEveryStore(tx, actor, 'enrol_staff', stores, input);
 }
 
 async function positionsBody(tx: Tx, input: ApplyStaffInput, actor: Actor): Promise<ApplyItemsResult> {
   const orgRowCode = (await organizationsRepo.identityOf(tx, input.orgId))?.code ?? '';
   assertRunTarget(input.map, { orgCode: input.orgCode, orgRowCode });
   const stores = await scopeStoreIds(tx, input);
-  await authorizeAtEveryStore(tx, actor, 'manage_store_settings', stores);
+  await authorizeAtEveryStore(tx, actor, 'manage_store_settings', stores, input);
   await tx.execute(dsql`select pg_advisory_xact_lock(hashtext('master-data:' || ${input.orgId}::text))`);
 
   const plan = await planStaffIn(tx, input);
@@ -432,7 +444,7 @@ async function staffBody(tx: Tx, input: ApplyStaffInput, actor: Actor): Promise<
   const orgRowCode = (await organizationsRepo.identityOf(tx, input.orgId))?.code ?? '';
   assertRunTarget(input.map, { orgCode: input.orgCode, orgRowCode });
   const stores = await scopeStoreIds(tx, input);
-  await authorizeEnrolAtEveryStore(tx, actor, stores); // refused before the queue and before the first write
+  await authorizeEnrolAtEveryStore(tx, actor, stores, input); // refused before the queue and before the first write
   await tx.execute(dsql`select pg_advisory_xact_lock(hashtext('master-data:' || ${input.orgId}::text))`);
 
   const plan = await planStaffIn(tx, input);
@@ -542,11 +554,16 @@ export interface ApplyMasterDataInput extends Omit<ApplyItemsInput, 'snapshot'> 
 
 export async function applyMasterData(input: ApplyMasterDataInput): Promise<Partial<Record<MasterDataEntity, ApplyItemsResult>>> {
   const actor = requireActor('applyMasterData', input);
+  for (const n of input.only ?? []) {
+    if (!(ENTITY_ORDER as readonly string[]).includes(n)) {
+      throw new Error(`applyMasterData: unknown entity "${n}" in only. Allowed: ${ENTITY_ORDER.join(', ')}.`);
+    }
+  }
   const wanted = input.only ? ENTITY_ORDER.filter((x) => input.only!.includes(x)) : [...ENTITY_ORDER];
   await withOrgPrincipal(input.orgId, async (tx) => {
     for (const x of wanted) {
-      if (x === 'positions') await authorizeAtEveryStore(tx, actor, 'manage_store_settings', await scopeStoreIds(tx, input));
-      else if (x === 'staff') await authorizeEnrolAtEveryStore(tx, actor, await scopeStoreIds(tx, input));
+      if (x === 'positions') await authorizeAtEveryStore(tx, actor, 'manage_store_settings', await scopeStoreIds(tx, input), input);
+      else if (x === 'staff') await authorizeEnrolAtEveryStore(tx, actor, await scopeStoreIds(tx, input), input);
       else await authorize(tx, actor, ENTITY_CAPABILITY[x], {});
     }
   });
@@ -588,11 +605,18 @@ export async function applyMasterData(input: ApplyMasterDataInput): Promise<Part
                 : await applyStaff(input);
     } catch (e) {
       const done = Object.entries(out);
+      if (done.length > 0 && e instanceof HeldError) {
+        const counts = done.map(([n, r]) => `${n}: created ${r.created}, linked ${r.linked}`).join('; ');
+        throw new HeldError(
+          e.held,
+          x,
+          `applyMasterData: ${x} is held (${e.held} row(s) for Ian). Already committed: ${counts}. Answer the sheets and rerun to finish; nothing of ${x} was written.`,
+        );
+      }
       if (done.length > 0 && e instanceof Error) {
         // S14b: earlier entities are already committed; say so, so a late refusal is never read as "nothing happened"
         const counts = done.map(([n, r]) => `${n}: created ${r.created}, linked ${r.linked}`).join('; ');
-        const reason = e instanceof HeldError ? `${x} is held (${e.held} row(s))` : `${x} was refused: ${e.message}`;
-        e.message = `Already committed before ${x} stopped (${counts}). ${reason}. Fix it, then rerun: committed entities write nothing twice.\n${e.message}`;
+        e.message = `Already committed: ${counts}. ${x} was refused: ${e.message}. Fix it, then rerun to finish: committed entities write nothing twice.`;
       }
       throw e;
     }

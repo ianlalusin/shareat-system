@@ -20,9 +20,9 @@ export function Tile({
 }) {
   const valueColor =
     tone === 'ok'
-      ? 'text-emerald-700 dark:text-emerald-400'
+      ? 'text-success'
       : tone === 'warn'
-        ? 'text-amber-700 dark:text-amber-400'
+        ? 'text-warning-ink'
         : 'text-neutral-900 dark:text-neutral-100';
 
   const className =

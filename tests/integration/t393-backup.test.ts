@@ -36,6 +36,7 @@ import { postEntry } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../packages/db/seed/chart-of-accounts';
 import { WORKED_EXAMPLES, type FixtureLine, type WorkedExample } from '../worked-examples/fixtures';
 import { RESTRICTED_TEST_PASSWORD, RESTRICTED_TEST_ROLE } from './setup';
+import { leaksPassword } from './t393-no-leak';
 import { fsStore, type ObjectStore } from '../../scripts/lib/backup/object-store';
 import { runBackup } from '../../scripts/lib/backup/run-backup';
 import type { Heartbeat } from '../../scripts/lib/backup/heartbeat';
@@ -331,7 +332,7 @@ describe('T-393 S1 - runBackup', () => {
 
     // R13/I9: no secret in the manifest; the roles file carries no password hashes.
     const password = decodeURIComponent(new URL(adminUrl).password);
-    expect(JSON.stringify(m)).not.toContain(password);
+    expect(leaksPassword(JSON.stringify(m), password), 'the password must not appear in the manifest').toBe(false);
     expect(JSON.stringify(m)).not.toMatch(/postgres(ql)?:\/\//);
     const rolesLocal = path.join(freshDir('dl'), 'r.sql');
     await store.get(roles[0]!, rolesLocal);

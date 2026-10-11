@@ -7,7 +7,7 @@ export function CsvExportLink({ href }: { href: string }) {
   return (
     <a
       href={href}
-      className="rounded border border-neutral-300 px-3 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+      className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
     >
       Download CSV
     </a>

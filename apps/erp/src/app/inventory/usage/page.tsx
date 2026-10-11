@@ -9,6 +9,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Badge, Banner, FlashBanner, Select } from '@/components/ui';
 
 export const metadata = { title: 'Usage & wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -19,16 +20,7 @@ interface SearchParams {
   ok?: string;
 }
 
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-
 const KIND_LABEL: Record<string, string> = { usage: 'Usage', wastage: 'Wastage', adjustment: 'Adjustment', opening: 'Opening' };
-const STATUS_LABEL: Record<string, string> = { draft: 'Draft', posted: 'Posted', void: 'Void' };
-const STATUS_TONE: Record<string, string> = {
-  draft: 'text-neutral-600 dark:text-neutral-400',
-  posted: 'text-emerald-700 dark:text-emerald-400',
-  void: 'text-red-700 dark:text-red-400',
-};
 
 export default async function UsagePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
@@ -62,39 +54,30 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
         </Link>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className={INPUT}>
+          <Select name="store" defaultValue={storeId}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
       {locations.length === 0 ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           This store has no active operating room yet — a usage can only be recorded from one. Add
           one under{' '}
-          <Link href={`/inventory/locations?store=${storeId}`} className="underline underline-offset-4">
+          <Link href={`/inventory/locations?store=${storeId}`} className="text-sm underline underline-offset-4">
             Locations
           </Link>
           .
-        </p>
+        </Banner>
       ) : (
         <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="text-sm font-medium">New record</h2>
@@ -141,8 +124,8 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
                       {r.reasonCode ? wastageReasonLabel(r.reasonCode) : '—'}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{r.lineCount}</td>
-                    <td className={`px-3 py-2 font-medium ${STATUS_TONE[r.status] ?? ''}`}>
-                      {STATUS_LABEL[r.status] ?? r.status}
+                    <td className="px-3 py-2">
+                      <Badge status={r.status} />
                     </td>
                   </tr>
                 ))}

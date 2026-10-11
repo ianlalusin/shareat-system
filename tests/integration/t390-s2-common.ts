@@ -1,3 +1,4 @@
+import { testItemCode } from '../../packages/domain/tests/integration/_fixtures/item-code';
 import { sql as dsql } from 'drizzle-orm';
 import type { Actor } from '@shareat/auth';
 import { seedChartOfAccounts } from '../../packages/db/seed/chart-of-accounts';
@@ -96,7 +97,7 @@ export async function s2fixture(hint: string, c2: C2Mode = 'real'): Promise<S2Fi
     const nm = `${label} ${uid('n')}`;
     const [i] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${orgId}, ${uid('IT')}, ${nm}, ${kind}, ${unit}, ${adminId}) returning id`;
+      values (${orgId}, ${testItemCode()}, ${nm}, ${kind}, ${unit}, ${adminId}) returning id`;
     names[key] = nm;
     return i!.id;
   };

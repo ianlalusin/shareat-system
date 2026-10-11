@@ -26,15 +26,15 @@ export function TieIndicator({
       role="status"
       className={
         ties
-          ? 'rounded-lg border-2 border-emerald-600 bg-emerald-50 p-4 dark:border-emerald-500 dark:bg-emerald-950'
-          : 'rounded-lg border-4 border-red-600 bg-red-100 p-4 dark:border-red-500 dark:bg-red-950'
+          ? 'rounded-lg border-2 border-success bg-success-soft p-4'
+          : 'rounded-lg border-4 border-danger bg-danger-surface p-4'
       }
     >
       <p
         className={
           ties
-            ? 'text-lg font-bold text-emerald-800 dark:text-emerald-200'
-            : 'text-2xl font-extrabold uppercase tracking-wide text-red-800 dark:text-red-100'
+            ? 'text-lg font-bold text-success'
+            : 'text-2xl font-extrabold uppercase tracking-wide text-danger'
         }
       >
         {ties ? 'Ties' : 'DOES NOT TIE'}
@@ -42,14 +42,14 @@ export function TieIndicator({
       <p
         className={
           ties
-            ? 'mt-1 text-sm text-emerald-700 dark:text-emerald-300'
-            : 'mt-1 text-base font-semibold text-red-800 dark:text-red-100'
+            ? 'mt-1 text-sm text-success'
+            : 'mt-1 text-base font-semibold text-danger'
         }
       >
         Total debits {formatMoney(totalDebit)} {ties ? '=' : '≠'} total credits {formatMoney(totalCredit)}
       </p>
       {!ties ? (
-        <p className="mt-2 text-sm text-red-800 dark:text-red-100">
+        <p className="mt-2 text-sm text-danger">
           This should never happen — every journal entry is enforced balanced at the
           database level. Stop and investigate before trusting any other figure on this
           screen.

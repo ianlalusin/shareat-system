@@ -44,6 +44,7 @@ import { postEntry } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../packages/db/seed/chart-of-accounts';
 import { WORKED_EXAMPLES, type FixtureLine, type WorkedExample } from '../worked-examples/fixtures';
 import { RESTRICTED_TEST_PASSWORD, RESTRICTED_TEST_ROLE } from './setup';
+import { leaksPassword } from './t393-no-leak';
 import { fsStore, type ObjectStore } from '../../scripts/lib/backup/object-store';
 import { runBackup } from '../../scripts/lib/backup/run-backup';
 import { runDrill } from '../../scripts/lib/backup/run-drill';
@@ -335,9 +336,9 @@ describe('T-393 S2 - runDrill', () => {
       const hit = Object.entries(flat).find(([k, v]) => re.test(k) && typeof v === 'number');
       expect(hit, `report needs a numeric duration field matching ${String(re)}: ${text}`).toBeDefined();
     }
-    expect(text).not.toContain(adminPassword); // R13
+    expect(leaksPassword(text, adminPassword), 'the admin password must not appear').toBe(false); // R13
     expect(text).not.toMatch(/postgres(ql)?:\/\//);
-    expect(o.out).not.toContain(adminPassword);
+    expect(leaksPassword(o.out, adminPassword), 'the admin password must not appear').toBe(false);
   });
 
   it('17. a changed balance fails and names the org and account (a per-account edit; org totals untouched)', async () => {
@@ -358,7 +359,7 @@ describe('T-393 S2 - runDrill', () => {
     expect(o.text).toContain(account);
     expect(o.hb.map((c) => c.name)).toEqual(['start', 'fail']);
     expect(await dbExists(name)).toBe(false); // dropped even on failure
-    expect(o.text).not.toContain(adminPassword);
+    expect(leaksPassword(o.text, adminPassword), 'the admin password must not appear').toBe(false);
   });
 
   it('18. a lost table fails, naming it (row counts are compared)', async () => {
@@ -498,7 +499,7 @@ describe('T-393 S2 - runDrill', () => {
       const o = await drill({ store, targetUrl: c.targetUrl, sourceUrl: c.sourceUrl });
       expect(o.ok, `${c.label} must be refused`).toBe(false);
       expect(o.connects.filter((x) => x.host === ALT_HOST), `${c.label}: the drill may open no connection before the refusal; text=${o.text}`).toEqual([]);
-      expect(o.text).not.toContain(adminPassword);
+      expect(leaksPassword(o.text, adminPassword), 'the admin password must not appear').toBe(false);
     }
     expect(await dbExists(sameName), 'the same-name target must not have been created').toBe(false);
     expect(await dbExists(decoy), 'foo_drill must not have been dropped').toBe(true);

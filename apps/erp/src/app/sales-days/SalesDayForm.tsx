@@ -9,10 +9,10 @@
  *
  * R1: the store and the date are never edited, so on an edit the date is plain text, not an input.
  */
+import { Button, Input } from '@/components/ui';
 import type { ChannelOption } from './lib';
 
-const FIELD =
-  'w-full rounded border border-neutral-300 bg-white px-2 py-1 text-sm text-right tabular-nums dark:border-neutral-700 dark:bg-neutral-950';
+const FIELD = 'w-full text-right tabular-nums';
 const LABEL = 'text-xs font-medium text-neutral-500 dark:text-neutral-400';
 
 export interface SalesDayDefaults {
@@ -52,12 +52,7 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
         {dateEditable ? (
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Business date</span>
-            <input
-              type="date"
-              name="businessDate"
-              defaultValue={businessDate}
-              className="rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950"
-            />
+            <Input type="date" name="businessDate" defaultValue={businessDate} />
           </label>
         ) : (
           <div className="flex flex-col gap-1">
@@ -154,13 +149,13 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
                       {c.isRemittedDaily ? (
                         <span className="text-xs text-neutral-500 dark:text-neutral-400">reaches the till</span>
                       ) : (
-                        <span className="text-xs text-amber-700 dark:text-amber-400">
+                        <span className="text-xs text-warning-ink">
                           settles later → {c.receivableAccountCode}
                         </span>
                       )}
                     </td>
                     <td className="py-2">
-                      <input
+                      <Input
                         name={`channel_${c.id}`}
                         placeholder="0.00"
                         defaultValue={prior && !prior.noSales ? prior.amount : undefined}
@@ -205,7 +200,7 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
                   <td className="py-2">{w.name}</td>
                   <td className="py-2 text-xs text-neutral-500 dark:text-neutral-400">{w.custodian}</td>
                   <td className="py-2">
-                    <input name={`tender_${w.id}`} placeholder="0.00" defaultValue={defaults?.tenders?.[w.id]} className={FIELD} />
+                    <Input name={`tender_${w.id}`} placeholder="0.00" defaultValue={defaults?.tenders?.[w.id]} className={FIELD} />
                   </td>
                 </tr>
               ))}
@@ -233,12 +228,9 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
         </section>
       )}
 
-      <button
-        type="submit"
-        className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-      >
+      <Button type="submit" variant="primary">
         {submitLabel}
-      </button>
+      </Button>
     </>
   );
 }
@@ -247,7 +239,7 @@ function Money({ name, label, value }: { name: string; label: string; value?: st
   return (
     <label className="flex flex-col gap-1">
       <span className={LABEL}>{label}</span>
-      <input name={name} placeholder="0.00" defaultValue={value} className={FIELD} />
+      <Input name={name} placeholder="0.00" defaultValue={value} className={FIELD} />
     </label>
   );
 }

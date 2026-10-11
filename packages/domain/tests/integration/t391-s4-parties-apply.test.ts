@@ -616,3 +616,71 @@ describe('S4 apply - audit round', () => {
     60_000,
   );
 });
+
+describe('S4 apply - re-audit round', () => {
+  const item = (store: string, name: string): Any => ({ id: `it${++rid}`, store, name, kind: 'raw_material', baseUnit: 'kg' });
+  const mixed = (): Any => ({
+    ...snap([sup(L, 'Acme Foods Inc'), sup(M, 'ACME FOODS INC.')]),
+    items: [item(L, 'Flour')],
+  });
+  const all = async (e: Env, s: Any, over: Record<string, unknown> = {}) => {
+    const mod: Any = await import('../../../../scripts/lib/master-data-apply');
+    return mod.applyMasterData({ snapshot: s, snapshotSha: SHA, map: e.map, orgId: e.orgId, orgCode: e.orgCode, answers: {}, actor: e.superA, apply: true, ...over });
+  };
+  const itemCount = async (orgId: string) => Number((await sql<Any[]>`select count(*)::int as n from items where org_id = ${orgId}`)[0]!.n);
+
+  it(
+    'a: items commit, then suppliers hit held: the error says items were ALREADY COMMITTED (with created and linked counts) and to RERUN; items stay; a rerun with the answers finishes without re-creating them. Killing mutant: the bare HeldError message',
+    async () => {
+      const e = await env('PC');
+      const s = mixed();
+      const err = await failure(all(e, s));
+      const msg = String((err as Error).message);
+      expect(msg).toMatch(/already committed/i);
+      expect(msg).toMatch(/created\D*1/i);
+      expect(msg).toMatch(/linked\D*1/i);
+      expect(msg).toMatch(/rerun/i);
+      expect(msg).toMatch(/held/i);
+      expect(await itemCount(e.orgId)).toBe(1);
+      expect(await suppliers(e.orgId)).toHaveLength(0);
+
+      const mod: Any = await import('../../../etl/src/master-data/parties-plan');
+      const first = mod.planParties({ snapshot: s, map: e.map, orgCode: e.orgCode, existingSuppliers: [], existingCustomers: [], links: [], answers: {} });
+      const rows = first.sheets['suppliers-twins'].map((r: Any) => ({ ...r, same_or_different: 'same' }));
+      const r = await all(e, s, { answers: { 'suppliers-twins': rows } });
+      expect(r.items).toMatchObject({ created: 0, linked: 0 });
+      expect(r.suppliers).toMatchObject({ created: 1, linked: 2 });
+      expect(await itemCount(e.orgId)).toBe(1);
+    },
+    60_000,
+  );
+
+  it(
+    'b: a DRY RUN by a manager with customers in scope is refused by the precheck (manage_chart_of_accounts) before anything is planned or written. Killing mutant: the precheck skipped when apply is false',
+    async () => {
+      const e = await env('PD');
+      const before = await state(e.orgId);
+      const err = await failure(all(e, snap([sup(L, 'Acme Foods')], [cust(L, 'Tonyo')]), { actor: e.manager, apply: false, only: ['suppliers', 'customers'] }));
+      expect(err).toBeInstanceOf(AuthorizationError);
+      expect(String((err as Error).message)).toMatch(/manage_chart_of_accounts/);
+      expect(await state(e.orgId)).toEqual(before);
+    },
+    60_000,
+  );
+
+  it(
+    'd: an unknown entity name in only (the singular supplier) throws and names it; nothing is written. Killing mutant: unknown names silently filtered out',
+    async () => {
+      const e = await env('UN');
+      const before = await state(e.orgId);
+      const err = await failure(all(e, snap([sup(L, 'Acme Foods')]), { only: ['supplier'] }));
+      expect(String((err as Error).message)).toMatch(/supplier/);
+      expect(String((err as Error).message)).toMatch(/unknown|not a/i);
+      expect(await state(e.orgId)).toEqual(before);
+      const err2 = await failure(all(e, snap([sup(L, 'Acme Foods')]), { only: ['suppliers', 'vendors'] }));
+      expect(String((err2 as Error).message)).toMatch(/vendors/);
+      expect(await state(e.orgId)).toEqual(before);
+    },
+    60_000,
+  );
+});

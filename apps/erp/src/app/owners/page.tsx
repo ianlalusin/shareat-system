@@ -12,6 +12,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Owners — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -54,20 +55,16 @@ export default async function OwnersPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/* ── Aged receivables ─────────────────────────────────────────────────────────── */}
       {stale.length > 0 && (
-        <section className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-800 dark:bg-amber-950">
-          <h2 className="font-medium text-amber-900 dark:text-amber-200">
+        <Banner tone="warning">
+          <h2 className="font-medium">
             {stale.length === 1 ? 'An owner balance has' : `${stale.length} owner balances have`}{' '}
             been outstanding a long time
           </h2>
-          <p className="text-amber-900 dark:text-amber-300">
+          <p>
             A personal expense the business is owed stops looking like a loan once it sits
             uncollected. Take it back in cash, recover it from pay, or write it off deliberately —
             leaving it is the one option that decides itself.
@@ -75,7 +72,7 @@ export default async function OwnersPage({
           <ul className="space-y-1">
             {stale.map((o) => (
               <li key={o.id}>
-                <Link href={`/owners/${o.id}`} className="underline underline-offset-2">
+                <Link href={`/owners/${o.id}`} className="text-sm underline underline-offset-2">
                   {personById.get(o.personId)?.displayName ?? 'Unknown'}
                 </Link>{' '}
                 — <span className="font-mono tabular-nums">{peso(o.aged!.outstanding)}</span>, oldest
@@ -83,7 +80,7 @@ export default async function OwnersPage({
               </li>
             ))}
           </ul>
-        </section>
+        </Banner>
       )}
 
       {/* ── The register ─────────────────────────────────────────────────────────────── */}
@@ -162,7 +159,7 @@ export default async function OwnersPage({
         <form action={createOwnerAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Store">
-              <select name="storeId" required defaultValue="" className={INPUT}>
+              <Select name="storeId" required defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -171,10 +168,10 @@ export default async function OwnersPage({
                     {s.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Who">
-              <select name="personId" required defaultValue="" className={INPUT}>
+              <Select name="personId" required defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -183,10 +180,10 @@ export default async function OwnersPage({
                     {p.displayName}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Role" hint="Managing Partner, Silent Partner…">
-              <input name="role" className={INPUT} />
+              <Input name="role" className="w-full" />
             </Field>
             <Field
               label="Ownership %"
@@ -198,31 +195,28 @@ export default async function OwnersPage({
               <input name="drawingLimit" inputMode="decimal" className={INPUT} />
             </Field>
             <Field label="Limit period">
-              <select name="drawingLimitPeriod" defaultValue="" className={INPUT}>
+              <Select name="drawingLimitPeriod" defaultValue="" className="w-full">
                 <option value="">—</option>
                 <option value="monthly">Monthly — resets each calendar month</option>
                 <option value="total">Total — across all time</option>
-              </select>
+              </Select>
             </Field>
             <Field
               label="Personal expenses"
               hint="Decides where a personal expense lands. It is the line the tax treatment turns on, so it is a stated policy rather than a per-expense guess."
             >
-              <select name="personalExpenseTreatment" defaultValue="repayable" className={INPUT}>
+              <Select name="personalExpenseTreatment" defaultValue="repayable" className="w-full">
                 <option value="repayable">{TREATMENT_LABEL.repayable}</option>
                 <option value="drawing">{TREATMENT_LABEL.drawing}</option>
-              </select>
+              </Select>
             </Field>
             <Field label="Notes" hint="Optional.">
-              <input name="notes" className={INPUT} />
+              <Input name="notes" className="w-full" />
             </Field>
           </div>
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-          >
+          <Button type="submit" variant="primary">
             Save
-          </button>
+          </Button>
         </form>
       </section>
     </Page>
@@ -230,7 +224,7 @@ export default async function OwnersPage({
 }
 
 const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
 function Field({
   label,

@@ -99,7 +99,7 @@ export default defineConfig({
           environment: 'node',
           // T-380 S1a / REV-2: an empty `next/headers` jar for any test that renders a page which
           // calls `withFlash` without mocking cookies itself (a test's own vi.mock still wins).
-          setupFiles: ['apps/erp/tests/helpers/flash-jar-setup.ts'],
+          setupFiles: ['apps/erp/tests/helpers/flash-jar-setup.ts', 'apps/erp/tests/helpers/form-status-setup.ts'],
         },
       },
       {
@@ -122,7 +122,7 @@ export default defineConfig({
           ],
           exclude: ['**/node_modules/**', '**/.next/**'],
           environment: 'node',
-          setupFiles: ['tests/integration/setup.ts', 'apps/erp/tests/helpers/flash-jar-setup.ts'],
+          setupFiles: ['tests/integration/setup.ts', 'apps/erp/tests/helpers/flash-jar-setup.ts', 'apps/erp/tests/helpers/form-status-setup.ts'],
           fileParallelism: false,
           testTimeout: 30_000,
           // T-285 (DEF-313): `testTimeout` and `hookTimeout` are SEPARATE vitest settings — raising

@@ -143,7 +143,8 @@ function formGridPlacementProblems(src: string): string[] {
 function needsFormGrid(src: string): boolean {
   const clean = codeOnly(src);
   const forms = clean.match(/<form\b[^>]*\baction=[\s\S]*?<\/form>/g) ?? [];
-  const big = forms.some((f) => (f.match(/<label\b/g) ?? []).length >= 3);
+  // T-387 S8: a kit <Checkbox> renders its own <label>, so it counts as one (else the sweep blinds G4).
+  const big = forms.some((f) => (f.match(/<label\b|<Checkbox\b/g) ?? []).length >= 3);
   const imports = (clean.match(/import[\s\S]*?from\s+['"][^'"]*['"]/g) ?? []).join('\n');
   return big && !/\bFormGrid\b/.test(imports);
 }

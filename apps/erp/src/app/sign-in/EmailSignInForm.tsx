@@ -36,6 +36,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { publicEnv } from '@shareat/core/env';
 import { signInWithEmailAction } from './actions';
 import { signInFirebase, prepareSignInPersistence } from './firebase-client';
+import { Banner, Button, Input } from '@/components/ui';
 
 /**
  * ⚠️ **One sentence for every wrong-credential shape.** `auth/user-not-found`,
@@ -106,7 +107,7 @@ export function EmailSignInForm({ next }: { next: string }) {
 
   if (configError) {
     return (
-      <div className="rounded-lg border border-dashed border-amber-400 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+      <div className="rounded-lg border border-dashed border-warning bg-warning-soft p-4 text-xs text-warning-ink">
         <strong className="block text-sm">
           No sign-in method is available: both email and terminal PIN sign-in need this
           server&apos;s Firebase identity values.
@@ -180,15 +181,11 @@ export function EmailSignInForm({ next }: { next: string }) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4 text-sm">
-      {error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {error}
-        </div>
-      )}
+      {error && <Banner tone="error">{error}</Banner>}
 
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Email</span>
-        <input
+        <Input
           name="email"
           type="email"
           inputMode="email"
@@ -197,32 +194,25 @@ export function EmailSignInForm({ next }: { next: string }) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          // Touch-first: py-3 keeps the tap target comfortable on a phone in portrait, the same
-          // sizing the PIN input beside it uses.
-          className="rounded border border-neutral-300 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-950"
+          // Touch-first: the kit's 44px field is the tap target on a phone in portrait.
         />
       </label>
 
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Password</span>
-        <input
+        <Input
           name="password"
           type="password"
           autoComplete="current-password"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded border border-neutral-300 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-950"
         />
       </label>
 
-      <button
-        type="submit"
-        disabled={busy}
-        className="w-full rounded bg-neutral-900 px-4 py-3 font-medium text-white hover:bg-neutral-700 disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-      >
+      <Button type="submit" variant="secondary" disabled={busy} className="w-full justify-center">
         {busy ? 'Signing in…' : 'Sign in with email'}
-      </button>
+      </Button>
     </form>
   );
 }

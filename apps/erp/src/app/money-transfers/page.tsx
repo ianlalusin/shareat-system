@@ -10,6 +10,7 @@ import { CUSTODIAN_LABEL, listAccountBalances, listRecentTransfers, listSettleme
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Badge, Banner, Button, FlashBanner, Input } from '@/components/ui';
 
 export const metadata = { title: 'Money transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -95,28 +96,12 @@ export default async function MoneyTransfersPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok === 'created' ? 'Transfer recorded.' : sp.ok === 'settled' ? 'Settlement recorded.' : 'Transfer reversed.'}
-        </div>
-      )}
-      {/* ⚠️ A warning is NOT an error — the transfer posted. Shown in amber beside the green
-          confirmation rather than in place of it, so nobody reads it as a failure. */}
-      {sp.warning && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          {sp.warning}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/* ⭐ OVERDRAWN ACCOUNTS — derived on every load, never a stored flag, so it cannot linger
           after the money arrives or go missing when it does not. Bible row 154. */}
       {overdrawn.length > 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong className="font-medium">
             {overdrawn.length === 1 ? 'One account is' : `${overdrawn.length} accounts are`} below
             zero in the books.
@@ -128,23 +113,21 @@ export default async function MoneyTransfersPage({
             and it should clear. If it does not, or if the account is an office safe or a staff
             float, the money is genuinely missing and needs counting.
           </div>
-        </div>
+        </Banner>
       )}
 
       {usable.length === 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          You can&apos;t move money at any store.
-        </div>
+        <Banner tone="warning">You can&apos;t move money at any store.</Banner>
       )}
 
       {usable.length > 0 && usable.length < 2 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong className="font-medium">A transfer needs two accounts.</strong> Add them on{' '}
-          <Link href="/money-accounts" className="underline underline-offset-2">
+          <Link href="/money-accounts" className="text-sm underline underline-offset-2">
             money accounts
           </Link>{' '}
           first — a transfer has to name where the money left and where it landed.
-        </div>
+        </Banner>
       )}
 
       {/* ── What is where ────────────────────────────────────────────────────────────── */}
@@ -163,7 +146,7 @@ export default async function MoneyTransfersPage({
                       negative cash balance is never ordinary. */}
                   <span
                     className={`font-mono text-sm tabular-nums ${
-                      compare(money(a.balance), ZERO) < 0 ? 'text-amber-600 dark:text-amber-400' : ''
+                      compare(money(a.balance), ZERO) < 0 ? 'text-warning-ink' : ''
                     }`}
                   >
                     {peso(a.balance)}
@@ -258,14 +241,10 @@ export default async function MoneyTransfersPage({
                     <td className="px-3 py-2">
                       {t.toName}
                       {t.settles && (
-                        <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-300">
-                          Settlement
-                        </span>
+                        <Badge tone="info" label="Settlement" className="ml-2" />
                       )}
                       {t.status === 'voided' && (
-                        <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-xs font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-                          Reversed
-                        </span>
+                        <Badge tone="closed" label="Reversed" className="ml-2" />
                       )}
                       {t.reference && (
                         <div className="text-xs text-neutral-400 dark:text-neutral-600">
@@ -281,7 +260,7 @@ export default async function MoneyTransfersPage({
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {compare(money(t.fee), ZERO) > 0 ? (
-                        <span className="text-amber-700 dark:text-amber-400">{peso(t.fee)}</span>
+                        <span className="text-warning-ink">{peso(t.fee)}</span>
                       ) : (
                         <span className="text-neutral-300 dark:text-neutral-700">—</span>
                       )}
@@ -292,18 +271,10 @@ export default async function MoneyTransfersPage({
                           <input type="hidden" name="moneyTransferId" value={t.id} />
                           {/* A reversal without a reason is a gap, so the reason is part of the
                               same control rather than a confirmation step that can be skipped. */}
-                          <input
-                            name="reason"
-                            required
-                            placeholder="Reason…"
-                            className="w-28 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
-                          />
-                          <button
-                            type="submit"
-                            className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-800 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
-                          >
+                          <Input name="reason" required placeholder="Reason…" className="w-28" />
+                          <Button type="submit" variant="danger">
                             Reverse
-                          </button>
+                          </Button>
                         </form>
                       )}
                     </td>

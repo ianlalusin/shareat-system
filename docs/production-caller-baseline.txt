@@ -1,11 +1,8 @@
-Badge
-Checkbox
 GET
 NumTd
 StatusIcon
 Table
 Td
-Textarea
 Th
 __setPhase5AvailableForTests
 acknowledgementHistory

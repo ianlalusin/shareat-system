@@ -8,21 +8,7 @@
  * before migration, because the row is the duplicated part, not the fields.
  */
 import type { ReactNode } from 'react';
-
-/**
- * NOT the majority string — the LARGER of the shapes found among the 26 pre-migration rows,
- * chosen deliberately (orchestrator ruling, T-241 §9, 2026-09-08, superseding an earlier
- * majority-string ruling). Collapsing 26 hand-copied rows into one component means every screen
- * gets the same button regardless of which shape is picked, so the choice is which value is
- * better, not which was more common: `px-4 py-2.5 font-medium` was already in-house on
- * `attendance/lane` and both `settings/*` pages, and phone portrait is this app's canvas
- * (`feedback_design_for_apk_tablet_phone`) — nobody's touch target gets smaller. Every one of the
- * 25 migrated pages therefore gets a very slightly taller, heavier button than it had before,
- * `attendance/lane` additionally gains the hover state it never had, and `attendance/terminals`
- * (previously the smallest, `py-1 text-xs`) changes the most.
- */
-const SUBMIT_BTN =
-  'rounded-md border border-neutral-300 px-4 py-2.5 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
+import { Button } from '@/components/ui';
 
 export interface FilterRowProps {
   /**
@@ -47,9 +33,7 @@ export function FilterRow({ children, submitLabel = 'Show', className }: FilterR
       className={`flex flex-wrap items-end gap-3 gap-y-2${className ? ` ${className}` : ''}`}
     >
       {children}
-      <button type="submit" className={SUBMIT_BTN}>
-        {submitLabel}
-      </button>
+      <Button type="submit">{submitLabel}</Button>
     </form>
   );
 }

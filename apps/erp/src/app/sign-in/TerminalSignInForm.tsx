@@ -23,6 +23,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { publicEnv } from '@shareat/core/env';
 import { signInFirebase, prepareSignInPersistence } from './firebase-client';
 import { verifyTerminalAction, signInWithTerminalPinAction } from './actions';
+import { Banner, Button, Input } from '@/components/ui';
 
 export function firebaseSignInMessage(err: unknown): string {
   const code = typeof err === 'object' && err !== null && 'code' in err ? String(err.code) : '';
@@ -82,10 +83,10 @@ export function TerminalSignInForm({ next }: { next: string }) {
     // (Contract 3), wherever page.tsx places it. This form only needs to stop offering a PIN box
     // it cannot honour.
     return (
-      <p className="rounded-lg border border-dashed border-amber-400 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+      <Banner tone="warning">
         Terminal sign-in is unavailable on this server. See the sign-in notice on this page for
         why.
-      </p>
+      </Banner>
     );
   }
 
@@ -160,16 +161,12 @@ export function TerminalSignInForm({ next }: { next: string }) {
   if (step === 'terminal') {
     return (
       <form onSubmit={onTerminalSubmit} className="space-y-4 text-sm">
-        {error && (
-          <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-            {error}
-          </div>
-        )}
+        {error && <Banner tone="error">{error}</Banner>}
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
             Terminal email
           </span>
-          <input
+          <Input
             name="email"
             type="email"
             inputMode="email"
@@ -178,44 +175,34 @@ export function TerminalSignInForm({ next }: { next: string }) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="store@example.com"
-            className="rounded border border-neutral-300 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-950"
           />
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
             Terminal password
           </span>
-          <input
+          <Input
             name="password"
             type="password"
             autoComplete="current-password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="rounded border border-neutral-300 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-950"
           />
         </label>
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full rounded bg-neutral-900 px-4 py-3 font-medium text-white hover:bg-neutral-700 disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-        >
+        <Button type="submit" variant="primary" disabled={busy} className="w-full justify-center">
           {busy ? 'Connecting…' : 'Connect this terminal'}
-        </button>
+        </Button>
       </form>
     );
   }
 
   return (
     <form onSubmit={onPinSubmit} className="space-y-4 text-sm">
-      {error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {error}
-        </div>
-      )}
+      {error && <Banner tone="error">{error}</Banner>}
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">PIN</span>
-        <input
+        <Input
           name="pin"
           type="password"
           inputMode="numeric"
@@ -226,16 +213,12 @@ export function TerminalSignInForm({ next }: { next: string }) {
           onChange={(e) => setPin(e.target.value)}
           // Touch-first: a cashier enters this on a tablet, so the target is large and the keypad
           // is numeric.
-          className="rounded border border-neutral-300 bg-white px-3 py-3 text-center text-2xl tracking-[0.5em] tabular-nums dark:border-neutral-700 dark:bg-neutral-950"
+          className="text-center text-2xl tracking-[0.5em] tabular-nums"
         />
       </label>
-      <button
-        type="submit"
-        disabled={busy}
-        className="w-full rounded bg-neutral-900 px-4 py-3 font-medium text-white hover:bg-neutral-700 disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-      >
+      <Button type="submit" variant="primary" disabled={busy} className="w-full justify-center">
         {busy ? 'Signing in…' : 'Sign in'}
-      </button>
+      </Button>
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
         <strong>Forgot your PIN?</strong> Ask an admin to issue you a new one. PINs cannot be
         looked up — a new one is the only way back in.

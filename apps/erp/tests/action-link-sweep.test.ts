@@ -204,14 +204,22 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 151 FAIL / 63 UNRESOLVED', () => {
+  it('accepted-baseline totals: 148 FAIL / 49 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
     // take a caller className through a template like Input.tsx's (same reason string), and Checkbox.tsx's native
     // `<input type="checkbox">` is the intrinsic checkbox box (Ian's ruling, section 6.1). touch-target-baseline.json gains the
     // three entries. FAIL unmoved at 151: the new boxes are 44px (min-h-11).
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 66 });
+    // 151 -> 148 FAIL, 66 -> 49 UNRESOLVED, T-387 S8 2026-10-10: the sweep moved buttons/fields onto the 44px kit.
+    // FAIL -3: undersized 20/22px controls in customers, fixed-assets and sales-days became 44px kit controls.
+    // UNRESOLVED -17: native checkboxes/selects became kit controls in budgets, inventory/locations, pos-map, items,
+    // items/[id], ItemCodeField, store-comparison, trade/returns, setup/SubmitButton and two-way-picker.
+    // ⚠️ Not a fall: 7 inline prose links (budgets, expenses/new, inventory/production, inventory/usage, liabilities,
+    // money-transfers, owners) now sit inside a kit <Banner>, whose text-sm the census cannot see through a component.
+    // They were briefly UNRESOLVED; each got an explicit `text-sm` (visually a no-op, the Banner is text-sm) and is
+    // again the same accepted 20px inline-link FAIL it was before, entry restored unchanged.
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 148, unresolved: 49 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -404,10 +412,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // (the 3 UNRESOLVED above) and Banner.tsx's "Go to <field>" `<a>` (assumed a PASS: the builder gives it a 24px+ box).
     // FAIL unchanged at 151. If the Banner anchor lands FAIL or UNRESOLVED instead, correct this number and the totals
     // with a measured census, not by guess.
+    // 1156 -> 1148, T-387 S8 2026-10-10. -8 net: the sweep removed controls it replaced with kit components; FAIL 151 -> 141, UNRESOLVED 66 -> 56.
     // 1156 + T-395 S2's reopen button -> 1157 at the merge of PR #10 with T-387 S3. Verified by running the census.
-    // 1157 -> 1169, T-390 S5 2026-10-11. +12 from the new cutover UI (room selector, Value the count, asset valuation forms, party picker,
-    // sheet links). Verified by running the census.
-    expect(results.length).toBe(1169);
+    // 1149 (T-387 S8 on main) + 12 (T-390 S5 cutover UI) = 1161, measured after merging origin/main 12 Oct. Verified by running the census.
+    expect(results.length).toBe(1161);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

@@ -490,7 +490,7 @@ describe('W12 (render) — /ap/suppliers/[id] for a 30-day supplier and a COD su
     const html = await renderSupplierDetail(f, s.id);
     expect(html, `page did not render termsMode at all: ${html.slice(0, 2000)}`).toMatch(/name="termsMode"/);
     const idx = html.indexOf('name="termsMode"');
-    const window = html.slice(Math.max(0, idx - 200), idx + 600);
+    const window = html.slice(Math.max(0, idx - 200), idx + 1600);
     expect(window).toMatch(/<option value="credit"[^>]*selected/);
     expect(window).toMatch(/name="creditTermsDays"[^>]*value="30"/);
   });
@@ -501,7 +501,7 @@ describe('W12 (render) — /ap/suppliers/[id] for a 30-day supplier and a COD su
     const html = await renderSupplierDetail(f, s.id);
     expect(html).toMatch(/name="termsMode"/);
     const idx = html.indexOf('name="termsMode"');
-    const window = html.slice(Math.max(0, idx - 200), idx + 600);
+    const window = html.slice(Math.max(0, idx - 200), idx + 1600);
     expect(window).toMatch(/<option value="cod"[^>]*selected/);
     expect(window).toMatch(/name="creditTermsDays"[^>]*value=""/);
   });

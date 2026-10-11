@@ -4,7 +4,7 @@ import { listStoresForAdmin } from './lib';
 import { createStoreAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { FormGrid, Field } from '@/components/ui';
+import { Badge, Button, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Stores — Shareat System' };
@@ -43,16 +43,7 @@ export default async function StoresPage({
         </PageDescription>
       </div>
 
-      {sp.ok && (
-        <p className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </p>
-      )}
-      {sp.error && (
-        <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </p>
-      )}
+      <FlashBanner flash={sp} />
 
       <section className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
         <table className="w-full text-sm">
@@ -81,11 +72,7 @@ export default async function StoresPage({
                 </td>
                 <td className="p-3 text-right tabular-nums">{s.roomCount}</td>
                 <td className="p-3">
-                  {s.isActive ? (
-                    <span className="text-emerald-700 dark:text-emerald-400">Active</span>
-                  ) : (
-                    <span className="text-neutral-500">Inactive</span>
-                  )}
+                  <Badge status={s.isActive ? 'active' : 'inactive'} />
                 </td>
                 {/* T-346 S1 (DEF-428) — Amendment R3.3: three states via the shared `isPreOpening`
                     (R1 item 11 originally specified two; superseded). */}
@@ -93,9 +80,9 @@ export default async function StoresPage({
                   {s.openingDate === null ? (
                     <span className="text-neutral-500">Not yet open</span>
                   ) : s.preOpening ? (
-                    <span className="text-amber-600">Opens {s.openingDate}</span>
+                    <span className="text-warning-ink">Opens {s.openingDate}</span>
                   ) : (
-                    <span className="text-emerald-700 dark:text-emerald-400">Opened {s.openingDate}</span>
+                    <span className="text-success">Opened {s.openingDate}</span>
                   )}
                 </td>
               </tr>
@@ -119,35 +106,30 @@ export default async function StoresPage({
               label={<span className="text-neutral-600 dark:text-neutral-400">Code</span>}
               hint="The stable handle. Not editable afterwards."
             >
-              <input name="code" required maxLength={16}
-                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+              <Input name="code" required maxLength={16} className="mt-1 w-full" />
             </Field>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}>
-              <input name="name" required
-                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+              <Input name="name" required className="mt-1 w-full" />
             </Field>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Stock model</span>}>
-              <select name="stockModel"
-                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900">
+              <Select name="stockModel" className="mt-1 w-full">
                 <option value="single_room">single_room</option>
                 <option value="multi_room">multi_room</option>
-              </select>
+              </Select>
             </Field>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Remittance cadence</span>}>
-              <select name="remittanceCadence"
-                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900">
+              <Select name="remittanceCadence" className="mt-1 w-full">
                 <option value="daily">daily</option>
                 <option value="every_2_days">every_2_days</option>
                 <option value="weekly">weekly</option>
                 <option value="monthly">monthly</option>
-              </select>
+              </Select>
             </Field>
             <Field
               label={<span className="text-neutral-600 dark:text-neutral-400">Opening date</span>}
               hint="Leave blank if it has not opened. The first day this store trades."
             >
-              <input type="date" name="openingDate"
-                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+              <Input type="date" name="openingDate" className="mt-1 w-full" />
             </Field>
             <Field
               span="full"
@@ -158,17 +140,15 @@ export default async function StoresPage({
               }
               hint="A store that pools cash must name the ceiling that bounds it. The database refuses the unsafe combination; this field is where you satisfy it."
             >
-              <input name="unremittedCeiling" inputMode="decimal" placeholder="e.g. 20000.00"
-                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+              <Input name="unremittedCeiling" inputMode="decimal" placeholder="e.g. 20000.00" className="mt-1 w-full" />
               {/* ⚠️ The form does not enforce this pairing — the database does. Disabling a button
                   client-side would be help, not enforcement (bible §2 rule 7). */}
             </Field>
           </FormGrid>
           <div>
-            <button type="submit"
-              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
+            <Button type="submit" variant="primary">
               Open branch
-            </button>
+            </Button>
           </div>
         </form>
       </section>

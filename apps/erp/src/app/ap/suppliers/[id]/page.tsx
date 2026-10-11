@@ -7,7 +7,7 @@ import { SUPPLIER_CLASSIFICATIONS, SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES } fr
 import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL } from '../../lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid } from '@/components/ui';
+import { FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { AutoAllocatePaymentForm } from './AutoAllocatePaymentForm';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -73,16 +73,7 @@ export default async function SupplierDetailPage({
         </div>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          <strong className="font-medium">Refused:</strong> {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/* ---------------------------------------------------------------- T-188: the record itself.
           ⛔ Until 2026-08-30 a supplier could be CREATED and never EDITED — `updateSupplier`
@@ -104,30 +95,30 @@ export default async function SupplierDetailPage({
           <FormGrid>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">VAT status</span>
-              <select name="vatStatus" defaultValue={supplier.vatStatus ?? ''} className={INPUT}>
+              <Select name="vatStatus" defaultValue={supplier.vatStatus ?? ''} className="w-full">
                 <option value="">Not stated</option>
                 {SUPPLIER_VAT_STATUSES.map((v) => (
                   <option key={v} value={v}>{VAT_STATUS_LABEL[v] ?? v}</option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="flex flex-col gap-1">
               {/* ⚠️ A LABEL, not a rule — nothing branches on it. See T-188 §4.2. */}
               <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Classification</span>
-              <select name="classification" defaultValue={supplier.classification ?? ''} className={INPUT}>
+              <Select name="classification" defaultValue={supplier.classification ?? ''} className="w-full">
                 <option value="">Not stated</option>
                 {SUPPLIER_CLASSIFICATIONS.map((c) => (
                   <option key={c} value={c}>{CLASSIFICATION_LABEL[c]}</option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Status</span>
-              <select name="status" defaultValue={supplier.status} className={INPUT}>
+              <Select name="status" defaultValue={supplier.status} className="w-full">
                 {SUPPLIER_STATUSES.map((v) => (
                   <option key={v} value={v}>{v}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           </FormGrid>
 
@@ -156,25 +147,25 @@ export default async function SupplierDetailPage({
             </legend>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Terms</span>
-              <select
+              <Select
                 name="termsMode"
                 defaultValue={supplier.creditTermsDays === null ? 'cod' : 'credit'}
-                className={INPUT}
+                className="w-full"
               >
                 <option value="cod">Cash on delivery (no credit)</option>
                 <option value="credit">On credit (AP)</option>
-              </select>
+              </Select>
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Days to pay</span>
-              <input
+              <Input
                 type="number"
                 name="creditTermsDays"
                 min="0"
                 max="365"
                 step="1"
                 defaultValue={supplier.creditTermsDays ?? ''}
-                className={INPUT}
+                className="w-full"
               />
               <span className="text-xs text-neutral-500 dark:text-neutral-400">
                 Cash on delivery means Credit (AP) cannot be used. On credit means Credit is allowed, and is
@@ -286,9 +277,6 @@ export default async function SupplierDetailPage({
   );
 }
 
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
@@ -299,7 +287,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-/** A plain labelled input for the T-188 edit form. Reuses this file's existing `INPUT`. */
+/** A plain labelled input for the T-188 edit form. */
 function TextField({
   label,
   name,
@@ -316,13 +304,7 @@ function TextField({
   return (
     <label className="flex flex-col gap-1">
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      <input
-        name={name}
-        type={type}
-        required={required}
-        defaultValue={defaultValue ?? ''}
-        className={INPUT}
-      />
+      <Input name={name} type={type} required={required} defaultValue={defaultValue ?? ''} className="w-full" />
     </label>
   );
 }

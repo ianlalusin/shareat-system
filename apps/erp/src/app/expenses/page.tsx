@@ -5,6 +5,7 @@ import { listStores, listCategoriesGrouped, withOrgPrincipal } from './lib';
 import { requireSession } from '../../lib/session';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Badge, Button, Select } from '@/components/ui';
 
 export const metadata = { title: 'Expenses — Shareat System' };
 
@@ -16,8 +17,6 @@ interface SearchParams {
   store?: string;
   status?: string;
 }
-
-const STATUS_LABEL: Record<string, string> = { draft: 'Draft', posted: 'Posted', voided: 'Voided' };
 
 export default async function ExpensesListPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
@@ -55,7 +54,7 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
         </div>
         <a
           href={`/expenses/new?${carry}`}
-          className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+          className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
         >
           New expense
         </a>
@@ -68,40 +67,29 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
       >
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Store</span>
-          <select
-            name="store"
-            defaultValue={storeId ?? ''}
-            className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-          >
+          <Select name="store" defaultValue={storeId ?? ''}>
             <option value="">All stores</option>
             {storeRows.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
 
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Status</span>
-          <select
-            name="status"
-            defaultValue={status ?? ''}
-            className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-          >
+          <Select name="status" defaultValue={status ?? ''}>
             <option value="">All</option>
             <option value="draft">Draft</option>
             <option value="posted">Posted</option>
             <option value="voided">Voided</option>
-          </select>
+          </Select>
         </label>
 
-        <button
-          type="submit"
-          className="rounded bg-neutral-900 px-4 py-1.5 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-        >
+        <Button type="submit" variant="primary">
           Apply
-        </button>
+        </Button>
       </form>
 
       {expenses.length === 0 ? (
@@ -134,7 +122,7 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatMoney(money(e.totalAmount))}</td>
                   <td className="px-3 py-2">
-                    <StatusBadge status={e.status} />
+                    <Badge status={e.status} />
                   </td>
                 </tr>
               ))}
@@ -148,14 +136,4 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
       </p>
     </Page>
   );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cls =
-    status === 'posted'
-      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-      : status === 'voided'
-        ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-        : 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300';
-  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{STATUS_LABEL[status] ?? status}</span>;
 }
