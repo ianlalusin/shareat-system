@@ -54,6 +54,7 @@ import { createItem, createSupplier, openTillShift } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { paramsOf } from '../helpers/flash-jar';
 import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
+import { realPurge } from '../../../../tests/integration/t390-real-purge';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -829,6 +830,9 @@ describe('Comma leg — money-transfers createMoneyTransferAction amountOut="1,5
 describe('Comma leg — cutover addOpeningFigureAction amount="1,5" ("This amount", SAFE, green pin)', () => {
   it('refuses by name', async () => {
     const f = await orgWithAdmin('opening-safe');
+    // T-390 R8: addOpeningFigure refuses until the purge (C2) has run, and only the REAL applyPurge records it. The org exists first so
+    // the purge writes its C2 row; the purge truncates this database's operational tables, which no later test here reuses.
+    await realPurge(sql, f.admin.personId);
     ACTOR_HOLDER.actor = f.admin;
     const { addOpeningFigureAction } = await import('../../src/app/cutover/actions');
     const fd = new FormData();

@@ -179,12 +179,12 @@ export async function lockOpeningItem(tx: Tx, storeId: string, itemId: string): 
   await tx.execute(sql`select pg_advisory_xact_lock(390002, hashtext(${storeId}::text || ':' || ${itemId}::text))`);
 }
 
-/** T-390 R8: has the opening been posted? A posted `opening_balance` entry exists. */
+/** T-390 R8: has the opening been posted? An `opening_balance` entry was POSTED, even if it was reversed since (the books were opened; corrections are ordinary stock documents). The reversal entry itself is not an opening. */
 export async function openingPosted(tx: Tx, orgId: string): Promise<{ posted: boolean; entryDate: string | null }> {
   const [row] = (await tx.execute(sql`
     select min(entry_date)::text as entry_date
     from journal_entries
-    where org_id = ${orgId} and source_type = 'opening_balance' and status = 'posted'
+    where org_id = ${orgId} and source_type = 'opening_balance' and status in ('posted', 'reversed') and reversal_of_entry_id is null
   `)) as unknown as Record<string, string | null>[];
   const entryDate = row?.entry_date ?? null;
   return { posted: entryDate !== null, entryDate };
@@ -297,15 +297,62 @@ export async function upsertOpeningCount(
   }
 }
 
-/** The valued total of everything counted — what the inventory opening figure should come to. */
-export async function countedValue(tx: Tx, orgId: string, storeId?: string): Promise<string> {
+/** T-390 R13: the EXCLUSIVE opening lock `postOpeningBalances` takes first. Every other opening writer holds the SHARED twin (390001) before its R8 check. */
+export async function lockOpeningExclusive(tx: Tx, orgId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(390001, hashtext(${orgId}::text))`);
+}
+
+/** T-390 R7: has any `opening_count` movement been written for this org? (C5 writes them once, ever.) */
+export async function openingStockMovementsExist(tx: Tx, orgId: string): Promise<boolean> {
   const [row] = (await tx.execute(sql`
-    select coalesce(sum(oc.quantity * coalesce(oc.unit_cost, 0)), 0)::text as value
+    select count(*)::int as n from stock_movements
+    where org_id = ${orgId} and kind = 'opening' and source_type = 'opening_count'
+  `)) as unknown as { n: number }[];
+  return Number(row?.n ?? 0) > 0;
+}
+
+export interface OpeningCountRow {
+  id: string;
+  storeId: string;
+  locationId: string;
+  locationName: string;
+  itemId: string;
+  itemName: string;
+  itemKind: string;
+  /** numeric(14,3) as text. */
+  quantity: string;
+  /** numeric(14,4) as text, or null when the row has no cost. */
+  unitCost: string | null;
+  costSource: string | null;
+}
+
+/**
+ * T-390 R5/R7/R17: every counted row (all rooms) of one store, or of the whole org, with the item's name and kind and the room's
+ * name. The ONE read behind `planOpeningStock`; the float `countedValue` it replaces is gone.
+ */
+export async function countsForStore(tx: Tx, orgId: string, storeId?: string): Promise<OpeningCountRow[]> {
+  const rows = (await tx.execute(sql`
+    select oc.id, oc.store_id, oc.location_id, sl.name as location_name, oc.item_id, i.name as item_name, i.kind as item_kind,
+           oc.quantity::text as quantity, oc.unit_cost::text as unit_cost, oc.cost_source
     from opening_counts oc
+    join items i on i.id = oc.item_id
+    join stock_locations sl on sl.id = oc.location_id
     where oc.org_id = ${orgId}
       ${storeId ? sql`and oc.store_id = ${storeId}` : sql``}
-  `)) as unknown as Record<string, string>[];
-  return Number(row?.value ?? 0).toFixed(2);
+    order by oc.store_id, i.name, i.id, sl.name, oc.id
+  `)) as unknown as Record<string, string | null>[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    storeId: String(r.store_id),
+    locationId: String(r.location_id),
+    locationName: String(r.location_name),
+    itemId: String(r.item_id),
+    itemName: String(r.item_name),
+    itemKind: String(r.item_kind),
+    quantity: String(r.quantity),
+    unitCost: r.unit_cost == null ? null : String(r.unit_cost),
+    costSource: r.cost_source == null ? null : String(r.cost_source),
+  }));
 }
 
 /**

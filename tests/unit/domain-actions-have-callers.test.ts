@@ -221,6 +221,10 @@ const EXEMPT: Record<string, string> = {
   valueOpeningAsset:
     'UNWIRED — no apps/ caller until T-390 S5, /cutover/opening assets list (the "Assets to value" Save button, spec 5.4). ' +
     'Domain function and tests landed in S3; the screen is S5. Delete this row when S5 wires it.',
+  // ---- T-390 S2 — opening stock ----------------------------------------------------------------
+  valueOpeningStock:
+    'UNWIRED — no apps/ caller until T-390 S5, /cutover/opening "Value opening stock" button (spec 5.4). ' +
+    'Domain function and tests landed in S2; the screen is S5. Delete this row when S5 wires it.',
 };
 
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {

@@ -40,6 +40,8 @@ interface Args {
   rehearse: boolean;
   allowNonLocal: boolean;
   asOf: string;
+  /** T-390 R8: the person id the purge records as having performed step C2. Required for --apply. */
+  by: string | null;
 }
 
 function parseArgs(argv: readonly string[]): Args {
@@ -49,6 +51,7 @@ function parseArgs(argv: readonly string[]): Args {
     rehearse: false,
     allowNonLocal: false,
     asOf: new Date().toISOString().slice(0, 10),
+    by: null,
   };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--confirm-database') a.confirmDatabase = argv[++i] ?? null;
@@ -56,6 +59,7 @@ function parseArgs(argv: readonly string[]): Args {
     else if (argv[i] === '--rehearse') a.rehearse = true;
     else if (argv[i] === '--yes-really-not-local') a.allowNonLocal = true;
     else if (argv[i] === '--as-of') a.asOf = argv[++i] ?? a.asOf;
+    else if (argv[i] === '--by') a.by = argv[++i] ?? null;
   }
   return a;
 }
@@ -63,7 +67,7 @@ function parseArgs(argv: readonly string[]): Args {
 function usage(): void {
   console.log(`
 Usage:
-  npm run cutover:purge -- --confirm-database <name> [--apply | --rehearse] [--as-of YYYY-MM-DD]
+  npm run cutover:purge -- --confirm-database <name> [--apply | --rehearse] [--as-of YYYY-MM-DD] [--by <personId>]
 
   Without --apply or --rehearse this is a DRY RUN: it reports what it would change and changes
   nothing.
@@ -72,6 +76,8 @@ Usage:
   --rehearse runs the full purge in a transaction and ALWAYS rolls back, reporting pass or the
   exact error — meant for a restored copy of production (ADR-007 §5), never a live database.
   --rehearse and --apply cannot be combined.
+  --by <personId> is REQUIRED with --apply: the purge records step C2 as performed by that person (T-390 R8). It must be a person
+  that exists. --rehearse records nothing (it rolls back), so --by is optional there.
 
   Reads its classification from packages/db/src/cutover/classification.ts. A table with no
   classification is a build failure, not a silent skip — see tests/unit/cutover-classification.test.ts.
@@ -87,6 +93,11 @@ async function main(): Promise<void> {
   }
   if (args.rehearse && args.apply) {
     console.error('REFUSED. --rehearse always rolls back; it cannot be combined with --apply.');
+    process.exitCode = 1;
+    return;
+  }
+  if (args.apply && !args.by) {
+    console.error('REFUSED. --apply needs --by <personId>: the purge records who performed step C2.');
     process.exitCode = 1;
     return;
   }
@@ -144,6 +155,23 @@ async function main(): Promise<void> {
     const plan = await planPurge(sql, args.asOf);
     printPlan(say, plan);
 
+    // T-390 R8: the person recorded against C2. Checked BEFORE anything is written. A rehearsal without --by borrows any person, since
+    // its row is rolled back with everything else.
+    let performedBy = args.by;
+    if (args.apply || args.rehearse) {
+      if (performedBy) {
+        const [person] = await sql<{ id: string }[]>`select id from persons where id::text = ${performedBy}`;
+        if (!person) {
+          console.error(`REFUSED. --by ${performedBy} is not a person in this database.`);
+          process.exitCode = 1;
+          return;
+        }
+      } else {
+        const [any] = await sql<{ id: string }[]>`select id from persons limit 1`;
+        performedBy = any?.id ?? '00000000-0000-0000-0000-000000000000';
+      }
+    }
+
     if (!args.apply && !args.rehearse) {
       say('**DRY RUN — nothing was changed.** Re-run with `--apply` to purge, or `--rehearse` to try it and roll back.');
       return;
@@ -153,7 +181,7 @@ async function main(): Promise<void> {
     try {
       await sql.begin(async (tx) => {
         const txPlan = await planPurge(tx, args.asOf);
-        await applyPurge(tx, txPlan);
+        await applyPurge(tx, txPlan, { performedBy: performedBy! });
         if (args.rehearse) throw REHEARSAL_ROLLBACK;
       });
     } catch (err) {

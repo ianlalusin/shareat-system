@@ -16,6 +16,7 @@
  */
 import { cutoverRepo, type Tx } from '@shareat/db';
 import { fromCentavos, money, toCentavos } from '@shareat/core/money';
+import { itemKindsOf, planOpeningStock } from './opening-stock';
 
 /**
  * The conversion date every opening figure, inventory draft and movement carries (POSTING-PATTERNS `opening_balance.load`).
@@ -104,7 +105,29 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
   const sentenceOnly = (register: string, storeId: string | null, account: string | null, sentence: string) =>
     add(register, storeId, account, 0n, 0n, sentence);
 
-  // ---- T1 (stock, 1310/1320/1330): S2 adds it here. ------------------------------------------------------------------------
+  // ---- T1 · stock, per store x 1310/1320/1330 -------------------------------------------------------------------------------
+  // The register figure is `planOpeningStock` over the counts (the ONE implementation of the arithmetic); the ledger figure is that
+  // account's opening line(s) for the store. A store counted but never valued, or edited since, is named with the difference.
+  const counts = await cutoverRepo.countsForStore(tx, orgId);
+  const stockPlans = planOpeningStock(counts, itemKindsOf(counts));
+  const stockStoreIds = new Set<string | null>([...stockPlans.map((p) => p.storeId), ...storeIds]);
+  for (const s of [...stockStoreIds].sort((a, b) => store(a).localeCompare(store(b)))) {
+    const plan = stockPlans.find((p) => p.storeId === s);
+    for (const code of ['1310', '1320', '1330']) {
+      const reg = cv(plan?.accounts.find((a) => a.code === code)?.amount ?? '0');
+      const led = netDebit(code, s);
+      if (reg !== led) {
+        add('Stock', s, code, reg, led,
+          `Stock at ${store(s)} comes to ${pesos(reg)} on ${code} but the opening figure is ${pesos(led)}, ${pesos(reg - led)} apart. Press Value the count again.`);
+      }
+    }
+    if (plan && plan.unpriced.length > 0) {
+      const shown = plan.unpriced.slice(0, 5).map((u) => u.name).join(', ');
+      const more = plan.unpriced.length > 5 ? ` and ${plan.unpriced.length - 5} more` : '';
+      sentenceOnly('Stock', s, null,
+        `${plan.unpriced.length} counted item${plan.unpriced.length === 1 ? '' : 's'} at ${store(s)} ${plan.unpriced.length === 1 ? 'has' : 'have'} no cost: ${shown}${more}.`);
+    }
+  }
 
   // ---- T2 · fixed assets, per store x 1510 ----------------------------------------------------------------------------------
   const assetCost = new Map((await cutoverRepo.openingAssetCostByStore(tx, orgId, CONVERSION_DATE)).map((r) => [r.storeId, cv(r.cost)]));
