@@ -157,9 +157,13 @@ interface Entity {
 const norm = (s: unknown): string => (typeof s === 'string' ? s.trim().toLowerCase() : '');
 const yes = (s: string | undefined): boolean => norm(s) === 'yes';
 
+/** The columns the database stores at 6 decimals (numeric(14,6)): a longer answer is held, never rounded late. */
+const NUMERIC_ANSWER_COLUMNS = ['factor', 'how_many', 'per_pack'] as const;
+const tooPrecise = (s: string | undefined): boolean => /\.\d{7,}/.test((s ?? '').trim()) || /e/i.test((s ?? '').trim());
+
 function parsePositive(s: string | undefined): number | null {
   const t = (s ?? '').trim();
-  if (t === '') return null;
+  if (t === '' || tooPrecise(t)) return null;
   const n = Number(t);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -181,6 +185,9 @@ export function planItems(input: PlanItemsInput): ItemPlan {
   const emit = (sheet: ItemSheet, row: Row): Row => {
     const a = answerByKey[sheet].get(row.row_key!);
     if (a) for (const c of ANSWER_COLUMNS[sheet]) row[c] = (a[c] ?? '').trim();
+    for (const c of NUMERIC_ANSWER_COLUMNS) {
+      if (tooPrecise(row[c])) row.note = `held: ${c} "${row[c]}" has more than 6 decimal places (or an exponent); give at most 6 decimal places. ${row.note ?? ''}`.trim();
+    }
     emitted[sheet].add(row.row_key!);
     sheets[sheet].push(row);
     return row;

@@ -4,13 +4,13 @@
  *   npm run master-data -- extract --out <dir>            Ian's machine only. Reads v1 (read-only) and writes the
  *                                                         snapshot, its sha256, stores.csv and the LOCAL-ONLY rates file.
  *   npm run master-data -- run --snapshot <file> --map <stores.csv> --org <uuid> --org-code <code>
- *                          --sheets <dir> [--stores LIPA,MLVR]
+ *                          --sheets <dir> [--stores LIPA,MLVR] [--actor <person uuid> --apply]
  *                                                         DRY RUN of the item planner (S2): reads v2, writes nothing to
  *                                                         the database, rewrites the item sheets. Exit 0 nothing held,
  *                                                         2 rows held for Ian, 1 error or refusal.
  *
  * `extract` refuses under NODE_ENV=production BEFORE it reads a credential, opens Firestore or touches the disk (R1).
- * Applying (`run --apply`), suppliers, customers, staff and `validate-hr` arrive with S3 to S5.
+ * `run --apply` (S3) writes the items as --actor through the domain functions. Suppliers, customers, staff and `validate-hr` arrive with S3 to S5.
  */
 import { config } from 'dotenv';
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
@@ -63,13 +63,19 @@ async function run(): Promise<number> {
   if (!snapshotPath || !mapPath || !orgId || !orgCode || !sheetsDir) {
     fail('Pass --snapshot <file> --map <stores.csv> --org <uuid> --org-code <code> --sheets <dir>.');
   }
-  if (process.argv.includes('--apply')) fail('--apply is not available yet: this slice is the dry run of the item planner.');
+  const doApply = process.argv.includes('--apply');
+  const actorId = arg('--actor');
+  if (actorId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actorId)) {
+    fail('--actor must be a person UUID (the persons.id of the actor who holds approve_item).');
+  }
+  if (doApply && !actorId) fail('--apply needs --actor <person uuid>: the load writes as a named person who holds approve_item (R8).');
   const { assertSheetsOutsideRepo, parseCsv, toCsv } = await import('../packages/etl/src/master-data/sheets');
   assertSheetsOutsideRepo(sheetsDir, REPO_ROOT);
   const { assertRunTarget, parseStoreMap } = await import('../packages/etl/src/master-data/store-map');
   const { verifySnapshotSha } = await import('../packages/etl/src/master-data/snapshot');
   const { planItems, staleAnswersCsv, ITEM_SHEETS, ITEM_SHEET_COLUMNS } = await import('../packages/etl/src/master-data/items-plan');
-  const { closeDb, itemsRepo, masterLinksRepo, organizationsRepo, withOrgPrincipal } = await import('@shareat/db');
+  const { closeDb, organizationsRepo, withOrgPrincipal } = await import('@shareat/db');
+  const { applyItems, HeldError, loadItemState } = await import('./lib/master-data-apply');
 
   const sha = verifySnapshotSha(snapshotPath); // refuses a snapshot that no longer matches its .sha256
   console.log(`Snapshot sha256 ${sha}`);
@@ -85,48 +91,60 @@ async function run(): Promise<number> {
     if (existsSync(p)) answers[s] = parseCsv(readFileSync(p, 'utf8'));
   }
 
-  const { existing, links } = await withOrgPrincipal(orgId, async (tx) => ({
-    existing: (await itemsRepo.listItems(tx, orgId, { includeInactive: true })).map((i) => ({
-      id: i.id,
-      name: i.name,
-      status: i.status as 'active' | 'inactive' | 'merged',
-      baseUnit: i.baseUnit,
-      kind: i.kind,
-      purchaseUnit: i.purchaseUnit,
-      purchaseFactor: i.purchaseFactor,
-      // ItemRow does not declare merged_into_id, but listItems selects the whole row, so it is there at runtime
-      mergedIntoId: (i as { mergedIntoId?: string | null }).mergedIntoId ?? null,
-    })),
-    links: (await masterLinksRepo.linksFor(tx, orgId, 'item')).map((l) => ({
-      entity: l.entity as string,
-      v1StoreId: l.v1StoreId,
-      v1Id: l.v1Id,
-      v2Id: l.v2Id,
-      v1Unit: l.v1Unit,
-      factorToBase: l.factorToBase,
-    })),
-  }));
+  const { existing, links } = await withOrgPrincipal(orgId, (tx) => loadItemState(tx, orgId));
 
   const plan = planItems({ snapshot, map, orgCode, storeCodes, existing, links, answers });
 
-  mkdirSync(sheetsDir, { recursive: true });
-  if (plan.stale.length > 0) {
-    // written and printed BEFORE the sheets are rewritten: a stale answer is never lost
-    const stalePath = join(sheetsDir, 'items-stale.csv');
-    writeFileSync(stalePath, staleAnswersCsv(plan.stale), { mode: 0o600 });
-    console.log(`STALE ANSWERS (v1 changed under them; kept in ${stalePath}):`);
-    for (const x of plan.stale) console.log(`  ${x.sheet} ${x.row_key} ${x.item}`);
+  const actor = actorId ? { orgId, personId: actorId } : undefined;
+  const common = { snapshot, snapshotSha: sha, map, orgId, orgCode, storeCodes, answers, actor };
+  const writeSheets = (): void => {
+    mkdirSync(sheetsDir, { recursive: true });
+    if (plan.stale.length > 0) {
+      // written and printed BEFORE the sheets are rewritten: a stale answer is never lost
+      const stalePath = join(sheetsDir, 'items-stale.csv');
+      writeFileSync(stalePath, staleAnswersCsv(plan.stale), { mode: 0o600 });
+      console.log(`STALE ANSWERS (v1 changed under them; kept in ${stalePath}):`);
+      for (const x of plan.stale) console.log(`  ${x.sheet} ${x.row_key} ${x.item}`);
+    }
+    for (const s of ITEM_SHEETS) {
+      const p = join(sheetsDir, `${s}.csv`);
+      writeFileSync(p, toCsv(ITEM_SHEET_COLUMNS[s], plan.sheets[s]), { mode: 0o600 });
+      chmodSync(p, 0o600);
+    }
+  };
+
+  try {
+    if (doApply) {
+      if (plan.held > 0) {
+        writeSheets(); // the sheets still show Ian what is open
+        console.error(`--apply refused: ${plan.held} row(s) are held for Ian. Nothing was written. Sheets written to ${resolve(sheetsDir)}.`);
+        return 2;
+      }
+      // no sheet rewrite and no "dry run" text on the way: the apply is the run
+      const r = await applyItems({ ...common, apply: true });
+      console.log(`APPLIED: ${r.created} items created, ${r.linked} links written.`);
+      return 0;
+    }
+
+    writeSheets();
+    if (actor && plan.held === 0) {
+      const r = await applyItems({ ...common, apply: false }); // the real writes, rolled back
+      console.log(`DRY RUN (rolled back, nothing committed): ${r.created} items created, ${r.linked} links written.`);
+    } else {
+      const creates = plan.writes.filter((w) => w.op === 'create').length;
+      const linkOps = plan.writes.filter((w) => w.op === 'link').length;
+      console.log(`DRY RUN (plan only; add --actor to run the writes rolled back): ${creates} items to create, ${linkOps} existing items to link.`);
+    }
+    console.log(`Held for Ian: ${plan.held}. Stale answers: ${plan.stale.length}. Sheets written to ${resolve(sheetsDir)}.`);
+  } catch (e) {
+    if (e instanceof HeldError) {
+      console.error(`${e.message} (the plan changed while waiting for the org lock)`);
+      return 2;
+    }
+    throw e;
+  } finally {
+    await closeDb();
   }
-  for (const s of ITEM_SHEETS) {
-    const p = join(sheetsDir, `${s}.csv`);
-    writeFileSync(p, toCsv(ITEM_SHEET_COLUMNS[s], plan.sheets[s]), { mode: 0o600 });
-    chmodSync(p, 0o600);
-  }
-  const creates = plan.writes.filter((w) => w.op === 'create').length;
-  const linkOps = plan.writes.filter((w) => w.op === 'link').length;
-  console.log(`DRY RUN (nothing written to the database): ${creates} items to create, ${linkOps} existing items to link.`);
-  console.log(`Held for Ian: ${plan.held}. Stale answers: ${plan.stale.length}. Sheets written to ${resolve(sheetsDir)}.`);
-  await closeDb();
   return plan.held > 0 ? 2 : 0;
 }
 
