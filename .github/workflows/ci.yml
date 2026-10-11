@@ -152,11 +152,36 @@ jobs:
       - name: Install
         run: npm ci --no-audit --no-fund
 
+      # T-399: tsconfig.json has `incremental: true`, so tsc writes tsconfig.tsbuildinfo at the repo
+      # root, and checkout's git clean deletes it. On the self-hosted runner keep it outside the
+      # workspace. tsc checks each file's content hash against it, so a stale copy costs time only.
+      - name: Restore typecheck cache (T-399, self-hosted only)
+        if: vars.CI_RUNNER != ''
+        run: |
+          if cp "$HOME/.cache/shareat/tsconfig.tsbuildinfo" tsconfig.tsbuildinfo 2>/dev/null; then
+            echo "Typecheck cache found; restored."
+          else
+            echo "Typecheck cache not found; checking cold."
+          fi
+
       # DEF-631: tsc outgrew node's ~2 GB default heap on 10 Oct (PR #10: exit 134, heap out of memory).
       - name: Typecheck
         run: npm run typecheck
         env:
           NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Save typecheck cache (T-399, self-hosted only)
+        if: success() && vars.CI_RUNNER != ''
+        continue-on-error: true
+        run: |
+          if [ -f tsconfig.tsbuildinfo ]; then
+            mkdir -p "$HOME/.cache/shareat"
+            cp tsconfig.tsbuildinfo "$HOME/.cache/shareat/tsconfig.tsbuildinfo.tmp"
+            mv "$HOME/.cache/shareat/tsconfig.tsbuildinfo.tmp" "$HOME/.cache/shareat/tsconfig.tsbuildinfo"
+            echo "Typecheck cache saved."
+          else
+            echo "No tsconfig.tsbuildinfo after Typecheck; nothing to save."
+          fi
 
       - name: Unit tests
         run: npm run test

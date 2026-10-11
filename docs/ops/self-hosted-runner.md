@@ -118,12 +118,13 @@ first run is slower while npm and Docker caches fill; later runs are usually fas
 
 ## Caches on the runner
 
-T-399. Two caches live on the runner's own disk, so jobs do not pull them over the slow link:
+T-399. Three caches live on the runner's own disk, so jobs do not pull them over the slow link:
 
 - **npm:** `~/.npm`. `setup-node` skips GitHub's cache service when `CI_RUNNER` is set.
+- **Typecheck (CI only):** `~/.cache/shareat/tsconfig.tsbuildinfo`, saved after a green `Typecheck` and restored before the next one.
 - **Next build (CI only):** `~/.cache/shareat/next-ci`, saved after a green `Build` and restored before the next one.
 
-Clear both with `rm -rf ~/.cache/shareat/next-ci ~/.npm`. The next job is slower, never broken.
+Clear them all with `rm -rf ~/.cache/shareat ~/.npm`. The next job is slower, never broken.
 
 Deploy builds are never cached, deliberately: the production artifact comes from a cold build, so a stale
 CI cache can never reach production. `deploy.yml` also leaves `apps/erp/.next/cache` out of the artifact.

@@ -79,6 +79,24 @@ share a cache directory: CI builds with dummy `NEXT_PUBLIC_*` values, deploy wit
 **Disk:** the cache is replaced on every save, never added to, so it stays one build's worth of
 data. The runner's disk has 953 GB free (11 Oct).
 
+### Slice 3 — typecheck: keep `tsconfig.tsbuildinfo` (added 11 Oct, *"continue with optimization"*)
+
+`tsconfig.json` already has `"incremental": true`, so `tsc --noEmit` writes `tsconfig.tsbuildinfo`
+(660 KB, gitignored at `.gitignore:50`) at the repo root, and checkout's `git clean` deletes it.
+Typecheck therefore always runs cold: 1 m 21 s on `ians-pc`. Restore it from
+`~/.cache/shareat/tsconfig.tsbuildinfo` before `Typecheck`, and save it after a green one.
+Self-hosted only, same pattern as Slice 2.
+
+**Why this cannot hide an error:**
+- tsc compares each file's **content hash** against the buildinfo, not its mtime, so a fresh
+  checkout is safe.
+- The buildinfo also stores each file's semantic diagnostics, so an unchanged file with an error is
+  reported again.
+- A TypeScript version change invalidates the file.
+
+**Acceptance:** on the second self-hosted run, `Typecheck` is faster than on the first, and its
+restore step logs "found".
+
 ## Rejected
 
 - **Split `verify` into parallel jobs.** One runner runs one job at a time, so split jobs would
