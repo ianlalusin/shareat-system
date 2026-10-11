@@ -10,8 +10,10 @@ CI is green **and** Ian has run prechecks **P0192a / P0193** (`docs/ops/README.m
 prechecks. Local main is ahead of origin/main; today's work is saved on the branch `wrap/2026-10-11` and in PR #16.
 Next free migration **0195** (0194 is T-398 S1, on its lane).
 
-## Gates (main `59ace55`+docs)
-- typecheck 0 (main at `5abdc83`, 11 Oct). Unit: see the wrap-up commit message for the real count.
+## Gates (main `e0a941f`)
+- typecheck 0 (at `5abdc83`; only docs and one test file changed since).
+- Unit, full run: 5556 passed, 49 failed, 3 skipped. A rerun of the 26 failing files with `--testTimeout 60000`: 296 passed, 2 failed. Both were real and are fixed in `e0a941f`: the t348 class baseline, and the pipe count on bible rows 308-312. Those files now pass 41/41. Everything else was load timeouts.
+- Build: not run locally (CI builds).
 - Integration: the full suite runs in CI on PR #16 (a local full run is unreliable under lane load).
 - The 5 CI failures from PR #16's second run were fixed test-side (`470f697`): t390-s2 shaped item codes,
   t393 password-leak helper `tests/integration/t393-no-leak.ts`, t342 1b runs the real C2 purge. All 5 files green on
