@@ -163,6 +163,10 @@ A row answered on two sheets (a twin that is also a box) is held until both are 
 | S7 | **The HR sheet is `staff-roster.csv`, one per org** (format in §Contract). The droplet run emits the skeleton; `validate-hr` on Ian's machine merges rates and validates the statutory columns, and reports "N of M complete"; nothing of it is stored (R15) |
 | S8 | Row 303 (q12) is checked, not configured: the readiness report names each store's encoders (a position holding `create_expense` and `receive_delivery`, i.e. Cashier today) and its verifiers (a manager role), and flags a store where they are the same person or either is missing |
 | S9 | **Staff codes keep v1's (Q6, recommended).** `createEmployment` gains an optional `staffCode` override (`enrol_staff`; shape `SE-NNN`; **refused when the code is taken at that store**, with a `userReason`; one `audit_log` row when used). The load passes v1's `staffCode`; a v1 code that is blank, malformed or duplicated at its store falls back to allocation and is listed. Later hires keep `max + 1`, which then starts above v1's numbers |
+| S10 | *(orchestrator, at S5 RED, 2026-10-11)* A person whose v1 positions are ALL unanswered on `positions.csv` is held (nothing written for them) until answered; a person with at least one resolved position is hired with those, and the unanswered names are listed. Every staffCode-override refusal carries a `userReason` |
+| S11 | *(orchestrator, 2026-10-11)* A v1 staffCode duplicated at one store: the copy with the earliest `dateHired` (then the lowest v1 id) keeps it; the other falls back to allocation and is listed |
+| S12 | *(orchestrator, 2026-10-11)* `dateHired` is accepted as an ISO timestamp or a date-only `YYYY-MM-DD`, read as a Manila date; any other form is held on `staff-roster.csv` like a missing date |
+| S13 | *(orchestrator, 2026-10-11)* `person_ref` on `staff-roster.csv` and the rates file is the `staffIdentities` group key for a grouped person and the v1 staff id otherwise; a blank `person_ref` row in the rates file is incomplete, not an error |
 
 ## Contract
 
