@@ -34,15 +34,13 @@ Next free migration **0195** (0194 is T-398 S1, on its lane).
 1. **PR #16:** CI green → Ian runs P0192a/P0193 → merge on his go → watch Deploy → record in `docs/ops/README.md`.
    If CI is red, fix test-side on a lane branched from main, then push main's HEAD to `release/2026-10-11`.
    If the UI session merges #14 first, merge origin/main into the release branch.
-2. **T-391 S4** (wt-t385, `lane/t391-s4`, DB `shareat_test_t391s4`, UNCOMMITTED): finish the 4 audit fixes
-   (contract: `applyMasterData` precheck, `plan.listed`, unmapped VAT holds, bad credit days nulled), re-audit,
-   commit, merge. Then S5 (staff), S6 (readiness).
+2. **T-391 S4** is built, with the audit fixes applied and green (unit 48/48, integration 97/97), committed `8395e11` on `lane/t391-s4` (pushed; wt-t385, DB `shareat_test_t391s4`). **Next: a fresh auditor pass on the P13 fixes** (`applyMasterData` precheck, `plan.listed`, unmapped VAT holds, bad credit days nulled), then merge to main. Then S5 (staff), S6 (readiness).
 3. **T-398 S1 PR** with Ian's 0194 precheck; T-392 S3 (migration 0195); T-390 S4 after the T-391 apply.
 
 ## Lanes (Sonnet subagents of the orchestrator; none live after this session)
 | Worktree | Branch | Lane DB | State |
 |---|---|---|---|
-| `wt-t385` | lane/t391-s4 | shareat_test_t391s4 | **uncommitted S4 work** — commit or finish first |
+| `wt-t385` | lane/t391-s4 | shareat_test_t391s4 | committed `8395e11` (pushed), needs re-audit, then merge |
 | `wt-t386` | lane/t398-s1 | shareat_test_t398s1 | committed `247c537`, unmerged |
 | `wt-t390` | lane/ci16-fixes | shareat_test_ci16 | merged, free |
 | `wt-t391` | lane/t390-s5 | — | merged, free |
@@ -69,7 +67,7 @@ docs/plans/remaining-build-plan.md §0b. GREP the register and bible, never Read
 State: production at 0191. PR #16 (release/2026-10-11) carries 0192+0193: merge only when CI is green, after Ian's
 P0192a/P0193 prechecks, on his go. NEVER push main directly (it deploys). Local main is ahead of origin; the branch
 wrap/2026-10-11 holds it.
-Next: finish T-391 S4 in wt-t385 (uncommitted, audit fixes per spec ruling P13), then T-391 S5/S6; T-398 S1 own PR
+Next: re-audit T-391 S4 (lane/t391-s4 8395e11, audit fixes per spec ruling P13), merge, then T-391 S5/S6; T-398 S1 own PR
 (0194 precheck); T-392 S3 (migration 0195). Next free migration 0195.
 STANDING: lanes are Sonnet subagents (tester/builder/auditor separate, own _test DB, worktrees; workers never run
 git); Opus for specs and a fresh Opus review of money/auth specs; never commit a lane while its agent runs;
