@@ -144,6 +144,10 @@ A row answered on two sheets (a twin that is also a box) is held until both are 
 | P6 | AR `classification` `staff` maps to group `staff`; `individual`/`corporate` to `wholesale`; `other` to `other` |
 | P7 | **Inactive v1 records are imported as `inactive`** (Q7; they keep the v1 to v2 map whole for the comparator). The create functions make rows `active`, so S4 adds **`setCustomerStatus`** (`manage_chart_of_accounts`, audited) and a `status` field on **`editSupplier`** (`approve_supplier`, audited), and the load calls them right after the create. Balances, reconciliation stamps and AP/AR documents are **not** imported |
 | P8 | A bank account number never appears in a sheet or the report (last four digits only) |
+| P9 | *(orchestrator, at S4 RED, 2026-10-11)* A franchise-pointing party goes on `parties-held` with reason `franchise` **for information only**: never written, and **not counted** in `held`, so it never blocks apply |
+| P10 | *(orchestrator, 2026-10-11)* A blank `tin`/`vat_status` on one copy is not a disagreement (P3's newest non-empty applies); only two different non-blank values hold the row |
+| P11 | *(orchestrator, 2026-10-11)* A merged party with mixed active/inactive copies is `active` if any copy is active (refines P7) |
+| P12 | *(orchestrator, 2026-10-11)* Audit actions: `set_supplier_counterparty_store`, `set_customer_status`, `set_supplier_status` (before/after, only on a real change); load rows `master_data_load`, source `etl` |
 
 ### Positions and staff
 
