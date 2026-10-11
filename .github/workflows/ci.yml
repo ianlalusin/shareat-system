@@ -180,8 +180,16 @@ jobs:
         if: needs.changes.outputs.docs_only != 'true'
         run: npm run db:migrate
 
+      # T-400: one cloned DB per vitest worker. Remove INTEGRATION_WORKERS to roll back to serial.
+      - name: Create integration worker DBs (T-400)
+        if: needs.changes.outputs.docs_only != 'true'
+        run: node scripts/make-integration-worker-dbs.mjs 4
+
       - name: Integration tests (real Postgres)
         if: needs.changes.outputs.docs_only != 'true'
+        env:
+          INTEGRATION_WORKERS: '4'
+          DATABASE_POOL_MAX: '4'
         run: npm run test:integration
 
       # PROJECT_BIBLE.md §2 rule 10 / §8 Rule 1:

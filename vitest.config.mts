@@ -3,6 +3,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 
+// T-400: >1 runs integration files in parallel, one cloned database per worker.
+const integrationWorkers = Number(process.env.INTEGRATION_WORKERS ?? 1);
+
 // Workspace packages are resolved from source, matching tsconfig paths and
 // next.config's transpilePackages. One copy of the truth, three resolvers agreeing.
 const alias = {
@@ -123,7 +126,9 @@ export default defineConfig({
           exclude: ['**/node_modules/**', '**/.next/**'],
           environment: 'node',
           setupFiles: ['tests/integration/setup.ts', 'apps/erp/tests/helpers/flash-jar-setup.ts'],
-          fileParallelism: false,
+          // T-400: opt-in parallel files, one DB per worker (tests/integration/setup.ts).
+          fileParallelism: integrationWorkers > 1,
+          maxWorkers: integrationWorkers > 1 ? integrationWorkers : undefined,
           testTimeout: 30_000,
           // T-285 (DEF-313): `testTimeout` and `hookTimeout` are SEPARATE vitest settings — raising
           // one does not raise the other. Whoever set `testTimeout: 30_000` above for exactly this

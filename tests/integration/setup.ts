@@ -10,6 +10,37 @@ import { config } from 'dotenv';
 
 config({ path: '.env.local' });
 
+/**
+ * T-400 — opt-in parallel workers, one database each. With `INTEGRATION_WORKERS` > 1 (and the
+ * clones made by `scripts/make-integration-worker-dbs.mjs`), each vitest worker points
+ * `TEST_DATABASE_URL` at `<base>_w<VITEST_POOL_ID>` BEFORE anything reads it. About 374 test
+ * files open their own `postgres(TEST_DATABASE_URL)` seeding connection and follow only if the
+ * variable itself changes. Unset or `1`: untouched, one shared database, serial as before.
+ * ⛔ A worker silently sharing a database is the failure to prevent, so a bad pool id throws.
+ */
+const integrationWorkers = Number(process.env.INTEGRATION_WORKERS ?? 1);
+if (integrationWorkers > 1) {
+  const rawPoolId = process.env.VITEST_POOL_ID;
+  const poolId = Number(rawPoolId);
+  if (!rawPoolId || !Number.isInteger(poolId) || poolId < 1 || poolId > integrationWorkers) {
+    throw new Error(
+      `INTEGRATION_WORKERS=${integrationWorkers} needs VITEST_POOL_ID in 1..${integrationWorkers}; ` +
+        `got ${rawPoolId === undefined ? 'nothing' : JSON.stringify(rawPoolId)}.`,
+    );
+  }
+  // This file runs once per TEST FILE, but process.env belongs to the worker PROCESS, which runs
+  // many files. Rewriting TEST_DATABASE_URL in place would give `_w1_w1` on the second file, so
+  // derive from the base URL, remembered the first time.
+  process.env.INTEGRATION_BASE_DATABASE_URL ??= process.env.TEST_DATABASE_URL;
+  const base = process.env.INTEGRATION_BASE_DATABASE_URL;
+  if (base) {
+    // `new URL()`, never string surgery; the query string survives.
+    const worker = new URL(base);
+    worker.pathname = `${worker.pathname}_w${poolId}`;
+    process.env.TEST_DATABASE_URL = worker.toString();
+  }
+}
+
 const url = process.env.TEST_DATABASE_URL;
 
 if (!url) {

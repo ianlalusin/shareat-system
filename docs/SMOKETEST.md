@@ -232,3 +232,5 @@ a silent omission.
   `/settings/attendance` renders a store picker and nothing else. That is the defect, not a broken
   screen. Specced as T-332. ⚠️ **This was first written here as DEF-405, which is retracted as a
   duplicate** — cite **DEF-249**, and read **DEF-251** and **DEF-256** with it.
+
+- **Running the integration suite in parallel locally (T-400).** `node scripts/make-integration-worker-dbs.mjs 4 && INTEGRATION_WORKERS=4 DATABASE_POOL_MAX=4 npm run test:integration`. Re-run the first command after every migration; unset, the suite is serial on one DB as before.
