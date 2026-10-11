@@ -1,7 +1,31 @@
 # T-387: the ERP looks like the brand. SharEat Warm in light, Grill Night in dark
 
-**Status:** BUILD PLAN 2026-10-10 (Opus planner), **ready to build; every open question is answered** (Ian,
-2026-10-10: *"4 - a , 5 - a , 6 - a, 7 -a"*). NOT BUILT. Next: S1.
+**Status:** **ALL EIGHT SLICES BUILT (2026-10-11).** S1–S4 merged to `main` (#9, #11, #12, #13). S8 is PR #14
+(CI re-running after test-only fixes; Ian: merge when green). S5, S6 and S7 are built, audited and seen on branch
+`release/t387-s5-s7` (stacked on S8; not yet pushed); one PR once #14 merges (Ian: merge when green).
+Every slice ran tester → builder → auditor (Sonnet) with the Opus lead adjudicating; every one was seen in the
+running app in both themes (screenshots under `docs/design/t387/seen/`).
+**Decisions Ian made while building (2026-10-10/11), recorded here and as bible §13 rows 308–312 (planner, `59ace55`):**
+- *"go on and fix the clash in colors"* → the warm `neutral` ramp (S1 addendum below; anchors are ruled tokens).
+- *"keep #2b2210"* → dark `--warning-soft` (see `t387-dark-warning-soft` in Open questions; pinned in a test).
+- *"merge S2/S3/S4/S8/S5–S7 when green"* → standing merge-on-green for this task's PRs.
+- *"make active nav red"* → the current nav item (and the rail's current group) fill with `--brand`, white text,
+  both themes (ADR-013 already lists active nav as a brand use). Pinned in `t387-s1-wordmark.test.ts`.
+- *"demote extras"* → one red primary per view: a Save repeated per row/category is `secondary`;
+  `SubmitButton` gained an optional `variant` for this. `budgets` changed; `prepaid/[id]` already had one primary.
+**Spec defects found while building (each fixed in the slice that found it):**
+- S2: the spec's `useFormStatus` is CORRECT. The tester measured react-dom 18.3.1, but that is only Vitest; the
+  App Router runs Next's bundled React 19 canary. Tests use a not-pending shim (`tests/helpers/form-status-setup.ts`).
+  `app/setup/SubmitButton.tsx`'s "unavailable" comment is the same mistake (DEF-635, orchestrator's register).
+- S5: "RLS store ✗" is false — `attendance_days` is `org_column`. The store boundary is the repo `storeIds`
+  filter fed from `reportScope`; RLS backs it at org level (both layers tested).
+- S6: exit step comes from the furthest timestamp the record has (`exitStepFromTimestamps`); an actor holding
+  both sides sees the commissary line. S7: cross-store request is an AuthorizationError refusal (as
+  `attendanceRoster`); a person missing from today's state gets no chip.
+- S8: the t384 G4/G7/G8 guards read the kit components as the native controls they render (else the sweep
+  blinded them); the census reads 147 FAIL / 48 UNRESOLVED / 1158 after S5–S7.
+**Found in passing, not T-387's (for the register):** `/staff` reads the roster with no `authorize` (any session
+sees names, status, start dates) — DEF-636; needs Ian's capability ruling.
 **Ruling:** Ian, 2026-10-09: *"go with B, C as dark mode"*. The values are recorded in ADR-013 **Amendment 7** and
 bible §13 **row 295**. ⛔ The values are RULED. This task builds them and does not re-pick them.
 **Sources:** brand sheet Artifact `L7hn691wjL76rSV2BgPa1A`; screen looks Artifact `9cvfRibBSRuvBbZYe8DfjW`.

@@ -248,8 +248,29 @@
   @keyframes si-stamp { 0% { transform: translateY(-10px) scale(1.2); opacity: 0; } 35% { transform: translateY(0) scale(1); opacity: 1; } 45% { transform: scale(.95); } 55%, 100% { transform: scale(1); } }
   @keyframes si-spin { to { transform: rotate(360deg); } }
   @keyframes si-flick { from { transform: scaleY(.94); } to { transform: scaleY(1.06); } }
+
+  /* T-387 S5: the editorial dashboard. Defaults (outside this block) are the finished chart. */
+  .dash-line { stroke-dasharray: 1; animation: dash-draw 1.8s cubic-bezier(.16, 1, .3, 1) both; }
+  .dash-fade { animation: dash-fade 1s 0.2s both; }
+  .dash-fade-late { animation: dash-fade 1.4s 0.6s both; }
+  .dash-pop { animation: dash-pop 0.5s 1.5s both; }
+  .dash-bar { transform-origin: left center; animation: dash-grow 1.2s cubic-bezier(.16, 1, .3, 1) both; }
+  .dash-ring { animation: dash-ring 1.4s cubic-bezier(.16, 1, .3, 1) both; }
+  .dash-rise { animation: dash-rise 0.8s cubic-bezier(.16, 1, .3, 1) both; }
+  .outline-count-num { transition: color 0.25s, -webkit-text-stroke-color 0.25s; }
+  @keyframes dash-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @keyframes dash-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes dash-pop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+  @keyframes dash-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes dash-ring { from { stroke-dasharray: 0 100; } }
+  @keyframes dash-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 }
 
 /* T-387 S4: under reduced motion the stamp skips the slam and fades the word in (opacity only, no movement, no keyframes). */
 .stamp-fade { transform: rotate(-12deg); transition: opacity 0.3s ease-out; }
 @starting-style { .stamp-fade { opacity: 0; } }
+
+/* T-387 S5: the dashboard's outlined counts. Transparent fill, ink stroke; brand on hover or focus. */
+.outline-count-num { color: transparent; -webkit-text-stroke: 2px var(--ink); }
+.outline-count:hover .outline-count-num,
+.outline-count:focus-visible .outline-count-num { color: var(--brand-ink); -webkit-text-stroke-color: var(--brand-ink); }

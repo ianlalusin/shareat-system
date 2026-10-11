@@ -1,6 +1,5 @@
 GET
 NumTd
-StatusIcon
 Table
 Td
 Th
@@ -50,7 +49,6 @@ linkInvoiceToReceipt
 listAdjustments
 listAvailableCommissaries
 listCategoryLives
-listDays
 listLiveForStore
 listOrderMessages
 listPayRates

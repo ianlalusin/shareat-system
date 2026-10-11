@@ -368,3 +368,19 @@ export async function listActiveRoster(tx: Tx, storeId: string): Promise<RosterR
     startedOn: String(r.started_on),
   }));
 }
+
+/**
+ * T-387 S7 - `employments.photo_file_id` for a batch, for the staff ID-card wall.
+ * Read-only, under the caller's RLS. An employment the caller can see with no photo maps to null; one it cannot
+ * see (another org) is ABSENT from the map, never an error and never a leaked file id.
+ */
+export async function photoFileIds(tx: Tx, employmentIds: string[]): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  if (employmentIds.length === 0) return out;
+  const rows = await tx
+    .select({ id: employments.id, photoFileId: employments.photoFileId })
+    .from(employments)
+    .where(inArray(employments.id, employmentIds));
+  for (const r of rows) out.set(r.id, r.photoFileId ?? null);
+  return out;
+}

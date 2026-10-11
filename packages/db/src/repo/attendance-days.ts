@@ -4,7 +4,8 @@
  * ⛔ No `update` that sets computed columns on a frozen day exists here — the trigger refuses it,
  * and a repo function offering it would only be a way to find that out at runtime.
  */
-import { and, asc, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { toBusinessDate } from '@shareat/core/datetime';
 import type { Tx } from '../client';
 import {
   attendanceDays,
@@ -311,4 +312,32 @@ export async function markNeedsReview(
            -- would close the string. That mistake was made here once already.
            explain = explain || array[${note}]::text[]
      where id = ${dayId} and frozen_at is null`);
+}
+
+/**
+ * T-387 S5. How many people are on shift right now: a COUNT of `status = 'open'` days for today's
+ * shift day, bound to the stores the caller may see. Never names, never ids.
+ *
+ * `attendance_days` is an org_column table, so RLS isolates ORGS; the store boundary is the
+ * `storeIds` argument (the dashboard passes the stores `reportScope` allowed). An empty list is 0,
+ * never "all stores".
+ */
+export async function countOpenToday(
+  tx: Tx,
+  orgId: string,
+  storeIds: readonly string[],
+): Promise<number> {
+  if (storeIds.length === 0) return 0;
+  const [row] = await tx
+    .select({ n: count() })
+    .from(attendanceDays)
+    .where(
+      and(
+        eq(attendanceDays.orgId, orgId),
+        inArray(attendanceDays.storeId, [...storeIds]),
+        eq(attendanceDays.status, 'open'),
+        eq(attendanceDays.shiftDay, toBusinessDate()),
+      ),
+    );
+  return Number(row?.n ?? 0);
 }
