@@ -65,6 +65,7 @@ listPunchesForDay
 listRecipeLines
 listRoster
 listWriteOffsForCharge
+loadCountSheet
 markReviewed
 mintUniqueToken
 newCorrelationId
@@ -118,8 +119,6 @@ updateOwner
 upsertCategoryLife
 upsertPolicy
 validateFingerprintTemplates
-valueOpeningAsset
-valueOpeningStock
 voidShift
 weekStartOf
 withPrincipal
