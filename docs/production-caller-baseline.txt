@@ -24,6 +24,7 @@ checkValuesMatch
 childLogger
 closeAsLateReceipt
 closeYear
+compareStoreWeek
 computeV1Figures
 confirmTradeOrder
 convertSpecimen
@@ -102,6 +103,7 @@ setCostBasisItem
 setItemPricing
 setItemPurchaseUnit
 setTillFloat
+signOffPack
 sumTender
 summarizeConversions
 tablesWithScope
