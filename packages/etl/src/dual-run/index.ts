@@ -3,3 +3,6 @@ export * from './week';
 export * from './snapshot';
 export * from './v1-figures';
 export * from './keys';
+export * from './classes';
+export * from './compare';
+export * from './verdict';

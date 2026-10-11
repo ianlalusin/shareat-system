@@ -2,12 +2,13 @@
  * T-392 S1 - week maths on date STRINGS (spec R1). A figure is placed in a week by its business date string
  * ('YYYY-MM-DD', Manila calendar), never by a timestamp. Pure; no "now", no local timezone.
  */
+import { toBusinessDate } from '@shareat/core/datetime';
 
 const DAY_MS = 86_400_000;
-const MANILA_OFFSET_MS = 8 * 3_600_000;
 
+/** The calendar date of a UTC-midnight instant (08:00 in Manila, the same date), via the project's business-date helper. */
 function fromUtcMs(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
+  return toBusinessDate(new Date(ms));
 }
 
 /** 'YYYY-MM-DD' or v1's legacy 'YYYYMMDD' -> 'YYYY-MM-DD'; null for anything else or an impossible date. */
@@ -49,5 +50,5 @@ export function datesInWeek(weekStart: string): string[] {
  * it must never place a figure in a week.
  */
 export function manilaDateOf(ms: number): string {
-  return fromUtcMs(ms + MANILA_OFFSET_MS);
+  return toBusinessDate(new Date(ms));
 }
