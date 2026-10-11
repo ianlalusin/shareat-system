@@ -101,7 +101,6 @@ scaleRecipeToTarget
 seedCanonicalPositions
 setCostBasisItem
 setItemPricing
-setItemPurchaseUnit
 setTillFloat
 signOffPack
 sumTender
