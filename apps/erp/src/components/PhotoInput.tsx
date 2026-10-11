@@ -167,13 +167,13 @@ export function PhotoInput({
       {status.kind === 'working' && <p className="text-xs text-neutral-500">Compressing…</p>}
       {status.kind === 'done' && (
         // ⭐ Visible, always. Silently replacing someone's file is how trust in an upload is lost.
-        <p className="text-xs text-emerald-700 dark:text-emerald-400">
+        <p className="text-xs text-success">
           Compressed {formatBytes(status.from)} → <strong>{formatBytes(status.to)}</strong>
         </p>
       )}
       {status.kind === 'passthrough' && <p className="text-xs text-neutral-500">{status.reason}</p>}
       {status.kind === 'failed' && (
-        <p className="text-xs text-red-700 dark:text-red-400">{status.reason}</p>
+        <p className="text-xs text-danger">{status.reason}</p>
       )}
     </div>
   );

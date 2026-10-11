@@ -12,6 +12,7 @@ import {
 import type { QueuedDay, ReviewDayRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Badge, Button, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Attendance review — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -71,9 +72,6 @@ export default async function AttendanceReviewPage({
     loadRoster(actor.orgId, actor, { storeId, from, to }),
   ]);
 
-  const FIELD =
-    'rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900';
-
   return (
     <Page density="table">
       <div>
@@ -88,28 +86,25 @@ export default async function AttendanceReviewPage({
       <form className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Store
-          <select name="store" defaultValue={storeId} className={`${FIELD} w-full`}>
+          <Select name="store" defaultValue={storeId} className="w-full">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           From
-          <input name="from" type="date" defaultValue={from} className={`${FIELD} w-full`} />
+          <Input name="from" type="date" defaultValue={from} className="w-full" />
         </label>
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           to
-          <input name="to" type="date" defaultValue={to} className={`${FIELD} w-full`} />
+          <Input name="to" type="date" defaultValue={to} className="w-full" />
         </label>
-        <button
-          type="submit"
-          className="rounded border border-neutral-300 px-4 py-1.5 text-sm font-medium dark:border-neutral-700"
-        >
+        <Button type="submit" variant="primary">
           Show
-        </button>
+        </Button>
       </form>
 
       <section className="space-y-3">
@@ -119,7 +114,7 @@ export default async function AttendanceReviewPage({
         </h2>
 
         {queued.length === 0 ? (
-          <p className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
+          <p className="rounded border border-dashed border-surface-border p-6 text-center text-sm text-neutral-500">
             ⭐ Nothing is waiting on a decision in this period.
           </p>
         ) : (
@@ -137,7 +132,7 @@ export default async function AttendanceReviewPage({
           <span className="text-sm font-normal text-neutral-500">({roster.length})</span>
         </h2>
         {roster.length === 0 ? (
-          <p className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
+          <p className="rounded border border-dashed border-surface-border p-6 text-center text-sm text-neutral-500">
             No attendance days in this range.
           </p>
         ) : (
@@ -168,7 +163,7 @@ export default async function AttendanceReviewPage({
 /** ⚠️ Every row says WHY it is here. A queue you cannot interpret is `needs_review` all over again. */
 function QueueRow({ day }: { day: QueuedDay }) {
   return (
-    <li className="rounded border border-amber-300 p-3 dark:border-amber-800">
+    <li className="rounded border border-warning p-3">
       <Link href={`/attendance/${day.id}`} className="block space-y-1">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <span className="font-medium">
@@ -180,7 +175,7 @@ function QueueRow({ day }: { day: QueuedDay }) {
           </span>
         </div>
         {day.reasons.map((r) => (
-          <p key={r} className="text-xs text-amber-900 dark:text-amber-300">
+          <p key={r} className="text-xs text-warning-ink">
             ⚠️ {REVIEW_REASON_TEXT[r]}
           </p>
         ))}
@@ -191,7 +186,7 @@ function QueueRow({ day }: { day: QueuedDay }) {
 
 function RosterRow({ day }: { day: ReviewDayRow }) {
   return (
-    <tr className="border-t border-neutral-200 dark:border-neutral-800">
+    <tr className="border-t border-surface-border">
       <td className="py-2 pr-4">
         <Link href={`/attendance/${day.id}`} className="underline underline-offset-2">
           {day.shiftDay}
@@ -210,7 +205,7 @@ function RosterRow({ day }: { day: ReviewDayRow }) {
             : `${asHours(day.approvedOtMinutes)} approved`}
       </td>
       <td className="pr-2">
-        {day.status}
+        <Badge status={day.status} />
         {day.frozenAt ? ' · frozen' : ''}
       </td>
     </tr>

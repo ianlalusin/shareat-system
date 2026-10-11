@@ -113,3 +113,30 @@ describe('<SubmitButton> while its action is pending (useFormStatus mocked pendi
     }
   });
 });
+
+describe('<SubmitButton variant> — a repeated Save is secondary, not a second red primary (Ian, 2026-10-11)', () => {
+  it('defaults to primary', () => {
+    const t = classTokens(renderToStaticMarkup(createElement(SubmitButton, { children: 'Save' })));
+    expect(t.has('bg-brand')).toBe(true);
+  });
+  it('variant="secondary" renders the kit secondary and keeps the pending behaviour', () => {
+    const idle = classTokens(renderToStaticMarkup(createElement(SubmitButton, { children: 'Save', variant: 'secondary' })));
+    expect(idle.has('bg-brand')).toBe(false);
+    expect(idle.has('bg-surface')).toBe(true);
+    formStatus.pending = true;
+    try {
+      const busy = renderToStaticMarkup(createElement(SubmitButton, { children: 'Save', variant: 'secondary' }));
+      expect(busy).toContain('aria-busy="true"');
+      expect(busy).toContain('Saving…');
+    } finally {
+      formStatus.pending = false;
+    }
+  });
+});
+
+describe('budgets: one Save per category is secondary (no second red primary per view)', () => {
+  it('the per-category SubmitButton passes variant="secondary"', () => {
+    const src = readFileSync(path.join(ERP, 'src/app/budgets/page.tsx'), 'utf8');
+    expect(src).toMatch(/<SubmitButton[^>]*variant="secondary"/);
+  });
+});

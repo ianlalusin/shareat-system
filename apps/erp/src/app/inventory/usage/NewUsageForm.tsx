@@ -8,7 +8,7 @@
  * starts with is created in ONE submission.
  */
 import { useState } from 'react';
-import { FormGrid, Field } from '@/components/ui';
+import { Banner, Button, Field, FormGrid, Input, Select } from '@/components/ui';
 
 interface LocationOption {
   id: string;
@@ -67,14 +67,12 @@ export function NewUsageForm({
   const FULL = 'mt-1 block w-full';
   const FLABEL = 'text-xs text-neutral-600 dark:text-neutral-400';
   const label = 'flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
-  const field =
-    'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
   if (items.length === 0) {
     return (
-      <p className="mt-3 text-sm text-amber-700 dark:text-amber-500">
+      <Banner tone="warning" className="mt-3">
         No active items yet — add one under Inventory › Items first.
-      </p>
+      </Banner>
     );
   }
 
@@ -84,32 +82,32 @@ export function NewUsageForm({
 
       <FormGrid>
         <Field label="Room" className={FLABEL}>
-          <select name="locationId" required className={`${field} ${FULL}`}>
+          <Select name="locationId" required className={FULL}>
             {locations.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name} ({l.code})
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Kind" className={FLABEL}>
-          <select
+          <Select
             name="kind"
             required
             value={kind}
             onChange={(e) => setKind(e.target.value === 'wastage' ? 'wastage' : 'usage')}
-            className={`${field} ${FULL}`}
+            className={FULL}
           >
             <option value="usage">Usage — consumed</option>
             <option value="wastage">Wastage — spoiled, damaged, lost</option>
-          </select>
+          </Select>
         </Field>
         <Field label="Used on" className={FLABEL}>
-          <input name="usedOn" type="date" required defaultValue={today} className={`${field} ${FULL}`} />
+          <Input name="usedOn" type="date" required defaultValue={today} className={FULL} />
         </Field>
         {kind === 'wastage' && (
           <Field label="Reason" className={FLABEL}>
-            <select name="reasonCode" required defaultValue="" className={`${field} ${FULL}`}>
+            <Select name="reasonCode" required defaultValue="" className={FULL}>
               <option value="" disabled>
                 Choose a reason
               </option>
@@ -118,19 +116,19 @@ export function NewUsageForm({
                   {r.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         )}
         {departments.length > 0 && (
           <Field label="Department (optional)" className={FLABEL}>
-            <select name="departmentId" defaultValue="" className={`${field} ${FULL}`}>
+            <Select name="departmentId" defaultValue="" className={FULL}>
               <option value="">—</option>
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         )}
       </FormGrid>
@@ -138,13 +136,9 @@ export function NewUsageForm({
       <div className="space-y-2">
         <div className="flex items-baseline justify-between">
           <h3 className="text-sm font-medium">Lines</h3>
-          <button
-            type="button"
-            onClick={addLine}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
+          <Button type="button" variant="secondary" onClick={addLine}>
             + Add line
-          </button>
+          </Button>
         </div>
         {lines.map((l) => {
           const item = items.find((i) => i.id === l.itemId);
@@ -155,52 +149,43 @@ export function NewUsageForm({
             >
               <label className={`${label} col-span-2 sm:col-span-1`}>
                 Item
-                <select
-                  name="itemId"
-                  required
-                  value={l.itemId}
-                  onChange={(e) => update(l.key, { itemId: e.target.value })}
-                  className={field}
-                >
+                <Select name="itemId" required value={l.itemId} onChange={(e) => update(l.key, { itemId: e.target.value })}>
                   {items.map((i) => (
                     <option key={i.id} value={i.id}>
                       {i.name} ({i.baseUnit})
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className={label}>
                 Quantity{item ? ` (${item.baseUnit})` : ''}
-                <input
+                <Input
                   name="quantity"
                   required
                   inputMode="decimal"
                   placeholder="0.000"
                   value={l.quantity}
                   onChange={(e) => update(l.key, { quantity: e.target.value })}
-                  className={`${field} tabular-nums`}
+                  className="tabular-nums"
                 />
               </label>
-              <button
+              <Button
                 type="button"
+                variant="danger"
                 onClick={() => removeLine(l.key)}
                 disabled={lines.length === 1}
                 aria-label="Remove line"
-                className="rounded-md border border-neutral-300 px-3 py-2 text-xs hover:bg-neutral-50 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-900"
               >
                 Remove
-              </button>
+              </Button>
             </div>
           );
         })}
       </div>
 
-      <button
-        type="submit"
-        className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-      >
+      <Button type="submit" variant="primary">
         Save draft
-      </button>
+      </Button>
     </form>
   );
 }

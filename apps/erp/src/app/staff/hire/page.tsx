@@ -5,7 +5,7 @@ import { hireAction } from '../actions';
 import { listStores, positionsForStore, searchPersonsFor } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { FormGrid, Field, Input } from '@/components/ui';
+import { Button, FlashBanner, FormGrid, Field, Input } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -20,8 +20,6 @@ interface SearchParams {
 
 const INPUT =
   'rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
 
 /** ⭐ v1/T-154 name no canonical "just hired" default among the seven statuses. `probationary` is
  *  what T-154's own test fixture already hires with, and reads as "not yet regular" — chosen and
@@ -67,11 +65,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow submitLabel="Search">
         <label className="text-sm">
@@ -169,9 +163,9 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
           </p>
         </fieldset>
 
-        <button type="submit" className={BTN}>
+        <Button type="submit" variant="primary">
           Save
-        </button>
+        </Button>
       </form>
     </Page>
   );

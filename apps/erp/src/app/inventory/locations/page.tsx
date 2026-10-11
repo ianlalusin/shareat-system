@@ -12,7 +12,7 @@ import {
 import { listStores, locationsPageData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid, Field } from '@/components/ui';
+import { Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -25,13 +25,6 @@ interface SearchParams {
   error?: string;
   ok?: string;
 }
-
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
-const BTN_SM =
-  'rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 const STOCK_MODEL_EXPLANATION: Record<'single_room' | 'multi_room', string> = {
   single_room:
@@ -81,27 +74,18 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
         </Link>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className={INPUT}>
+          <Select name="store" defaultValue={storeId}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
@@ -114,15 +98,15 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
       </section>
 
       {locations.length === 0 ? (
-        <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
-          <p className="text-sm text-amber-900 dark:text-amber-300">
+        <section className="rounded-lg border border-warning bg-warning-soft p-4">
+          <p className="text-sm text-warning-ink">
             This store has no rooms yet — nothing can be received, used, or counted until it does.
           </p>
           <form action={setupRoomsAction} className="mt-3">
             <input type="hidden" name="storeId" value={storeId} />
-            <button type="submit" className={BTN}>
+            <Button type="submit" variant="primary">
               Set up rooms
-            </button>
+            </Button>
           </form>
         </section>
       ) : (
@@ -161,29 +145,29 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                           hidden={{ storeId, id: loc.id }}
                         >
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                            <input
+                            <Input
                               name="name"
                               aria-label="Name"
                               defaultValue={loc.name}
-                              className={`${INPUT} col-span-2 sm:col-span-1`}
+                              className="col-span-2 sm:col-span-1"
                             />
-                            <select name="typeId" aria-label="Type" defaultValue={loc.typeId} className={INPUT}>
+                            <Select name="typeId" aria-label="Type" defaultValue={loc.typeId}>
                               {types.map((t) => (
                                 <option key={t.id} value={t.id}>
                                   {t.name}
                                 </option>
                               ))}
-                            </select>
+                            </Select>
                             {loc.purpose === 'receiving' ? (
                               <span className="self-center text-xs text-neutral-500">storage (fixed)</span>
                             ) : (
-                              <select name="role" aria-label="Role" defaultValue={loc.role} className={INPUT}>
+                              <Select name="role" aria-label="Role" defaultValue={loc.role}>
                                 {LOCATION_ROLES.map((r) => (
                                   <option key={r} value={r}>
                                     {r}
                                   </option>
                                 ))}
-                              </select>
+                              </Select>
                             )}
                           </div>
                         </EditableRecord>
@@ -192,9 +176,9 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                             <form action={setDefaultAction}>
                               <input type="hidden" name="storeId" value={storeId} />
                               <input type="hidden" name="id" value={loc.id} />
-                              <button type="submit" className={BTN_SM}>
+                              <Button type="submit" variant="secondary" className="text-xs">
                                 Make default
-                              </button>
+                              </Button>
                             </form>
                           )}
                           {loc.status === 'active' && loc.isDefault ? (
@@ -205,17 +189,17 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                             <form action={deactivateLocationAction}>
                               <input type="hidden" name="storeId" value={storeId} />
                               <input type="hidden" name="id" value={loc.id} />
-                              <button type="submit" className={BTN_SM}>
+                              <Button type="submit" variant="secondary" className="text-xs">
                                 Deactivate
-                              </button>
+                              </Button>
                             </form>
                           ) : (
                             <form action={reactivateLocationAction}>
                               <input type="hidden" name="storeId" value={storeId} />
                               <input type="hidden" name="id" value={loc.id} />
-                              <button type="submit" className={BTN_SM}>
+                              <Button type="submit" variant="secondary" className="text-xs">
                                 Reactivate
-                              </button>
+                              </Button>
                             </form>
                           )}
                         </div>
@@ -232,13 +216,13 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
             <input type="hidden" name="storeId" value={storeId} />
             <FormGrid>
               <Field label={<span className="text-neutral-600 dark:text-neutral-400">Code</span>} className="text-sm">
-                <input name="code" required className={`${INPUT} w-full`} />
+                <Input name="code" required className="w-full" />
               </Field>
               <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>} className="text-sm">
-                <input name="name" required className={`${INPUT} w-full`} />
+                <Input name="name" required className="w-full" />
               </Field>
               <Field label={<span className="text-neutral-600 dark:text-neutral-400">Type</span>} className="text-sm">
-                <select name="typeId" required defaultValue="" className={`${INPUT} w-full`}>
+                <Select name="typeId" required defaultValue="" className="w-full">
                   <option value="" disabled>
                     Select a type
                   </option>
@@ -247,29 +231,23 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                       {t.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label={<span className="text-neutral-600 dark:text-neutral-400">Role</span>} className="text-sm">
-                <select name="role" defaultValue="storage" className={`${INPUT} w-full`}>
+                <Select name="role" defaultValue="storage" className="w-full">
                   {LOCATION_ROLES.map((r) => (
                     <option key={r} value={r}>
                       {r}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="isReceiving" />
-                This is the Receiving room
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="isDefault" />
-                Make it the default
-              </label>
+              <Checkbox name="isReceiving" label="This is the Receiving room" />
+              <Checkbox name="isDefault" label="Make it the default" />
             </FormGrid>
-            <button type="submit" className={BTN}>
+            <Button type="submit" variant="primary">
               Save
-            </button>
+            </Button>
           </form>
         </section>
       )}

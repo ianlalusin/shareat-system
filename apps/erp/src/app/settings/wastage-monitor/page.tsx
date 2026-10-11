@@ -5,7 +5,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid, Field } from '@/components/ui';
+import { Banner, Button, Field, FlashBanner, FormGrid, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { WASTAGE_MONITOR_EDIT } from './typed-forms';
@@ -90,33 +90,32 @@ export default async function WastageMonitorSettingsPage({
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className={`${FIELD} mt-1`}>
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
-      {sp.error && <Banner tone="error">{sp.error}</Banner>}
-      {sp.ok && <Banner tone="ok">{sp.ok}</Banner>}
+      <FlashBanner flash={sp} />
 
       {/* ⭐ The consequence, in money, before the form. */}
       {!monitor && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong>Nobody answers for a wasted order at this branch.</strong> Every reviewed wastage
           recorded here is created with no one named, and after 15 days the store absorbs it — no
           error, no warning, nothing recovered.
-        </div>
+        </Banner>
       )}
 
       {monitor && !monitor.isActive && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong>{monitor.displayName} is no longer active.</strong> Losses are still being created
           in their name. Name somebody else.
-        </div>
+        </Banner>
       )}
 
       <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
@@ -129,7 +128,7 @@ export default async function WastageMonitorSettingsPage({
             <>Nothing open here is unowned.</>
           ) : (
             <>
-              <strong className="text-amber-800 dark:text-amber-300">
+              <strong className="text-warning-ink">
                 {ownerless.count} open {ownerless.count === 1 ? 'wastage' : 'wastages'} worth ₱
                 {ownerless.amount}
               </strong>{' '}
@@ -158,10 +157,10 @@ export default async function WastageMonitorSettingsPage({
       >
         <FormGrid className="text-sm">
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Monitor</span>}>
-            <select
+            <Select
               name="personId"
               defaultValue={monitor?.personId ?? ''}
-              className={`${FIELD} mt-1 w-full`}
+              className="mt-1 w-full"
               aria-label="Wastage Monitor"
             >
               {/* ⭐ A real choice, not a placeholder: picking it CLEARS the assignment. The column is
@@ -173,7 +172,7 @@ export default async function WastageMonitorSettingsPage({
                   {p.displayName}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </FormGrid>
       </EditableRecord> ) : (
@@ -183,10 +182,10 @@ export default async function WastageMonitorSettingsPage({
           <input type="hidden" name="personLabel" value="" />
           <FormGrid className="text-sm">
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Monitor</span>}>
-            <select
+            <Select
               name="personId"
               defaultValue=""
-              className={`${FIELD} mt-1 w-full`}
+              className="mt-1 w-full"
               aria-label="Wastage Monitor"
             >
               {/* ⭐ A real choice, not a placeholder: picking it CLEARS the assignment. The column is
@@ -198,12 +197,12 @@ export default async function WastageMonitorSettingsPage({
                   {p.displayName}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </FormGrid>
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="primary">
             Save
-          </button>
+          </Button>
         </form>
       )}
 
@@ -230,16 +229,3 @@ function Crumb() {
     </p>
   );
 }
-
-function Banner({ tone, children }: { tone: 'error' | 'ok'; children: React.ReactNode }) {
-  const cls =
-    tone === 'error'
-      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
-      : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-  return <div className={`rounded-lg border p-4 text-sm ${cls}`}>{children}</div>;
-}
-
-const BTN =
-  'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';
-const FIELD =
-  'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';

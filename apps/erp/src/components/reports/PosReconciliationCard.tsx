@@ -51,15 +51,15 @@ export function PosReconciliationCard({
 }) {
   const indicatorClass =
     matches === true
-      ? 'border-2 border-emerald-600 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950'
+      ? 'border-2 border-success bg-success-soft'
       : matches === false
-        ? 'border-4 border-red-600 bg-red-100 dark:border-red-500 dark:bg-red-950'
-        : 'border border-neutral-300 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900';
+        ? 'border-4 border-danger bg-danger-surface'
+        : 'border border-surface-border bg-canvas';
 
   return (
     <div className={`space-y-4 rounded-lg p-4 ${indicatorClass}`}>
       {matches !== null ? (
-        <p className={matches ? 'text-lg font-bold text-emerald-800 dark:text-emerald-200' : 'text-2xl font-extrabold uppercase tracking-wide text-red-800 dark:text-red-100'}>
+        <p className={matches ? 'text-lg font-bold text-success' : 'text-2xl font-extrabold uppercase tracking-wide text-danger'}>
           {matches ? 'Matches' : 'DOES NOT MATCH'}
         </p>
       ) : (

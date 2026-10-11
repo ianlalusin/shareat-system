@@ -18,6 +18,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { PhotoInput } from '@/components/PhotoInput';
+import { Button, Input, Select } from '@/components/ui';
 import type { AutoAllocateCollectionRequest, AutoAllocateCollectionResponse } from '../actions';
 
 export interface ReceivableItem {
@@ -33,9 +34,6 @@ export interface Wallet {
   custodian: string;
   balance: string;
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function peso(v: string): string {
   const n = Number(v);
@@ -208,7 +206,7 @@ export function AutoAllocateCollectionForm({
                   <span
                     className={
                       i.dueDate < today
-                        ? 'ml-2 text-xs font-medium text-red-700 dark:text-red-400'
+                        ? 'ml-2 text-xs font-medium text-danger'
                         : 'ml-2 text-xs text-neutral-500'
                     }
                   >
@@ -217,14 +215,14 @@ export function AutoAllocateCollectionForm({
                   </span>
                 )}
               </span>
-              <input
+              <Input
                 type="text"
                 inputMode="decimal"
                 name={`allocateAmount_${i.chargeId}`}
                 value={value}
                 aria-label={`Amount applied to ${i.referenceNo ?? i.chargeDate}`}
                 onChange={(e) => setAmount(i.chargeId, e.target.value)}
-                className="min-w-0 flex-1 basis-28 rounded border border-neutral-300 bg-white px-2 py-1 text-right dark:border-neutral-700 dark:bg-neutral-950"
+                className="min-w-0 flex-1 basis-28 text-right"
               />
             </label>
           );
@@ -232,22 +230,17 @@ export function AutoAllocateCollectionForm({
       </div>
 
       <div>
-        <button
-          type="button"
-          onClick={autoAllocate}
-          disabled={pending}
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-        >
+        <Button type="button" variant="secondary" onClick={autoAllocate} disabled={pending}>
           {pending ? 'Allocating…' : 'Auto-allocate (oldest first)'}
-        </button>
+        </Button>
         {pageStale && (
-          <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+          <p className="mt-2 text-xs text-warning-ink">
             ⚠️ The open items changed since this page loaded — refresh before relying on this
             figure or pressing Save.
           </p>
         )}
         {!pageStale && (raceDetected || (surplus !== null && editedSinceCheck)) && (
-          <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+          <p className="mt-2 text-xs text-warning-ink">
             The boxes changed since that check — press &ldquo;Auto-allocate&rdquo; again for an
             up to date figure.
           </p>
@@ -260,41 +253,41 @@ export function AutoAllocateCollectionForm({
           </p>
         )}
         {previewError && (
-          <p className="mt-2 text-xs text-red-700 dark:text-red-400">Refused: {previewError}</p>
+          <p className="mt-2 text-xs text-danger">Refused: {previewError}</p>
         )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Total received (gross)">
-          <input
+          <Input
             name="amount"
             required
             inputMode="decimal"
             placeholder="0.00"
             value={totalAmount}
             onChange={(e) => setTotal(e.target.value)}
-            className={INPUT}
+            className="w-full"
           />
         </Field>
         <Field label="Platform fee" hint="⛔ Booked here (6400) and NOWHERE else. Never also as an expense.">
-          <input name="platformFee" inputMode="decimal" placeholder="0.00" className={INPUT} />
+          <Input name="platformFee" inputMode="decimal" placeholder="0.00" className="w-full" />
         </Field>
         <Field label="Date">
-          <input type="date" name="collectionDate" required defaultValue={today} className={INPUT} />
+          <Input type="date" name="collectionDate" required defaultValue={today} className="w-full" />
         </Field>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Into account">
-          <select name="moneyAccountId" required defaultValue="" className={INPUT}>
+          <Select name="moneyAccountId" required defaultValue="" className="w-full">
             <option value="" disabled>Choose…</option>
             {wallets.map((w) => (
               <option key={w.id} value={w.id}>{w.name} ({w.custodian}) — {peso(w.balance)}</option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Reference no." hint="Optional.">
-          <input name="referenceNo" className={INPUT} />
+          <Input name="referenceNo" className="w-full" />
         </Field>
       </div>
 
@@ -303,7 +296,7 @@ export function AutoAllocateCollectionForm({
           label="Store credit to apply"
           hint={`${peso(credit)} held at 2140. Spending it draws the liability down instead of taking cash.`}
         >
-          <input name="creditApplied" inputMode="decimal" placeholder="0.00" className={INPUT} />
+          <Input name="creditApplied" inputMode="decimal" placeholder="0.00" className="w-full" />
         </Field>
       )}
 
@@ -314,12 +307,9 @@ export function AutoAllocateCollectionForm({
         <PhotoInput name="receiptPhoto" accept="image/*" className="text-sm" />
       </Field>
 
-      <button
-        type="submit"
-        className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-      >
+      <Button type="submit" variant="primary">
         Record payment
-      </button>
+      </Button>
     </form>
   );
 }

@@ -46,11 +46,9 @@ import {
 } from '@shareat/domain/money-lines';
 import { compare, money, subtract } from '@shareat/core/money';
 import { visibleIssues, type LineField } from './money-line-visibility';
+import { Button, Input, Select } from '@/components/ui';
 
 const ALL_LINE_FIELDS: readonly LineField[] = ['method', 'amount', 'moneyAccountId', 'cashRequestId', 'staffId'];
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 const peso = (v: string | number) =>
   `₱${Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -237,11 +235,12 @@ export function MoneyLines({
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_8rem]">
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-neutral-500 dark:text-neutral-400">Method</span>
-                <select
+                <Select
                   id={`${name}-method-${i}`}
                   name={`${name}Method_${i}`}
                   value={line.method}
-                  className={INPUT}
+                  className="w-full"
+                  invalid={Boolean(issueFor(i, 'method'))}
                   onChange={(e) => {
                     const method = e.target.value as MoneyLineMethod;
                     // Clearing the fields the old method owned — a stale staffId on a cash line
@@ -271,7 +270,7 @@ export function MoneyLines({
                       </option>
                     );
                   })}
-                </select>
+                </Select>
               </label>
 
               {needsSource(line.method) ? (
@@ -279,11 +278,12 @@ export function MoneyLines({
                   <span className="text-xs text-neutral-500 dark:text-neutral-400">
                     {direction === 'out' ? 'Paid from' : 'Received into'}
                   </span>
-                  <select
+                  <Select
                     id={`${name}-source-${i}`}
                     name={`${name}Source_${i}`}
                     value={sourceKey(line) ?? ''}
-                    className={INPUT}
+                    className="w-full"
+                    invalid={Boolean(issueFor(i, 'moneyAccountId') || issueFor(i, 'cashRequestId'))}
                     onChange={(e) => {
                       const source = byKey.get(e.target.value);
                       patch(i, {
@@ -332,16 +332,17 @@ export function MoneyLines({
                         ))}
                       </optgroup>
                     )}
-                  </select>
+                  </Select>
                 </label>
               ) : line.method === 'reimbursable' ? (
                 <label className="flex flex-col gap-1">
                   <span className="text-xs text-neutral-500 dark:text-neutral-400">Who paid</span>
-                  <select
+                  <Select
                     id={`${name}-staff-${i}`}
                     name={`${name}Staff_${i}`}
                     value={line.staffId ?? ''}
-                    className={INPUT}
+                    className="w-full"
+                    invalid={Boolean(issueFor(i, 'staffId'))}
                     onChange={(e) => {
                       patch(i, { staffId: e.target.value || null });
                       markTouched(i, ['staffId']);
@@ -352,7 +353,7 @@ export function MoneyLines({
                     {staff.map((s) => (
                       <option key={s.id} value={s.id}>{s.displayName}</option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
               ) : (
                 <p className="self-end pb-1.5 text-xs text-neutral-500 dark:text-neutral-400">
@@ -364,13 +365,14 @@ export function MoneyLines({
 
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-neutral-500 dark:text-neutral-400">Amount</span>
-                <input
+                <Input
                   id={`${name}-amount-${i}`}
                   name={`${name}Amount_${i}`}
                   value={line.amount}
                   inputMode="decimal"
                   placeholder="0.00"
-                  className={`${INPUT} text-right tabular-nums`}
+                  className="w-full text-right tabular-nums"
+                  invalid={Boolean(issueFor(i, 'amount'))}
                   onChange={(e) => patch(i, { amount: e.target.value })}
                   // T-353 — NOT on change: a half-typed "1." must show nothing until the box is
                   // left, or every keystroke of a valid amount would flash "not a valid amount".
@@ -385,11 +387,11 @@ export function MoneyLines({
                 <span className="text-xs text-neutral-500 dark:text-neutral-400">
                   Reference <span className="text-neutral-400 dark:text-neutral-600">— what reconciles this against the statement</span>
                 </span>
-                <input
+                <Input
                   id={`${name}-ref-${i}`}
                   name={`${name}Ref_${i}`}
                   value={line.referenceNo ?? ''}
-                  className={INPUT}
+                  className="w-full"
                   onChange={(e) => patch(i, { referenceNo: e.target.value || null })}
                 />
               </label>
@@ -409,32 +411,32 @@ export function MoneyLines({
                 box and bare `text-xs` models to 16px. `action-link-sweep.test.ts` measures it
                 (DEF-269) and caught this control at 16px on its first write. */}
             {lines.length > 1 && (
-              <button
+              <Button
                 type="button"
-                className="mt-3 inline-flex items-center rounded px-2 py-1.5 text-xs text-neutral-500 underline hover:bg-neutral-100 hover:text-red-700 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-red-400"
+                variant="danger"
+                className="mt-3 text-xs"
                 onClick={() => {
                   setLines((prev) => prev.filter((_, n) => n !== i));
                   setTouched((prev) => prev.filter((_, n) => n !== i));
                 }}
               >
                 Remove this line
-              </button>
+              </Button>
             )}
           </fieldset>
         );
       })}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
+        <Button
           type="button"
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
           onClick={() => {
             setLines((prev) => [...prev, blankLine()]);
             setTouched((prev) => [...prev, new Set<LineField>()]);
           }}
         >
           Add another {direction === 'out' ? 'payment' : 'receipt'}
-        </button>
+        </Button>
         <p className="text-sm tabular-nums text-neutral-600 dark:text-neutral-400">
           Total <strong className="text-neutral-900 dark:text-neutral-100">{peso(total)}</strong>
           {mustTotal ? <> of {peso(mustTotal)}</> : null}
@@ -446,8 +448,8 @@ export function MoneyLines({
           key={v.key}
           className={
             v.blocked
-              ? 'rounded border-l-4 border-red-600 bg-red-50 px-3 py-2 text-xs text-red-800 dark:bg-red-950 dark:text-red-300'
-              : 'rounded border-l-4 border-amber-500 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+              ? 'rounded border-l-4 border-danger bg-danger-surface px-3 py-2 text-xs text-danger'
+              : 'rounded border-l-4 border-warning bg-warning-soft px-3 py-2 text-xs text-warning-ink'
           }
         >
           {v.message}

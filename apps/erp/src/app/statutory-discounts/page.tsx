@@ -10,7 +10,8 @@ import { recordStatutoryDiscountAction, voidStatutoryDiscountAction } from './ac
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { FormGrid } from '@/components/ui';
+import { Banner, Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'SC/PWD register — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -72,12 +73,12 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
       {/* ⛔ Bible row 75, on the face of the screen rather than buried in a doc. The disclaimer in
           POSTING-PATTERNS.md is doing real work and must not be quietly dropped; this is the same
           sentence where a reader will actually meet it. */}
-      <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+      <Banner tone="warning">
         <strong>This is a business record, not a BIR return.</strong> Shareat System is a management
         ledger and computes no VAT — amounts here are recorded as the till calculated them. Nothing
         on this page posts to the ledger; the daily senior/PWD totals on the sales day remain the
         only figures that reach account 4900.
-      </div>
+      </Banner>
 
       {/* ⛔ The honest caveat, and it is the important one on this screen. There is no paper
           logbook to copy from (bible row 164) — so a missing record cannot be recovered later, and
@@ -89,38 +90,32 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
         v2, after January.
       </div>
 
-      {sp.error && (
-        <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-700 dark:bg-red-950 dark:text-red-200">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/* ── Filters ──────────────────────────────────────────────────────────────────── */}
       <form method="GET" className="flex flex-wrap items-end gap-3 rounded border border-neutral-200 p-4 dark:border-neutral-800">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Store</span>
-          <select name="store" defaultValue={storeId ?? ''} className="min-h-11 rounded border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-900">
+          <Select name="store" defaultValue={storeId ?? ''}>
             <option value="">All stores</option>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">From</span>
-          <input type="date" name="from" defaultValue={from} className="min-h-11 rounded border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-900" />
+          <Input type="date" name="from" defaultValue={from} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">To</span>
-          <input type="date" name="to" defaultValue={to} className="min-h-11 rounded border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-900" />
+          <Input type="date" name="to" defaultValue={to} />
         </label>
         <label className="flex min-h-11 items-center gap-2 text-sm">
           <input type="checkbox" name="showVoided" value="1" defaultChecked={includeVoided} className="h-5 w-5" />
           <span>Show voided</span>
         </label>
-        <button type="submit" className="min-h-11 rounded bg-neutral-900 px-4 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
-          Apply
-        </button>
+        <Button type="submit">Apply</Button>
       </form>
 
       {/* ── Summary ──────────────────────────────────────────────────────────────────── */}
@@ -188,15 +183,10 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
                           <input type="hidden" name="storeId" value={carry.storeId} />
                           <input type="hidden" name="from" value={carry.from} />
                           <input type="hidden" name="to" value={carry.to} />
-                          <input
-                            name="voidReason"
-                            required
-                            placeholder="Reason"
-                            className="min-h-9 w-28 rounded border border-neutral-300 px-2 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-                          />
-                          <button type="submit" className="min-h-9 rounded border border-red-300 px-2 text-xs text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300">
+                          <Input name="voidReason" required placeholder="Reason" className="w-28 text-xs" />
+                          <Button type="submit" variant="danger" className="text-xs">
                             Void
-                          </button>
+                          </Button>
                         </form>
                       )}
                     </td>
@@ -218,68 +208,66 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Store</span>
-            <select name="storeId" required defaultValue={storeId ?? ''} className="min-h-11 rounded border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-900">
+            <Select name="storeId" required defaultValue={storeId ?? ''}>
               <option value="" disabled>Choose a store</option>
               {stores.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
-            </select>
+            </Select>
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Date of sale</span>
-            <input type="date" name="businessDate" required defaultValue={to} className="min-h-11 rounded border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-900" />
+            <Input type="date" name="businessDate" required defaultValue={to} />
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Invoice / OR number</span>
-            <input name="invoiceNumber" required className="min-h-11 rounded border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-900" />
+            <Input name="invoiceNumber" required />
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Discount kind</span>
-            <select name="kind" required defaultValue="senior" className="min-h-11 rounded border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-900">
+            <Select name="kind" required defaultValue="senior">
               <option value="senior">Senior citizen (OSCA ID)</option>
               <option value="pwd">PWD (PWD ID)</option>
-            </select>
+            </Select>
             <span className="text-xs text-neutral-500">One only — a PWD who is also a senior claims one 20%, not both.</span>
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Holder&apos;s name</span>
-            <input name="holderName" required className="min-h-11 rounded border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-900" />
+            <Input name="holderName" required />
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">ID number</span>
-            <input name="idNumber" required className="min-h-11 rounded border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-900" />
+            <Input name="idNumber" required />
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Gross amount</span>
-            <input name="grossAmount" inputMode="decimal" required placeholder="0.00" className="min-h-11 rounded border border-neutral-300 px-3 tabular-nums dark:border-neutral-700 dark:bg-neutral-900" />
+            <Input name="grossAmount" inputMode="decimal" required placeholder="0.00" className="tabular-nums" />
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Discount granted</span>
-            <input name="discountAmount" inputMode="decimal" required placeholder="0.00" className="min-h-11 rounded border border-neutral-300 px-3 tabular-nums dark:border-neutral-700 dark:bg-neutral-900" />
+            <Input name="discountAmount" inputMode="decimal" required placeholder="0.00" className="tabular-nums" />
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Signatory <span className="font-normal text-neutral-500">(optional)</span></span>
-            <input name="signatory" className="min-h-11 rounded border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-900" />
+            <Input name="signatory" />
             <span className="text-xs text-neutral-500">Not required by the regulations — kept if your store&apos;s logbook has the column.</span>
           </label>
 
           <label className="flex flex-col gap-1 text-sm col-span-full">
             <span className="font-medium">Notes <span className="font-normal text-neutral-500">(optional)</span></span>
-            <input name="notes" className="min-h-11 rounded border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-900" />
+            <Input name="notes" />
           </label>
 
           <div className="col-span-full">
-            <button type="submit" className="min-h-11 w-full rounded bg-neutral-900 px-4 text-sm font-medium text-white hover:bg-neutral-700 sm:w-auto dark:bg-neutral-100 dark:text-neutral-900">
-              Save
-            </button>
+            <SubmitButton pendingLabel="Saving…" className="w-full sm:w-auto">Save</SubmitButton>
           </div>
           </FormGrid>
         </form>

@@ -18,6 +18,7 @@ import { formatBusinessDateTime, toBusinessDate } from '@shareat/core/datetime';
 import { schedulerRepo, type SchedulerJob } from '@shareat/db';
 import { withOrgPrincipal } from '../app/expenses/lib';
 import { containsIdentifier } from '../lib/error-shape';
+import { Banner } from '@/components/ui/Banner';
 
 /**
  * T-343 S4b — this screen has no session-scoped gate of its own (`SchedulerStatus` is embedded
@@ -58,12 +59,12 @@ export async function SchedulerStatus({
   // seed data claimed a cron existed.
   if (!last) {
     return (
-      <Box tone="alarm">
+      <Banner tone="warning">
         <strong className="font-medium">{label} has never run.</strong> Nothing is posting it on a
         schedule. Until <code className="font-mono">npm run month-end</code> is on a timer, the
         charge only lands when somebody remembers to press a button — which is exactly how v1 lost
         two months without noticing.
-      </Box>
+      </Banner>
     );
   }
 
@@ -75,11 +76,11 @@ export async function SchedulerStatus({
     // Started and never reported back — a killed process. Invisible without a row written BEFORE
     // the work, which is why `startRun` writes one.
     return (
-      <Box tone="alarm">
+      <Banner tone="warning">
         <strong className="font-medium">A {label.toLowerCase()} run started and never finished.</strong>{' '}
         Began {toBusinessDate(stuck[0]!.startedAt)} {formatBusinessDateTime(stuck[0]!.startedAt, { hour: '2-digit', minute: '2-digit', hour12: false })} for{' '}
         {stuck[0]!.period}. The process was probably killed. Re-running is safe.
-      </Box>
+      </Banner>
     );
   }
 
@@ -89,7 +90,7 @@ export async function SchedulerStatus({
 
   if (last.outcome !== 'ok') {
     return (
-      <Box tone="alarm">
+      <Banner tone="warning">
         <strong className="font-medium">
           The last {label.toLowerCase()} run ({last.period}, {when}) did not complete cleanly.
         </strong>{' '}
@@ -116,18 +117,18 @@ export async function SchedulerStatus({
           Nothing was rolled back — each item posts in its own transaction, so re-running picks up
           whatever is fixed.
         </div>
-      </Box>
+      </Banner>
     );
   }
 
   if (stale) {
     return (
-      <Box tone="alarm">
+      <Banner tone="warning">
         <strong className="font-medium">
           {label} last ran {when}, for {last.period}.
         </strong>{' '}
         That is more than a month ago. The schedule may have stopped.
-      </Box>
+      </Banner>
     );
   }
 
@@ -143,19 +144,5 @@ export async function SchedulerStatus({
         </p>
       ))}
     </>
-  );
-}
-
-function Box({ tone, children }: { tone: 'alarm'; children: React.ReactNode }) {
-  return (
-    <div
-      className={
-        tone === 'alarm'
-          ? 'rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'
-          : ''
-      }
-    >
-      {children}
-    </div>
   );
 }

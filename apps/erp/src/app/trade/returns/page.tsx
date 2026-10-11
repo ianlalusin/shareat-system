@@ -10,6 +10,7 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Badge, Button, Checkbox, FlashBanner, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Customer returns — Shareat System' };
@@ -128,36 +129,23 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
         choice.
       </PageDescription>
 
-      {sp.error && (
-        <div className="mt-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="mt-4 rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow className="mt-6">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select
-            name="store"
-            defaultValue={storeId}
-            className="mt-1 rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          >
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
       {credits.size > 0 && (
-        <section className="mt-8 rounded-lg border border-amber-400 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950">
+        <section className="mt-8 rounded-lg border border-warning-ink bg-warning-soft p-4">
           <h2 className="text-sm font-medium">Spendable customer credit</h2>
           <ul className="mt-2 text-sm">
             {[...credits.entries()].map(([customerId, balance]) => (
@@ -203,23 +191,16 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
                     <input type="hidden" name="store" value={storeId} />
                     <input type="hidden" name="tradeOrderId" value={l.order_id} />
                     <input type="hidden" name="tradeOrderLineId" value={l.line_id} />
-                    <input
+                    <Input
                       name="quantity"
                       placeholder={`up to ${l.cap}`}
                       inputMode="decimal"
                       required
-                      className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-xs tabular-nums dark:border-neutral-700 dark:bg-neutral-900"
+                      className="w-24 text-xs tabular-nums"
                     />
-                    <input
-                      name="reason"
-                      placeholder="reason"
-                      required
-                      className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-                    />
+                    <Input name="reason" placeholder="reason" required className="w-32 text-xs" />
                     {!l.isInternal && (
-                      <label className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-                        <input type="checkbox" name="saleable" value="false" /> unsellable
-                      </label>
+                      <Checkbox name="saleable" value="false" label="unsellable" />
                     )}
                     {!l.isInternal && moneyAccountId && (
                       <label className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400">
@@ -227,9 +208,9 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
                         <input type="hidden" name="moneyAccountId" value={moneyAccountId} />
                       </label>
                     )}
-                    <button type="submit" className="rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900">
+                    <Button type="submit" variant="secondary">
                       Return
-                    </button>
+                    </Button>
                   </form>
                 </td>
               </tr>
@@ -260,21 +241,18 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
                 <td className="py-2 pr-4">{customerName.get(r.customerId) ?? r.customerId}</td>
                 <td className="py-2 pr-4">{r.treatment}</td>
                 <td className="py-2 pr-4">{r.settlement}</td>
-                <td className="py-2 pr-4">{r.status}</td>
+                <td className="py-2 pr-4">
+                  <Badge status={r.status} />
+                </td>
                 <td className="py-2">
                   {r.status === 'posted' && (
                     <form action={voidReturnAction} className="flex items-center gap-1">
                       <input type="hidden" name="returnId" value={r.id} />
                       <input type="hidden" name="store" value={storeId} />
-                      <input
-                        name="reason"
-                        placeholder="void reason"
-                        required
-                        className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-                      />
-                      <button type="submit" className="rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900">
+                      <Input name="reason" placeholder="void reason" required className="w-28 text-xs" />
+                      <Button type="submit" variant="danger">
                         Void
-                      </button>
+                      </Button>
                     </form>
                   )}
                 </td>

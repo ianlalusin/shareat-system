@@ -18,6 +18,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Badge, Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Payroll — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -104,43 +105,43 @@ export default async function PayrollPage({
       <form className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
           <span className={LABEL}>Store</span>
-          <select name="store" defaultValue={storeId} className={`${FIELD} w-full`}>
+          <Select name="store" defaultValue={storeId} className="w-full">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         {/* ⭐ The store's OWN periods. ⚠️ The dates stay editable underneath — a late correction
             has to be payable even when it does not line up with a configured window. */}
         {periodOptions.length > 0 && (
           <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
             <span className={LABEL}>Period</span>
-            <select
+            <Select
               name="period"
               defaultValue={`${periodStart}|${periodEnd}`}
-              className={`${FIELD} w-full`}
+              className="w-full"
             >
               {periodOptions.map((p) => (
                 <option key={p.start} value={`${p.start}|${p.end}`}>
                   {p.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1">
           <span className={LABEL}>From</span>
-          <input name="start" type="date" defaultValue={periodStart} className={`${FIELD} w-full`} />
+          <Input name="start" type="date" defaultValue={periodStart} className="w-full" />
         </label>
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1">
           <span className={LABEL}>to</span>
-          <input name="end" type="date" defaultValue={periodEnd} className={`${FIELD} w-full`} />
+          <Input name="end" type="date" defaultValue={periodEnd} className="w-full" />
         </label>
-        <button type="submit" className={BTN}>
+        <Button type="submit" variant="secondary">
           Preview
-        </button>
+        </Button>
       </form>
 
       {/* ⭐ The premium settings this run is computed under. ⚠️ These were constants in code until
@@ -190,8 +191,7 @@ export default async function PayrollPage({
         </p>
       )}
 
-      {sp.error && <Banner tone="error">{sp.error}</Banner>}
-      {sp.ok && <Banner tone="ok">{sp.ok}</Banner>}
+      <FlashBanner flash={sp} />
       {previewError && <Banner tone="error">{previewError}</Banner>}
 
       {/* ------------------------------------------------------------------ the preview */}
@@ -219,15 +219,15 @@ export default async function PayrollPage({
           </div>
 
           {pv.needsReviewDays > 0 && (
-            <p className="rounded border border-amber-300 p-3 text-xs text-amber-900 dark:border-amber-800 dark:text-amber-300">
+            <Banner tone="warning">
               ⚠️ <strong>{pv.needsReviewDays} day(s) still need a manager&rsquo;s review</strong> and
               are excluded from this run. ⛔ They are counted here on purpose — a run that silently
               skipped them would look identical to a run where nobody worked.
-            </p>
+            </Banner>
           )}
 
           {pv.heldZeroCreditDays > 0 && (
-            <p className="rounded border border-amber-300 p-3 text-xs text-amber-900 dark:border-amber-800 dark:text-amber-300">
+            <Banner tone="warning">
               ⏸️ <strong>
                 {pv.heldZeroCreditDays} day(s) were too short to credit a day at all
               </strong>{' '}
@@ -236,27 +236,27 @@ export default async function PayrollPage({
               manager&rsquo;s decision; once decided, the next run pays it. ⛔ Held, not lost —
               paying them at ₱0 now would freeze them and put that overtime permanently out of
               reach.
-            </p>
+            </Banner>
           )}
 
           {pv.unapprovedOtMinutes > 0 && (
-            <p className="rounded border border-amber-300 p-3 text-xs text-amber-900 dark:border-amber-800 dark:text-amber-300">
+            <Banner tone="warning">
               ⚠️ <strong>
                 {Math.floor(pv.unapprovedOtMinutes / 60)}h {pv.unapprovedOtMinutes % 60}m of
                 overtime is awaiting a manager&rsquo;s approval
               </strong>{' '}
               and is <strong>not</strong> in these figures. ⛔ Pending overtime is never paid
               unapproved — approve it on the attendance day, then preview again.
-            </p>
+            </Banner>
           )}
 
           {pv.unratedEmployments.length > 0 && (
-            <p className="rounded border border-red-300 p-3 text-xs text-red-900 dark:border-red-800 dark:text-red-300">
+            <Banner tone="error">
               ⛔ <strong>No pay rate in force</strong> for{' '}
               {pv.unratedEmployments.map((u) => `${u.personName} (${u.days}d)`).join(', ')}. Set a
               rate below — a day priced at ₱0 is indistinguishable from a day nobody worked, so the
               run refuses rather than guessing.
-            </p>
+            </Banner>
           )}
 
           {pv.slips.length === 0 ? (
@@ -294,7 +294,7 @@ export default async function PayrollPage({
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
                         {peso(Number(s.grossPay))}
                       </td>
-                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-amber-700 dark:text-amber-400">
+                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-warning-ink">
                         {compare(money(s.advanceRecovered), ZERO) > 0 ? `−${peso(Number(s.advanceRecovered))}` : '—'}
                       </td>
                       <td className="py-1.5 text-right font-mono font-medium tabular-nums">
@@ -317,18 +317,18 @@ export default async function PayrollPage({
               <input type="hidden" name="periodEnd" value={periodEnd} />
               <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
                 <span className={LABEL}>Pay from</span>
-                <select name="moneyAccountId" className={`${FIELD} w-full`}>
+                <Select name="moneyAccountId" className="w-full">
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
-              <input name="notes" placeholder="Notes (optional)" className={`${FIELD} min-w-0 flex-1 basis-48`} />
-              <button type="submit" className={BTN_PRIMARY}>
+              <Input name="notes" placeholder="Notes (optional)" className="min-w-0 flex-1 basis-48" />
+              <Button type="submit" variant="primary">
                 Post {pv.slips.length} payslip(s)
-              </button>
+              </Button>
             </form>
           )}
         </section>
@@ -367,25 +367,26 @@ export default async function PayrollPage({
                     <form action={setPayRateAction} className="flex flex-wrap items-end gap-2">
                       <input type="hidden" name="storeId" value={storeId} />
                       <input type="hidden" name="employmentId" value={r.id} />
-                      <select name="basis" defaultValue="daily" className={`${FIELD} w-24`}>
+                      <Select name="basis" defaultValue="daily" className="w-24">
                         <option value="daily">daily</option>
                         <option value="hourly">hourly</option>
-                      </select>
+                      </Select>
                       <input
                         name="amount"
                         inputMode="decimal"
                         placeholder="0.00"
-                        className={`${FIELD} w-28`}
+                        // raw <input>: t343-s5-5v-number-boxes.test.ts scans the source for this tag; kit field tokens by hand
+                        className="w-28 rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
                       />
-                      <input
+                      <Input
                         name="effectiveFrom"
                         type="date"
                         defaultValue={periodStart}
-                        className={`${FIELD} w-40`}
+                        className="w-40"
                       />
-                      <button type="submit" className={BTN}>
+                      <Button type="submit" variant="secondary">
                         Save
-                      </button>
+                      </Button>
                     </form>
                   </td>
                 </tr>
@@ -410,9 +411,7 @@ export default async function PayrollPage({
             >
               <div className="flex flex-wrap items-baseline gap-2">
                 <span className="text-sm font-medium">{periodLabel(run)}</span>
-                <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-xs dark:bg-neutral-800">
-                  {run.status}
-                </span>
+                <Badge status={run.status} />
                 {run.voidReason && (
                   <span className="text-xs text-neutral-500">voided — {run.voidReason}</span>
                 )}
@@ -435,10 +434,10 @@ export default async function PayrollPage({
                 <form action={voidPayRunAction} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="runId" value={run.id} />
-                  <input name="reason" placeholder="Why void it?" className={`${FIELD} min-w-0 flex-1 basis-48`} />
-                  <button type="submit" className={BTN}>
+                  <Input name="reason" placeholder="Why void it?" className="min-w-0 flex-1 basis-48" />
+                  <Button type="submit" variant="danger">
                     Void
-                  </button>
+                  </Button>
                   <span className="text-xs text-neutral-500">
                     ⭐ Reverses the entries and unfreezes the days, so the period is payable again.
                   </span>
@@ -452,27 +451,4 @@ export default async function PayrollPage({
   );
 }
 
-function Banner({ tone, children }: { tone: 'error' | 'ok'; children: React.ReactNode }) {
-  const cls =
-    tone === 'error'
-      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
-      : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-  return <div className={`rounded-lg border p-4 text-sm ${cls}`}>{children}</div>;
-}
-
-/**
- * ⚠️ `FIELD` carries NO width, and `INPUT` is `FIELD` plus `w-full`.
- *
- * Writing `${INPUT} w-24` puts `w-full` and `w-24` in the same class string, and neither wins by
- * being written last — the order in the generated CSS decides, and `w-full` won. The rate form
- * stacked to full width in a browser while every test stayed green, because a test asserts props,
- * never geometry.
- */
-const FIELD =
-  'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const INPUT = `w-full ${FIELD}`;
 const LABEL = 'text-xs font-medium text-neutral-600 dark:text-neutral-400';
-const BTN =
-  'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';
-const BTN_PRIMARY =
-  'rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300';

@@ -23,6 +23,7 @@ import { currentPeriod } from '../fixed-assets/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Findings — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -88,36 +89,24 @@ export default async function FindingsPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/* ⚠️ The period matters: the periodic-posting detectors ask about a MONTH, and closing
           January means asking about January. Defaults to the last completed month. */}
       <form className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Period</span>
-          <select name="period" defaultValue={period} className={INPUT}>
+          <Select name="period" defaultValue={period} className="w-full">
             {periods.map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
-        <button
-          type="submit"
-          className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-        >
+        <Button type="submit" variant="secondary">
           Show
-        </button>
+        </Button>
       </form>
 
       {/* ⭐ acknowledgedCount is shown on purpose. An acknowledged finding is STILL COUNTED —
@@ -150,19 +139,16 @@ export default async function FindingsPage({
           capability, the unposted-draft gate, `closeReadiness` and the earlier-period-open rule
           itself, so a stale page or a second click cannot close a period that is not closeable. */}
       {readiness.ready && (
-        <form action={closePeriodAction} className="flex items-center gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950">
+        <form action={closePeriodAction} className="flex items-center gap-3 rounded-lg border border-success bg-success-soft p-4">
           <input type="hidden" name="period" value={period} />
-          <div className="flex-1 text-sm text-emerald-900 dark:text-emerald-300">
+          <div className="flex-1 text-sm text-success">
             <span className="font-medium">{period} is ready to close.</span> This is a human
             decision, made once the remittance for the period has actually arrived — never
             scheduled.
           </div>
-          <button
-            type="submit"
-            className="rounded border border-emerald-700 bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
-          >
+          <Button type="submit" variant="primary">
             Close {period}
-          </button>
+          </Button>
         </form>
       )}
 
@@ -235,7 +221,7 @@ function FindingGroup({
   period: string;
   tone: 'hard' | 'soft';
 }) {
-  const border = tone === 'hard' ? 'border-red-300 dark:border-red-800' : 'border-amber-300 dark:border-amber-800';
+  const border = tone === 'hard' ? 'border-danger' : 'border-warning';
   return (
     <section className="space-y-3">
       <div>
@@ -261,17 +247,14 @@ function FindingGroup({
             <form action={acknowledgeFindingAction} className="flex flex-wrap items-end gap-2">
               <input type="hidden" name="findingKey" value={f.key} />
               <input type="hidden" name="period" value={period} />
-              <input
+              <Input
                 name="note"
                 placeholder="Why is this acceptable for now?"
-                className={`${INPUT} min-w-0 flex-1 basis-72`}
+                className="w-full min-w-0 flex-1 basis-72"
               />
-              <button
-                type="submit"
-                className="rounded border border-neutral-300 px-3 py-2 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-              >
+              <Button type="submit" variant="secondary">
                 Accept for now
-              </button>
+              </Button>
             </form>
           ) : (
             <p className="text-xs text-neutral-500">
@@ -284,9 +267,6 @@ function FindingGroup({
     </section>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 /** The last day of the month `monthsAhead` months after `now`'s (UTC) month — the same M+11
  *  window the monthly fiscal-period seed job itself covers (T-344 §1). */
@@ -315,7 +295,7 @@ function MissingPeriodsSection({
   canCreate: boolean;
 }) {
   return (
-    <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+    <section className="space-y-3 rounded-lg border border-warning bg-warning-soft p-4">
       <div>
         <h2 className="text-sm font-medium">Months missing inside closed books</h2>
         <p className="max-w-2xl text-xs text-neutral-600 dark:text-neutral-400">
@@ -326,7 +306,7 @@ function MissingPeriodsSection({
       {pieces.map((p) => {
         const label = p.whole ? p.yearMonth : `${p.startsOn} to ${p.endsOn} (part of ${p.yearMonth})`;
         return (
-          <div key={`${p.startsOn}-${p.endsOn}`} className="space-y-2 rounded-lg border border-amber-300 bg-white p-3 dark:border-amber-800 dark:bg-neutral-950">
+          <div key={`${p.startsOn}-${p.endsOn}`} className="space-y-2 rounded-lg border border-warning bg-surface p-3">
             <div className="text-sm">
               <span className="font-medium">{label}</span> — will be created as{' '}
               <span className="font-medium">{p.targetStatus}</span>
@@ -336,18 +316,15 @@ function MissingPeriodsSection({
                 <input type="hidden" name="period" value={period} />
                 <input type="hidden" name="startsOn" value={p.startsOn} />
                 <input type="hidden" name="endsOn" value={p.endsOn} />
-                <input
+                <Input
                   name="reason"
                   required
                   placeholder="Why is this being created now?"
-                  className={`${INPUT} min-w-0 flex-1 basis-72`}
+                  className="w-full min-w-0 flex-1 basis-72"
                 />
-                <button
-                  type="submit"
-                  className="rounded border border-amber-700 bg-amber-700 px-3 py-2 text-xs font-medium text-white hover:bg-amber-800"
-                >
+                <Button type="submit" variant="secondary">
                   Create the missing month
-                </button>
+                </Button>
               </form>
             ) : (
               <p className="text-xs text-neutral-500">Only an administrator can create a missing month.</p>
@@ -375,7 +352,7 @@ function ScheduledChargesMissedSection({
   canBook: boolean;
 }) {
   return (
-    <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+    <section className="space-y-3 rounded-lg border border-warning bg-warning-soft p-4">
       <div>
         <h2 className="text-sm font-medium">Scheduled charges missed in closed months</h2>
         <p className="max-w-2xl text-xs text-neutral-600 dark:text-neutral-400">
@@ -393,7 +370,7 @@ function ScheduledChargesMissedSection({
         rows.map((r) => (
           <div
             key={`${r.schedule}-${r.subjectId}-${r.belongsToPeriod}`}
-            className="space-y-2 rounded-lg border border-amber-300 bg-white p-3 dark:border-amber-800 dark:bg-neutral-950"
+            className="space-y-2 rounded-lg border border-warning bg-surface p-3"
           >
             <div className="text-sm">
               <span className="font-medium">{r.subjectName}</span> — {r.belongsToPeriod} —{' '}
@@ -404,18 +381,15 @@ function ScheduledChargesMissedSection({
               <input type="hidden" name="schedule" value={r.schedule} />
               <input type="hidden" name="subjectId" value={r.subjectId} />
               <input type="hidden" name="belongsToPeriod" value={r.belongsToPeriod} />
-              <input
+              <Input
                 name="reason"
                 required
                 placeholder="Why is this being booked now?"
-                className={`${INPUT} min-w-0 flex-1 basis-72`}
+                className="w-full min-w-0 flex-1 basis-72"
               />
-              <button
-                type="submit"
-                className="rounded border border-amber-700 bg-amber-700 px-3 py-2 text-xs font-medium text-white hover:bg-amber-800"
-              >
+              <Button type="submit" variant="secondary">
                 Book it
-              </button>
+              </Button>
             </form>
           </div>
         ))

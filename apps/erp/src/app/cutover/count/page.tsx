@@ -7,7 +7,7 @@ import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid, Field } from '@/components/ui';
+import { Banner, Button, FlashBanner, FormGrid, Field } from '@/components/ui';
 
 export const metadata = { title: 'Opening count — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -61,11 +61,7 @@ export default async function CountPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/* Switching stores. ⭐ Four stores, four counts — a single tick would hide the one nobody
           visited, so each is entered and shown on its own. */}
@@ -77,8 +73,8 @@ export default async function CountPage({
               href={`/cutover/count?store=${s.id}`}
               className={`rounded border px-3 py-2 text-sm ${
                 s.id === storeId
-                  ? 'border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
-                  : 'border-neutral-300 dark:border-neutral-700'
+                  ? 'border-ink bg-ink text-surface'
+                  : 'border-surface-border'
               }`}
             >
               {s.name}
@@ -100,7 +96,7 @@ export default async function CountPage({
         a real zero has to be typed on purpose.
       */}
       {missing.length > 0 ? (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong className="font-medium">
             {missing.length} item{missing.length === 1 ? '' : 's'} not counted yet.
           </strong>
@@ -108,11 +104,9 @@ export default async function CountPage({
             If the shelf is genuinely empty, enter <span className="font-mono">0</span> — that is a
             real answer and a different one from never having looked.
           </p>
-        </div>
+        </Banner>
       ) : (
-        <p className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          Every active item has a count at this store.
-        </p>
+        <Banner tone="success">Every active item has a count at this store.</Banner>
       )}
 
       <div className="space-y-2">
@@ -121,7 +115,7 @@ export default async function CountPage({
             key={r.itemId}
             className={`rounded-lg border p-3 ${
               r.quantity === null
-                ? 'border-amber-300 dark:border-amber-800'
+                ? 'border-warning-ink'
                 : 'border-neutral-200 dark:border-neutral-800'
             }`}
           >
@@ -146,7 +140,7 @@ export default async function CountPage({
                         required
                         placeholder={`Quantity (${r.baseUnit})`}
                         inputMode="decimal"
-                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
                     </Field>
                     <Field label={<span className="sr-only">Cost per {r.baseUnit}</span>}>
@@ -154,16 +148,13 @@ export default async function CountPage({
                         name="unitCost"
                         placeholder={`Cost per ${r.baseUnit}`}
                         inputMode="decimal"
-                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
                     </Field>
                   </FormGrid>
-                  <button
-                    type="submit"
-                    className="mt-3 rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
-                  >
+                  <Button type="submit" variant="secondary" className="mt-3">
                     Save
-                  </button>
+                  </Button>
                 </form>
               ) : (
                 <EditableRecord
@@ -180,7 +171,7 @@ export default async function CountPage({
                         defaultValue={r.quantity}
                         placeholder={`Quantity (${r.baseUnit})`}
                         inputMode="decimal"
-                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
                     </Field>
                     <Field label={<span className="sr-only">Cost per {r.baseUnit}</span>}>
@@ -189,7 +180,7 @@ export default async function CountPage({
                         defaultValue={r.unitCost ?? ''}
                         placeholder={`Cost per ${r.baseUnit}`}
                         inputMode="decimal"
-                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
                     </Field>
                   </FormGrid>

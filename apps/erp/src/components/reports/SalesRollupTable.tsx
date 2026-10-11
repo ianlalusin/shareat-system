@@ -37,18 +37,18 @@ export function SalesReconciliationIndicator({
       role="status"
       className={
         reconciles
-          ? 'rounded-lg border-2 border-emerald-600 bg-emerald-50 p-4 dark:border-emerald-500 dark:bg-emerald-950'
-          : 'rounded-lg border-4 border-red-600 bg-red-100 p-4 dark:border-red-500 dark:bg-red-950'
+          ? 'rounded-lg border-2 border-success bg-success-soft p-4'
+          : 'rounded-lg border-4 border-danger bg-danger-surface p-4'
       }
     >
-      <p className={reconciles ? 'text-lg font-bold text-emerald-800 dark:text-emerald-200' : 'text-2xl font-extrabold uppercase tracking-wide text-red-800 dark:text-red-100'}>
+      <p className={reconciles ? 'text-lg font-bold text-success' : 'text-2xl font-extrabold uppercase tracking-wide text-danger'}>
         {reconciles ? 'Reconciles' : 'DOES NOT RECONCILE'}
       </p>
-      <p className={reconciles ? 'mt-1 text-sm text-emerald-700 dark:text-emerald-300' : 'mt-1 text-base font-semibold text-red-800 dark:text-red-100'}>
+      <p className={reconciles ? 'mt-1 text-sm text-success' : 'mt-1 text-base font-semibold text-danger'}>
         Ledger {formatMoney(ledgerTotal)} {reconciles ? '=' : '≠'} channels {formatMoney(channelTotal)} {reconciles ? '=' : '≠'} modes {formatMoney(modeTotal)}
       </p>
       {!reconciles ? (
-        <p className="mt-2 text-sm text-red-800 dark:text-red-100">
+        <p className="mt-2 text-sm text-danger">
           This should never happen — the channel/mode breakdown (from `sales_days`) and the
           ledger total (from `journal_lines`) have drifted. Stop and investigate.
         </p>

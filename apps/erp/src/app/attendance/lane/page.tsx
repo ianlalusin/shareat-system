@@ -8,6 +8,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'The clock lane — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -80,31 +81,17 @@ export default async function LanePage({
           <label htmlFor="store" className="text-sm text-neutral-600 dark:text-neutral-400">
             Store
           </label>
-          <select
-            id="store"
-            name="store"
-            defaultValue={storeId}
-            className="rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          >
+          <Select id="store" name="store" defaultValue={storeId}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
             ))}
-          </select>
+          </Select>
         </FilterRow>
       )}
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.notice && (
-        <div className="rounded-lg border border-neutral-300 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-900">
-          {sp.notice}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <HealthPanel health={health} now={now} />
 
@@ -116,7 +103,7 @@ export default async function LanePage({
         </h2>
 
         {quarantine.open.length === 0 ? (
-          <p className="rounded-lg border border-neutral-200 p-4 text-sm text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
+          <p className="rounded-lg border border-surface-border p-4 text-sm text-neutral-600">
             Nothing is stuck at this store.{' '}
             {health.healedRecently > 0 && (
               <>
@@ -171,7 +158,7 @@ export default async function LanePage({
               </thead>
               <tbody>
                 {quarantine.resolved.map((row) => (
-                  <tr key={row.id} className="border-t border-neutral-200 dark:border-neutral-800">
+                  <tr key={row.id} className="border-t border-surface-border">
                     <td className="py-2 pr-4 whitespace-nowrap text-neutral-600 dark:text-neutral-400">
                       {when(row.resolvedAt)}
                     </td>
@@ -180,7 +167,7 @@ export default async function LanePage({
                       {/* ⭐ "Came back on its own" is not the same event as "somebody discarded it",
                           and the difference is exactly `resolvedBy` being null. */}
                       {row.resolution === 'ingested' ? (
-                        <span className="text-emerald-700 dark:text-emerald-400">
+                        <span className="text-success">
                           {row.resolvedBy ? 'Went through' : 'Came back on its own'}
                         </span>
                       ) : (
@@ -212,8 +199,8 @@ export default async function LanePage({
 
 function HealthPanel({ health, now }: { health: LaneHealthReport; now: Date }) {
   const tone = health.needsAttention
-    ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950'
-    : 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950';
+    ? 'border-warning bg-warning-soft'
+    : 'border-success bg-success-soft';
 
   return (
     <section className={`space-y-4 rounded-lg border p-4 sm:p-5 ${tone}`}>
@@ -301,7 +288,7 @@ function HealthPanel({ health, now }: { health: LaneHealthReport; now: Date }) {
                 <span
                   className={
                     t.status === 'silent'
-                      ? 'text-amber-800 dark:text-amber-400'
+                      ? 'text-warning-ink'
                       : 'text-neutral-600 dark:text-neutral-400'
                   }
                 >
@@ -343,10 +330,10 @@ function Metric({
 }) {
   const colour =
     status === 'warn'
-      ? 'text-amber-900 dark:text-amber-300'
+      ? 'text-warning-ink'
       : status === 'unknown'
         ? 'text-neutral-500 dark:text-neutral-500'
-        : 'text-emerald-900 dark:text-emerald-300';
+        : 'text-success';
   return (
     <div>
       <div className="text-xs text-neutral-600 dark:text-neutral-400">{label}</div>
@@ -371,7 +358,7 @@ function StuckEvent({
   const occurredAt = (row.rawEvent as { occurredAt?: number } | null)?.occurredAt ?? null;
 
   return (
-    <article className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+    <article className="rounded-lg border border-surface-border p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           {/* ⭐ The SENTENCE is the headline, not the code. A code is for the database. */}
@@ -382,7 +369,7 @@ function StuckEvent({
             {row.attempts > 1 && ` · seen ${row.attempts} times`}
           </p>
         </div>
-        <span className="shrink-0 rounded bg-neutral-100 px-2 py-0.5 font-mono text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
+        <span className="shrink-0 rounded bg-canvas px-2 py-0.5 font-mono text-xs text-neutral-600">
           {row.reasonCode}
         </span>
       </div>
@@ -393,7 +380,7 @@ function StuckEvent({
         <summary className="cursor-pointer text-xs text-neutral-600 dark:text-neutral-400">
           Show the raw event
         </summary>
-        <pre className="mt-2 overflow-x-auto rounded border border-neutral-200 bg-neutral-50 p-3 text-xs dark:border-neutral-800 dark:bg-neutral-900">
+        <pre className="mt-2 overflow-x-auto rounded border border-surface-border bg-canvas p-3 text-xs">
           {rawJson(row.rawEvent)}
         </pre>
       </details>
@@ -405,17 +392,14 @@ function StuckEvent({
           <form action={retryEventAction}>
             <input type="hidden" name="quarantineId" value={row.id} />
             <input type="hidden" name="storeId" value={storeId} />
-            <button
-              type="submit"
-              className="w-full rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white sm:w-auto dark:bg-neutral-100 dark:text-neutral-900"
-            >
+            <Button type="submit" variant="secondary" className="w-full sm:w-auto">
               Retry
-            </button>
+            </Button>
           </form>
         ) : (
           // ⛔ The absence of the button is the message: retrying an unreadable body will fail the
           // same way forever, and a button that cannot work teaches a manager to distrust the page.
-          <p className="text-xs text-neutral-500 sm:max-w-[12rem] dark:text-neutral-500">
+          <p className="text-xs text-neutral-500 sm:max-w-[12rem]">
             Retry cannot help here — the body will not change.
           </p>
         )}
@@ -424,19 +408,16 @@ function StuckEvent({
         <form action={discardEventAction} className="flex-1 space-y-2 sm:flex sm:gap-2 sm:space-y-0">
           <input type="hidden" name="quarantineId" value={row.id} />
           <input type="hidden" name="storeId" value={storeId} />
-          <input
+          <Input
             type="text"
             name="reason"
             required
             placeholder="Why this is not a real shift"
-            className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+            className="w-full"
           />
-          <button
-            type="submit"
-            className="w-full rounded border border-neutral-300 px-4 py-2.5 text-sm font-medium sm:w-auto dark:border-neutral-700"
-          >
+          <Button type="submit" variant="danger" className="w-full sm:w-auto">
             Discard
-          </button>
+          </Button>
         </form>
       </div>
     </article>

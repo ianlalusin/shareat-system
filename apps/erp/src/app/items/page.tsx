@@ -12,17 +12,11 @@ import { listItems, mayApproveItem, pendingRequestCodes, pendingRequests, duplic
 import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
-import { FormGrid, Field } from '@/components/ui';
+import { Banner, Button, Checkbox, FlashBanner, Input, Select, FormGrid, Field } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Items — Shareat System' };
 export const dynamic = 'force-dynamic';
-
-const INPUT =
-  'rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const FULL = 'mt-1 block w-full';
-const BTN =
-  'rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900';
 
 export default async function ItemsPage({
   searchParams,
@@ -51,28 +45,14 @@ export default async function ItemsPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
-      {sp.warning && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          ⚠️ {sp.warning}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {dupes.length > 0 && (
-        <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
-          <h2 className="font-medium text-amber-900 dark:text-amber-200">
+        <section className="space-y-3 rounded-lg border border-warning-ink bg-warning-soft p-4">
+          <h2 className="font-medium text-warning-ink">
             {dupes.length === 1 ? 'One pair looks' : `${dupes.length} pairs look`} like the same item
           </h2>
-          <p className="text-xs text-amber-800 dark:text-amber-300">
+          <p className="text-xs text-warning-ink">
             Spelling-similarity check. ⚠️ It is a prompt, not a verdict — &ldquo;Coke 1.5&rdquo; and
             &ldquo;Coke 15&rdquo; look alike and are different products. Merging is permanent:
             every invoice line, price and supplier link moves to the item you keep.
@@ -81,7 +61,7 @@ export default async function ItemsPage({
             {dupes.map((d) => (
               <li
                 key={`${d.aId}-${d.bId}`}
-                className="rounded border border-amber-300 bg-white p-3 text-sm dark:border-amber-800 dark:bg-neutral-950"
+                className="rounded border border-warning-ink bg-surface p-3 text-sm"
               >
                 <div className="mb-2">
                   <a href={`/items/${d.aId}`} className="underline hover:no-underline">{d.aName}</a>
@@ -94,7 +74,7 @@ export default async function ItemsPage({
                   </span>
                 </div>
                 {d.unitsDiffer ? (
-                  <p className="text-xs text-red-700 dark:text-red-400">
+                  <p className="text-xs text-danger">
                     ⛔ Measured differently ({d.aUnit} vs {d.bUnit}). Merging is refused until one
                     of them is corrected — combining them would make every past price incomparable.
                   </p>
@@ -103,16 +83,16 @@ export default async function ItemsPage({
                     <form action={mergeItemsAction} className="flex items-center gap-2">
                       <input type="hidden" name="winnerId" value={d.aId} />
                       <input type="hidden" name="loserId" value={d.bId} />
-                      <button type="submit" className="rounded border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+                      <Button type="submit" variant="secondary">
                         Keep &ldquo;{d.aName}&rdquo;
-                      </button>
+                      </Button>
                     </form>
                     <form action={mergeItemsAction} className="flex items-center gap-2">
                       <input type="hidden" name="winnerId" value={d.bId} />
                       <input type="hidden" name="loserId" value={d.aId} />
-                      <button type="submit" className="rounded border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+                      <Button type="submit" variant="secondary">
                         Keep &ldquo;{d.bName}&rdquo;
-                      </button>
+                      </Button>
                     </form>
                   </div>
                 )}
@@ -143,7 +123,7 @@ export default async function ItemsPage({
                         <>Every number under {w.stem} has been used (999 items); a super-admin must type a code.</>
                       )}
                       {w.sameStem.length > 0 && (
-                        <span className="block text-amber-800 dark:text-amber-300">
+                        <span className="block text-warning-ink">
                           Same code letters as: {w.sameStem.map((s) => `${s.code} ${s.name} (${s.status})`).join(', ')}
                         </span>
                       )}
@@ -155,9 +135,9 @@ export default async function ItemsPage({
                   {r.reason ? ` · ${r.reason}` : ''}
                 </div>
                 {r.similarWarning && (
-                  <p className="mt-2 rounded bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-300">
+                  <Banner tone="warning" className="mt-2">
                     ⚠️ {r.similarWarning}
-                  </p>
+                  </Banner>
                 )}
                 <div className="mt-2 flex flex-wrap items-end gap-2">
                   <form action={approveItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
@@ -165,44 +145,35 @@ export default async function ItemsPage({
                     {/* T-378 R5: the approver confirms the unit (pre-selected to the requester's choice) and the three ticks. */}
                     <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                       Measured in
-                      <select name="baseUnit" required defaultValue={r.baseUnit} className={INPUT}>
+                      <Select name="baseUnit" required defaultValue={r.baseUnit}>
                         {BASE_UNITS.map((u) => (
                           <option key={u} value={u}>{u}</option>
                         ))}
-                      </select>
+                      </Select>
                     </label>
                     {canOverride && (
                       <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                         Use a different code
-                        <input
+                        <Input
                           name="code"
                           autoComplete="off"
                           pattern="[A-Za-z0-9]{4}-[0-9]{3}"
                           placeholder={willBe.get(r.id)?.code ?? 'CHWN-001'}
-                          className={`${INPUT} font-mono`}
+                          className="font-mono"
                         />
                       </label>
                     )}
-                    <label className="flex items-center gap-1 text-xs">
-                      <input type="checkbox" name="isPurchasable" defaultChecked={r.isPurchasable} className="h-4 w-4" />
-                      Bought
-                    </label>
-                    <label className="flex items-center gap-1 text-xs">
-                      <input type="checkbox" name="sellableRetail" defaultChecked={r.sellableRetail} className="h-4 w-4" />
-                      Sold à la carte
-                    </label>
-                    <label className="flex items-center gap-1 text-xs">
-                      <input type="checkbox" name="sellableWholesale" defaultChecked={r.sellableWholesale} className="h-4 w-4" />
-                      Sold wholesale
-                    </label>
-                    <button type="submit" className={BTN}>Approve</button>
+                    <Checkbox name="isPurchasable" defaultChecked={r.isPurchasable} label="Bought" />
+                    <Checkbox name="sellableRetail" defaultChecked={r.sellableRetail} label="Sold à la carte" />
+                    <Checkbox name="sellableWholesale" defaultChecked={r.sellableWholesale} label="Sold wholesale" />
+                    <Button type="submit" variant="secondary">Approve</Button>
                   </form>
                   <form action={rejectItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
                     <input type="hidden" name="requestId" value={r.id} />
-                    <input name="note" required placeholder="Why not?" className={INPUT} />
-                    <button type="submit" className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950">
+                    <Input name="note" required placeholder="Why not?" />
+                    <Button type="submit" variant="danger">
                       Reject
-                    </button>
+                    </Button>
                   </form>
                 </div>
               </li>
@@ -260,11 +231,11 @@ export default async function ItemsPage({
         <form action={requestItemAction} className="space-y-3">
           <FormGrid>
             <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>} className="text-sm">
-              <input id="item-name" name="name" required placeholder="Pork belly" className={`${INPUT} ${FULL}`} />
+              <Input id="item-name" name="name" required placeholder="Pork belly" className="mt-1 block w-full" />
             </Field>
             <ItemCodeField nameInputId="item-name" mode="new" canOverride={false} suggestAction={suggestItemCodeAction} />
             <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>} className="text-sm">
-              <select name="kind" required defaultValue="" className={`${INPUT} ${FULL}`}>
+              <select name="kind" required defaultValue="" className="mt-1 block w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink">
                 <option value="">Choose a kind</option>
                 {ITEM_KINDS.map((k) => (
                   <option key={k} value={k}>{ITEM_KIND_LABEL[k]}</option>
@@ -272,12 +243,12 @@ export default async function ItemsPage({
               </select>
             </Field>
             <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Measured in</span>} className="text-sm">
-              <select name="baseUnit" required defaultValue="" className={`${INPUT} ${FULL}`}>
+              <Select name="baseUnit" required defaultValue="" className="mt-1 block w-full">
                 <option value="">Choose a unit</option>
                 {BASE_UNITS.map((u) => (
                   <option key={u} value={u}>{u}</option>
                 ))}
-              </select>
+              </Select>
             </Field>
           <Field
               span="full"
@@ -288,7 +259,7 @@ export default async function ItemsPage({
               }
               className="text-sm"
             >
-              <input name="reason" className={`${INPUT} ${FULL}`} />
+              <Input name="reason" className="mt-1 block w-full" />
             </Field>
           </FormGrid>
           {/*
@@ -301,18 +272,9 @@ export default async function ItemsPage({
               What it may be bought and sold as
             </legend>
             <div className="grid gap-2 text-sm sm:grid-cols-3">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" name="isPurchasable" defaultChecked className="h-4 w-4" />
-                Bought from suppliers
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" name="sellableRetail" className="h-4 w-4" />
-                Sold à la carte (retail)
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" name="sellableWholesale" className="h-4 w-4" />
-                Sold wholesale / to franchisees
-              </label>
+              <Checkbox name="isPurchasable" defaultChecked label="Bought from suppliers" />
+              <Checkbox name="sellableRetail" label="Sold à la carte (retail)" />
+              <Checkbox name="sellableWholesale" label="Sold wholesale / to franchisees" />
             </div>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               Three independent facts — Milkis is all three, a bento box is retail-only and made
@@ -322,28 +284,24 @@ export default async function ItemsPage({
             </p>
           </fieldset>
           <div className="flex flex-wrap gap-2">
-            <button type="submit" className={BTN}>Request item</button>
+            <Button type="submit" variant="primary">Request item</Button>
             {/* T-386 R7: the override belongs to the direct add (a super-admin), not to the request fields. */}
             {canOverride && (
               <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                 Use a different code (super-admin)
-                <input
+                <Input
                   name="code"
                   type="text"
                   autoComplete="off"
                   pattern="[A-Za-z0-9]{4}-[0-9]{3}"
                   placeholder="CHWN-001"
-                  className={`${INPUT} font-mono`}
+                  className="font-mono"
                 />
               </label>
             )}
-            <button
-              type="submit"
-              formAction={createItemAction}
-              className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-            >
+            <Button type="submit" variant="secondary" formAction={createItemAction}>
               Add directly (super-admin)
-            </button>
+            </Button>
           </div>
         </form>
       </section>

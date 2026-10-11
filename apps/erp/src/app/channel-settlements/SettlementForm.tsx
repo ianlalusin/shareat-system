@@ -21,7 +21,7 @@
  * returns money; v1 filtered to `amount > 0` and silently overstated fees by exactly the credit.
  */
 import { useMemo, useState, useTransition } from 'react';
-import { FormGrid } from '@/components/ui';
+import { Banner, Button, FormGrid, Input, Select } from '@/components/ui';
 import type { PreviewRequest, PreviewResponse } from './actions';
 
 export interface ChannelChoice {
@@ -75,7 +75,7 @@ const DEDUCTIONS = [
 type DeductionName = (typeof DEDUCTIONS)[number]['name'];
 
 const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 const LABEL = 'flex flex-col gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400';
 
 function money(v: string): string {
@@ -215,11 +215,11 @@ export function SettlementForm({
 
   if (channels.length === 0) {
     return (
-      <p className="text-sm text-amber-700 dark:text-amber-500">
+      <Banner tone="warning">
         No channel raises a receivable yet. A platform that settles days later is a sales channel
         with <span className="font-mono">is_remitted_daily = false</span> and a receivable account —
         cash and walk-in channels reach the till on the day and have nothing to settle.
-      </p>
+      </Banner>
     );
   }
 
@@ -243,20 +243,20 @@ export function SettlementForm({
       <FormGrid>
         <label className={LABEL}>
           Channel
-          <select
+          <Select
             name="channelId"
             value={channelId}
             onChange={(e) => pickChannel(e.target.value)}
-            className={INPUT}
+            className="w-full"
           >
             {channels.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.storeName} — {c.name} ({money(c.outstanding)} owed)
               </option>
             ))}
-          </select>
+          </Select>
           {channel && !channel.destinationMoneyAccountId && (
-            <span className="text-amber-700 dark:text-amber-500">
+            <span className="text-warning-ink">
               No payout account set — set it above before recording.
             </span>
           )}
@@ -269,11 +269,11 @@ export function SettlementForm({
 
         <label className={LABEL}>
           Day being settled
-          <select
+          <Select
             name="salesDayPicker"
             value={salesDayId}
             onChange={(e) => pickDay(e.target.value)}
-            className={INPUT}
+            className="w-full"
           >
             <option value="">Choose a verified day…</option>
             {channelDays.map((d) => (
@@ -282,9 +282,9 @@ export function SettlementForm({
                 {d.ageDays > 0 ? ` · ${d.ageDays}d old` : ''}
               </option>
             ))}
-          </select>
+          </Select>
           {channelDays.length === 0 && (
-            <span className="text-amber-700 dark:text-amber-500">
+            <span className="text-warning-ink">
               Nothing waiting on this channel. Only a <strong>verified</strong> day raises a
               receivable — an unverified one has posted nothing to clear.
             </span>
@@ -337,13 +337,13 @@ export function SettlementForm({
               <span>
                 {d.label} <span className="font-mono text-neutral-400">{d.account}</span>
               </span>
-              <input
+              <Input
                 name={d.name}
                 value={deductions[d.name]}
                 onChange={(e) => setDeductions((prev) => ({ ...prev, [d.name]: e.target.value }))}
                 inputMode="decimal"
                 placeholder="0.00"
-                className={INPUT}
+                className="w-full"
               />
               <span className="text-neutral-400 dark:text-neutral-600">{d.hint}</span>
             </label>
@@ -364,11 +364,11 @@ export function SettlementForm({
         <FormGrid>
           <label className={LABEL}>
             Loan
-            <select
+            <Select
               name="loanId"
               value={loanId}
               onChange={(e) => setLoanId(e.target.value)}
-              className={INPUT}
+              className="w-full"
             >
               <option value="">Nothing docked</option>
               {loans.map((l) => (
@@ -376,28 +376,28 @@ export function SettlementForm({
                   {l.label} — {money(l.outstanding)} outstanding
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className={LABEL}>
             Amount docked
-            <input
+            <Input
               name="loanAmount"
               value={loanAmount}
               onChange={(e) => setLoanAmount(e.target.value)}
               inputMode="decimal"
               placeholder="0.00"
               disabled={loanId === ''}
-              className={`${INPUT} disabled:opacity-40`}
+              className="w-full"
             />
           </label>
         </FormGrid>
         {crossStoreLoan && (
-          <p className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          <Banner tone="warning">
             <strong>This loan belongs to another store.</strong> The paying store books{' '}
             <span className="font-mono">1250 Due from related store</span> and the owning store{' '}
             <span className="font-mono">2150 Due to related store</span>, so the pair nets to zero
             across the group and neither store&apos;s books absorb the other&apos;s debt.
-          </p>
+          </Banner>
         )}
       </fieldset>
 
@@ -405,24 +405,24 @@ export function SettlementForm({
       <FormGrid>
         <label className={LABEL}>
           Payout reference
-          <input
+          <Input
             name="reference"
             value={reference}
             onChange={(e) => setReference(e.target.value)}
             maxLength={120}
             placeholder="The platform's payout reference"
-            className={INPUT}
+            className="w-full"
           />
         </label>
         <label className={LABEL}>
           Settled on
-          <input
+          <Input
             name="settledOn"
             value={settledOn}
             onChange={(e) => setSettledOn(e.target.value)}
             type="date"
             required
-            className={INPUT}
+            className="w-full"
           />
           <span className="text-neutral-400 dark:text-neutral-600">
             The entry dates on this, not on the sales day
@@ -433,23 +433,16 @@ export function SettlementForm({
       {/* ── ⭐ The preview. The reason this component exists ─────────────────────────── */}
       <div className="space-y-3 rounded-lg border border-neutral-300 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-900">
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={check}
-            disabled={pending || salesDayId === ''}
-            className="rounded border border-neutral-400 px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
-          >
+          <Button type="button" onClick={check} disabled={pending || salesDayId === ''} variant="secondary">
             {pending ? 'Checking…' : 'Check the numbers'}
-          </button>
+          </Button>
           <span className="text-xs text-neutral-500 dark:text-neutral-400">
             Nothing is written. This is the same arithmetic the posting runs.
           </span>
         </div>
 
         {previewError && (
-          <p className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-            {previewError}
-          </p>
+          <Banner tone="error">{previewError}</Banner>
         )}
 
         {preview && (
@@ -457,17 +450,21 @@ export function SettlementForm({
             <SettlementPreviewFigures preview={preview} />
 
             {preview.blockers.length > 0 && (
-              <ul className="mt-3 space-y-1 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-                {preview.blockers.map((b) => (
-                  <li key={b}>{b}</li>
-                ))}
-              </ul>
+              <div className="mt-3">
+                <Banner tone="error">
+                  <ul className="space-y-1">
+                    {preview.blockers.map((b) => (
+                      <li key={b}>{b}</li>
+                    ))}
+                  </ul>
+                </Banner>
+              </div>
             )}
 
             {/* ⭐ The gain acknowledgement is offered ONLY once a gain past tolerance is on
                 screen. A permanently visible tick is one people learn to tick. */}
             {preview.needsGainAcknowledgement && (
-              <label className="mt-3 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+              <label className="mt-3 flex items-start gap-2 rounded border border-warning bg-warning-soft p-3 text-sm text-warning-ink">
                 <input
                   type="checkbox"
                   checked={recognizeGain}
@@ -483,7 +480,7 @@ export function SettlementForm({
             )}
 
             {stale && (
-              <p className="mt-3 text-sm font-medium text-amber-700 dark:text-amber-400">
+              <p className="mt-3 text-sm font-medium text-warning-ink">
                 The figures changed since this check. Check again before posting.
               </p>
             )}
@@ -492,13 +489,9 @@ export function SettlementForm({
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="submit"
-          disabled={!canPost}
-          className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-        >
+        <Button type="submit" disabled={!canPost} variant="primary">
           Post this settlement
-        </button>
+        </Button>
         {!canPost && (
           <span className="text-xs text-neutral-500 dark:text-neutral-400">
             {salesDayId === ''
@@ -574,7 +567,7 @@ function Row({
 }) {
   const colour =
     tone === 'warn'
-      ? 'text-amber-700 dark:text-amber-400'
+      ? 'text-warning-ink'
       : tone === 'good'
         ? 'text-emerald-700 dark:text-emerald-400'
         : '';

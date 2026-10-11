@@ -7,7 +7,7 @@ import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
-import { Button, FormGrid, Input } from '@/components/ui';
+import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Reimbursements — Shareat System' };
@@ -27,9 +27,6 @@ interface SearchParams {
   error?: string;
   warning?: string;
 }
-
-const SELECT =
-  'rounded-md border border-surface-border bg-surface px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
 
 export default async function ReimbursementsPage({
   searchParams,
@@ -61,22 +58,8 @@ export default async function ReimbursementsPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
-      {/* A warning is not an error: the payout posted. Amber, beside the confirmation. */}
-      {sp.warning && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          {sp.warning}
-        </div>
-      )}
+      {/* A warning is not an error: the payout posted. FlashBanner draws it as a warning; the Toaster shows ok. */}
+      <FlashBanner flash={sp} />
 
       {!store ? (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -87,13 +70,13 @@ export default async function ReimbursementsPage({
           <FilterRow>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Store</span>
-              <select name="store" defaultValue={store.id} className={SELECT}>
+              <Select name="store" defaultValue={store.id}>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </FilterRow>
 
@@ -141,13 +124,13 @@ export default async function ReimbursementsPage({
                         </label>
                         <label className="flex flex-col gap-1">
                           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Pay from</span>
-                          <select name="fromMoneyAccountId" required className={SELECT}>
+                          <Select name="fromMoneyAccountId" required>
                             {accounts.map((a) => (
                               <option key={a.id} value={a.id}>
                                 {a.name}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         </label>
                         <label className="flex flex-col gap-1">
                           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Memo (optional)</span>

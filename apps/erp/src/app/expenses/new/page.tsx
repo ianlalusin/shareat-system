@@ -10,7 +10,7 @@ import { BudgetHint } from './BudgetHint';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { FlashBanner, FormGrid, Select } from '@/components/ui';
+import { Banner, Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'New expense — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -65,10 +65,10 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
       <FlashBanner flash={sp} fieldLabels={{ store: 'Store' }} />
 
       {!storeId ? (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           This org needs at least one store before an expense can be created. Go back to the{' '}
-          <a className="underline" href="/expenses">expenses list</a>.
-        </div>
+          <a className="text-sm underline" href="/expenses">expenses list</a>.
+        </Banner>
       ) : (
         <form action={createExpenseAction} className="space-y-6">
           {/* ⭐ T-215. The cap matters at the moment of spending — a report at month end is a
@@ -103,12 +103,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
                 Supplier invoice <span className="italic">(sets the date and the supplier)</span>
               </span>
-              <select
-                name="supplierInvoiceId"
-                required
-                defaultValue=""
-                className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-              >
+              <Select name="supplierInvoiceId" required defaultValue="">
                 <option value="" disabled>
                   {invoices.length === 0 ? 'No open invoices yet' : 'Select…'}
                 </option>
@@ -118,17 +113,12 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                     {inv.status === 'pending' ? ' — pending' : ' — verified'}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
 
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Category</span>
-              <select
-                name="categoryId"
-                required
-                defaultValue=""
-                className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-              >
+              <Select name="categoryId" required defaultValue="">
                 <option value="" disabled>
                   Select a category
                 </option>
@@ -146,18 +136,13 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                     </optgroup>
                   );
                 })}
-              </select>
+              </Select>
             </label>
           </FormGrid>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Particulars — what this was actually for</span>
-            <input
-              type="text"
-              name="particulars"
-              required
-              className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-            />
+            <Input type="text" name="particulars" required />
           </label>
 
           <div>
@@ -176,12 +161,9 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
             />
           </div>
 
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-          >
+          <Button type="submit" variant="primary">
             Save draft
-          </button>
+          </Button>
         </form>
       )}
     </Page>

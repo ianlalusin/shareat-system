@@ -158,7 +158,7 @@ export function SidebarNav({
               aria-expanded={isRailReactive ? false : open}
               aria-label={group.label}
               aria-current={isCurrentOnRail ? 'true' : undefined}
-              className={`shell-nav-row flex items-center gap-2 rounded-md px-2 text-[11px] font-medium uppercase tracking-wide text-neutral-400 hover:bg-neutral-100 aria-[current=true]:bg-neutral-900 aria-[current=true]:text-white dark:hover:bg-neutral-900 dark:aria-[current=true]:bg-neutral-100 dark:aria-[current=true]:text-neutral-900 ${FOCUS_RING}`}
+              className={`shell-nav-row flex items-center gap-2 rounded-md px-2 text-[11px] font-medium uppercase tracking-wide text-neutral-400 hover:bg-neutral-100 aria-[current=true]:bg-brand aria-[current=true]:text-white dark:hover:bg-neutral-900 ${FOCUS_RING}`}
             >
               <Icon className="h-4 w-4 shrink-0" />
               <span className="shell-sidebar-expanded-only flex-1 text-left">{group.label}</span>
@@ -176,7 +176,7 @@ export function SidebarNav({
                         href={link.href}
                         aria-current={isActive ? 'page' : undefined}
                         onClick={onLinkClick}
-                        className={`shell-nav-row flex items-center rounded-md px-2 text-sm text-neutral-600 aria-[current=page]:bg-neutral-900 aria-[current=page]:font-medium aria-[current=page]:text-white hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:aria-[current=page]:bg-neutral-100 dark:aria-[current=page]:text-neutral-900 ${FOCUS_RING}`}
+                        className={`shell-nav-row flex items-center rounded-md px-2 text-sm text-neutral-600 aria-[current=page]:bg-brand aria-[current=page]:font-medium aria-[current=page]:text-white hover:bg-neutral-100 aria-[current=page]:hover:bg-brand-hover dark:text-neutral-400 dark:hover:bg-neutral-900 dark:aria-[current=page]:text-white ${FOCUS_RING}`}
                       >
                         {link.label}
                       </Link>

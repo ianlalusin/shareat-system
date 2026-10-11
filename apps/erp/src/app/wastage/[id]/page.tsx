@@ -15,6 +15,7 @@ import {
 } from '../actions';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Order wastage — Shareat System' };
@@ -96,12 +97,7 @@ export default async function WastageDetailPage({
         <p className="mt-1 text-sm">&ldquo;{row.reason}&rdquo;</p>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">{sp.error}</div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">{sp.ok}</div>
-      )}
+      <FlashBanner flash={sp} />
 
       <section className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
         <h2 className="font-medium">Status</h2>
@@ -121,18 +117,20 @@ export default async function WastageDetailPage({
       </section>
 
       {match && (
-        <section className="rounded-lg border border-amber-400 bg-amber-50 p-4 text-sm dark:border-amber-700 dark:bg-amber-950">
+        <Banner tone="warning">
+        <section className="text-sm">
           <h2 className="font-medium">⭐ Possible settlement match</h2>
-          <p className="mt-1 text-neutral-700 dark:text-neutral-300">{match.rationale}</p>
+          <p className="mt-1">{match.rationale}</p>
           <form action={confirmSettlementMatchAction} className="mt-3">
             <input type="hidden" name="id" value={row.id} />
             <input type="hidden" name="storeId" value={row.storeId} />
             <input type="hidden" name="settlementId" value={match.settlementId} />
-            <button type="submit" className="rounded-md border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900">
+            <Button type="submit" variant="secondary">
               Mark paid by the platform — posts nothing
-            </button>
+            </Button>
           </form>
         </section>
+        </Banner>
       )}
 
       {row.status !== 'resolved' && (
@@ -144,7 +142,7 @@ export default async function WastageDetailPage({
             <input type="hidden" name="resolvedOn" value={toBusinessDate()} />
             <label className="flex flex-col gap-1">
               <span className="text-neutral-600 dark:text-neutral-400">Disposition</span>
-              <select name="disposition" defaultValue="absorbed" className="rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900">
+              <select name="disposition" defaultValue="absorbed" className="min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink">
                 <option value="platform_paid">Platform paid — posts nothing</option>
                 <option value="absorbed">Store absorbs — Dr 5300 / Cr 1220</option>
                 <option value="charged">Charge staff — Dr 1230 / Cr 1220, split by allocation</option>
@@ -157,26 +155,24 @@ export default async function WastageDetailPage({
               </p>
               {ALLOCATION_ROWS.map((n) => (
                 <div key={n} className="mt-1 grid grid-cols-[1fr_6rem] gap-2">
-                  <select name="personId" defaultValue={allocations[n - 1]?.personId ?? ''} className="rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900">
+                  <Select name="personId" defaultValue={allocations[n - 1]?.personId ?? ''}>
                     <option value="">— person {n} (optional) —</option>
                     {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                  <input name="percent" inputMode="decimal" placeholder="%" defaultValue={allocations[n - 1]?.percent ?? ''} className="rounded-md border border-neutral-300 px-2 py-1 tabular-nums dark:border-neutral-700 dark:bg-neutral-900" />
+                  </Select>
+                  <Input name="percent" inputMode="decimal" placeholder="%" defaultValue={allocations[n - 1]?.percent ?? ''} className="tabular-nums" />
                 </div>
               ))}
             </div>
-            <button type="submit" className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200">
-              Resolve
-            </button>
+            <Button type="submit" variant="primary">Resolve</Button>
           </form>
 
           {row.status === 'open' && row.typeMode === 'tracked' && (
             <form action={disputeOrderWastageAction} className="mt-4">
               <input type="hidden" name="id" value={row.id} />
               <input type="hidden" name="storeId" value={row.storeId} />
-              <button type="submit" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900">
+              <Button type="submit" variant="secondary">
                 Dispute — flag for review, does not stop the 15-day clock
-              </button>
+              </Button>
             </form>
           )}
         </section>
@@ -189,10 +185,10 @@ export default async function WastageDetailPage({
             <form action={reverseAutoChargeAction} className="mt-3 space-y-2 text-sm">
               <input type="hidden" name="id" value={row.id} />
               <input type="hidden" name="storeId" value={row.storeId} />
-              <input name="reason" required placeholder="Why is this being reversed?" className="w-full rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900" />
-              <button type="submit" className="rounded-md border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900">
+              <Input name="reason" required placeholder="Why is this being reversed?" className="w-full" />
+              <Button type="submit" variant="danger">
                 Reverse — then resolve again with the correct disposition
-              </button>
+              </Button>
             </form>
           ) : (
             <p className="mt-1 text-sm text-neutral-500">More than 30 days since the backstop resolved this — no longer reversible here.</p>

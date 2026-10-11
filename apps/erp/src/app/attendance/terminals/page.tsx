@@ -7,6 +7,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Clock terminals — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -16,9 +17,6 @@ interface SearchParams {
   error?: string;
   ok?: string;
 }
-
-const SELECT =
-  'rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function fmt(d: Date | null): string {
   if (!d) return '—';
@@ -85,31 +83,22 @@ export default async function TerminalsPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className={SELECT}>
+          <Select name="store" defaultValue={storeId}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
-      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <section className="space-y-3 rounded-lg border border-surface-border p-4">
         <h2 className="font-medium">Provision a new terminal</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           The pairing token is shown <strong>once</strong>, right after provisioning — never
@@ -129,10 +118,10 @@ export default async function TerminalsPage({
             No terminal provisioned here yet.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+          <div className="overflow-x-auto rounded-lg border border-surface-border">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
+                <tr className="border-b border-surface-border bg-canvas text-left">
                   <th className="px-3 py-2 font-medium">Label</th>
                   <th className="px-3 py-2 font-medium">Status</th>
                   <th className="px-3 py-2 font-medium">Last seen</th>
@@ -145,14 +134,14 @@ export default async function TerminalsPage({
                   return (
                     <tr
                       key={t.id}
-                      className="border-b border-neutral-100 align-top last:border-0 dark:border-neutral-900"
+                      className="border-b border-surface-border align-top last:border-0"
                     >
                       <td className="px-3 py-2 font-medium">{t.label}</td>
                       <td
                         className={`px-3 py-2 ${
                           state.ready
-                            ? 'text-emerald-700 dark:text-emerald-400'
-                            : 'text-amber-700 dark:text-amber-500'
+                            ? 'text-success'
+                            : 'text-warning-ink'
                         }`}
                       >
                         {state.text}
@@ -166,18 +155,10 @@ export default async function TerminalsPage({
                           <form action={revokeTerminalAction} className="flex flex-wrap items-center gap-2">
                             <input type="hidden" name="terminalId" value={t.id} />
                             <input type="hidden" name="storeId" value={storeId} />
-                            <input
-                              name="reason"
-                              required
-                              placeholder="Reason to revoke"
-                              className="rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
-                            />
-                            <button
-                              type="submit"
-                              className="rounded border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
-                            >
+                            <Input name="reason" required placeholder="Reason to revoke" />
+                            <Button type="submit" variant="danger">
                               Revoke
-                            </button>
+                            </Button>
                           </form>
                         </div>
                       </td>
