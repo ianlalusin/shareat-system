@@ -13,7 +13,7 @@
  * `counterparty_store_id` → internal, eliminates. `counterparty_org_id` → inter-entity, real
  * revenue. Neither → external, real revenue. ⛔ `customer_group` never decides any of it.
  */
-import { customersRepo, itemsRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, customersRepo, itemsRepo, transaction, type Tx } from '@shareat/db';
 import type { CustomerGroup, CustomerTreatment } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { gone, refuse } from '../shared/refusal';
@@ -92,6 +92,36 @@ export async function createCustomer(
         counterpartyOrgId: orgLink,
       }),
     };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * T-391 S4 (P7). Set a customer active or inactive. `createCustomer` makes every row active, so the master-data load
+ * calls this right after it for a v1 record that was inactive. Gated on `manage_chart_of_accounts`; one `audit_log`
+ * row, only when the status really changes.
+ */
+export async function setCustomerStatus(
+  tx: Tx | null,
+  actor: Actor,
+  input: { customerId: string; status: 'active' | 'inactive'; source?: 'web' | 'etl' },
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_chart_of_accounts', {});
+    const customer = await customersRepo.getById(trx, actor.orgId, input.customerId);
+    if (!customer) throw gone(`setCustomerStatus: customer ${input.customerId} does not exist.`, 'customer');
+    if (customer.status === input.status) return;
+    await customersRepo.updateCustomer(trx, actor.orgId, customer.id, { status: input.status });
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'set_customer_status',
+      entity: 'customers',
+      entityId: customer.id,
+      before: { status: customer.status },
+      after: { status: input.status },
+      source: input.source ?? 'web',
+    });
   };
   if (tx) return run(tx);
   return transaction(run);

@@ -89,6 +89,10 @@ function actionShapedExports(): Map<string, string> {
  * off the same day** by T-226, and the stale-exemption rule below is what forced their rows out.
  */
 const EXEMPT: Record<string, string> = {
+  setCustomerStatus:
+    'UNWIRED — T-391 S4: scripts/master-data.ts apply (applyCustomers / applySuppliers) is its caller; no screen in S4',
+  setSupplierCounterpartyStore:
+    'UNWIRED — T-391 S4: scripts/master-data.ts apply (applyCustomers / applySuppliers) is its caller; no screen in S4',
   setItemPurchaseUnit:
     'UNWIRED — T-391 S3 item apply is its caller (the master-data load script); there is no screen for the buying unit yet, ' +
     'and the load is the only writer planned.',
