@@ -49,7 +49,6 @@ linkInvoiceToReceipt
 listAdjustments
 listAvailableCommissaries
 listCategoryLives
-listDays
 listLiveForStore
 listOrderMessages
 listPayRates

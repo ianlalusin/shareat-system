@@ -204,7 +204,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 148 FAIL / 48 UNRESOLVED', () => {
+  it('accepted-baseline totals: 147 FAIL / 48 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -220,7 +220,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // They were briefly UNRESOLVED; each got an explicit `text-sm` (visually a no-op, the Banner is text-sm) and is
     // again the same accepted 20px inline-link FAIL it was before, entry restored unchanged.
     // 49 -> 48 UNRESOLVED, T-387 S5 2026-10-11: components/dashboard/Tile.tsx retired (its baseline entry removed). FAIL unmoved at 148.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 148, unresolved: 48 });
+    // 148 -> 147 FAIL, T-387 S7 2026-10-11: app/staff/page.tsx's 20px name link in the old table is gone (the page is now the
+    // ID-card wall plus the live roster, every control min-h-11); its touch-target-baseline.json entry is removed.
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 147, unresolved: 48 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -418,7 +420,11 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // T-387 S8 merged onto main (1157): measured 1149 (S8's kit swaps net -8 against main's 1157); FAIL 148 / UNRESOLVED 49 unmoved. Verified by running the census.
     // 1149 -> 1153, T-387 S5 2026-10-11. Measured +4: Tile.tsx retired (-1); new interactive sites are the RangeForm preset link,
     // page.tsx's stat link, OutlineCount, and the two RightNowBand links. All 44px; FAIL 148 unmoved, UNRESOLVED 49 -> 48.
-    expect(results.length).toBe(1153);
+    // 1149 -> 1154, T-387 S7 2026-10-11. +5 net: /staff gains two segmented-control links, the card links and roster-row
+    // links (kit-sized, resolved) and loses the old table's name link; FAIL 148 -> 147 (that link), UNRESOLVED 49 unmoved.
+    // Verified by running the census (1154).
+    // 1158 with S5 and S7 together (1149 + 4 + 5), T-387 S5-S7 combined 2026-10-11.
+    expect(results.length).toBe(1158);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
