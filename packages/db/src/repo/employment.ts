@@ -196,6 +196,53 @@ export async function allocateStaffCode(tx: Tx, storeId: string): Promise<string
   return `SE-${String(next).padStart(3, '0')}`;
 }
 
+/**
+ * T-391 S5 (S9). Is this staff code already used at this store? Case-insensitive, the comparison the
+ * `unique (store_id, lower(staff_code))` index makes. It takes the same store-row lock as `allocateStaffCode`, so a
+ * concurrent hire cannot take the code between this check and the insert. The index stays the backstop.
+ */
+export async function findEmploymentByStaffCode(tx: Tx, storeId: string, staffCode: string): Promise<EmploymentRow | undefined> {
+  await tx.execute(sql`select 1 from stores where id = ${storeId} for update`);
+  const [row] = await tx
+    .select()
+    .from(employments)
+    .where(and(eq(employments.storeId, storeId), sql`lower(${employments.staffCode}) = lower(${staffCode})`))
+    .limit(1);
+  return row as EmploymentRow | undefined;
+}
+
+/** T-391 S5. Every staff code an org holds, with its store's code, so the load's planner can see which are taken. */
+export async function listStaffCodes(tx: Tx, orgId: string): Promise<Array<{ storeCode: string; staffCode: string }>> {
+  const result = await tx.execute(sql`
+    select s.code as store_code, e.staff_code
+    from employments e join stores s on s.id = e.store_id
+    where e.org_id = ${orgId}`);
+  return (result as unknown as Array<{ store_code: string; staff_code: string }>).map((r) => ({
+    storeCode: String(r.store_code),
+    staffCode: String(r.staff_code),
+  }));
+}
+
+/** T-391 S5. Positions of an org with their store's code (null = canonical, org-wide), for the load's planner. */
+export async function listOrgPositions(tx: Tx, orgId: string): Promise<Array<{ id: string; name: string; storeCode: string | null }>> {
+  const result = await tx.execute(sql`
+    select p.id, p.name, s.code as store_code
+    from positions p left join stores s on s.id = p.store_id
+    where p.org_id = ${orgId} and p.is_active = true`);
+  return (result as unknown as Array<{ id: string; name: string; store_code: string | null }>).map((r) => ({
+    id: String(r.id),
+    name: String(r.name),
+    storeCode: r.store_code === null ? null : String(r.store_code),
+  }));
+}
+
+/** T-391 S5. The org's people (terminals excluded) by display name, so the load's planner can spot a same-name person. */
+export async function listOrgPersons(tx: Tx, orgId: string): Promise<Array<{ id: string; displayName: string }>> {
+  const result = await tx.execute(sql`
+    select id, display_name from persons where org_id = ${orgId} and kind = 'person'`);
+  return (result as unknown as Array<{ id: string; display_name: string }>).map((r) => ({ id: String(r.id), displayName: String(r.display_name) }));
+}
+
 export async function findOpenEmployment(
   tx: Tx,
   personId: string,

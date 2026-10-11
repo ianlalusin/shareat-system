@@ -12,6 +12,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 import {
   accessRepo,
+  auditLogRepo,
   employmentRepo,
   personsRepo,
   type EmploymentRow,
@@ -38,11 +39,17 @@ export {
 } from './position-defaults';
 
 export class EmploymentError extends Error {
-  constructor(message: string) {
+  /** A sentence a person at the screen (or Ian at the terminal) can act on. Set where the refusal is about their input. */
+  readonly userReason?: string;
+  constructor(message: string, userReason?: string) {
     super(message);
     this.name = 'EmploymentError';
+    if (userReason !== undefined) this.userReason = userReason;
   }
 }
+
+/** T-391 S9: v2's staff-code shape. */
+const STAFF_CODE_SHAPE = /^SE-\d{3}$/i;
 
 /** The statuses that MEAN the person has left, and therefore require an end date. */
 const ENDED_STATUSES: readonly EmploymentStatus[] = ['resigned', 'terminated'];
@@ -56,6 +63,13 @@ export interface CreateEmploymentInput {
   /** Omitted ⇒ the least-privileged default. See below. */
   positionIds?: string[];
   primaryPositionId?: string;
+  /**
+   * T-391 S9. Keep a code the person already carries (v1's) instead of allocating the next one. Shape `SE-NNN`; refused
+   * when the code is taken at this store; one audit row when used. Omitted: `max + 1`, as always.
+   */
+  staffCode?: string;
+  /** Where the hire came from, for the override's audit row. */
+  source?: 'web' | 'etl';
 }
 
 /**
@@ -90,7 +104,25 @@ export async function createEmployment(
     );
   }
 
-  const staffCode = await employmentRepo.allocateStaffCode(tx, input.storeId);
+  let staffCode: string;
+  const override = input.staffCode === undefined ? undefined : input.staffCode.trim().toUpperCase();
+  if (override !== undefined) {
+    if (!STAFF_CODE_SHAPE.test(override)) {
+      throw new EmploymentError(
+        `Staff code '${input.staffCode}' is not SE-NNN.`,
+        `Staff code '${input.staffCode}' is not valid. It looks like SE-014: SE, a dash, three digits.`,
+      );
+    }
+    if (await employmentRepo.findEmploymentByStaffCode(tx, input.storeId, override)) {
+      throw new EmploymentError(
+        `Staff code ${override} is already used at this store.`,
+        `Staff code ${override} is already used at this store. Leave the code blank to get the next free one.`,
+      );
+    }
+    staffCode = override;
+  } else {
+    staffCode = await employmentRepo.allocateStaffCode(tx, input.storeId);
+  }
   const employment = await employmentRepo.insertEmployment(tx, {
     orgId: actor.orgId,
     storeId: input.storeId,
@@ -101,6 +133,18 @@ export async function createEmployment(
     notes: input.notes ?? null,
     createdBy: actor.personId,
   });
+
+  if (override !== undefined) {
+    await auditLogRepo.append(tx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'set_staff_code',
+      entity: 'employments',
+      entityId: employment.id,
+      before: null,
+      after: { staffCode: override, storeId: input.storeId, personId: input.personId },
+      source: input.source ?? 'web',
+    });
+  }
 
   const { positionIds, primaryPositionId } = await resolvePositions(tx, actor, input);
   await employmentRepo.replaceEmploymentPositions(tx, {
