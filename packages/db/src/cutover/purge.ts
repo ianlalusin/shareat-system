@@ -305,6 +305,11 @@ export interface ApplyPurgeOptions {
    *  `set local row_security = off` backstop's OWN failure mode (Amendment R1.4) instead of always
    *  stopping one layer earlier at the preflight. Never set outside a test. */
   skipPreflightForTest?: boolean;
+  /**
+   * T-390 R8: the person who ran the purge. The purge records step C2 as `performed` by this person, once per organization, inside
+   * its own transaction (so a rehearsal's rollback takes the row with it). Required: nothing opening-related works without it.
+   */
+  performedBy: string;
 }
 
 /**
@@ -312,11 +317,11 @@ export interface ApplyPurgeOptions {
  * TRUNCATE must precede the shell step, and the one reason the `fixed_assets` shell UPDATE must
  * name `status` in the same statement as everything else.
  */
-export async function applyPurge(tx: Tx, plan: PurgePlan, opts?: ApplyPurgeOptions): Promise<void> {
+export async function applyPurge(tx: Tx, plan: PurgePlan, opts: ApplyPurgeOptions): Promise<void> {
   // Step 0 — RLS preflight (§3.4), then the row_security=off backstop (§3.3 step 0). Two separate
   // defences: the preflight gives a legible refusal; row_security=off is what makes a role that
   // somehow reaches this point anyway FAIL LOUDLY instead of silently matching zero rows (G).
-  if (!opts?.skipPreflightForTest) {
+  if (!opts.skipPreflightForTest) {
     const [role] = await tx<{ user: string; ok: boolean }[]>`
       select current_user as user, coalesce((rolsuper or rolbypassrls), false) as ok
       from pg_roles where rolname = current_user`;
@@ -450,4 +455,19 @@ export async function applyPurge(tx: Tx, plan: PurgePlan, opts?: ApplyPurgeOptio
   if (problems.length > 0) {
     throw new Error('POST-CONDITION FAILED — rolling back, the database is unchanged:\n  ' + problems.join('\n  '));
   }
+
+  // T-390 R8: record C2 as PERFORMED, one row per organization, AFTER the post-conditions (cutover_steps is KEEP, so writing it
+  // earlier would fail the byte-identical check). A re-run replaces the row (same unique key as `recordStep`). It rolls back with a
+  // rehearsal, because it lives in this transaction.
+  let purgedRows = 0;
+  for (const n of plan.purgeRowsNow.values()) purgedRows += n;
+  const tables = plan.purgeOrder.length;
+  const note = `Purged ${purgedRows} row${purgedRows === 1 ? '' : 's'} from ${tables} table${tables === 1 ? '' : 's'} as of ${plan.asOf}`;
+  await tx`
+    insert into cutover_steps (org_id, store_id, step_code, completion, note, completed_by)
+    select o.id, null, 'C2', 'performed', ${note}, ${opts.performedBy}
+    from organizations o
+    on conflict (org_id, step_code, coalesce(store_id, '00000000-0000-0000-0000-000000000000'::uuid))
+    do update set completion = excluded.completion, note = excluded.note,
+                  completed_by = excluded.completed_by, completed_at = now()`;
 }

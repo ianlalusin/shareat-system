@@ -9,12 +9,7 @@ import {
   type OverlapCountsByPosition,
 } from './lib';
 import { capabilityTitle, type Capability } from '@shareat/auth';
-
-// T-334 slice 3 names `page.tsx` (`:281`) for its local BTN/INPUT sweep — this is this file's own
-// local copy, not a shared export, exactly that slice's one-constant-per-file shape. `page.tsx`
-// keeps its own copy for its "Same for every store" / "Copy defaults from…" buttons.
-const LINK_BTN =
-  'rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
+import { Button } from '@/components/ui';
 
 // -------------------------------------------------------------------------------------------
 // One immediate toggle per cell. Safe to render twice (desktop + mobile) — see actions.ts.
@@ -42,8 +37,8 @@ function ToggleButton({
         aria-pressed={active}
         className={`w-full rounded-md border px-2 py-2 text-xs font-medium ${
           active
-            ? 'border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-            : 'border-neutral-300 bg-white text-neutral-500 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-400'
+            ? 'border-success bg-success-soft text-success'
+            : 'border-neutral-300 bg-surface text-neutral-500 hover:bg-neutral-50'
         }`}
       >
         {active ? 'On' : 'Off'}
@@ -159,12 +154,9 @@ export function DesktopGrid({
                     {/* T-262 / DEF-269 — a header control still has to clear the 24px touch floor;
                         the first draft was a 10px underlined word and the sweep caught it. Fixed
                         the control, never the baseline (T-290 §C10). */}
-                    <button
-                      type="submit"
-                      className="rounded-md border border-red-300 px-2 py-1 text-xs font-normal text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
-                    >
+                    <Button type="submit" variant="danger" className="font-normal">
                       Retire
-                    </button>
+                    </Button>
                   </form>
                 )}
               </th>
@@ -229,7 +221,7 @@ export function DesktopGrid({
                                   <ToggleButton storeId={storeId} positionId={p.id} capability={cell.capability} active={active} />
                                 )}
                                 {disclosure && (
-                                  <p className="mt-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">{disclosure}</p>
+                                  <p className="mt-1 text-[11px] font-medium text-warning-ink">{disclosure}</p>
                                 )}
                               </td>
                             );
@@ -338,7 +330,7 @@ export function MobileSections({
                                       </div>
                                     </div>
                                     {disclosure && (
-                                      <p className="mt-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">{disclosure}</p>
+                                      <p className="mt-2 text-[11px] font-medium text-warning-ink">{disclosure}</p>
                                     )}
                                   </div>
                                 );
@@ -355,9 +347,9 @@ export function MobileSections({
               <form action={retireStorePositionAction} className="pt-2">
                 <input type="hidden" name="storeId" value={storeId} />
                 <input type="hidden" name="positionId" value={p.id} />
-                <button type="submit" className={LINK_BTN}>
+                <Button type="submit" variant="danger">
                   Retire {p.name}
-                </button>
+                </Button>
               </form>
             )}
           </div>

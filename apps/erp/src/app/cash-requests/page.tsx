@@ -3,7 +3,6 @@ import { requireSession } from '../../lib/session';
 import { createRequestAction } from './actions';
 import {
   STATUS_LABEL,
-  STATUS_TONE,
   listActivePersons,
   listRegister,
   listStores,
@@ -12,6 +11,7 @@ import {
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Badge, Button, FlashBanner, Input, Select, statusTone } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Cash requests — Shareat System' };
@@ -55,11 +55,7 @@ export default async function CashRequestsPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} fieldLabels={{ store: 'Store', 'requested-for': 'Who holds the money' }} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
@@ -138,8 +134,8 @@ export default async function CashRequestsPage({
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {peso(r.float.outstanding)}
                     </td>
-                    <td className={`px-3 py-2 text-xs ${STATUS_TONE[r.status] ?? ''}`}>
-                      {STATUS_LABEL[r.status] ?? r.status}
+                    <td className="px-3 py-2">
+                      <Badge tone={statusTone(r.status)} label={STATUS_LABEL[r.status] ?? r.status} />
                     </td>
                   </tr>
                 );
@@ -164,7 +160,7 @@ export default async function CashRequestsPage({
         <form action={createRequestAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Store">
-              <select name="storeId" required defaultValue="" className={INPUT}>
+              <Select id="store" name="storeId" required defaultValue="" invalid={sp.field === 'store'} className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -173,13 +169,13 @@ export default async function CashRequestsPage({
                     {s.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field
               label="Who holds the money"
               hint="The person the float is charged to — a shortage lands on them by name."
             >
-              <select name="requestedFor" required defaultValue="" className={INPUT}>
+              <Select id="requested-for" name="requestedFor" required defaultValue="" invalid={sp.field === 'requested-for'} className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -188,45 +184,40 @@ export default async function CashRequestsPage({
                     {p.displayName}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="What it is for">
-              <input
+              <Input
                 name="purpose"
                 required
                 placeholder="Market run, permit fee…"
-                className={INPUT}
+                className="w-full"
               />
             </Field>
             <Field label="Amount">
+              {/* raw <input>: t343-s5-5v-number-boxes.test.ts scans the source for this tag */}
               <input
                 name="amount"
                 required
                 inputMode="decimal"
-                className={INPUT}
+                className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
               />
             </Field>
             <Field label="Date">
-              <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+              <Input name="on" type="date" required defaultValue={today()} className="w-full" />
             </Field>
             <Field label="Notes" hint="Optional.">
-              <input name="notes" className={INPUT} />
+              <Input name="notes" className="w-full" />
             </Field>
           </div>
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-          >
+          <Button type="submit" variant="primary">
             Submit request
-          </button>
+          </Button>
         </form>
       </section>
     </Page>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function Field({
   label,

@@ -223,5 +223,5 @@ export async function receiveDeliveryAction(fd: FormData): Promise<void> {
 
   revalidatePath('/inventory/deliveries');
   revalidatePath(`/inventory/deliveries/${deliveryId}`);
-  return await redirectWithFlash(`/inventory/deliveries/${deliveryId}`, {}, { ok: message });
+  return await redirectWithFlash(`/inventory/deliveries/${deliveryId}`, {}, { stamp: 'RECEIVED', ok: message });
 }

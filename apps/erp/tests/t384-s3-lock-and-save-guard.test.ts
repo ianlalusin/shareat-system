@@ -58,6 +58,7 @@ const COMMANDS: Record<string, string> = {
   'Post payslip(s)': 'posts to the ledger',
   'Post separation': 'posts to the ledger',
   'Post the opening balances': 'posts to the ledger',
+  'Value the count': 'writes the generated opening inventory entry (T-390 S5)',
   'Post this settlement': 'posts to the ledger',
   'Pay': 'books a payment',
   'Reopen PIN sign-in': 'lets PIN sign-in back in at a stopped store (T-395 S2, audited)',
@@ -208,6 +209,24 @@ function attrString(n: ts.JsxOpeningLikeElement, name: string): string | undefin
   }
   return undefined;
 }
+/**
+ * T-387 S8: the kit renders the native controls these guards look for. `<Input>`/`<Select>`/`<Textarea>`
+ * are an input/select/textarea; `<Button>` and `<SubmitButton>` are a button. Read them as the native tag,
+ * or the sweep onto the kit would silently blind G7/G8 (the counts "fall" because the guard stopped seeing
+ * the controls, not because the forms changed). A kit `<Button>` with no `type` renders type="button"
+ * (Button.tsx), unlike a native button's implicit submit; `<SubmitButton>` is always a submit.
+ */
+const KIT_NATIVE: Record<string, string> = { Input: 'input', Select: 'select', Textarea: 'textarea', Button: 'button', SubmitButton: 'button' };
+function nativeTag(o: ts.JsxOpeningElement | ts.JsxSelfClosingElement): string {
+  const t = tagName(o);
+  return KIT_NATIVE[t] ?? t;
+}
+function buttonType(o: ts.JsxOpeningElement | ts.JsxSelfClosingElement): string | undefined {
+  const t = tagName(o);
+  if (t === 'SubmitButton') return 'submit';
+  if (t === 'Button') return attrString(o, 'type') ?? 'button';
+  return attrString(o, 'type') ?? (t === 'button' ? 'submit' : undefined);
+}
 function allJsx(sf: ts.SourceFile): ts.Node[] {
   const out: ts.Node[] = [];
   const visit = (n: ts.Node) => {
@@ -268,14 +287,14 @@ function lockFindings(source: string, file: string): Finding[] {
     const kids = descendants(form, (x) => !!opening(x));
     const hasHiddenId = kids.some((k) => {
       const o = opening(k)!;
-      if (tagName(o) !== 'input' || attrString(o, 'type') !== 'hidden') return false;
+      if (nativeTag(o) !== 'input' || attrString(o, 'type') !== 'hidden') return false;
       const nm = attrString(o, 'name');
       return nm !== undefined && /^(id|version|code|slug)$|Id$/.test(nm);
     });
     if (!hasHiddenId) continue;
     const bound = kids.some((k) => {
       const o = opening(k)!;
-      if (!['input', 'select', 'textarea'].includes(tagName(o))) return false;
+      if (!['input', 'select', 'textarea'].includes(nativeTag(o))) return false;
       return ['defaultValue', 'defaultChecked'].some((a) => {
         const at = attr(o, a);
         return !!at?.initializer && ts.isJsxExpression(at.initializer) && !!at.initializer.expression && readsRecord(at.initializer.expression);
@@ -323,14 +342,14 @@ function labelScan(source: string, file: string): LabelScan {
     const btns = descendants(form, (x) => {
       const o = opening(x);
       if (!o) return false;
-      if (tagName(o) === 'button') return true;
-      return tagName(o) === 'input' && attrString(o, 'type') === 'submit';
+      if (nativeTag(o) === 'button') return true;
+      return nativeTag(o) === 'input' && attrString(o, 'type') === 'submit';
     });
     const picked = new Set<ts.Node>();
     for (const b of btns) {
       const o = opening(b);
       if (!o) continue;
-      const type = attrString(o, 'type') ?? (tagName(o) === 'button' ? 'submit' : undefined);
+      const type = buttonType(o);
       if (type === 'submit') picked.add(b);
     }
     const lastBtn = btns[btns.length - 1];
@@ -409,7 +428,7 @@ describe('G8: submit labels are Save / Save draft / a COMMANDS verb / a toggle',
       const sf = parse(readFileSync(f, 'utf8'), rel(f));
       for (const n of allJsx(sf)) {
         const o = opening(n)!;
-        if (tagName(o) === 'button') {
+        if (nativeTag(o) === 'button') {
           const l = buttonLabel(n);
           if (l) seen.add(l);
         }

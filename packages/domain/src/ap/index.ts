@@ -37,6 +37,7 @@ import {
   expensesRepo,
   filesRepo,
   moneyAccountsRepo,
+  storesRepo,
   transaction,
   type Tx,
 } from '@shareat/db';
@@ -130,6 +131,8 @@ export interface UnrecognisedTermsMode {
 export interface EditSupplierInput extends Partial<CreateSupplierInput> {
   supplierId: string;
   status?: SupplierStatus;
+  /** T-391 S4: the audit source of the status row. A screen leaves it out (web); the master-data load passes 'etl'. */
+  source?: 'web' | 'etl';
 }
 
 /** Trim to null so an emptied field clears rather than storing `''`. */
@@ -291,6 +294,19 @@ export async function editSupplier(
       });
     }
 
+    // T-391 S4 (P7, P12): a REAL status change is audited (before/after), same transaction.
+    if (input.status !== undefined && input.status !== existing.status) {
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'set_supplier_status',
+        entity: 'suppliers',
+        entityId: input.supplierId,
+        before: { status: existing.status },
+        after: { status: input.status },
+        source: input.source ?? 'web',
+      });
+    }
+
     // T-365 / DEF-498 — R1/R2: one `set_supplier_bank_account` row per edit that REALLY changes
     // where money goes, judged on the WRITTEN value (reusing `values`' already-normalised bank
     // keys, not renormalising), never on the raw input. Full before/after triple even when only
@@ -322,6 +338,43 @@ export async function editSupplier(
         source: 'web',
       });
     }
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * T-391 S4 (P5). The commissary mirror: a supplier that IS one of our own stores. `counterparty_store_id` is
+ * system-managed (createSupplier does not take it), so this is its one named, audited writer. Gated on
+ * `approve_supplier`; a store of another organisation is refused.
+ */
+export async function setSupplierCounterpartyStore(
+  tx: Tx | null,
+  actor: Actor,
+  input: { supplierId: string; storeId: string; source?: 'web' | 'etl' },
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'approve_supplier', {});
+    const existing = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
+    if (!existing) throw gone(`setSupplierCounterpartyStore: supplier ${input.supplierId} does not exist.`, 'supplier');
+    const store = await storesRepo.getById(trx, actor.orgId, input.storeId);
+    if (!store) {
+      throw refuse(
+        `setSupplierCounterpartyStore: store ${input.storeId} is not a store of this organisation.`,
+        'That store does not belong to this organisation, so a supplier cannot be linked to it.',
+      );
+    }
+    if (existing.counterpartyStoreId === input.storeId) return;
+    await apRepo.updateSupplier(trx, actor.orgId, input.supplierId, { counterpartyStoreId: input.storeId });
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'set_supplier_counterparty_store',
+      entity: 'suppliers',
+      entityId: input.supplierId,
+      before: { counterpartyStoreId: existing.counterpartyStoreId },
+      after: { counterpartyStoreId: input.storeId },
+      source: input.source ?? 'web',
+    });
   };
   if (tx) return run(tx);
   return transaction(run);

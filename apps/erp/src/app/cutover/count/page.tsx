@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { recordCountAction } from '../actions';
-import { countedValueFor, listStores, loadCountSheet, peso } from '../lib';
+import { countedValueFor, listStores, loadMergedLines, loadRoomCountSheet, loadRooms, peso } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -9,13 +9,14 @@ import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { CUTOVER_COUNT } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid, Field } from '@/components/ui';
+import { Banner, Button, FlashBanner, FormGrid, Field } from '@/components/ui';
 
 export const metadata = { title: 'Opening count — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
   store?: string;
+  room?: string;
   error?: string;
 }
 
@@ -25,7 +26,8 @@ export default async function CountPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/cutover/count');
+  const { actor, refusal } = await requirePageAccess('/cutover/count');
+  if (refusal) return refusal;
   const stores = await listStores(actor.orgId);
 
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
@@ -40,12 +42,27 @@ export default async function CountPage({
     );
   }
 
-  const [rows, countedValue] = await Promise.all([
-    loadCountSheet(actor.orgId, storeId),
+  // T-390 DEF-630: one ROOM at a time. No `room` (or one that is not this store's) = the store's default room.
+  const rooms = await loadRooms(actor.orgId, storeId);
+  const room = rooms.find((r) => r.id === sp.room) ?? rooms.find((r) => r.isDefault) ?? rooms[0];
+  if (!room) {
+    return (
+      <Page density="table" className="">
+        <h1 className="text-2xl font-semibold">Opening count</h1>
+        <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">This store has no stock room to count in yet.</p>
+      </Page>
+    );
+  }
+  const roomId = room.id;
+
+  const [rows, countedValue, merged] = await Promise.all([
+    loadRoomCountSheet(actor.orgId, storeId, roomId),
     countedValueFor(actor.orgId, storeId),
+    loadMergedLines(actor.orgId, storeId),
   ]);
   const store = stores.find((s) => s.id === storeId)!;
   const missing = rows.filter((r) => r.quantity === null);
+  const countedN = rows.length - missing.length;
 
   return (
     <Page density="table">
@@ -56,18 +73,14 @@ export default async function CountPage({
         >
           ← Back to the conversion
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Opening count — {store.name}</h1>
+        <h1 className="mt-1 text-2xl font-semibold">Opening count — {store.name}, {room.name}</h1>
         <PageDescription>
           What is physically on the shelf on 31 December, and what it cost. This becomes the
           opening inventory figure, so a guess here is a wrong number in every month that follows.
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/* Switching stores. ⭐ Four stores, four counts — a single tick would hide the one nobody
           visited, so each is entered and shown on its own. */}
@@ -79,8 +92,8 @@ export default async function CountPage({
               href={`/cutover/count?store=${s.id}`}
               className={`rounded border px-3 py-2 text-sm ${
                 s.id === storeId
-                  ? 'border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
-                  : 'border-neutral-300 dark:border-neutral-700'
+                  ? 'border-ink bg-ink text-surface'
+                  : 'border-surface-border'
               }`}
             >
               {s.name}
@@ -89,8 +102,35 @@ export default async function CountPage({
         </div>
       )}
 
+      {/* A count belongs to a ROOM. Each room is counted and edited on its own: a store total is never a form. */}
+      {rooms.length > 1 && (
+        <nav aria-label="Rooms" className="flex flex-wrap gap-2">
+          {rooms.map((r) => (
+            <Link
+              key={r.id}
+              href={`/cutover/count?store=${storeId}&room=${r.id}`}
+              aria-current={r.id === roomId ? 'page' : undefined}
+              className={`rounded border px-3 py-2 text-sm ${
+                r.id === roomId
+                  ? 'border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
+                  : 'border-neutral-300 dark:border-neutral-700'
+              }`}
+            >
+              {r.name}
+            </Link>
+          ))}
+        </nav>
+      )}
+
+      <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        Counted {countedN} of {rows.length} items in {room.name}.{' '}
+        <Link href={`/cutover/count/sheet?store=${storeId}&room=${roomId}`} className={ACTION_LINK}>
+          Print the count sheet
+        </Link>
+      </p>
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
-        <span className="text-neutral-600 dark:text-neutral-400">Counted so far, at cost</span>
+        <span className="text-neutral-600 dark:text-neutral-400">Counted so far in the whole store (all rooms), at cost</span>
         <span className="font-mono text-lg font-medium tabular-nums">{peso(Number(countedValue))}</span>
       </div>
 
@@ -102,19 +142,33 @@ export default async function CountPage({
         a real zero has to be typed on purpose.
       */}
       {missing.length > 0 ? (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong className="font-medium">
-            {missing.length} item{missing.length === 1 ? '' : 's'} not counted yet.
+            {missing.length} item{missing.length === 1 ? '' : 's'} not counted yet in {room.name}.
           </strong>
           <p className="mt-1 text-xs">
             If the shelf is genuinely empty, enter <span className="font-mono">0</span> — that is a
             real answer and a different one from never having looked.
           </p>
-        </div>
+        </Banner>
       ) : (
-        <p className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          Every active item has a count at this store.
-        </p>
+        <Banner tone="success">Every active item has a count in this room.</Banner>
+      )}
+
+      {/* DEF-630: an item counted in more than one room is shown here ONCE, as a total, READ-ONLY. It has no form: editing a
+          total would write it into one room and count the other room twice. Edit each room's own line. */}
+      {merged.length > 0 && (
+        <section className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+          <h2 className="font-medium">Counted in more than one room (read-only)</h2>
+          <ul className="mt-2 space-y-1 text-neutral-600 dark:text-neutral-400">
+            {merged.map((m) => (
+              <li key={m.itemId}>
+                {m.name}: {m.total} {m.baseUnit} in all ({m.parts.map((p) => `${p.room} ${p.quantity}`).join(', ')})
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-neutral-500">To change a figure, open that room and edit its own line.</p>
+        </section>
       )}
 
       <div className="space-y-2">
@@ -123,14 +177,16 @@ export default async function CountPage({
             key={r.itemId}
             className={`rounded-lg border p-3 ${
               r.quantity === null
-                ? 'border-amber-300 dark:border-amber-800'
+                ? 'border-warning-ink'
                 : 'border-neutral-200 dark:border-neutral-800'
             }`}
           >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="font-medium">{r.name}</span>
               <span className="text-xs text-neutral-500 dark:text-neutral-500">
-                {r.quantity === null ? 'Not counted' : `Counted ${r.quantity} ${r.baseUnit}`}
+                {r.quantity === null
+                  ? 'Not counted'
+                  : `Counted ${r.quantity} ${r.baseUnit}${r.costSource ? ` · cost ${r.costSource}` : ''}`}
               </span>
             </div>
 
@@ -140,6 +196,7 @@ export default async function CountPage({
               {r.quantity === null ? (
                 <form action={recordCountAction}>
                   <input type="hidden" name="storeId" value={storeId} />
+                  <input type="hidden" name="locationId" value={roomId} />
                   <input type="hidden" name="itemId" value={r.itemId} />
                   <FormGrid>
                     <Field label={<span className="sr-only">Quantity in {r.baseUnit}</span>}>
@@ -148,7 +205,7 @@ export default async function CountPage({
                         required
                         placeholder={`Quantity (${r.baseUnit})`}
                         inputMode="decimal"
-                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
                     </Field>
                     <Field label={<span className="sr-only">Cost per {r.baseUnit}</span>}>
@@ -156,24 +213,21 @@ export default async function CountPage({
                         name="unitCost"
                         placeholder={`Cost per ${r.baseUnit}`}
                         inputMode="decimal"
-                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
                     </Field>
                   </FormGrid>
-                  <button
-                    type="submit"
-                    className="mt-3 rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
-                  >
+                  <Button type="submit" variant="secondary" className="mt-3">
                     Save
-                  </button>
+                  </Button>
                 </form>
               ) : (
                 <EditableRecord
-                  key={`${r.itemId}:${r.quantity}:${r.unitCost ?? ''}`}
+                  key={`${r.itemId}:${roomId}:${r.quantity}:${r.unitCost ?? ''}`}
                   action={recordCountAction}
                   label={r.name}
-                  hidden={{ storeId, itemId: r.itemId }}
-                  typed={typedFor(sp, CUTOVER_COUNT, r.itemId, actor.personId)}
+                  hidden={{ storeId, locationId: roomId, itemId: r.itemId }}
+                  typed={typedFor(sp, CUTOVER_COUNT, `${r.itemId}:${roomId}`, actor.personId)}
                 >
                   <FormGrid>
                     <Field label={<span className="sr-only">Quantity in {r.baseUnit}</span>}>
@@ -183,7 +237,7 @@ export default async function CountPage({
                         defaultValue={r.quantity}
                         placeholder={`Quantity (${r.baseUnit})`}
                         inputMode="decimal"
-                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
                     </Field>
                     <Field label={<span className="sr-only">Cost per {r.baseUnit}</span>}>
@@ -192,7 +246,7 @@ export default async function CountPage({
                         defaultValue={r.unitCost ?? ''}
                         placeholder={`Cost per ${r.baseUnit}`}
                         inputMode="decimal"
-                        className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
                     </Field>
                   </FormGrid>

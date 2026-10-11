@@ -193,7 +193,7 @@ function roundToScale6(raw: string): string {
 export async function setItemPurchaseUnit(
   tx: Tx | null,
   actor: Actor,
-  input: { itemId: string; purchaseUnit: PurchaseUnit | null; purchaseFactor: string | null },
+  input: { itemId: string; purchaseUnit: PurchaseUnit | null; purchaseFactor: string | null; source?: 'web' | 'etl' },
 ): Promise<{ changed: boolean }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_item', {});
@@ -227,7 +227,7 @@ export async function setItemPurchaseUnit(
       entityId: input.itemId,
       before: { purchaseUnit: item.purchaseUnit, purchaseFactor: item.purchaseFactor },
       after: { purchaseUnit: input.purchaseUnit, purchaseFactor: factor },
-      source: 'web',
+      source: input.source ?? 'web',
     });
     return { changed: true };
   };

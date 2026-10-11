@@ -180,7 +180,7 @@ export async function voidSettlementAction(formData: FormData): Promise<void> {
     return await redirectWithFlash('/channel-settlements', {}, { error: errorMessage(err) });
   }
 
-  return await redirectWithFlash('/channel-settlements', {}, { ok: 'voided' });
+  return await redirectWithFlash('/channel-settlements', {}, { stamp: 'VOID', ok: 'Settlement voided.' });
 }
 
 /**

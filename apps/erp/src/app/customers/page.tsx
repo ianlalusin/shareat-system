@@ -16,6 +16,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Customers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -58,16 +59,7 @@ export default async function CustomersPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {customers.length > 0 ? (
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
@@ -124,12 +116,7 @@ export default async function CustomersPage({
                     ) : (
                       <form action={reconcileCustomerAction} className="flex items-center gap-1">
                         <input type="hidden" name="customerId" value={c.id} />
-                        <input
-                          name="asOf"
-                          type="date"
-                          defaultValue={today()}
-                          className="rounded border border-neutral-300 px-1 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-950"
-                        />
+                        <Input name="asOf" type="date" defaultValue={today()} />
                         <button
                           type="submit"
                           className="rounded border border-neutral-300 px-2 py-0.5 text-xs dark:border-neutral-700"
@@ -169,7 +156,7 @@ export default async function CustomersPage({
         <form action={createCustomerAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name">
-              <input name="name" required placeholder="Resto Bulacan" className={INPUT} />
+              <Input name="name" required placeholder="Resto Bulacan" className="w-full" />
             </Field>
             <Field
               label="Counterparty"
@@ -177,7 +164,7 @@ export default async function CustomersPage({
             >
               {/* ⭐ ONE picker, not two. Two independent dropdowns would let someone fill both, and
                   the whole design rests on a customer having at most one counterparty. */}
-              <select name="counterparty" defaultValue="" className={INPUT}>
+              <Select name="counterparty" defaultValue="" className="w-full">
                 <option value="">External — an outside buyer</option>
                 {stores.length > 0 && (
                   <optgroup label="One of our own stores — eliminates">
@@ -197,51 +184,45 @@ export default async function CustomersPage({
                     ))}
                   </optgroup>
                 )}
-              </select>
+              </Select>
             </Field>
             <Field
               label="Group"
               hint="Reporting and defaults only — it never decides how a sale is treated."
             >
-              <select name="customerGroup" defaultValue="wholesale" className={INPUT}>
+              <Select name="customerGroup" defaultValue="wholesale" className="w-full">
                 {CUSTOMER_GROUPS.map((g) => (
                   <option key={g} value={g}>
                     {GROUP_LABEL[g] ?? g}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Price list" hint="Optional — without one, nothing has a rate for them.">
-              <select name="priceListId" defaultValue="" className={INPUT}>
+              <Select name="priceListId" defaultValue="" className="w-full">
                 <option value="">—</option>
                 {priceLists.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Contact" hint="Optional.">
-              <input name="contactNo" className={INPUT} />
+              <Input name="contactNo" className="w-full" />
             </Field>
             <Field label="Address" hint="Optional.">
-              <input name="address" className={INPUT} />
+              <Input name="address" className="w-full" />
             </Field>
           </div>
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-          >
+          <Button type="submit" variant="primary">
             Save
-          </button>
+          </Button>
         </form>
       </section>
     </Page>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function Field({
   label,

@@ -1,6 +1,6 @@
 # T-398: Padre Garcia on v2 as its own organisation (plan C11)
 
-**Status:** SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). Amendments A1-A10 in §8 bind and win
+**Status:** S1 BUILT on lane/t398-s1 (`247c537`, wt-t386, DB shareat_test_t398s1): migration **0194**, 229 same-org composite FKs, 12/12 on its own test. NOT in PR #16. It needs its own PR, the full suite on CI, and Ian's 0194 precheck. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). Amendments A1-A10 in §8 bind and win
 over any earlier sentence they correct; the corrected sentences are also fixed in place.
 **Model:** Sonnet lanes (tester then builder per slice); Opus for the review and for any spec amendment.
 **Why now:** bible row 305 (Ian, 2026-10-10, plan-q4 = (b)): *Padre Garcia runs on v2 by 1 January 2027, as its own
@@ -35,7 +35,7 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
 
 **What is missing** — and the order this spec builds it in:
 
-1. **DEF-491** — ≈360 org→org FKs + 79 derived-scope→org FKs with no same-org check (census: T-357 R1). S1, S3, S4.
+1. **DEF-491** — 370 org→org FKs + 77 derived→org + 5 org→derived/derived→derived FKs + 5 FK-less refs with no same-org check (S1 tester census, A11; T-357 R1 said ≈360 + 79). S1, S3, S4.
 2. **DEF-421** — 165 `tx: Tx | null` signatures in 49 files of `packages/domain/src`, ≈132 `transaction(run)` null
    branches with no org principal. S2.
 3. **The inter-entity sale** — `createTradeOrder` refuses it (`trade/index.ts:198-206`). S5.
@@ -71,7 +71,7 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
   - **Pre-flight, fail closed** (T-357 R4): a DO block counts cross-org rows per FK and RAISEs naming each non-zero
     one with *"DEF-491: no silent fix; each row needs a human decision"*. Production holds one org, so its count is
     0 by construction; a lane DB with residue is re-made, never the migration edited (T-357 R7).
-- **R3 — Derived-scope children (the 79) get a trigger, not a new column.** One generic `plpgsql` function,
+- **R3 — Derived-scope children (A11: 77 derived→org + 5 org→derived/derived→derived) get a trigger, not a new column.** One generic `plpgsql` function,
   `assert_same_org_via_parent()`, parameterised by `TG_ARGV` (child FK column, header table, header FK column,
   target table), raising `23503`-class `foreign_key_violation` with a named message; one `BEFORE INSERT OR UPDATE OF
   <col>, <header fk col>` trigger per FK. Reason: adding `org_id` to ≈40 child tables means backfill + 40 Drizzle
@@ -158,10 +158,10 @@ free slot and re-runs `migration-journal.test.ts`, `rls-registry.test.ts` and `c
 
 | Slice | What | Migration | Size | Needed by |
 |---|---|---|---|---|
-| **S1** | Census guard (A8 scope) + exemptions file; persons (143) + stores (71) composites | yes | M 2 | 13 Nov (plan) |
+| **S1** | Census guard (A8 scope) + exemptions file; persons (153) + stores (76) = 229 composites (A11) | yes | M 2 | 13 Nov (plan) |
 | **S2** | DEF-421: non-nullable `tx`, allow-list guard, tests moved to principals | none | M 1.5 | 13 Nov |
-| **S3** | DEF-491: the remaining org→org parents (journal_entries, items, stock_locations, suppliers, employments, the rest ≈146) | yes | M 1.5 | 20 Nov |
-| **S4** | DEF-491: the 79 derived-scope FKs by trigger; `OPEN_DEF_491` reaches empty | yes | S-M 1.5 | 24 Nov |
+| **S3** | DEF-491: the remaining org→org parents (journal_entries, items, stock_locations, suppliers, employments, the rest: 141) + 5 FK-less `ref-gap` columns (A11) | yes | M 1.5 | 20 Nov |
+| **S4** | DEF-491: the 82 derived-scope FKs (A11) by trigger; `OPEN_DEF_491` reaches empty | yes | S-M 1.5 | 24 Nov |
 | **S5** | Inter-entity sale: shipment handoff, definer receive/void, credit note, reconciliation fn | yes | L 3.5 | 1 Dec |
 | **S6** | Sales-only view + access log + break-glass sign-in logging + screen (A5 hardening) | yes | M 2 | 2 Dec, merged after S5 |
 | **S7** | Onboarding CLI, split item import, POS link, multi-org job checks, two-org rehearsal data | none expected | M 1.5 | 4 Dec |
@@ -173,13 +173,13 @@ free slot and re-runs `migration-journal.test.ts`, `rls-registry.test.ts` and `c
 `packages/db/src/rls/same-org-fk-exemptions.ts` (seeded with the full measured list, persons/stores entries marked for
 deletion by the builder); new `packages/db/tests/integration/t398-s1-persons-stores-same-org.test.ts`.
 **BUILDER paths:** the new migration; `packages/db/migrations/meta/_journal.json`; the Drizzle schema files holding
-the 214 child columns (the builder lists them in its report, from the census query); `schema/persons.ts`,
+the 229 child columns (A11) (the builder lists them in its report, from the census query); `schema/persons.ts`,
 `schema/stores.ts` (NOTE comments for the hand-added uniques); `same-org-fk-exemptions.ts` (deletions only).
 ⛔ No domain/repo/app code, no other test file, not the register or the bible.
 
 | Id | Case | Target | Red today |
 |---|---|---|---|
-| C1 | Census: every org→org FK has a composite twin, or is in one of the two lists | Pass | Red once the 214 persons/stores entries are removed from `OPEN_DEF_491` (the tester records that red on its branch, then restores them; the builder deletes them in the same PR as the migration) |
+| C1 | Census: every org→org FK has a composite twin, or is in one of the two lists | Pass | Red once the 229 persons/stores entries are removed from `OPEN_DEF_491` (the tester records that red on its branch, then restores them; the builder deletes them in the same PR as the migration) |
 | C2 | Stale entry: an `OPEN_DEF_491` entry whose FK now has a twin | Fails naming it | Green today (none) — proven by a synthetic entry in a unit of the test's own helper |
 | C3 | A brand-new bare org→org FK added on a scratch DB (`CREATE TABLE … REFERENCES stores(id)`) | Census fails naming it | Red: guard absent |
 | C4 | Count pin: `OPEN_DEF_491.length` ≤ the baseline written in the file | Pass; fails if it grows | — |
@@ -224,14 +224,14 @@ table, ≥ 1 per parent, the tester names the child), plus M1/M2 as in S1.
 **BUILDER paths:** the new migration, the journal, the Drizzle schema files for the children, NOTE comments on each
 parent, `same-org-fk-exemptions.ts` (deletions only).
 Legs: K1 (census green with the shrunken list), one F-leg per parent (`23503` as `shareat_app`), one owner leg,
-same-org controls, M1/M2. **Workflow sweep allowed** (row 298 #5) for writing the ≈146 `ADD CONSTRAINT` lines from
+same-org controls, M1/M2. **Workflow sweep allowed** (row 298 #5) for writing the 146 `ADD CONSTRAINT` lines from
 the census query output; the builder pastes the query and the sweep's diff stat in its report.
 **Mutants:** drop any one composite → C1; reorder `VALIDATE` before `ADD … NOT VALID` → migration fails on scratch.
 
 ### S4 — DEF-491, the derived-scope children
 
 **TESTER paths:** new `packages/db/tests/integration/t398-s4-derived-same-org.test.ts`.
-**BUILDER paths:** the new migration (R3's function + 79 triggers + pre-flight), the journal,
+**BUILDER paths:** the new migration (R3's function + 82 triggers + pre-flight), the journal,
 `same-org-fk-exemptions.ts` (deletions to empty).
 | Id | Case | Target |
 |---|---|---|
@@ -486,3 +486,18 @@ through existing screens**, not code; the 18 Dec rehearsal runs with both orgs (
   named policy kind **`dual_org_counterparty`** (counterparty column named per table) that the registry test learns,
   rather than a per-table skip. S5 introduces it; S6 reuses it. Sizes now S1 2, S5 3.5, S6 2; total ≈ 13.5
   lane-days (K3).
+- **A11 — The S1 tester's measured catalog (2026-10-11) replaces T-357's estimates.** Every count above that
+  disagrees is superseded by these:
+  - **S1:** persons 153 + stores 76 = **229** FKs (not 143 + 71). Org→org total is **370** (not ≈360), so S3's
+    remainder is **141**.
+  - **`ORG_LESS_TABLES`:** the 4 `etl_*` FKs have no org on either side; they are listed in the exemptions file as
+    org-less, never as cross-org, and the census skips them by that list.
+  - **S4 = 82:** the 77 derived→org triggers plus the 3 org→derived and 2 derived→derived FKs —
+    `sessions.credential_id`, `supplier_return_lines.delivery_line_id`, `stock_layers.invoice_line_id`,
+    `attendance_punches.captured_by_session_id`, `attendance_adjustments.decided_by_session_id` — each by R3's
+    fail-closed trigger (A2).
+  - **S3 gains 5 FK-less references** as new same-org composite FKs: `payslips.journal_entry_id`,
+    `separations.journal_entry_id`, `thirteenth_month_payouts.journal_entry_id`,
+    `owner_drawing_closes.adjustment_entry_id`, `pos_v1_day_feeds.batch_id`. Until S3 merges they are declared
+    `ref-gap` in `NO_FK_REFERENCES` (A8's no-FK list); S3 deletes the declarations. Each gets S3's pre-flight.
+  - **Post-S1 `OPEN_DEF_491` pin = 223** (by value, A8).

@@ -6,6 +6,7 @@ import { listSuppliersWithPosition, listInvoices, listStores, peso, today } from
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -37,25 +38,11 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
-      {sp.warning && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          ⚠️ {sp.warning}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {pending.length > 0 && (
-        <section className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-800 dark:bg-amber-950">
-          <h2 className="font-medium text-amber-900 dark:text-amber-200">
+        <section className="space-y-2 rounded-lg border border-warning bg-warning-soft p-4 text-sm">
+          <h2 className="font-medium text-warning-ink">
             {pending.length === 1 ? 'One invoice needs' : `${pending.length} invoices need`} verification
           </h2>
           <ul className="space-y-1">
@@ -108,24 +95,24 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
           <h2 className="font-medium">Record a supplier</h2>
           <form action={createSupplierAction} className="space-y-3">
             <Field label="Name">
-              <input name="name" required placeholder="ABC Meat Supply" className={INPUT} />
+              <Input name="name" required placeholder="ABC Meat Supply" className="w-full" />
             </Field>
             <Field label="Address" hint="Optional.">
-              <input name="address" className={INPUT} />
+              <Input name="address" className="w-full" />
             </Field>
             <Field label="Contact no." hint="Optional.">
-              <input name="contactNo" className={INPUT} />
+              <Input name="contactNo" className="w-full" />
             </Field>
             <Field label="Payment terms">
-              <select name="termsMode" defaultValue="cod" className={INPUT}>
+              <Select name="termsMode" defaultValue="cod" className="w-full">
                 <option value="cod">Cash on delivery (no credit)</option>
                 <option value="credit">On credit (AP)</option>
-              </select>
+              </Select>
             </Field>
             <Field label="Days to pay" hint="Only for On credit. 0 to 365.">
-              <input type="number" name="creditTermsDays" min="0" max="365" step="1" className={INPUT} />
+              <Input type="number" name="creditTermsDays" min="0" max="365" step="1" className="w-full" />
             </Field>
-            <button type="submit" className={BTN}>Save</button>
+            <Button type="submit" variant="secondary">Save</Button>
           </form>
         </section>
 
@@ -138,42 +125,42 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
           </div>
           <form action={recordInvoiceAction} className="space-y-3">
             <Field label="Store">
-              <select name="storeId" required defaultValue="" className={INPUT}>
+              <Select name="storeId" required defaultValue="" className="w-full">
                 <option value="" disabled>Choose…</option>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Supplier">
-              <select name="supplierId" required defaultValue="" className={INPUT}>
+              <Select name="supplierId" required defaultValue="" className="w-full">
                 <option value="" disabled>Choose…</option>
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Invoice no." hint="Optional.">
-                <input name="invoiceNo" className={INPUT} />
+                <Input name="invoiceNo" className="w-full" />
               </Field>
               <Field label="Total amount">
-                <input name="totalAmount" required placeholder="0.00" className={INPUT} />
+                <Input name="totalAmount" required placeholder="0.00" className="w-full" />
               </Field>
               <Field label="Delivery fee" hint="Optional.">
-                <input name="deliveryFee" inputMode="decimal" placeholder="0.00" className={INPUT} />
+                <Input name="deliveryFee" inputMode="decimal" placeholder="0.00" className="w-full" />
               </Field>
               <Field label="Other fees" hint="Optional.">
-                <input name="otherFees" inputMode="decimal" placeholder="0.00" className={INPUT} />
+                <Input name="otherFees" inputMode="decimal" placeholder="0.00" className="w-full" />
               </Field>
               <p className="col-span-2 text-xs text-neutral-500 dark:text-neutral-500">
                 Part of the total above. Both are added to the items&apos; cost; neither is a line.
               </p>
               <Field label="Invoice date">
-                <input type="date" name="invoiceDate" required defaultValue={today()} className={INPUT} />
+                <Input type="date" name="invoiceDate" required defaultValue={today()} className="w-full" />
               </Field>
               <Field label="Due date" hint="Leave blank to use the supplier's terms.">
-                <input type="date" name="dueDate" className={INPUT} />
+                <Input type="date" name="dueDate" className="w-full" />
               </Field>
             </div>
             <Field
@@ -185,10 +172,10 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               <PhotoInput
                 name="receiptPhoto"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
-                className={INPUT}
+                className={FILE_INPUT}
               />
             </Field>
-            <button type="submit" className={BTN}>Log invoice</button>
+            <Button type="submit" variant="primary">Log invoice</Button>
           </form>
         </section>
       </div>
@@ -196,10 +183,8 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
   );
 }
 
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900';
+// PhotoInput is a file input, which the kit does not wrap; it takes the field tokens directly.
+const FILE_INPUT = 'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink';
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (

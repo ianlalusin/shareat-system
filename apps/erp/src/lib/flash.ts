@@ -60,8 +60,19 @@ export const FLASH_KEYS = [
   'failed',
   'posted',
   'needsConfirmation',
+  'stamp',
+  'field',
 ] as const;
 export type FlashKey = (typeof FLASH_KEYS)[number];
+
+/**
+ * T-387 S4 (`t387-q5-stamp-words`): the closed stamp vocabulary, one word per action, following the glossary.
+ * A stamp marks a state change that moves money or responsibility; `redirectWithFlash` refuses any other word.
+ */
+export const STAMP_WORDS = ['VERIFIED', 'POSTED', 'APPROVED', 'RELEASED', 'RECEIVED', 'VOID', 'REVERSED'] as const;
+export type StampWord = (typeof STAMP_WORDS)[number];
+/** T-387 S4: `field` is an element id (kebab-case), the control a refusal names. */
+const FIELD_ID = /^[a-z0-9-]{1,40}$/;
 
 export const KEEP_KEYS = [
   'reason',
@@ -89,6 +100,7 @@ const ANCHOR = /^store-[0-9a-f-]{36}$/;
 
 const NAV_SHAPES = {
   store: UUID,
+  room: UUID,
   day: UUID,
   pull: UUID,
   supplier: UUID,
@@ -141,6 +153,10 @@ export interface Flash {
   failed?: string;
   posted?: string;
   needsConfirmation?: string;
+  /** T-387 S4: one of `STAMP_WORDS`; anything else makes `redirectWithFlash` throw. */
+  stamp?: StampWord;
+  /** T-387 S4: the id of the control an `error` names; the banner links to it. */
+  field?: string;
   keep?: Partial<Record<KeepKey, string>>;
   typed?: TypedFlash | undefined;
 }
@@ -164,7 +180,7 @@ export interface FlashPayload {
 }
 
 const TYPED_FORM = /^[a-z][a-zA-Z0-9.]{0,63}$/;
-const TYPED_RECORD = /^[A-Za-z0-9_-]{0,64}$/; // '' , a UUID, or a short slug
+const TYPED_RECORD = /^[A-Za-z0-9_:-]{0,80}$/; // '' , a UUID, a short slug, or `<uuid>:<uuid>` (T-390 S5: an item in a room)
 const TYPED_FIELD = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
 /** Strict shape check of a typed slot. Anything else is not a TypedFlash. */
@@ -280,6 +296,14 @@ export async function redirectWithFlash(path: string, nav: Nav, flash?: Flash, o
   if (opts?.anchor !== undefined) {
     if (ANCHOR.test(opts.anchor)) hash = `#${opts.anchor}`;
     else logger.warn({ key: 'anchor' }, 'flash: anchor dropped (wrong shape)');
+  }
+
+  // T-387 S4: validated before anything is written, so a refusal leaves no cookie.
+  if (flash?.stamp !== undefined && !(STAMP_WORDS as readonly string[]).includes(flash.stamp)) {
+    throw new Error('redirectWithFlash: stamp is not in the stamp vocabulary');
+  }
+  if (flash?.field !== undefined && !FIELD_ID.test(flash.field)) {
+    throw new Error('redirectWithFlash: field must match ^[a-z0-9-]{1,40}$');
   }
 
   const query = new URLSearchParams();

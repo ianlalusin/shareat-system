@@ -1,6 +1,6 @@
 # T-391: Production master-data load (items, suppliers, customers, staff), with sheets Ian fills
 
-**Status:** SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). Drafted 2026-10-10 by the Opus planner.
+**Status:** ✅ **BUILD DONE 2026-10-12** — S1-S6 on main (S6 `00539cf`, main `c9dc5f0`: readiness report; `canAt` shares `authorize()`'s decision code). Remaining: the rollout with Ian (§Rollout: extract on Ian's machine, sheets answered, dry run, apply per store). | Earlier: S1 (0193), S2, S3 DONE (S3 `ee32d86`, on main and in PR #16). **S4 DONE** 2026-10-12 (`8395e11` + re-audit fixes `1ea3490`, main `bc3936b`; two audit rounds; integration 100/100 t391 s1/s3/s4). **S5 DONE** 2026-10-12 (`96a318d`, main `3bd884f`; audit S14 applied; extract rates keyed by person_ref; integration 127/127 t391 s1-s5). **S6 (readiness) next.** | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). Drafted 2026-10-10 by the Opus planner.
 (≈4.0 lane-days, six slices; the plan says M 3, see §Research "Where this spec disagrees with the plan").
 Migration **0NNN (allocated at merge)**. Seven questions for Ian; the recommended option is what gets built.
 **T-390 S4 depends on this task's apply, per store** (its price list reads `v1_master_links`).
@@ -144,6 +144,11 @@ A row answered on two sheets (a twin that is also a box) is held until both are 
 | P6 | AR `classification` `staff` maps to group `staff`; `individual`/`corporate` to `wholesale`; `other` to `other` |
 | P7 | **Inactive v1 records are imported as `inactive`** (Q7; they keep the v1 to v2 map whole for the comparator). The create functions make rows `active`, so S4 adds **`setCustomerStatus`** (`manage_chart_of_accounts`, audited) and a `status` field on **`editSupplier`** (`approve_supplier`, audited), and the load calls them right after the create. Balances, reconciliation stamps and AP/AR documents are **not** imported |
 | P8 | A bank account number never appears in a sheet or the report (last four digits only) |
+| P9 | *(orchestrator, at S4 RED, 2026-10-11)* A franchise-pointing party goes on `parties-held` with reason `franchise` **for information only**: never written, and **not counted** in `held`, so it never blocks apply |
+| P10 | *(orchestrator, 2026-10-11)* A blank `tin`/`vat_status` on one copy is not a disagreement (P3's newest non-empty applies); only two different non-blank values hold the row |
+| P11 | *(orchestrator, 2026-10-11)* A merged party with mixed active/inactive copies is `active` if any copy is active (refines P7) |
+| P12 | *(orchestrator, 2026-10-11)* Audit actions: `set_supplier_counterparty_store`, `set_customer_status`, `set_supplier_status` (before/after, only on a real change); load rows `master_data_load`, source `etl` |
+| P13 | *(orchestrator, at S4 audit, 2026-10-11)* An unmapped non-blank `vat_status` (`Exempt`, `Zero-rated`, a typo) is a distinct value: it holds the row on `suppliers-tax` for Ian, never silently blank. A non-integer or negative `lastCreditDueDays` becomes null and is listed. A manager's apply with customers in scope is refused before anything is written. The report says a stored bank number is masked and must be re-entered |
 
 ### Positions and staff
 
@@ -158,6 +163,11 @@ A row answered on two sheets (a twin that is also a box) is held until both are 
 | S7 | **The HR sheet is `staff-roster.csv`, one per org** (format in §Contract). The droplet run emits the skeleton; `validate-hr` on Ian's machine merges rates and validates the statutory columns, and reports "N of M complete"; nothing of it is stored (R15) |
 | S8 | Row 303 (q12) is checked, not configured: the readiness report names each store's encoders (a position holding `create_expense` and `receive_delivery`, i.e. Cashier today) and its verifiers (a manager role), and flags a store where they are the same person or either is missing |
 | S9 | **Staff codes keep v1's (Q6, recommended).** `createEmployment` gains an optional `staffCode` override (`enrol_staff`; shape `SE-NNN`; **refused when the code is taken at that store**, with a `userReason`; one `audit_log` row when used). The load passes v1's `staffCode`; a v1 code that is blank, malformed or duplicated at its store falls back to allocation and is listed. Later hires keep `max + 1`, which then starts above v1's numbers |
+| S10 | *(orchestrator, at S5 RED, 2026-10-11)* A person whose v1 positions are ALL unanswered on `positions.csv` is held (nothing written for them) until answered; a person with at least one resolved position is hired with those, and the unanswered names are listed. Every staffCode-override refusal carries a `userReason` |
+| S11 | *(orchestrator, 2026-10-11)* A v1 staffCode duplicated at one store: the copy with the earliest `dateHired` (then the lowest v1 id) keeps it; the other falls back to allocation and is listed |
+| S12 | *(orchestrator, 2026-10-11)* `dateHired` is accepted as an ISO timestamp or a date-only `YYYY-MM-DD`, read as a Manila date; any other form is held on `staff-roster.csv` like a missing date |
+| S13 | *(orchestrator, 2026-10-11)* `person_ref` on `staff-roster.csv` and the rates file is the `staffIdentities` group key for a grouped person and the v1 staff id otherwise; a blank `person_ref` row in the rates file is incomplete, not an error |
+| S14 | *(orchestrator, at S5 audit, 2026-10-12)* With positions in scope, `applyMasterData` authorizes `manage_store_settings` at every in-scope store up front, beside `enrol_staff`. A later-step refusal or hold reports which entities already committed (as S4). The rates file is keyed by `person_ref`, the same key as the roster; `validate-hr` lists roster persons with no rate row. `access-to-grant.csv` merges by `row_key` and never drops an ungranted row. An UNANSWERED management-looking position also lands on it (pending). `rate_effective_from` follows the rate basis. Dismissed: an SE-999 override pushing allocation to 4 digits (existing allocator behaviour); `new:` position not yet created aborts staff with an honest error; concurrent override race (unique index `employments_store_staff_code_unique` + store-row lock) |
 
 ## Contract
 

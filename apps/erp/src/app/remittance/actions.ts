@@ -193,7 +193,7 @@ export async function reverseRemittanceAction(formData: FormData): Promise<void>
   } catch (err) {
     return await redirectWithFlash('/remittance', { store: storeId }, { error: errorMessage(err) });
   }
-  return await redirectWithFlash('/remittance', { store: storeId }, { ok: 'Reversed. The days it settled are owed again.' });
+  return await redirectWithFlash('/remittance', { store: storeId }, { stamp: 'REVERSED', ok: 'Reversed. The days it settled are owed again.' });
 }
 
 export async function resolveVarianceAction(formData: FormData): Promise<void> {

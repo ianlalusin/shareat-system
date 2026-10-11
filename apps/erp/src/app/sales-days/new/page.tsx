@@ -7,6 +7,7 @@ import { SalesDayForm } from '../SalesDayForm';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Button, FlashBanner, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'New sales day — Shareat System' };
@@ -64,11 +65,7 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          <strong className="font-medium">Refused:</strong> {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} fieldLabels={{ store: 'Store' }} />
 
       {stores.length === 0 ? (
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -84,9 +81,11 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
                     className; FilterRow hides that ancestry from the touch-target census, so
                     removing this changes the modelled control size. */}
                 <select
+                  id="store"
                   name="store"
                   defaultValue={storeId}
-                  className="rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+                  aria-invalid={sp.field === 'store' ? 'true' : undefined}
+                  className="min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm aria-invalid:border-2 aria-invalid:border-danger"
                 >
                   {stores.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -111,24 +110,16 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
                 </div>
                 <label className="flex flex-col gap-1">
                   <span className={LABEL}>Business date</span>
-                  <input
-                    type="date"
-                    name="businessDate"
-                    defaultValue={toBusinessDate()}
-                    className="rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950"
-                  />
+                  <Input type="date" name="businessDate" defaultValue={toBusinessDate()} />
                 </label>
               </section>
               <p className="text-neutral-600 dark:text-neutral-400">
                 The figures are read from POS, never typed. Importing a date again while it is still open or
                 submitted brings in whatever POS says now.
               </p>
-              <button
-                type="submit"
-                className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-              >
+              <Button type="submit" variant="primary">
                 Import from POS
-              </button>
+              </Button>
             </form>
           ) : (
             <>

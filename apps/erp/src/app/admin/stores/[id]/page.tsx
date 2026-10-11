@@ -12,7 +12,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid, Field } from '@/components/ui';
+import { Banner, Button, FlashBanner, FormGrid, Field, Input, Textarea } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { STORE_DETAILS, STORE_OPENING_DATE, STORE_STOCK_MODEL } from '../typed-forms';
@@ -83,25 +83,16 @@ export default async function StoreDetailPage({
         </p>
       </div>
 
-      {sp.ok && (
-        <p className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </p>
-      )}
-      {sp.error && (
-        <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </p>
-      )}
+      <FlashBanner flash={sp} />
 
       {blocking.length > 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong>
             {blocking.length} thing{blocking.length === 1 ? '' : 's'} still stop this store working.
           </strong>{' '}
           They are listed below. Each is a real business fact — a default here would be a guess
           wearing the costume of a decision.
-        </div>
+        </Banner>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -111,7 +102,7 @@ export default async function StoreDetailPage({
             {readiness.map((c) => (
               <li key={c.key} className="text-sm">
                 <div className="flex items-start gap-2">
-                  <span className={c.ok ? 'text-emerald-600' : 'text-amber-600'}>
+                  <span className={c.ok ? 'text-success' : 'text-warning-ink'}>
                     {c.ok ? '✓' : '•'}
                   </span>
                   <div>
@@ -147,12 +138,10 @@ export default async function StoreDetailPage({
             <EditableRecord action={updateStoreAction} label={store.name} hidden={{ storeId: store.id }} typed={typedFor(sp, STORE_DETAILS, store.id, actor.personId)}>
               <FormGrid className="text-sm">
                 <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}>
-                  <input name="name" defaultValue={store.name} required
-                    className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+                  <Input name="name" defaultValue={store.name} required className="mt-1 w-full" />
                 </Field>
                 <Field label={<span className="text-neutral-600 dark:text-neutral-400">Timezone</span>}>
-                  <input name="timezone" defaultValue={store.timezone}
-                    className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+                  <Input name="timezone" defaultValue={store.timezone} className="mt-1 w-full" />
                 </Field>
                 {/* ⭐ T-229 slice 4 / DEF-208 — what a document printed for THIS BRANCH carries. The
                     registered name, the TIN and the tax type belong to the organisation and are set
@@ -160,12 +149,10 @@ export default async function StoreDetailPage({
                     carries a code against it, so duplicating the number per store (as v1 did) is one
                     number in N places to go wrong. */}
                 <Field span="full" label={<span className="text-neutral-600 dark:text-neutral-400">Trading address</span>}>
-                  <textarea name="address" defaultValue={store.address ?? ''} rows={2}
-                    className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+                  <Textarea name="address" defaultValue={store.address ?? ''} rows={2} className="mt-1 w-full" />
                 </Field>
                 <Field label={<span className="text-neutral-600 dark:text-neutral-400">Contact number</span>}>
-                  <input name="contactNumber" defaultValue={store.contactNumber ?? ''}
-                    className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+                  <Input name="contactNumber" defaultValue={store.contactNumber ?? ''} className="mt-1 w-full" />
                 </Field>
                 <Field
                   label={
@@ -174,8 +161,7 @@ export default async function StoreDetailPage({
                     </span>
                   }
                 >
-                  <input name="tinBranchCode" defaultValue={store.tinBranchCode ?? ''} inputMode="numeric"
-                    className="mt-1 w-full rounded border border-neutral-300 p-2 tabular-nums dark:border-neutral-700 dark:bg-neutral-900" />
+                  <Input name="tinBranchCode" defaultValue={store.tinBranchCode ?? ''} inputMode="numeric" className="mt-1 w-full tabular-nums" />
                 </Field>
               </FormGrid>
               <p className="mt-3 text-xs text-neutral-500">
@@ -204,9 +190,7 @@ export default async function StoreDetailPage({
           <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <h2 className="text-sm font-medium">Opening date</h2>
             {sp.confirm && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                {sp.confirm}
-              </div>
+              <Banner tone="warning">{sp.confirm}</Banner>
             )}
             {/* The confirm step is a COMMAND, not an edit: the date to save rides in a hidden input
                 (`??`-style: `sp.openingDate` is `''` for a DELIBERATELY CLEARED date and must stay `''`),
@@ -222,10 +206,9 @@ export default async function StoreDetailPage({
                 <p className="text-neutral-600 dark:text-neutral-400">
                   Opening date to save: <strong>{sp.openingDate === '' ? 'blank (not opened)' : sp.openingDate}</strong>
                 </p>
-                <button type="submit"
-                  className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700">
+                <Button type="submit" variant="primary">
                   Confirm change
-                </button>
+                </Button>
               </form>
             ) : (
               <>
@@ -246,8 +229,7 @@ export default async function StoreDetailPage({
                       label={<span className="text-neutral-600 dark:text-neutral-400">Opening date</span>}
                       hint="Leave blank if it has not opened. The first day this store trades."
                     >
-                      <input type="date" name="openingDate" defaultValue={store.openingDate ?? ''}
-                        className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+                      <Input type="date" name="openingDate" defaultValue={sp.openingDate ?? store.openingDate ?? ''} className="mt-1 w-full" />
                     </Field>
                   </FormGrid>
                 </EditableRecord> 
@@ -261,14 +243,12 @@ export default async function StoreDetailPage({
                       label={<span className="text-neutral-600 dark:text-neutral-400">Opening date</span>}
                       hint="Leave blank if it has not opened. The first day this store trades."
                     >
-                      <input type="date" name="openingDate" defaultValue={store.openingDate ?? ''}
-                        className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+                      <Input type="date" name="openingDate" defaultValue={sp.openingDate ?? store.openingDate ?? ''} className="mt-1 w-full" />
                     </Field>
                   </FormGrid>
-                    <button type="submit"
-                      className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700">
+                    <Button type="submit" variant="secondary">
                       Save
-                    </button>
+                    </Button>
                   </form>
                 )}
               </>
@@ -353,10 +333,9 @@ export default async function StoreDetailPage({
                 ? 'Deactivating never deletes. Its journal entries, attendance and stock stay queryable.'
                 : 'Reopening also re-grants store access to every admin — including any appointed while it was closed, who would otherwise not see it.'}
             </p>
-            <button type="submit"
-              className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700">
+            <Button type="submit" variant={store.isActive ? 'danger' : 'secondary'}>
               {store.isActive ? 'Deactivate' : 'Reactivate'}
-            </button>
+            </Button>
           </form>
         </section>
       </div>

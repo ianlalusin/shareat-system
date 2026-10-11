@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1642` 13. Decision log
-- `1643–1662` 14. Amendment protocol
-- `1663–1667` 15. Engineering standards — the industry practices this project follows
-  - `1668–1673` 15.1 Build order: walking skeleton first
-  - `1674–1685` 15.2 Golden-master testing — the most important practice here
-  - `1686–1694` 15.3 Strangler Fig, not big-bang cutover
-  - `1695–1699` 15.4 No dual-write
-  - `1700–1708` 15.5 Expand/contract migrations
-  - `1709–1717` 15.6 Observability from day zero, not later
-  - `1718–1722` 15.7 CI gates
-  - `1723–1727` 15.8 Backups and a tested restore
-  - `1728–1732` 15.9 Twelve-Factor config
-  - `1733–1740` 15.10 Append-only ledgers — but not event sourcing
-  - `1741–1745` 15.11 Defence in depth
-  - `1746–1774` 15.12 Skills are lenses, not assurance
-  - `1775–1781` 15.13 Reconciliation is a permanent feature
-- `1782–1786` 16. The accounting spine
-  - `1787–1818` 16.0 What we are actually fixing — the diagnosis
-  - `1819–1862` 16.1 The ten invariants — non-negotiable
-  - `1863–1877` 16.2 The oracle: how "correct" is tested
-  - `1878–1899` 16.3 The model — header + lines, not legs
-  - `1900–1919` 16.4 Deliberately simpler than ERPNext
-  - `1920–1986` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1987–2011` 16.6 What v1 already gets right — preserve the intent
-  - `2012–2033` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2034–2048` 16.8 What v1's accounting already gets right
-  - `2049–2092` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2093–2143` 16.10 Posting patterns — one canonical pattern per business event
-  - `2144–2176` 16.11 Inventory's accounting integration
+- `1329–1648` 13. Decision log
+- `1649–1668` 14. Amendment protocol
+- `1669–1673` 15. Engineering standards — the industry practices this project follows
+  - `1674–1679` 15.1 Build order: walking skeleton first
+  - `1680–1691` 15.2 Golden-master testing — the most important practice here
+  - `1692–1700` 15.3 Strangler Fig, not big-bang cutover
+  - `1701–1705` 15.4 No dual-write
+  - `1706–1714` 15.5 Expand/contract migrations
+  - `1715–1723` 15.6 Observability from day zero, not later
+  - `1724–1728` 15.7 CI gates
+  - `1729–1733` 15.8 Backups and a tested restore
+  - `1734–1738` 15.9 Twelve-Factor config
+  - `1739–1746` 15.10 Append-only ledgers — but not event sourcing
+  - `1747–1751` 15.11 Defence in depth
+  - `1752–1780` 15.12 Skills are lenses, not assurance
+  - `1781–1787` 15.13 Reconciliation is a permanent feature
+- `1788–1792` 16. The accounting spine
+  - `1793–1824` 16.0 What we are actually fixing — the diagnosis
+  - `1825–1868` 16.1 The ten invariants — non-negotiable
+  - `1869–1883` 16.2 The oracle: how "correct" is tested
+  - `1884–1905` 16.3 The model — header + lines, not legs
+  - `1906–1925` 16.4 Deliberately simpler than ERPNext
+  - `1926–1992` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1993–2017` 16.6 What v1 already gets right — preserve the intent
+  - `2018–2039` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2040–2054` 16.8 What v1's accounting already gets right
+  - `2055–2098` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2099–2149` 16.10 Posting patterns — one canonical pattern per business event
+  - `2150–2182` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1639,6 +1639,12 @@ just a patch.**
 | 304 | 2026-10-10 | ⭐ **OPENING STOCK IS COUNTED PER ROOM AT THE COMMISSARY AND IN ONE ROOM AT EACH BRANCH, AND IS VALUED AT THE LAST V1 DELIVERY PRICE; AN ITEM V1 NEVER DELIVERED IS PRICED BY A MANAGER TYPING IT. THIS SUPERSEDES §16.11's "THE 2027-01-01 OPENING LAYER IS WEIGHTED AVERAGE" (AND ADR-009's opening-layer row).** Ian, 2026-10-10: plan-q8 (free text): *"mirror v1, storage is important for commissary only; for branches and others 1 room only"*; t390-q2 = (a) last v1 delivery price; t390-q1 (Q-T390-1) = (b) the manager types every unpriced item. T-390 S2 is unblocked. Built as data, no code change: T-390 R1 (a branch count with no room goes to the store's default room), R2 (`--basis last`, `cost_source = 'v1_last_delivery'`; a typed cost is `'typed'`) | v1 keeps a per-room ledger and storage matters only at the commissary. The last delivery price is the closest to a FIFO layer cost that exists, and it is auditable per row; a weighted average over v1 data that holds no inventory value had no defensible input. The basis still changes exactly once, at the boundary | Yes — a different price file, before C5 posts; after it, never |
 | 305 | 2026-10-10 | ⭐ **THE PADRE GARCIA FRANCHISE RUNS ON V2 BY 1 JANUARY 2027, AS ITS OWN ORGANISATION. ROW 246'S TRIGGER ("before a second organisation is onboarded") THEREFORE FIRES BEFORE CUTOVER: DEF-491 AND DEF-421 BECOME CUTOVER SCOPE. PLAN ITEM C11, TASK T-398 (RESERVED).** Ian, 2026-10-10: plan-q4 = (b), against the recommended (a). Plan §1.1 C11 | ADR-008 §4-§7 and rows 111, 114, 175 already design the second org (own books, franchisor sees SALES only, commissary dispatch to a franchise is a sale). What is missing is the onboarding itself and the guards a second org needs. ⚠️ `scripts/import-items.ts` reads every v1 store, Padre Garcia included, into one org: under this row Padre Garcia's items belong to its own org (T-391 must split them) | Yes, until Padre Garcia's first posting; after it, leaving v2 is a franchise-by-franchise data migration |
 | 306 | 2026-10-10 | **BACKUPS: T-393 IS BUILT AND TESTED BUT NOT SWITCHED ON UNTIL IAN SETS IT UP ("no backup for now, we'll set up soon", Ian 2026-10-10, answering every T-393 question). OPEN POINT, NOT RESOLVED HERE: plan-q7 = (a) (the existing `shareat-erp-backups` bucket under `postgres/`, prefix-scoped 30-day retention, never touching the Frappe objects) conflicts with the T-393 spec as reviewed (a dedicated `shareat-pg-backups` bucket, 35 days + 13 monthly + yearly, R5/R12). Ian picks one when he sets it up.** Ian, 2026-10-10: plan-q7 = (a); T-393 Q1-Q5 answered "no backup for now" | ⚠️ Until it is switched on, production has only DO's native 7-day backups and no restore has ever been rehearsed. The 13 Nov rehearsal (T-394) needs a restored copy and wizard step C1 attests a drill: **the 15 Nov go/no-go cannot pass without it** (R4) | Yes — it is configuration; the spec's bucket and retention are config-contract constants |
+| 307 | 2026-10-11 | ⭐ **POS V2 AND CUSTOMER V2 HAVE NO ADMIN PANELS OF THEIR OWN. MASTER DATA (MENU/CATALOG WITH VARIANTS, FLAVORS, REFILLS, PACKAGES, OPTION GROUPS AND PER-STORE PRICE; STORES; STAFF AND USERS; DISCOUNTS, CHARGES AND TENDERS; LOYALTY REWARDS; STORE SETTINGS — SCHEDULES, TABLES, KITCHEN ROUTING, FORECAST, CUSTOMER ORDERING), DINER CONTENT (FLASH ADS, GAMES MODERATION, FEEDBACK) AND REPORTS ARE EDITED IN ERP V2 ONLY. FLOOR OPERATIONS STAY ON THE APP: TABLE PINS, THE ONLINE-ORDER QUEUE, RECEIPT REPRINT AND REFUND, AND MARKING AN ITEM SOLD OUT (AVAILABILITY) ON THE POS. DEVICE SETTINGS (THERMAL PRINTERS, OFFLINE DEVICE IDENTITY) STAY ON THE DEVICE. CUSTOMER'S SEPARATE `categories` MASTER IS FOLDED INTO THE ONE ERP MENU. V1's REPAIR SCREENS (reconcile, backfill, rebuild caches) ARE NOT CARRIED.** Ian, 2026-10-11, brainstorm session: accepted the three-way split, sold-out on the POS, and categories folded into the menu. Narrows row 269: the POS/CUSTOMER UI copy excludes their admin areas | v1 keeps stores, staff, payment methods and menu groupings in two or three apps, synced one way or by hand (POS `admin/*`, `manager/*` ≈26 pages; CUSTOMER `admin/*`, `manager/*` ≈13 pages; ERP-rebuild `inventory/pos-mappings`). ADR-003/004 (one product master, one store table) and ADR-015 §2 / row 130 (the till only reads menu, prices, tenders, discounts) already imply one editor; this row names it. Floor actions stay on the till because seconds matter mid-service (row 270 already puts corrections there); printers are a device concern (CAPABILITY-GAPS.md "printer"). Repair screens exist only to fix Firestore projections, which v2 does not have (row 280). Branch managers reach ERP on a store device, with navigation scoped by role and store. Industry pattern: web back office owns master data; the register keeps availability and device setup | Yes, until the ERP menu screens are built; moving an editor later is a UI move, not a data move — one table either way |
+| 308 | 2026-10-11 | **WARM NEUTRALS (T-387).** Ian: *"go on and fix the clash in colors."* Tailwind's `neutral` ramp is re-valued warm in `apps/erp/warm-neutral.ts`: steps 200/400/500/800/900/950 ARE the ruled Amendment 7 tokens; the other steps keep stock lightness in the ink hue. Side effect, intended: the stock caption grey (4.34:1 on cream, an AA failure) now passes. | Ian's ruling; the stock ramp clashed with the warm tokens and failed AA | Yes — one file |
+| 309 | 2026-10-11 | **DARK `--warning-soft` = `#2b2210` (T-387).** Ian: *"keep #2b2210."* ADR-013 A7 had no dark warning-soft; this is it, pinned in `theme-tokens.test.ts`. | Ian's ruling; the token was missing | Yes — one token |
+| 310 | 2026-10-11 | **ACTIVE NAV IS RED (T-387).** Ian: *"make active nav red."* The current nav item fills with `--brand`, white text, in both themes. | Ian's ruling | Yes — CSS only |
+| 311 | 2026-10-11 | **ONE RED PRIMARY PER VIEW (T-387).** Ian: *"demote extras."* A view has one red primary action; a repeated Save is secondary. `SubmitButton` gained a `variant` prop. Ian also ruled *"merge when green"* for every T-387 PR. | Ian's ruling; several red buttons on one view diluted the primary action | Yes — per-call `variant` |
+| 312 | 2026-10-11 | **TWO T-387 SPEC NOTES.** (1) `useFormStatus` exists in the App Router (Next's bundled React 19) but not in the react-dom 18.3.1 Vitest loads, so tests use the shim `apps/erp/tests/helpers/form-status-setup.ts` — a test-only bridge, never imported by source. (2) `attendance_days` RLS is org-level; the store boundary is the repo filter (§15.11 layering), not RLS. | Recorded so the next reader does not "fix" the shim or add store RLS | Yes |
 
 ## 14. Amendment protocol
 

@@ -21,9 +21,7 @@
  */
 import { useMemo } from 'react';
 import qrcode from 'qrcode-generator';
-
-const BTN =
-  'rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
+import { Button, Textarea } from '@/components/ui';
 
 export function TokenReveal({
   heading,
@@ -54,10 +52,10 @@ export function TokenReveal({
   }
 
   return (
-    <div className="space-y-4 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+    <div className="space-y-4 rounded-lg border border-warning bg-warning-soft p-4">
       <div>
-        <h3 className="font-medium text-amber-900 dark:text-amber-200">{heading}</h3>
-        <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">{intro}</p>
+        <h3 className="font-medium text-warning-ink">{heading}</h3>
+        <p className="mt-1 text-xs text-warning-ink">{intro}</p>
       </div>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -74,27 +72,27 @@ export function TokenReveal({
         </svg>
 
         <div className="flex-1 space-y-2">
-          <label className="block text-xs font-medium text-amber-800 dark:text-amber-300">
+          <label className="block text-xs font-medium text-warning-ink">
             Or paste this token directly on the terminal
           </label>
-          <textarea
+          <Textarea
             readOnly
             value={customToken}
             onFocus={(e) => e.currentTarget.select()}
             rows={6}
-            className="w-full rounded border border-amber-300 bg-white p-2 font-mono text-xs dark:border-amber-800 dark:bg-neutral-950"
+            className="w-full font-mono text-xs"
           />
         </div>
       </div>
 
-      <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
+      <p className="text-xs font-medium text-warning-ink">
         ⚠️ Shown once. This screen cannot show it to you again after you leave or refresh — if it is
         lost before pairing finishes, mint a fresh one instead of hunting for this one.
       </p>
 
-      <button type="button" onClick={onDone} className={BTN}>
+      <Button type="button" variant="primary" onClick={onDone}>
         Done
-      </button>
+      </Button>
     </div>
   );
 }

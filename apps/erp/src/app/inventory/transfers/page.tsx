@@ -14,6 +14,7 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Badge, Button, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Stock transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -104,22 +105,18 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
       <FilterRow className="mt-6">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select
-            name="store"
-            defaultValue={storeId}
-            className="mt-1 rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          >
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
       {locations.length < 2 ? (
-        <p className="mt-8 text-sm text-amber-700 dark:text-amber-500">
+        <p className="mt-8 text-sm text-warning-ink">
           This store needs at least two active rooms before a transfer means anything.
         </p>
       ) : (
@@ -160,31 +157,33 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
                     </div>
                   ))}
                 </td>
-                <td className="py-2 pr-4">{t.status}</td>
+                <td className="py-2 pr-4">
+                  <Badge status={t.status} />
+                </td>
                 <td className="py-2">
                   <div className="flex flex-wrap gap-2">
                     {t.status === 'draft' && (
                       <form action={dispatchTransferAction}>
                         <input type="hidden" name="transferId" value={t.id} />
-                        <button type="submit" className="rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900">
+                        <Button type="submit" variant="secondary">
                           Dispatch
-                        </button>
+                        </Button>
                       </form>
                     )}
                     {t.status === 'in_transit' && (
                       <form action={receiveTransferAction}>
                         <input type="hidden" name="transferId" value={t.id} />
-                        <button type="submit" className="rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900">
+                        <Button type="submit" variant="secondary">
                           Receive
-                        </button>
+                        </Button>
                       </form>
                     )}
                     <form action={voidTransferAction} className="flex items-center gap-1">
                       <input type="hidden" name="transferId" value={t.id} />
-                      <input name="reason" placeholder="void reason" required className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900" />
-                      <button type="submit" className="rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900">
+                      <Input name="reason" placeholder="void reason" required className="w-28" />
+                      <Button type="submit" variant="danger">
                         Void
-                      </button>
+                      </Button>
                     </form>
                   </div>
                 </td>

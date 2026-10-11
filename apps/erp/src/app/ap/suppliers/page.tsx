@@ -11,6 +11,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Badge, Button, FlashBanner, Input } from '@/components/ui';
 
 export const metadata = { title: 'Suppliers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -57,35 +58,21 @@ export default async function SuppliersPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <form className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-[14rem] flex-1 flex-col gap-1">
           <span className={LABEL}>Search</span>
-          <input
-            name="q"
-            defaultValue={q}
-            placeholder="Name, TIN, contact, bank…"
-            className={INPUT}
-          />
+          <Input name="q" defaultValue={q} placeholder="Name, TIN, contact, bank…" className="w-full" />
         </label>
         <label className="flex items-center gap-2 pb-2 text-sm">
           <input type="checkbox" name="show" value="all" defaultChecked={includeInactive} />
           Include inactive ({inactiveCount})
         </label>
-        <button type="submit" className={BTN}>
+        <Button type="submit" variant="primary">
           Search
-        </button>
-        <Link href="/ap" className={`${BTN} inline-block`}>
+        </Button>
+        <Link href="/ap" className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas">
           Add a supplier
         </Link>
       </form>
@@ -125,9 +112,7 @@ export default async function SuppliersPage({
                       )}
                       {s.representativeName && <span className="mr-2">{s.representativeName}</span>}
                       {s.status !== 'active' && (
-                        <span className="rounded bg-neutral-200 px-1 py-0.5 dark:bg-neutral-800">
-                          {s.status}
-                        </span>
+                        <Badge status={s.status} />
                       )}
                     </div>
                   </td>
@@ -162,8 +147,4 @@ export default async function SuppliersPage({
   );
 }
 
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const LABEL = 'text-xs font-medium text-neutral-600 dark:text-neutral-400';
-const BTN =
-  'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';

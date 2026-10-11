@@ -1,0 +1,303 @@
+{
+ "version": 1,
+ "stores": [
+  {
+   "id": "b9DzsnPbr1BUnY88lyT4",
+   "name": "SharEat Lipa"
+  },
+  {
+   "id": "dZUyvX4q824JBSVDAfE9",
+   "name": "SharEat Malvar"
+  },
+  {
+   "id": "iGOW7q2pZbeHWV832UNh",
+   "name": "SharEat Banay-Banay"
+  },
+  {
+   "id": "eVYKj6wABdakk8RgEotW",
+   "name": "SharEat Davao"
+  },
+  {
+   "id": "y1DMgfisuTHBF57cNL6i",
+   "name": "SharEat Padre Garcia"
+  },
+  {
+   "id": "XbkyEgZqunmj2wzhicNf",
+   "name": "TEST"
+  },
+  {
+   "id": "TEST",
+   "name": "Test Commissary"
+  }
+ ],
+ "items": [
+  {
+   "id": "it-001",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Pork Belly",
+   "kind": "raw_material",
+   "baseUnit": "kg"
+  },
+  {
+   "id": "it-002",
+   "store": "dZUyvX4q824JBSVDAfE9",
+   "name": "pork belly ",
+   "kind": "raw_material",
+   "baseUnit": "kg"
+  },
+  {
+   "id": "it-003",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "White Onion",
+   "kind": "raw_material",
+   "baseUnit": "kg"
+  },
+  {
+   "id": "it-004",
+   "store": "dZUyvX4q824JBSVDAfE9",
+   "name": "White Onion",
+   "kind": "raw_material",
+   "baseUnit": "kg"
+  },
+  {
+   "id": "it-005",
+   "store": "iGOW7q2pZbeHWV832UNh",
+   "name": "White Onion",
+   "kind": "raw_material",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-006",
+   "store": "y1DMgfisuTHBF57cNL6i",
+   "name": "White Onion",
+   "kind": "raw_material",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-007",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Tomato",
+   "kind": "raw_material",
+   "baseUnit": "kg"
+  },
+  {
+   "id": "it-008",
+   "store": "dZUyvX4q824JBSVDAfE9",
+   "name": "Tomato",
+   "kind": "raw_material",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-009",
+   "store": "iGOW7q2pZbeHWV832UNh",
+   "name": "Tomato",
+   "kind": "raw_material",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-010",
+   "store": "y1DMgfisuTHBF57cNL6i",
+   "name": "Tomato",
+   "kind": "raw_material",
+   "baseUnit": "kg"
+  },
+  {
+   "id": "it-011",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Garlic Powder",
+   "kind": "raw_material",
+   "baseUnit": "kg"
+  },
+  {
+   "id": "it-012",
+   "store": "dZUyvX4q824JBSVDAfE9",
+   "name": "Garlic Powder",
+   "kind": "raw_material",
+   "baseUnit": "g"
+  },
+  {
+   "id": "it-013",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Paper Cups",
+   "kind": "supply",
+   "baseUnit": "box",
+   "purchaseUnit": "pcs",
+   "conversionFactor": 24
+  },
+  {
+   "id": "it-014",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Straw Pack",
+   "kind": "supply",
+   "baseUnit": "pack",
+   "purchaseUnit": "box",
+   "conversionFactor": 6
+  },
+  {
+   "id": "it-015",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Tissue Pack",
+   "kind": "supply",
+   "baseUnit": "pack",
+   "purchaseUnit": "pack",
+   "conversionFactor": 12
+  },
+  {
+   "id": "it-016",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "3D W/LID",
+   "kind": "supply",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-017",
+   "store": "dZUyvX4q824JBSVDAfE9",
+   "name": "3D W/LID.",
+   "kind": "supply",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-018",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Coke 1.5",
+   "kind": "retail",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-019",
+   "store": "dZUyvX4q824JBSVDAfE9",
+   "name": "Coke 15",
+   "kind": "retail",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-020",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Soy Sauce 15",
+   "kind": "raw_material",
+   "baseUnit": "ltr"
+  },
+  {
+   "id": "it-021",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "2",
+   "kind": "retail",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-022",
+   "store": "dZUyvX4q824JBSVDAfE9",
+   "name": "2",
+   "kind": "retail",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-023",
+   "store": "dZUyvX4q824JBSVDAfE9",
+   "name": "--",
+   "kind": "retail",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-024",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Mystery Item",
+   "baseUnit": "kg"
+  },
+  {
+   "id": "it-025",
+   "store": "dZUyvX4q824JBSVDAfE9",
+   "name": "Odd Thing",
+   "kind": "gadget",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-026",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Dish Soap",
+   "kind": "supply",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-027",
+   "store": "dZUyvX4q824JBSVDAfE9",
+   "name": "Dish Soap",
+   "kind": "retail",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-028",
+   "store": "iGOW7q2pZbeHWV832UNh",
+   "name": "Dish Soap",
+   "kind": "supply",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-029",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Sugar",
+   "kind": "raw_material",
+   "baseUnit": "kg"
+  },
+  {
+   "id": "it-030",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Flour",
+   "kind": "raw_material",
+   "baseUnit": "g"
+  },
+  {
+   "id": "it-031",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Old Rice",
+   "kind": "raw_material",
+   "baseUnit": "kg"
+  },
+  {
+   "id": "it-032",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Retired Napkin",
+   "kind": "supply",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-033",
+   "store": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Sea Salt",
+   "kind": "raw_material",
+   "baseUnit": "kg"
+  },
+  {
+   "id": "it-034",
+   "store": "dZUyvX4q824JBSVDAfE9",
+   "name": "Malvar Only Chili",
+   "kind": "raw_material",
+   "baseUnit": "kg"
+  },
+  {
+   "id": "it-035",
+   "store": "y1DMgfisuTHBF57cNL6i",
+   "name": "Franchise Special Tea",
+   "kind": "retail",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-036",
+   "store": "XbkyEgZqunmj2wzhicNf",
+   "name": "Test Only Item",
+   "kind": "retail",
+   "baseUnit": "pcs"
+  },
+  {
+   "id": "it-037",
+   "store": "TEST",
+   "name": "Test Only Item",
+   "kind": "retail",
+   "baseUnit": "pcs"
+  }
+ ],
+ "suppliers": [],
+ "arCustomers": [],
+ "staff": [],
+ "staffIdentities": []
+}

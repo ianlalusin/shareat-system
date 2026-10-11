@@ -76,7 +76,6 @@
     "app/customers/page.tsx": [
       20,
       20,
-      22,
       22
     ],
     "app/customers/price-lists/page.tsx": [
@@ -116,7 +115,6 @@
       20
     ],
     "app/fixed-assets/page.tsx": [
-      20,
       20
     ],
     "app/fixed-assets/[id]/page.tsx": [
@@ -244,7 +242,6 @@
       20
     ],
     "app/sales-days/page.tsx": [
-      20,
       20
     ],
     "app/sales-days/[id]/page.tsx": [
@@ -273,9 +270,6 @@
       20
     ],
     "app/staff/hire/page.tsx": [
-      20
-    ],
-    "app/staff/page.tsx": [
       20
     ],
     "app/staff/[employmentId]/page.tsx": [
@@ -328,9 +322,6 @@
     "app/attendance/terminals/RepairButton.tsx": [
       "foreign component — box decided inside the component"
     ],
-    "app/budgets/page.tsx": [
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
     "app/channel-settlements/SettlementForm.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
@@ -358,31 +349,10 @@
     "app/inventory/deliveries/[id]/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
-    "app/inventory/locations/page.tsx": [
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
-    "app/inventory/pos-map/page.tsx": [
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
     "app/inventory/pos-usage/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
-    "app/items/page.tsx": [
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
-    "app/items/[id]/page.tsx": [
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
     "app/payroll/separations/page.tsx": [
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
-    "app/reports/store-comparison/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
     "app/sales-days/SalesDayForm.tsx": [
@@ -403,9 +373,6 @@
     "app/settings/sales-channels/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
-    "app/setup/SubmitButton.tsx": [
-      "ancestry truncated — no font size resolvable"
-    ],
     "app/staff/hire/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
@@ -420,14 +387,10 @@
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
     "app/trade/returns/page.tsx": [
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
     "components/ClosedMonthOverride.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
-    "components/dashboard/Tile.tsx": [
-      "className could not be resolved statically (dynamic expression outside the known shapes)"
     ],
     "components/reports/AccountDrillLink.tsx": [
       "ancestry truncated — no font size resolvable"
@@ -436,10 +399,6 @@
       "ancestry truncated — no font size resolvable",
       "foreign component — box decided inside the component",
       "foreign component — box decided inside the component"
-    ],
-    "components/two-way-picker.tsx": [
-      "className could not be resolved statically (dynamic expression outside the known shapes)",
-      "className could not be resolved statically (dynamic expression outside the known shapes)"
     ],
     "app/admin/users/[personId]/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
@@ -467,9 +426,6 @@
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
     "app/settings/pos-link/page.tsx": [
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
-    "app/items/ItemCodeField.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ]
   }

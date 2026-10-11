@@ -22,7 +22,10 @@ jobs:
   # answer, in the `verify` job below.
   changes:
     name: detect doc-only changes
-    runs-on: ubuntu-latest
+    # Self-hosted switch (docs/ops/self-hosted-runner.md): set the repository variable CI_RUNNER to the
+    # runner's label (shareat-local) and the job runs on Ian's machine, which uses no GitHub-hosted
+    # minutes. Unset or empty = GitHub-hosted, so deleting the variable is the rollback.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     outputs:
       docs_only: ${{ steps.check.outputs.docs_only }}
     steps:
@@ -102,7 +105,7 @@ jobs:
   verify:
     name: typecheck, test, build
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}  # see the note on `changes`
 
     services:
       postgres:
@@ -181,7 +184,12 @@ jobs:
       # than itself (the service container is postgres:18). The runner's stock client is older, so install PGDG's.
       - name: PostgreSQL 18 client (T-393)
         if: needs.changes.outputs.docs_only != 'true'
+        # The self-hosted runner (ians-pc) has no passwordless sudo: it carries the client pre-installed, so skip.
         run: |
+          if [ -x /usr/lib/postgresql/18/bin/pg_dump ]; then
+            echo "PG_BIN_DIR=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"
+            exit 0
+          fi
           sudo install -d /usr/share/postgresql-common/pgdg
           sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list

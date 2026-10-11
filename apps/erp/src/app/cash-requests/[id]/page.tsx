@@ -15,6 +15,7 @@ import {
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Cash request — Shareat System' };
@@ -66,16 +67,7 @@ export default async function CashRequestPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <DetailLayout
         summary={
@@ -130,29 +122,23 @@ export default async function CashRequestPage({
                   required
                   inputMode="decimal"
                   defaultValue={req.requestedAmount}
-                  className={INPUT}
+                  className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
                 />
               </Field>
-              <button
-                type="submit"
-                className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-              >
+              <Button type="submit" variant="primary">
                 Approve
-              </button>
+              </Button>
             </form>
 
             <form action={decideAction} className="space-y-3">
               <input type="hidden" name="requestId" value={req.id} />
               <input type="hidden" name="decision" value="reject" />
               <Field label="Refuse, because" hint="A refusal without a reason is not recorded.">
-                <input name="reason" required className={INPUT} />
+                <Input name="reason" required className="w-full" />
               </Field>
-              <button
-                type="submit"
-                className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700"
-              >
+              <Button type="submit" variant="secondary">
                 Refuse
-              </button>
+              </Button>
             </form>
           </div>
         </section>
@@ -178,11 +164,11 @@ export default async function CashRequestPage({
                   required
                   inputMode="decimal"
                   defaultValue={req.approvedAmount ?? ''}
-                  className={INPUT}
+                  className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
                 />
               </Field>
               <Field label="From" hint="Balances shown are derived from the ledger.">
-                <select name="fromMoneyAccountId" required defaultValue="" className={INPUT}>
+                <Select name="fromMoneyAccountId" required defaultValue="" className="w-full">
                   <option value="" disabled>
                     Choose…
                   </option>
@@ -191,18 +177,15 @@ export default async function CashRequestPage({
                       {a.name} — {peso(a.balance)}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label="On">
-                <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+                <Input name="on" type="date" required defaultValue={today()} className="w-full" />
               </Field>
             </div>
-            <button
-              type="submit"
-              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-            >
+            <Button type="submit" variant="primary">
               Release
-            </button>
+            </Button>
           </form>
         </section>
       )}
@@ -226,37 +209,34 @@ export default async function CashRequestPage({
             <input type="hidden" name="requestId" value={req.id} />
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Returned" hint="Cash physically handed back. Leave blank if none.">
-                <input name="returnedAmount" inputMode="decimal" className={INPUT} />
+                <input name="returnedAmount" inputMode="decimal" className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
               </Field>
               <Field label="Into" hint="Where the returned cash landed.">
-                <select name="toMoneyAccountId" defaultValue="" className={INPUT}>
+                <Select name="toMoneyAccountId" defaultValue="" className="w-full">
                   <option value="">—</option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name} — {peso(a.balance)}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field
                 label="Short"
                 hint="Unaccounted-for. Becomes a receivable from the holder, not a write-off."
               >
-                <input name="shortAmount" inputMode="decimal" className={INPUT} />
+                <input name="shortAmount" inputMode="decimal" className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
               </Field>
               <Field label="Short because" hint="Required if anything is short.">
-                <input name="shortReason" className={INPUT} />
+                <Input name="shortReason" className="w-full" />
               </Field>
               <Field label="On">
-                <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+                <Input name="on" type="date" required defaultValue={today()} className="w-full" />
               </Field>
             </div>
-            <button
-              type="submit"
-              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-            >
+            <Button type="submit" variant="primary">
               Record
-            </button>
+            </Button>
           </form>
         </section>
       )}
@@ -274,14 +254,11 @@ export default async function CashRequestPage({
           <form action={cancelAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="requestId" value={req.id} />
             <Field label="Because" hint="Optional.">
-              <input name="reason" className={INPUT} />
+              <Input name="reason" className="w-full" />
             </Field>
-            <button
-              type="submit"
-              className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700"
-            >
+            <Button type="submit" variant="danger">
               Withdraw
-            </button>
+            </Button>
           </form>
         </section>
       )}
@@ -322,9 +299,6 @@ export default async function CashRequestPage({
     </Page>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function Figure({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
   return (

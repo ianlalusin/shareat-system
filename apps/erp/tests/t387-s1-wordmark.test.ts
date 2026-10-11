@@ -72,3 +72,18 @@ describe('T-387 S1 — the mobile top bar', () => {
     expect(topBar).toMatch(/className="font-display[^"]*"/);
   });
 });
+
+describe('T-387 S8 — the active nav item is brand red (Ian, 2026-10-11; ADR-013 lists "active nav" as a brand use)', () => {
+  const nav = strip(readFileSync(`${here}../src/components/shell/SidebarNav.tsx`, 'utf8'));
+  it('the current page link fills with --brand and white text, in both themes', () => {
+    expect(nav).toMatch(/aria-\[current=page\]:bg-brand/);
+    expect(nav).toMatch(/aria-\[current=page\]:text-white/);
+    // NEGATIVE: no near-black / near-white active fill left, and no dark: override of the brand fill.
+    expect(nav).not.toMatch(/aria-\[current=page\]:bg-neutral-/);
+    expect(nav).not.toMatch(/dark:aria-\[current=page\]:bg-/);
+  });
+  it('the rail current group heading matches', () => {
+    expect(nav).toMatch(/aria-\[current=true\]:bg-brand/);
+    expect(nav).not.toMatch(/aria-\[current=true\]:bg-neutral-/);
+  });
+});

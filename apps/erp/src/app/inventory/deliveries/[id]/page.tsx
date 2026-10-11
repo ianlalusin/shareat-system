@@ -7,6 +7,18 @@ import { peso } from '../../../../lib/format';
 import { receiveDeliveryAction } from '../actions';
 import { deliveryDetail } from '../lib';
 import { Page } from '@/components/shell/Page';
+import {
+  Button,
+  FlashBanner,
+  Input,
+  Select,
+  StatusHero,
+  deliverySteps,
+  simpleStepIndexFor,
+  statusLabel,
+  type StatusIconKind,
+  type Tone,
+} from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
@@ -14,13 +26,7 @@ import { withFlash } from '@/lib/flash';
 export const metadata = { title: 'Delivery — Shareat System' };
 export const dynamic = 'force-dynamic';
 
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
-
 const KIND_LABEL: Record<string, string> = { supplier: 'Supplier delivery', purchase: 'Cash purchase', commissary: 'Commissary delivery' };
-const STATUS_LABEL: Record<string, string> = { draft: 'Draft', received: 'Received', void: 'Void' };
 /** ⭐ `not_received` is auto-set by the server on a zero-received line — a system conclusion,
  *  never an operator's picker choice (T-166's own design). */
 const PICKABLE_REASONS = SHORTAGE_REASONS.filter((r) => r !== 'not_received');
@@ -32,6 +38,13 @@ const REASON_LABEL: Record<string, string> = {
   quality_reject: 'Quality reject',
   count_correction: 'Count correction',
   other: 'Other',
+};
+
+/** Delivery statuses -> hero. `void` is the exit (danger). */
+const DELIVERY_HERO: Record<string, { kind: StatusIconKind; tone: Tone; line: string }> = {
+  draft: { kind: 'counting', tone: 'info', line: 'Count what landed, line by line, then receive the delivery.' },
+  received: { kind: 'received', tone: 'success', line: 'Received. The stock is in and the value is posted.' },
+  void: { kind: 'void', tone: 'danger', line: 'This delivery was voided.' },
 };
 
 function when(d: Date | null): string {
@@ -54,6 +67,10 @@ export default async function DeliveryPage({
 
   const canViewProof = await canViewPhoto(actor, doc.proofFileId);
   const canReceive = doc.status === 'draft';
+  const hero = DELIVERY_HERO[doc.status];
+  if (!hero) throw new Error(`DeliveryPage: no hero for status ${doc.status}`);
+  // `void` is an exit and maps to the first step (the delivery has no step-level timestamps beyond receivedAt).
+  const heroStep = simpleStepIndexFor('delivery', doc.status);
   const goods = doc.lines.reduce((n, l) => n + Number(l.orderedQuantity) * Number(l.unitCost), 0);
 
   return (
@@ -67,7 +84,7 @@ export default async function DeliveryPage({
           {doc.supplierName && <> — {doc.supplierName}</>}
         </h1>
         <PageDescription className="mt-1">
-          {doc.deliveredOn} · <strong>{STATUS_LABEL[doc.status] ?? doc.status}</strong>
+          {doc.deliveredOn}
           {doc.referenceNo && <> · ref {doc.referenceNo}</>}
         </PageDescription>
         {doc.proofFileId && canViewProof && (
@@ -77,23 +94,17 @@ export default async function DeliveryPage({
         )}
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
-      {sp.warning && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          ⚠️ {sp.warning}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
-      <form action={receiveDeliveryAction} className="space-y-4">
+      <StatusHero kind={hero.kind} word={statusLabel(doc.status)} step={heroStep} steps={deliverySteps} line={hero.line} tone={hero.tone}>
+        {canReceive && (
+          <Button type="submit" form="receive-delivery-form" variant="primary">
+            Receive
+          </Button>
+        )}
+      </StatusHero>
+
+      <form id="receive-delivery-form" action={receiveDeliveryAction} className="space-y-4">
         <input type="hidden" name="deliveryId" value={doc.id} />
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table className="w-full min-w-[720px] border-collapse text-sm">
@@ -133,32 +144,32 @@ export default async function DeliveryPage({
                     <>
                       <td className="px-3 py-2 text-right tabular-nums">
                         <input type="hidden" name="lineId" value={l.id} />
-                        <input
+                        <Input
                           name="receivedQuantity"
                           inputMode="decimal"
                           defaultValue={l.orderedQuantity}
-                          className={`${INPUT} w-24 text-right tabular-nums`}
+                          className="w-24 text-right tabular-nums"
                         />
                       </td>
                       <td className="px-3 py-2">
-                        <select name="shortageReason" defaultValue="" className={`${INPUT} text-xs`}>
+                        <Select name="shortageReason" defaultValue="" className="text-xs">
                           <option value="">— only if short —</option>
                           {PICKABLE_REASONS.map((r) => (
                             <option key={r} value={r}>
                               {REASON_LABEL[r] ?? r}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                       </td>
                       <td className="px-3 py-2">
-                        <select name="locationId" defaultValue="" className={`${INPUT} text-xs`}>
+                        <Select name="locationId" defaultValue="" className="text-xs">
                           <option value="">— keep as drafted —</option>
                           {locations.map((loc) => (
                             <option key={loc.id} value={loc.id}>
                               {loc.name}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                       </td>
                     </>
                   ) : (
@@ -168,7 +179,7 @@ export default async function DeliveryPage({
                       </td>
                       <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
                         {l.shortageReason ? (REASON_LABEL[l.shortageReason] ?? l.shortageReason) : '—'}
-                        {l.overReceiptAllowed && <span className="ml-1 text-amber-700 dark:text-amber-500">(over-receipt approved)</span>}
+                        {l.overReceiptAllowed && <span className="ml-1 text-warning-ink">(over-receipt approved)</span>}
                       </td>
                     </>
                   )}
@@ -203,9 +214,6 @@ export default async function DeliveryPage({
                 <span className="text-neutral-500">(needs a manager or admin — a cashier ticking this is refused)</span>
               </label>
             </div>
-            <button type="submit" className={BTN}>
-              Receive
-            </button>
           </div>
         )}
       </form>

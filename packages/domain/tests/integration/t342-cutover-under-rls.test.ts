@@ -35,6 +35,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { closeDb, transaction, withOrgPrincipal } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { addOpeningFigure, attestStep } from '@shareat/domain';
+import { realPurge } from '../../../../tests/integration/t390-real-purge';
 
 /** Admin/bypass connection, for fixture seeding only — same shape as every other integration
  * test file's own `sql` (e.g. `packages/domain/tests/integration/cutover.test.ts:38`). Never used
@@ -85,6 +86,8 @@ describe('T-342 / DEF-417 part 1 — cutover under the RLS-enforcing role', () =
     // gets (if any) is never the RLS refusal under test — a period/account error here would be a
     // fixture gap, not a repeat of the bug.
     const { orgId, actor } = await fixture();
+    // T-390 S2 (R8): opening figures need the purge (C2) to have run. Run the REAL purge right after the org exists (C2 is per org) and BEFORE seeding: it truncates periods/stores/chart.
+    await realPurge(admin, actor.personId);
     await admin`
       insert into fiscal_periods (org_id, starts_on, ends_on, status) values
         (${orgId}, '2026-12-01', '2026-12-31', 'open')`;

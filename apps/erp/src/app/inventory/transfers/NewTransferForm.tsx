@@ -2,7 +2,7 @@
 
 /** The "New transfer" form. From/To exclusivity is `TwoWayPicker`'s job — shared with
  *  money-transfers rather than reimplemented here (see that component's header). */
-import { FormGrid, Field } from '@/components/ui';
+import { Button, Field, FormGrid, Input, Select } from '@/components/ui';
 import { TwoWayPicker, type PickerOption } from '../../../components/two-way-picker';
 
 export function NewTransferForm({
@@ -17,8 +17,7 @@ export function NewTransferForm({
   items: readonly { id: string; name: string }[];
 }) {
   const fieldLabel = 'text-xs text-neutral-600 dark:text-neutral-400';
-  const fieldSelect =
-    'mt-1 block w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900';
+  const fieldSelect = 'mt-1 block w-full min-h-11 rounded-[10px] border border-field-border bg-field px-2 py-1.5 text-sm';
 
   return (
     <form action={action} className="mt-3 space-y-3">
@@ -34,39 +33,30 @@ export function NewTransferForm({
       />
 
       <Field label="Item" className={fieldLabel}>
-        <select name="itemId" required className={fieldSelect}>
+        <Select name="itemId" required className="mt-1 block w-full">
           {items.map((i) => (
             <option key={i.id} value={i.id}>
               {i.name}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="Quantity" className={fieldLabel}>
-        <input
-          name="quantity"
-          required
-          inputMode="decimal"
-          placeholder="0.000"
-          className={`${fieldSelect} tabular-nums`}
-        />
+        <Input name="quantity" required inputMode="decimal" placeholder="0.000" className="mt-1 block w-full tabular-nums" />
       </Field>
       <Field label="Mode" className={fieldLabel}>
-        <select name="mode" className={fieldSelect}>
+        <Select name="mode" className="mt-1 block w-full">
           <option value="immediate">Transfer now (instant)</option>
           <option value="two_step">Dispatch, then receive later</option>
-        </select>
+        </Select>
       </Field>
       <Field label="Note (optional)" className={fieldLabel}>
-        <input name="note" className={fieldSelect} />
+        <Input name="note" className="mt-1 block w-full" />
       </Field>
       </FormGrid>
-      <button
-        type="submit"
-        className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-      >
+      <Button type="submit" variant="primary">
         Transfer
-      </button>
+      </Button>
     </form>
   );
 }

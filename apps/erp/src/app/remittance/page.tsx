@@ -32,7 +32,8 @@ import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { CASH_POLICY_EDIT } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid } from '@/components/ui';
+import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'Remittance — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -133,16 +134,7 @@ export default async function RemittancePage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/*
         ⭐ T-152 — the ceiling, the cadence, and DEF-082's float.
@@ -153,20 +145,20 @@ export default async function RemittancePage({
         never a blocked till" — so nothing here stops a handover, a sale, or a verification.
       */}
       {findings.length > 0 && (
-        <section className="space-y-2 rounded-lg border border-orange-300 bg-orange-50 p-4 dark:border-orange-800 dark:bg-orange-950">
-          <div className="text-sm font-medium text-orange-900 dark:text-orange-300">
+        <section className="space-y-2 rounded-lg border border-warning bg-warning-soft p-4">
+          <div className="text-sm font-medium text-warning-ink">
             {findings.length} cash-custody {findings.length === 1 ? 'finding' : 'findings'}
           </div>
           <ul className="space-y-2">
             {findings.map((f) => (
               <li
                 key={f.key}
-                className="border-t border-orange-200 pt-2 text-sm text-orange-900 dark:border-orange-900 dark:text-orange-300"
+                className="border-t border-warning pt-2 text-sm text-warning-ink"
               >
                 {f.detail}
                 {f.status === 'acknowledged' && (
                   // ⚠️ Acknowledged is not resolved: it is still counted, and it visibly ages.
-                  <span className="ml-2 rounded bg-orange-200 px-1.5 py-0.5 text-xs dark:bg-orange-900">
+                  <span className="ml-2 rounded bg-surface px-1.5 py-0.5 text-xs">
                     accepted for now
                   </span>
                 )}
@@ -188,8 +180,8 @@ export default async function RemittancePage({
           counted and visible, never hidden by the store picker. Rows and controls stay
           store-scoped either way (finding 5). */}
       {(variances.length > 0 || orgVarianceCount > 0) && (
-        <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
-          <div className="text-sm text-amber-900 dark:text-amber-300">
+        <section className="space-y-3 rounded-lg border border-warning bg-warning-soft p-4">
+          <div className="text-sm text-warning-ink">
             <strong className="font-medium">
               {variances.length} unresolved remittance{' '}
               {variances.length === 1 ? 'variance' : 'variances'} here
@@ -212,11 +204,11 @@ export default async function RemittancePage({
             <form
               key={v.id}
               action={resolveVarianceAction}
-              className="space-y-3 border-t border-amber-200 pt-3 dark:border-amber-900"
+              className="space-y-3 border-t border-warning pt-3"
             >
               <input type="hidden" name="varianceId" value={v.id} />
               <input type="hidden" name="storeId" value={storeId} />
-              <div className="mr-2 text-sm text-amber-900 dark:text-amber-300">
+              <div className="mr-2 text-sm text-warning-ink">
                 <span className="font-mono tabular-nums">
                   {compare(money(v.amount), ZERO) < 0 ? 'Short ' : 'Over '}
                   {peso(Math.abs(Number(v.amount)))}
@@ -233,57 +225,52 @@ export default async function RemittancePage({
                   boolean (not per-row) — see its own comment above for why that is safe here, and
                   `variancesAreStoreScoped` for the fallback if it ever were not. */}
               {!canResolveVariances || !variancesAreStoreScoped ? (
-                <span className="text-xs text-amber-900 dark:text-amber-300">
+                <span className="text-xs text-warning-ink">
                   You don&rsquo;t have permission to resolve this variance.
                 </span>
               ) : compare(money(v.amount), ZERO) < 0 ? (
                 <>
                   <FormGrid>
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
+                    <span className="text-xs font-medium text-warning-ink">
                       Charge to
                     </span>
-                    <select name="personId" defaultValue="" className={`${INPUT}`}>
+                    <Select name="personId" defaultValue="" className="w-full">
                       <option value="">Nobody yet…</option>
                       {people.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.displayName}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                   {/* R5: shown only when the handover came from more than one account — with one
                       there is nothing to choose. */}
                   {v.fromAccounts.length > 1 && (
                     <label className="flex flex-col gap-1">
-                      <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
+                      <span className="text-xs font-medium text-warning-ink">
                         Comes out of
                       </span>
-                      <select name="fromMoneyAccountId" defaultValue="" className={`${INPUT}`}>
+                      <Select name="fromMoneyAccountId" defaultValue="" className="w-full">
                         <option value="">Choose an account…</option>
                         {v.fromAccounts.map((a) => (
                           <option key={a.id} value={a.id}>
                             {a.name}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </label>
                   )}
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
+                    <span className="text-xs font-medium text-warning-ink">
                       Reason
                     </span>
-                    <input name="reason" className={`${INPUT}`} />
+                    <Input name="reason" className="w-full" />
                   </label>
                   </FormGrid>
-                  <button
-                    type="submit"
-                    name="action"
-                    value="charge"
-                    className="rounded bg-amber-700 px-3 py-2 text-xs font-medium text-white hover:bg-amber-600"
-                  >
+                  <Button type="submit" name="action" value="charge" className="text-xs">
                     Charge
-                  </button>
+                  </Button>
                 </>
               ) : (
                 <>
@@ -291,34 +278,29 @@ export default async function RemittancePage({
                   {/* R5: shown only when the handover came from more than one account. */}
                   {v.fromAccounts.length > 1 && (
                     <label className="flex flex-col gap-1">
-                      <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
+                      <span className="text-xs font-medium text-warning-ink">
                         Came into
                       </span>
-                      <select name="fromMoneyAccountId" defaultValue="" className={`${INPUT}`}>
+                      <Select name="fromMoneyAccountId" defaultValue="" className="w-full">
                         <option value="">Choose an account…</option>
                         {v.fromAccounts.map((a) => (
                           <option key={a.id} value={a.id}>
                             {a.name}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </label>
                   )}
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs font-medium text-amber-900 dark:text-amber-300">
+                    <span className="text-xs font-medium text-warning-ink">
                       Note (optional)
                     </span>
-                    <input name="reason" className={`${INPUT}`} />
+                    <Input name="reason" className="w-full" />
                   </label>
                   </FormGrid>
-                  <button
-                    type="submit"
-                    name="action"
-                    value="recognise_income"
-                    className="rounded bg-amber-700 px-3 py-2 text-xs font-medium text-white hover:bg-amber-600"
-                  >
+                  <Button type="submit" name="action" value="recognise_income" className="text-xs">
                     Recognise as other income (7350)
-                  </button>
+                  </Button>
                 </>
               )}
             </form>
@@ -331,20 +313,15 @@ export default async function RemittancePage({
         <form className="flex flex-wrap items-end gap-2 gap-y-2">
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Store</span>
-            <select name="store" defaultValue={storeId} className={INPUT}>
+            <Select name="store" defaultValue={storeId} className="w-full">
               {stores.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} ({s.code})
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
-          <button
-            type="submit"
-            className="rounded border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
-            Show
-          </button>
+          <Button type="submit">Show</Button>
         </form>
       )}
 
@@ -383,7 +360,7 @@ export default async function RemittancePage({
                     <td className="px-3 py-2 font-mono whitespace-nowrap">
                       {d.businessDate}
                       {!d.remittable && (
-                        <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-xs font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                        <span className="ml-2 rounded bg-closed-soft px-1.5 py-0.5 text-xs font-medium text-closed">
                           {d.salesDayStatus ? `day ${d.salesDayStatus}` : 'no sales day'}
                         </span>
                       )}
@@ -409,7 +386,7 @@ export default async function RemittancePage({
             the same as not handable-over (T-324): the cash behind it can be declared as an
             overage and handed over today; only the verify-then-settle step waits. */}
         {heldBack.length > 0 && (
-          <p className="text-xs text-amber-700 dark:text-amber-400">
+          <p className="text-xs text-warning-ink">
             {heldBack.length} day{heldBack.length === 1 ? '' : 's'} holding{' '}
             {peso(heldBack.reduce((s, d) => s + Number(d.owed), 0))} cannot be settled yet — the
             sales day has to be verified first, because that is the signed count behind it.
@@ -458,7 +435,7 @@ export default async function RemittancePage({
                       name={`lineAmount_${i}`}
                       inputMode="decimal"
                       placeholder="0.00"
-                      className={INPUT}
+                      className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
                     />
                   </Field>
                   <Field
@@ -469,26 +446,26 @@ export default async function RemittancePage({
                       name={`lineOverage_${i}`}
                       inputMode="decimal"
                       placeholder="0.00"
-                      className={INPUT}
+                      className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
                     />
                   </Field>
                   {/* ⚠️ Defaults to the office account of the SAME KIND. Cash handed into a bank
                       account is a deposit, not a remittance, and letting the first office account
                       alphabetically win made "BDO — office" the default for the till. */}
                   <Field label="Lands in">
-                    <select
+                    <Select
                       name={`lineTo_${i}`}
                       defaultValue={
                         office.find((o) => o.instrument === a.instrument)?.id ?? office[0]?.id
                       }
-                      className={INPUT}
+                      className="w-full"
                     >
                       {office.map((o) => (
                         <option key={o.id} value={o.id}>
                           {o.name}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </Field>
                 </FormGrid>
               ))}
@@ -496,28 +473,23 @@ export default async function RemittancePage({
 
             <FormGrid>
               <Field label="Date">
-                <input
+                <Input
                   name="remittedOn"
                   type="date"
                   required
                   defaultValue={today()}
-                  className={INPUT}
+                  className="w-full"
                 />
               </Field>
               <Field label="Reference">
-                <input name="reference" maxLength={120} className={INPUT} />
+                <Input name="reference" maxLength={120} className="w-full" />
               </Field>
             </FormGrid>
             <Field label="Notes">
-              <input name="notes" className={INPUT} />
+              <Input name="notes" className="w-full" />
             </Field>
 
-            <button
-              type="submit"
-              className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-            >
-              Record handover
-            </button>
+            <SubmitButton pendingLabel="Saving…">Record handover</SubmitButton>
           </form>
         </section>
       )}
@@ -554,18 +526,10 @@ export default async function RemittancePage({
                         <form action={reverseRemittanceAction} className="flex justify-end gap-1">
                           <input type="hidden" name="remittanceId" value={r.id} />
                           <input type="hidden" name="storeId" value={storeId} />
-                          <input
-                            name="reason"
-                            required
-                            placeholder="Reason…"
-                            className="w-28 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
-                          />
-                          <button
-                            type="submit"
-                            className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                          >
+                          <Input name="reason" required placeholder="Reason…" className="w-28 text-xs" />
+                          <Button type="submit" variant="danger" className="text-xs">
                             Reverse
-                          </button>
+                          </Button>
                         </form>
                       )}
                     </td>
@@ -604,28 +568,28 @@ export default async function RemittancePage({
             {/* ⚠️ Both fields carry a hint so the control row lines up. With only one hinted, the
                 select and the text input sat at different heights under `items-end`. */}
             <Field label="Remittance cadence" hint="How often the money is carried in.">
-              <select
+              <Select
                 name="remittanceCadence"
                 defaultValue={policy.remittanceCadence}
-                className={`${INPUT}`}
+                className="w-full"
               >
                 {Object.entries(CADENCE_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field
               label="Un-remitted ceiling"
               hint="Required for any cadence but daily. Leave blank only when remitting daily."
             >
-              <input
+              <Input
                 name="unremittedCeiling"
                 inputMode="decimal"
                 defaultValue={policy.unremittedCeiling ?? ''}
                 placeholder="e.g. 20000.00"
-                className={`${INPUT}`}
+                className="w-full"
               />
             </Field>
 </FormGrid>
@@ -640,9 +604,6 @@ export default async function RemittancePage({
     </Page>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function Field({
   label,

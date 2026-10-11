@@ -1,0 +1,889 @@
+{
+ "version": 1,
+ "from": "2026-10-19",
+ "through": "2026-10-25",
+ "window": {
+  "from": "2026-10-12",
+  "through": "2026-11-01"
+ },
+ "extractedAt": "2026-10-26T01:00:00.000Z",
+ "stores": [
+  {
+   "id": "b9DzsnPbr1BUnY88lyT4",
+   "name": "SharEat Lipa"
+  },
+  {
+   "id": "dZUyvX4q824JBSVDAfE9",
+   "name": "SharEat Malvar"
+  },
+  {
+   "id": "iGOW7q2pZbeHWV832UNh",
+   "name": "SharEat Banay-Banay"
+  },
+  {
+   "id": "eVYKj6wABdakk8RgEotW",
+   "name": "SharEat Davao"
+  }
+ ],
+ "excludedStores": [
+  {
+   "id": "y1DMgfisuTHBF57cNL6i",
+   "name": "SharEat Padre Garcia",
+   "reason": "not operating yet"
+  },
+  {
+   "id": "XbkyEgZqunmj2wzhicNf",
+   "name": "TEST",
+   "reason": "test store"
+  },
+  {
+   "id": "TEST",
+   "name": "Test Commissary",
+   "reason": "test store"
+  }
+ ],
+ "suppliers": [
+  {
+   "id": "S1",
+   "name": "Alpha Foods Trading"
+  },
+  {
+   "id": "S2",
+   "name": "Bravo Packaging"
+  },
+  {
+   "id": "S3",
+   "name": "Carlos Landlord Corp"
+  }
+ ],
+ "paymentAccounts": [
+  {
+   "id": "gcash",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "name": "GCash Lipa"
+  },
+  {
+   "id": "maya",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "name": "Maya Lipa"
+  }
+ ],
+ "journal": [
+  {
+   "id": "sale:2026-10-18:cash:cashier",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-18",
+   "sourceType": "sale",
+   "sourceId": "2026-10-18",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "in",
+   "amount": 3000,
+   "status": "posted",
+   "createdAtMs": 1792342800000
+  },
+  {
+   "id": "sale:2026-10-19:cash:cashier",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-19",
+   "sourceType": "sale",
+   "sourceId": "2026-10-19",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "in",
+   "amount": 5500,
+   "status": "posted"
+  },
+  {
+   "id": "sale:2026-10-19:online:gcash",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-19",
+   "sourceType": "sale",
+   "sourceId": "2026-10-19",
+   "legKey": "online:gcash",
+   "accountId": "online__gcash",
+   "direction": "in",
+   "amount": 3000,
+   "status": "posted"
+  },
+  {
+   "id": "sale:2026-10-20:cash:cashier",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-20",
+   "sourceType": "sale",
+   "sourceId": "2026-10-20",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "in",
+   "amount": 13000,
+   "status": "posted"
+  },
+  {
+   "id": "sale:2026-10-20:online:gcash",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-20",
+   "sourceType": "sale",
+   "sourceId": "2026-10-20",
+   "legKey": "online:gcash",
+   "accountId": "online__gcash",
+   "direction": "in",
+   "amount": 5000,
+   "status": "posted"
+  },
+  {
+   "id": "sale:2026-10-20:online:maya",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-20",
+   "sourceType": "sale",
+   "sourceId": "2026-10-20",
+   "legKey": "online:maya",
+   "accountId": "online__maya",
+   "direction": "in",
+   "amount": 2000,
+   "status": "posted"
+  },
+  {
+   "id": "sale:2026-10-21:cash:cashier",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-21",
+   "sourceType": "sale",
+   "sourceId": "2026-10-21",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "in",
+   "amount": 1500,
+   "status": "posted"
+  },
+  {
+   "id": "sale:2026-10-21:online:gcash",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-21",
+   "sourceType": "sale",
+   "sourceId": "2026-10-21",
+   "legKey": "online:gcash",
+   "accountId": "online__gcash",
+   "direction": "in",
+   "amount": 4000,
+   "status": "posted"
+  },
+  {
+   "id": "sale:2026-10-22:online:gcash",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-22",
+   "sourceType": "sale",
+   "sourceId": "2026-10-22",
+   "legKey": "online:gcash",
+   "accountId": "online__gcash",
+   "direction": "in",
+   "amount": 7000,
+   "status": "posted"
+  },
+  {
+   "id": "sale:2026-10-24:cash:cashier",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-24",
+   "sourceType": "sale",
+   "sourceId": "2026-10-24",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "in",
+   "amount": 6000,
+   "status": "voided"
+  },
+  {
+   "id": "sale:2026-10-25:cash:cashier",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "20261025",
+   "sourceType": "sale",
+   "sourceId": "2026-10-25",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "in",
+   "amount": 10000,
+   "status": "posted",
+   "createdAtMs": 1792945800000
+  },
+  {
+   "id": "sale:2026-10-25:online:gcash",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "20261025",
+   "sourceType": "sale",
+   "sourceId": "2026-10-25",
+   "legKey": "online:gcash",
+   "accountId": "online__gcash",
+   "direction": "in",
+   "amount": 2000,
+   "status": "posted",
+   "createdAtMs": 1792945800000
+  },
+  {
+   "id": "sale:2026-10-26:cash:cashier",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-26",
+   "sourceType": "sale",
+   "sourceId": "2026-10-26",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "in",
+   "amount": 5000,
+   "status": "posted",
+   "createdAtMs": 1792940400000
+  },
+  {
+   "id": "expense_payment:ex1:cash:cashier",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-21",
+   "sourceType": "expense_payment",
+   "sourceId": "ex1",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "out",
+   "amount": 2500,
+   "status": "posted"
+  },
+  {
+   "id": "expense_payment:ex2:ap:S1",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-20",
+   "sourceType": "expense_payment",
+   "sourceId": "ex2",
+   "legKey": "ap:S1",
+   "accountId": "ap__S1",
+   "direction": "in",
+   "amount": 4000,
+   "status": "posted",
+   "supplierId": "S1"
+  },
+  {
+   "id": "expense_payment:ex3:ap:S3",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-19",
+   "sourceType": "expense_payment",
+   "sourceId": "ex3",
+   "legKey": "ap:S3",
+   "accountId": "ap__S3",
+   "direction": "in",
+   "amount": 6000,
+   "status": "posted",
+   "supplierId": "S3"
+  },
+  {
+   "id": "expense_payment:ex4:cash:cashier",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-22",
+   "sourceType": "expense_payment",
+   "sourceId": "ex4",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "out",
+   "amount": 999,
+   "status": "voided"
+  },
+  {
+   "id": "expense_payment:ex5:online:gcash",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-24",
+   "sourceType": "expense_payment",
+   "sourceId": "ex5",
+   "legKey": "online:gcash",
+   "accountId": "online__gcash",
+   "direction": "out",
+   "amount": 12000,
+   "status": "posted"
+  },
+  {
+   "id": "expense_payment:ex5:asset:A1",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-24",
+   "sourceType": "expense_payment",
+   "sourceId": "ex5",
+   "legKey": "asset:A1",
+   "accountId": "asset__A1",
+   "direction": "in",
+   "amount": 12000,
+   "status": "posted"
+  },
+  {
+   "id": "expense_payment:ex6:cash:staff",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-25",
+   "sourceType": "expense_payment",
+   "sourceId": "ex6",
+   "legKey": "cash:staff",
+   "accountId": "cash__staff",
+   "direction": "out",
+   "amount": 300,
+   "status": "posted"
+  },
+  {
+   "id": "expense_payment:ex7:cash:office",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-22",
+   "sourceType": "expense_payment",
+   "sourceId": "ex7",
+   "legKey": "cash:office",
+   "accountId": "cash__office",
+   "direction": "out",
+   "amount": 150,
+   "status": "posted"
+  },
+  {
+   "id": "expense_payment:ex8:cash:cashier",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-26",
+   "sourceType": "expense_payment",
+   "sourceId": "ex8",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "out",
+   "amount": 700,
+   "status": "posted"
+  },
+  {
+   "id": "ap_payment:pay1:cash:office",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-23",
+   "sourceType": "ap_payment",
+   "sourceId": "pay1",
+   "legKey": "cash:office",
+   "accountId": "cash__office",
+   "direction": "out",
+   "amount": 1500,
+   "status": "posted",
+   "supplierId": "S1"
+  },
+  {
+   "id": "ap_payment:pay1:ap:S1",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-23",
+   "sourceType": "ap_payment",
+   "sourceId": "pay1",
+   "legKey": "ap:S1",
+   "accountId": "ap__S1",
+   "direction": "out",
+   "amount": 1500,
+   "status": "posted",
+   "supplierId": "S1"
+  },
+  {
+   "id": "ap_payment:pay2:cash:office",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-24",
+   "sourceType": "ap_payment",
+   "sourceId": "pay2",
+   "legKey": "cash:office",
+   "accountId": "cash__office",
+   "direction": "out",
+   "amount": 700,
+   "status": "posted",
+   "supplierId": "S2"
+  },
+  {
+   "id": "ap_payment:pay2:ap:S2",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-24",
+   "sourceType": "ap_payment",
+   "sourceId": "pay2",
+   "legKey": "ap:S2",
+   "accountId": "ap__S2",
+   "direction": "out",
+   "amount": 500,
+   "status": "posted",
+   "supplierId": "S2"
+  },
+  {
+   "id": "ap_payment:pay2:advance:S2",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-24",
+   "sourceType": "ap_payment",
+   "sourceId": "pay2",
+   "legKey": "advance:S2",
+   "accountId": "supplier_advance__S2",
+   "direction": "in",
+   "amount": 200,
+   "status": "posted",
+   "supplierId": "S2"
+  },
+  {
+   "id": "remittance:rem1:cash:cashier",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-22",
+   "sourceType": "remittance",
+   "sourceId": "rem1",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "out",
+   "amount": 3000,
+   "status": "posted"
+  },
+  {
+   "id": "remittance:rem1:cash:office",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-22",
+   "sourceType": "remittance",
+   "sourceId": "rem1",
+   "legKey": "cash:office",
+   "accountId": "cash__office",
+   "direction": "in",
+   "amount": 3000,
+   "status": "posted"
+  },
+  {
+   "id": "transfer:tr1:out",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-22",
+   "sourceType": "transfer",
+   "sourceId": "tr1",
+   "legKey": "out",
+   "accountId": "cash__office",
+   "direction": "out",
+   "amount": 400,
+   "status": "posted"
+  },
+  {
+   "id": "transfer:tr1:in",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-22",
+   "sourceType": "transfer",
+   "sourceId": "tr1",
+   "legKey": "in",
+   "accountId": "online__gcash",
+   "direction": "in",
+   "amount": 400,
+   "status": "posted"
+  },
+  {
+   "id": "cash_request_release:cr1:office",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-20",
+   "sourceType": "cash_request_release",
+   "sourceId": "cr1",
+   "legKey": "office",
+   "accountId": "cash__office",
+   "direction": "out",
+   "amount": 800,
+   "status": "posted"
+  },
+  {
+   "id": "cash_request_release:cr1:staff",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-20",
+   "sourceType": "cash_request_release",
+   "sourceId": "cr1",
+   "legKey": "staff",
+   "accountId": "cash__staff",
+   "direction": "in",
+   "amount": 800,
+   "status": "posted"
+  },
+  {
+   "id": "salary_advance:sa1:cash",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-21",
+   "sourceType": "salary_advance",
+   "sourceId": "sa1",
+   "legKey": "cash",
+   "accountId": "cash__cashier",
+   "direction": "out",
+   "amount": 400,
+   "status": "posted"
+  },
+  {
+   "id": "payroll_payout:pp1:cash",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-24",
+   "sourceType": "payroll_payout",
+   "sourceId": "pp1",
+   "legKey": "cash",
+   "accountId": "cash__office",
+   "direction": "out",
+   "amount": 9000,
+   "status": "posted"
+  },
+  {
+   "id": "loan_payment:lp1:cash",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-23",
+   "sourceType": "loan_payment",
+   "sourceId": "lp1",
+   "legKey": "cash",
+   "accountId": "cash__office",
+   "direction": "out",
+   "amount": 1100,
+   "status": "posted"
+  },
+  {
+   "id": "future_thing:x1:cash",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "businessDate": "2026-10-22",
+   "sourceType": "future_thing",
+   "sourceId": "x1",
+   "legKey": "cash",
+   "accountId": "cash__office",
+   "direction": "out",
+   "amount": 50,
+   "status": "posted"
+  },
+  {
+   "id": "sale:2026-10-20:cash:cashier",
+   "storeId": "dZUyvX4q824JBSVDAfE9",
+   "businessDate": "2026-10-20",
+   "sourceType": "sale",
+   "sourceId": "2026-10-20",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "in",
+   "amount": 5000,
+   "status": "posted"
+  },
+  {
+   "id": "sale:2026-10-22:cash:cashier",
+   "storeId": "dZUyvX4q824JBSVDAfE9",
+   "businessDate": "2026-10-22",
+   "sourceType": "sale",
+   "sourceId": "2026-10-22",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "in",
+   "amount": 3000,
+   "status": "posted"
+  },
+  {
+   "id": "expense_payment:exd1:cash:cashier",
+   "storeId": "eVYKj6wABdakk8RgEotW",
+   "businessDate": "2026-10-22",
+   "sourceType": "expense_payment",
+   "sourceId": "exd1",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "out",
+   "amount": 80,
+   "status": "voided"
+  },
+  {
+   "id": "payroll_payout:ppd:cash",
+   "storeId": "eVYKj6wABdakk8RgEotW",
+   "businessDate": "2026-10-24",
+   "sourceType": "payroll_payout",
+   "sourceId": "ppd",
+   "legKey": "cash",
+   "accountId": "cash__office",
+   "direction": "out",
+   "amount": 2000,
+   "status": "posted"
+  },
+  {
+   "id": "sale:2026-10-20:cash:cashier",
+   "storeId": "y1DMgfisuTHBF57cNL6i",
+   "businessDate": "2026-10-20",
+   "sourceType": "sale",
+   "sourceId": "2026-10-20",
+   "legKey": "cash:cashier",
+   "accountId": "cash__cashier",
+   "direction": "in",
+   "amount": 777,
+   "status": "posted"
+  }
+ ],
+ "expenses": [
+  {
+   "id": "ex1",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "dayKey": "2026-10-21",
+   "totalAmount": 2500,
+   "status": "posted",
+   "supplierId": "",
+   "expenseEntryId": "ent-util",
+   "expenseEntryGroup": "OPEX",
+   "category": "Electricity",
+   "payments": [
+    {
+     "method": "cash",
+     "amount": 2500,
+     "accountId": "cashier"
+    }
+   ],
+   "createdAt": 1791770400000
+  },
+  {
+   "id": "ex2",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "dayKey": "2026-10-20",
+   "totalAmount": 4000,
+   "status": "posted",
+   "supplierId": "S1",
+   "expenseEntryId": "ent-pork",
+   "expenseEntryGroup": "COGS",
+   "category": "Pork",
+   "payments": [
+    {
+     "method": "credit",
+     "amount": 4000
+    }
+   ],
+   "createdAt": 1792461600000
+  },
+  {
+   "id": "ex3",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "dayKey": "2026-10-19",
+   "totalAmount": 6000,
+   "status": "posted",
+   "supplierId": "S3",
+   "expenseEntryId": "ent-rent",
+   "expenseEntryGroup": "OPEX",
+   "category": "Rent",
+   "payments": [
+    {
+     "method": "credit",
+     "amount": 6000
+    }
+   ],
+   "createdAt": 1792375200000
+  },
+  {
+   "id": "ex4",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "dayKey": "2026-10-22",
+   "totalAmount": 999,
+   "status": "voided",
+   "supplierId": "",
+   "expenseEntryId": "ent-util",
+   "expenseEntryGroup": "OPEX",
+   "category": "Electricity",
+   "payments": [
+    {
+     "method": "cash",
+     "amount": 999,
+     "accountId": "cashier"
+    }
+   ],
+   "createdAt": 1792634400000
+  },
+  {
+   "id": "ex5",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "dayKey": "2026-10-24",
+   "totalAmount": 12000,
+   "status": "posted",
+   "supplierId": "",
+   "expenseEntryId": "ent-equip",
+   "expenseEntryGroup": "CAPEX",
+   "category": "Equipment",
+   "payments": [
+    {
+     "method": "online",
+     "amount": 12000,
+     "accountId": "gcash"
+    }
+   ],
+   "createdAt": 1792807200000
+  },
+  {
+   "id": "ex6",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "dayKey": "2026-10-25",
+   "totalAmount": 300,
+   "status": "posted",
+   "supplierId": "",
+   "expenseEntryId": "ent-pers",
+   "expenseEntryGroup": "PERSONAL",
+   "category": "Personal",
+   "payments": [
+    {
+     "method": "cash",
+     "amount": 300,
+     "accountId": "staff"
+    }
+   ],
+   "createdAt": 1792893600000
+  },
+  {
+   "id": "ex7",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "dayKey": "2026-10-22",
+   "totalAmount": 150,
+   "status": "posted",
+   "supplierId": "",
+   "expenseEntryId": "ent-misc",
+   "expenseEntryGroup": "OTHERS",
+   "category": "Misc",
+   "payments": [
+    {
+     "method": "cash",
+     "amount": 150,
+     "accountId": "office"
+    }
+   ],
+   "createdAt": 1792634400000
+  },
+  {
+   "id": "ex8",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "dayKey": "2026-10-26",
+   "totalAmount": 700,
+   "status": "posted",
+   "supplierId": "",
+   "expenseEntryId": "ent-util",
+   "expenseEntryGroup": "OPEX",
+   "category": "Electricity",
+   "payments": [
+    {
+     "method": "cash",
+     "amount": 700,
+     "accountId": "cashier"
+    }
+   ],
+   "createdAt": 1792461600000
+  },
+  {
+   "id": "exd1",
+   "storeId": "eVYKj6wABdakk8RgEotW",
+   "dayKey": "2026-10-22",
+   "totalAmount": 80,
+   "status": "voided",
+   "supplierId": "",
+   "expenseEntryId": "ent-util",
+   "expenseEntryGroup": "OPEX",
+   "category": "Electricity",
+   "payments": [
+    {
+     "method": "cash",
+     "amount": 80,
+     "accountId": "cashier"
+    }
+   ],
+   "createdAt": 1792634400000
+  }
+ ],
+ "salesDays": [
+  {
+   "id": "2026-10-18",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "status": "verified",
+   "dineInSales": 3000,
+   "onlineBreakdown": {},
+   "creditSales": 0,
+   "otherPaymentSales": 0
+  },
+  {
+   "id": "2026-10-19",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "status": "verified",
+   "dineInSales": 10000,
+   "onlineBreakdown": {
+    "gcash": 3000
+   },
+   "creditSales": 1000,
+   "otherPaymentSales": 500
+  },
+  {
+   "id": "2026-10-20",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "status": "partially_remitted",
+   "dineInSales": 20000,
+   "onlineBreakdown": {
+    "gcash": 5000,
+    "maya": 2000
+   },
+   "creditSales": 0,
+   "otherPaymentSales": 0
+  },
+  {
+   "id": "2026-10-21",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "status": "remitted",
+   "dineInSales": 8000,
+   "onlineBreakdown": {
+    "gcash": 4000
+   },
+   "creditSales": 2500,
+   "otherPaymentSales": 0
+  },
+  {
+   "id": "2026-10-22",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "status": "verified",
+   "dineInSales": 10000,
+   "onlineBreakdown": {
+    "gcash": 7000
+   },
+   "creditSales": 3500,
+   "otherPaymentSales": 0
+  },
+  {
+   "id": "2026-10-23",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "status": "submitted",
+   "dineInSales": 9000,
+   "onlineBreakdown": {},
+   "creditSales": 700,
+   "otherPaymentSales": 0
+  },
+  {
+   "id": "2026-10-24",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "status": "voided",
+   "dineInSales": 6000,
+   "onlineBreakdown": {},
+   "creditSales": 0,
+   "otherPaymentSales": 0
+  },
+  {
+   "id": "2026-10-25",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "status": "verified",
+   "dineInSales": 12000,
+   "onlineBreakdown": {
+    "gcash": 2000
+   },
+   "creditSales": 0,
+   "otherPaymentSales": 0
+  },
+  {
+   "id": "2026-10-26",
+   "storeId": "b9DzsnPbr1BUnY88lyT4",
+   "status": "verified",
+   "dineInSales": 5000,
+   "onlineBreakdown": {},
+   "creditSales": 0,
+   "otherPaymentSales": 0
+  },
+  {
+   "id": "2026-10-20",
+   "storeId": "dZUyvX4q824JBSVDAfE9",
+   "status": "verified",
+   "dineInSales": 5000,
+   "onlineBreakdown": {},
+   "creditSales": 0,
+   "otherPaymentSales": 0
+  },
+  {
+   "id": "2026-10-22",
+   "storeId": "dZUyvX4q824JBSVDAfE9",
+   "status": "verified",
+   "dineInSales": 0,
+   "onlineBreakdown": {},
+   "creditSales": 0,
+   "otherPaymentSales": 0
+  },
+  {
+   "id": "2026-10-21",
+   "storeId": "eVYKj6wABdakk8RgEotW",
+   "status": "submitted",
+   "dineInSales": 4000,
+   "onlineBreakdown": {},
+   "creditSales": 100,
+   "otherPaymentSales": 0
+  },
+  {
+   "id": "2026-10-20",
+   "storeId": "y1DMgfisuTHBF57cNL6i",
+   "status": "verified",
+   "dineInSales": 777,
+   "onlineBreakdown": {},
+   "creditSales": 0,
+   "otherPaymentSales": 0
+  }
+ ]
+}

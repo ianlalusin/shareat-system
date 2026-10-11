@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
+import { Button } from '@/components/ui';
 
 /**
  * T-217. `retry` (not `reset`) is the recovery callback on Next 16.3+ — confirmed against
@@ -37,16 +38,12 @@ export default function ErrorBoundary({
         </p>
       )}
       <div className="flex justify-center gap-4 pt-2">
-        <button
-          type="button"
-          onClick={() => retry()}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-        >
+        <Button type="button" variant="primary" onClick={() => retry()}>
           Try again
-        </button>
+        </Button>
         <Link
           href="/"
-          className="rounded-md border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+          className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
         >
           Back to the dashboard
         </Link>

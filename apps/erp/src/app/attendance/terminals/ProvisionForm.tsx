@@ -9,11 +9,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { TokenReveal } from './TokenReveal';
 import type { ProvisionActionResult } from './actions';
-
-const INPUT =
-  'rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
+import { Button, Input } from '@/components/ui';
 
 export function ProvisionForm({
   storeId,
@@ -66,18 +62,18 @@ export function ProvisionForm({
     <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
       <label className="min-w-0 flex-1 basis-48 text-sm">
         <span className="block text-neutral-600 dark:text-neutral-400">Label</span>
-        <input
+        <Input
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           required
           placeholder="e.g. Lipa front counter"
-          className={`${INPUT} w-full`}
+          className="w-full"
         />
       </label>
-      <button type="submit" disabled={pending} className={BTN}>
+      <Button type="submit" variant="primary" disabled={pending}>
         {pending ? 'Provisioning…' : 'Provision terminal'}
-      </button>
-      {error && <p className="w-full text-sm text-red-700 dark:text-red-400">{error}</p>}
+      </Button>
+      {error && <p className="w-full text-sm text-danger">{error}</p>}
     </form>
   );
 }

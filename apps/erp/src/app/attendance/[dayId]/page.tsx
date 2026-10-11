@@ -15,6 +15,7 @@ import { isBlockingAnomaly } from '@shareat/domain';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Banner, Button, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
 
 /**
  * Plain-language names for the engine's anomaly codes.
@@ -56,11 +57,7 @@ export const dynamic = 'force-dynamic';
   side only from `lg`. Every control is a real form control — no hover-only affordances.
 */
 
-const CARD = 'rounded border border-neutral-200 p-4 dark:border-neutral-800';
-const FIELD =
-  'rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900';
-const BTN =
-  'rounded border border-neutral-300 px-3 py-1.5 text-sm font-medium disabled:opacity-40 dark:border-neutral-700';
+const CARD = 'rounded border border-surface-border p-4';
 
 export default async function AttendanceDayPage({
   params,
@@ -91,24 +88,15 @@ export default async function AttendanceDayPage({
         <PageDescription>
           {asHours(day.computedMinutes)} paid{day.isHalfDay ? ' (half day)' : ''} ·{' '}
           {day.pendingOtMinutes > 0 ? `${asHours(day.pendingOtMinutes)} overtime recorded` : 'no overtime'} ·
-          status <strong>{day.status}</strong>
+          status <strong>{statusLabel(day.status)}</strong>
         </PageDescription>
       </div>
 
-      {sp.ok && (
-        <p className="rounded border border-emerald-300 p-3 text-xs text-emerald-900 dark:border-emerald-800 dark:text-emerald-300">
-          ✅ {sp.ok}
-        </p>
-      )}
-      {sp.error && (
-        <p className="rounded border border-red-300 p-3 text-xs text-red-900 dark:border-red-800 dark:text-red-300">
-          ⛔ {sp.error}
-        </p>
-      )}
+      <FlashBanner flash={sp} />
       {lockedReason && (
-        <p className="rounded border border-amber-300 p-3 text-xs text-amber-900 dark:border-amber-800 dark:text-amber-300">
+        <Banner tone="warning">
           🔒 <strong>No decision can be made on this day.</strong> {lockedReason}
-        </p>
+        </Banner>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -164,16 +152,16 @@ function Evidence({ detail }: { detail: DayReviewDetail }) {
       </div>
 
       {day.anomalies.length > 0 && (
-        <div className="rounded border border-amber-300 p-4 dark:border-amber-800">
-          <h3 className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-400">
+        <div className="rounded border border-warning p-4">
+          <h3 className="text-xs uppercase tracking-wide text-warning-ink">
             Anomalies
           </h3>
-          <ul className="mt-2 space-y-1 text-sm text-amber-900 dark:text-amber-300">
+          <ul className="mt-2 space-y-1 text-sm text-warning-ink">
             {day.anomalies.map((a) => (
               <li key={a}>
                 {isBlockingAnomaly(a) ? '⛔' : '⚠️'} {ANOMALY_LABEL[a] ?? a}
                 {!isBlockingAnomaly(a) && (
-                  <span className="ml-1 text-xs text-amber-700 dark:text-amber-500">
+                  <span className="ml-1 text-xs text-warning-ink">
                     — advisory, does not block sign-off
                   </span>
                 )}
@@ -187,7 +175,7 @@ function Evidence({ detail }: { detail: DayReviewDetail }) {
               not do is the exact class this project keeps filing defects about, so the line now
               renders only when something actually blocks. */}
           {day.anomalies.some((a) => isBlockingAnomaly(a)) && (
-            <p className="mt-2 text-xs text-amber-800 dark:text-amber-400">
+            <p className="mt-2 text-xs text-warning-ink">
               ⛔ The blocking items above must be settled before this day can be verified — a
               sign-off that ignores them records an approval nobody actually made.
             </p>
@@ -199,7 +187,7 @@ function Evidence({ detail }: { detail: DayReviewDetail }) {
               worked; overriding the half day pays a FULL day for a shift that was short, which is
               what v1 did and why it over-paid relative to presence in 58 of 346 sessions. */}
           {day.anomalies.includes('half_day_near_full') && (
-            <p className="mt-3 rounded bg-amber-100 p-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-300">
+            <p className="mt-3 rounded bg-warning-soft p-2 text-xs text-warning-ink">
               <strong>If the undertime was permitted, approve the pending overtime</strong> — that
               credits the hours actually worked. ⛔ Do <strong>not</strong> override the half day to
               a full one: permission excuses the absence, it does not pay for the missing time.
@@ -239,7 +227,7 @@ function Overtime({ day, locked }: { day: Day; locked: boolean }) {
       <h3 className="text-sm font-medium">
         Overtime — {asHours(day.pendingOtMinutes)} recorded
         {day.approvedOtMinutes !== null && (
-          <span className="ml-2 text-xs font-normal text-emerald-700 dark:text-emerald-400">
+          <span className="ml-2 text-xs font-normal text-success">
             ✅ {asHours(day.approvedOtMinutes)} already approved
           </span>
         )}
@@ -252,16 +240,16 @@ function Overtime({ day, locked }: { day: Day; locked: boolean }) {
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Minutes to pay
-          <input
+          <Input
             name="approvedOtMinutes"
             inputMode="numeric"
             defaultValue={day.approvedOtMinutes ?? day.pendingOtMinutes}
-            className={FIELD + ' w-full'}
+            className="w-full"
           />
         </label>
-        <button type="submit" className={BTN} disabled={locked}>
+        <Button type="submit" variant="primary" disabled={locked}>
           Decide
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -274,7 +262,7 @@ function StartAnchor({ day, locked }: { day: Day; locked: boolean }) {
       <h3 className="text-sm font-medium">
         Paid from
         {day.hasStartAnchor && (
-          <span className="ml-2 text-xs font-normal text-emerald-700 dark:text-emerald-400">
+          <span className="ml-2 text-xs font-normal text-success">
             ✅ decided
           </span>
         )}
@@ -286,16 +274,16 @@ function StartAnchor({ day, locked }: { day: Day; locked: boolean }) {
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Minute of shift day
-          <input
+          <Input
             name="chosenAnchorMinute"
             inputMode="numeric"
             defaultValue={day.anchorMinute ?? 0}
-            className={FIELD + ' w-full'}
+            className="w-full"
           />
         </label>
-        <button type="submit" className={BTN} disabled={locked}>
+        <Button type="submit" variant="secondary" disabled={locked}>
           Save
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -308,7 +296,7 @@ function EarlyOut({ day, locked }: { day: Day; locked: boolean }) {
       <h3 className="text-sm font-medium">
         Paid until
         {day.hasEarlyOut && (
-          <span className="ml-2 text-xs font-normal text-emerald-700 dark:text-emerald-400">
+          <span className="ml-2 text-xs font-normal text-success">
             ✅ decided
           </span>
         )}
@@ -320,16 +308,16 @@ function EarlyOut({ day, locked }: { day: Day; locked: boolean }) {
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Minute of shift day
-          <input
+          <Input
             name="effectiveOutMinute"
             inputMode="numeric"
             defaultValue={day.endMinute ?? 0}
-            className={FIELD + ' w-full'}
+            className="w-full"
           />
         </label>
-        <button type="submit" className={BTN} disabled={locked}>
+        <Button type="submit" variant="secondary" disabled={locked}>
           Approve
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -342,7 +330,7 @@ function HalfDay({ day, locked }: { day: Day; locked: boolean }) {
       <h3 className="text-sm font-medium">
         Half day
         {day.hasHalfDayOverride && (
-          <span className="ml-2 text-xs font-normal text-emerald-700 dark:text-emerald-400">
+          <span className="ml-2 text-xs font-normal text-success">
             ✅ overridden
           </span>
         )}
@@ -354,18 +342,18 @@ function HalfDay({ day, locked }: { day: Day; locked: boolean }) {
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Set to
-          <select name="isHalfDay" defaultValue={String(day.isHalfDay)} className={FIELD + ' w-full'}>
+          <Select name="isHalfDay" defaultValue={String(day.isHalfDay)} className="w-full">
             <option value="true">Half day</option>
             <option value="false">Full day</option>
-          </select>
+          </Select>
         </label>
         <label className="flex flex-1 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Reason (required)
-          <input name="reason" className={FIELD + ' w-full'} placeholder="Why this override?" />
+          <Input name="reason" className="w-full" placeholder="Why this override?" />
         </label>
-        <button type="submit" className={BTN} disabled={locked}>
+        <Button type="submit" variant="secondary" disabled={locked}>
           Override
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -387,12 +375,12 @@ function VerifyVoid({ day, locked }: { day: Day; locked: boolean }) {
           ⭐ Verifying is the <strong>only</strong> thing that can make a flagged day payable — a
           recompute deliberately will not.
         </p>
-        <button type="submit" className={BTN} disabled={locked || day.status === 'verified'}>
+        <Button type="submit" variant="secondary" disabled={locked || day.status === 'verified'}>
           {day.status === 'verified' ? 'Verified' : 'Verify'}
-        </button>
+        </Button>
       </form>
 
-      <form action={voidDayAction} className="space-y-1 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+      <form action={voidDayAction} className="space-y-1 border-t border-surface-border pt-3">
         <Ident day={day} />
         <p className="text-xs text-neutral-500">
           ⛔ A voided day contributes nothing to payroll. The punches survive — the evidence outlives
@@ -401,11 +389,11 @@ function VerifyVoid({ day, locked }: { day: Day; locked: boolean }) {
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex flex-1 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
             Reason (required)
-            <input name="reason" className={FIELD + ' w-full'} placeholder="Duplicate tap, etc." />
+            <Input name="reason" className="w-full" placeholder="Duplicate tap, etc." />
           </label>
-          <button type="submit" className={BTN} disabled={locked || day.status === 'voided'}>
+          <Button type="submit" variant="danger" disabled={locked || day.status === 'voided'}>
             {day.status === 'voided' ? 'Voided' : 'Void'}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

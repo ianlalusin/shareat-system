@@ -278,7 +278,7 @@ export async function verifyInvoiceAction(formData: FormData): Promise<void> {
   } catch (err) {
     return await redirectWithFlash(`/ap/invoices/${id}`, {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/ap/invoices/${id}`, {}, { ok: 'Verified. Expenses can now be recorded against it.' });
+  return await redirectWithFlash(`/ap/invoices/${id}`, {}, { stamp: 'VERIFIED', ok: 'Verified. Expenses can now be recorded against it.' });
 }
 
 export async function voidInvoiceAction(formData: FormData): Promise<void> {
@@ -291,7 +291,7 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
   } catch (err) {
     return await redirectWithFlash(`/ap/invoices/${id}`, {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/ap/invoices/${id}`, {}, { ok: 'Voided — every linked expense was reversed with it.' });
+  return await redirectWithFlash(`/ap/invoices/${id}`, {}, { stamp: 'VOID', ok: 'Voided — every linked expense was reversed with it.' });
 }
 
 export interface AutoAllocateRequest {
@@ -420,5 +420,5 @@ export async function voidPaymentAction(formData: FormData): Promise<void> {
   } catch (err) {
     return await redirectWithFlash(returnTo, {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(returnTo, {}, { ok: message });
+  return await redirectWithFlash(returnTo, {}, { stamp: 'VOID', ok: message });
 }

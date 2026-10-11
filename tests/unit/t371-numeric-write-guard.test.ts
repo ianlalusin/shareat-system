@@ -73,6 +73,13 @@ const UNRESOLVED_RAW_SQL: Readonly<Record<string, string>> = {
 const EXEMPT_REASONS = ['not-a-column-value', 'display-only'] as const;
 /** `file::function::normalised expression` -> reason. Filled by the S2/S3 builders, one entry per proven-safe comparison. */
 const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
+  // T-387 S5 (dashboard range): whole-day counts and loop indexes from validated business dates, and ISO business-date ordering (lexicographic by design). No numeric(p,s) column value.
+  'apps/erp/src/app/dashboard/lib.ts::previousRange::days < 1': 'not-a-column-value',
+  'apps/erp/src/app/dashboard/lib.ts::eachDay::n < 1': 'not-a-column-value',
+  'apps/erp/src/app/dashboard/lib.ts::eachDay::i < n': 'not-a-column-value',
+  'apps/erp/src/app/dashboard/lib.ts::resolveRange::dayCount(from, to) > MAX_RANGE_DAYS': 'not-a-column-value',
+  'apps/erp/src/app/dashboard/lib.ts::resolveRange::prev.from < MIN_RANGE_START': 'not-a-column-value',
+  'apps/erp/src/app/page.tsx::DashboardPage::days > 1': 'not-a-column-value',
   // string-vs-string ORDERING of fiscal-period keys / ids / dates ('2026-01' <= '2026-02'): lexicographic by design, never a money comparison
   'packages/domain/src/shared/straight-line.ts::periodsThroughOf::p.period <= asOfPeriod': 'not-a-column-value',
   'packages/domain/src/shared/allocate-oldest-first.ts::compareItems::dateA < dateB': 'not-a-column-value',

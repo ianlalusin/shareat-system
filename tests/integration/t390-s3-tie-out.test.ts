@@ -700,7 +700,13 @@ describe('audit 5 - the double-counting guard only counts LIVE documents on the 
   it('a REVERSED opening entry for the party is not an opening figure for the guard', async () => {
     const f = await fixture('g5revopen');
     const c = await mkCustomer(f, 'Old Opening Customer');
-    // An opening entry for this customer that was posted and then reversed, plus a live pre-cutover document.
+    // T-390 ruling 4: once an opening entry has been posted (even if reversed) every opening writer refuses, and C5 itself cannot run.
+    // So the live figures and the pre-cutover document are set up FIRST, the old opening is posted and reversed LAST, and the
+    // double-counting guard (the query C5 and C4 read) is asked directly: a reversed opening line must not count as an opening figure.
+    await preDoc(f, custLines(f, c));
+    const sup = await mkSupplier(f, 'Plain Supplier');
+    await figure(f, { accountCode: '1240', storeId: f.storeA, direction: 'debit', amount: '10.00', partyType: 'supplier', partyId: sup.id });
+    await ready(f);
     const old = await asOrg(f.orgId, (tx) =>
       domain.postEntry(tx, {
         orgId: f.orgId, entryDate: '2026-12-10', sourceType: 'opening_balance', sourceId: uid('old'), idempotencyKey: uid('old'),
@@ -712,12 +718,8 @@ describe('audit 5 - the double-counting guard only counts LIVE documents on the 
       } as Parameters<typeof domain.postEntry>[1]),
     );
     await asOrg(f.orgId, (tx) => domain.reverseEntry(tx, { entryId: old.entryId, reason: 'redo', reversedBy: f.adminId }));
-    await preDoc(f, custLines(f, c));
-    const sup = await mkSupplier(f, 'Plain Supplier');
-    await figure(f, { accountCode: '1240', storeId: f.storeA, direction: 'debit', amount: '10.00', partyType: 'supplier', partyId: sup.id });
-    await ready(f);
-    const err = await errorOf(c5(f));
-    expect(reason(err), 'a reversed opening line refused C5 as double counting').not.toContain(c.name);
+    const doubled = await asOrg(f.orgId, (tx) => cutoverRepo.partiesWithOpeningAndPreCutoverDocs(tx, f.orgId, CONVERSION));
+    expect(doubled.map((d) => d.partyId), 'a reversed opening line was counted as an opening figure').not.toContain(c.id);
   });
 
   it('POSITIVE CONTROL: a still-posted pre-cutover document for the same party and account refuses', async () => {

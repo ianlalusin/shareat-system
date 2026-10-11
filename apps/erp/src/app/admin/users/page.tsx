@@ -3,6 +3,7 @@ import { listUsers } from './lib';
 import { ROLE_LABEL } from '@shareat/auth';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Banner } from '@/components/ui';
 
 export const metadata = { title: 'Users and roles — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -33,13 +34,13 @@ export default async function UsersPage() {
       </div>
 
       {roleless > 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           <strong>
             {roleless} {roleless === 1 ? 'person has' : 'people have'} no role.
           </strong>{' '}
           A person with no role is authorized for nothing — they can sign in and every screen will
           refuse them. Assign a role to finish onboarding them.
-        </div>
+        </Banner>
       )}
 
       <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
@@ -77,7 +78,7 @@ export default async function UsersPage() {
                       {ROLE_LABEL[u.role]}
                     </span>
                   ) : (
-                    <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-300">
+                    <span className="rounded bg-warning-soft px-2 py-0.5 text-xs text-warning-ink">
                       no role — cannot do anything
                     </span>
                   )}

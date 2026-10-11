@@ -19,6 +19,7 @@
     "test:integration": "vitest run --project integration --reporter=verbose",
     "test:all": "vitest run",
     "capture": "tsx scripts/capture.ts",
+    "master-data": "tsx scripts/master-data.ts",
     "db:generate": "npm run db:generate -w @shareat/db",
     "db:migrate": "npm run db:migrate -w @shareat/db",
     "provision-test-role": "node scripts/provision-test-role.mjs",
@@ -48,7 +49,8 @@
     "backfill-canonical-positions": "tsx scripts/backfill-canonical-positions.ts",
     "backfill-store-attendance-config": "tsx scripts/backfill-store-attendance-config.ts",
     "deploy-preflight": "tsx scripts/deploy-preflight.ts",
-    "db-backup": "tsx scripts/db-backup.ts"
+    "db-backup": "tsx scripts/db-backup.ts",
+    "restore-drill": "tsx scripts/restore-drill.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1149.0",

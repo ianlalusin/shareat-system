@@ -34,6 +34,7 @@ export * from './steps';
 export * from './opening';
 export * from './tie-out';
 export * from './opening-assets';
+export * from './opening-stock';
 
 export interface StepState {
   def: StepDef;
@@ -192,6 +193,11 @@ export async function attestStep(
   const run = async (trx: Tx) => {
     const def = stepDef(input.stepCode);
     if (!def) throw new Error(`attestStep: ${input.stepCode} is not a cutover step.`);
+
+    // T-390 R8: only the purge itself writes C2 (as `performed`, inside its own transaction). A hand-ticked C2 would open the gate.
+    if (def.code === 'C2') {
+      throw refuse('attestStep: C2 is recorded by the purge itself.', 'The purge records this itself when it runs.');
+    }
 
     // ⛔ A verified step cannot be ticked by hand. Invariant 1, enforced rather than described.
     if (def.kind === 'verified' && !def.cannotVerifyHere) {

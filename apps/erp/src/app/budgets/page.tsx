@@ -14,6 +14,7 @@ import {
   periodOptions,
   peso,
 } from './lib';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -21,7 +22,7 @@ import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
 import { BUDGET_CAP_EDIT } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid, Field } from '@/components/ui';
+import { Banner, Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Budgets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,8 @@ interface SearchParams {
   period?: string;
   ok?: string;
   error?: string;
+  warning?: string;
+  notice?: string;
 }
 
 export default async function BudgetsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -75,48 +78,45 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
         </PageDescription>
       </div>
 
+      {/* The error keeps its "Refused:" lead; warning and notice go through FlashBanner. */}
       {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+        <Banner tone="error">
           <strong className="font-medium">Refused:</strong> {sp.error}
-        </div>
+        </Banner>
       )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={{ warning: sp.warning, notice: sp.notice }} />
 
       {stores.length === 0 ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           This org has no store yet, so there is nothing to cap. Create one on{' '}
-          <Link href="/admin/stores" className="underline">
+          <Link href="/admin/stores" className="text-sm underline">
             stores
           </Link>
           .
-        </p>
+        </Banner>
       ) : (
         <>
           <section className="flex flex-wrap items-end gap-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <FilterRow>
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Store</span>
-                <select name="store" defaultValue={storeId} className={INPUT}>
+                <Select name="store" defaultValue={storeId}>
                   {stores.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Period</span>
-                <select name="period" defaultValue={periodKey} className={INPUT}>
+                <Select name="period" defaultValue={periodKey}>
                   {periods.map((p) => (
                     <option key={p} value={p}>
                       {periodLabel(p)}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             </FilterRow>
             <div className="ml-auto text-right text-sm">
@@ -159,7 +159,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                         </span>
                         <span className="tabular-nums">
                           {peso(b.consumed)} of {peso(b.amount)} ·{' '}
-                          <strong className={b.overBudget ? 'text-red-700 dark:text-red-400' : ''}>
+                          <strong className={b.overBudget ? 'text-danger' : ''}>
                             {peso(b.remaining)} left
                           </strong>
                         </span>
@@ -170,13 +170,13 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                           −₱750, and the number is the thing anyone acts on. */}
                       <div className="h-2 w-full overflow-hidden rounded bg-neutral-200 dark:bg-neutral-800">
                         <div
-                          className={`h-full ${b.overBudget ? 'bg-red-500' : nearCap ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                          className={`h-full ${b.overBudget ? 'border border-danger bg-danger-surface' : nearCap ? 'bg-warning' : 'bg-success'}`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
 
                       {b.overBudget && (
-                        <p className="text-xs text-red-700 dark:text-red-400">
+                        <p className="text-xs text-danger">
                           Over by {peso((Number(b.consumed) - Number(b.amount)).toFixed(2))}. ⚠️ Nothing was
                           refused — expenses still post.
                         </p>
@@ -208,12 +208,9 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                             <input type="hidden" name="storeId" value={storeId} />
                             <input type="hidden" name="periodKey" value={periodKey} />
                             <input type="hidden" name="budgetId" value={b.id} />
-                            <button
-                              type="submit"
-                              className="rounded border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                            >
+                            <Button type="submit" variant="danger">
                               Remove cap
-                            </button>
+                            </Button>
                           </form>
                         </div>
                       </details>
@@ -255,9 +252,6 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
   );
 }
 
-const INPUT =
-  'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-
 /**
  * One cap, four fields — which is why there is no detail page.
  *
@@ -287,27 +281,24 @@ function CapForm({
   const fields = (
     <FormGrid>
       <Field label="Cap">
-        <input
+        <Input
           name="amount"
           required
           inputMode="decimal"
           defaultValue={defaultAmount ?? ''}
           placeholder="0.00"
-          className={`${INPUT} w-full text-right`}
+          className="w-full text-right"
         />
       </Field>
-      <label className="flex items-center gap-2 pb-2 text-sm">
-        <input type="checkbox" name="autoReissue" defaultChecked={defaultAutoReissue ?? false} />
-        renew automatically
-      </label>
+      <Checkbox name="autoReissue" defaultChecked={defaultAutoReissue ?? false} label="renew automatically" />
       <Field label="How often">
-        <select name="reissueInterval" defaultValue={defaultInterval ?? 'monthly'} className={`${INPUT} w-full`}>
+        <Select name="reissueInterval" defaultValue={defaultInterval ?? 'monthly'} className="w-full">
           {REISSUE_INTERVALS.map((i) => (
             <option key={i} value={i}>
               {INTERVAL_LABEL[i] ?? i}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
     </FormGrid>
   );
@@ -326,12 +317,9 @@ function CapForm({
       <input type="hidden" name="periodKey" value={periodKey} />
       <input type="hidden" name="categoryId" value={categoryId} />
       {fields}
-      <button
-        type="submit"
-        className="mt-3 rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-      >
+      <SubmitButton className="mt-3" variant="secondary" pendingLabel="Saving…">
         Save
-      </button>
+      </SubmitButton>
     </form>
   );
 }

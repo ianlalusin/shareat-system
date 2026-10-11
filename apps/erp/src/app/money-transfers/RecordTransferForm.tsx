@@ -9,9 +9,11 @@
  * formatting happens in `page.tsx`, server-side, before this component ever renders.
  */
 import { TwoWayPicker, type PickerOption } from '../../components/two-way-picker';
+import { Button, Input } from '@/components/ui';
 
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+// The picker draws its own <select>, so it takes the kit's field tokens as a class string.
+const PICKER_SELECT =
+  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
 function Field({
   label,
@@ -52,7 +54,7 @@ export function RecordTransferForm({
           toLabel="To — money landed here"
           blankPlaceholder="Choose an account…"
           labelClassName="flex flex-col gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400"
-          selectClassName={INPUT}
+          selectClassName={PICKER_SELECT}
         />
 
         {/*
@@ -70,28 +72,28 @@ export function RecordTransferForm({
             required
             inputMode="decimal"
             placeholder="0.00"
-            className={INPUT}
+            className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
           />
         </Field>
         <Field label="Amount that arrived" hint="Leave blank if nothing was deducted — the usual case">
-          <input
+          <Input
             name="amountIn"
             inputMode="decimal"
             placeholder="Same as above"
-            className={INPUT}
+            className="w-full"
           />
         </Field>
 
         <Field label="Date">
-          <input name="transferDate" type="date" required defaultValue={today} className={INPUT} />
+          <Input name="transferDate" type="date" required defaultValue={today} className="w-full" />
         </Field>
         <Field label="Reference" hint="The bank or wallet reference, if there is one">
-          <input name="reference" maxLength={120} className={INPUT} />
+          <Input name="reference" maxLength={120} className="w-full" />
         </Field>
       </div>
 
       <Field label="Notes">
-        <input name="notes" className={INPUT} />
+        <Input name="notes" className="w-full" />
       </Field>
 
       <p className="text-xs text-neutral-400 dark:text-neutral-600">
@@ -102,12 +104,9 @@ export function RecordTransferForm({
         own position.
       </p>
 
-      <button
-        type="submit"
-        className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-      >
+      <Button type="submit" variant="primary">
         Record transfer
-      </button>
+      </Button>
     </form>
   );
 }

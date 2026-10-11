@@ -13,7 +13,7 @@ import {
 } from './lib';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
-import { FormGrid } from '@/components/ui';
+import { Badge, Button, FlashBanner, FormGrid, Input, Select, statusTone } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -27,10 +27,6 @@ interface SearchParams {
   error?: string;
 }
 
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
 const LABEL = 'flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
 
 /** How many line rows the "New order" form offers. More lines are added on the order itself. */
@@ -74,26 +70,17 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className={`mt-1 ${INPUT}`}>
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/* ⭐ The "New order" panel — only for a store that IS a branch of some commissary. */}
       {choices.length > 0 ? (
@@ -153,9 +140,9 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
                       {o.commissaryName} → {o.branchName ?? '—'}
                     </td>
                     <td className="px-3 py-2">
-                      {BRANCH_ORDER_STAGE_LABEL[stage]}
+                      <Badge tone={statusTone(stage)} label={BRANCH_ORDER_STAGE_LABEL[stage]} />
                       {o.pendingCount > 0 && (
-                        <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900 dark:bg-amber-900 dark:text-amber-100">
+                        <span className="ml-2 rounded bg-warning-soft px-1.5 py-0.5 text-xs text-warning-ink">
                           {o.pendingCount} awaiting the branch
                         </span>
                       )}
@@ -208,11 +195,11 @@ function NewOrderForm({ choice, branchStoreId }: { choice: CommissaryChoice; bra
       <FormGrid>
         <label className={`${LABEL} min-w-0`}>
           Order date
-          <input name="orderDate" type="date" required defaultValue={today()} className={`${INPUT} w-full`} />
+          <Input name="orderDate" type="date" required defaultValue={today()} className="w-full" />
         </label>
         <label className={`${LABEL} min-w-0 [@container_(min-width:29rem)]:col-span-2`}>
           Notes (optional)
-          <input name="notes" className={`${INPUT} w-full`} />
+          <Input name="notes" className="w-full" />
         </label>
       </FormGrid>
       <div className="space-y-2">
@@ -220,7 +207,7 @@ function NewOrderForm({ choice, branchStoreId }: { choice: CommissaryChoice; bra
           <div key={n} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem_9rem] sm:items-end">
             <label className={`${LABEL} col-span-2 sm:col-span-1`}>
               Item{n === 1 ? '' : ` ${n} (optional)`}
-              <select name="itemId" required={n === 1} defaultValue="" className={INPUT}>
+              <Select name="itemId" required={n === 1} defaultValue="">
                 <option value="">— pick —</option>
                 {choice.catalogue.map((l) => (
                   <option key={l.commissaryItemId} value={l.commissaryItemId}>
@@ -229,15 +216,15 @@ function NewOrderForm({ choice, branchStoreId }: { choice: CommissaryChoice; bra
                     {l.blocker ? ` — ⚠ ${l.blocker}` : ''}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className={LABEL}>
               Quantity
-              <input name="quantity" inputMode="decimal" placeholder="0.000" className={`${INPUT} tabular-nums`} />
+              <Input name="quantity" inputMode="decimal" placeholder="0.000" className="tabular-nums" />
             </label>
             <label className={LABEL}>
               Rate ₱ (blank = default)
-              <input name="rate" inputMode="decimal" placeholder="default" className={`${INPUT} tabular-nums`} />
+              <Input name="rate" inputMode="decimal" placeholder="default" className="tabular-nums" />
             </label>
           </div>
         ))}
@@ -246,9 +233,9 @@ function NewOrderForm({ choice, branchStoreId }: { choice: CommissaryChoice; bra
           Commissary catalogue first. Whatever rate is used is captured onto the line.
         </p>
       </div>
-      <button type="submit" className={BTN}>
+      <Button type="submit" variant="primary">
         Save draft
-      </button>
+      </Button>
     </form>
   );
 }

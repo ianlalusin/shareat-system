@@ -7,6 +7,7 @@ import { CATEGORY_LABEL, INTERVAL_LABEL, listActiveStores, readPolicyForDisplay 
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input, Select, Textarea } from '@/components/ui';
 
 export const metadata = { title: 'Add asset — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -40,11 +41,7 @@ export default async function NewAssetPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <form action={createAssetAction} className="space-y-6">
         <input type="hidden" name="filterStore" value={sp.store ?? ''} />
@@ -55,35 +52,35 @@ export default async function NewAssetPage({
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name" hint="What somebody would call it when pointing at it">
-              <input
+              <Input
                 name="name"
                 required
                 maxLength={200}
                 placeholder="Chest freezer — kitchen"
-                className={INPUT}
+                className="w-full"
               />
             </Field>
             <Field label="Store">
-              <select name="storeId" required defaultValue={sp.store ?? ''} className={INPUT}>
+              <Select name="storeId" required defaultValue={sp.store ?? ''} className="w-full">
                 <option value="">Choose a store…</option>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.code})
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Category">
-              <select name="category" required defaultValue="equipment" className={INPUT}>
+              <Select name="category" required defaultValue="equipment" className="w-full">
                 {ASSET_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
                     {CATEGORY_LABEL[c] ?? c}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Acquired on">
-              <input type="date" name="acquiredOn" required max={today} defaultValue={today} className={INPUT} />
+              <Input type="date" name="acquiredOn" required max={today} defaultValue={today} className="w-full" />
             </Field>
           </div>
         </section>
@@ -104,14 +101,14 @@ export default async function NewAssetPage({
             When it goes into service
           </h2>
           <Field label="Choice">
-            <select name="inServiceMode" defaultValue="" className={INPUT}>
+            <Select name="inServiceMode" defaultValue="" className="w-full">
               <option value="">When the store opens (or on the acquisition date if it already has)</option>
               <option value="acquired">On the acquisition date — even if the store has not opened yet</option>
               <option value="set">A specific date —</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Specific date" hint="Only used when 'A specific date' is chosen above">
-            <input type="date" name="inServiceOn" className={INPUT} />
+            <Input type="date" name="inServiceOn" className="w-full" />
           </Field>
         </section>
 
@@ -121,7 +118,7 @@ export default async function NewAssetPage({
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Cost">
-              <input name="cost" required inputMode="decimal" placeholder="0.00" className={INPUT} />
+              <Input name="cost" required inputMode="decimal" placeholder="0.00" className="w-full" />
             </Field>
             <Field
               label="Salvage value"
@@ -129,7 +126,7 @@ export default async function NewAssetPage({
                 policy ? formatMoney(money(policy.defaultSalvageValue)) : '₱0.00'
               }). Must be below cost.`}
             >
-              <input name="salvageValue" inputMode="decimal" placeholder="0.00" className={INPUT} />
+              <Input name="salvageValue" inputMode="decimal" placeholder="0.00" className="w-full" />
             </Field>
             {/* ⭐ MONTHS, and the field says so. v1 asked for months too, then divided by 12 to
                 store years — so a 30-month life became 2.5 and carried a rounding nobody saw.
@@ -142,31 +139,28 @@ export default async function NewAssetPage({
                 name="usefulLifeMonths"
                 inputMode="numeric"
                 placeholder="24"
-                className={INPUT}
+                className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
               />
             </Field>
             <Field label="Depreciation interval" hint="How often it charges. Set once, here.">
-              <select name="interval" defaultValue="monthly" className={INPUT}>
+              <Select name="interval" defaultValue="monthly" className="w-full">
                 {(['monthly', 'quarterly', 'semiannual', 'annually'] as const).map((i) => (
                   <option key={i} value={i}>
                     {INTERVAL_LABEL[i]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
           </div>
           <Field label="Notes" hint="Why this life? A year from now this is what a reviewer wants.">
-            <textarea name="notes" rows={2} className={INPUT} />
+            <Textarea name="notes" rows={2} className="w-full" />
           </Field>
         </section>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-          >
+          <Button type="submit" variant="primary">
             Save
-          </button>
+          </Button>
           <a
             href={`/fixed-assets?${sp.store ? `store=${sp.store}` : ''}`}
             className="text-sm underline hover:no-underline"
@@ -178,9 +172,6 @@ export default async function NewAssetPage({
     </Page>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function Field({
   label,

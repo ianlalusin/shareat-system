@@ -19,10 +19,24 @@ import {
   updateLineAction,
   withdrawOrderAction,
 } from './actions';
-import { BRANCH_ORDER_STAGE_LABEL, actorStoreIds, orderView, peso, today, type OrderView } from '../lib';
+import { actorStoreIds, orderView, peso, today, type OrderView } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { FormGrid } from '@/components/ui';
+import {
+  Button,
+  FlashBanner,
+  FormGrid,
+  Input,
+  Select,
+  StatusHero,
+  branchOrderSteps,
+  exitStepFromTimestamps,
+  isExitStage,
+  nextLineFor,
+  stepIndexFor,
+  type StatusIconKind,
+  type Tone,
+} from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -31,14 +45,6 @@ import { COMMISSARY_LINE_FULFIL, COMMISSARY_LINE_UPDATE } from './typed-forms';
 export const metadata = { title: 'Branch order — Shareat System' };
 export const dynamic = 'force-dynamic';
 
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
-const BTN_SECONDARY =
-  'rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
-const BTN_DANGER =
-  'rounded-md border border-red-300 px-4 py-2.5 text-sm text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950';
 const LABEL = 'flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
 const PANEL = 'space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800';
 
@@ -50,6 +56,18 @@ const REASON_LABEL: Record<string, string> = {
   quality_reject: 'Quality reject',
   count_correction: 'Count correction',
   other: 'Other',
+};
+
+/** The hero's icon, word and tone per derived stage. An exit stage is `danger` (greyed chevrons, red word). */
+const STAGE_HERO: Record<string, { kind: StatusIconKind; word: string; tone: Tone }> = {
+  draft: { kind: 'draft', word: 'Draft', tone: 'info' },
+  submitted: { kind: 'submitted', word: 'Submitted', tone: 'warning' },
+  accepted: { kind: 'preparing', word: 'Being packed', tone: 'progress' },
+  ready: { kind: 'ready', word: 'Ready to dispatch', tone: 'progress' },
+  dispatched: { kind: 'dispatched', word: 'In transit', tone: 'progress' },
+  received: { kind: 'received', word: 'Received', tone: 'success' },
+  rejected: { kind: 'rejected', word: 'Rejected', tone: 'danger' },
+  cancelled: { kind: 'cancelled', word: 'Cancelled', tone: 'danger' },
 };
 
 function when(d: Date | null): string {
@@ -80,6 +98,18 @@ export default async function BranchOrderPage({
   const receiving = stage === 'dispatched' && branchSide;
   const goods = lines.filter((l) => l.approval === 'not_required' || l.approval === 'approved');
 
+  // The big state. The side is the page's own: a person who holds both stores reads the commissary line.
+  const hero = STAGE_HERO[stage];
+  if (!hero) throw new Error(`BranchOrderPage: no hero for stage ${stage}`);
+  const heroStep = isExitStage(stage)
+    ? exitStepFromTimestamps(
+        'branch',
+        { acceptedAt: order.acceptedAt, readyAt: order.readyAt, dispatchedAt: order.dispatchedAt, receivedAt: order.receivedAt },
+        stepIndexFor(stage),
+      )
+    : stepIndexFor(stage);
+  const heroLine = nextLineFor(stage, commissarySide ? 'commissary' : 'branch');
+
   return (
     <Page density="table">
       <div>
@@ -90,7 +120,7 @@ export default async function BranchOrderPage({
           {commissary.name} → {branch.name}
         </h1>
         <PageDescription className="mt-1">
-          {order.orderDate} · <strong>{BRANCH_ORDER_STAGE_LABEL[stage]}</strong> · {peso(order.totalAmount)}
+          {order.orderDate} · {peso(order.totalAmount)}
           {order.referenceNo && <> · ref {order.referenceNo}</>}
         </PageDescription>
         {order.notes && <p className="mt-1 text-xs text-neutral-500">{order.notes}</p>}
@@ -107,16 +137,47 @@ export default async function BranchOrderPage({
         </p>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
+
+      <StatusHero kind={hero.kind} word={hero.word} step={heroStep} steps={branchOrderSteps} line={heroLine} tone={hero.tone}>
+        {draft && branchSide && (
+          <form action={submitOrderAction}>
+            <input type="hidden" name="orderId" value={order.id} />
+            <Button type="submit" variant="primary">
+              Submit to {commissary.name}
+            </Button>
+          </form>
+        )}
+        {stage === 'submitted' && commissarySide && (
+          <form action={acceptOrderAction}>
+            <input type="hidden" name="orderId" value={order.id} />
+            <Button type="submit" variant="primary">
+              Accept
+            </Button>
+          </form>
+        )}
+        {stage === 'accepted' && commissarySide && (
+          <form action={markReadyAction}>
+            <input type="hidden" name="orderId" value={order.id} />
+            <Button type="submit" variant="primary">
+              Mark ready
+            </Button>
+          </form>
+        )}
+        {stage === 'ready' && commissarySide && (
+          <form action={dispatchOrderAction}>
+            <input type="hidden" name="orderId" value={order.id} />
+            <Button type="submit" variant="primary">
+              Dispatch
+            </Button>
+          </form>
+        )}
+        {receiving && (
+          <Button type="submit" form="receive-order-form" variant="primary">
+            Receive
+          </Button>
+        )}
+      </StatusHero>
 
       {/* ---- The lines ------------------------------------------------------------------------ */}
       <section className="space-y-3">
@@ -130,7 +191,7 @@ export default async function BranchOrderPage({
         {lines.length === 0 && <p className="text-sm text-neutral-500">Nothing on this order yet.</p>}
 
         {receiving ? (
-          <form action={receiveOrderAction} className="space-y-3">
+          <form id="receive-order-form" action={receiveOrderAction} className="space-y-3">
             <input type="hidden" name="orderId" value={order.id} />
             {lines.map((l) => (
               <LineCard key={l.id} line={l} view={view} branchSide={branchSide} commissarySide={commissarySide} receiving typedUpdate={typedFor(sp, COMMISSARY_LINE_UPDATE, l.id, actor.personId)} typedFulfil={typedFor(sp, COMMISSARY_LINE_FULFIL, l.id, actor.personId)} />
@@ -146,11 +207,8 @@ export default async function BranchOrderPage({
               </div>
               <label className={LABEL}>
                 Received on
-                <input name="receivedOn" type="date" defaultValue={today()} className={INPUT} />
+                <Input name="receivedOn" type="date" defaultValue={today()} />
               </label>
-              <button type="submit" className={BTN}>
-                Receive
-              </button>
             </div>
           </form>
         ) : (
@@ -164,7 +222,7 @@ export default async function BranchOrderPage({
             <span className="text-neutral-500">Total (counted lines only)</span>{' '}
             <span className="font-mono tabular-nums">{peso(order.totalAmount)}</span>
             {pendingCount > 0 && (
-              <span className="ml-2 text-xs text-amber-700 dark:text-amber-400">
+              <span className="ml-2 text-xs text-warning-ink">
                 {pendingCount} proposed line{pendingCount === 1 ? '' : 's'} not counted until the branch answers
               </span>
             )}
@@ -180,7 +238,7 @@ export default async function BranchOrderPage({
             <input type="hidden" name="orderId" value={order.id} />
             <label className={`${LABEL} col-span-2 sm:col-span-1`}>
               Item (the commissary&rsquo;s catalogue)
-              <select name="itemId" required defaultValue="" className={INPUT}>
+              <Select name="itemId" required defaultValue="">
                 <option value="">— pick —</option>
                 {catalogue.map((c) => (
                   <option key={c.commissaryItemId} value={c.commissaryItemId}>
@@ -188,27 +246,21 @@ export default async function BranchOrderPage({
                     {c.blocker ? ` — ⚠ ${c.blocker}` : ''}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className={LABEL}>
               Quantity
-              <input name="quantity" required inputMode="decimal" placeholder="0.000" className={`${INPUT} tabular-nums`} />
+              <Input name="quantity" required inputMode="decimal" placeholder="0.000" className="tabular-nums" />
             </label>
             <label className={LABEL}>
               Rate ₱ (blank = default)
-              <input name="rate" inputMode="decimal" className={`${INPUT} tabular-nums`} />
+              <Input name="rate" inputMode="decimal" className="tabular-nums" />
             </label>
-            <button type="submit" className={BTN_SECONDARY}>
+            <Button type="submit" variant="secondary">
               Save
-            </button>
+            </Button>
           </form>
           <div className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
-            <form action={submitOrderAction}>
-              <input type="hidden" name="orderId" value={order.id} />
-              <button type="submit" className={BTN}>
-                Submit to {commissary.name}
-              </button>
-            </form>
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               Submit is refused while any line is unmapped or has no expense category — fix those under{' '}
               <Link href={`/commissary/catalogue?commissary=${commissary.id}&branch=${branch.id}`} className="underline underline-offset-4">
@@ -228,12 +280,6 @@ export default async function BranchOrderPage({
             Accepting copies every asked quantity into the packing list; you adjust from there. Nothing posts.
           </p>
           <div className="flex flex-wrap items-end gap-3">
-            <form action={acceptOrderAction}>
-              <input type="hidden" name="orderId" value={order.id} />
-              <button type="submit" className={BTN}>
-                Accept
-              </button>
-            </form>
             <RejectForm orderId={order.id} />
           </div>
         </section>
@@ -251,37 +297,37 @@ export default async function BranchOrderPage({
             <input type="hidden" name="orderId" value={order.id} />
             <label className={`${LABEL} col-span-2 sm:col-span-1`}>
               Item
-              <select name="itemId" required defaultValue="" className={INPUT}>
+              <Select name="itemId" required defaultValue="">
                 <option value="">— pick —</option>
                 {items.map((i) => (
                   <option key={i.id} value={i.id}>
                     {i.name} ({i.baseUnit})
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className={LABEL}>
               Quantity
-              <input name="quantity" required inputMode="decimal" className={`${INPUT} tabular-nums`} />
+              <Input name="quantity" required inputMode="decimal" className="tabular-nums" />
             </label>
             <label className={LABEL}>
               Rate ₱ (blank = default)
-              <input name="rate" inputMode="decimal" className={`${INPUT} tabular-nums`} />
+              <Input name="rate" inputMode="decimal" className="tabular-nums" />
             </label>
             <label className={LABEL}>
               From room
-              <select name="sourceLocationId" defaultValue="" className={INPUT}>
+              <Select name="sourceLocationId" defaultValue="">
                 <option value="">default room</option>
                 {rooms.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className={LABEL}>
               Replaces (optional)
-              <select name="replacesLineId" defaultValue="" className={INPUT}>
+              <Select name="replacesLineId" defaultValue="">
                 <option value="">nothing — an addition</option>
                 {lines
                   .filter((l) => l.origin === 'requested')
@@ -290,15 +336,15 @@ export default async function BranchOrderPage({
                       {l.itemName}
                     </option>
                   ))}
-              </select>
+              </Select>
             </label>
             <label className={`${LABEL} col-span-2 sm:col-span-1`}>
               Why (goes on the thread)
-              <input name="note" className={INPUT} />
+              <Input name="note" />
             </label>
-            <button type="submit" className={`${BTN_SECONDARY} col-span-2 sm:col-span-1`}>
+            <Button type="submit" variant="secondary" className="col-span-2 sm:col-span-1">
               Propose
-            </button>
+            </Button>
           </form>
         </section>
       )}
@@ -306,22 +352,6 @@ export default async function BranchOrderPage({
       {packing && commissarySide && (
         <section className={PANEL}>
           <div className="flex flex-wrap items-end gap-3">
-            {stage === 'accepted' && (
-              <form action={markReadyAction}>
-                <input type="hidden" name="orderId" value={order.id} />
-                <button type="submit" className={BTN}>
-                  Mark ready
-                </button>
-              </form>
-            )}
-            {stage === 'ready' && (
-              <form action={dispatchOrderAction}>
-                <input type="hidden" name="orderId" value={order.id} />
-                <button type="submit" className={BTN}>
-                  Dispatch
-                </button>
-              </form>
-            )}
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               {stage === 'accepted'
                 ? 'Ready means the list is final — after it the order can only be dispatched or rejected.'
@@ -338,11 +368,11 @@ export default async function BranchOrderPage({
           <input type="hidden" name="orderId" value={order.id} />
           <label className={`${LABEL} min-w-[14rem] flex-1`}>
             {branchSide ? 'Withdraw this order — say why' : 'Cancel this order — say why'}
-            <input name="reason" required placeholder="reason" className={`${INPUT} w-full`} />
+            <Input name="reason" required placeholder="reason" className="w-full" />
           </label>
-          <button type="submit" className={BTN_DANGER}>
+          <Button type="submit" variant="danger">
             {branchSide ? 'Withdraw' : 'Cancel order'}
-          </button>
+          </Button>
           <span className="text-xs text-neutral-500 dark:text-neutral-400">Nothing has moved; nothing posts.</span>
         </form>
       )}
@@ -351,11 +381,11 @@ export default async function BranchOrderPage({
           <input type="hidden" name="orderId" value={order.id} />
           <label className={`${LABEL} min-w-[14rem] flex-1`}>
             Void the dispatch — say why
-            <input name="reason" required placeholder="truck never left" className={`${INPUT} w-full`} />
+            <Input name="reason" required placeholder="truck never left" className="w-full" />
           </label>
-          <button type="submit" className={BTN_DANGER}>
+          <Button type="submit" variant="danger">
             Void dispatch
-          </button>
+          </Button>
           <span className="text-xs text-neutral-500 dark:text-neutral-400">
             The in-transit posting is <strong>reversed</strong>, never deleted, and the stock returns to its layers.
           </span>
@@ -418,15 +448,15 @@ export default async function BranchOrderPage({
         </ul>
         <form action={postMessageAction} className="mt-4 flex gap-2">
           <input type="hidden" name="orderId" value={order.id} />
-          <input name="body" placeholder="Say something about this order…" className={`${INPUT} flex-1`} />
-          <button type="submit" className={BTN_SECONDARY}>
+          <Input name="body" placeholder="Say something about this order…" className="flex-1" />
+          <Button type="submit" variant="secondary">
             Post
-          </button>
+          </Button>
         </form>
       </section>
 
       {goods.length === 0 && lines.length > 0 && (
-        <p className="text-xs text-amber-700 dark:text-amber-400">Nothing on this order counts yet.</p>
+        <p className="text-xs text-warning-ink">Nothing on this order counts yet.</p>
       )}
     </Page>
   );
@@ -438,11 +468,11 @@ function RejectForm({ orderId }: { orderId: string }) {
       <input type="hidden" name="orderId" value={orderId} />
       <label className={`${LABEL} min-w-[14rem] flex-1`}>
         Reject — say why
-        <input name="reason" required placeholder="the branch reads this" className={`${INPUT} w-full`} />
+        <Input name="reason" required placeholder="the branch reads this" className="w-full" />
       </label>
-      <button type="submit" className={BTN_DANGER}>
+      <Button type="submit" variant="danger">
         Reject
-      </button>
+      </Button>
     </form>
   );
 }
@@ -481,7 +511,7 @@ function LineCard({
         declined
           ? 'border-neutral-200 opacity-60 dark:border-neutral-800'
           : pending
-            ? 'border-amber-300 dark:border-amber-800'
+            ? 'border-warning'
             : 'border-neutral-200 dark:border-neutral-800'
       }`}
     >
@@ -491,7 +521,7 @@ function LineCard({
         </Link>
         <span className="font-mono text-xs text-neutral-500">{l.itemCode}</span>
         {l.origin === 'commissary_added' && (
-          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900 dark:bg-amber-900 dark:text-amber-100">
+          <span className="rounded bg-warning-soft px-1.5 py-0.5 text-xs text-warning-ink">
             proposed by the commissary ·{' '}
             {pending ? 'awaiting the branch' : l.approval === 'approved' ? 'approved' : 'declined'}
           </span>
@@ -499,7 +529,7 @@ function LineCard({
         {l.isLedgerOnly && <span className="text-xs text-neutral-500">ledger-only — moves no branch stock</span>}
         {l.suggestedQuantity && <span className="text-xs text-neutral-500">auto-suggested {l.suggestedQuantity}</span>}
         {packed !== null && Number(packed) === 0 && !declined && (
-          <span className="text-xs text-red-700 dark:text-red-400">none of this will be sent</span>
+          <span className="text-xs text-danger">none of this will be sent</span>
         )}
       </div>
 
@@ -532,11 +562,11 @@ function LineCard({
               <FormGrid>
                 <label className={`${LABEL} min-w-0`}>
                   Quantity ({l.unit})
-                  <input name="quantity" inputMode="decimal" defaultValue={l.requestedQuantity ?? l.quantity} className={`${INPUT} w-full tabular-nums`} />
+                  <Input name="quantity" inputMode="decimal" defaultValue={l.requestedQuantity ?? l.quantity} className="w-full tabular-nums" />
                 </label>
                 <label className={`${LABEL} min-w-0`}>
                   Rate ₱
-                  <input name="rate" inputMode="decimal" defaultValue={l.rate} className={`${INPUT} w-full tabular-nums`} />
+                  <Input name="rate" inputMode="decimal" defaultValue={l.rate} className="w-full tabular-nums" />
                 </label>
               </FormGrid>
             </EditableRecord>
@@ -544,9 +574,9 @@ function LineCard({
           <form action={removeLineAction}>
             <input type="hidden" name="orderId" value={order.id} />
             <input type="hidden" name="lineId" value={l.id} />
-            <button type="submit" className={BTN_DANGER}>
+            <Button type="submit" variant="danger">
               Remove
-            </button>
+            </Button>
           </form>
         </div>
       )}
@@ -558,22 +588,22 @@ function LineCard({
               <FormGrid>
               <label className={`${LABEL} min-w-0`}>
                 Send ({l.unit}) — 0 means none
-                <input name="quantity" inputMode="decimal" defaultValue={packed ?? l.quantity} className={`${INPUT} w-full tabular-nums`} />
+                <Input name="quantity" inputMode="decimal" defaultValue={packed ?? l.quantity} className="w-full tabular-nums" />
               </label>
               <label className={`${LABEL} min-w-0`}>
                 Rate ₱
-                <input name="rate" inputMode="decimal" defaultValue={l.rate} className={`${INPUT} w-full tabular-nums`} />
+                <Input name="rate" inputMode="decimal" defaultValue={l.rate} className="w-full tabular-nums" />
               </label>
               <label className={`${LABEL} min-w-0`}>
                 From room
-                <select name="sourceLocationId" defaultValue={l.sourceLocationId ?? ''} className={`${INPUT} w-full`}>
+                <Select name="sourceLocationId" defaultValue={l.sourceLocationId ?? ''} className="w-full">
                   <option value="">default room</option>
                   {rooms.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             </FormGrid>
             </EditableRecord>
@@ -584,27 +614,27 @@ function LineCard({
               <FormGrid>
               <label className={`${LABEL} min-w-0`}>
                 Send ({l.unit}) — 0 means none
-                <input name="quantity" inputMode="decimal" defaultValue={packed ?? l.quantity} className={`${INPUT} w-full tabular-nums`} />
+                <Input name="quantity" inputMode="decimal" defaultValue={packed ?? l.quantity} className="w-full tabular-nums" />
               </label>
               <label className={`${LABEL} min-w-0`}>
                 Rate ₱
-                <input name="rate" inputMode="decimal" defaultValue={l.rate} className={`${INPUT} w-full tabular-nums`} />
+                <Input name="rate" inputMode="decimal" defaultValue={l.rate} className="w-full tabular-nums" />
               </label>
               <label className={`${LABEL} min-w-0`}>
                 From room
-                <select name="sourceLocationId" defaultValue={l.sourceLocationId ?? ''} className={`${INPUT} w-full`}>
+                <Select name="sourceLocationId" defaultValue={l.sourceLocationId ?? ''} className="w-full">
                   <option value="">default room</option>
                   {rooms.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             </FormGrid>
-              <button type="submit" className={`mt-3 ${BTN_SECONDARY}`}>
+              <Button type="submit" variant="secondary" className="mt-3">
                 Save
-              </button>
+              </Button>
             </form>
           )}
         </div>
@@ -615,12 +645,12 @@ function LineCard({
           <input type="hidden" name="orderId" value={order.id} />
           <input type="hidden" name="lineId" value={l.id} />
           <span className="text-xs text-neutral-600 dark:text-neutral-400">The commissary proposes this. Your answer:</span>
-          <button type="submit" name="decision" value="approved" className={BTN}>
+          <Button type="submit" name="decision" value="approved" variant="secondary">
             Approve
-          </button>
-          <button type="submit" name="decision" value="rejected" className={BTN_DANGER}>
+          </Button>
+          <Button type="submit" name="decision" value="rejected" variant="danger">
             Decline
-          </button>
+          </Button>
         </form>
       )}
 
@@ -629,18 +659,18 @@ function LineCard({
           <input type="hidden" name="lineId" value={l.id} />
           <label className={`${LABEL} min-w-[7rem] flex-1`}>
             Signed for ({l.unit})
-            <input name="receivedQuantity" inputMode="decimal" defaultValue={packed} className={`${INPUT} w-full tabular-nums`} />
+            <Input name="receivedQuantity" inputMode="decimal" defaultValue={packed} className="w-full tabular-nums" />
           </label>
           <label className={LABEL}>
             If short: why?
-            <select name="shortageReason" defaultValue="" className={INPUT}>
+            <Select name="shortageReason" defaultValue="">
               <option value="">—</option>
               {SHORTAGE_REASONS.map((r) => (
                 <option key={r} value={r}>
                   {REASON_LABEL[r] ?? r}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
       )}

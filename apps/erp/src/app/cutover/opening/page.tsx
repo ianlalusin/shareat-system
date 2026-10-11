@@ -1,24 +1,32 @@
 import Link from 'next/link';
 import { compare, isZero, money, ZERO } from '@shareat/core/money';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import {
   addOpeningFigureAction,
+  attestStepAction,
   postOpeningBalancesAction,
   removeOpeningFigureAction,
+  valueOpeningAssetAction,
+  valueOpeningStockAction,
 } from '../actions';
 import {
   CONVERSION_DATE,
+  countedValueFor,
   listStores,
   loadGaps,
   loadOpeningDrafts,
+  loadPartyOptions,
+  loadPendingShells,
   loadPostableAccounts,
+  loadProgress,
+  loadTieOut,
   peso,
 } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { FormGrid, Field } from '@/components/ui';
+import { Banner, Button, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Opening balances — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -34,14 +42,25 @@ export default async function OpeningPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/cutover/opening');
+  const { actor, refusal } = await requirePageAccess('/cutover/opening');
+  if (refusal) return refusal;
 
-  const [stores, drafts, accounts, gaps] = await Promise.all([
+  const [stores, drafts, accounts, gaps, parties, shells, tie] = await Promise.all([
     listStores(actor.orgId),
     loadOpeningDrafts(actor.orgId),
     loadPostableAccounts(actor.orgId),
     loadGaps(actor.orgId),
+    loadPartyOptions(actor.orgId),
+    loadPendingShells(actor.orgId),
+    loadTieOut(actor.orgId),
   ]);
+  const [progress, counted] = await Promise.all([
+    loadProgress(actor.orgId, stores.map((s) => s.id)),
+    Promise.all(stores.map(async (s) => ({ store: s, value: await countedValueFor(actor.orgId, s.id) }))),
+  ]);
+  const tieSteps = progress.steps.filter((x) => ['C3P', 'C4', 'C5'].includes(x.def.code));
+  const INPUT = 'mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900';
+  const BUTTON = 'rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900';
 
   const residual = Number(gaps.residual);
   // T-371 C4: balanced is decided in centavos on the minted figure; `residual` is display-only.
@@ -64,17 +83,13 @@ export default async function OpeningPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {sp.posted === '1' && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+        <Banner tone="success">
           <strong className="font-medium">The books are open.</strong> The opening entry is posted
           and can no longer be edited — a correction from here is a reversal.
-        </div>
+        </Banner>
       )}
 
       {/* ⭐ The same running difference as the wizard, because it is the same question. Watching it
@@ -82,21 +97,21 @@ export default async function OpeningPage({
       <section
         className={`rounded-lg border p-4 sm:p-5 ${
           balanced
-            ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950'
-            : 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950'
+            ? 'border-success bg-success-soft'
+            : 'border-warning-ink bg-warning-soft'
         }`}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <span
             className={`text-sm font-medium ${
-              balanced ? 'text-emerald-900 dark:text-emerald-300' : 'text-amber-900 dark:text-amber-300'
+              balanced ? 'text-success' : 'text-warning-ink'
             }`}
           >
             {balanced ? 'Everything balances' : 'Difference still to explain'}
           </span>
           <span
             className={`font-mono text-2xl font-semibold tabular-nums ${
-              balanced ? 'text-emerald-900 dark:text-emerald-300' : 'text-amber-900 dark:text-amber-300'
+              balanced ? 'text-success' : 'text-warning-ink'
             }`}
           >
             {peso(Math.abs(residual))}
@@ -104,7 +119,7 @@ export default async function OpeningPage({
         </div>
         <p
           className={`mt-1 text-xs ${
-            balanced ? 'text-emerald-800 dark:text-emerald-400' : 'text-amber-800 dark:text-amber-400'
+            balanced ? 'text-success' : 'text-warning-ink'
           }`}
         >
           {balanced
@@ -117,7 +132,7 @@ export default async function OpeningPage({
 
       {/* ── What is still needed ─────────────────────────────────────────────────────── */}
       {gaps.doubleCounted.length > 0 && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+        <Banner tone="error">
           <strong className="font-medium">
             {gaps.doubleCounted.length} part
             {gaps.doubleCounted.length === 1 ? 'y has' : 'ies have'} the same money twice.
@@ -126,7 +141,7 @@ export default async function OpeningPage({
             An opening balance was entered for them, and a document dated before the conversion also
             exists. One of the two has to go.
           </p>
-        </div>
+        </Banner>
       )}
 
       {/* ── Add a figure ─────────────────────────────────────────────────────────────── */}
@@ -136,41 +151,29 @@ export default async function OpeningPage({
           <input type="hidden" name="entryDate" value={CONVERSION_DATE} />
           <FormGrid>
             <Field label="Account">
-              <select
-                name="accountCode"
-                required
-                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-              >
+              <Select name="accountCode" required className="mt-1 w-full">
                 {accounts.map((a) => (
                   <option key={a.code} value={a.code}>
                     {a.code} — {a.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Store">
-              <select
-                name="storeId"
-                required
-                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-              >
+              <Select name="storeId" required className="mt-1 w-full">
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Owns or owes">
-              <select
-                name="direction"
-                required
-                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-              >
+              <Select name="direction" required className="mt-1 w-full">
                 {/* Plain words, because "debit" and "credit" are the thing people get backwards. */}
                 <option value="debit">We have this (asset)</option>
                 <option value="credit">We owe this (liability)</option>
-              </select>
+              </Select>
             </Field>
             <Field label="Amount">
               <input
@@ -178,26 +181,160 @@ export default async function OpeningPage({
                 required
                 inputMode="decimal"
                 placeholder="0.00"
-                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                className="mt-1 w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
               />
             </Field>
+            <Field label="Party kind (suppliers and customers only)">
+              <select name="partyType" className={INPUT} defaultValue="">
+                <option value="">No party</option>
+                <option value="supplier">Supplier</option>
+                <option value="customer">Customer</option>
+              </select>
+            </Field>
+            <Field label="Party">
+              <select name="partyId" className={INPUT} defaultValue="">
+                <option value="">No party</option>
+                {parties.map((p) => (
+                  <option key={`${p.type}:${p.id}`} value={p.id}>
+                    {p.name} ({p.type})
+                  </option>
+                ))}
+              </select>
+            </Field>
           </FormGrid>
-          <input
-            type="text"
-            name="memo"
-            placeholder="What this is (optional)"
-            className="w-full rounded border border-neutral-300 px-3 py-2.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          />
-          <button
-            type="submit"
-            className="w-full rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white sm:w-auto dark:bg-neutral-100 dark:text-neutral-900"
-          >
+          <Input type="text" name="memo" placeholder="What this is (optional)" className="w-full" />
+          <Button type="submit" variant="secondary" className="w-full sm:w-auto">
             Save
-          </button>
+          </Button>
         </form>
       </section>
 
-      {/* ── What has been entered ────────────────────────────────────────────────────── */}
+      {/* ── Value the count (R5) ─────────────────────────────────────────────────────── */}
+      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="text-sm font-medium">Value the count</h2>
+        <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
+          Inventory opens from the count, one entry per store. Press the button again after any change to the count; it rewrites that
+          store&apos;s entry.
+        </p>
+        <div className="mt-3 space-y-2">
+          {counted.map(({ store, value }) => (
+            <form
+              key={store.id}
+              action={valueOpeningStockAction}
+              className="flex flex-wrap items-center justify-between gap-3 rounded border border-neutral-200 p-3 dark:border-neutral-800"
+            >
+              <input type="hidden" name="storeId" value={store.id} />
+              <span className="text-sm">
+                {store.name} <span className="text-xs text-neutral-500">counted at cost {peso(Number(value))}</span>
+              </span>
+              <button type="submit" className={BUTTON}>
+                Value the count
+              </button>
+            </form>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Assets to value (R10) ────────────────────────────────────────────────────── */}
+      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="text-sm font-medium">Assets to value</h2>
+        {shells.length === 0 ? (
+          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">No asset is waiting for a value.</p>
+        ) : (
+          <div className="mt-3 space-y-3">
+            {shells.map((a) => (
+              <form key={a.id} action={valueOpeningAssetAction} className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                <input type="hidden" name="assetId" value={a.id} />
+                <p className="text-sm font-medium">
+                  {a.name} <span className="text-xs font-normal text-neutral-500">{storeName(a.storeId)}</span>
+                </p>
+                <FormGrid>
+                  <Field label="Book value on the conversion date">
+                    <input name="bookValue" required inputMode="decimal" placeholder="0.00" className={INPUT} />
+                  </Field>
+                  <Field label="Remaining life (whole months)">
+                    <input name="remainingLifeMonths" required inputMode="numeric" placeholder="e.g. 18" className={INPUT} />
+                  </Field>
+                  <Field label="Salvage value (optional)">
+                    <input name="salvageValue" inputMode="decimal" placeholder="0.00" className={INPUT} />
+                  </Field>
+                </FormGrid>
+                <button type="submit" className={BUTTON}>
+                  Save
+                </button>
+              </form>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── Tie-out (R9, R15) ────────────────────────────────────────────────────────── */}
+      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="text-sm font-medium">Tie-out</h2>
+        <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
+          Each register in the new system is compared with the opening figures. Party balances (customers, suppliers, loans, advances) are
+          checked for valid parties only; their totals are compared with v1 at the rehearsal (T-394).
+        </p>
+        {tie.lines.length === 0 ? (
+          <p className="mt-3 rounded border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+            Every checked register ties to the opening figures.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {tie.lines.map((l, k) => (
+              <li
+                key={`${l.register}:${l.storeId ?? ''}:${l.account ?? ''}:${k}`}
+                className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
+              >
+                {l.sentence}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {tie.notChecked.length > 0 && (
+          <div className="mt-4">
+            <h3 className="text-xs font-medium">Not checked here</h3>
+            <ul className="mt-1 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
+              {tie.notChecked.map((n, k) => (
+                <li key={`${n.account}:${k}`}>
+                  <span className="font-mono">{n.account}</span> — {n.amount} — {n.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="mt-4 space-y-2">
+          {tieSteps.map((st) => {
+            const why = st.blockedBy ?? st.detail;
+            return (
+              <div key={`${st.def.code}:${st.storeId ?? ''}`} className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span>
+                    <span className="font-mono text-xs">{st.def.code}</span> {st.def.title}
+                  </span>
+                  <span className="text-xs">{st.done ? 'Done' : st.blockedBy ? 'Blocked' : 'Not done'}</span>
+                </div>
+                {!st.done && why && <p className="mt-1 text-xs text-amber-800 dark:text-amber-400">{why}</p>}
+                {st.def.code === 'C3P' && !st.done && (
+                  <form action={attestStepAction} className="mt-2 space-y-2">
+                    <input type="hidden" name="stepCode" value="C3P" />
+                    <input type="hidden" name="returnTo" value="/cutover/opening" />
+                    <input type="hidden" name="storeId" value="" />
+                    <input type="text" name="note" placeholder="Which v1 lists you compared (optional)" className={INPUT} />
+                    <button type="submit" className={BUTTON}>
+                      I confirm this is done
+                    </button>
+                  </form>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── What has been entered────────────────────────────────────────────────────── */}
       <section className="space-y-2">
         <h2 className="text-sm font-medium">
           Entered so far{' '}
@@ -231,12 +368,9 @@ export default async function OpeningPage({
                 {/* A draft was never final, so removing one is a delete rather than a reversal. */}
                 <form action={removeOpeningFigureAction}>
                   <input type="hidden" name="entryId" value={d.id} />
-                  <button
-                    type="submit"
-                    className="rounded border border-neutral-300 px-3 py-2 text-xs dark:border-neutral-700"
-                  >
+                  <Button type="submit" variant="danger">
                     Remove
-                  </button>
+                  </Button>
                 </form>
               </div>
             </div>
@@ -257,19 +391,16 @@ export default async function OpeningPage({
         */}
         {balanced && drafts.length > 0 ? (
           <form action={postOpeningBalancesAction} className="mt-3">
-            <button
-              type="submit"
-              className="w-full rounded bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white sm:w-auto dark:bg-emerald-600"
-            >
+            <Button type="submit" variant="primary" className="w-full sm:w-auto">
               Post the opening balances
-            </button>
+            </Button>
           </form>
         ) : (
-          <p className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          <Banner tone="warning" className="mt-3">
             {drafts.length === 0
               ? 'Nothing to post yet.'
               : `₱${Math.abs(residual).toFixed(2)} is still unexplained, so this cannot be posted. There is no holding account to put it in — the difference has to be found.`}
-          </p>
+          </Banner>
         )}
       </section>
     </Page>

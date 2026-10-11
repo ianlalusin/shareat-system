@@ -1,0 +1,13 @@
+# T-393 S2 - WEEKLY, Sunday 05:30 Manila, an hour after that night's backup (04:30), so the drill restores a fresh dump.
+
+[Unit]
+Description=Shareat - weekly restore drill, Sundays (T-393)
+
+[Timer]
+OnCalendar=Sun *-*-* 05:30:00 Asia/Manila
+# Catch up after a reboot or an outage rather than skipping silently (DEF-044).
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

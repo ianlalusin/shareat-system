@@ -250,6 +250,7 @@ export async function voidCollectionAction(formData: FormData): Promise<void> {
   // ⚠️ "Reversed, not deleted" is the whole point: the allocations stay, so the charges it
   // settled correctly reopen and the aging picks them up again.
   return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, {
+    stamp: 'VOID',
     ok: 'Collection voided — reversed, not deleted, and the charges it settled are open again.',
   });
 }
@@ -267,7 +268,7 @@ export async function voidChargeAction(formData: FormData): Promise<void> {
   } catch (err) {
     return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { ok: 'Charge voided — the entry is reversed, and it stays listed.' });
+  return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { stamp: 'VOID', ok: 'Charge voided — the entry is reversed, and it stays listed.' });
 }
 
 export async function writeOffChargeAction(formData: FormData): Promise<void> {
