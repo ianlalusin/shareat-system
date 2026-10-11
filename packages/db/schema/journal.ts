@@ -61,6 +61,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { accounts } from './accounts';
 import { fiscalPeriods } from './fiscal-periods';
@@ -116,7 +117,16 @@ export const journalEntries = pgTable(
     check('journal_entries_status_check', sql`${t.status} in ('draft', 'posted', 'reversed')`),
     // NOTE: balance / minimum-two-lines / account-eligibility / period-open /
     // posted-immutability are all hand-added in the generated migration as triggers — see
-    // this file's top comment and the migration for why each cannot be a plain CHECK.
+    // this file's top comment and the migration for why each cannot be a plain CHECK.,
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.postedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'journal_entries_posted_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

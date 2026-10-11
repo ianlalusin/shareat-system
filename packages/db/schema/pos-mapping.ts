@@ -56,6 +56,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { items } from './items';
 import { organizations } from './organizations';
@@ -118,6 +119,20 @@ export const posItemMaps = pgTable(
       sql`${t.quantityPerSale} is null or ${t.quantityPerSale} > 0`,
     ),
     check('pos_item_maps_quantity_per_sale_finite_check', sql`${t.quantityPerSale} > '-Infinity'::numeric and ${t.quantityPerSale} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'pos_item_maps_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'pos_item_maps_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -157,6 +172,25 @@ export const posMapRequests = pgTable(
       'pos_map_requests_decided_shape_check',
       sql`${t.status} = 'requested' or (${t.decidedBy} is not null and ${t.decidedAt} is not null)`,
     ),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.decidedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'pos_map_requests_decided_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.requestedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'pos_map_requests_requested_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'pos_map_requests_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -213,6 +247,25 @@ export const posUsagePulls = pgTable(
     ),
     index('pos_usage_pulls_store_status_idx').on(t.storeId, t.status),
     index('pos_usage_pulls_org_idx').on(t.orgId),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.finalizedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'pos_usage_pulls_finalized_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'pos_usage_pulls_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.voidedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'pos_usage_pulls_voided_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

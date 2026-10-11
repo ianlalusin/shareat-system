@@ -30,6 +30,7 @@ let orgB: string;
 let storeA: string;
 let storeB: string;
 let personA: string;
+let personB: string;
 let typeA: string;
 
 async function asOrg<T>(org: string | null, fn: (tx: postgres.TransactionSql) => Promise<T>): Promise<T> {
@@ -51,7 +52,7 @@ async function room(
     insert into stock_locations (org_id, store_id, code, name, type_id, role, purpose, is_default, status, created_by)
     values (${orgId}, ${storeId}, ${code}, ${code}, ${typeA},
             ${over.role ?? 'storage'}, ${over.purpose ?? 'normal'},
-            ${over.isDefault ?? false}, ${over.status ?? 'active'}, ${personA})
+            ${over.isDefault ?? false}, ${over.status ?? 'active'}, ${orgId === orgB ? personB : personA})
     returning id`;
   return r!.id;
 }
@@ -79,6 +80,8 @@ beforeEach(async () => {
 
   const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgA}, 'Alice') returning id`;
   personA = p!.id;
+  const [pb] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgB}, 'Bob') returning id`;
+  personB = pb!.id;
 
   const [t] = await sql<{ id: string }[]>`
     insert into location_types (org_id, code, name) values (${orgA}, 'STOCKROOM', 'Stockroom') returning id`;

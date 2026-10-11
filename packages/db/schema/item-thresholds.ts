@@ -17,7 +17,7 @@
  * it is worse than usual here: a stale alert is indistinguishable from a real one.
  */
 import { sql } from 'drizzle-orm';
-import { check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { items } from './items';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -47,6 +47,20 @@ export const storeItemThresholds = pgTable(
     check('store_item_thresholds_non_negative_check', sql`${t.lowStockThreshold} >= 0`),
     index('store_item_thresholds_org_idx').on(t.orgId),
     check('store_item_thresholds_low_stock_threshold_finite_check', sql`${t.lowStockThreshold} > '-Infinity'::numeric and ${t.lowStockThreshold} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.setBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'store_item_thresholds_set_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'store_item_thresholds_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -74,5 +88,14 @@ export const tradeOrderMessages = pgTable(
   (t) => [
     check('trade_order_messages_body_not_blank_check', sql`length(trim(${t.body})) > 0`),
     index('trade_order_messages_order_idx').on(t.orderId, t.createdAt),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.authorId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'trade_order_messages_author_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

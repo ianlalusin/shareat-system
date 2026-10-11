@@ -33,6 +33,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { items } from './items';
 import { organizations } from './organizations';
@@ -83,6 +84,25 @@ export const countSessions = pgTable(
     ),
     index('count_sessions_store_status_idx').on(t.storeId, t.status),
     index('count_sessions_org_idx').on(t.orgId),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.closedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'count_sessions_closed_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.openedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'count_sessions_opened_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'count_sessions_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

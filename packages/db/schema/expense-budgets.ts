@@ -46,6 +46,7 @@ import {
   uniqueIndex,
   uuid,
   type AnyPgColumn,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { expenseCategories } from './expenses';
 import { organizations } from './organizations';
@@ -109,5 +110,19 @@ export const expenseBudgets = pgTable(
       sql`${t.autoReissue} = false or ${t.reissueInterval} is not null`,
     ),
     check('expense_budgets_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'expense_budgets_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'expense_budgets_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
