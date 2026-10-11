@@ -1,5 +1,5 @@
 /**
- * The twelve steps of the 31 December conversion, and the four gates between them. T-134.
+ * The thirteen steps of the 31 December conversion, and the five gates between them. T-134.
  *
  * ⭐ **A pure declaration**, so the ordering and the gates can be reasoned about — and tested —
  * without a database. `index.ts` is what asks the ledger whether each one holds.
@@ -141,15 +141,27 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
       'entered at once. The difference still to explain is shown the whole time.',
   },
   {
+    code: 'C3P',
+    phase: 'C',
+    title: "Opening party balances agree with v1's aged lists",
+    kind: 'attested',
+    perStore: false,
+    why:
+      "Customer, supplier, loan and advance balances can only be checked here for valid parties, not " +
+      "for totals. Somebody has to compare them with v1's aged lists and say so, by name.",
+  },
+  {
     code: 'C4',
     phase: 'C',
-    title: '3900 nets to exactly zero',
+    title: '3900 nets to zero and every register ties',
     kind: 'verified',
     perStore: false,
     why:
       'If anything is left over, this stops. Most accounting software would park the difference in ' +
       'a holding account and open the books anyway; that exists for people who cannot ask anyone. ' +
-      'A difference here has to be found.',
+      'A difference here has to be found. It also checks every register against its control ' +
+      'account: assets, prepaids, loans, advances, parties, money accounts, the store-to-store ' +
+      'balances and 3900 store by store.',
   },
   {
     code: 'C5',
@@ -162,7 +174,7 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
 ] as const;
 
 /**
- * ⭐ **The ONLY enforced ordering.** Four gates, each already argued for by an existing ADR or
+ * ⭐ **The ONLY enforced ordering.** Five gates, each already argued for by an existing ADR or
  * defect.
  *
  * ⚠️ A blanket "no step starts until its prerequisites verify" rule would be **stricter than every
@@ -187,6 +199,11 @@ export const CUTOVER_GATES: readonly { after: string; before: string; because: s
   },
   { after: 'C3', before: 'C4', because: 'There is nothing to check against until the figures are in.' },
   { after: 'C4', before: 'C5', because: 'The books cannot open on an entry that does not balance.' },
+  {
+    after: 'C3P',
+    before: 'C5',
+    because: "Nobody has confirmed the customer, supplier, loan and advance balances against v1's lists.",
+  },
 ] as const;
 
 export function stepDef(code: string): StepDef | undefined {

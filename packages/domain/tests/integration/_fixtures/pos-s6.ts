@@ -9,6 +9,7 @@ import { receiveDelivery } from '../../../src/deliveries/receive';
 import { quantity } from '../../../src/stock/quantity';
 import type { LocationLike } from '../../../src/stock-locations/rules';
 import { D1_FIGURES, linkTestStore, seedTestTenders } from './pos-day';
+import { testItemCode } from './item-code';
 
 /**
  * T-375 S6 - shared fixture for the drift, correction and reconciliation tests (`docs/tasks/375-pos-v1-day-feed.md`
@@ -95,7 +96,7 @@ export async function s6Fixture(sql: postgres.Sql, hint: string, o: { stock?: bo
   const locations: LocationLike[] = [{ id: kitchen, role: 'operating', purpose: 'normal', isDefault: true, status: 'active' }];
   const mkItem = async (c: string, name: string) =>
     (await sql<{ id: string }[]>`
-      insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${c}, ${name}, 'meat_slab', 'kg', ${managerId}) returning id`)[0]!.id;
+      insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, ${name}, 'meat_slab', 'kg', ${managerId}) returning id`)[0]!.id;
   const cheese = await mkItem('CHEESE', 'Cheese');
   const buns = await mkItem('BUNS', 'Buns');
   for (const itemId of [cheese, buns]) {

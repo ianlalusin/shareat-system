@@ -46,6 +46,7 @@ const RAW_SQL_WRITERS: ReadonlySet<string> = new Set(['insertInvoiceLines', 'mer
  * anything but a `*_dev` database (asserted first); a NEW script or function still trips the guard.
  */
 const RAW_SQL_EXEMPT: Readonly<Record<string, { reason: string; mustContain: string }>> = {
+  'scripts/dev-seed-inventory.ts::item': { reason: 'T-391 S1: dev seed inserts items without purchase_unit or purchase_factor (both stay null); never runs on production', mustContain: "endsWith('_dev')" },
   'scripts/dev-seed-inventory.ts::main': { reason: 'dev-only seed, never runs on production', mustContain: "endsWith('_dev')" },
   'scripts/smoke-pin-throttle.ts::main': { reason: 'T-395 smoke fixture: inserts an org, store and persons (no numeric money columns) and resets a tier-1 counter; refuses any database not named *_test', mustContain: 'shareat_test|_test' },
 };
@@ -72,6 +73,13 @@ const UNRESOLVED_RAW_SQL: Readonly<Record<string, string>> = {
 const EXEMPT_REASONS = ['not-a-column-value', 'display-only'] as const;
 /** `file::function::normalised expression` -> reason. Filled by the S2/S3 builders, one entry per proven-safe comparison. */
 const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
+  // T-387 S5 (dashboard range): whole-day counts and loop indexes from validated business dates, and ISO business-date ordering (lexicographic by design). No numeric(p,s) column value.
+  'apps/erp/src/app/dashboard/lib.ts::previousRange::days < 1': 'not-a-column-value',
+  'apps/erp/src/app/dashboard/lib.ts::eachDay::n < 1': 'not-a-column-value',
+  'apps/erp/src/app/dashboard/lib.ts::eachDay::i < n': 'not-a-column-value',
+  'apps/erp/src/app/dashboard/lib.ts::resolveRange::dayCount(from, to) > MAX_RANGE_DAYS': 'not-a-column-value',
+  'apps/erp/src/app/dashboard/lib.ts::resolveRange::prev.from < MIN_RANGE_START': 'not-a-column-value',
+  'apps/erp/src/app/page.tsx::DashboardPage::days > 1': 'not-a-column-value',
   // string-vs-string ORDERING of fiscal-period keys / ids / dates ('2026-01' <= '2026-02'): lexicographic by design, never a money comparison
   'packages/domain/src/shared/straight-line.ts::periodsThroughOf::p.period <= asOfPeriod': 'not-a-column-value',
   'packages/domain/src/shared/allocate-oldest-first.ts::compareItems::dateA < dateB': 'not-a-column-value',

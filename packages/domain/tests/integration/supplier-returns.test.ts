@@ -22,6 +22,7 @@ import type { LocationLike } from '../../src/stock-locations/rules';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { testItemCode } from './_fixtures/item-code';
 
 /**
  * T-170 — supplier returns: the goods go back, and we hold a credit. Bible row 166.
@@ -107,7 +108,7 @@ async function fixture(): Promise<Fixture> {
 
   const [item] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${staff!.id}) returning id`;
+    values (${orgId}, ${testItemCode()}, 'Pork Belly', 'raw_material', 'kg', ${staff!.id}) returning id`;
 
   // T-361: credit needs terms now the domain enforces it (DEF-492) — Acme Meats is the credit
   // payer above; Beta Foods stays cash-on-delivery, no credit expense ever names it.
@@ -315,7 +316,7 @@ describe('T-170 — the invoiced case: a real credit', () => {
     const f = await fixture();
     const [item2] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${uid('ITEM2')}, 'Chicken Breast', 'raw_material', 'kg', ${f.staff.personId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, 'Chicken Breast', 'raw_material', 'kg', ${f.staff.personId}) returning id`;
 
     // ONE delivery, two lines — item A stays uninvoiced, item B's layer is marked invoiced.
     const [d] = await sql<{ id: string }[]>`

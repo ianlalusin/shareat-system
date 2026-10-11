@@ -49,6 +49,7 @@ import { mkSubmitter, submitThenVerify } from './_fixtures/sales-day-flow';
 import { closedStockPeriodSentence } from '../../src/stock/period-guard';
 import { humanDate } from '../../src/shared/refusal-leaf';
 import type { LocationLike } from '../../src/stock-locations/rules';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 12 });
 let seq = 0;
@@ -194,7 +195,7 @@ async function fixture(hint: string) {
   ];
   const mkItem = async (c: string, name: string) =>
     (await sql<{ id: string }[]>`
-      insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${c}, ${name}, 'meat_slab', 'kg', ${managerId}) returning id`)[0]!.id;
+      insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, ${name}, 'meat_slab', 'kg', ${managerId}) returning id`)[0]!.id;
   const cheese = await mkItem('CHEESE', 'Cheese');
   const rice = await mkItem('RICE', 'Rice');
 

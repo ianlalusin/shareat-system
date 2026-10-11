@@ -89,6 +89,13 @@ function actionShapedExports(): Map<string, string> {
  * off the same day** by T-226, and the stale-exemption rule below is what forced their rows out.
  */
 const EXEMPT: Record<string, string> = {
+  setCustomerStatus:
+    'UNWIRED — T-391 S4: scripts/master-data.ts apply (applyCustomers / applySuppliers) is its caller; no screen in S4',
+  setSupplierCounterpartyStore:
+    'UNWIRED — T-391 S4: scripts/master-data.ts apply (applyCustomers / applySuppliers) is its caller; no screen in S4',
+  setItemPurchaseUnit:
+    'UNWIRED — T-391 S3 item apply is its caller (the master-data load script); there is no screen for the buying unit yet, ' +
+    'and the load is the only writer planned.',
   // ---- 1. internal: called by another domain function that is itself wired -------------------
   recordCharge:
     'INTERNAL — `dispatchTradeOrder` calls it (`trade/index.ts:460`); dispatch IS the billing ' +
@@ -212,11 +219,6 @@ const EXEMPT: Record<string, string> = {
     'on a brand-new store; there is no human boundary because there is nothing yet for a human to ' +
     'act on. `tests/unit/t336-canonical-position-defaults.test.ts`\'s U3 is the closed-caller-list ' +
     'guard that keeps it that way; it also owns the one required barrel re-export (§7:135).',
-
-  // ---- T-386 R11 — the one-time item recode ---------------------------------------------------
-  recodeItems:
-    'JOB — `scripts/recode-items.ts` (T-386 R11), a one-time run with Ian. Gives every legacy item code the ' +
-    'CHWN-001 shape under a super-admin actor; no screen by design, and this guard scans apps/ only.',
 };
 
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {

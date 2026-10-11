@@ -71,6 +71,8 @@ export async function countsRegister(orgId: string, storeId: string): Promise<Co
 // -----------------------------------------------------------------------------------------
 
 export interface SheetLine {
+  /** count_lines.id once something has been typed against this row; `null` for a row not counted yet. */
+  readonly id: string | null;
   readonly itemId: string;
   readonly itemCode: string;
   readonly itemName: string;
@@ -111,6 +113,15 @@ export interface CountSessionDetail {
   readonly addableItems: readonly { id: string; code: string; name: string; baseUnit: string }[];
 }
 
+/**
+ * T-389 S4: the count line's own id for a (session, item, room), or '' when there is none. A refused save keeps the
+ * typing under this id so only that line reopens. One row is read, never the whole sheet. A database error is not
+ * swallowed: it surfaces like any other failure of the action.
+ */
+export async function countLineId(orgId: string, sessionId: string, itemId: string, locationId: string): Promise<string> {
+  return withOrgPrincipal(orgId, async (tx) => (await countSessionsRepo.lineIdFor(tx, sessionId, itemId, locationId)) ?? '');
+}
+
 /** ⚠️ `orgId` is the ACTOR's org, not derived from the row — a session id from another org
  *  resolves to "not found" under this org's RLS principal rather than ever being read. */
 export async function getCountSessionDetail(orgId: string, id: string): Promise<CountSessionDetail | undefined> {
@@ -142,6 +153,7 @@ export async function getCountSessionDetail(orgId: string, id: string): Promise<
     const sheet: SheetLine[] = expected.map((e) => {
       const line = lineByKey.get(`${e.itemId}:${e.locationId}`);
       return {
+        id: line?.id ?? null,
         itemId: e.itemId,
         itemCode: e.itemCode,
         itemName: e.itemName,
@@ -159,6 +171,7 @@ export async function getCountSessionDetail(orgId: string, id: string): Promise<
     const extras: SheetLine[] = lines
       .filter((l) => !expectedKeys.has(`${l.itemId}:${l.locationId}`))
       .map((l) => ({
+        id: l.id,
         itemId: l.itemId,
         itemCode: l.itemCode,
         itemName: l.itemName,

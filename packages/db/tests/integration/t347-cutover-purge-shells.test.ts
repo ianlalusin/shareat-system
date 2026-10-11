@@ -82,6 +82,8 @@ async function migrateToHead(sql: ReturnType<typeof postgres>): Promise<void> {
   await migrate(drizzle(sql), { migrationsFolder: REAL_MIGRATIONS_FOLDER });
 }
 
+/** T-390 R8: the purge records C2 as performed by a person; set to the fixture's person right after each seedFixture. */
+const PERFORMER = { id: '' };
 let seq = 0;
 const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 
@@ -261,15 +263,16 @@ describe('T-347 S2-S6, N2 — applyPurge on the full fixture', () => {
     sql = postgres(scratchUrl(dbName), { max: 1 });
     await migrateToHead(sql);
     f = await seedFixture(sql);
+    PERFORMER.id = f.personId;
     keepBefore = await keepTablesMd5(sql, KEEP_TABLES);
     try {
       const mod = (await import(PURGE_MODULE_PATH)) as {
         planPurge: (sql: unknown, asOf: string) => Promise<unknown>;
-        applyPurge: (tx: unknown, plan: unknown) => Promise<unknown>;
+        applyPurge: (tx: unknown, plan: unknown, opts?: { performedBy?: string }) => Promise<unknown>;
       };
       await sql.begin(async (tx) => {
         const plan = await mod.planPurge(tx, '2026-12-31');
-        await mod.applyPurge(tx, plan);
+        await mod.applyPurge(tx, plan, { performedBy: PERFORMER.id });
       });
     } catch (err) {
       applyError = err;
@@ -354,6 +357,7 @@ describe('T-347 S1 — scripts/cutover-purge.ts --apply, as a real subprocess', 
     sql = postgres(scratchUrl(dbName), { max: 1 });
     await migrateToHead(sql);
     f = await seedFixture(sql);
+    PERFORMER.id = f.personId;
     // Advance mirror_version_seq past its fresh start (1, is_called=false) BEFORE capturing
     // "before" — a sequence nothing has ever touched reads identically whether correctly
     // excluded from the restart or reset anyway, so the "unchanged" assertion below would be
@@ -368,7 +372,7 @@ describe('T-347 S1 — scripts/cutover-purge.ts --apply, as a real subprocess', 
   }, 120_000);
 
   it('exits 0, reports committed, mirror_version_seq unchanged — A1\'s posted depreciation entry is what makes the TRUNCATE-before-shell order observable (R2.6)', () => {
-    const result = spawnSync('npx', ['tsx', SCRIPT_PATH, '--confirm-database', dbName, '--apply'], {
+    const result = spawnSync('npx', ['tsx', SCRIPT_PATH, '--confirm-database', dbName, '--apply', '--by', f.personId], {
       cwd: REPO_ROOT,
       env: subprocessEnv(dbName),
       encoding: 'utf8',
@@ -411,6 +415,7 @@ describe('T-347 N1 — a scratch-only CHECK refusing NULL reconciled_by rolls th
     sql = postgres(scratchUrl(dbName), { max: 1 });
     await migrateToHead(sql);
     f = await seedFixture(sql);
+    PERFORMER.id = f.personId;
     // A CHECK the real schema does not have — this is what makes ONE of the shell step's several
     // per-table clears fail partway through, without needing to know which table BUILDER clears
     // first. Anything failing mid-transaction proves the invariant; this one is deliberately picked
@@ -428,14 +433,14 @@ describe('T-347 N1 — a scratch-only CHECK refusing NULL reconciled_by rolls th
   it('⛔ applyPurge throws; A1 is still active at 24,000; the journal is unchanged; the customer anchor is intact', async () => {
     const mod = (await import(PURGE_MODULE_PATH)) as {
       planPurge: (sql: unknown, asOf: string) => Promise<unknown>;
-      applyPurge: (tx: unknown, plan: unknown) => Promise<unknown>;
+      applyPurge: (tx: unknown, plan: unknown, opts?: { performedBy?: string }) => Promise<unknown>;
     };
     const [journalBefore] = await sql<{ n: number }[]>`select count(*)::int as n from journal_entries where org_id = ${f.orgId}`;
 
     await expect(
       sql.begin(async (tx) => {
         const plan = await mod.planPurge(tx, '2026-12-31');
-        await mod.applyPurge(tx, plan);
+        await mod.applyPurge(tx, plan, { performedBy: PERFORMER.id });
       }),
     ).rejects.toBeDefined();
 
@@ -463,6 +468,7 @@ describe('T-347 N3, P1 — dry run and --rehearse are read-only; the dry run\'s 
     sql = postgres(scratchUrl(dbName), { max: 1 });
     await migrateToHead(sql);
     f = await seedFixture(sql);
+    PERFORMER.id = f.personId;
   }, 60_000);
 
   afterAll(async () => {
@@ -492,7 +498,7 @@ describe('T-347 N3, P1 — dry run and --rehearse are read-only; the dry run\'s 
     const tablesBefore = await keepTablesMd5(sql, allTables);
     const result = spawnSync(
       'npx',
-      ['tsx', SCRIPT_PATH, '--confirm-database', dbName, '--rehearse'],
+      ['tsx', SCRIPT_PATH, '--confirm-database', dbName, '--rehearse', '--by', f.personId],
       { cwd: REPO_ROOT, env: subprocessEnv(dbName), encoding: 'utf8', shell: true },
     );
     expect(result.status).toBe(0);
@@ -539,7 +545,7 @@ describe('T-347 N4 — the RLS preflight refuses a non-bypass role', () => {
     await createScratchDatabase(dbName);
     sql = postgres(scratchUrl(dbName), { max: 1 });
     await migrateToHead(sql);
-    await seedFixture(sql);
+    PERFORMER.id = (await seedFixture(sql)).personId;
   }, 60_000);
 
   afterAll(async () => {
@@ -550,14 +556,14 @@ describe('T-347 N4 — the RLS preflight refuses a non-bypass role', () => {
   it('⛔ run as shareat_app (RLS-subject, non-bypass, DML grants only) — REFUSED for row-level security; nothing changed', async () => {
     const mod = (await import(PURGE_MODULE_PATH)) as {
       planPurge: (sql: unknown, asOf: string) => Promise<unknown>;
-      applyPurge: (tx: unknown, plan: unknown) => Promise<unknown>;
+      applyPurge: (tx: unknown, plan: unknown, opts?: { performedBy?: string }) => Promise<unknown>;
     };
     const [before] = await sql<{ n: number }[]>`select count(*)::int as n from fixed_assets`;
     await expect(
       sql.begin(async (tx) => {
         await tx.unsafe('set local role shareat_app');
         const plan = await mod.planPurge(tx, '2026-12-31');
-        await mod.applyPurge(tx, plan);
+        await mod.applyPurge(tx, plan, { performedBy: PERFORMER.id });
       }),
     ).rejects.toMatchObject({
       userMessage: 'REFUSED. shareat_app is subject to row-level security; the purge would clear nothing and report success.',
@@ -601,7 +607,7 @@ describe('T-347 N4b — row_security=off itself refuses an owner role without BY
     // the migration itself, before there is even a fixture to test applyPurge against.
     adminSql = postgres(scratchUrl(dbName), { max: 1 });
     await migrateToHead(adminSql);
-    await seedFixture(adminSql);
+    PERFORMER.id = (await seedFixture(adminSql)).personId;
 
     // Build the role AFTER the schema exists, then hand it every object the superuser just
     // created — making it the OWNER (full DDL/DML: can TRUNCATE, ALTER, reach the shell step)
@@ -648,13 +654,13 @@ describe('T-347 N4b — row_security=off itself refuses an owner role without BY
   it('⛔ applyPurge as the table OWNER, preflight bypassed via the test-only hook — the raw row_security=off refusal fires; nothing changed, never a silent success', async () => {
     const mod = (await import(PURGE_MODULE_PATH)) as {
       planPurge: (sql: unknown, asOf: string) => Promise<unknown>;
-      applyPurge: (tx: unknown, plan: unknown, opts?: { skipPreflightForTest?: boolean }) => Promise<unknown>;
+      applyPurge: (tx: unknown, plan: unknown, opts?: { skipPreflightForTest?: boolean; performedBy?: string }) => Promise<unknown>;
     };
     const [before] = await ownerSql<{ n: number }[]>`select count(*)::int as n from fixed_assets`;
     await expect(
       ownerSql.begin(async (tx) => {
         const plan = await mod.planPurge(tx, '2026-12-31');
-        await mod.applyPurge(tx, plan, { skipPreflightForTest: true });
+        await mod.applyPurge(tx, plan, { skipPreflightForTest: true, performedBy: PERFORMER.id });
       }),
     ).rejects.toThrow(/query would be affected by row-level security policy/i);
     const [after] = await ownerSql<{ n: number }[]>`select count(*)::int as n from fixed_assets`;
@@ -674,7 +680,7 @@ describe('T-347 N5 — an un-classified FK into a purged table blocks --apply', 
     await createScratchDatabase(dbName);
     sql = postgres(scratchUrl(dbName), { max: 1 });
     await migrateToHead(sql);
-    await seedFixture(sql);
+    PERFORMER.id = (await seedFixture(sql)).personId;
     // A scratch-only KEPT table whose FK into `expenses` (purge class) is NOT in any
     // `clearColumns` list — `planPurge` must find it (derived from `pg_constraint`, not a
     // hand-list) and `--apply` must refuse before writing anything.
@@ -697,7 +703,7 @@ describe('T-347 N5 — an un-classified FK into a purged table blocks --apply', 
     ).map((r) => r.t);
     const seqBefore = await sequenceValues(sql);
     const tablesBefore = await keepTablesMd5(sql, allTables);
-    const result = spawnSync('npx', ['tsx', SCRIPT_PATH, '--confirm-database', dbName, '--apply'], {
+    const result = spawnSync('npx', ['tsx', SCRIPT_PATH, '--confirm-database', dbName, '--apply', '--by', PERFORMER.id], {
       cwd: REPO_ROOT,
       env: subprocessEnv(dbName),
       encoding: 'utf8',

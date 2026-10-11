@@ -143,6 +143,12 @@ export async function recordStep(
     completedBy: string;
   },
 ): Promise<void> {
+  // T-390 R16: a C3P attestation records a fingerprint of the party opening lines it vouched for, so C5 can tell when they changed.
+  // Re-attesting replaces the row and so replaces the fingerprint.
+  if (input.stepCode === 'C3P') {
+    const fp = await partyLinesFingerprint(tx, input.orgId);
+    input = { ...input, note: `${input.note ?? ''} ${C3P_FINGERPRINT_OPEN}${fp}]`.trim() };
+  }
   // Re-attesting replaces: the latest statement by a named person is the record, and the old one
   // was never a posting.
   await tx.execute(sql`
@@ -173,12 +179,12 @@ export async function lockOpeningItem(tx: Tx, storeId: string, itemId: string): 
   await tx.execute(sql`select pg_advisory_xact_lock(390002, hashtext(${storeId}::text || ':' || ${itemId}::text))`);
 }
 
-/** T-390 R8: has the opening been posted? A posted `opening_balance` entry exists. */
+/** T-390 R8: has the opening been posted? An `opening_balance` entry was POSTED, even if it was reversed since (the books were opened; corrections are ordinary stock documents). The reversal entry itself is not an opening. */
 export async function openingPosted(tx: Tx, orgId: string): Promise<{ posted: boolean; entryDate: string | null }> {
   const [row] = (await tx.execute(sql`
     select min(entry_date)::text as entry_date
     from journal_entries
-    where org_id = ${orgId} and source_type = 'opening_balance' and status = 'posted'
+    where org_id = ${orgId} and source_type = 'opening_balance' and status in ('posted', 'reversed') and reversal_of_entry_id is null
   `)) as unknown as Record<string, string | null>[];
   const entryDate = row?.entry_date ?? null;
   return { posted: entryDate !== null, entryDate };
@@ -291,15 +297,62 @@ export async function upsertOpeningCount(
   }
 }
 
-/** The valued total of everything counted — what the inventory opening figure should come to. */
-export async function countedValue(tx: Tx, orgId: string, storeId?: string): Promise<string> {
+/** T-390 R13: the EXCLUSIVE opening lock `postOpeningBalances` takes first. Every other opening writer holds the SHARED twin (390001) before its R8 check. */
+export async function lockOpeningExclusive(tx: Tx, orgId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(390001, hashtext(${orgId}::text))`);
+}
+
+/** T-390 R7: has any `opening_count` movement been written for this org? (C5 writes them once, ever.) */
+export async function openingStockMovementsExist(tx: Tx, orgId: string): Promise<boolean> {
   const [row] = (await tx.execute(sql`
-    select coalesce(sum(oc.quantity * coalesce(oc.unit_cost, 0)), 0)::text as value
+    select count(*)::int as n from stock_movements
+    where org_id = ${orgId} and kind = 'opening' and source_type = 'opening_count'
+  `)) as unknown as { n: number }[];
+  return Number(row?.n ?? 0) > 0;
+}
+
+export interface OpeningCountRow {
+  id: string;
+  storeId: string;
+  locationId: string;
+  locationName: string;
+  itemId: string;
+  itemName: string;
+  itemKind: string;
+  /** numeric(14,3) as text. */
+  quantity: string;
+  /** numeric(14,4) as text, or null when the row has no cost. */
+  unitCost: string | null;
+  costSource: string | null;
+}
+
+/**
+ * T-390 R5/R7/R17: every counted row (all rooms) of one store, or of the whole org, with the item's name and kind and the room's
+ * name. The ONE read behind `planOpeningStock`; the float `countedValue` it replaces is gone.
+ */
+export async function countsForStore(tx: Tx, orgId: string, storeId?: string): Promise<OpeningCountRow[]> {
+  const rows = (await tx.execute(sql`
+    select oc.id, oc.store_id, oc.location_id, sl.name as location_name, oc.item_id, i.name as item_name, i.kind as item_kind,
+           oc.quantity::text as quantity, oc.unit_cost::text as unit_cost, oc.cost_source
     from opening_counts oc
+    join items i on i.id = oc.item_id
+    join stock_locations sl on sl.id = oc.location_id
     where oc.org_id = ${orgId}
       ${storeId ? sql`and oc.store_id = ${storeId}` : sql``}
-  `)) as unknown as Record<string, string>[];
-  return Number(row?.value ?? 0).toFixed(2);
+    order by oc.store_id, i.name, i.id, sl.name, oc.id
+  `)) as unknown as Record<string, string | null>[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    storeId: String(r.store_id),
+    locationId: String(r.location_id),
+    locationName: String(r.location_name),
+    itemId: String(r.item_id),
+    itemName: String(r.item_name),
+    itemKind: String(r.item_kind),
+    quantity: String(r.quantity),
+    unitCost: r.unit_cost == null ? null : String(r.unit_cost),
+    costSource: r.cost_source == null ? null : String(r.cost_source),
+  }));
 }
 
 /**
@@ -316,22 +369,29 @@ export async function partiesWithOpeningAndPreCutoverDocs(
   orgId: string,
   conversionDate: string,
 ): Promise<{ partyType: string; partyId: string }[]> {
+  // T-390 audit 5: LIVE entries only (not reversed, not a reversal), and only on the SAME party-control account on both sides, so an
+  // old payroll or transfer line on another account never refuses.
   const rows = (await tx.execute(sql`
     with opening as (
-      select distinct jl.party_type, jl.party_id
+      select distinct a.code, jl.party_type, jl.party_id
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id
-      where je.org_id = ${orgId} and je.source_type = 'opening_balance' and jl.party_id is not null
+      join accounts a on a.id = jl.account_id
+      where je.org_id = ${orgId} and je.source_type = 'opening_balance' and je.status in ('draft', 'posted')
+        and je.reversal_of_entry_id is null and jl.party_id is not null and a.code in ('1210', '2110', '2400', '1230')
     )
-    select o.party_type, o.party_id
+    select distinct o.party_type, o.party_id
     from opening o
     where exists (
       select 1
       from journal_lines jl2
       join journal_entries je2 on je2.id = jl2.entry_id
+      join accounts a2 on a2.id = jl2.account_id
       where je2.org_id = ${orgId}
         and je2.source_type <> 'opening_balance'
+        and je2.status = 'posted' and je2.reversal_of_entry_id is null
         and je2.entry_date < ${conversionDate}
+        and a2.code = o.code
         and jl2.party_type = o.party_type and jl2.party_id = o.party_id
     )
   `)) as unknown as Record<string, string>[];
@@ -404,4 +464,296 @@ export async function deleteDraftEntry(tx: Tx, orgId: string, entryId: string): 
   await tx.execute(sql`
     delete from journal_entries where id = ${entryId} and org_id = ${orgId} and status = 'draft'
   `);
+}
+
+// -------------------------------------------------------------------------------------
+// T-390 S3 — the tie-out's queries (R9, §5.3) and the writers' R8 gates
+// -------------------------------------------------------------------------------------
+
+/** T-390 R8: has the purge (C2) been RECORDED as performed? Only `performed` counts; an `attested` C2 row does not. */
+export async function c2Performed(tx: Tx, orgId: string): Promise<boolean> {
+  const [row] = (await tx.execute(sql`
+    select count(*)::int as n from cutover_steps
+    where org_id = ${orgId} and step_code = 'C2' and completion = 'performed'
+  `)) as unknown as { n: number }[];
+  return Number(row?.n ?? 0) > 0;
+}
+
+/** Every store of the org, by id, so a sentence can name the store. */
+export async function storeNamesOf(tx: Tx, orgId: string): Promise<Map<string, string>> {
+  const rows = (await tx.execute(sql`select id, name from stores where org_id = ${orgId}`)) as unknown as Record<string, string>[];
+  return new Map(rows.map((r) => [String(r.id), String(r.name)]));
+}
+
+export interface OpeningLine {
+  entryId: string;
+  entryDate: string;
+  accountCode: string;
+  storeId: string | null;
+  debit: string;
+  credit: string;
+  partyType: string | null;
+  partyId: string | null;
+  /** The party name when it resolves under its own type; null for an orphan or a party with no name. */
+  partyName: string | null;
+  /** loan / money_account only: the store the party belongs to. */
+  partyStoreId: string | null;
+  /** money_account only: its GL code and whether it is active. */
+  partyGlCode: string | null;
+  partyActive: boolean | null;
+  /** employee only: has this person an employment (ANY status) at the line's store? */
+  employedAtStore: boolean | null;
+}
+
+/**
+ * EVERY line of every opening entry, draft and posted alike (3900 included), with its party resolved under the party's OWN type.
+ * The registers T2-T10 are decided over this one set; the arithmetic happens in the domain, in centavos.
+ */
+export async function openingLines(tx: Tx, orgId: string): Promise<OpeningLine[]> {
+  const rows = (await tx.execute(sql`
+    select je.id as entry_id, je.entry_date::text as entry_date, a.code as account_code, jl.store_id,
+           jl.debit::text as debit, jl.credit::text as credit, jl.party_type, jl.party_id,
+           case jl.party_type
+             when 'customer' then (select c.name from customers c where c.id::text = jl.party_id and c.org_id = je.org_id)
+             when 'supplier' then (select s.name from suppliers s where s.id::text = jl.party_id and s.org_id = je.org_id)
+             when 'employee' then (select p.display_name from persons p where p.id::text = jl.party_id and p.org_id = je.org_id)
+             when 'loan' then (select l.name from loans l where l.id::text = jl.party_id and l.org_id = je.org_id)
+             when 'money_account' then (select m.name from money_accounts m where m.id::text = jl.party_id and m.org_id = je.org_id)
+             when 'store' then (select st.name from stores st where st.id::text = jl.party_id and st.org_id = je.org_id)
+             else null end as party_name,
+           case jl.party_type
+             when 'loan' then (select l.store_id::text from loans l where l.id::text = jl.party_id and l.org_id = je.org_id)
+             when 'money_account' then (select m.store_id::text from money_accounts m where m.id::text = jl.party_id and m.org_id = je.org_id)
+             else null end as party_store_id,
+           (select m.gl_account_code from money_accounts m
+             where jl.party_type = 'money_account' and m.id::text = jl.party_id and m.org_id = je.org_id) as party_gl_code,
+           (select m.is_active from money_accounts m
+             where jl.party_type = 'money_account' and m.id::text = jl.party_id and m.org_id = je.org_id) as party_active,
+           case when jl.party_type = 'employee' then exists (
+             select 1 from employments e
+             where e.person_id::text = jl.party_id and e.store_id = jl.store_id and e.org_id = je.org_id) else null end as employed_at_store
+    from journal_entries je
+    join journal_lines jl on jl.entry_id = je.id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId} and je.source_type = 'opening_balance' and je.status in ('draft', 'posted')
+      and je.reversal_of_entry_id is null
+    order by je.entry_date, a.code, jl.line_no, je.id
+  `)) as unknown as Record<string, string | boolean | null>[];
+  return rows.map((r) => ({
+    entryId: String(r.entry_id),
+    entryDate: String(r.entry_date),
+    accountCode: String(r.account_code),
+    storeId: r.store_id == null ? null : String(r.store_id),
+    debit: String(r.debit),
+    credit: String(r.credit),
+    partyType: r.party_type == null ? null : String(r.party_type),
+    partyId: r.party_id == null ? null : String(r.party_id),
+    partyName: r.party_name == null ? null : String(r.party_name),
+    partyStoreId: r.party_store_id == null ? null : String(r.party_store_id),
+    partyGlCode: r.party_gl_code == null ? null : String(r.party_gl_code),
+    partyActive: r.party_active == null ? null : Boolean(r.party_active),
+    employedAtStore: r.employed_at_store == null ? null : Boolean(r.employed_at_store),
+  }));
+}
+
+/** T2 register side: the cost of the ACTIVE assets acquired on the conversion date, per store. */
+export async function openingAssetCostByStore(
+  tx: Tx,
+  orgId: string,
+  conversionDate: string,
+): Promise<{ storeId: string; cost: string }[]> {
+  const rows = (await tx.execute(sql`
+    select store_id, coalesce(sum(cost), 0)::text as cost
+    from fixed_assets
+    where org_id = ${orgId} and status = 'active' and acquired_on = ${conversionDate}::date
+    group by store_id
+  `)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({ storeId: String(r.store_id), cost: String(r.cost) }));
+}
+
+/** T2: every shell still waiting for a value (it blocks C5 by name). */
+export async function pendingAssetShells(tx: Tx, orgId: string): Promise<{ id: string; storeId: string; name: string }[]> {
+  const rows = (await tx.execute(sql`
+    select id, store_id, name from fixed_assets
+    where org_id = ${orgId} and status = 'pending_valuation'
+    order by name, id
+  `)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({ id: String(r.id), storeId: String(r.store_id), name: String(r.name) }));
+}
+
+/** One asset's store, name and status, or null when there is no such asset in this org (R10's lookup). */
+export async function assetOf(
+  tx: Tx,
+  orgId: string,
+  assetId: string,
+): Promise<{ storeId: string; name: string; status: string } | null> {
+  const [row] = (await tx.execute(sql`
+    select store_id, name, status from fixed_assets where id = ${assetId} and org_id = ${orgId}
+  `)) as unknown as Record<string, string>[];
+  return row ? { storeId: String(row.store_id), name: String(row.name), status: String(row.status) } : null;
+}
+
+/** T3 register side: the total cost of the ACTIVE prepaid items, per store. */
+export async function activePrepaidTotalByStore(tx: Tx, orgId: string): Promise<{ storeId: string; total: string }[]> {
+  const rows = (await tx.execute(sql`
+    select store_id, coalesce(sum(total_cost), 0)::text as total
+    from prepaid_items
+    where org_id = ${orgId} and status = 'active'
+    group by store_id
+  `)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({ storeId: String(r.store_id), total: String(r.total) }));
+}
+
+/** T4 register side: every ACTIVE loan, with its store. */
+export async function activeLoans(tx: Tx, orgId: string): Promise<{ id: string; storeId: string; name: string }[]> {
+  const rows = (await tx.execute(sql`
+    select id, store_id, name from loans where org_id = ${orgId} and status = 'active' order by name, id
+  `)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({ id: String(r.id), storeId: String(r.store_id), name: String(r.name) }));
+}
+
+/** A party name under its own type, for a sentence about it (the double-counting guard). Null when it does not resolve. */
+export async function partyNameOf(tx: Tx, orgId: string, partyType: string, partyId: string): Promise<string | null> {
+  const [row] = (await tx.execute(sql`
+    select case ${partyType}::text
+             when 'customer' then (select c.name from customers c where c.id::text = ${partyId} and c.org_id = ${orgId})
+             when 'supplier' then (select s.name from suppliers s where s.id::text = ${partyId} and s.org_id = ${orgId})
+             when 'employee' then (select p.display_name from persons p where p.id::text = ${partyId} and p.org_id = ${orgId})
+             when 'loan' then (select l.name from loans l where l.id::text = ${partyId} and l.org_id = ${orgId})
+             when 'money_account' then (select m.name from money_accounts m where m.id::text = ${partyId} and m.org_id = ${orgId})
+             when 'store' then (select st.name from stores st where st.id::text = ${partyId} and st.org_id = ${orgId})
+             else null end as name
+  `)) as unknown as Record<string, string | null>[];
+  return row?.name ?? null;
+}
+
+export const C3P_FINGERPRINT_OPEN = '[party-lines:';
+
+/** T-390 R16: count and total (debits plus credits) of the opening lines on the party-control accounts 1210, 2110, 2400, 1230. */
+export async function partyLinesFingerprint(tx: Tx, orgId: string): Promise<string> {
+  const [row] = (await tx.execute(sql`
+    select count(*)::text as n, coalesce(sum(jl.debit + jl.credit), 0)::text as total
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId} and je.source_type = 'opening_balance' and je.status in ('draft', 'posted')
+      and je.reversal_of_entry_id is null and a.code in ('1210', '2110', '2400', '1230')
+  `)) as unknown as Record<string, string>[];
+  return `${row?.n ?? '0'}:${row?.total ?? '0'}`;
+}
+
+/** The C3P attestation as recorded: when, and the fingerprint it vouched for (null when the row carries none). */
+export async function c3pAttestation(
+  tx: Tx,
+  orgId: string,
+): Promise<{ completedAt: Date; fingerprint: string | null } | null> {
+  const [row] = (await tx.execute(sql`
+    select completed_at, note from cutover_steps where org_id = ${orgId} and step_code = 'C3P' and store_id is null
+  `)) as unknown as { completed_at: Date | string; note: string | null }[];
+  if (!row) return null;
+  const m = /\[party-lines:([^\]]*)\]/.exec(row.note ?? '');
+  return { completedAt: new Date(row.completed_at), fingerprint: m ? (m[1] ?? null) : null };
+}
+
+// -------------------------------------------------------------------------------------
+// T-390 S5: the reads behind the cutover screens (the screens' lib.ts holds no SQL)
+// -------------------------------------------------------------------------------------
+
+type Row = Record<string, string | null>;
+
+/** The store's active rooms, default first. */
+export async function activeRoomsOf(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+): Promise<{ id: string; code: string; name: string; isDefault: boolean }[]> {
+  const rows = (await tx.execute(sql`
+    select id, code, name, is_default from stock_locations
+    where org_id = ${orgId} and store_id = ${storeId} and status = 'active'
+    order by is_default desc, name, id
+  `)) as unknown as Record<string, unknown>[];
+  return rows.map((r) => ({ id: String(r.id), code: String(r.code), name: String(r.name), isDefault: Boolean(r.is_default) }));
+}
+
+/** One room's counts (quantity, cost, cost source) keyed by item id. */
+export async function countsForRoom(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  roomId: string,
+): Promise<Map<string, { quantity: string; unitCost: string | null; costSource: string | null }>> {
+  const rows = (await tx.execute(sql`
+    select item_id, quantity::text as quantity, unit_cost::text as unit_cost, cost_source
+    from opening_counts where org_id = ${orgId} and store_id = ${storeId} and location_id = ${roomId}
+  `)) as unknown as Row[];
+  return new Map(
+    rows.map((r) => [String(r.item_id), { quantity: String(r.quantity), unitCost: r.unit_cost ?? null, costSource: r.cost_source ?? null }]),
+  );
+}
+
+/** Per item across every room of the store: summed quantity (as text) and the cost. */
+export async function countTotalsByItem(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+): Promise<Map<string, { quantity: string; unitCost: string | null }>> {
+  const rows = (await tx.execute(sql`
+    select item_id, sum(quantity)::text as quantity, max(unit_cost)::text as unit_cost
+    from opening_counts where org_id = ${orgId} and store_id = ${storeId}
+    group by item_id
+  `)) as unknown as Row[];
+  return new Map(rows.map((r) => [String(r.item_id), { quantity: String(r.quantity), unitCost: r.unit_cost ?? null }]));
+}
+
+export interface SheetItemRow {
+  code: string;
+  name: string;
+  baseUnit: string;
+  purchaseUnit: string | null;
+  purchaseFactor: string | null;
+}
+
+/** ACTIVE items with a stock movement in this room in the last 90 days. Reads no quantity: the count sheet is blind. */
+export async function itemsMovedInRoom(tx: Tx, orgId: string, storeId: string, roomId: string): Promise<SheetItemRow[]> {
+  const rows = (await tx.execute(sql`
+    select i.code, i.name, i.base_unit, i.purchase_unit, i.purchase_factor::text as purchase_factor
+    from items i
+    where i.org_id = ${orgId} and i.status = 'active'
+      and exists (
+        select 1 from stock_movements m
+        where m.org_id = ${orgId} and m.store_id = ${storeId} and m.location_id = ${roomId}
+          and m.item_id = i.id and m.moved_at >= now() - interval '90 days'
+      )
+    order by i.name, i.id
+  `)) as unknown as Row[];
+  return rows.map((r) => ({
+    code: String(r.code),
+    name: String(r.name),
+    baseUnit: String(r.base_unit),
+    purchaseUnit: r.purchase_unit ?? null,
+    purchaseFactor: r.purchase_factor ?? null,
+  }));
+}
+
+/** Suppliers and customers by name, for the opening-figure party picker. */
+export async function partyOptions(tx: Tx, orgId: string): Promise<{ type: 'supplier' | 'customer'; id: string; name: string }[]> {
+  const sup = (await tx.execute(sql`select id, name from suppliers where org_id = ${orgId} order by name, id`)) as unknown as Row[];
+  const cus = (await tx.execute(sql`select id, name from customers where org_id = ${orgId} order by name, id`)) as unknown as Row[];
+  return [
+    ...sup.map((r) => ({ type: 'supplier' as const, id: String(r.id), name: String(r.name) })),
+    ...cus.map((r) => ({ type: 'customer' as const, id: String(r.id), name: String(r.name) })),
+  ];
+}
+
+/** Postable accounts an opening figure may be entered against. 3900 is excluded at the source. */
+export async function postableOpeningAccounts(
+  tx: Tx,
+  orgId: string,
+): Promise<{ code: string; name: string; requiresParty: boolean }[]> {
+  const rows = (await tx.execute(sql`
+    select code, name, requires_party from accounts
+    where org_id = ${orgId} and is_postable = true and status = 'active' and code <> '3900'
+    order by code
+  `)) as unknown as Record<string, unknown>[];
+  return rows.map((r) => ({ code: String(r.code), name: String(r.name), requiresParty: Boolean(r.requires_party) }));
 }

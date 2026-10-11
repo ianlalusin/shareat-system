@@ -20,6 +20,7 @@ import type { LocationLike } from '../../src/stock-locations/rules';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
 import type { PosV1SoldItemInput } from '../../../db/src/pos-v1/fixtures';
+import { testItemCode } from './_fixtures/item-code';
 
 /**
  * T-388 S1 - DEF-618: a POS usage pull posts every line that has stock and holds back only the short items
@@ -165,10 +166,10 @@ beforeEach(async () => {
   const [rs] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, created_by) values (${orgA},${storeA},'STORE','Stockroom',${t!.id},${staffId}) returning id`;
   kitchen = rk!.id; display = rd!.id; stockroom = rs!.id;
 
-  const [ic] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'COKE','Coke','retail','pcs',${staffId}) returning id`;
-  const [ich] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'CHEESE','Cheese','raw_material','kg',${staffId}) returning id`;
-  const [isc] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'SAUCE','Sauce','raw_material','pcs',${staffId}) returning id`;
-  const [im] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'PORKSLAB','Pork Slab','meat_slab','kg',${staffId}) returning id`;
+  const [ic] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Coke','retail','pcs',${staffId}) returning id`;
+  const [ich] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Cheese','raw_material','kg',${staffId}) returning id`;
+  const [isc] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Sauce','raw_material','pcs',${staffId}) returning id`;
+  const [im] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Pork Slab','meat_slab','kg',${staffId}) returning id`;
   itemCoke = ic!.id; itemCheese = ich!.id; itemSauce = isc!.id; itemMeat = im!.id;
 
   const [r] = await sql<{ id: string }[]>`
@@ -392,7 +393,7 @@ describe('T-388 I5 - a closed stock month posts nothing', () => {
 describe('T-388 I5c / I6 - an unexpected failure inside a room post is never swallowed', () => {
   /** A recipe whose only ingredient is a SUPPLY item (inventory account 1320), stocked, so only its posting can fail. */
   async function supplyRecipeDay() {
-    const [n] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},'NAPKIN','Napkin','supply','pcs',${staffId}) returning id`;
+    const [n] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Napkin','supply','pcs',${staffId}) returning id`;
     await stockUp(n!.id, kitchen, '20', '1.0000', '2026-08-01');
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
     const recipe = await newRecipe('Napkin Pack', itemSauce, [{ itemId: n!.id, quantity: '2', unit: 'pcs' }]);

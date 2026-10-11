@@ -16,7 +16,10 @@
  * variable inside the try, and the single redirect at the end reads it.
  */
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { COUNT_LINE } from './typed-forms';
 import { revalidatePath } from 'next/cache';
+import { AuthorizationError } from '@shareat/auth';
 import {
   advanceCountSession,
   cancelCountSession,
@@ -24,7 +27,7 @@ import {
   openCountSession,
   recordCount,
 } from '@shareat/domain';
-import { withOrgPrincipal } from './lib';
+import { countLineId, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../../lib/error-shape';
@@ -96,6 +99,7 @@ export async function recordCountAction(fd: FormData): Promise<void> {
   const countedQuantity = str(fd, 'countedQuantity');
 
   let errorText: string | null = null;
+  let denied = false;
   try {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       // T-371 S3: the raw figure goes to the domain, which parses it after `authorize()` (R5) into a presentable refusal.
@@ -104,10 +108,14 @@ export async function recordCountAction(fd: FormData): Promise<void> {
     if (!result.ok) errorText = result.reason;
   } catch (err) {
     errorText = errorMessage(err);
+    denied = err instanceof AuthorizationError;
   }
 
   if (errorText) {
-    return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { error: errorText });
+    // A permission refusal keeps nothing and looks nothing up: no count line id goes into the cookie.
+    if (denied) return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { error: errorText });
+    const lineId = await countLineId(actor.orgId, sessionId, itemId, locationId);
+    return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { error: errorText, typed: keepTyping(fd, COUNT_LINE, lineId, { actorId: actor.personId }) });
   }
   revalidatePath(`/inventory/counts/${sessionId}`);
   return await redirectWithFlash(`/inventory/counts/${sessionId}`, {}, { ok: 'Line saved.' });

@@ -30,6 +30,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { CONSTRAINT_MESSAGES, errorMessage } from '../../src/lib/constraint-messages';
 import { insertDerivedSalesDayRow } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -439,7 +440,7 @@ describe('T-378 S1 - item unit and kind CHECKs', () => {
 
   it('items_base_unit_check', async () => {
     const f = await org();
-    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('C')}, ${uid('n')}, 'retail', 'box', ${f.personId})`);
+    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${testItemCode()}, ${uid('n')}, 'retail', 'box', ${f.personId})`);
     check('items_base_unit_check', UNIT, err);
   });
   it('item_requests_base_unit_check', async () => {
@@ -449,7 +450,7 @@ describe('T-378 S1 - item unit and kind CHECKs', () => {
   });
   it('items_kind_check', async () => {
     const f = await org();
-    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('C')}, ${uid('n')}, 'bogus', 'pcs', ${f.personId})`);
+    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${testItemCode()}, ${uid('n')}, 'bogus', 'pcs', ${f.personId})`);
     check('items_kind_check', KIND, err);
   });
   it('item_requests_kind_check', async () => {
@@ -474,7 +475,7 @@ describe('T-378 S2 - the item unit is fixed once it has history', () => {
       insert into stock_locations (org_id, store_id, code, name, type_id, created_by) values (${orgId}, ${store!.id}, 'MAIN', 'Main', ${lt!.id}, ${person!.id}) returning id`;
     const itemCode = uid('itm');
     const [item] = await sql<{ id: string }[]>`
-      insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${itemCode}, ${itemCode}, 'raw_material', 'kg', ${person!.id}) returning id`;
+      insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, ${itemCode}, 'raw_material', 'kg', ${person!.id}) returning id`;
     await sql`
       insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
       values (${orgId}, ${store!.id}, ${loc!.id}, ${item!.id}, '2026-01-20T02:00:00Z', '10', 'receipt', 'delivery', ${crypto.randomUUID()}, ${person!.id})`;
@@ -498,7 +499,7 @@ describe('T-383 S1 - an item cannot be blank-named or blank-coded', () => {
   }
   it('items_name_not_blank_check', async () => {
     const f = await blankItemOrg();
-    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('C')}, '   ', 'retail', 'pcs', ${f.personId})`);
+    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${testItemCode()}, '   ', 'retail', 'pcs', ${f.personId})`);
     const row = record('items_name_not_blank_check', err);
     expect(row.constraintName).toBe('items_name_not_blank_check');
     expect(row.message).toBe(NAME_SENTENCE);
@@ -599,10 +600,56 @@ describe('T-386 S2 - the item-code never-reused trigger', () => {
   });
 });
 
+// T-386 S6 - the shape CHECK items_code_shape_check: a code not of the shape CHWN-001 is refused, and the person reads R5's shape sentence.
+describe('T-386 S6 - the item-code shape CHECK', () => {
+  const KEY = 'items_code_shape_check';
+  const SENTENCE = 'An item code is 4 letters or numbers, a dash and 3 digits, like CHWN-001.';
+
+  it(KEY, async () => {
+    const code = uid('t386-shape');
+    const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
+    const orgId = org!.id;
+    const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
+    const err = await provoke(
+      () => sql`insert into items (org_id, code, name, kind, base_unit, created_by)
+                values (${orgId}, 'PORK-BELLY', 'Pork belly', 'raw_material', 'kg', ${person!.id})`,
+    );
+    const row = record(KEY, err);
+    expect(row.constraintName).toBe(KEY);
+    expect(row.message, `a raw driver error reached the person: ${row.message}`).toBe(CONSTRAINT_MESSAGES[KEY]);
+    expect(row.message).toBe(SENTENCE);
+  });
+});
+
+// T-391 S1 (0193): the three item buying-unit CHECKs, provoked for real; the person reads the sentence, not the raw error.
+describe('T-391 S1 - the item buying-unit CHECKs', () => {
+  const legs = [
+    { key: 'items_purchase_pair_check', unit: 'box', factor: null as string | null },
+    { key: 'items_purchase_unit_check', unit: 'kg', factor: '1' },
+    { key: 'items_purchase_factor_check', unit: 'box', factor: '0' },
+  ];
+  for (const leg of legs) {
+    it(leg.key, async () => {
+      const code = uid('t391-lookup');
+      const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
+      const orgId = org!.id;
+      const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
+      const [item] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by)
+                values (${orgId}, 'PRCH-001', 'Pork', 'raw_material', 'kg', ${person!.id}) returning id`;
+      const err = await provoke(
+        () => sql`update items set purchase_unit = ${leg.unit}, purchase_factor = ${leg.factor} where id = ${item!.id}`,
+      );
+      const row = record(leg.key, err);
+      expect(row.constraintName).toBe(leg.key);
+      expect(row.message, `a raw driver error reached the person: ${row.message}`).toBe(CONSTRAINT_MESSAGES[leg.key as keyof typeof CONSTRAINT_MESSAGES]);
+    });
+  }
+});
+
 it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   const exercised = new Set(rows.map((r) => r.key));
   const missing = Object.keys(CONSTRAINT_MESSAGES).filter((k) => !exercised.has(k));
   expect(missing).toEqual([]);
-  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys + T-383 S1's items blank-name and blank-code CHECK keys + T-385 S2's sales_days_verify_requires_submitted + T-386 S2's items_code_never_reused = 43 rows provoked above.
-  expect(rows.length).toBe(43);
+  // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys + T-383 S1's items blank-name and blank-code CHECK keys + T-385 S2's sales_days_verify_requires_submitted + T-386 S2's items_code_never_reused + T-386 S6's items_code_shape_check = 44 rows provoked above.
+  expect(rows.length).toBe(47);
 });

@@ -34,6 +34,7 @@ import {
   seedCanonicalPositions,
 } from '@shareat/domain';
 import { postEntry } from '../../src/ledger/post-entry';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -376,7 +377,7 @@ describe('T-218 / DEF-176 — receivingDisputeOverdue, the backstop receiving ne
       values (${f.orgId}, ${`Branch ${tag}`}, ${f.personId}) returning id`;
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${tag}, 'Pork', 'raw_material', 'kg', ${f.personId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, 'Pork', 'raw_material', 'kg', ${f.personId}) returning id`;
     const [ord] = await sql<{ id: string }[]>`
       insert into trade_orders (org_id, store_id, customer_id, order_date, status, total_amount, created_by)
       values (${f.orgId}, ${f.storeId}, ${cust!.id}, '2026-01-10', 'draft', '1000.00', ${f.personId})
@@ -466,7 +467,7 @@ describe('T-220 / DEF-184 — commissaryUnitMismatch: goods signed for that neve
       values (${f.orgId}, ${'Branch ' + tag}, ${branch!.id}, ${f.personId}) returning id`;
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${tag}, 'Pork', 'raw_material', 'kg', ${f.personId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, 'Pork', 'raw_material', 'kg', ${f.personId}) returning id`;
 
     const [period] = await sql<{ id: string }[]>`
       select id from fiscal_periods where org_id = ${f.orgId} order by starts_on limit 1`;
@@ -658,7 +659,7 @@ describe('T-224 / DEF-186 — lowStockOrderNotProposed: low, able to order, noth
     }
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${tag}, ${'Pork ' + tag}, 'raw_material', 'kg', ${f.personId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, ${'Pork ' + tag}, 'raw_material', 'kg', ${f.personId}) returning id`;
     await sql`
       insert into store_item_thresholds (org_id, store_id, item_id, low_stock_threshold, set_by)
       values (${f.orgId}, ${branch!.id}, ${item!.id}, ${opts.threshold ?? '20'}, ${f.personId})`;
@@ -774,7 +775,7 @@ describe('T-224 / DEF-186 — lowStockOrderNotProposed: low, able to order, noth
     const ctx = await lowItem(f, { onHand: '4' });
     const [other] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${uid('oth')}, 'Beef', 'raw_material', 'kg', ${f.personId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, 'Beef', 'raw_material', 'kg', ${f.personId}) returning id`;
     await orderFor(f, { ...ctx, itemId: other!.id, status: 'draft' });
     expect(await find(f)).toBeDefined();
   });
@@ -794,7 +795,7 @@ describe('T-224 / DEF-186 — lowStockOrderNotProposed: low, able to order, noth
     for (let i = 0; i < 2; i++) {
       const [extra] = await sql<{ id: string }[]>`
         insert into items (org_id, code, name, kind, base_unit, created_by)
-        values (${f.orgId}, ${uid('x' + i)}, ${'Extra ' + i}, 'raw_material', 'kg', ${f.personId}) returning id`;
+        values (${f.orgId}, ${testItemCode()}, ${'Extra ' + i}, 'raw_material', 'kg', ${f.personId}) returning id`;
       await sql`
         insert into store_item_thresholds (org_id, store_id, item_id, low_stock_threshold, set_by)
         values (${f.orgId}, ${branchId}, ${extra!.id}, '10', ${f.personId})`;

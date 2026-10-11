@@ -154,6 +154,17 @@ const S_FULL = (stem: string) => `Every number under ${stem} has been used (999 
 const S_TAKEN = (code: string, stem: string, last: string, next: string) =>
   `${code} cannot be used: numbers up to ${stem}-${last} have already been given out under ${stem}. The next free one is ${stem}-${next}.`;
 
+/** T-386 S6: legacy shapes can no longer exist. A raw insert of a code that is not of the shape is refused by the table CHECK. */
+async function shapeRefused(f: { orgId: string; createdBy: string }, code: string): Promise<{ code?: string; constraint_name?: string } | null> {
+  try {
+    await sql`insert into items (org_id, code, name, kind, base_unit, created_by)
+              values (${f.orgId}, ${code}, 'Legacy', 'raw_material', 'kg', ${f.createdBy})`;
+    return null;
+  } catch (e) {
+    return e as { code?: string; constraint_name?: string };
+  }
+}
+
 beforeAll(async () => {
   await sql`select 1`;
 });
@@ -573,28 +584,13 @@ describe('R - renameItem and the code (spec R8)', () => {
   );
 
   it(
-    'R4: a LEGACY code (PORK-BELLY, raw insert) unchanged on rename is ok - no shape check on an unchanged code (the recode has not run yet). Mutant: shape-check the code always -> red. Red today: green (control: HEAD renames freely)',
+    'R4/R5 (S6, converted): legacy PORK-BELLY can no longer exist - the raw insert is refused by items_code_shape_check, so there is no legacy row to rename or to adopt over. Replaces "unchanged legacy code on rename is ok" and "adopt over a legacy code allocates". Red before S6: the insert succeeds',
     async () => {
       const f = await fixture('ar4');
-      const [row] = await sql<{ id: string }[]>`
-        insert into items (org_id, code, name, kind, base_unit, created_by)
-        values (${f.orgId}, 'PORK-BELLY', 'Pork belly', 'raw_material', 'kg', ${f.createdBy}) returning id`;
-      expect(await rename(f, f.superAdmin, row!.id, 'Pork belly sliced', 'PORK-BELLY')).toEqual({ changed: true });
-      expect(await itemRow(row!.id)).toMatchObject({ name: 'Pork belly sliced', code: 'PORK-BELLY' });
-      expect(await counterRows(f)).toBe(0);
-    },
-    60_000,
-  );
-
-  it(
-    'R5: adopt ticked on legacy PORK-BELLY, renamed "Pork belly" -> the code is ALLOCATED: PRBL-001 (the legacy code is not of the shape, so it is never "kept"). Mutant: keep when stems match without checking the shape -> stays PORK-BELLY, red. Red today: the flag is ignored',
-    async () => {
-      const f = await fixture('ar5');
-      const [row] = await sql<{ id: string }[]>`
-        insert into items (org_id, code, name, kind, base_unit, created_by)
-        values (${f.orgId}, 'PORK-BELLY', 'Pork bellies', 'raw_material', 'kg', ${f.createdBy}) returning id`;
-      await rename(f, f.superAdmin, row!.id, 'Pork belly', 'PORK-BELLY', true);
-      expect(await codeOf(row!.id)).toBe('PRBL-001');
+      const err = await shapeRefused(f, 'PORK-BELLY');
+      expect(err, 'must be refused').not.toBeNull();
+      expect({ code: err!.code, constraint: err!.constraint_name }).toEqual({ code: '23514', constraint: 'items_code_shape_check' });
+      expect(await itemCount(f)).toBe(0);
     },
     60_000,
   );
@@ -650,15 +646,16 @@ describe('R - renameItem and the code (spec R8)', () => {
   );
 });
 
-describe('A - legacy lower-case codes and the allocator', () => {
+describe('A - lower-case codes (S6, converted)', () => {
   it(
-    'A12: an item that holds a lower-case legacy chwn-001 (raw insert, as production data may) reserves the number: a new "Chicken wings" with no code is allocated CHWN-002, not CHWN-001 (the case twin). Mutant: the allocator ignores codes that are not already upper-case -> CHWN-001 -> unique-index error, red. Red against e0d4b03 if the allocator does not see the lower-case row',
+    'A12 (S6, converted): a lower-case chwn-001 can no longer be stored - the raw insert is refused by items_code_shape_check - so the allocator never meets a case twin and a new "Chicken wings" is CHWN-001. Replaces "lower-case legacy row reserves the number". Red before S6: the insert succeeds',
     async () => {
       const f = await fixture('a12');
-      await sql`insert into items (org_id, code, name, kind, base_unit, created_by)
-                values (${f.orgId}, 'chwn-001', 'Legacy wings', 'raw_material', 'kg', ${f.createdBy})`;
+      const err = await shapeRefused(f, 'chwn-001');
+      expect(err, 'must be refused').not.toBeNull();
+      expect({ code: err!.code, constraint: err!.constraint_name }).toEqual({ code: '23514', constraint: 'items_code_shape_check' });
       const made = await create(f, f.superAdmin, { name: 'Chicken wings' });
-      expect(await codeOf(made.id)).toBe('CHWN-002');
+      expect(await codeOf(made.id)).toBe('CHWN-001');
     },
     60_000,
   );

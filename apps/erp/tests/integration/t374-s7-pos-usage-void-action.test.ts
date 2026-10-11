@@ -55,6 +55,7 @@ import { receiveDelivery } from '../../../../packages/domain/src/deliveries/rece
 import { quantity } from '../../../../packages/domain/src/stock/quantity';
 import { importTestDay, linkTestStore, seedTestTenders } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
 import { urlOf } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -113,7 +114,7 @@ async function fixture(hint: string) {
     values (${orgId}, ${storeId}, 'KIT', 'Kitchen', ${type!.id}, 'operating', true, ${managerId}) returning id`;
   const kitchen = loc!.id;
   const [it] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, 'CHEESE', 'Cheese', 'meat_slab', 'kg', ${managerId}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Cheese', 'meat_slab', 'kg', ${managerId}) returning id`;
   const [file] = await sql<{ id: string }[]>`
     insert into stored_files (org_id, storage_path, content_type, byte_size, checksum, purpose, uploaded_by)
     values (${orgId}, ${`orgs/${orgId}/p-${uid('f')}.jpg`}, 'image/jpeg', 10, 'x', 'receipt_photo', ${managerId}) returning id`;

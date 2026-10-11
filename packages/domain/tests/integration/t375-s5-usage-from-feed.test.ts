@@ -54,6 +54,7 @@ import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
 import { mkSubmitter, submitThenVerify } from './_fixtures/sales-day-flow';
 import { insertRecheckBatch } from './_fixtures/pos-sold-items';
+import { testItemCode } from './_fixtures/item-code';
 
 const hd = (d: string) => humanDateOf(parseBusinessDate(d));
 const sql = postgres(url, { max: 12 });
@@ -219,7 +220,7 @@ async function fixture(hint: string, o: { link?: boolean } = {}) {
   const locations: LocationLike[] = [{ id: kitchen, role: 'operating', purpose: 'normal', isDefault: true, status: 'active' }];
   const mkItem = async (c: string, name: string) =>
     (await sql<{ id: string }[]>`
-      insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${c}, ${name}, 'meat_slab', 'kg', ${managerId}) returning id`)[0]!.id;
+      insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, ${name}, 'meat_slab', 'kg', ${managerId}) returning id`)[0]!.id;
   const cheese = await mkItem('CHEESE', 'Cheese');
   const buns = await mkItem('BUNS', 'Buns');
   for (const itemId of [cheese, buns]) {

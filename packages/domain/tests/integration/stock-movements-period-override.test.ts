@@ -34,6 +34,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { closeDb, journalRepo, stockLedgerRepo, withOrgPrincipal, type Tx } from '@shareat/db';
 import { decimal } from '@shareat/core/money';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -71,7 +72,7 @@ async function fixture(): Promise<Fixture> {
   const locationId = location!.id;
   const [item] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgId}, ${uid('ITEM')}, 'Test Item', 'raw_material', 'kg', ${personId}) returning id
+    values (${orgId}, ${testItemCode()}, 'Test Item', 'raw_material', 'kg', ${personId}) returning id
   `;
   const itemId = item!.id;
 

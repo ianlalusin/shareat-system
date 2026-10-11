@@ -10,6 +10,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
 import { paramsOf } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 config({ path: '.env.local' });
 
@@ -87,7 +88,7 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 async function insertItem(f: Fixture, baseUnit: string): Promise<string> {
   const [row] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${f.orgId}, ${uid('IT')}, ${`Item ${uid('n')}`}, 'raw_material', ${baseUnit}, ${f.superAdmin.personId})
+    values (${f.orgId}, ${testItemCode()}, ${`Item ${uid('n')}`}, 'raw_material', ${baseUnit}, ${f.superAdmin.personId})
     returning id`;
   return row!.id;
 }

@@ -1,6 +1,6 @@
 # T-390: Opening stock from the count into FIFO opening layers per room, plus opening subledger tie-out gates
 
-**Status:** S1 DONE 2026-10-10 (`f75201e`, main `783d2b7`, migration 0191 in PR #10; audit round applied: per-(store,item) advisory lock; browser smoke on 9008 passed, 5 checks). DEF-630 (edit of a merged two-room line double-counts) is S5's, and must land before S4's import is used on real data. S3 in a lane. S2 still gated on t390-q2. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (review applied; S2 gated on t390-q2). Written at `main` `a6a9665`
+**Status:** S1, S2, S3, S5 DONE (S5 `fed0d1f`, on main and in PR #16). S5 browser smoke 2026-10-11 on 9008: count, sheet, value the count, AP by party, prepaid, red→green tie-out, the 1510 mistype, POST, then /inventory and the trial balance tie. UNMET: value-an-asset (no asset shell in the smoke DB). Found DEF-637, DEF-638. **S4 waits on the T-391 apply.** | Earlier: S1 DONE 2026-10-10 (`f75201e`, main `783d2b7`, migration 0191 in PR #10; audit round applied: per-(store,item) advisory lock; browser smoke on 9008 passed, 5 checks). DEF-630 (edit of a merged two-room line double-counts) is S5's, and must land before S4's import is used on real data. S3 in a lane. **S2 UNBLOCKED 2026-10-10** (Ian answered Q8, t390-q2 and Q-T390-1; bible row 304). | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (review applied; S2 gated on t390-q2). Written at `main` `a6a9665`
 by the Opus planner; the money review's 13 findings are applied in §4 R5a, R8, R13, R15-R17, §5, §7, §8 and §11.
 **Model:** Sonnet lanes, **tester first** in every slice, then builder (bible row 184). An amendment is written in plan
 mode (Opus).
@@ -8,12 +8,12 @@ mode (Opus).
 **Migration:** **yes, one** — `0NNN (allocated at merge)`, hand-authored per ADR-012 §5. No new table.
 **Defect:** DEF-623 (🔴): `opening_counts` records the count, but nothing turns it into `source='opening'` layers,
 `kind='opening'` movements or a `1310` line; `postOpeningBalances` never reads it. Plan items C1 + C2.
-**Ian:** Q8 (open on the Open Questions page) is built to its recommendation, **(a) count per room + (c) last v1
-delivery price**, and both halves are made DATA, so a different answer changes no code (§4 R2, R3).
-⛔ **Conflict named:** bible §16.11 (`PROJECT_BIBLE.md:2149`) says the 2027-01-01 opening layer is **weighted
-average**; Q8 (c) is a last price. **The bible wins until Ian rules** on `t390-q2-opening-cost-basis` (Open Questions
-page). The basis is a price-file setting (R2, §5.5 `--basis`), so either ruling is data, but **S2 does not start until
-that question is answered** (S1, S3's asset half, S4 may proceed).
+**Ian (RULED 2026-10-10, bible row 304):** Q8 = *"mirror v1, storage is important for commissary only; for branches
+and others 1 room only"*: **the commissary counts per room; each branch counts ONE room** (R1's default room: a
+branch count row with no room goes to the store's default room; no code change). **t390-q2 = (a) last v1 delivery
+price** (`--basis last`, `cost_source = 'v1_last_delivery'`). **Q-T390-1 = (b): every item v1 never delivered is
+priced by a manager typing it** (`cost_source = 'typed'`; no commissary transfer-price file). The §16.11 "weighted
+average" conflict is resolved: row 304 supersedes it and §16.11 now says so. **S2 may start.**
 
 ---
 
@@ -281,7 +281,7 @@ Amounts compared in centavos (`money()`), never floats (T-371). Party-derived re
 | **S1 · Count per room** — migration, schema, repo, `recordOpeningCount` (optional room, R1), R2/R3, count half of R8/R13 | **S 1.0** | `tests/integration/t390-s1-opening-counts-per-room.test.ts` | `packages/db/migrations/0NNN_t390_opening_counts_per_room.sql`, `packages/db/schema/cutover.ts`, `packages/db/src/repo/cutover.ts`, `packages/domain/src/cutover/index.ts`. (`meta/_journal.json`: the **orchestrator**, at merge) |
 | **S2 · Opening stock (DEF-623 core)** — ⛔ **gated on t390-q2** — `planOpeningStock`, `valueOpeningStock`, `writeOpeningStock`, R5, R5a, R6-R8, R13, R14, R17, the purge's C2 row, `postOpeningBalances` order | **M 2.0** | `tests/unit/t390-s2-plan-opening-stock.test.ts`, `tests/integration/t390-s2-opening-stock-post.test.ts`, **and the existing callers R8 now refuses:** `packages/domain/tests/integration/cutover.test.ts` (C2 reached through the real `applyPurge`, not `attestStep`) and `apps/erp/tests/integration/t343-s5-5v-followups.test.ts:826` (fixture runs the purge before `addOpeningFigureAction`) | `packages/domain/src/cutover/opening-stock.ts`, `packages/domain/src/cutover/opening.ts`, `packages/domain/src/cutover/index.ts` (exports, `CONVERSION_DATE`, `attestStep` refuses C2), `packages/db/src/repo/cutover.ts`, `packages/db/src/cutover/purge.ts`, `scripts/cutover-purge.ts` |
 | **S3 · Tie-out + asset valuation** — T1-T10, R15 refusals and "not checked" list, R16 `C3P`, C4 evaluate, C5 refusal, `valueOpeningAsset` | **M 1.75** | `tests/integration/t390-s3-tie-out.test.ts`, `tests/integration/t390-s3-opening-assets.test.ts` | `packages/domain/src/cutover/tie-out.ts`, `packages/domain/src/cutover/opening-assets.ts`, `packages/domain/src/cutover/{index,opening,steps}.ts`, `packages/db/src/repo/cutover.ts` |
-| **S4 · Import + price list** | **S 0.5** | `tests/unit/t390-s4-price-list.test.ts`, `tests/integration/t390-s4-import-counts.test.ts` | `packages/domain/src/cutover/price-list.ts`, `packages/domain/src/cutover/import.ts`, `scripts/cutover-v1-price-list.ts`, `scripts/cutover-import-counts.ts` |
+| **S4 · Import + price list** (⛔ **depends HARD on T-391's apply for each store priced**: the price list reads `v1_master_links` (v1 item id → v2 item, `factor_to_base`, following `merged_into_id`), not names) | **S 0.5** | `tests/unit/t390-s4-price-list.test.ts`, `tests/integration/t390-s4-import-counts.test.ts` | `packages/domain/src/cutover/price-list.ts`, `packages/domain/src/cutover/import.ts`, `scripts/cutover-v1-price-list.ts`, `scripts/cutover-import-counts.ts` |
 | **S5 · Screens + count sheets** | **S 0.75** | `tests/integration/t390-s5-cutover-actions.test.ts` (actions pass party and room through; refusals reach the flash) | `apps/erp/src/app/cutover/**` (`count/page.tsx`, `count/sheet/page.tsx` new, `opening/page.tsx`, `actions.ts`, `lib.ts`) |
 
 Order: S1 → S2 → S3; S4 after S1 (parallel with S2/S3 only if the orchestrator gives it its own test DB, RULES §2);
@@ -387,10 +387,10 @@ without (RAISE path). Full suite on a fresh gate DB (memory: a trigger migration
 
 ## 13. Questions for Ian (only his)
 
-- **t390-q2-opening-cost-basis (on the Open Questions page; S2 is gated on it).** Bible §16.11 says weighted average; Q8 (c) says last v1 delivery price. Either is `--basis weighted|last` on the price-list script; no code differs.
-- **Q8 (already open on the Open Questions page; not re-asked).** Built as (a) per room + (c) last v1 delivery price.
+- ✅ **ANSWERED 2026-10-10 (row 304): (a) last v1 delivery price.** Was: **t390-q2-opening-cost-basis.** Bible §16.11 says weighted average; Q8 (c) says last v1 delivery price. Either is `--basis weighted|last` on the price-list script; no code differs.
+- ✅ **ANSWERED 2026-10-10 (row 304): commissary per room, branches one room.** Was: **Q8.** Built as (a) per room + (c) last v1 delivery price.
   Either answer is now data (R1, R2).
-- **Q-T390-1 · Items no v1 delivery ever priced.** Commissary-made (`prepped`) items and anything never delivered
+- ✅ **ANSWERED 2026-10-10 (row 304): (b) the manager types every unpriced item.** Was: **Q-T390-1 · Items no v1 delivery ever priced.** Commissary-made (`prepped`) items and anything never delivered
   have no last v1 delivery price. Options: **(a) the commissary's price file (its transfer price) for prepped items,
   and the store manager types the rest on count day** · (b) the manager types every one · (c) open them at zero.
   **Recommended (a):** a transfer price is the closest thing to cost the commissary has; zero (c) understates the

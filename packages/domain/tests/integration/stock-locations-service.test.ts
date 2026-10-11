@@ -16,6 +16,7 @@ import {
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
+import { testItemCode } from './_fixtures/item-code';
 
 /**
  * T-160 / DEF-135 (2026-09-03) — the room service that closed the gap: schema, migration, pure
@@ -94,7 +95,7 @@ async function fixture(): Promise<Fixture> {
 
   const [item] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${adminId}) returning id`;
+    values (${orgId}, ${testItemCode()}, 'Pork Belly', 'raw_material', 'kg', ${adminId}) returning id`;
 
   const [file] = await sql<{ id: string }[]>`
     insert into stored_files (org_id, storage_path, content_type, byte_size, checksum, purpose, uploaded_by)

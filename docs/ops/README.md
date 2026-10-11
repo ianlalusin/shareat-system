@@ -41,7 +41,9 @@ deploy: Ian decides each row, through the screens where one exists; no migration
 | 0188 (T-385) | READ ONLY (`BEGIN READ ONLY; ... ROLLBACK;`), as `doadmin` with Ian before the push (SQL in the 0188 header). **P0188a** status counts; **P0188b** historic verified-without-submit (informational, unaffected); **P0188c** MUST be 0; **P0188d** open days (tell stores Submit now comes first); **P0188e** self-verified days (informational); **P0188f** holders of the five super-admin-only grants: the backfill grants `verify_own_sales_day` to exactly `role = 'admin'` and `grants = 5` (Ian only; needs 0187 applied first). Must run as `doadmin` (backfill needs `row_security = off`; 42501 otherwise) | Ian reported the prechecks run and clean on 2026-10-09 (output not shared in the session). Merged as PR #3; deployed 2026-10-09, `462ed8c`, CI and Deploy green, "Migrations applied", healthy after 1 attempt, sign-in 200. Expect 169 rows in `drizzle.__drizzle_migrations` (not yet read back) |
 | 0189 (T-386) | READ ONLY, as `doadmin` with Ian before the push (SQL in the 0189 header). P0189a item counts; P0189b shaped codes (seeded); P0189c MUST be 0 rows; P0189d lower-case codes; P0189e pending requests. Must run as `doadmin` (the seed needs `row_security = off`) | **Run 2026-10-09 with Ian as `doadmin`, READ ONLY:** P0189a 1 item (active); P0189b 0 shaped; P0189c no case-twins ✅; P0189d 1 lower-case code; P0189e 0 pending requests. After deploy expect 170 rows in `drizzle.__drizzle_migrations`. (results). After deploy expect one more row in `drizzle.__drizzle_migrations` than after 0188 (170 if 0188 landed as 169). Then: recode dry run with Ian, `--apply`, post-check = 0 non-shaped (gates S6) **Deployed 2026-10-09** as PR #4, `7489bba`: CI and Deploy green, "Migrations applied", healthy after 1 attempt, sign-in 200 (row count not read back). **Recode run 2026-10-10 with Ian on 159.223.46.224** (`sudo -u shareat env NODE_ENV=production npm run recode-items -- --org=… --actor=…`; NODE_ENV needed, DEF-634): dry run `coke15 -> CK15-001  Coke 1.5 (active)` · recoded 1 · kept 0 · skipped 0; `--apply` APPLIED. Post-check (S6 gate) `{ not_shaped: 0 }` ✅ |
 | 0190 (T-395) | READ ONLY, as `doadmin` with Ian before the merge: `BEGIN READ ONLY; SELECT count(*) FROM pin_attempt_throttle; SELECT to_regclass('public.sign_in_attempts'); SELECT column_name FROM information_schema.columns WHERE table_name='pin_attempt_throttle' AND column_name IN ('stopped_at','reopened_at','reopened_by'); ROLLBACK;` — expect any count, `to_regclass` NULL, 0 columns (the migration creates the table and adds the three nullable columns; nothing is backfilled) | Run by Ian 2026-10-10 as `doadmin`, READ ONLY: OK (as expected). After deploy expect one more row in `drizzle.__drizzle_migrations` than after 0189. Before choosing Q1 (a) live: every store has a manager who signs in by email (reopen needs one) |
-| 0191 (T-390 S1) | READ ONLY, as `doadmin` with Ian before the merge: `BEGIN READ ONLY; SELECT count(*) FROM opening_counts; SELECT s.code, count(l.id) FILTER (WHERE l.is_default AND l.status='active') AS defaults FROM stores s LEFT JOIN stock_locations l ON l.store_id=s.id GROUP BY s.code ORDER BY s.code; ROLLBACK;` — P0191a expect 0 (not 0 is safe: the migration backfills to the default room or RAISEs). P0191b: every store that will count stock on 31 Dec shows `defaults` = 1; a 0 means the count screen refuses that store until a default room is set | Run by Ian 2026-10-10 as `doadmin`, READ ONLY: OK. After deploy expect one more row in `drizzle.__drizzle_migrations` than after 0190 |
+| 0191 (T-390 S1) | READ ONLY, as `doadmin` with Ian before the merge: `BEGIN READ ONLY; SELECT count(*) FROM opening_counts; SELECT s.code, count(l.id) FILTER (WHERE l.is_default AND l.status='active') AS defaults FROM stores s LEFT JOIN stock_locations l ON l.store_id=s.id GROUP BY s.code ORDER BY s.code; ROLLBACK;` — P0191a expect 0 (not 0 is safe: the migration backfills to the default room or RAISEs). P0191b: every store that will count stock on 31 Dec shows `defaults` = 1; a 0 means the count screen refuses that store until a default room is set | Run by Ian 2026-10-10 as `doadmin`, READ ONLY: OK. **Deployed 2026-10-10** as PR #10 (`3f4c99a`): main CI green, Deploy green 14:27 UTC (row count not read back) |
+| 0192 (T-386 S6) | READ ONLY, as `doadmin` with Ian before the merge: `BEGIN READ ONLY; SELECT count(*) FROM items WHERE NOT (code ~ '^[A-Z0-9]{4}-[0-9]{3}$' AND right(code,3) <> '000'); ROLLBACK;` — P0192a expect 0 (read 0 on 10 Oct after the recode). If not 0 the migration's VALIDATE fails and the deploy stops; find the item and recode it first | **Ian ran it 2026-10-11: OK** (merge on green, his go). After deploy expect one more row in `drizzle.__drizzle_migrations` than after 0191 |
+| 0193 (T-391 S1) | READ ONLY, as `doadmin` with Ian before the merge: `BEGIN READ ONLY; SELECT count(*) FROM information_schema.columns WHERE table_name='items' AND column_name IN ('purchase_unit','purchase_factor'); SELECT to_regclass('v1_master_links'); SELECT count(*) FROM pg_constraint WHERE conname IN ('items_purchase_pair_check','items_purchase_unit_check','items_purchase_factor_check'); ROLLBACK;` — P0193 expect 0, NULL, 0 (additive: existing items get NULL/NULL, which every new CHECK allows) | **Ian ran it 2026-10-11: OK** (merge on green, his go). After deploy expect two more rows in `drizzle.__drizzle_migrations` than after 0191 (0192 and 0193 ship together) |
 | ⛔ T-316 S3 (no migration) | S1+S2 alone mis-report floats (the old detector reads the drawer's takings as "over"); production has no float targets today | S3 must be on main before main is pushed, or hold the push |
 | T-374 S5 (no migration, DEF-584) | `SELECT count(*) FROM fixed_assets WHERE useful_life_months > 1200;` (the edit screen now refuses a life above 1200 months, so such an asset could not re-save any term) | 0 rows — else Ian decides each asset's life before the push | Re-run 2026-10-06: **0** ✅
 | T-373 S2 (no migration, DEF-559) | the two new findings on production: inter-store pairs out of step, and 1250/2150 lines no pair can read (run `/findings` read-only, or the two detector queries in `packages/db/src/repo/findings.ts`) | none — else Ian sees the figures before the push, because a hard finding blocks a month close |
@@ -244,6 +246,45 @@ nothing behind them the moment a second organisation exists.
   watching. `docs/discovery/29` §5.3 has been re-derived by T-300; both of its unknowns are now
   measured.
 
+## Backups (T-393) - built and tested, NOT switched on
+
+Spec: `docs/tasks/393-nightly-backup-and-restore.md`. Ian, 2026-10-10: *no backup for now, set up soon*. Nothing here arms itself.
+
+- **Install the client.** Re-running `provision.sh` adds PGDG's apt repository and `postgresql-client-18` (pg_dump refuses a server newer than itself; production is 18.x). It also installs `shareat-db-backup.{service,timer}` and arms nothing.
+- **Env** in `/srv/shareat-shared/.env.local` (`.env.example` has the block): `SPACES_ENDPOINT`, `SPACES_REGION`, `SPACES_BUCKET=shareat-pg-backups`, `SPACES_KEY`, `SPACES_SECRET`, `BACKUP_HEARTBEAT_URL`. The source is `SYSTEM_DATABASE_URL`, which must be on the **direct** port 25060 (25061, the pooler, is refused). The bucket must be the dedicated one: `shareat-erp-backups` (Frappe) is refused by name.
+- **Prove the key first, writing nothing:** `npm run db-backup -- --store=spaces --dry-run` lists `postgres/`.
+- **First run:** `sudo systemctl start shareat-db-backup.service`, then read `/var/log/shareat/db-backup.log`. Check the object is under `postgres/daily/` in the DO panel and that the heartbeat shows green. Record the dump size and duration for T-394's runbook.
+- **The weekly restore drill** (`shareat-restore-drill.{service,timer}`, Sunday 05:30 Manila) is installed the same way and armed separately. Extra env: `RESTORE_DRILL_DATABASE_URL` (a `CREATEDB` role on the direct port 25060, database `shareat_restore_drill`), `RESTORE_DRILL_MAINTENANCE_DB` (default `defaultdb`), `DRILL_HEARTBEAT_URL` (8-day grace). It refuses any target not named `shareat_restore_drill`, and never connects to the production database. Local smoke: `npm run restore-drill -- --store=fs:<dir>`.
+- Every arm-all loop in this file and in `provision.sh` **skips `shareat-db-backup.timer` and `shareat-restore-drill.timer` explicitly**. Nothing arms backups by accident.
+
+### Switching backups on (only when Ian says so)
+
+Do this only after the env above is in `.env.local`, `--dry-run` listed `postgres/`, and the first manual run was green:
+
+```sh
+sudo systemctl start shareat-db-backup.service        # one manual run first; read /var/log/shareat/db-backup.log
+sudo systemctl enable --now shareat-db-backup.timer   # --now is not optional
+systemctl is-enabled shareat-db-backup.timer && systemctl is-active shareat-db-backup.timer   # never list-timers (DEF-332)
+
+sudo systemctl start shareat-restore-drill.service    # one manual drill first; it needs a complete dump in Spaces
+sudo systemctl enable --now shareat-restore-drill.timer
+systemctl is-enabled shareat-restore-drill.timer && systemctl is-active shareat-restore-drill.timer
+```
+
+- **Where to look:** `/var/log/shareat/db-backup.log`; the dead-man's switch (alerts when no success arrives in 26 hours, so it also catches a timer nobody armed); `postgres/daily/<Manila date>/` holds `.dump`, `.roles.sql` and `.manifest.json` per night. Retention runs in the script, never as a bucket lifecycle rule.
+
+### Restoring for real
+
+**Never restore over the live database:** never into the database `SYSTEM_DATABASE_URL` points at, never with `--clean`. Restore into a NEW empty database (or cluster), check it, then switch the env.
+
+1. Pick the newest dump that has a `.manifest.json` beside it under `postgres/daily/` (no manifest means an unfinished upload). Download both, plus the `.roles.sql`.
+2. Check the file: `sha256sum <stem>.dump` must equal the manifest's `sha256`. Create the new database empty.
+3. Replay the roles first: `psql -f <stem>.roles.sql` (it carries no passwords), then set each role's password by hand.
+4. `pg_restore --no-owner --exit-on-error --single-transaction --dbname=<new db> <stem>.dump`. Do **not** pass `--no-acl`: a real restore needs the dump's grants. (The drill passes it because its scratch cluster lacks the roles.)
+5. Re-run the grants and default privileges for `shareat_app_prod` (T-355), then confirm with `psql -c '\ddp'`.
+6. Fingerprint compare, as `doadmin` (it sees every row): the manifest's `fingerprint.trialBalance` must equal `select org_id, account_id, sum(debit_total), sum(credit_total), sum(net_balance) from v_trial_balance group by 1,2` on the new database, exactly. An empty result is a failure.
+7. Only then point `DATABASE_URL` and `SYSTEM_DATABASE_URL` at the new database and restart `shareat-erp`; `npm run restore-drill` verifies the next dump the same way. History guards survive a full restore (T-354, below).
+
 ## Restores and replica mode (T-354)
 
 DEF-487: 18 history-guard triggers (append-only / posted-immutable / frozen / commit-once /
@@ -389,6 +430,8 @@ domain argument to also set up Caddy + automatic TLS on 80/443 (no traefik confl
 | **Orphan-file sweep (T-272 / DEF-299)** | `npm run orphan-file-sweep` | **Daily, 03:00 Manila** | A day-old unclaimed upload has no wall-clock component of its own; runs after order-wastage-backstop (02:30) so the two don't contend. ⛔ Shipped with NO caller at all until this task — `sweepOrphanedFiles` existed since T-141, was documented in two places as a running cron, and nothing called it, the DEF-186 shape a fourth time. Scoped per org (was global; `scheduler_runs.org_id` is `NOT NULL` and cannot record a global run) |
 | **Budget reissue (T-215 / DEF-303)** | `npm run budget-reissue` | **Daily, 03:30 Manila** | Runs after orphan-file-sweep (03:00) so the two don't contend. ⛔ Registered in `SCHEDULER_JOBS` and reachable by its npm script since T-215, but had no `.service`/`.timer` pair at all until this task — the DEF-186 shape a fifth time, found the day after DEF-299 |
 | **Fiscal-period coverage (T-276 / DEF-305)** | `npm run fiscal-period-seed` | **Monthly, 1st, 04:00 Manila** | Coverage moves in whole calendar months, so a finer cadence buys nothing over the 12-month slack every org already carries. Runs at 04:00, after budget-reissue's own 03:30 slot, so the two don't contend. Keeps every org's fiscal-period coverage 12 months ahead of its current Manila business month, and backfills (option (c)) any month that already elapsed with none — created `open`, never closed retroactively — so a gap surfaces here instead of `postEntry` refusing the next post into it ⏰ Timer armed 2026-10-04 (it was NOT installed; provision.sh re-run, `systemctl enable --now shareat-fiscal-period-seed.timer`). First run seeded SHAREAT OPC 2026-10..2027-09 (12 inserted; the org had no periods at all, so the job exits 1 by design on that gap). Next run 1 Nov 04:00 Manila. No periods exist before Oct 2026 (DEF-585). |
+| **Database backup (T-393)** | `npm run db-backup -- --production` | **Daily, 04:30 Manila** | After every other nightly job, so the dump includes their output. A platform job, not a `SCHEDULER_JOBS` entry (`scheduler_runs.org_id` is `NOT NULL`, a whole-database dump has no org). See *Backups (T-393)* below for the install and the separate switching-on step. |
+| **Restore drill (T-393)** | `npm run restore-drill -- --production` | **Weekly, Sunday 05:30 Manila** | An hour after that night's backup. Restores the newest complete dump into a scratch database and compares the trial balance with the manifest. A platform job, not a `SCHEDULER_JOBS` entry. Not switched on; see *Switching backups on*. |
 
 ⛔⛔ **WHICH UNITS ARE ARMED IS NOT RECORDED HERE, DELIBERATELY — IT IS A FACT THAT MOVES.**
 This paragraph used to name four jobs as *"NOT YET ARMED"*. **That claim went stale and then
@@ -615,6 +658,9 @@ retype it.** A glob cannot be forgotten; a list has to be edited by whoever adds
 sudo systemctl enable --now shareat-erp.service
 # Every timer, derived — never a typed list:
 for f in /etc/systemd/system/shareat-*.timer; do
+  # T-393: backups are NOT switched on (Ian, bible row 306). See "Switching backups on".
+  [ "$(basename "$f")" = shareat-db-backup.timer ] && continue
+  [ "$(basename "$f")" = shareat-restore-drill.timer ] && continue
   sudo systemctl enable --now "$(basename "$f")"
 done
 ```
@@ -632,6 +678,8 @@ systemctl list-timers 'shareat-*'
 # Run each job once, now — derived from the units, not typed:
 for f in /etc/systemd/system/shareat-*.timer; do
   u="$(basename "$f" .timer)"
+  [ "$u" = shareat-db-backup ] && continue   # T-393: not switched on
+  [ "$u" = shareat-restore-drill ] && continue   # T-393 S2: not switched on
   # ⚠️ shareat-month-end-retry.timer deliberately has no service of its own — it points at
   # shareat-month-end.service via Unit=. Skip any timer with no matching service file.
   [ -e "/etc/systemd/system/$u.service" ] && sudo systemctl start "$u.service"
@@ -722,6 +770,8 @@ ssh root@159.223.46.224 'bash /root/shareat-ops/provision.sh'
 #     BOOT and not for today. That single missing flag is the shape of every failure in the
 #     table at the top of this file.
 ssh root@159.223.46.224 'for f in /etc/systemd/system/shareat-*.timer; do \
+  [ "$(basename "$f")" = shareat-db-backup.timer ] && continue; \
+  [ "$(basename "$f")" = shareat-restore-drill.timer ] && continue; \
   systemctl enable --now "$(basename "$f")"; done'
 
 # 4 — ⛔ THE STEP THAT HAS HISTORICALLY NEVER BEEN DONE. NEXT and LEFT must be populated for EVERY

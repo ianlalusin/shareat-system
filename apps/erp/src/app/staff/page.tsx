@@ -8,7 +8,11 @@ import { Button, FlashBanner, Input } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { authorize, AuthorizationError } from '@shareat/auth';
-import { pinAttemptsRepo } from '@shareat/db';
+import { employmentRepo, pinAttemptsRepo } from '@shareat/db';
+import { todayStateFor } from '@shareat/domain';
+import { toBusinessDate } from '@shareat/core/datetime';
+import { canViewPhoto } from '../../lib/photo-link';
+import { CardWall, Roster, ViewSwitch, type LiveEntry, type StaffPerson } from './StaffViews';
 import { PinSignInPanel } from './PinSignInPanel';
 
 export const metadata = { title: 'Staff — Shareat System' };
@@ -18,6 +22,7 @@ interface SearchParams {
   store?: string;
   error?: string;
   ok?: string;
+  view?: string;
 }
 
 const INPUT =
@@ -43,6 +48,38 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     positionsForStore(actor.orgId, storeId),
   ]);
 
+  // T-387 S7 - photos (only where the viewer may open them) and the live state (only for manage_attendance here).
+  const ids = roster.map((r) => r.id);
+  const [photoIds, states] = await Promise.all([
+    withOrgPrincipal(actor.orgId, (tx) => employmentRepo.photoFileIds(tx, ids)),
+    withOrgPrincipal(actor.orgId, async (tx): Promise<Record<string, LiveEntry> | null> => {
+      try {
+        return await todayStateFor(tx, actor, storeId);
+      } catch (err) {
+        if (err instanceof AuthorizationError) return null;
+        throw err;
+      }
+    }),
+  ]);
+  const people: StaffPerson[] = await Promise.all(
+    roster.map(async (r) => {
+      const fileId = photoIds.get(r.id) ?? null;
+      const primary = r.positions.find((p) => p.isPrimary) ?? r.positions[0];
+      return {
+        id: r.id,
+        displayName: r.displayName,
+        employmentStatus: r.employmentStatus,
+        startedOn: r.startedOn,
+        primaryPosition: primary?.name ?? null,
+        photoFileId: fileId && (await canViewPhoto(actor, fileId)) ? fileId : null,
+      };
+    }),
+  );
+  const now = new Date();
+  const today = toBusinessDate(now);
+  const storeName = stores.find((s) => s.id === storeId)?.name ?? '';
+  const view: 'cards' | 'roster' = sp.view === 'roster' ? 'roster' : 'cards';
+
   // T-395 S2 - the PIN sign-in panel is for anyone holding enrol_staff at this store (R5).
   const pinStatus = await withOrgPrincipal(actor.orgId, async (tx) => {
     try {
@@ -65,66 +102,39 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
             created (DEF-131).
           </PageDescription>
         </div>
-        <Link href={`/staff/hire?store=${storeId}`} className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas">
+        <Link href={`/staff/hire?store=${storeId}`} className="inline-flex min-h-11 items-center rounded-[12px] border border-transparent bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover">
           Hire
         </Link>
       </div>
 
       <FlashBanner flash={sp} />
 
-      <FilterRow>
-        <label className="text-sm">
-          <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className={INPUT}>
-            {stores.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.code})
-              </option>
-            ))}
-          </select>
-        </label>
-      </FilterRow>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <FilterRow>
+          <input type="hidden" name="view" value={view} />
+          <label className="text-sm">
+            <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
+            <select name="store" defaultValue={storeId} className={INPUT}>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.code})
+                </option>
+              ))}
+            </select>
+          </label>
+        </FilterRow>
+        <ViewSwitch view={view} storeId={storeId} />
+      </div>
 
       <section className="space-y-3">
-        {roster.length === 0 ? (
+        {people.length === 0 ? (
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
             Nobody hired here yet. &ldquo;Hire&rdquo; above starts one.
           </p>
+        ) : view === 'roster' ? (
+          <Roster people={people} today={today} now={now} states={states} />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                  <th className="px-3 py-2 font-medium">Staff code</th>
-                  <th className="px-3 py-2 font-medium">Name</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 font-medium">Positions</th>
-                  <th className="px-3 py-2 font-medium">Started</th>
-                </tr>
-              </thead>
-              <tbody>
-                {roster.map((r) => (
-                  <tr key={r.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                    <td className="px-3 py-2 font-mono text-xs">{r.staffCode}</td>
-                    <td className="px-3 py-2">
-                      <Link href={`/staff/${r.id}`} className="underline hover:no-underline">
-                        {r.displayName}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2">{r.employmentStatus.replace(/-/g, ' ')}</td>
-                    <td className="px-3 py-2 text-xs text-neutral-600 dark:text-neutral-400">
-                      {r.positions.length === 0
-                        ? '—'
-                        : r.positions
-                            .map((p) => (p.isPrimary ? `${p.name} ★` : p.name))
-                            .join(', ')}
-                    </td>
-                    <td className="px-3 py-2">{r.startedOn}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <CardWall people={people} storeName={storeName} today={today} states={states} />
         )}
       </section>
 
@@ -156,7 +166,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
             <span className="block text-neutral-600 dark:text-neutral-400">Add a position</span>
             <Input name="name" required placeholder="Barista" />
           </label>
-          <Button type="submit" variant="primary">
+          <Button type="submit" variant="secondary">
             Save
           </Button>
         </form>

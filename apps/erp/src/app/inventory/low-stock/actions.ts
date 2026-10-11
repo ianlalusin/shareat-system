@@ -8,6 +8,8 @@
  * build if that ever changes.
  */
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { LOW_STOCK_THRESHOLD } from './typed-forms';
 import { revalidatePath } from 'next/cache';
 import { authorize } from '@shareat/auth';
 import { lowStockRepo } from '@shareat/db';
@@ -58,7 +60,7 @@ export async function setThresholdAction(fd: FormData): Promise<void> {
     failure = errorMessage(err);
   }
   if (failure !== null) {
-    return await redirectWithFlash('/inventory/low-stock', { store: storeId }, { error: failure });
+    return await redirectWithFlash('/inventory/low-stock', { store: storeId }, { error: failure, typed: keepTyping(fd, LOW_STOCK_THRESHOLD, itemId, { actorId: actor.personId }) });
   }
 
   revalidatePath('/inventory/low-stock');

@@ -4,6 +4,7 @@ import { sql as dsql } from 'drizzle-orm';
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { seedChartOfAccounts } from '../../../../db/seed/chart-of-accounts';
+import { testItemCode } from './item-code';
 
 /**
  * T-371 S0 — shared fixture for the per-module NaN tests (`t371-<module>-nan.test.ts`). `docs/tasks/371-nan-sweep.md` §S0 "Per-module NaN tests".
@@ -47,7 +48,7 @@ export async function bootstrap(sql: postgres.Sql, hint: string) {
   const adminId = await mk('Admin', 'admin');
   const managerId = await mk('Manager', 'manager');
   const [item] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${uid('IT')}, 'Pork', 'raw_material', 'kg', ${adminId}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Pork', 'raw_material', 'kg', ${adminId}) returning id`;
   return { orgId, storeId, adminId, managerId, admin: actor(orgId, adminId), manager: actor(orgId, managerId), itemId: item!.id };
 }
 export type Kit = Awaited<ReturnType<typeof bootstrap>>;

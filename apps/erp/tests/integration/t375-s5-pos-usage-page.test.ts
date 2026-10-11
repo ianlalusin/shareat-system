@@ -64,6 +64,7 @@ import { insertRecheckBatch } from '../../../../packages/domain/tests/integratio
 import PosUsagePage from '../../src/app/inventory/pos-usage/page';
 import { buildPlanAction, finalizeSectionAction } from '../../src/app/inventory/pos-usage/actions';
 import { paramsOf, urlOf } from '../helpers/flash-jar';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -131,7 +132,7 @@ async function fixture(hint: string) {
   const kitchen = await mkRoom(storeId);
   const kitchen2 = await mkRoom(store2Id);
   const [cheese] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, 'CHEESE', 'Cheese', 'meat_slab', 'kg', ${p!.id}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Cheese', 'meat_slab', 'kg', ${p!.id}) returning id`;
   const admin = { personId: p!.id, orgId };
   await asOrg(orgId, (tx) =>
     D.upsertPosItemMap(tx, admin, { orgId, storeId, posItemKey: 'item-a', posItemName: 'item-a', mode: 'direct', itemId: cheese!.id, quantityPerSale: '1' }),
@@ -269,7 +270,7 @@ async function stuck(pullId: string) {
 }
 async function setItemAMap(f: F, mode: 'direct' | 'no_stock') {
   const [m] = await sql<{ id: string }[]>`select id from pos_item_maps where store_id = ${f.storeId} and pos_item_key = 'item-a' and status = 'active'`;
-  const [cheese] = await sql<{ id: string }[]>`select id from items where org_id = ${f.orgId} and code = 'CHEESE'`;
+  const [cheese] = await sql<{ id: string }[]>`select id from items where org_id = ${f.orgId} and name = 'Cheese'`;
   const base = { orgId: f.orgId, storeId: f.storeId, posItemKey: 'item-a', posItemName: 'item-a', editMapId: m!.id };
   const out = await asOrg(f.orgId, (tx) =>
     D.upsertPosItemMap(tx, f.admin, mode === 'direct' ? { ...base, mode, itemId: cheese!.id, quantityPerSale: '1' } : { ...base, mode }),

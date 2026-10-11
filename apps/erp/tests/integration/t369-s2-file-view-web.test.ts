@@ -68,6 +68,7 @@ import type { Actor } from '@shareat/auth';
 import { createSupplier, inMemoryDriver, recordInvoice, setStorageDriver, type StorageDriver } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
+import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -325,7 +326,7 @@ describe('View photo — /inventory/deliveries/[id] shows the delivery proof', (
       values (${f.orgId}, ${f.storeId}, 'KIT', 'Kitchen', ${type!.id}, 'operating', true, ${f.managerId}) returning id`;
     const [item] = await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, created_by)
-      values (${f.orgId}, ${uid('PORK')}, 'Pork Belly', 'raw_material', 'kg', ${f.managerId}) returning id`;
+      values (${f.orgId}, ${testItemCode()}, 'Pork Belly', 'raw_material', 'kg', ${f.managerId}) returning id`;
     const { createDeliveryDocument } = await import('../../../../packages/domain/src/deliveries/documents');
     const { deliveryId } = await asOrg(f.orgId, (tx) =>
       createDeliveryDocument(tx, f.manager, {
@@ -424,7 +425,7 @@ describe('AUDIT A — the "View photo" link is shown ONLY to people who hold the
       insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
       values (${f.orgId}, ${f.storeId}, 'KIT', 'Kitchen', ${type!.id}, 'operating', true, ${f.managerId}) returning id`;
     const [item] = await sql<{ id: string }[]>`
-      insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('PORK')}, 'Pork Belly', 'raw_material', 'kg', ${f.managerId}) returning id`;
+      insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${testItemCode()}, 'Pork Belly', 'raw_material', 'kg', ${f.managerId}) returning id`;
     const { createDeliveryDocument } = await import('../../../../packages/domain/src/deliveries/documents');
     const { deliveryId } = await asOrg(f.orgId, (tx) =>
       createDeliveryDocument(tx, f.manager, {

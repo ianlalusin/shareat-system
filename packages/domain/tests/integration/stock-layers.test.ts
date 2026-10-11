@@ -29,6 +29,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { planConsumption, planReversal, type ConsumedLine, type CostLayer } from '../../src/stock/layers';
 import { quantity } from '../../src/stock/quantity';
+import { testItemCode } from './_fixtures/item-code';
 
 const sql = postgres(url, { max: 3 });
 
@@ -100,7 +101,7 @@ beforeEach(async () => {
   roomA = r!.id;
   const [i] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${orgA},'PORK','Pork Belly','raw_material','kg',${personA}) returning id`;
+    values (${orgA},${testItemCode()},'Pork Belly','raw_material','kg',${personA}) returning id`;
   itemA = i!.id;
 });
 

@@ -224,6 +224,13 @@ describe('F3 - nav shapes (R1, REV-4): a bad value is dropped, and the log names
     // Mutant: drop the shape check -> the URL assertions go red. Log the value -> the log assertion goes red.
   });
 
+  it('T-390 S5: the `room` nav key keeps a uuid and drops anything else', async () => {
+    const { u } = await post('/cutover/count', { store: UUID, room: UUID });
+    expect(u.searchParams.get('room')).toBe(UUID);
+    const bad = await post('/cutover/count', { store: UUID, room: 'x ' + UUID });
+    expect(bad.u.searchParams.has('room')).toBe(false);
+  });
+
   it('a uuid and a period are both kept', async () => {
     const { u } = await post('/p', { store: UUID, period: '2026-09' });
     expect(u.searchParams.get('store')).toBe(UUID);
@@ -542,6 +549,17 @@ describe('T-389 K2 - the typed slot in the signed flash', () => {
       expect(sp.reason, label).toBe(REASON);
     }
     // Mutant: skip the shape check in decodeFlash -> a line above is red.
+  });
+
+  it('T-390 S5: a 73-char itemId:locationId record round-trips; a space or a quote is still refused', async () => {
+    const record = `${UUID}:${UUID}`.slice(0, 73);
+    expect(record.length).toBe(73);
+    const { f } = await post('/p', {}, { error: 'e', typed: { form: 'cutover.count', record, fields: { x: '1' } } });
+    expect(((await readFull({ f: f! })).typed as { record?: string } | undefined)?.record).toBe(record);
+    for (const bad of [`${UUID}:a b`, `${UUID}:a"b`]) {
+      const r = await post('/p', {}, { error: 'e', typed: { form: 'cutover.count', record: bad, fields: { x: '1' } } });
+      expect((await readFull({ f: r.f! })).typed, JSON.stringify(bad)).toBeFalsy();
+    }
   });
 
   it('a blank record and a uuid record are both valid', async () => {

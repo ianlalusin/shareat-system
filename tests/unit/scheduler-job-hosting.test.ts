@@ -75,6 +75,24 @@ const NAMED_NON_JOB_SERVICE = ['erp'];
 const NAMED_SECONDARY_TIMER_ONLY = ['month-end-retry'];
 
 /**
+ * T-393 S1 - platform jobs: a unit pair that runs a script which is NOT a per-org `SCHEDULER_JOBS`
+ * entry. `scheduler_runs.org_id` is NOT NULL, so a cluster-wide run (a whole-database dump) cannot be
+ * recorded there, and widening it needs a migration (`docs/tasks/393-nightly-backup-and-restore.md`
+ * R11). Each entry needs BOTH units and a reason citing a T-/DEF- number. S1 named `db-backup`;
+ * S2 adds `restore-drill` with its units.
+ */
+const NAMED_PLATFORM_JOB: Record<string, string> = {
+  'db-backup':
+    'T-393: the nightly whole-database pg_dump to Spaces is cluster-wide, so it cannot be a per-org ' +
+    'SCHEDULER_JOBS entry (scheduler_runs.org_id is NOT NULL); its run record is the object in Spaces ' +
+    'plus its manifest and the heartbeat.',
+  'restore-drill':
+    'T-393 S2: the weekly restore of the newest complete dump into a scratch database, with the trial-balance ' +
+    'tie check, is cluster-wide, so it cannot be a per-org SCHEDULER_JOBS entry (scheduler_runs.org_id is NOT ' +
+    'NULL); its run record is the drill report in Spaces and the heartbeat.',
+};
+
+/**
  * Scripts with no unit pair today, and why — a confession, not a config knob (same discipline as
  * `tests/unit/scheduler-jobs-have-callers.test.ts`'s `EXEMPT`).
  *
@@ -152,14 +170,36 @@ describe('T-273 — every scheduler job is hosted by a docs/ops/ unit pair, or a
   });
 
   it('⛔ no .service file in docs/ops is unexplained — either a known job script or a named exception', () => {
-    const known = new Set([...knownScripts(), ...NAMED_NON_JOB_SERVICE]);
+    const known = new Set([...knownScripts(), ...NAMED_NON_JOB_SERVICE, ...Object.keys(NAMED_PLATFORM_JOB)]);
     const unexplained = unitBasenames('service').filter((name) => !known.has(name));
     expect(unexplained).toEqual([]);
   });
 
   it('⛔ no .timer file in docs/ops is unexplained — either a known job script or a named exception', () => {
-    const known = new Set([...knownScripts(), ...NAMED_SECONDARY_TIMER_ONLY]);
+    const known = new Set([...knownScripts(), ...NAMED_SECONDARY_TIMER_ONLY, ...Object.keys(NAMED_PLATFORM_JOB)]);
     const unexplained = unitBasenames('timer').filter((name) => !known.has(name));
     expect(unexplained).toEqual([]);
+  });
+
+  it('T-393 S2: the named platform jobs are exactly db-backup and restore-drill and none is a SCHEDULER_JOBS script', () => {
+    expect(Object.keys(NAMED_PLATFORM_JOB)).toEqual(['db-backup', 'restore-drill']);
+    for (const name of Object.keys(NAMED_PLATFORM_JOB)) {
+      expect(knownScripts(), `${name} is a per-org job script; it does not belong in NAMED_PLATFORM_JOB`).not.toContain(name);
+    }
+  });
+
+  it('T-393 S1: every named platform job has BOTH a .service and a .timer in docs/ops (red until the units exist)', () => {
+    const missing = Object.keys(NAMED_PLATFORM_JOB).flatMap((name) => [
+      ...(existsSync(path.join(OPS_DIR, `shareat-${name}.service`)) ? [] : [`shareat-${name}.service is missing`]),
+      ...(existsSync(path.join(OPS_DIR, `shareat-${name}.timer`)) ? [] : [`shareat-${name}.timer is missing`]),
+    ]);
+    expect(missing).toEqual([]);
+  });
+
+  it('T-393 S1: every named platform job reason cites a T-/DEF- number and says something', () => {
+    const weak = Object.entries(NAMED_PLATFORM_JOB)
+      .filter(([, reason]) => !/DEF-\d+|T-\d+/.test(reason) || reason.trim().length < 40)
+      .map(([name]) => `${name} - the reason must cite a DEF-/T- number and say why`);
+    expect(weak).toEqual([]);
   });
 });

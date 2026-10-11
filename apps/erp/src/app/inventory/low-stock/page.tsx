@@ -11,6 +11,8 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { LOW_STOCK_THRESHOLD } from './typed-forms';
 
 export const metadata = { title: 'Low stock — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -169,6 +171,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
                     action={setThresholdAction}
                     label={`${item.name} threshold`}
                     hidden={{ storeId, itemId: item.id }}
+                    typed={typedFor(sp, LOW_STOCK_THRESHOLD, item.id, actor.personId)}
                   >
                     <Input
                       name="threshold"

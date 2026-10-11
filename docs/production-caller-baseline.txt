@@ -1,6 +1,5 @@
 GET
 NumTd
-StatusIcon
 Table
 Td
 Th
@@ -15,16 +14,20 @@ arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
+buildSnapshot
 capitalizeFromExpense
 checkValuesMatch
 childLogger
 closeAsLateReceipt
 closeYear
+compareStoreWeek
+computeV1Figures
 confirmTradeOrder
 convertSpecimen
 countedVariances
 createRecipe
 customerReturnableQuantity
+datesInWeek
 declareSupplierItem
 depreciateAsset
 depreciationDrift
@@ -50,7 +53,6 @@ linkInvoiceToReceipt
 listAdjustments
 listAvailableCommissaries
 listCategoryLives
-listDays
 listLiveForStore
 listOrderMessages
 listPayRates
@@ -58,6 +60,7 @@ listPunchesForDay
 listRecipeLines
 listRoster
 listWriteOffsForCharge
+loadCountSheet
 markReviewed
 mintUniqueToken
 newCorrelationId
@@ -95,6 +98,7 @@ seedCanonicalPositions
 setCostBasisItem
 setItemPricing
 setTillFloat
+signOffPack
 sumTender
 summarizeConversions
 tablesWithScope
@@ -110,6 +114,6 @@ updateOwner
 upsertCategoryLife
 upsertPolicy
 validateFingerprintTemplates
-valuateShell
 voidShift
+weekStartOf
 withPrincipal

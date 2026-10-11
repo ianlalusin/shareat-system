@@ -271,6 +271,13 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'history from December has no business in the January ledger.',
   },
 
+  v1_master_links: {
+    class: 'keep',
+    reason:
+      'The v1 to v2 key the master-data load writes: T-390 price list and the T-392 AP tie read it, and after 1 January ' +
+      'it is provenance. Purging it would let a re-run duplicate every record it had already created.',
+  },
+
   // ---- T-154: the staff master record (Phase 4, lane B) --------------------------------
   positions: {
     class: 'keep',

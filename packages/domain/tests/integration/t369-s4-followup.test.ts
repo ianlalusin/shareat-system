@@ -127,13 +127,13 @@ async function fixture(hint: string) {
   const otherLocationId = await mkLoc(otherStoreId, 'B');
 
   const [item] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${adminId}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Pork Belly', 'raw_material', 'kg', ${adminId}) returning id`;
   const [slab] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${uid('SLAB')}, 'Beef Forequarter', 'meat_slab', 'kg', ${adminId}) returning id`;
+    insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgId}, ${testItemCode()}, 'Beef Forequarter', 'meat_slab', 'kg', ${adminId}) returning id`;
   const mkSlice = async (c: string) =>
     (await sql<{ id: string }[]>`
       insert into items (org_id, code, name, kind, base_unit, parent_slab_item_id, created_by)
-      values (${orgId}, ${uid(c)}, ${`Beef Slice ${c}`}, 'meat_sliced', 'kg', ${slab!.id}, ${adminId}) returning id`)[0]!.id;
+      values (${orgId}, ${testItemCode()}, ${`Beef Slice ${c}`}, 'meat_sliced', 'kg', ${slab!.id}, ${adminId}) returning id`)[0]!.id;
   const sliceA = await mkSlice('A');
   const sliceB = await mkSlice('B');
   const sliceC = await mkSlice('C');
@@ -369,7 +369,7 @@ describe('DEF-560 — a supplier-return void is all-or-nothing: line 2 refused l
   async function twoLineReturn(hint: string) {
     const f = await fixture(hint);
     const item2 = (await sql<{ id: string }[]>`
-      insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${uid('ITEM2')}, 'Chicken Thigh', 'raw_material', 'kg', ${f.adminId}) returning id`)[0]!.id;
+      insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${testItemCode()}, 'Chicken Thigh', 'raw_material', 'kg', ${f.adminId}) returning id`)[0]!.id;
     const [d] = await sql<{ id: string }[]>`
       insert into deliveries (org_id, store_id, kind, supplier_id, delivered_on, proof_file_id, created_by)
       values (${f.orgId}, ${f.storeId}, 'supplier', ${f.supplierId}, '2026-01-05', ${f.fileId}, ${f.staffId}) returning id`;
