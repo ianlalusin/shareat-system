@@ -1,6 +1,6 @@
 # T-400 — Run the integration suite on several workers, one database each
 
-> **Status: BUILT, CI runs with 2 WORKERS.** From Ian, 2026-10-11: *"continue with optimization"*,
+> **Status: IN REVIEW (PR #18), not merged. CI runs with 2 workers.** From Ian, 2026-10-11: *"continue with optimization"*,
 > after T-399, then *"push T-400 with 2 workers and open the PR"*. Branch `lane/t400-parallel-integration`.
 >
 > ⚠️ **Amended 11 Oct: N=2, not 4.** The self-hosted runner stalled from memory starvation (an 83-minute
