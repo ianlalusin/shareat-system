@@ -1,6 +1,5 @@
 GET
 NumTd
-StatusIcon
 Table
 Td
 Th

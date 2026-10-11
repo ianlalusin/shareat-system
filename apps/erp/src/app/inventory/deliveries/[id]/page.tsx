@@ -7,7 +7,18 @@ import { peso } from '../../../../lib/format';
 import { receiveDeliveryAction } from '../actions';
 import { deliveryDetail } from '../lib';
 import { Page } from '@/components/shell/Page';
-import { Button, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
+import {
+  Button,
+  FlashBanner,
+  Input,
+  Select,
+  StatusHero,
+  deliverySteps,
+  simpleStepIndexFor,
+  statusLabel,
+  type StatusIconKind,
+  type Tone,
+} from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
@@ -27,6 +38,13 @@ const REASON_LABEL: Record<string, string> = {
   quality_reject: 'Quality reject',
   count_correction: 'Count correction',
   other: 'Other',
+};
+
+/** Delivery statuses -> hero. `void` is the exit (danger). */
+const DELIVERY_HERO: Record<string, { kind: StatusIconKind; tone: Tone; line: string }> = {
+  draft: { kind: 'counting', tone: 'info', line: 'Count what landed, line by line, then receive the delivery.' },
+  received: { kind: 'received', tone: 'success', line: 'Received. The stock is in and the value is posted.' },
+  void: { kind: 'void', tone: 'danger', line: 'This delivery was voided.' },
 };
 
 function when(d: Date | null): string {
@@ -49,6 +67,10 @@ export default async function DeliveryPage({
 
   const canViewProof = await canViewPhoto(actor, doc.proofFileId);
   const canReceive = doc.status === 'draft';
+  const hero = DELIVERY_HERO[doc.status];
+  if (!hero) throw new Error(`DeliveryPage: no hero for status ${doc.status}`);
+  // `void` is an exit and maps to the first step (the delivery has no step-level timestamps beyond receivedAt).
+  const heroStep = simpleStepIndexFor('delivery', doc.status);
   const goods = doc.lines.reduce((n, l) => n + Number(l.orderedQuantity) * Number(l.unitCost), 0);
 
   return (
@@ -62,7 +84,7 @@ export default async function DeliveryPage({
           {doc.supplierName && <> — {doc.supplierName}</>}
         </h1>
         <PageDescription className="mt-1">
-          {doc.deliveredOn} · <strong>{statusLabel(doc.status)}</strong>
+          {doc.deliveredOn}
           {doc.referenceNo && <> · ref {doc.referenceNo}</>}
         </PageDescription>
         {doc.proofFileId && canViewProof && (
@@ -74,7 +96,15 @@ export default async function DeliveryPage({
 
       <FlashBanner flash={sp} />
 
-      <form action={receiveDeliveryAction} className="space-y-4">
+      <StatusHero kind={hero.kind} word={statusLabel(doc.status)} step={heroStep} steps={deliverySteps} line={hero.line} tone={hero.tone}>
+        {canReceive && (
+          <Button type="submit" form="receive-delivery-form" variant="primary">
+            Receive
+          </Button>
+        )}
+      </StatusHero>
+
+      <form id="receive-delivery-form" action={receiveDeliveryAction} className="space-y-4">
         <input type="hidden" name="deliveryId" value={doc.id} />
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table className="w-full min-w-[720px] border-collapse text-sm">
@@ -184,9 +214,6 @@ export default async function DeliveryPage({
                 <span className="text-neutral-500">(needs a manager or admin — a cashier ticking this is refused)</span>
               </label>
             </div>
-            <Button type="submit" variant="primary">
-              Receive
-            </Button>
           </div>
         )}
       </form>
