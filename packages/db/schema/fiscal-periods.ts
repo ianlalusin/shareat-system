@@ -6,7 +6,7 @@
  * `CREATE EXTENSION IF NOT EXISTS btree_gist` it depends on (Contract §8).
  */
 import { sql } from 'drizzle-orm';
-import { check, date, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { check, date, pgTable, text, timestamp, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
 
@@ -50,6 +50,20 @@ export const fiscalPeriods = pgTable(
     // migration 0160, along with fiscal_periods_fill_immutable and fiscal_periods_order_guard
     // (R1.2 — an open period may never start before a closed/locked one; see migration 0160).
     // NOTE: fiscal_periods_gap_guard_trg (DEF-424 — no close or lock may leave a missing month
-    // behind it) is hand-added in migration 0174; see the migration for the body.
+    // behind it) is hand-added in migration 0174; see the migration for the body.,
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.closedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'fiscal_periods_closed_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'fiscal_periods_created_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

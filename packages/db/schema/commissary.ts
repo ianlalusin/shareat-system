@@ -15,7 +15,7 @@
  * What was genuinely missing is the **cross-store correspondence**, and it is one table.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { expenseCategories } from './expenses';
 import { items } from './items';
 import { organizations } from './organizations';
@@ -40,6 +40,25 @@ export const commissaryLinks = pgTable(
     uniqueIndex('commissary_links_pair_key').on(t.commissaryStoreId, t.branchStoreId),
     check('commissary_links_not_self_check', sql`${t.commissaryStoreId} <> ${t.branchStoreId}`),
     index('commissary_links_branch_idx').on(t.branchStoreId, t.status),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.branchStoreId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'commissary_links_branch_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.commissaryStoreId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'commissary_links_commissary_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'commissary_links_created_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -68,6 +87,20 @@ export const commissaryItemOfferings = pgTable(
     check('commissary_item_offerings_manual_cost_check', sql`${t.manualCost} is null or ${t.manualCost} >= 0`),
     index('commissary_item_offerings_org_idx').on(t.orgId),
     check('commissary_item_offerings_manual_cost_finite_check', sql`${t.manualCost} > '-Infinity'::numeric and ${t.manualCost} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.commissaryStoreId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'commissary_item_offerings_commissary_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'commissary_item_offerings_created_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -110,5 +143,24 @@ export const commissaryItemMap = pgTable(
     uniqueIndex('commissary_item_map_key').on(t.commissaryStoreId, t.branchStoreId, t.commissaryItemId),
     check('commissary_item_map_not_self_check', sql`${t.commissaryStoreId} <> ${t.branchStoreId}`),
     index('commissary_item_map_branch_idx').on(t.branchStoreId),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.branchStoreId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'commissary_item_map_branch_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.commissaryStoreId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'commissary_item_map_commissary_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'commissary_item_map_created_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

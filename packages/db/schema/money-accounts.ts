@@ -41,6 +41,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { stores } from './stores';
@@ -223,6 +224,15 @@ export const moneyAccounts = pgTable(
     // (T-357 / DEF-490), no Drizzle mirror here. It is trivially true (id alone is already
     // unique) and exists only so the 11 composite `(org_id, "<col>") REFERENCES money_accounts
     // (org_id, id)` same-org FKs elsewhere in this schema (each declared beside its own table)
-    // have a real unique target — Postgres requires one for a composite FK's referenced columns.
+    // have a real unique target — Postgres requires one for a composite FK's referenced columns.,
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'money_accounts_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

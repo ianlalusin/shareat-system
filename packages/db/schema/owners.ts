@@ -27,6 +27,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -153,5 +154,24 @@ export const owners = pgTable(
     ),
     check('owners_ownership_percentage_finite_check', sql`${t.ownershipPercentage} > '-Infinity'::numeric and ${t.ownershipPercentage} < 'Infinity'::numeric`),
     check('owners_drawing_limit_finite_check', sql`${t.drawingLimit} > '-Infinity'::numeric and ${t.drawingLimit} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'owners_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.personId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'owners_person_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'owners_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

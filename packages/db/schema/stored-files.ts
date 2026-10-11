@@ -28,6 +28,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -89,5 +90,19 @@ export const storedFiles = pgTable(
     /** ⛔ The path must be the shape the broker builds. A row whose path did not come from the
      *  deriver is the one thing that would make every other guarantee here decorative. */
     check('stored_files_path_shape_check', sql`${t.storagePath} ~ '^orgs/[0-9a-f-]{36}/'`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'stored_files_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.uploadedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'stored_files_uploaded_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

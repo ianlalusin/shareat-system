@@ -38,6 +38,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { items } from './items';
 import { organizations } from './organizations';
@@ -113,6 +114,15 @@ export const stockLayers = pgTable(
     check('stock_layers_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
     check('stock_layers_unit_cost_finite_check', sql`${t.unitCost} > '-Infinity'::numeric and ${t.unitCost} < 'Infinity'::numeric`),
     check('stock_layers_remaining_quantity_finite_check', sql`${t.remainingQuantity} > '-Infinity'::numeric and ${t.remainingQuantity} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'stock_layers_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

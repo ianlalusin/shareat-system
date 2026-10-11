@@ -36,6 +36,7 @@ import {
   text,
   timestamp,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -162,5 +163,19 @@ export const loans = pgTable(
     ),
     check('loans_principal_amount_finite_check', sql`${t.principalAmount} > '-Infinity'::numeric and ${t.principalAmount} < 'Infinity'::numeric`),
     check('loans_interest_rate_finite_check', sql`${t.interestRate} > '-Infinity'::numeric and ${t.interestRate} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'loans_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'loans_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
