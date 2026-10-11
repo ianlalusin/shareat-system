@@ -1,6 +1,6 @@
 # T-391: Production master-data load (items, suppliers, customers, staff), with sheets Ian fills
 
-**Status:** S1 (0193), S2, S3 DONE (S3 `ee32d86`, on main and in PR #16). **S4 DONE** 2026-10-12 (`8395e11` + re-audit fixes `1ea3490`, main `bc3936b`; two audit rounds; integration 100/100 t391 s1/s3/s4). **S5 (staff) building** on lane/t391-s5 (wt-t390, DB shareat_test_t391s5; rulings S10-S13). Then S6. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). Drafted 2026-10-10 by the Opus planner.
+**Status:** S1 (0193), S2, S3 DONE (S3 `ee32d86`, on main and in PR #16). **S4 DONE** 2026-10-12 (`8395e11` + re-audit fixes `1ea3490`, main `bc3936b`; two audit rounds; integration 100/100 t391 s1/s3/s4). **S5 DONE** 2026-10-12 (`96a318d`, main `3bd884f`; audit S14 applied; extract rates keyed by person_ref; integration 127/127 t391 s1-s5). **S6 (readiness) next.** | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). Drafted 2026-10-10 by the Opus planner.
 (≈4.0 lane-days, six slices; the plan says M 3, see §Research "Where this spec disagrees with the plan").
 Migration **0NNN (allocated at merge)**. Seven questions for Ian; the recommended option is what gets built.
 **T-390 S4 depends on this task's apply, per store** (its price list reads `v1_master_links`).
