@@ -10,7 +10,7 @@ import { POS_LINK_EDIT, TENDER_EDIT } from './typed-forms';
 import { canUnlink, posLinkRows, posStoreOptions, storeTenders, tenderMapping, type PosLinkStoreRow, type StoreTenders, type TenderAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { Field, FormGrid } from '@/components/ui';
+import { Banner, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 
@@ -59,14 +59,13 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
         </PageDescription>
       </div>
 
-      {!cardShowsFeedback && sp.error && <Banner tone="error">{sp.error}</Banner>}
-      {!cardShowsFeedback && sp.ok && <Banner tone="ok">{sp.ok}</Banner>}
+      {!cardShowsFeedback && <FlashBanner flash={sp} />}
 
       {options === null && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           POS isn&apos;t connected to this system yet, so its stores can&apos;t be listed. Type the POS store&apos;s id
           and name instead.
-        </div>
+        </Banner>
       )}
 
       {rows.length === 0 && (
@@ -115,11 +114,11 @@ function StoreCard({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-medium">{row.storeName}</h2>
         {link ? (
-          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100">
+          <span className="rounded bg-success-soft px-1.5 py-0.5 text-[11px] font-medium text-success">
             Linked to {link.posStoreName}
           </span>
         ) : (
-          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900 dark:text-amber-100">
+          <span className="rounded bg-warning-soft px-1.5 py-0.5 text-[11px] font-medium text-warning-ink">
             Not linked — sales are typed
           </span>
         )}
@@ -143,9 +142,9 @@ function StoreCard({
             <input type="hidden" name="storeId" value={row.storeId} />
             <input type="hidden" name="storeName" value={row.storeName} />
             <LinkFields row={row} options={options} />
-            <button type="submit" className={BTN}>
+            <Button type="submit" variant="secondary">
               Save
-            </button>
+            </Button>
           </form>
         )}
       </div>
@@ -158,8 +157,9 @@ function StoreCard({
 
       {link && canUnlink && <UnlinkSection row={row} posStoreName={link.posStoreName} />}
 
-      {feedback?.error && <Banner tone="error">{feedback.error}</Banner>}
-      {feedback?.ok && <Banner tone="ok">{feedback.ok}</Banner>}
+      {/* Kept: t384-s1-pos-link-web W3b pins the ok sentence, with role=status, on the card. */}
+      {feedback && <FlashBanner flash={flash} />}
+      {feedback?.ok && <Banner tone="success">{feedback.ok}</Banner>}
 
       <TendersSection storeId={row.storeId} storeName={row.storeName} linked={!!link} t={tenders} flash={flash} actorId={actorId} />
     </section>
@@ -173,7 +173,7 @@ function LinkFields({ row, options }: { row: PosLinkStoreRow; options: { id: str
     <FormGrid>
       {options ? (
         <Field label="POS store">
-          <select name="posStoreId" required defaultValue={link?.posStoreId ?? ''} className={FIELD}>
+          <Select name="posStoreId" required defaultValue={link?.posStoreId ?? ''} className="mt-1 w-full">
             <option value="" disabled>
               Choose a POS store
             </option>
@@ -182,15 +182,15 @@ function LinkFields({ row, options }: { row: PosLinkStoreRow; options: { id: str
                 {o.name || o.id}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       ) : (
         <>
           <Field label="POS store id">
-            <input name="posStoreId" required defaultValue={link?.posStoreId ?? ''} className={FIELD} />
+            <Input name="posStoreId" required defaultValue={link?.posStoreId ?? ''} className="mt-1 w-full" />
           </Field>
           <Field label="POS store name">
-            <input name="posStoreName" required defaultValue={link?.posStoreName ?? ''} className={FIELD} />
+            <Input name="posStoreName" required defaultValue={link?.posStoreName ?? ''} className="mt-1 w-full" />
           </Field>
         </>
       )}
@@ -199,7 +199,7 @@ function LinkFields({ row, options }: { row: PosLinkStoreRow; options: { id: str
         label="Sales channel POS's sales land in"
         hint="Only channels whose money is remitted daily are offered: POS's sales are paid at the till."
       >
-        <select name="salesChannelId" required defaultValue={link?.salesChannelId ?? ''} className={FIELD}>
+        <Select name="salesChannelId" required defaultValue={link?.salesChannelId ?? ''} className="mt-1 w-full">
           <option value="" disabled>
             Choose a channel
           </option>
@@ -208,18 +208,18 @@ function LinkFields({ row, options }: { row: PosLinkStoreRow; options: { id: str
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
 
       <Field label="Tax type, as set in the POS store">
-        <select name="posTaxType" required defaultValue={link?.posTaxType ?? ''} className={FIELD}>
+        <Select name="posTaxType" required defaultValue={link?.posTaxType ?? ''} className="mt-1 w-full">
           <option value="" disabled>
             Choose a tax type
           </option>
           <option value="vat_inclusive">VAT inclusive</option>
           <option value="non_vat">Non-VAT</option>
           <option value="vat_exclusive">VAT exclusive (not importable yet)</option>
-        </select>
+        </Select>
       </Field>
     </FormGrid>
   );
@@ -234,7 +234,7 @@ function UnlinkSection({ row, posStoreName }: { row: PosLinkStoreRow; posStoreNa
   const store = row.storeName;
   const blocked = row.unverifiedImportedDates;
   return (
-    <div className="space-y-3 rounded border border-red-200 p-3 text-sm dark:border-red-900">
+    <div className="space-y-3 rounded border border-danger p-3 text-sm">
       <h3 className="font-medium">Unlink from POS</h3>
       {blocked.length > 0 ? (
         <p className="text-neutral-700 dark:text-neutral-300">
@@ -251,16 +251,16 @@ function UnlinkSection({ row, posStoreName }: { row: PosLinkStoreRow; posStoreNa
           </p>
           <FormGrid>
             <Field label={`Why is ${store} being unlinked?`} span="full">
-              <textarea name="reason" required maxLength={500} rows={3} className={FIELD} />
+              <Textarea name="reason" required maxLength={500} rows={3} className="mt-1 w-full" />
             </Field>
           </FormGrid>
           <label className="flex items-start gap-2">
             <input type="checkbox" name="confirm" required className="mt-1" />
             <span>I understand: {store}&apos;s sales will be typed from now on.</span>
           </label>
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="danger">
             Unlink {store}
-          </button>
+          </Button>
         </form>
       )}
     </div>
@@ -335,7 +335,7 @@ function TendersSection({
                     <td className="py-1 pr-3">{m.tenderName ?? '—'}</td>
                     <td className="py-1 pr-3">{m.kind === 'cash' ? 'Cash' : m.kind === 'wallet' ? 'Wallet' : '—'}</td>
                     <td className="py-1 pr-3">{m.moneyAccountName ?? '—'}</td>
-                    <td className={m.status === 'mapped' ? 'py-1' : 'py-1 text-amber-800 dark:text-amber-300'}>{m.statusText}</td>
+                    <td className={m.status === 'mapped' ? 'py-1' : 'py-1 text-warning-ink'}>{m.statusText}</td>
                   </tr>
                 ))}
               </tbody>
@@ -363,9 +363,9 @@ function TendersSection({
                 <span>
                   {x.name} ({x.kind})
                 </span>
-                <button type="submit" className={BTN}>
+                <Button type="submit" variant="secondary">
                   Restore
-                </button>
+                </Button>
               </form>
             ))}
           </div>
@@ -378,32 +378,32 @@ function TendersSection({
           <input type="hidden" name="storeId" value={storeId} />
           <FormGrid>
             <Field label="Name">
-              <input name="name" required placeholder="e.g. GCash" autoComplete="off" className={FIELD} />
+              <Input name="name" required placeholder="e.g. GCash" autoComplete="off" className="mt-1 w-full" />
             </Field>
             <Field label="Kind">
-              <select name="kind" required defaultValue="" className={FIELD}>
+              <Select name="kind" required defaultValue="" className="mt-1 w-full">
                 <option value="">Choose cash or wallet</option>
                 <option value="cash">Cash</option>
                 <option value="wallet">Wallet</option>
-              </select>
+              </Select>
             </Field>
             <Field label="Money account (wallets only)" hint={ACCOUNT_HINT}>
-              <select name="moneyAccountId" defaultValue="" className={FIELD}>
+              <Select name="moneyAccountId" defaultValue="" className="mt-1 w-full">
                 <option value="">None</option>
                 {t.accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="POS name" hint={POS_NAME_HINT}>
-              <input name="posV1Alias" autoComplete="off" className={FIELD} />
+              <Input name="posV1Alias" autoComplete="off" className="mt-1 w-full" />
             </Field>
           </FormGrid>
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="secondary">
             Save
-          </button>
+          </Button>
         </form>
       </div>
     </div>
@@ -428,24 +428,24 @@ function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdmi
           <input type="hidden" name="tenderId" value={x.id} />
           <input type="hidden" name="version" value={x.version} />
           <input type="hidden" name="isActive" value="false" />
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="danger">
             Retire
-          </button>
+          </Button>
         </form>
       }
     >
       <FormGrid>
         <Field label="Name">
-          <input name="name" required defaultValue={x.name} autoComplete="off" className={FIELD} />
+          <Input name="name" required defaultValue={x.name} autoComplete="off" className="mt-1 w-full" />
         </Field>
         <Field label="Kind">
-          <select name="kind" required defaultValue={x.kind} className={FIELD}>
+          <Select name="kind" required defaultValue={x.kind} className="mt-1 w-full">
             <option value="cash">Cash</option>
             <option value="wallet">Wallet</option>
-          </select>
+          </Select>
         </Field>
         <Field label="Money account (wallets only)" hint={ACCOUNT_HINT}>
-          <select name="moneyAccountId" defaultValue={x.moneyAccountId ?? ''} className={FIELD}>
+          <Select name="moneyAccountId" defaultValue={x.moneyAccountId ?? ''} className="mt-1 w-full">
             <option value="">None</option>
             {x.moneyAccountId && !t.accounts.some((a) => a.id === x.moneyAccountId) && (
               <option value={x.moneyAccountId}>{x.moneyAccountName ?? 'Retired account'}</option>
@@ -455,28 +455,12 @@ function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdmi
                 {a.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="POS name" hint={POS_NAME_HINT}>
-          <input name="posV1Alias" defaultValue={x.posV1Alias ?? ''} autoComplete="off" className={FIELD} />
+          <Input name="posV1Alias" defaultValue={x.posV1Alias ?? ''} autoComplete="off" className="mt-1 w-full" />
         </Field>
       </FormGrid>
     </EditableRecord>
   );
 }
-
-function Banner({ tone, children }: { tone: 'error' | 'ok'; children: React.ReactNode }) {
-  const cls =
-    tone === 'error'
-      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
-      : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-  return (
-    <div role={tone === 'error' ? 'alert' : 'status'} className={`rounded-lg border p-4 text-sm ${cls}`}>
-      {children}
-    </div>
-  );
-}
-
-const FIELD = 'mt-1 w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';

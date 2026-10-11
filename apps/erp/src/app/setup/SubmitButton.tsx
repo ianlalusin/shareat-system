@@ -23,13 +23,14 @@
  * attempt — only the second.
  */
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui';
 
 export function SubmitButton({ children, pendingLabel }: { children: string; pendingLabel: string }) {
-  const ref = useRef<HTMLButtonElement>(null);
+  const ref = useRef<HTMLSpanElement>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const form = ref.current?.form;
+    const form = ref.current?.closest('form');
     if (!form) return;
     const onSubmit = () => setBusy(true);
     form.addEventListener('submit', onSubmit);
@@ -37,16 +38,18 @@ export function SubmitButton({ children, pendingLabel }: { children: string; pen
   }, []);
 
   return (
-    <button
-      ref={ref}
+    <span ref={ref} className="contents">
+    <Button
       type="submit"
+      variant="primary"
       disabled={busy}
       // ⚠️ `aria-busy` as well as `disabled`: a screen reader should hear that something is
       // happening, not merely that the control went away.
       aria-busy={busy}
-      className="w-full rounded bg-neutral-900 px-4 py-3 font-medium text-white hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+      className="w-full justify-center"
     >
       {busy ? pendingLabel : children}
-    </button>
+    </Button>
+    </span>
   );
 }

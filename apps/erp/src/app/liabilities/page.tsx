@@ -7,6 +7,7 @@ import { CATEGORY_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Liabilities — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -45,22 +46,18 @@ export default async function LiabilitiesPage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {overdue.length > 0 && (
-        <section className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-800 dark:bg-amber-950">
-          <h2 className="font-medium text-amber-900 dark:text-amber-200">
+        <Banner tone="warning">
+          <h2 className="font-medium">
             {overdue.length === 1 ? 'One obligation is' : `${overdue.length} obligations are`} past
             due
           </h2>
           <ul className="space-y-1">
             {overdue.map((r) => (
               <li key={r.id}>
-                <Link href={`/liabilities/${r.id}`} className="underline underline-offset-2">
+                <Link href={`/liabilities/${r.id}`} className="text-sm underline underline-offset-2">
                   {r.name}
                 </Link>{' '}
                 — <span className="font-mono tabular-nums">{peso(r.position.outstanding)}</span>, due{' '}
@@ -68,7 +65,7 @@ export default async function LiabilitiesPage({
               </li>
             ))}
           </ul>
-        </section>
+        </Banner>
       )}
 
       {rows.length > 0 && (
@@ -110,7 +107,7 @@ export default async function LiabilitiesPage({
                   <td className="px-3 py-2">{storeById.get(r.storeId)?.code ?? '—'}</td>
                   <td
                     className={`px-3 py-2 text-xs whitespace-nowrap ${
-                      r.overdue ? 'text-amber-700 dark:text-amber-400' : ''
+                      r.overdue ? 'text-warning-ink' : ''
                     }`}
                   >
                     {r.dueOn ?? '—'}
@@ -146,7 +143,7 @@ export default async function LiabilitiesPage({
         <form action={createLiabilityAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Store">
-              <select name="storeId" required defaultValue="" className={INPUT}>
+              <Select name="storeId" required defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -155,47 +152,41 @@ export default async function LiabilitiesPage({
                     {s.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="What it is">
-              <input name="name" required placeholder="Accrued rent — January" className={INPUT} />
+              <Input name="name" required placeholder="Accrued rent — January" className="w-full" />
             </Field>
             <Field label="Category">
-              <select name="category" defaultValue="other" className={INPUT}>
+              <Select name="category" defaultValue="other" className="w-full">
                 {LIABILITY_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
                     {CATEGORY_LABEL[c] ?? c}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field
               label="Due"
               hint="Optional — but an obligation with no due date can never be reported late."
             >
-              <input name="dueOn" type="date" defaultValue={today()} className={INPUT} />
+              <Input name="dueOn" type="date" defaultValue={today()} className="w-full" />
             </Field>
             <Field label="Description" hint="Optional.">
-              <input name="description" className={INPUT} />
+              <Input name="description" className="w-full" />
             </Field>
             <Field label="Notes" hint="Optional.">
-              <input name="notes" className={INPUT} />
+              <Input name="notes" className="w-full" />
             </Field>
           </div>
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-          >
+          <Button type="submit" variant="primary">
             Record obligation
-          </button>
+          </Button>
         </form>
       </section>
     </Page>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function Field({
   label,

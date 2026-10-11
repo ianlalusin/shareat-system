@@ -3,6 +3,7 @@ import { listStores, stockSummary } from './lib';
 import { requireSession } from '../../lib/session';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { Select } from '@/components/ui';
 
 export const metadata = { title: 'Stock on hand — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -71,17 +72,13 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       <FilterRow className="mt-6">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select
-            name="store"
-            defaultValue={storeId}
-            className="mt-1 rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          >
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
@@ -94,7 +91,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         className={`mt-6 rounded-lg border p-4 ${
           ties
             ? 'border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900'
-            : 'border-amber-400 bg-amber-50 dark:border-amber-700 dark:bg-amber-950'
+            : 'border-warning bg-warning-soft'
         }`}
       >
         <h2 className="text-sm font-medium">
@@ -163,7 +160,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                   {/* ⚠️ A balance with no open layer is a real state worth seeing rather than
                       showing as ₱0 — it means stock exists that no receipt ever valued. */}
                   {row.value === null ? (
-                    <span className="text-amber-700 dark:text-amber-500">no layer</span>
+                    <span className="text-warning-ink">no layer</span>
                   ) : (
                     `₱${row.value}`
                   )}

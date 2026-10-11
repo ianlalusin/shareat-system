@@ -30,6 +30,7 @@ import {
 } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { withFlash } from '@/lib/flash';
+import { Badge, Button, FlashBanner, Input } from '@/components/ui';
 
 export const metadata = { title: 'Customer — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -157,9 +158,7 @@ export default async function CustomerDetailPage({
           <p className={`text-xs ${TREATMENT_TONE[customer.treatment] ?? ''}`}>
             {TREATMENT_LABEL[customer.treatment]}
             {customer.status !== 'active' && (
-              <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-                {customer.status}
-              </span>
+              <Badge status={customer.status} className="ml-2" />
             )}
           </p>
         </div>
@@ -173,7 +172,7 @@ export default async function CustomerDetailPage({
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               limit {peso(customer.creditLimit)}
               {compare(money(owedOverall), money(customer.creditLimit)) > 0 && (
-                <span className="ml-1 font-medium text-red-700 dark:text-red-400">over</span>
+                <span className="ml-1 font-medium text-danger">over</span>
               )}
             </p>
           )}
@@ -183,23 +182,14 @@ export default async function CustomerDetailPage({
             </p>
           )}
           {compare(money(credit), ZERO) > 0 && (
-            <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+            <p className="mt-1 text-xs text-success">
               {peso(credit)} store credit held (2140)
             </p>
           )}
         </div>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          <strong className="font-medium">Refused:</strong> {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {storeOptions.length > 1 && (
         <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -291,7 +281,7 @@ export default async function CustomerDetailPage({
                       } ${c.journalEntryId ? 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900/40' : ''}`}
                     >
                       <td className="px-3 py-3">{c.chargeDate}</td>
-                      <td className={`px-3 py-3 ${overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}`}>
+                      <td className={`px-3 py-3 ${overdue ? 'font-medium text-danger' : ''}`}>
                         {c.dueDate ?? '—'}
                         {overdue && <span className="ml-1 text-xs">overdue</span>}
                       </td>
@@ -356,22 +346,19 @@ export default async function CustomerDetailPage({
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="chargeId" value={c.chargeId} />
                     <Field label="Write off" className="min-w-[8rem] flex-1">
-                      <input
+                      <Input
                         name="amount"
                         inputMode="decimal"
                         defaultValue={c.outstanding}
-                        className={INPUT}
+                        className="w-full"
                       />
                     </Field>
                     <Field label="Why is it uncollectible?" className="min-w-[14rem] flex-[2]">
-                      <input name="reason" required className={INPUT} />
+                      <Input name="reason" required className="w-full" />
                     </Field>
-                    <button
-                      type="submit"
-                      className="rounded border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                    >
+                    <Button type="submit" variant="danger">
                       Write off to 6860
-                    </button>
+                    </Button>
                   </form>
                 )}
                 {canVoidAt(c.storeId) && (
@@ -380,14 +367,11 @@ export default async function CustomerDetailPage({
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="chargeId" value={c.chargeId} />
                     <Field label="Void this charge — why?" className="min-w-[14rem] flex-[2]">
-                      <input name="reason" required className={INPUT} />
+                      <Input name="reason" required className="w-full" />
                     </Field>
-                    <button
-                      type="submit"
-                      className="rounded border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                    >
+                    <Button type="submit" variant="danger">
                       Void charge
-                    </button>
+                    </Button>
                   </form>
                 )}
               </div>
@@ -474,12 +458,12 @@ export default async function CustomerDetailPage({
                           <input type="hidden" name="customerId" value={customerId} />
                           <input type="hidden" name="storeId" value={storeId} />
                           <input type="hidden" name="collectionId" value={c.collectionId} />
-                          <input
+                          <Input
                             name="reason"
                             required
                             placeholder="why?"
                             aria-label="Why is this collection being voided?"
-                            className="w-28 rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                            className="w-28 text-xs"
                           />
                           {/* T-258 found in passing: this button was the same undersized DEF-239 shape,
                               missed by DEF-239's census and by action-link-sweep.test.ts's shape guard
@@ -510,9 +494,6 @@ export default async function CustomerDetailPage({
     </Page>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function Field({
   label,

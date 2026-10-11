@@ -10,7 +10,7 @@
  * sees "no default" before the server refuses the line.
  */
 import { useState } from 'react';
-import { FormGrid } from '@/components/ui';
+import { Button, FormGrid, Input, Select } from '@/components/ui';
 import type { CustomerOption, ItemOption, StoreOption } from './lib';
 
 interface LineDraft {
@@ -74,12 +74,10 @@ export function NewOrderForm({
   }
 
   const label = 'flex min-w-0 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
-  const field =
-    'w-full rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
   if (customers.length === 0 || items.length === 0) {
     return (
-      <p className="mt-3 text-sm text-amber-700 dark:text-amber-500">
+      <p className="mt-3 text-sm text-warning-ink">
         {customers.length === 0
           ? 'No active customers yet — record one under Trade › Customers first.'
           : 'No active items yet — add one under Inventory › Items first.'}
@@ -92,28 +90,26 @@ export function NewOrderForm({
       <FormGrid>
         <label className={label}>
           Selling store
-          <select
+          <Select
             name="storeId"
             required
             value={sellingStoreId}
             onChange={(e) => setSellingStoreId(e.target.value)}
-            className={field}
           >
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className={label}>
           Customer
-          <select
+          <Select
             name="customerId"
             required
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
-            className={field}
           >
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
@@ -121,43 +117,39 @@ export function NewOrderForm({
                 {c.treatment === 'internal' ? ' — our own store' : c.treatment === 'inter_entity' ? ' — another company' : ''}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className={label}>
           Order date
-          <input name="orderDate" type="date" required defaultValue={today} className={field} />
+          <Input name="orderDate" type="date" required defaultValue={today} />
         </label>
         <label className={label}>
           Reference (optional)
-          <input name="referenceNo" placeholder="DR-0001" className={field} />
+          <Input name="referenceNo" placeholder="DR-0001" />
         </label>
       </FormGrid>
 
       <p
         className={`text-xs ${
           treatment === 'internal'
-            ? 'text-sky-700 dark:text-sky-400'
+            ? 'text-info'
             : unsupported
-              ? 'text-red-700 dark:text-red-400'
+              ? 'text-danger'
               : 'text-neutral-600 dark:text-neutral-400'
         }`}
       >
         {TREATMENT_HINT[treatment]}
         {treatment === 'internal' && customer?.counterpartyStoreId === sellingStoreId && (
-          <span className="ml-1 text-red-700 dark:text-red-400">⛔ That is the selling store itself — a store cannot transfer to itself.</span>
+          <span className="ml-1 text-danger">⛔ That is the selling store itself — a store cannot transfer to itself.</span>
         )}
       </p>
 
       <div className="space-y-2">
         <div className="flex items-baseline justify-between">
           <h3 className="text-sm font-medium">Lines</h3>
-          <button
-            type="button"
-            onClick={addLine}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
+          <Button type="button" variant="secondary" onClick={addLine}>
             + Add line
-          </button>
+          </Button>
         </div>
         {lines.map((l, idx) => {
           const item = itemById.get(l.itemId);
@@ -172,52 +164,51 @@ export function NewOrderForm({
               </span>
               <label className={`${label} col-span-2 sm:col-span-1`}>
                 Item
-                <select
+                <Select
                   name="itemId"
                   required
                   value={l.itemId}
                   onChange={(e) => update(l.key, { itemId: e.target.value })}
-                  className={field}
                 >
                   {items.map((i) => (
                     <option key={i.id} value={i.id}>
                       {i.name} ({i.baseUnit})
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className={label}>
                 Quantity{item ? ` (${item.baseUnit})` : ''}
-                <input
+                <Input
                   name="quantity"
                   required
                   inputMode="decimal"
                   placeholder="0.000"
                   value={l.quantity}
                   onChange={(e) => update(l.key, { quantity: e.target.value })}
-                  className={`${field} tabular-nums`}
+                  className="tabular-nums"
                 />
               </label>
               <label className={label}>
                 Rate ₱ (blank = default)
-                <input
+                <Input
                   name="rate"
                   inputMode="decimal"
                   placeholder={dflt ? `₱${dflt}` : 'no default — state one'}
                   value={l.rate}
                   onChange={(e) => update(l.key, { rate: e.target.value })}
-                  className={`${field} tabular-nums ${dflt || l.rate ? '' : 'border-amber-400 dark:border-amber-600'}`}
+                  className={`tabular-nums ${dflt || l.rate ? '' : 'ring-1 ring-warning-ink'}`}
                 />
               </label>
-              <button
+              <Button
                 type="button"
+                variant="danger"
                 onClick={() => removeLine(l.key)}
                 disabled={lines.length === 1}
                 aria-label="Remove line"
-                className="rounded-md border border-neutral-300 px-3 py-2 text-xs hover:bg-neutral-50 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-900"
               >
                 Remove
-              </button>
+              </Button>
             </div>
           );
         })}
@@ -230,25 +221,21 @@ export function NewOrderForm({
       <FormGrid>
         <label className={label}>
           Delivery fee ₱ (optional)
-          <input name="deliveryFee" inputMode="decimal" placeholder="0.00" className={`${field} tabular-nums`} />
+          <Input name="deliveryFee" inputMode="decimal" placeholder="0.00" className="tabular-nums" />
         </label>
         <label className={label}>
           Other fees ₱ (optional)
-          <input name="otherFees" inputMode="decimal" placeholder="0.00" className={`${field} tabular-nums`} />
+          <Input name="otherFees" inputMode="decimal" placeholder="0.00" className="tabular-nums" />
         </label>
         <label className={label}>
           Notes (optional)
-          <input name="notes" className={field} />
+          <Input name="notes" />
         </label>
       </FormGrid>
 
-      <button
-        type="submit"
-        disabled={unsupported}
-        className="rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-      >
+      <Button type="submit" variant="primary" disabled={unsupported}>
         Save draft
-      </button>
+      </Button>
     </form>
   );
 }

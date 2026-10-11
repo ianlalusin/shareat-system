@@ -83,6 +83,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { compare, money, ZERO } from '@shareat/core/money';
 import type { AutoAllocateRequest, AutoAllocateResponse } from '../../actions';
+import { Button, Input, Select } from '@/components/ui';
 
 export interface PayableItem {
   expenseId: string;
@@ -96,9 +97,6 @@ export interface Wallet {
   custodian: string;
   balance: string;
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function peso(v: string): string {
   const n = Number(v);
@@ -266,13 +264,13 @@ export function AutoAllocatePaymentForm({
                 onChange={(e) => setAmount(i.expenseId, e.target.checked ? i.outstanding : '')}
               />
               <span className="min-w-0 flex-1 basis-48">{i.particulars} — owed {peso(i.outstanding)}</span>
-              <input
+              <Input
                 type="text"
                 inputMode="decimal"
                 name={`allocateAmount_${i.expenseId}`}
                 value={value}
                 onChange={(e) => setAmount(i.expenseId, e.target.value)}
-                className="min-w-0 flex-1 basis-28 rounded border border-neutral-300 bg-white px-2 py-1 text-right dark:border-neutral-700 dark:bg-neutral-950"
+                className="min-w-0 flex-1 basis-28 text-right"
               />
             </label>
           );
@@ -280,22 +278,17 @@ export function AutoAllocatePaymentForm({
       </div>
 
       <div>
-        <button
-          type="button"
-          onClick={autoAllocate}
-          disabled={pending}
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-        >
+        <Button type="button" variant="secondary" onClick={autoAllocate} disabled={pending}>
           {pending ? 'Allocating…' : 'Auto-allocate (oldest first)'}
-        </button>
+        </Button>
         {pageStale && (
-          <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+          <p className="mt-2 text-xs text-warning-ink">
             ⚠️ The open items changed since this page loaded — refresh before relying on this
             figure or pressing Save.
           </p>
         )}
         {!pageStale && (raceDetected || (unallocated !== null && editedSinceCheck)) && (
-          <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+          <p className="mt-2 text-xs text-warning-ink">
             The boxes changed since that check — press &ldquo;Auto-allocate&rdquo; again for an
             up to date figure.
           </p>
@@ -308,40 +301,40 @@ export function AutoAllocatePaymentForm({
           </p>
         )}
         {previewError && (
-          <p className="mt-2 text-xs text-red-700 dark:text-red-400">Refused: {previewError}</p>
+          <p className="mt-2 text-xs text-danger">Refused: {previewError}</p>
         )}
       </div>
 
       <div className="grid grid-cols-3 gap-3">
         <Field label="Total handed over">
-          <input
+          <Input
             name="amount"
             required
             inputMode="decimal"
             placeholder="0.00"
             value={totalAmount}
             onChange={(e) => setTotal(e.target.value)}
-            className={INPUT}
+            className="w-full"
           />
         </Field>
         <Field label="From account">
-          <select name="moneyAccountId" required defaultValue="" className={INPUT}>
+          <Select name="moneyAccountId" required defaultValue="" className="w-full">
             <option value="" disabled>Choose…</option>
             {wallets.map((w) => (
               <option key={w.id} value={w.id}>{w.name} ({w.custodian}) — {peso(w.balance)}</option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Date">
-          <input type="date" name="businessDate" required defaultValue={today} className={INPUT} />
+          <Input type="date" name="businessDate" required defaultValue={today} className="w-full" />
         </Field>
       </div>
       <Field label="Reference no." hint="Optional.">
-        <input name="referenceNo" className={INPUT} />
+        <Input name="referenceNo" className="w-full" />
       </Field>
-      <button type="submit" className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900">
+      <Button type="submit" variant="primary">
         Record payment
-      </button>
+      </Button>
     </form>
   );
 }

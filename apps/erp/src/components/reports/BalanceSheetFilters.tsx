@@ -1,3 +1,5 @@
+import { Button, Input, Select } from '@/components/ui';
+
 export interface FilterOption {
   id: string;
   label: string;
@@ -30,29 +32,27 @@ export function BalanceSheetFilters({
     <form
       method="GET"
       action={basePath}
-      className="flex flex-wrap items-end gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+      className="flex flex-wrap items-end gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm"
     >
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Organization</span>
-        <select
+        <span className="text-xs font-medium text-neutral-500">Organization</span>
+        <Select
           name="org"
           defaultValue={currentOrgId}
-          className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
         >
           {orgs.map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Store</span>
-        <select
+        <span className="text-xs font-medium text-neutral-500">Store</span>
+        <Select
           name="store"
           defaultValue={currentStoreId ?? ''}
-          className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
         >
           <option value="">All stores</option>
           {stores.map((s) => (
@@ -60,41 +60,36 @@ export function BalanceSheetFilters({
               {s.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">As of</span>
-        <input
+        <span className="text-xs font-medium text-neutral-500">As of</span>
+        <Input
           type="date"
           name="asOf"
           defaultValue={asOfDate}
-          className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
         />
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Year-close entry</span>
-        <select
+        <span className="text-xs font-medium text-neutral-500">Year-close entry</span>
+        <Select
           name="yearClose"
           defaultValue={includeYearClose ? 'include' : 'exclude'}
-          className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
         >
           <option value="include">Included</option>
           <option value="exclude">Excluded</option>
-        </select>
+        </Select>
         <span className="text-xs text-neutral-400 dark:text-neutral-600">
           Defaults to included — a balance sheet is an as-of view (ADR-006), same default as the
           trial balance.
         </span>
       </label>
 
-      <button
-        type="submit"
-        className="rounded bg-neutral-900 px-4 py-1.5 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-      >
+      <Button type="submit" variant="primary">
         Apply
-      </button>
+      </Button>
     </form>
   );
 }

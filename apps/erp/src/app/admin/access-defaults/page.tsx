@@ -5,6 +5,7 @@ import { DesktopGrid, MobileSections } from './grid';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Button, FlashBanner, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Position access defaults — Shareat System' };
@@ -18,11 +19,6 @@ interface SearchParams {
   cap?: string | string[];
   pos?: string | string[];
 }
-
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const LINK_BTN =
-  'rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 // T-337 review fix — gridCapabilityGroups() has no per-request input (no actor, no store), so it
 // is the same value on every request; computed once at module load instead of once per request.
@@ -99,26 +95,17 @@ export default async function AccessDefaultsPage({
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId} className={INPUT}>
+          <Select name="store" defaultValue={storeId}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {positions.length === 0 ? (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -160,9 +147,9 @@ export default async function AccessDefaultsPage({
               <form key={p.id} action={sameForEveryStoreAction}>
                 <input type="hidden" name="storeId" value={storeId} />
                 <input type="hidden" name="positionId" value={p.id} />
-                <button type="submit" className={LINK_BTN}>
+                <Button type="submit" variant="secondary">
                   Apply {p.name} to every store
-                </button>
+                </Button>
               </form>
             ))}
           </div>
@@ -181,17 +168,17 @@ export default async function AccessDefaultsPage({
             <input type="hidden" name="storeId" value={storeId} />
             <label className="text-sm">
               <span className="block text-neutral-600 dark:text-neutral-400">From</span>
-              <select name="sourceStoreId" required className={INPUT}>
+              <Select name="sourceStoreId" required>
                 {otherStores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.code})
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
-            <button type="submit" className={LINK_BTN}>
+            <Button type="submit" variant="secondary">
               Copy
-            </button>
+            </Button>
           </form>
         </section>
       )}

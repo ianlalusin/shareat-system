@@ -8,19 +8,12 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input, statusLabel } from '@/components/ui';
 
 export const metadata = { title: 'Usage record — Shareat System' };
 export const dynamic = 'force-dynamic';
 
-const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN =
-  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
-const BTN_DANGER =
-  'rounded-md border border-red-300 px-4 py-2.5 text-sm text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950';
-
 const KIND_LABEL: Record<string, string> = { usage: 'Usage', wastage: 'Wastage', adjustment: 'Adjustment', opening: 'Opening' };
-const STATUS_LABEL: Record<string, string> = { draft: 'Draft', posted: 'Posted', void: 'Void' };
 
 function when(d: Date | null): string {
   return d ? new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '—';
@@ -54,21 +47,12 @@ export default async function UsageRecordPage({
           {KIND_LABEL[record.kind] ?? record.kind} — {locationName}
         </h1>
         <PageDescription className="mt-1">
-          {record.usedOn} · <strong>{STATUS_LABEL[record.status] ?? record.status}</strong>
+          {record.usedOn} · <strong>{statusLabel(record.status)}</strong>
           {record.reasonCode && <> · {wastageReasonLabel(record.reasonCode)}</>}
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
         <table className="w-full min-w-[480px] border-collapse text-sm">
@@ -113,9 +97,9 @@ export default async function UsageRecordPage({
               entry — nothing has moved until this.
             </p>
           </div>
-          <button type="submit" className={BTN}>
+          <Button type="submit" variant="primary">
             Post
-          </button>
+          </Button>
         </form>
       )}
 
@@ -123,9 +107,9 @@ export default async function UsageRecordPage({
         <form action={deleteUsageDraftAction} className="flex items-center gap-3">
           <input type="hidden" name="recordId" value={record.id} />
           <input type="hidden" name="storeId" value={record.storeId} />
-          <button type="submit" className={BTN_DANGER}>
+          <Button type="submit" variant="danger">
             Delete draft
-          </button>
+          </Button>
         </form>
       )}
 
@@ -158,11 +142,11 @@ export default async function UsageRecordPage({
           <input type="hidden" name="recordId" value={record.id} />
           <label className="flex min-w-0 grow flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
             Void — say why
-            <input name="reason" required placeholder="reason" className={`${INPUT} w-full`} />
+            <Input name="reason" required placeholder="reason" className="w-full" />
           </label>
-          <button type="submit" className={BTN_DANGER}>
+          <Button type="submit" variant="danger">
             Void
-          </button>
+          </Button>
           <span className="max-w-xs text-xs text-neutral-500 dark:text-neutral-400">
             Stock, the FIFO layers and the original journal entry are all reversed together.
           </span>

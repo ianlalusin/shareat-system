@@ -10,6 +10,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
+import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Transit discrepancies — Shareat System' };
@@ -73,26 +74,18 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
         that counted over, the section below lists it for you to recount and return.
       </PageDescription>
 
-      {sp.error && (
-        <div className="mt-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow className="mt-6">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select
-            name="store"
-            defaultValue={storeId}
-            className="mt-1 rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          >
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" name="all" value="1" defaultChecked={includeResolved} />
@@ -106,17 +99,17 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
         cost of sales, and every day opened on top of that makes it worse and harder to unpick.
       */}
       {blocking > 0 && (
-        <div className="mt-6 rounded-lg border border-amber-400 bg-amber-50 p-4 text-sm dark:border-amber-700 dark:bg-amber-950">
+        <Banner tone="warning">
           <strong>
             ⚠️ {blocking} unresolved discrepanc{blocking === 1 ? 'y' : 'ies'} — this store cannot open a
             new sales day
           </strong>
-          <p className="mt-1 text-neutral-700 dark:text-neutral-300">
+          <p className="mt-1">
             Deciding what happened lifts the block. ⛔ Choosing <em>Audit only</em> does not — it
             records that somebody looked and chose to wait, which is a decision to wait, not a
             resolution.
           </p>
-        </div>
+        </Banner>
       )}
 
       {rows.length === 0 ? (
@@ -145,7 +138,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                 </span>
               </div>
               {row.direction === 'over' && (
-                <p className="mt-1 text-sm font-medium text-amber-700 dark:text-amber-400">
+                <p className="mt-1 text-sm font-medium text-warning-ink">
                   Counted over — the branch counted more than was sent. The extra is on nobody&apos;s books until you
                   decide.
                 </p>
@@ -176,7 +169,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                         <select
                           name="disposition"
                           defaultValue="extra_dispatch"
-                          className="rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
+                          className="min-h-11 rounded-[10px] border border-field-border bg-field px-2 py-1 text-ink"
                         >
                           <option value="extra_dispatch">{discrepancyDispositionLabel('extra_dispatch')}</option>
                           <option value="return">{discrepancyDispositionLabel('return')} — note required</option>
@@ -187,7 +180,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                           <select
                             name="disposition"
                             defaultValue="loss"
-                            className="rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
+                            className="min-h-11 rounded-[10px] border border-field-border bg-field px-2 py-1 text-ink"
                           >
                             <option value="loss">Loss — Dr 5300</option>
                             <option value="charge">Charge a person — Dr 1230</option>
@@ -197,7 +190,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                           <select
                             name="chargePersonId"
                             defaultValue=""
-                            className="rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
+                            className="min-h-11 rounded-[10px] border border-field-border bg-field px-2 py-1 text-ink"
                           >
                             <option value="">(person, for a charge)</option>
                             {people.map((p) => (
@@ -209,17 +202,14 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                         </>
                       )}
                     </div>
-                    <input
+                    <Input
                       name="note"
                       placeholder="What happened?"
-                      className="w-full rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
+                      className="w-full"
                     />
-                    <button
-                      type="submit"
-                      className="rounded-md border border-neutral-300 px-3 py-1 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                    >
+                    <Button type="submit" variant="secondary">
                       Decide
-                    </button>
+                    </Button>
                   </form>
 
                   <form action={deferDiscrepancyAction} className="space-y-2 text-sm">
@@ -229,11 +219,11 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                       <span className="text-neutral-600 dark:text-neutral-400">
                         Or decide later — <strong>once</strong>
                       </span>
-                      <input
+                      <Input
                         type="date"
                         name="deferredTo"
                         defaultValue={today}
-                        className="mt-1 block rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
+                        className="mt-1 block"
                       />
                     </label>
                     {/* ⚠️ v1's rule, and the whole reason defer is safe to offer: a dispute cannot
@@ -241,12 +231,9 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                     <p className="text-xs text-neutral-500">
                       A second deferral is refused. On the date, it blocks again by itself.
                     </p>
-                    <button
-                      type="submit"
-                      className="rounded-md border border-neutral-300 px-3 py-1 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                    >
+                    <Button type="submit" variant="secondary">
                       Defer
-                    </button>
+                    </Button>
                   </form>
                 </div>
               )}
@@ -280,18 +267,15 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="resolvedOn" value={today} />
                   <input type="hidden" name="disposition" value="return" />
-                  <input
+                  <Input
                     name="note"
                     required
                     placeholder="Who carried it back and when, or that you recounted"
-                    className="w-full rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
+                    className="w-full"
                   />
-                  <button
-                    type="submit"
-                    className="rounded-md border border-neutral-300 px-3 py-1 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                  >
+                  <Button type="submit" variant="secondary">
                     Return
-                  </button>
+                  </Button>
                 </form>
               </article>
             ))}

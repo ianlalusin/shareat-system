@@ -5,6 +5,8 @@ import { floatBalance, listStores, moneyAccounts, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'Service charge — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -57,16 +59,7 @@ export default async function ServiceChargePage({
         </PageDescription>
       </div>
 
-      {sp.error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       {/* ── Store picker ─────────────────────────────────────────────────────────────── */}
       {stores.length > 1 && (
@@ -75,20 +68,15 @@ export default async function ServiceChargePage({
             <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
               Store
             </span>
-            <select name="store" defaultValue={storeId} className={INPUT}>
+            <Select name="store" defaultValue={storeId} className="w-full">
               {stores.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} ({s.code})
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
-          <button
-            type="submit"
-            className="rounded border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
-            Show
-          </button>
+          <Button type="submit">Show</Button>
         </form>
       )}
 
@@ -120,11 +108,11 @@ export default async function ServiceChargePage({
                 name="amount"
                 required
                 inputMode="decimal"
-                className={INPUT}
+                className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
               />
             </Field>
             <Field label="From" hint="Balances shown are derived from the ledger.">
-              <select name="moneyAccountId" required defaultValue="" className={INPUT}>
+              <Select name="moneyAccountId" required defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -133,26 +121,18 @@ export default async function ServiceChargePage({
                     {a.name} — {peso(a.balance)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Payday">
-              <input name="paidOn" type="date" required defaultValue={today()} className={INPUT} />
+              <Input name="paidOn" type="date" required defaultValue={today()} className="w-full" />
             </Field>
-            <button
-              type="submit"
-              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-            >
-              Distribute
-            </button>
+            <SubmitButton pendingLabel="Saving…">Distribute</SubmitButton>
           </form>
         )}
       </section>
     </Page>
   );
 }
-
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 function Field({
   label,

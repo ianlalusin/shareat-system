@@ -7,6 +7,7 @@ import { PosReconciliationCard } from '@/components/reports/PosReconciliationCar
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Banner, Button, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'POS Reconciliation — Shareat System' };
 
@@ -71,9 +72,9 @@ export default async function PosReconciliationPage({
 
       {/* DEF-604: a refused recheck comes back to this page; its sentence arrives in the flash. */}
       {sp.error && (
-        <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+        <Banner tone="error">
           <strong className="font-medium">Refused:</strong> {sp.error}
-        </div>
+        </Banner>
       )}
 
       <form
@@ -83,19 +84,19 @@ export default async function PosReconciliationPage({
       >
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Store</span>
-          <select name="store" defaultValue={storeId ?? ''} className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950">
+          <Select name="store" defaultValue={storeId ?? ''}>
             {storeRows.map((s) => (
               <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Date</span>
-          <input type="date" name="date" defaultValue={businessDate} className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950" />
+          <Input type="date" name="date" defaultValue={businessDate} />
         </label>
-        <button type="submit" className="rounded bg-neutral-900 px-4 py-1.5 font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300">
+        <Button type="submit" variant="primary">
           Apply
-        </button>
+        </Button>
       </form>
 
       {storeId && result ? (
@@ -112,12 +113,9 @@ export default async function PosReconciliationPage({
             <form action={recheckPosDayAction} className="text-sm">
               <input type="hidden" name="salesDayId" value={result.salesDayId} />
               <input type="hidden" name="returnTo" value={`/reports/pos-reconciliation?store=${storeId}&date=${businessDate}`} />
-              <button
-                type="submit"
-                className="inline-flex min-h-[44px] items-center rounded border border-neutral-300 px-4 py-1.5 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-              >
+              <Button type="submit" variant="secondary">
                 Check POS again
-              </button>
+              </Button>
             </form>
           )}
         </>

@@ -16,6 +16,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { itemCodeStem } from '@shareat/domain/item-code';
+import { Banner, Checkbox, Input } from '@/components/ui';
 
 export interface ItemCodeSuggestionView {
   stem: string | null;
@@ -34,7 +35,6 @@ export interface ItemCodeFieldProps {
 }
 
 const DEBOUNCE_MS = 300;
-const INPUT = 'rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
 const statusNote = (status: string): string => (status === 'active' ? '' : ` (${status === 'inactive' ? 'retired' : status})`);
 
@@ -124,44 +124,42 @@ export function ItemCodeField({ nameInputId, mode, canOverride, currentCode, ite
       )}
 
       {shown?.full && (
-        <p className="text-xs text-red-700 dark:text-red-400">
+        <p className="text-xs text-danger">
           Every number under {shown.stem} has been used (999 items). A super-admin can type a code with different letters.
         </p>
       )}
 
       {stem && sameStem.length > 0 && (
-        <p className="rounded bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-300">
+        <Banner tone="warning">
           Already coded {stem}: {sameStem.map((s) => `${s.code} ${s.name}${statusNote(s.status)}`).join(', ')}. Is this the same thing?
-        </p>
+        </Banner>
       )}
 
       {mode === 'new' && canOverride && (
         <label className="block">
           <span className="block text-xs font-medium text-neutral-500 dark:text-neutral-400">Use a different code (super-admin)</span>
-          <input
+          <Input
             name="code"
             type="text"
             autoComplete="off"
             pattern="[A-Za-z0-9]{4}-[0-9]{3}"
             placeholder={suggested ?? 'CHWN-001'}
-            className={`${INPUT} mt-1 block w-full font-mono`}
+            className="mt-1 block w-full font-mono"
           />
         </label>
       )}
 
       {mode === 'rename' && (
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="adoptSuggestedCode"
-            className="h-4 w-4"
-            onChange={(e) => setAdopt(e.target.checked)}
-          />
-          <span>
-            Use the suggested code for the new name{suggested ? `: ${suggested}` : ''}
-            {currentCode && suggested && suggested === currentCode ? ' (it keeps its code)' : ''}
-          </span>
-        </label>
+        <Checkbox
+          name="adoptSuggestedCode"
+          onChange={(e) => setAdopt(e.target.checked)}
+          label={
+            <span>
+              Use the suggested code for the new name{suggested ? `: ${suggested}` : ''}
+              {currentCode && suggested && suggested === currentCode ? ' (it keeps its code)' : ''}
+            </span>
+          }
+        />
       )}
     </div>
   );

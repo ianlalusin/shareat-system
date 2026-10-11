@@ -11,6 +11,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { Badge, Button, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Supplier returns — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -127,36 +128,23 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
         whether the receipt was invoiced — never a choice on this form.
       </PageDescription>
 
-      {sp.error && (
-        <div className="mt-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {sp.error}
-        </div>
-      )}
-      {sp.ok && (
-        <div className="mt-4 rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          {sp.ok}
-        </div>
-      )}
+      <FlashBanner flash={sp} />
 
       <FilterRow className="mt-6">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <select
-            name="store"
-            defaultValue={storeId}
-            className="mt-1 rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          >
+          <Select name="store" defaultValue={storeId} className="mt-1">
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.code})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </FilterRow>
 
       {credits.size > 0 && (
-        <section className="mt-8 rounded-lg border border-amber-400 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950">
+        <section className="mt-8 rounded-lg border border-warning-ink bg-warning-soft p-4">
           <h2 className="text-sm font-medium">Spendable supplier credit</h2>
           <ul className="mt-2 text-sm">
             {[...credits.entries()].map(([supplierId, balance]) => (
@@ -166,19 +154,10 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="supplierId" value={supplierId} />
                   <input type="hidden" name="moneyAccountId" value={moneyAccountId ?? ''} />
-                  <input
-                    name="amount"
-                    placeholder="refund amount"
-                    inputMode="decimal"
-                    className="min-w-0 flex-1 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!moneyAccountId}
-                    className="rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                  >
+                  <Input name="amount" placeholder="refund amount" inputMode="decimal" className="min-w-0 flex-1" />
+                  <Button type="submit" variant="secondary" disabled={!moneyAccountId}>
                     Refund
-                  </button>
+                  </Button>
                 </form>
               </li>
             ))}
@@ -222,26 +201,11 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
                     <input type="hidden" name="itemId" value={l.item_id} />
                     <input type="hidden" name="itemKind" value={l.item_kind} />
                     <input type="hidden" name="locationId" value={l.location_id ?? ''} />
-                    <input
-                      name="quantity"
-                      placeholder={`up to ${l.returnable}`}
-                      inputMode="decimal"
-                      required
-                      className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-xs tabular-nums dark:border-neutral-700 dark:bg-neutral-900"
-                    />
-                    <input
-                      name="reason"
-                      placeholder="reason"
-                      required
-                      className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!l.location_id}
-                      className="rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                    >
+                    <Input name="quantity" placeholder={`up to ${l.returnable}`} inputMode="decimal" required className="w-24 tabular-nums" />
+                    <Input name="reason" placeholder="reason" required className="w-32" />
+                    <Button type="submit" variant="secondary" disabled={!l.location_id}>
                       Return
-                    </button>
+                    </Button>
                   </form>
                 </td>
               </tr>
@@ -270,21 +234,18 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
                 <td className="py-2 pr-4">{r.returnedOn}</td>
                 <td className="py-2 pr-4">{supplierName.get(r.supplierId) ?? r.supplierId}</td>
                 <td className="py-2 pr-4">{r.creditBasis}</td>
-                <td className="py-2 pr-4">{r.status}</td>
+                <td className="py-2 pr-4">
+                  <Badge status={r.status} />
+                </td>
                 <td className="py-2">
                   {r.status === 'posted' && (
                     <form action={voidReturnAction} className="flex items-center gap-1">
                       <input type="hidden" name="returnId" value={r.id} />
                       <input type="hidden" name="store" value={storeId} />
-                      <input
-                        name="reason"
-                        placeholder="void reason"
-                        required
-                        className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-                      />
-                      <button type="submit" className="rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900">
+                      <Input name="reason" placeholder="void reason" required className="w-28" />
+                      <Button type="submit" variant="danger">
                         Void
-                      </button>
+                      </Button>
                     </form>
                   )}
                 </td>
