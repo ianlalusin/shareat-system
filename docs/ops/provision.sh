@@ -193,6 +193,7 @@ if [ -L /srv/shareat ] && [ -s /srv/shareat-shared/.env.local ]; then
     [ -e "$f" ] || continue
     # T-393: backups are NOT switched on (Ian, bible row 306); see docs/ops/README.md "Switching backups on".
     [ "$(basename "$f")" = shareat-db-backup.timer ] && continue
+    [ "$(basename "$f")" = shareat-restore-drill.timer ] && continue
     echo "      systemctl enable --now $(basename "$f")"
   done
   echo "    Then verify each is actually armed — 'systemctl list-timers' — per docs/ops/README.md."

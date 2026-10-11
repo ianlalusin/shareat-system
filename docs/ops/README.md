@@ -250,7 +250,8 @@ Spec: `docs/tasks/393-nightly-backup-and-restore.md`. Ian, 2026-10-10: *no backu
 - **Env** in `/srv/shareat-shared/.env.local` (`.env.example` has the block): `SPACES_ENDPOINT`, `SPACES_REGION`, `SPACES_BUCKET=shareat-pg-backups`, `SPACES_KEY`, `SPACES_SECRET`, `BACKUP_HEARTBEAT_URL`. The source is `SYSTEM_DATABASE_URL`, which must be on the **direct** port 25060 (25061, the pooler, is refused). The bucket must be the dedicated one: `shareat-erp-backups` (Frappe) is refused by name.
 - **Prove the key first, writing nothing:** `npm run db-backup -- --store=spaces --dry-run` lists `postgres/`.
 - **First run:** `sudo systemctl start shareat-db-backup.service`, then read `/var/log/shareat/db-backup.log`. Check the object is under `postgres/daily/` in the DO panel and that the heartbeat shows green. Record the dump size and duration for T-394's runbook.
-- Every arm-all loop in this file and in `provision.sh` **skips `shareat-db-backup.timer` explicitly**. Nothing arms backups by accident.
+- **The weekly restore drill** (`shareat-restore-drill.{service,timer}`, Sunday 05:30 Manila) is installed the same way and armed separately. Extra env: `RESTORE_DRILL_DATABASE_URL` (a `CREATEDB` role on the direct port 25060, database `shareat_restore_drill`), `RESTORE_DRILL_MAINTENANCE_DB` (default `defaultdb`), `DRILL_HEARTBEAT_URL` (8-day grace). It refuses any target not named `shareat_restore_drill`, and never connects to the production database. Local smoke: `npm run restore-drill -- --store=fs:<dir>`.
+- Every arm-all loop in this file and in `provision.sh` **skips `shareat-db-backup.timer` and `shareat-restore-drill.timer` explicitly**. Nothing arms backups by accident.
 
 ### Switching backups on (only when Ian says so)
 
@@ -260,9 +261,25 @@ Do this only after the env above is in `.env.local`, `--dry-run` listed `postgre
 sudo systemctl start shareat-db-backup.service        # one manual run first; read /var/log/shareat/db-backup.log
 sudo systemctl enable --now shareat-db-backup.timer   # --now is not optional
 systemctl is-enabled shareat-db-backup.timer && systemctl is-active shareat-db-backup.timer   # never list-timers (DEF-332)
+
+sudo systemctl start shareat-restore-drill.service    # one manual drill first; it needs a complete dump in Spaces
+sudo systemctl enable --now shareat-restore-drill.timer
+systemctl is-enabled shareat-restore-drill.timer && systemctl is-active shareat-restore-drill.timer
 ```
 
 - **Where to look:** `/var/log/shareat/db-backup.log`; the dead-man's switch (alerts when no success arrives in 26 hours, so it also catches a timer nobody armed); `postgres/daily/<Manila date>/` holds `.dump`, `.roles.sql` and `.manifest.json` per night. Retention runs in the script, never as a bucket lifecycle rule.
+
+### Restoring for real
+
+**Never restore over the live database:** never into the database `SYSTEM_DATABASE_URL` points at, never with `--clean`. Restore into a NEW empty database (or cluster), check it, then switch the env.
+
+1. Pick the newest dump that has a `.manifest.json` beside it under `postgres/daily/` (no manifest means an unfinished upload). Download both, plus the `.roles.sql`.
+2. Check the file: `sha256sum <stem>.dump` must equal the manifest's `sha256`. Create the new database empty.
+3. Replay the roles first: `psql -f <stem>.roles.sql` (it carries no passwords), then set each role's password by hand.
+4. `pg_restore --no-owner --exit-on-error --single-transaction --dbname=<new db> <stem>.dump`. Do **not** pass `--no-acl`: a real restore needs the dump's grants. (The drill passes it because its scratch cluster lacks the roles.)
+5. Re-run the grants and default privileges for `shareat_app_prod` (T-355), then confirm with `psql -c '\ddp'`.
+6. Fingerprint compare, as `doadmin` (it sees every row): the manifest's `fingerprint.trialBalance` must equal `select org_id, account_id, sum(debit_total), sum(credit_total), sum(net_balance) from v_trial_balance group by 1,2` on the new database, exactly. An empty result is a failure.
+7. Only then point `DATABASE_URL` and `SYSTEM_DATABASE_URL` at the new database and restart `shareat-erp`; `npm run restore-drill` verifies the next dump the same way. History guards survive a full restore (T-354, below).
 
 ## Restores and replica mode (T-354)
 
@@ -410,6 +427,7 @@ domain argument to also set up Caddy + automatic TLS on 80/443 (no traefik confl
 | **Budget reissue (T-215 / DEF-303)** | `npm run budget-reissue` | **Daily, 03:30 Manila** | Runs after orphan-file-sweep (03:00) so the two don't contend. ⛔ Registered in `SCHEDULER_JOBS` and reachable by its npm script since T-215, but had no `.service`/`.timer` pair at all until this task — the DEF-186 shape a fifth time, found the day after DEF-299 |
 | **Fiscal-period coverage (T-276 / DEF-305)** | `npm run fiscal-period-seed` | **Monthly, 1st, 04:00 Manila** | Coverage moves in whole calendar months, so a finer cadence buys nothing over the 12-month slack every org already carries. Runs at 04:00, after budget-reissue's own 03:30 slot, so the two don't contend. Keeps every org's fiscal-period coverage 12 months ahead of its current Manila business month, and backfills (option (c)) any month that already elapsed with none — created `open`, never closed retroactively — so a gap surfaces here instead of `postEntry` refusing the next post into it ⏰ Timer armed 2026-10-04 (it was NOT installed; provision.sh re-run, `systemctl enable --now shareat-fiscal-period-seed.timer`). First run seeded SHAREAT OPC 2026-10..2027-09 (12 inserted; the org had no periods at all, so the job exits 1 by design on that gap). Next run 1 Nov 04:00 Manila. No periods exist before Oct 2026 (DEF-585). |
 | **Database backup (T-393)** | `npm run db-backup -- --production` | **Daily, 04:30 Manila** | After every other nightly job, so the dump includes their output. A platform job, not a `SCHEDULER_JOBS` entry (`scheduler_runs.org_id` is `NOT NULL`, a whole-database dump has no org). See *Backups (T-393)* below for the install and the separate switching-on step. |
+| **Restore drill (T-393)** | `npm run restore-drill -- --production` | **Weekly, Sunday 05:30 Manila** | An hour after that night's backup. Restores the newest complete dump into a scratch database and compares the trial balance with the manifest. A platform job, not a `SCHEDULER_JOBS` entry. Not switched on; see *Switching backups on*. |
 
 ⛔⛔ **WHICH UNITS ARE ARMED IS NOT RECORDED HERE, DELIBERATELY — IT IS A FACT THAT MOVES.**
 This paragraph used to name four jobs as *"NOT YET ARMED"*. **That claim went stale and then
@@ -638,6 +656,7 @@ sudo systemctl enable --now shareat-erp.service
 for f in /etc/systemd/system/shareat-*.timer; do
   # T-393: backups are NOT switched on (Ian, bible row 306). See "Switching backups on".
   [ "$(basename "$f")" = shareat-db-backup.timer ] && continue
+  [ "$(basename "$f")" = shareat-restore-drill.timer ] && continue
   sudo systemctl enable --now "$(basename "$f")"
 done
 ```
@@ -656,6 +675,7 @@ systemctl list-timers 'shareat-*'
 for f in /etc/systemd/system/shareat-*.timer; do
   u="$(basename "$f" .timer)"
   [ "$u" = shareat-db-backup ] && continue   # T-393: not switched on
+  [ "$u" = shareat-restore-drill ] && continue   # T-393 S2: not switched on
   # ⚠️ shareat-month-end-retry.timer deliberately has no service of its own — it points at
   # shareat-month-end.service via Unit=. Skip any timer with no matching service file.
   [ -e "/etc/systemd/system/$u.service" ] && sudo systemctl start "$u.service"
@@ -747,6 +767,7 @@ ssh root@159.223.46.224 'bash /root/shareat-ops/provision.sh'
 #     table at the top of this file.
 ssh root@159.223.46.224 'for f in /etc/systemd/system/shareat-*.timer; do \
   [ "$(basename "$f")" = shareat-db-backup.timer ] && continue; \
+  [ "$(basename "$f")" = shareat-restore-drill.timer ] && continue; \
   systemctl enable --now "$(basename "$f")"; done'
 
 # 4 — ⛔ THE STEP THAT HAS HISTORICALLY NEVER BEEN DONE. NEXT and LEFT must be populated for EVERY
