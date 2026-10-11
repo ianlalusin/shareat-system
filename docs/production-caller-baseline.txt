@@ -119,6 +119,7 @@ upsertCategoryLife
 upsertPolicy
 validateFingerprintTemplates
 valueOpeningAsset
+valueOpeningStock
 voidShift
 weekStartOf
 withPrincipal

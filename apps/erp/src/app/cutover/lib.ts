@@ -6,7 +6,7 @@
  */
 import { sql as dsql } from 'drizzle-orm';
 import { cutoverRepo, itemsRepo } from '@shareat/db';
-import { cutoverProgress, openingGaps, type CutoverProgress, type OpeningGaps } from '@shareat/domain';
+import { countedStockValue, cutoverProgress, openingGaps, type CutoverProgress, type OpeningGaps } from '@shareat/domain';
 import type { OpeningDraft } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
 
@@ -69,7 +69,7 @@ export async function loadCountSheet(orgId: string, storeId: string): Promise<Co
 }
 
 export async function countedValueFor(orgId: string, storeId: string): Promise<string> {
-  return withOrgPrincipal(orgId, (tx) => cutoverRepo.countedValue(tx, orgId, storeId));
+  return withOrgPrincipal(orgId, (tx) => countedStockValue(tx, orgId, storeId));
 }
 
 export const PHASE_TITLE: Record<string, string> = {
