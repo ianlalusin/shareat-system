@@ -272,9 +272,6 @@
     "app/staff/hire/page.tsx": [
       20
     ],
-    "app/staff/page.tsx": [
-      20
-    ],
     "app/staff/[employmentId]/page.tsx": [
       20,
       20,
@@ -394,9 +391,6 @@
     ],
     "components/ClosedMonthOverride.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
-    "components/dashboard/Tile.tsx": [
-      "className could not be resolved statically (dynamic expression outside the known shapes)"
     ],
     "components/reports/AccountDrillLink.tsx": [
       "ancestry truncated — no font size resolvable"

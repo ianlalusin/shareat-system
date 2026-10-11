@@ -22,3 +22,5 @@ export * from './credentials';
 // it imports `@shareat/domain/attendance/fingerprint`, the DB-free leaf, because this barrel
 // re-exports modules that pull `@shareat/db` behind them (T-266). The leaf's own header says so.
 export * from './fingerprint';
+// T-387 S7 - the live roster state (gated like attendanceRoster).
+export * from './today-state';

@@ -13,7 +13,7 @@ import {
 } from './lib';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
-import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Button, FlashBanner, FormGrid, Input, Select, statusTone } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -140,7 +140,7 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
                       {o.commissaryName} → {o.branchName ?? '—'}
                     </td>
                     <td className="px-3 py-2">
-                      {BRANCH_ORDER_STAGE_LABEL[stage]}
+                      <Badge tone={statusTone(stage)} label={BRANCH_ORDER_STAGE_LABEL[stage]} />
                       {o.pendingCount > 0 && (
                         <span className="ml-2 rounded bg-warning-soft px-1.5 py-0.5 text-xs text-warning-ink">
                           {o.pendingCount} awaiting the branch

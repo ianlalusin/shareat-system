@@ -8,7 +8,19 @@ import { orderDetail, peso, today } from '../lib';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Button, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
+import {
+  Button,
+  FlashBanner,
+  Input,
+  Select,
+  StatusHero,
+  exitStepFromTimestamps,
+  simpleStepIndexFor,
+  statusLabel,
+  tradeOrderSteps,
+  type StatusIconKind,
+  type Tone,
+} from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Trade order — Shareat System' };
@@ -22,6 +34,15 @@ const REASON_LABEL: Record<string, string> = {
   quality_reject: 'Quality reject',
   count_correction: 'Count correction',
   other: 'Other',
+};
+
+/** Trade-order statuses -> hero. `void` is the exit (danger). No `submitted` step: there is no submittedAt (L10). */
+const TRADE_HERO: Record<string, { kind: StatusIconKind; tone: Tone }> = {
+  draft: { kind: 'draft', tone: 'info' },
+  confirmed: { kind: 'ready', tone: 'success' },
+  dispatched: { kind: 'dispatched', tone: 'progress' },
+  received: { kind: 'received', tone: 'success' },
+  void: { kind: 'void', tone: 'danger' },
 };
 
 function when(d: Date | null): string {
@@ -51,6 +72,26 @@ export default async function TradeOrderPage({
   const canVoid = order.status !== 'void' && !(order.status === 'received' && isInternal);
   // T-371 C4 — stored figures re-minted and summed/compared in scaled bigint, never as floats.
   const goods = add(...lines.map((l) => money(l.lineTotal)));
+  const hero = TRADE_HERO[order.status];
+  if (!hero) throw new Error(`TradeOrderPage: no hero for status ${order.status}`);
+  const heroStep =
+    order.status === 'void'
+      ? exitStepFromTimestamps('trade', { dispatchedAt: order.dispatchedAt, receivedAt: order.receivedAt }, simpleStepIndexFor('trade', 'void'))
+      : simpleStepIndexFor('trade', order.status);
+  const heroLine = (() => {
+    switch (order.status) {
+      case 'draft':
+        return 'Check the lines, then dispatch the order.';
+      case 'confirmed':
+        return 'Confirmed. Dispatch the order when the goods leave.';
+      case 'dispatched':
+        return isInternal ? 'On its way. The receiving store signs for what landed.' : 'Dispatched. Record who signed for the goods.';
+      case 'received':
+        return 'Received. This order is complete.';
+      default:
+        return 'This order was voided. The posting, if any, was reversed.';
+    }
+  })();
   const fees = add(money(order.deliveryFee), money(order.otherFees));
 
   return (
@@ -63,7 +104,7 @@ export default async function TradeOrderPage({
           {sellingStore?.name ?? '—'} → {isInternal ? (receivingStore?.name ?? '—') : customer.name}
         </h1>
         <PageDescription className="mt-1">
-          {order.orderDate} · <strong>{statusLabel(order.status)}</strong> · {peso(order.totalAmount)}
+          {order.orderDate} · {peso(order.totalAmount)}
           {order.referenceNo && <> · ref {order.referenceNo}</>}
         </PageDescription>
         <p className={`mt-1 text-xs ${TREATMENT_TONE[treatment] ?? ''}`}>
@@ -73,12 +114,37 @@ export default async function TradeOrderPage({
 
       <FlashBanner flash={sp} />
 
+      <StatusHero kind={hero.kind} word={statusLabel(order.status)} step={heroStep} steps={tradeOrderSteps} line={heroLine} tone={hero.tone}>
+        {canDispatch && (
+          <form
+            action={dispatchOrderAction}
+            className="flex flex-wrap items-end gap-3"
+          >
+            <input type="hidden" name="orderId" value={order.id} />
+            {!isInternal && customer.creditLimit !== null && (
+              <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                Reason to exceed the {peso(customer.creditLimit)} limit (only if it does)
+                <Input name="creditOverrideReason" placeholder="say why, on the record" className="w-full" />
+              </label>
+            )}
+            <Button type="submit" variant="primary">
+              Dispatch
+            </Button>
+          </form>
+        )}
+        {canReceive && (
+          <Button type="submit" form="receive-trade-order-form" variant="primary">
+            Receive
+          </Button>
+        )}
+      </StatusHero>
+
       {/*
         ⭐ For a DISPATCHED internal transfer this table is also the receive form: what the branch
         signed for, per line. THREE quantities (T-172) — ordered, packed, signed for — and the gap
         between the last two becomes a transit discrepancy (T-174) the commissary must dispose of.
       */}
-      <form action={receiveOrderAction} className="space-y-4">
+      <form id="receive-trade-order-form" action={receiveOrderAction} className="space-y-4">
         <input type="hidden" name="orderId" value={order.id} />
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table className="w-full min-w-[640px] border-collapse text-sm">
@@ -176,9 +242,6 @@ export default async function TradeOrderPage({
               Received on
               <Input name="receivedOn" type="date" defaultValue={today()} />
             </label>
-            <Button type="submit" variant="primary">
-              Receive
-            </Button>
           </div>
         )}
       </form>
@@ -190,29 +253,14 @@ export default async function TradeOrderPage({
       )}
 
       {canDispatch && (
-        <form
-          action={dispatchOrderAction}
-          className="flex flex-wrap items-end gap-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
-        >
-          <input type="hidden" name="orderId" value={order.id} />
-          <div className="grow">
-            <h2 className="font-medium">Dispatch</h2>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              {isInternal
-                ? 'The goods leave the commissary: its stock is relieved into in-transit (1340) at real FIFO cost. No revenue, no receivable — a branch is not a customer of its own company.'
-                : 'The billing event: the receivable is raised against the customer, wholesale revenue is recognised, and stock is relieved with cost of sales — one act, idempotent.'}
-            </p>
-          </div>
-          {!isInternal && customer.creditLimit !== null && (
-            <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-              Reason to exceed the {peso(customer.creditLimit)} limit (only if it does)
-              <Input name="creditOverrideReason" placeholder="say why, on the record" className="w-full" />
-            </label>
-          )}
-          <Button type="submit" variant="primary">
-            Dispatch
-          </Button>
-        </form>
+        <div className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">Dispatch</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            {isInternal
+              ? 'The goods leave the commissary: its stock is relieved into in-transit (1340) at real FIFO cost. No revenue, no receivable — a branch is not a customer of its own company.'
+              : 'The billing event: the receivable is raised against the customer, wholesale revenue is recognised, and stock is relieved with cost of sales — one act, idempotent.'}
+          </p>
+        </div>
       )}
 
       {(order.status === 'dispatched' || order.status === 'received' || order.status === 'void') && (
