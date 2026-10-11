@@ -151,7 +151,7 @@ const rename: FormCase<ItemCtx> = {
   }],
   siblings: async (ctx): Promise<Sib[]> => [
     { label: 'the unit form', sel: { action: 'changeItemUnitAction', hidden: { itemId: ctx.itemId } }, has: [`name="itemId" value="${ctx.itemId}"`, 'name="baseUnit"'] },
-    { label: 'the org flags form', sel: { action: 'updateItemFlagsAction', hidden: { itemId: ctx.itemId } }, has: [`name="itemId" value="${ctx.itemId}"`, 'type="checkbox" name="isPurchasable"'] },
+    { label: 'the org flags form', sel: { action: 'updateItemFlagsAction', hidden: { itemId: ctx.itemId } }, has: [`name="itemId" value="${ctx.itemId}"`, 'type="checkbox"', 'name="isPurchasable"'] },
   ],
 };
 runTypedLegs(rename);
@@ -195,7 +195,7 @@ const flags: FormCase<ItemCtx> = {
   page,
   props,
   sel: (ctx) => ({ action: 'updateItemFlagsAction', hidden: { itemId: ctx.itemId } }),
-  has: (ctx) => [`name="itemId" value="${ctx.itemId}"`, 'type="checkbox" name="isPurchasable"'],
+  has: (ctx) => [`name="itemId" value="${ctx.itemId}"`, 'type="checkbox"', 'name="isPurchasable"'],
   hiddenNames: ['itemId'],
   // stored: bought yes, retail no, wholesale no. Typed: purchasable UNticked, retail and wholesale ticked.
   refused: (ctx, over = {}) => fdOf({ itemId: ctx.itemId, sellableRetail: 'on', sellableWholesale: 'on' }, over),
@@ -215,7 +215,7 @@ const flags: FormCase<ItemCtx> = {
   around: revoke,
   note: 'QUESTION P: permission refusal (role revoked for the Save)',
   siblings: async (ctx): Promise<Sib[]> => [
-    { label: 'the store override form', sel: { action: 'setStoreSellabilityAction', hidden: { itemId: ctx.itemId, storeId: ctx.storeId } }, has: [`name="storeId" value="${ctx.storeId}"`, '<select name="isPurchasable"'] },
+    { label: 'the store override form', sel: { action: 'setStoreSellabilityAction', hidden: { itemId: ctx.itemId, storeId: ctx.storeId } }, has: [`name="storeId" value="${ctx.storeId}"`, '<select', 'name="isPurchasable"'] },
     { label: 'the rename form', sel: { action: 'renameItemAction', hidden: { itemId: ctx.itemId } }, has: [`name="itemId" value="${ctx.itemId}"`, 'id="rename-name"'] },
   ],
 };
@@ -233,7 +233,7 @@ const sellability: FormCase<ItemCtx> = {
   page,
   props,
   sel: (ctx) => ({ action: 'setStoreSellabilityAction', hidden: { itemId: ctx.itemId, storeId: ctx.storeId } }),
-  has: (ctx) => [`name="storeId" value="${ctx.storeId}"`, '<select name="isPurchasable"'],
+  has: (ctx) => [`name="storeId" value="${ctx.storeId}"`, '<select', 'name="isPurchasable"'],
   hiddenNames: ['itemId', 'storeId'],
   refused: (ctx, over = {}) =>
     fdOf({ itemId: ctx.itemId, storeId: ctx.storeId, isPurchasable: 'yes', sellableRetail: 'no', sellableWholesale: '', note: 'typed note' }, over),
@@ -253,8 +253,8 @@ const sellability: FormCase<ItemCtx> = {
   around: revoke,
   note: 'QUESTION P: permission refusal (role revoked for the Save)',
   siblings: async (ctx): Promise<Sib[]> => [
-    { label: 'the other store override', sel: { action: 'setStoreSellabilityAction', hidden: { itemId: ctx.itemId, storeId: ctx.storeB } }, has: [`name="storeId" value="${ctx.storeB}"`, '<select name="isPurchasable"'] },
-    { label: 'the org flags form', sel: { action: 'updateItemFlagsAction', hidden: { itemId: ctx.itemId } }, has: [`name="itemId" value="${ctx.itemId}"`, 'type="checkbox" name="isPurchasable"'] },
+    { label: 'the other store override', sel: { action: 'setStoreSellabilityAction', hidden: { itemId: ctx.itemId, storeId: ctx.storeB } }, has: [`name="storeId" value="${ctx.storeB}"`, '<select', 'name="isPurchasable"'] },
+    { label: 'the org flags form', sel: { action: 'updateItemFlagsAction', hidden: { itemId: ctx.itemId } }, has: [`name="itemId" value="${ctx.itemId}"`, 'type="checkbox"', 'name="isPurchasable"'] },
   ],
 };
 runTypedLegs(sellability);
