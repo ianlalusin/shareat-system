@@ -306,10 +306,14 @@ export interface ApplyPurgeOptions {
    *  stopping one layer earlier at the preflight. Never set outside a test. */
   skipPreflightForTest?: boolean;
   /**
-   * T-390 R8: the person who ran the purge. The purge records step C2 as `performed` by this person, once per organization, inside
-   * its own transaction (so a rehearsal's rollback takes the row with it). Required: nothing opening-related works without it.
+   * T-390 R8 / DEF-640: the person who performed the purge, PER ORGANIZATION (orgId -> personId). The purge records step C2 as
+   * `performed` once per organization, each by its OWN org's person (migration 0194's same-org FK refuses any other), inside its own
+   * transaction (so a rehearsal's rollback takes the row with it). An apply refuses, before any write, if an organization has no
+   * entry here or if an entry is not a person of that organization.
    */
-  performedBy: string;
+  performedBy: Readonly<Record<string, string>>;
+  /** A rehearsal rolls back, so an organization with no performer is skipped (no C2 row) instead of refused. */
+  rehearsal?: boolean;
 }
 
 /**
@@ -334,6 +338,40 @@ export async function applyPurge(tx: Tx, plan: PurgePlan, opts: ApplyPurgeOption
     }
   }
   await tx.unsafe('set local row_security = off');
+
+  // Step 0b (DEF-640) — one performer per organization, validated BEFORE any write. A person must belong to the org it performs for.
+  const orgIds = (await tx<{ id: string }[]>`select id from organizations order by id`).map((r) => r.id);
+  const suppliedIds = [...new Set(Object.values(opts.performedBy))];
+  const personOrg = new Map<string, string>();
+  if (suppliedIds.length > 0) {
+    for (const r of await tx<{ id: string; org_id: string }[]>`
+      select id, org_id from persons where id::text = any(${suppliedIds}::text[])`) {
+      personOrg.set(r.id, r.org_id);
+    }
+  }
+  const performerProblems: string[] = [];
+  const noPerformer: string[] = [];
+  const c2Orgs: string[] = [];
+  for (const orgId of orgIds) {
+    const pid = opts.performedBy[orgId];
+    if (!pid) {
+      if (!opts.rehearsal) noPerformer.push(orgId);
+      continue;
+    }
+    const owner = personOrg.get(pid);
+    if (!owner) performerProblems.push(`person ${pid} (for organization ${orgId}) does not exist`);
+    else if (owner !== orgId) performerProblems.push(`person ${pid} belongs to organization ${owner}, not ${orgId}`);
+    else c2Orgs.push(orgId);
+  }
+  for (const orgId of Object.keys(opts.performedBy)) {
+    if (!orgIds.includes(orgId)) performerProblems.push(`performer given for unknown organization ${orgId}`);
+  }
+  if (noPerformer.length > 0 || performerProblems.length > 0) {
+    const msg =
+      (noPerformer.length > 0 ? `no performer for organization(s): ${noPerformer.join(', ')}. ` : '') +
+      performerProblems.join('; ');
+    throw refuse(`cutover purge: C2 performer refused - ${msg}`, `REFUSED. Nothing was changed. Step C2 needs one performer per organization: ${msg}`);
+  }
 
   // Step 1 — every kept-child → purged-parent FK must already be cleared, or refuse before writing.
   // Every column of the constraint must be cleared (almost always exactly one, in this schema).
@@ -463,11 +501,12 @@ export async function applyPurge(tx: Tx, plan: PurgePlan, opts: ApplyPurgeOption
   for (const n of plan.purgeRowsNow.values()) purgedRows += n;
   const tables = plan.purgeOrder.length;
   const note = `Purged ${purgedRows} row${purgedRows === 1 ? '' : 's'} from ${tables} table${tables === 1 ? '' : 's'} as of ${plan.asOf}`;
-  await tx`
-    insert into cutover_steps (org_id, store_id, step_code, completion, note, completed_by)
-    select o.id, null, 'C2', 'performed', ${note}, ${opts.performedBy}
-    from organizations o
-    on conflict (org_id, step_code, coalesce(store_id, '00000000-0000-0000-0000-000000000000'::uuid))
-    do update set completion = excluded.completion, note = excluded.note,
-                  completed_by = excluded.completed_by, completed_at = now()`;
+  for (const orgId of c2Orgs) {
+    await tx`
+      insert into cutover_steps (org_id, store_id, step_code, completion, note, completed_by)
+      values (${orgId}, null, 'C2', 'performed', ${note}, ${opts.performedBy[orgId]!})
+      on conflict (org_id, step_code, coalesce(store_id, '00000000-0000-0000-0000-000000000000'::uuid))
+      do update set completion = excluded.completion, note = excluded.note,
+                    completed_by = excluded.completed_by, completed_at = now()`;
+  }
 }

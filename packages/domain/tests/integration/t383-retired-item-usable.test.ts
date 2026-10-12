@@ -914,9 +914,19 @@ describe('L1 - listUsableItems: active, plus retired items with stock ABOVE zero
     const otherItem = await mkItem(other, 'L1 Other org retired');
     // An ACTIVE item of the other org needs no stock to be offered, so only the org filter keeps it out (the movement org filter cannot).
     const otherActive = await mkItem(other, 'L1 Other org active');
-    // The OTHER org's item holds +9 at THIS org's store (w.A), so the store filter cannot exclude it: only the org filter can.
+    // Migration 0194 (T-398 S1): the other org's item can no longer hold stock at THIS org's store (w.A), because
+    // stock_movements (org_id, store_id) is a same-org composite FK. That fixture is impossible by construction, so the leg now asserts
+    // the DB refuses it (23503 naming the constraint). The org filter is still proven by the ACTIVE other-org item above (it needs no
+    // stock, so only items.org_id can exclude it), and the other org's retired item holds +9 at its OWN store.
+    const crossOrg = await sql`insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
+      values (${other.orgId}, ${w.A}, ${w.kitchenA}, ${otherItem}, now(), 9, 'opening', 'test_seed', ${crypto.randomUUID()}, ${other.su.personId})`.then(
+      () => null,
+      (e: { code?: string; constraint_name?: string }) => e,
+    );
+    expect(crossOrg?.code, 'a cross-org stock movement is refused by the DB').toBe('23503');
+    expect(crossOrg?.constraint_name).toBe('stock_movements_store_id_same_org_fk');
     await sql`insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
-      values (${other.orgId}, ${w.A}, ${w.kitchenA}, ${otherItem}, now(), 9, 'opening', 'test_seed', ${crypto.randomUUID()}, ${other.su.personId})`;
+      values (${other.orgId}, ${other.A}, ${other.kitchenA}, ${otherItem}, now(), 9, 'opening', 'test_seed', ${crypto.randomUUID()}, ${other.su.personId})`;
     await retire(other, otherItem);
 
     const idsAt = async (storeId: string) => (await asOrg(w.orgId, (tx) => listUsableItems(tx, w.orgId, storeId))).map((r) => r.id);
