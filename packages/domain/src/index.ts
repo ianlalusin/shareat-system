@@ -127,3 +127,4 @@ export * from './organizations';
 // row 180). ⚠️ Separate from `stores/service` on purpose: that module is `manage_stores`
 // (admin-only), this one is `manage_store_settings` (manager ✅).
 export * from './sales-channels';
+export * from './dual-run';
