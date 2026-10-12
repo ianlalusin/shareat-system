@@ -366,3 +366,15 @@ Money columns, `v1_counter` and `opening_gap` included, are `numeric(14,2)`.
 - **inventory_basis codes:** 1310, 1320, 1330, 1340, 5100, 5110–5170, 5175, 5200, 5300, 5400, 5450. 2120 (GRNI) is **excluded**: with it, a receipt would net to 0. **expense_category** covers lines on `expense_categories.account_code` minus that list, only from entries whose reversal-chain root is `source_type 'expense_payment'`. Lines from any other source on those codes (depreciation, amortisation, payroll, drawings, disposals, prepaid write-offs) are outside the tie set and are not emitted. A guard test checks that every COGS-group category code is in the list.
 - **A correction** is one of: an entry with `reversal_of_entry_id`; a POS correction (`sales_day_pos_corrections.id = source_id`); a later entry from a source that already has an earlier entry of any status, ordered by (entry_date, id). **datedLater** holds corrections with no posted original. The earliest entry of its source is never a correction.
 - **dual_run_lines.org_id** is NOT NULL, with a composite FK `(org_id, report_id)` → reports `(org_id, id)`, and **no trigger**. The repo copies org_id from the report (`INSERT … SELECT r.org_id …`). A report id from another org inserts nothing and raises.
+
+## S4 rulings (orchestrator, at S4 RED, 2026-10-12)
+The tester's pins stand:
+- A compare run is authorized by **`run_cutover`** (org-scoped; the dual run is a cutover activity), checked before the lock or any write.
+- Every apply run writes one audit row (`dual_run.compare`), including a run where every week is `unchanged`.
+- The snapshot file's mode/owner check is POSIX-only by default; an injected `stat` is always enforced.
+- A snapshot spanning several weeks gives one report per Monday-week, with `through` = min(Sunday, snapshot.through).
+- R13's "posted sales day" means `sales_days.status = 'verified'`.
+- The `ap_supplier` `line_key` is the v2 supplier UUID, or `v1:ap__<id>` when unmapped.
+- `extract` runs with no v2 catalogue (`v2?`, empty by default).
+- "Older extract" is strict: an equal `extractedAt` is allowed.
+- `no_data` means no data on either side.
