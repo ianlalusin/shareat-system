@@ -381,3 +381,20 @@ The tester's pins stand:
 - *(orchestrator, at S4 READY)* A store-week with 0 compared days is `open` (S2's pinned coordinator ruling), or `no_data` when there is no data on either side; it is never `explained` by default.
 - **Gap, its own slice S4b:** document-level matching (R9) is not wired. `runDualRun` passes empty `v1Docs`/`v2Docs`, because S3's repo has no v2 document reader, so an unmatched delta stays UNEXPLAINED and never becomes NOT_DOUBLE_ENTERED. S4b adds the v2 document reader and wires R9 before the go/no-go pack (S5) relies on those classes.
 - The builder chose these keys: money/category sheet `v2Key` is the GL code or the account/category UUID; v1 `supplier_advance__x` maps to `1240:<supplier uuid>`; inventory_basis is keyed by GL code on the v2 side and `COGS` on the v1 side (always INVENTORY_BASIS). The audit row's entity_id is a fresh UUID per run.
+
+## S4 tender keys (fresh Opus planner, 2026-10-12; binding)
+- **sales_tender keys.** `cash__cashier` and `online__{id}` use the keys sheet's `money` rows.
+- **`credit`** is a stated mapping with no sheet row:
+  - v1: `salesDay.creditSales`.
+  - v2: debits to 1210 at the store from entries whose reversal-chain root is `source_type 'ar_charge'`, summed over customers and dated by entry date. 1210 credits are excluded.
+  - v2Figures must add these lines to `sales_tender` under `credit`.
+- **`other`** has one `money` row per store (v1_key `other`):
+  - its v2_key is a money account, `channel:<id>` or `none`;
+  - `none` makes a non-zero v1 `other` NOT_DOUBLE_ENTERED;
+  - an unticked row is UNMAPPED_KEY.
+- **Channel receivables.** v2 1220/1221/1222 sales-day debits are keyed `channel:<channelId>`. The v1 side comes from the `channel_sales` flow.
+  - **Orchestrator decision (2026-10-12): S1 reads that flow. This is new slice S1b, which adds the `channel_sales` arTransactions to the whitelist and v1 figures.**
+  - Until S1b lands, those lines are UNEXPLAINED (CHANNEL_AR_FLOW).
+  - S1b must land before the 2 Nov dual run.
+- **Staff cash** is a stated mapping with no sheet row: v1 `cash__staff` (re-kinded) ↔ v2 `staff_cash`, line key `cash__staff`. Pre-fill skips it, and a sheet row for it is refused.
+- **inventory_basis** is one line per store-week, key `COGS`. v2 = Σ(debit − credit) over the S3 inventory_basis codes, with byDay summed per date. Store-less lines stay on `unassigned_store`.
