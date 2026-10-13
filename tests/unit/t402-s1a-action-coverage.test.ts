@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -94,6 +95,74 @@ describe('T-402 S1a - every audit action the code writes is labelled, in both pl
     // positive control: the rule does flag an undotted newcomer and lets a dotted one and a listed legacy one through
     expect(offenders(['brand_new_snake_case', 'area.verb', 'rename_item'])).toEqual(['brand_new_snake_case']);
   });
+
+  /**
+   * DEPLOY REGRESSION (fix/0197-recode-item). Production's audit_log held 'recode_item', written once by the T-386 S5 recode
+   * script (commit 2a62961, since removed), and 0197 refused to copy it: the HEAD scan above cannot see a writer that no
+   * longer exists. So every action string that was EVER passed to an audit write, anywhere in history, must be in 0197.
+   *
+   * Pinned list: derived with `git log --all -p -- packages apps scripts` (added lines `action: '...'` in a diff that also
+   * contains `auditLogRepo.append(`, plus the menu `audit(tx, actor, '...')` helper), noise removed (other `action` fields:
+   * charge, recognise_income, write_off, inactive, supplier, read), and the dotted actions that post-date 0197 left out
+   * (master_data.*_load, menu.option_offer_*), which the catalogue test covers. Add to it when a new undotted action ever ships.
+   */
+  const HISTORICAL = [
+    'change_item_base_unit', 'create_tender', 'dual_run.compare', 'edit_sales_day', 'link_store_to_pos', 'master_data_load',
+    'menu_category_create', 'menu_category_edit', 'menu_depletion_rule_cancel', 'menu_depletion_rule_set', 'menu_item_create',
+    'menu_item_edit', 'menu_item_request', 'menu_item_request_approve', 'menu_item_request_duplicate', 'menu_item_request_reject',
+    'menu_item_request_withdraw', 'menu_offer_cancel', 'menu_offer_set', 'menu_offer_withdraw', 'menu_option_group_create',
+    'menu_option_group_edit', 'menu_option_group_link', 'menu_option_group_unlink', 'menu_option_offer_cancel',
+    'menu_option_value_create', 'menu_option_value_edit', 'menu_variant_create', 'menu_variant_edit', 'reactivate_tender',
+    'recode_item', 'reimport_sales_day', 'rename_item', 'reopen_pin_sign_in', 'restore_item', 'retire_item', 'retire_tender',
+    'set_channel_payout', 'set_customer_status', 'set_item_purchase_unit', 'set_platform_sales', 'set_staff_code',
+    'set_supplier_bank_account', 'set_supplier_counterparty_store', 'set_supplier_credit_terms', 'set_supplier_status',
+    'unlink_store_from_pos', 'update_tender',
+  ];
+
+  it('every action ever written to the audit log (pinned history list) is in 0197 list, and catalogued', () => {
+    const mig = migrationLabels();
+    expect(HISTORICAL.filter((a) => !mig.has(a))).toEqual([]);
+    expect(HISTORICAL.filter((a) => !catalogueEntry(a))).toEqual([]);
+  });
+
+  it('the same, scanned live from git history (skipped when the clone is shallow or has no git)', (ctx) => {
+    let log = '';
+    try {
+      const shallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], { cwd: ROOT, encoding: 'utf8' }).trim();
+      if (shallow !== 'false') return ctx.skip();
+      log = execFileSync('git', ['log', '--all', '-p', '--no-color', '-G', 'action: |audit[(]', '--', 'packages', 'apps', 'scripts', ':!*.test.ts', ':!*.test.tsx'], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        maxBuffer: 1024 * 1024 * 1024,
+      });
+    } catch (e) {
+      console.warn('git history scan skipped:', String(e).slice(0, 200));
+      return ctx.skip();
+    }
+    const found = new Set<string>();
+    for (const block of log.split(/^diff --git /m)) {
+      const writesAudit = block.includes('auditLogRepo.append(');
+      for (const line of block.split(String.fromCharCode(10))) {
+        if (!line.startsWith('+')) continue;
+        if (writesAudit) {
+          const m = /^\+\s*action:\s*(.*)$/.exec(line);
+          if (m) for (const q of m[1]!.matchAll(/'([a-z][a-z0-9_.]*)'/g)) found.add(q[1]!);
+        }
+        const h = /(?<![A-Za-z0-9_])audit\(\s*\w+\s*,\s*\w+\s*,\s*'([a-z][a-z0-9_.]*)'/.exec(line);
+        if (h) found.add(h[1]!);
+      }
+    }
+    expect(found.size, 'the history scan found the writers').toBeGreaterThan(25);
+    expect(found.has('recode_item'), 'the removed T-386 S5 script is in history').toBe(true);
+    const mig = migrationLabels();
+    // an undotted action (or dual_run.compare) must be in 0197; a dotted one is newer than 0197 and must be catalogued
+    const notInMigration = [...found].filter((a) => (!a.includes('.') || a === 'dual_run.compare') && !mig.has(a)).sort();
+    const notCatalogued = [...found].filter((a) => a.includes('.') && !catalogueEntry(a)).sort();
+    // other `action:` fields that sit in files which also append to the audit log: not audit actions
+    const NOT_AUDIT = new Set(['action', 'charge', 'inactive', 'read', 'recognise_income', 'supplier', 'write_off']);
+    expect(notInMigration.filter((a) => !NOT_AUDIT.has(a)), 'an action ever written but missing from 0197 would make the deploy refuse').toEqual([]);
+    expect(notCatalogued.filter((a) => !NOT_AUDIT.has(a))).toEqual([]);
+  }, 180_000);
 
   it('no live (non-reserved) catalogue entry is unwritten - a stale entry hides a rename', () => {
     const stale = AUDIT_CATALOGUE.filter((e) => !e.reserved && !actions.has(e.action)).map((e) => e.action).sort();

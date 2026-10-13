@@ -99,6 +99,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('rename_item', 'stock', 'normal', 'org', 'items', 'T-391'),
   def('retire_item', 'stock', 'normal', 'org', 'items', 'T-383'),
   def('restore_item', 'stock', 'normal', 'org', 'items', 'T-383'),
+  // One-time T-386 S5 recode script (removed): old rows carry it (0197's list); reserved so nothing new writes it.
+  def('recode_item', 'stock', 'normal', 'org', 'items', 'T-386', { reserved: true }),
   def('set_staff_code', 'security', 'high', 'store', 'employments', 'T-391', { viewers: 'admin' }),
   def('link_store_to_pos', 'settings', 'normal', 'store', 'pos_v1_store_links', 'T-375'),
   def('unlink_store_from_pos', 'settings', 'normal', 'store', 'pos_v1_store_links', 'T-382'),

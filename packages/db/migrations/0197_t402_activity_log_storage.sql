@@ -70,6 +70,7 @@ INSERT INTO t402_labels (action, category, sensitivity) VALUES
 	('change_item_base_unit', 'stock', 'normal'),
 	('set_item_purchase_unit', 'stock', 'normal'),
 	('rename_item', 'stock', 'normal'),
+	('recode_item', 'stock', 'normal'),
 	('retire_item', 'stock', 'normal'),
 	('restore_item', 'stock', 'normal'),
 	('set_staff_code', 'security', 'high'),
