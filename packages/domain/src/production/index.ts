@@ -110,7 +110,7 @@ export interface CreateRecipeInput {
 export type RecipeOutcome = { readonly ok: true; readonly recipeId: string } | { readonly ok: false; readonly reason: string };
 
 export async function createRecipe(tx: Tx, actor: Actor, input: CreateRecipeInput): Promise<RecipeOutcome> {
-  await authorize(tx, actor, 'manage_items', {});
+  await authorize(tx, actor, 'manage_recipes', {}); // T-403: admin-only
   if (!input.name.trim()) return { ok: false, reason: 'a recipe needs a name' };
   if (input.lines.length === 0) return { ok: false, reason: 'a recipe needs at least one ingredient line' };
   // T-371 R5/R6: parsed AFTER authorize(), into the column's (14,3) brand. Both columns are NOT NULL with no default, so a

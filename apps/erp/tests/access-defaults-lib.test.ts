@@ -108,18 +108,19 @@ describe('L1 — gridCapabilityGroups: area order, exactly-91-once, and the 76/1
 
   // ⭐ 91 -> 92 (T-350/DEF-477): `set_channel_payout` is store-scoped, admin-yes/manager-no, same
   // shape as `set_cash_policy` — offerable to a position, none of the three excluded sets.
-  it('the 92 offerable capabilities each appear exactly once across every area of every scope', () => {
+  // ⭐ 92 -> 93 (T-403): `manage_recipes` (org, admin-only) is offerable to a position.
+  it('the 93 offerable capabilities each appear exactly once across every area of every scope', () => {
     const rendered = groups.flatMap((g) => g.areas.flatMap((a) => a.capabilities.map((c) => c.capability)));
-    expect(rendered.length).toBe(92);
-    expect(new Set(rendered).size, 'no capability appears twice').toBe(92);
+    expect(rendered.length).toBe(93);
+    expect(new Set(rendered).size, 'no capability appears twice').toBe(93);
   });
 
   // ⭐ store 76 -> 77 (T-350/DEF-477): `set_channel_payout` joins store, same as `set_cash_policy`.
-  it('store holds 77, org holds 15 (§1\'s totals)', () => {
+  it('store holds 77, org holds 16 (§1\'s totals)', () => {
     const countFor = (scope: (typeof SCOPE_ORDER)[number]) =>
       groups.find((g) => g.scope === scope)!.areas.reduce((n, a) => n + a.capabilities.length, 0);
     expect(countFor('store')).toBe(77);
-    expect(countFor('org')).toBe(15);
+    expect(countFor('org')).toBe(16);
   });
 
   it('NEGATIVE: no area group is ever empty — gridCapabilityGroups filters them out', () => {
