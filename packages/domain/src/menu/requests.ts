@@ -8,7 +8,7 @@
  * A requester withdraws only their own open request. A resolved request never changes again (database trigger).
  * One `audit_log` row per call, entity `menu_item_requests`.
  */
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, heldCapabilities, type Actor } from '@shareat/auth';
 import { MENU_ITEM_TYPES, type MenuItemType } from '@shareat/db/schema';
 import { menuRepo, type Tx } from '@shareat/db';
 import { gone, refuse } from '../shared/refusal';
@@ -63,6 +63,9 @@ async function openRequest(trx: Tx, actor: Actor, id: string, rawLabel: string) 
 /** Only the requester, only while open. The store gate is the request's own store. */
 export async function withdrawMenuItemRequest(actor: Actor, input: { id: string }, tx?: Tx): Promise<{ id: string }> {
   return inTx(tx, async (trx) => {
+    // Authorize BEFORE reading: a caller without the capability learns nothing about which ids exist.
+    // A store-scoped capability needs a store, which is read from the row: so first ask only whether the role holds it at all.
+    if (!(await heldCapabilities(trx, actor)).has('request_menu_item')) await authorize(trx, actor, 'request_menu_item', {});
     const row = await menuRepo.getRequest(trx, actor.orgId, input.id, true);
     if (!row) throw gone(`withdrawMenuItemRequest: request ${input.id} does not exist.`, 'item request');
     await authorize(trx, actor, 'request_menu_item', { storeId: row.storeId });

@@ -9,6 +9,7 @@
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
+import { expect } from 'vitest';
 
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor, Capability } from '@shareat/auth';
@@ -148,4 +149,19 @@ export async function attempt<T>(fn: () => Promise<T>): Promise<{ failed: boolea
 export async function auditCount(orgId: string): Promise<number> {
   const [r] = await sql<{ n: number }[]>`select count(*)::int as n from audit_log where org_id = ${orgId}`;
   return r!.n;
+}
+
+/**
+ * A refusal in a SENTENCE: the domain's own refusal (RefusalError, or AuthorizationError with a userMessage), never a raw Postgres error.
+ * Fails on a PostgresError, on a SQLSTATE `code`, on constraint/trigger words in the text, and on an empty sentence.
+ */
+export function expectSentence(r: { failed: boolean; message: string; error?: unknown }, what: string): void {
+  expect(r.failed, `${what}: was not refused`).toBe(true);
+  const e = r.error as { name?: string; code?: unknown; userMessage?: unknown; message?: string; constructor?: { name?: string } } | undefined;
+  expect(e?.constructor?.name, `${what}: a raw database error leaked (${r.message})`).not.toBe('PostgresError');
+  expect(typeof e?.code === 'string' && /^[0-9A-Z]{5}$/.test(e.code as string), `${what}: a SQLSTATE leaked (${String(e?.code)}): ${r.message}`).toBe(false);
+  expect(typeof e?.userMessage, `${what}: no userMessage - not a domain refusal (${r.message})`).toBe('string');
+  const text = `${r.message} ${String(e?.userMessage ?? '')}`;
+  expect(text, `${what}: database wording in the sentence`).not.toMatch(/violates|duplicate key|unique constraint|check constraint|trigger|menu_[a-z_]+_key|relation "/i);
+  expect(String(e?.userMessage).trim().length, `${what}: empty sentence`).toBeGreaterThan(10);
 }

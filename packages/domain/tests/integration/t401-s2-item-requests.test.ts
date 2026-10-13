@@ -13,9 +13,10 @@
  *   A refusal is a throw or { ok:false }; capability refusals are AuthorizationError with .capability.
  *   possibleDuplicates: a normalised exact-name match (case/space) is always listed; an unrelated name lists nothing.
  *
- * ## Red today
- * `requestMenuItem is not a function`, and migration 0196 has no menu_item_requests table yet (S1 revision). Mutants: approval creates the item
- * on another connection or leaves the request open; resolution gated by manage_menu (admin resolves); withdraw not limited to the requester.
+ * ## Red until built
+ * Whatever of requestMenuItem / withdrawMenuItemRequest / approveMenuItemRequest / markMenuItemRequestDuplicate / rejectMenuItemRequest is
+ * missing or mis-gated. Resolution (approve, duplicate, reject) is gated by add_menu_item, NOT manage_menu. Mutants: approval creates the
+ * item on another connection or leaves the request open; resolution gated by manage_menu (admin resolves); withdraw not limited to the requester.
  */
 import { afterAll, describe, expect, it } from 'vitest';
 

@@ -108,10 +108,12 @@ export async function requireNotBackdated(tx: Tx, at: Date | undefined, rawLabel
 
 /** A scheduled row may be cancelled; one already in effect is history and never goes. The trigger enforces it too. */
 export async function requireScheduled(tx: Tx, effectiveFrom: Date, rawLabel: string, what: string): Promise<void> {
-  if (effectiveFrom.getTime() <= (await menuRepo.dbNow(tx)).getTime()) {
+  // "In effect" is judged at the instant a "from now" row is stored (now() rounded up to the ms), so a row this very
+  // transaction wrote for "now" counts as in effect. The delete guard (now()) is looser; this is never looser than it.
+  if (effectiveFrom.getTime() <= (await menuRepo.nowCeilMs(tx)).getTime()) {
     throw refuse(
       `${rawLabel}: the row took effect at ${effectiveFrom.toISOString()}; only a scheduled change can be cancelled.`,
-      `That ${what} has already taken effect, so it can't be cancelled. Set a new one instead.`,
+      `That ${what} is already in effect, so it can't be cancelled. Withdraw it instead, or set a new one.`,
     );
   }
 }
@@ -128,4 +130,27 @@ export function changedFields<R extends object, K extends keyof R & string>(
     if (v !== undefined && v !== row[k]) out[k] = v;
   }
   return out;
+}
+
+/**
+ * The monotonic and same-instant rules of a history key, as a sentence before the database would raise (S2 audit rulings).
+ * Takes the key's advisory lock first (`lockId`: the variant for offers and rules, the option value for option offers), so the
+ * check and the insert that follows it cannot race another writer. Two "now" writes in one transaction land here too: the
+ * second sees the first at the same instant.
+ */
+export async function requireHistorySlot(tx: Tx, lockId: string, key: menuRepo.HistoryKey, at: Date | undefined, what: string): Promise<void> {
+  await menuRepo.lockKey(tx, lockId);
+  const clash = await menuRepo.historyClash(tx, key, at);
+  if (clash === 'same') {
+    throw refuse(
+      `${what}: a row already exists at that exact instant for this key.`,
+      `There is already a change at that exact time. Pick a later time, or cancel the scheduled one first.`,
+    );
+  }
+  if (clash === 'later') {
+    throw refuse(
+      `${what}: a later row is already scheduled for this key, so this one would never take effect.`,
+      `A later change is already scheduled, so this one would never apply. Cancel the scheduled change first, or pick a time after it.`,
+    );
+  }
 }

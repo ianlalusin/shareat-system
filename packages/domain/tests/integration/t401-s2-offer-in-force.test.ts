@@ -18,6 +18,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { businessDayRange, parseBusinessDate } from '@shareat/core/datetime';
+import { AuthorizationError } from '@shareat/auth';
 import { menuRepo } from '@shareat/db';
 import { setMenuOffer, withdrawMenuOffer, setOptionOffer } from '@shareat/domain';
 
@@ -115,7 +116,7 @@ describe('I2 -- the offer in force at t is the row with the greatest effective_f
     expect(got[`${b.valueId}/online`], 'offered at the counter, withheld online').toBeUndefined();
   });
 
-  it('DATETIME: "from 2026-12-01 00:00" Asia/Manila is stored as the instant 2026-11-30T16:00:00Z, never a business date (mutant: the form parses the time as UTC)', async () => {
+  it('DATETIME: the database stores the Manila-midnight instant it is handed as 2026-11-30T16:00:00Z, never a business date, and resolves it exactly at that instant (the "form parses the time as UTC" mutant belongs to S4)', async () => {
     const c = await cast('i2e');
     const { variantId } = await rawItem(c);
     await rawRule(c, variantId);
@@ -144,6 +145,8 @@ describe('I1b through the domain -- the past is never rewritten', () => {
     const out = await asOrg(c.orgId, (tx) =>
       attempt(() => setMenuOffer(c.admin, { storeId: c.storeA, variantId, channel: 'store', amount: '100.00', effectiveFrom: new Date(Date.now() - 60_000) }, tx)));
     expect(out.failed, 'a back-dated offer was accepted').toBe(true);
+    expect(out.message, 'refused for being in the past, not for some other reason').toMatch(/back-?dat|in the past|earlier than now|past/i);
+    expect(out.error, 'not a capability refusal').not.toBeInstanceOf(AuthorizationError);
     const [n] = await sql<{ n: number }[]>`select count(*)::int as n from menu_offers where org_id = ${c.orgId}`;
     expect(n!.n, 'no menu_offers row may exist').toBe(0);
     // Control: the refusal above is about the past, not about this call being broken - a scheduled change goes through.

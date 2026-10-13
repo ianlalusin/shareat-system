@@ -12,7 +12,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { menuRepo, type Tx } from '@shareat/db';
 import { MENU_CHANNELS, MENU_DEPLETION_MODES, MENU_PRICING_MODES, type MenuChannel, type MenuDepletionMode, type MenuPricingMode } from '@shareat/db/schema';
 import { gone, refuse } from '../shared/refusal';
-import { audit, inTx, parseMarkupPercent, parseMenuAmount, parseMenuQuantity, requireNotBackdated, requireScheduled } from './shared';
+import { audit, inTx, parseMarkupPercent, requireHistorySlot, parseMenuAmount, parseMenuQuantity, requireNotBackdated, requireScheduled } from './shared';
 
 // -------------------------------------------------------------------------------------------------------------------
 // Depletion rules (R6): the pos_item_maps shape, per variant, effective-dated
@@ -57,6 +57,7 @@ export async function setDepletionRule(actor: Actor, input: SetDepletionRuleInpu
     if (!(await menuRepo.getVariant(trx, actor.orgId, input.variantId))) {
       throw gone(`setDepletionRule: variant ${input.variantId} does not exist.`, 'variant');
     }
+    await requireHistorySlot(trx, input.variantId, { kind: 'rule', variantId: input.variantId }, input.effectiveFrom, 'setDepletionRule');
     const row = await menuRepo.insertRule(trx, {
       orgId: actor.orgId,
       variantId: input.variantId,
@@ -177,6 +178,7 @@ export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: 
     if (item?.itemType === 'refill' && (amount !== null || isRule || hasHeads)) {
       throw refuse('setMenuOffer: a refill carries no price or price rule.', 'A refill is a free serving a package entitles. It has no price, so it cannot take one.');
     }
+    await requireHistorySlot(trx, input.variantId, { kind: 'offer', storeId: input.storeId, variantId: input.variantId, channel }, input.effectiveFrom, 'setMenuOffer');
     const row = await menuRepo.insertOffer(trx, {
       orgId: actor.orgId,
       storeId: input.storeId,
@@ -208,6 +210,7 @@ export async function withdrawMenuOffer(
     const channel = requireChannel(input.channel, 'withdrawMenuOffer');
     await requireNotBackdated(trx, input.effectiveFrom, 'withdrawMenuOffer', 'withdrawals');
     await requireVariant(trx, actor, input.variantId, 'withdrawMenuOffer');
+    await requireHistorySlot(trx, input.variantId, { kind: 'offer', storeId: input.storeId, variantId: input.variantId, channel }, input.effectiveFrom, 'withdrawMenuOffer');
     const row = await menuRepo.insertOffer(trx, {
       orgId: actor.orgId,
       storeId: input.storeId,
@@ -264,6 +267,7 @@ export async function setOptionOffer(
     if (!(await menuRepo.getOptionValue(trx, actor.orgId, input.optionValueId))) {
       throw gone(`setOptionOffer: option value ${input.optionValueId} does not exist.`, 'option');
     }
+    await requireHistorySlot(trx, input.optionValueId, { kind: 'option', storeId: input.storeId, optionValueId: input.optionValueId, channel }, input.effectiveFrom, 'setOptionOffer');
     const row = await menuRepo.insertOptionOffer(trx, {
       orgId: actor.orgId,
       storeId: input.storeId,

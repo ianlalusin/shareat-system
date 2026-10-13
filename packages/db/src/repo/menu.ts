@@ -62,6 +62,41 @@ export async function dbNow(tx: Tx): Promise<Date> {
   return new Date(rows[0]!.t);
 }
 
+/** The same instant a "from now" history row is stored at (`NOW_MS`): `now()` rounded up to the millisecond. */
+export async function nowCeilMs(tx: Tx): Promise<Date> {
+  const rows = (await tx.execute(sql`select ${NOW_MS} as t`)) as unknown as { t: string | Date }[];
+  return new Date(rows[0]!.t);
+}
+
+/** Takes the per-id menu advisory lock (the one the database guards take), so a pre-check and the insert it guards cannot race. */
+export async function lockKey(tx: Tx, id: string): Promise<void> {
+  await tx.execute(sql`select menu_lock_key(${id}::uuid)`);
+}
+
+export type HistoryKey =
+  | { kind: 'offer'; storeId: string; variantId: string; channel: MenuChannel }
+  | { kind: 'option'; storeId: string; optionValueId: string; channel: MenuChannel }
+  | { kind: 'rule'; variantId: string };
+
+/**
+ * Would a new row at `at` (omitted = "from now") break the history of its key? `same`: a row already sits at that exact instant;
+ * `later`: a row is already scheduled after it (history is monotonic: it would never take effect). Call under `lockKey`.
+ */
+export async function historyClash(tx: Tx, key: HistoryKey, at?: Date): Promise<'same' | 'later' | null> {
+  const x = at ? sql`${at.toISOString()}::timestamptz` : NOW_MS;
+  const where =
+    key.kind === 'offer'
+      ? sql`from menu_offers where store_id = ${key.storeId} and variant_id = ${key.variantId} and channel = ${key.channel}`
+      : key.kind === 'option'
+        ? sql`from menu_option_offers where store_id = ${key.storeId} and option_value_id = ${key.optionValueId} and channel = ${key.channel}`
+        : sql`from menu_depletion_rules where variant_id = ${key.variantId}`;
+  const rows = (await tx.execute(
+    sql`select count(*) filter (where effective_from = ${x})::int as same, count(*) filter (where effective_from > ${x})::int as later ${where}`,
+  )) as unknown as { same: number; later: number }[];
+  const r = rows[0]!;
+  return r.same > 0 ? 'same' : r.later > 0 ? 'later' : null;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Categories
 // ---------------------------------------------------------------------------------------------------------------------

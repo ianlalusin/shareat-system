@@ -473,6 +473,12 @@ that sending a **menu** photo to the provider is not the receipt-photo case row 
 - The S5 refusal (no usage-source switch and no depletion-rule change while a store has a pull in status planned) still stands. It does not block anyone recording drafts; it only stops the recipe from changing underneath a draft the manager has not posted.
 - Whether this replaces or sits beside today's v1 usage pull and the existing stock-usage drafts is to be confirmed in the S5 build against the current usage code; flag any conflict to the orchestrator.
 
+## S2 audit rulings (orchestrator, 2026-10-13; binding)
+- The domain pre-checks the monotonic and same-instant rules (offers, option offers, depletion rules). A clash is refused in a sentence before the database would raise.
+- Two "now" writes for the same key in one transaction are refused in a sentence.
+- withdrawMenuItemRequest authorizes before it reads or locks the request.
+- **S4 note:** the price form omits effectiveFrom for "now" and never sends the client clock. A scheduled time is parsed as Asia/Manila. The S4 tester owns the form test that kills the "parsed as UTC" mutant.
+
 ## S1 audit rulings (orchestrator, 2026-10-13; binding)
 - Every check that reads another row (rule in force, live offer, retire) first locks the variant row (`FOR UPDATE`) or takes a per-variant advisory lock, so concurrent edits serialise.
 - The three history UPDATE guards are `ENABLE ALWAYS` (history_guard), so replica mode cannot rewrite price history. Insert (clock) guards stay at origin.
