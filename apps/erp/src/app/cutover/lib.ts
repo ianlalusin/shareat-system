@@ -24,32 +24,6 @@ export async function loadGaps(orgId: string): Promise<OpeningGaps> {
   return withOrgPrincipal(orgId, (tx) => openingGaps(tx, orgId, CONVERSION_DATE));
 }
 
-export interface CountRow {
-  itemId: string;
-  name: string;
-  baseUnit: string;
-  quantity: string | null;
-  unitCost: string | null;
-}
-
-/**
- * Every active item at this store, with its count if one exists.
- *
- * ⭐ Items WITHOUT a count come back with `quantity: null` — and that is the whole point of the
- * screen. An item silently absent and an item counted as zero must not look the same, so the
- * blank is rendered as a blank and a zero is rendered as a zero.
- */
-export async function loadCountSheet(orgId: string, storeId: string): Promise<CountRow[]> {
-  return withOrgPrincipal(orgId, async (tx) => {
-    const items = await itemsRepo.listItems(tx, orgId);
-    const byItem = await cutoverRepo.countTotalsByItem(tx, orgId, storeId);
-    return items.map((i) => {
-      const c = byItem.get(i.id);
-      return { itemId: i.id, name: i.name, baseUnit: i.baseUnit, quantity: c?.quantity ?? null, unitCost: c?.unitCost ?? null };
-    });
-  });
-}
-
 export async function countedValueFor(orgId: string, storeId: string): Promise<string> {
   return withOrgPrincipal(orgId, (tx) => countedStockValue(tx, orgId, storeId));
 }
