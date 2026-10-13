@@ -308,3 +308,8 @@ Firestore mirror reset after the purge (DEF-643, logged, owner to be named in th
 - **Doc note** (not registered) `docs/plans/remaining-build-plan.md:9` says "15 Nov go/no-go + purge rehearsal", while §2 and
   §3 put the rehearsal on 13 Nov; and plan R4 says wizard C1 "refuses until a restore is rehearsed", which it does
   not (T-393 R14 already noted it).
+
+## S1 orchestrator rulings (2026-10-14)
+- **Tests may create local rehearsal databases** named `shareat_rehearsal_2099MMDD` on localhost:5435 (R3's real pattern; a far-future date so they can never collide with a real rehearsal), created and dropped by the tests themselves. The name pattern is NOT made injectable.
+- The function signatures pinned in the S1 test headers (guards, children, checks, app-env) are the contract.
+- The tester's readings stand: `--against` needs no typed name of its own; a closed period covering 2027-01 counts as missing; months before the conversion month are not required; `opening-stock.ts` must derive its conversion date (7.b required); both `--apply` and `--rehearse` need `--as-of`.
