@@ -316,6 +316,7 @@ export const JSONB_REFERENCES: readonly JsonbReference[] = [
   { column: 'etl_source_documents.payload', kind: 'snapshot', reason: 'raw v1 document; no tenancy' },
   { column: 'inbox_quarantine.raw_event', kind: 'snapshot', reason: 'raw rejected inbox event kept for diagnosis' },
   { column: 'pos_usage_pull_lines.blocked', kind: 'diagnostic', reason: 'blocked-line diagnostics; not read back as a reference' },
+  { column: 'dual_run_lines.per_day', kind: 'snapshot', reason: 'per-day {date, v1, v2, delta, state} comparison figures for display; holds no id and is never read back as a reference' },
   { column: 'pos_v1_day_feeds.payload', kind: 'snapshot', reason: 'raw v1 POS day payload' },
   { column: 'production_records.soft_warnings', kind: 'diagnostic', reason: 'warning list shown to the cook; not read back as a reference' },
   { column: 'scheduler_runs.failures', kind: 'diagnostic', reason: 'per-run failure list; not read back as a reference' },

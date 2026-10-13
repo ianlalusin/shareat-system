@@ -207,6 +207,8 @@ export type { ArDocStatus } from '../schema/ar';
 export * as itemsRepo from './repo/items';
 export * as itemCodesRepo from './repo/item-codes';
 export * as masterLinksRepo from './repo/master-links';
+export * as dualRunRepo from './repo/dual-run';
+export type { V2Line as DualRunV2Line, V2Figures as DualRunV2Figures } from './repo/dual-run';
 export * as stockLedgerRepo from './repo/stock-ledger';
 export * as stockLayersRepo from './repo/stock-layers';
 export * as stockTransfersRepo from './repo/stock-transfers';

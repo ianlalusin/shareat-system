@@ -89,6 +89,8 @@ function actionShapedExports(): Map<string, string> {
  * off the same day** by T-226, and the stale-exemption rule below is what forced their rows out.
  */
 const EXEMPT: Record<string, string> = {
+  runDualRun:
+    'UNWIRED — T-392 S4: scripts/dual-run.ts `compare` is its caller (a job, run on the droplet); the on-screen report and disposition action are T-392 S5',
   setCustomerStatus:
     'UNWIRED — T-391 S4: scripts/master-data.ts apply (applyCustomers / applySuppliers) is its caller; no screen in S4',
   setSupplierCounterpartyStore:

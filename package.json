@@ -20,6 +20,7 @@
     "test:all": "vitest run",
     "capture": "tsx scripts/capture.ts",
     "master-data": "tsx scripts/master-data.ts",
+    "dual-run": "tsx scripts/dual-run.ts",
     "db:generate": "npm run db:generate -w @shareat/db",
     "db:migrate": "npm run db:migrate -w @shareat/db",
     "provision-test-role": "node scripts/provision-test-role.mjs",

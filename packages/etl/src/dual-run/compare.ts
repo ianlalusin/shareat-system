@@ -219,6 +219,8 @@ export function compareStoreWeek(input: CompareInput): StoreWeekResult {
     reCheck.set(id, false);
     if (delta === 0) continue;
     if (a.unmapped) { list.push({ class: 'UNMAPPED_KEY', paired: false, amount: delta }); continue; }
+    // `other` ticked to `none` (S4 tender keys): v2 holds no home for it by design, so a v1 amount is NOT_DOUBLE_ENTERED on its face.
+    if (a.kind === 'sales_tender' && a.key === 'none' && a.v2 === 0 && a.v1 !== 0) { list.push({ class: 'NOT_DOUBLE_ENTERED', paired: false, amount: delta }); continue; }
     if (a.kind === 'inventory_basis') { list.push({ class: 'INVENTORY_BASIS', paired: false, amount: delta }); continue; }
     if (a.key.startsWith('1240:')) {
       list.push({ class: 'SUPPLIER_ADVANCE_1240', paired: false, amount: delta });
