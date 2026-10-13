@@ -1048,6 +1048,57 @@ GRANT SELECT, INSERT, UPDATE ON "menu_item_requests" TO "shareat_app";--> statem
 GRANT SELECT, INSERT, UPDATE ON "menu_pos_v1_links" TO "shareat_app";--> statement-breakpoint
 GRANT SELECT, INSERT ON "menu_usage_source_switches" TO "shareat_app";
 --> statement-breakpoint
+
+-- ---------------------------------------------------------------------------------------------
+-- A depletion rule naming a stock item is history for that item (t378 B3): its base unit freezes, since the rule's
+-- quantity_per_sale is read in that unit. Same function as 0186 with ONE added leg (menu_depletion_rules.item_id); every
+-- other leg is byte-identical. The 0186 header query (P0186b-pre) is a pasted copy of the pre-migration list and is not edited.
+-- ---------------------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION "items_unit_history_exists"(p_item uuid) RETURNS boolean
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+	bypass boolean;
+BEGIN
+	IF app_current_org() IS NULL THEN
+		SELECT coalesce(rolsuper OR rolbypassrls, false) INTO bypass FROM pg_roles WHERE rolname = current_user;
+		IF NOT coalesce(bypass, false) THEN
+			RETURN true;
+		END IF;
+	END IF;
+	IF EXISTS (SELECT 1 FROM stock_movements WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM supplier_invoice_lines WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM delivery_lines WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM trade_order_lines WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM stock_usage_lines WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM stock_transfer_lines WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM stock_reservations WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM supplier_return_lines WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM customer_return_lines WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM production_recipe_lines WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM production_record_lines WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM pos_item_maps WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM menu_depletion_rules WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM pos_usage_pull_lines WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM item_pricing WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM items WHERE parent_slab_item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM stock_layers WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM count_lines WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM opening_counts WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM store_item_thresholds WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM price_list_items WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM commissary_item_offerings WHERE item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM commissary_item_map WHERE commissary_item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM commissary_item_map WHERE branch_item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM production_recipes WHERE output_item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM items WHERE cost_basis_item_id = p_item) THEN RETURN true; END IF;
+	IF EXISTS (SELECT 1 FROM items WHERE merged_into_id = p_item) THEN RETURN true; END IF;
+	-- REV-2: this item's OWN cost basis (it prices off another item per its current unit).
+	IF EXISTS (SELECT 1 FROM items WHERE id = p_item AND cost_basis_item_id IS NOT NULL) THEN RETURN true; END IF;
+	RETURN false;
+END;
+$$;
+--> statement-breakpoint
+
 -- add_menu_item OWNER BACKFILL (the seventh super-admin-only capability, spec section 3; same shape as 0188's B0188).
 -- SUPER_ADMIN_ONLY_CAPABILITIES is materialised as person_grants once, at createFirstAdmin, so an org created before today
 -- holds six and would silently lose "super admin may add an item" when add_menu_item lands. Every OWNER (an ACTIVE admin

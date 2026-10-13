@@ -114,8 +114,8 @@ export async function s6Fixture(sql: postgres.Sql, hint: string, o: { stock?: bo
     );
   }
   await asOrgOn(orgId, async (tx) => {
-    await D.upsertPosItemMap(tx, base.manager, { orgId, storeId, posItemKey: 'A', posItemName: 'A', mode: 'direct', itemId: cheese, quantityPerSale: '1' });
-    await D.upsertPosItemMap(tx, base.manager, { orgId, storeId, posItemKey: 'B', posItemName: 'B', mode: 'direct', itemId: buns, quantityPerSale: '0.5', confirmShared: true });
+    await D.upsertPosItemMap(tx, base.admin, { orgId, storeId, posItemKey: 'A', posItemName: 'A', mode: 'direct', itemId: cheese, quantityPerSale: '1' });
+    await D.upsertPosItemMap(tx, base.admin, { orgId, storeId, posItemKey: 'B', posItemName: 'B', mode: 'direct', itemId: buns, quantityPerSale: '0.5', confirmShared: true });
   });
   return { ...base, kitchen, cheese, buns };
 }

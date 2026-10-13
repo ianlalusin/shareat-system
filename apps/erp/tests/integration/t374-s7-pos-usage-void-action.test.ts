@@ -101,6 +101,7 @@ async function fixture(hint: string) {
   };
   const managerId = await mkPerson('Manager', 'manager');
   const nobodyId = await mkPerson('Nobody', null);
+  const adminId = await mkPerson('Admin', 'admin'); // T-403: mapping is admin-only
   const [ch] = await sql<{ id: string }[]>`
     insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${orgId}, ${storeId}, 'Walk-in', true) returning id`;
   const [gcash] = await sql<{ id: string }[]>`
@@ -130,7 +131,7 @@ async function fixture(hint: string) {
   );
   const manager = actor(orgId, managerId);
   await asOrg(orgId, (tx) =>
-    upsertPosItemMap(tx, manager, { orgId, storeId, posItemKey: 'cheese', posItemName: 'Cheese', mode: 'direct', itemId: it!.id, quantityPerSale: '1' }),
+    upsertPosItemMap(tx, actor(orgId, adminId), { orgId, storeId, posItemKey: 'cheese', posItemName: 'Cheese', mode: 'direct', itemId: it!.id, quantityPerSale: '1' }),
   );
   const { id: dayId } = await asOrg(orgId, (tx) => importTestDay(tx, manager, { storeId, businessDate: DAY, soldItems: SOLD }));
   const built = await asOrg(orgId, (tx) => buildPlan(tx, manager, { orgId, storeId, salesDayId: dayId, locationId: kitchen }));
