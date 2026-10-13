@@ -1,6 +1,6 @@
 # T-402: Activity log, one immutable log for ERP, POS and the customer app, tagged and graded
 
-**Status:** SPEC APPROVED WITH CHANGES 2026-10-13 (fresh Opus review applied). Ian: build now. Q1-Q6 unanswered: the **Ian 2026-10-13: Q1-Q6 answered "go with recommendation" — the recommended options are rulings.**
+**Status:** **S1a+S1b DONE 2026-10-13, live** (PR #23 + deploy fix PR #24, migration 0197). Next: S2 security events, S3 money/data events + envelope, S4 viewer, S5 nightly partitions. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-13 (fresh Opus review applied). Ian: build now. Q1-Q6 unanswered: the **Ian 2026-10-13: Q1-Q6 answered "go with recommendation" — the recommended options are rulings.**
 recommended options are built. Drafted 2026-10-13 by the Opus planner.
 (≈6.5 lane-days, six slices.) Pulled forward from Phase 7 row A2 (`docs/plans/remaining-build-plan.md:99`),
 overriding Q11 (a) for this one item. Migration **0NNN, the next free number at merge** (0194 is deployed, 0195 is

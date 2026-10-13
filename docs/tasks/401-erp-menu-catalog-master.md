@@ -1,6 +1,6 @@
 # T-401: the ERP menu and catalog master (POS v2 P1 prerequisite)
 
-**Status:** SPEC APPROVED WITH CHANGES 2026-10-13 (revised after Ian's answers; fresh Opus review applied). S1 built on lane, to be amended in place.
+**Status:** **S1+S2 DONE 2026-10-13, live** (PR #22, migration 0196; four S1 audit rounds and two S2). Next: S3 store-menu projection, S4 screens, S5 v1 usage switch + ±10% tolerance. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-13 (revised after Ian's answers; fresh Opus review applied). S1 built on lane, to be amended in place.
 (S1 = migration 0196 on `lane/t401-s1`, commit 16ab42a, worktree `wt-t401`; not merged, not deployed, so 0196 is edited
 in place, never followed by a 0197 fix-up. S2 is half-built and paused; §6a lists the tests that Ian's answers make wrong.)
 Earlier status: SPEC APPROVED WITH CHANGES 2026-10-13 (fresh Opus review applied). Written at HEAD a9e299b.
@@ -461,6 +461,16 @@ description, type and category on a **request**, never an item; super admin stil
 and the approval function, so AI only adds suggestions to a human flow that already works without it. Open for that
 spec, not this one: where uploaded item photos are stored (R13 leaves images to row 280's hosting move), and confirming
 that sending a **menu** photo to the provider is not the receipt-photo case row 251 forbade.
+
+## Ian ruling on usage tolerance (2026-10-13; binding; S5)
+"The recipe will serve as basis of usage report. We can also set up a margin: when the recipe expects 1 kg of carrots from today's sales, usage allowed is ±10%. Inside it can be accepted; outside it flag for manual verification before acceptance." So:
+- The guide recipe × the day's sales gives the **expected usage** per stock item. Staff counts and drafts give the **actual usage**. The manager posts.
+- A line whose actual usage is within the tolerance of expected can be accepted as normal. A line outside it is **flagged**: it cannot be posted until the manager verifies it explicitly and types a reason. Flag and reason are written to the activity log (T-402, category stock).
+- Default tolerance is **±10%**, an org setting; a per-item override is allowed (admin only, since it is part of the standard). An item with expected 0 and actual > 0, or the reverse, is always flagged.
+- Slab slicing yields are not subject to this rule: they have no standard and record actuals (production, T-176).
+- Sauce/batch production recipes are Shareat standards (admin only, T-403). Recording a batch output outside the same tolerance of the recipe's expected output is flagged the same way; build it with this slice or as a T-176 follow-up, whichever the S5 planner finds smaller.
+- Recipes are Shareat standards: never grantable below admin (Ian chose option B). Stores suggest changes through a request queue, approved by an admin.
+- **Franchise (Ian, 2026-10-13, answer (a)): Shareat's main branch controls Padre Garcia's recipes too.** Padre Garcia (a separate org, T-398) may only suggest changes. Open design point for the planner, not decided here: Padre Garcia's org needs the Shareat standards without Shareat admins writing into another org. One option is a published standard that the franchise org receives read-only and cannot edit. Settle it in the T-398 S5/S7 or a T-401 follow-up spec before Padre Garcia sells with recipes.
 
 ## Ian ruling on recipes (2026-10-13; binding)
 "Only admin can edit recipe." `set_menu_depletion` (the menu depletion rule, which is the stock recipe of a menu variant) is **super admin and admin only**; manager is ✗ (with a ✗ test). This supersedes the manager ✅ in the capability table and removes review finding 2's cross-store authorize (admin is org-wide). Ian 2026-10-13 ("go with recommendation"): it also applies to `manage_pos_map` (the v1 bridge mapping, admin-only; delete each store's mapping after it moves to POS v2) and to production recipes. Both are done in T-403, not here. **Q6 ANSWERED: the online rule follows the counter price.**
