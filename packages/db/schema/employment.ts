@@ -43,6 +43,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -140,7 +141,21 @@ export const positions = pgTable(
     // NOTE: uniqueness is case- and whitespace-insensitive and must treat NULL store_id as a
     // single group — `unique (org_id, coalesce(store_id, <nil uuid>), lower(trim(name)))`. That is
     // an expression index Drizzle's builder cannot express; it is hand-added in the migration,
-    // exactly as `person_identities` already documents for its own identity-defining rule.
+    // exactly as `person_identities` already documents for its own identity-defining rule.,
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'positions_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'positions_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -215,7 +230,26 @@ export const employments = pgTable(
       'employments_ended_status_pair_check',
       sql`(${t.employmentStatus} in ('resigned','terminated')) = (${t.endedOn} is not null)`,
     ),
-    // NOTE: `unique (store_id, lower(staff_code))` is an expression index, hand-added in the migration.
+    // NOTE: `unique (store_id, lower(staff_code))` is an expression index, hand-added in the migration.,
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'employments_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.personId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'employments_person_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'employments_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

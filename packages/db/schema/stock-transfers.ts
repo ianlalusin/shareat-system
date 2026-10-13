@@ -125,6 +125,35 @@ export const stockTransfers = pgTable(
     }).onDelete('restrict'),
     index('stock_transfers_store_status_idx').on(t.storeId, t.status),
     index('stock_transfers_org_idx').on(t.orgId),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'stock_transfers_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.dispatchedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'stock_transfers_dispatched_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.receivedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'stock_transfers_received_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'stock_transfers_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.voidedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'stock_transfers_voided_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -193,5 +222,14 @@ export const stockReservations = pgTable(
     index('stock_reservations_item_location_idx').on(t.itemId, t.locationId),
     index('stock_reservations_org_idx').on(t.orgId),
     check('stock_reservations_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'stock_reservations_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

@@ -70,6 +70,25 @@ export const arCharges = pgTable(
     index('ar_charges_org_due_date_idx').on(t.orgId, t.dueDate),
     check('ar_charges_total_positive_check', sql`${t.totalAmount} > 0`),
     check('ar_charges_total_amount_finite_check', sql`${t.totalAmount} > '-Infinity'::numeric and ${t.totalAmount} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'ar_charges_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'ar_charges_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.voidedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'ar_charges_voided_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -120,6 +139,25 @@ export const arCollections = pgTable(
       foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
       name: 'ar_collections_money_account_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'ar_collections_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'ar_collections_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.voidedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'ar_collections_voided_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -165,5 +203,14 @@ export const arWriteOffs = pgTable(
     // T-367 S1 / DEF-201 (R2): one write-off decision makes exactly one row — the DB backstop
     // beside `writeOffCharge`'s own idempotency-key retry (bible §15.11). Migration 0173.
     uniqueIndex('ar_write_offs_journal_entry_unique').on(t.journalEntryId),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.writtenOffBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'ar_write_offs_written_off_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

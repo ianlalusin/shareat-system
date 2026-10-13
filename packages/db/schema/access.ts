@@ -82,6 +82,20 @@ export const personRoles = pgTable(
       .on(t.personId, t.orgId)
       .where(sql`${t.revokedAt} is null`),
     check('person_roles_role_check', sql`${t.role} in ('super_admin', 'admin', 'manager', 'staff')`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.grantedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'person_roles_granted_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.personId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'person_roles_person_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

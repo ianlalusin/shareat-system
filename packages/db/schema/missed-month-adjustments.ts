@@ -38,7 +38,7 @@
  *      cascades to this row via the FK, and that cascade must not read as a "direct" DELETE.
  */
 import { sql } from 'drizzle-orm';
-import { check, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { check, index, pgTable, text, timestamp, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { fixedAssets } from './fixed-assets';
 import { journalEntries } from './journal';
 import { organizations } from './organizations';
@@ -92,5 +92,14 @@ export const missedMonthAdjustments = pgTable(
     ),
     check('missed_month_adjustments_belongs_to_period_check', sql`${t.belongsToPeriod} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
     check('missed_month_adjustments_reason_not_blank_check', sql`btrim(${t.reason}) <> ''`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.bookedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'missed_month_adjustments_booked_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

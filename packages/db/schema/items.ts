@@ -37,6 +37,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -175,6 +176,15 @@ export const items = pgTable(
       'items_purchase_factor_check',
       sql`${t.purchaseFactor} IS NULL OR (${t.purchaseFactor} > 0 AND ${t.purchaseFactor} < 'Infinity'::numeric)`,
     ),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'items_created_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -255,7 +265,21 @@ export const itemRequests = pgTable(
     decisionNote: text('decision_note'),
     createdItemId: uuid('created_item_id').references(() => items.id, { onDelete: 'restrict' }),
   },
-  (t) => [index('item_requests_org_status_idx').on(t.orgId, t.status)],
+  (t) => [
+    index('item_requests_org_status_idx').on(t.orgId, t.status),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons FKs above
+    // (see the note in schema/persons.ts for the unique they reference).
+    foreignKey({
+      columns: [t.orgId, t.requestedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'item_requests_requested_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.decidedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'item_requests_decided_by_same_org_fk',
+    }).onDelete('restrict'),
+  ],
 );
 
 /**
@@ -298,6 +322,20 @@ export const storeItemSellability = pgTable(
   (t) => [
     uniqueIndex('store_item_sellability_store_item_key').on(t.storeId, t.itemId),
     index('store_item_sellability_org_item_idx').on(t.orgId, t.itemId),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.setBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'store_item_sellability_set_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'store_item_sellability_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -352,6 +390,15 @@ export const itemPricing = pgTable(
     check('item_pricing_markup_percent_finite_check', sql`${t.markupPercent} > '-Infinity'::numeric and ${t.markupPercent} < 'Infinity'::numeric`),
     check('item_pricing_fixed_markup_amount_finite_check', sql`${t.fixedMarkupAmount} > '-Infinity'::numeric and ${t.fixedMarkupAmount} < 'Infinity'::numeric`),
     check('item_pricing_margin_alert_threshold_pct_finite_check', sql`${t.marginAlertThresholdPct} > '-Infinity'::numeric and ${t.marginAlertThresholdPct} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.setBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'item_pricing_set_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

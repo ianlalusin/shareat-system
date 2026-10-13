@@ -8,7 +8,7 @@
  * carries neither. A link is a fact about the load: the app role has no UPDATE and no DELETE.
  */
 import { sql } from 'drizzle-orm';
-import { check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
 
@@ -43,6 +43,15 @@ export const v1MasterLinks = pgTable(
       'v1_master_links_item_factor_check',
       sql`(${t.entity} = 'item' AND ${t.factorToBase} IS NOT NULL AND ${t.factorToBase} > 0 AND ${t.factorToBase} < 'Infinity'::numeric AND ${t.v1Unit} IS NOT NULL) OR (${t.entity} <> 'item' AND ${t.factorToBase} IS NULL AND ${t.v1Unit} IS NULL)`,
     ),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'v1_master_links_created_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 // NOTE: ENABLE + FORCE ROW LEVEL SECURITY, the org-isolation policy and the SELECT, INSERT-only grant are hand-added in

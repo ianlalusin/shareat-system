@@ -25,6 +25,7 @@ import {
   text,
   timestamp,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { employments } from './employment';
 import { organizations } from './organizations';
@@ -173,5 +174,24 @@ export const attendanceCredentials = pgTable(
       sql`(${t.revokedAt} is null and ${t.revokedBy} is null and ${t.revokeReason} is null)
           or (${t.revokedAt} is not null and ${t.revokedBy} is not null and ${t.revokeReason} is not null and btrim(${t.revokeReason}) <> '')`,
     ),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.enrolledBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'attendance_credentials_enrolled_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.revokedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'attendance_credentials_revoked_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'attendance_credentials_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

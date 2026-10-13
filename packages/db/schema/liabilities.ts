@@ -17,7 +17,7 @@
  * the question people open the screen to ask.
  */
 import { sql } from 'drizzle-orm';
-import { check, date, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { check, date, index, pgTable, text, timestamp, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
@@ -75,5 +75,19 @@ export const liabilities = pgTable(
       'liabilities_category_check',
       sql`${t.category} in ('taxes_payable','government_contributions','accrued_expenses','other')`,
     ),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'liabilities_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'liabilities_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
