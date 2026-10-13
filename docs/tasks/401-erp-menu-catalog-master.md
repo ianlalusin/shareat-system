@@ -548,3 +548,71 @@ _(filled by the lanes: commits, test counts.)_
   not with cost. Built as (a) unless Ian says otherwise; (b) later is a new `pricing_basis` column, not a redesign.
 
 Earlier wording of the questions and the planner's recommendations are in git history (commit 68a77f0).
+
+## S3 projection types (planner, 2026-10-14; binding)
+All types live in `packages/domain/src/menu/project.ts` and are **structural** (it may not import `@shareat/db`, I14); repo rows
+and `OfferInForce` / `OptionOfferInForce` must be assignable to them. **`menuRepo.menuSnapshot` is NOT built in S3**: S3 is
+pure, takes a plain object, and the tester builds snapshots by hand. The loader is built by the first slice that projects live
+data (the P1 carrier spec), with its return type checked against `MenuSnapshot`. S3 builder scope is unchanged (`project.ts`).
+```ts
+type Status = 'active' | 'retired'; type Channel = 'store' | 'online';
+export interface MenuSnapshot {                       // org catalog + per-store offers; rows in any order
+  readonly categories: readonly { id: string; name: string; parentId: string | null; sortOrder: number; status: Status }[];
+  readonly items: readonly { id: string; categoryId: string; name: string; description: string | null; itemType: 'a_la_carte' | 'package' | 'refill';
+    soldALaCarte: boolean; soldInPackageSession: boolean; dinerOrderable: boolean; sortOrder: number; status: Status }[];
+  readonly variants: readonly { id: string; menuItemId: string; label: string | null; isDefault: boolean; sortOrder: number; status: Status }[];
+  readonly optionGroups: readonly { id: string; name: string; selectionMode: 'single' | 'multi'; minSelections: number; maxSelections: number; status: Status }[];
+  readonly optionValues: readonly { id: string; optionGroupId: string; name: string; sortOrder: number; status: Status }[];
+  readonly optionGroupLinks: readonly { id: string; optionGroupId: string; menuItemId: string | null; variantId: string | null; sortOrder: number; status: Status }[];
+  readonly packageRefills: readonly { packageVariantId: string; refillItemId: string; status: Status }[];
+  readonly stores: readonly StoreOffersAt[];
+}
+export interface StoreOffersAt {
+  readonly storeId: string;
+  readonly at: Date;                                  // the instant offersInForce / optionOffersInForce were read at
+  readonly offers: readonly (ResolvableOffer & { variantId: string; channel: Channel; effectiveFrom: Date })[]; // = offersInForce(storeId, at), raw, with basis
+  readonly optionOffers: readonly { optionValueId: string; channel: Channel; priceDelta: string }[];           // = optionOffersInForce(storeId, at)
+  readonly upcoming: readonly Date[];                 // effective_from of every menu_offers AND menu_option_offers row of this store > at, both channels
+}
+export type NotOfferedReason = 'no_offer' | 'withdrawn' | 'no_basis' | 'rule_below_zero';  // 'no_offer' = no row in force
+export type ChannelOffer = { orderable: true; amount: string | null; bundleHeads: number | null; extraHeadAmount: string | null }
+                         | { orderable: false; notOffered: NotOfferedReason };
+export type ChannelDelta = { orderable: true; priceDelta: string } | { orderable: false; notOffered: 'no_offer' };
+export interface StoreMenuV1 { schemaVersion: 1; storeId: string; categories: ProjectedCategory[]; items: ProjectedItem[] }
+export interface ProjectedCategory { id: string; name: string; parentId: string | null; sortOrder: number }
+export interface ProjectedItem { id: string; categoryId: string; name: string; description: string | null; itemType: 'a_la_carte' | 'package' | 'refill';
+  soldALaCarte: boolean; soldInPackageSession: boolean; dinerOrderable: boolean; sortOrder: number; variants: ProjectedVariant[] }
+export interface ProjectedVariant { id: string; label: string | null; isDefault: boolean; sortOrder: number;
+  channels: { store: ChannelOffer; online: ChannelOffer }; optionGroups: ProjectedOptionGroup[]; refillItemIds: string[] }
+export interface ProjectedOptionGroup { id: string; name: string; selectionMode: 'single' | 'multi'; minSelections: number; maxSelections: number;
+  values: { id: string; name: string; sortOrder: number; channels: { store: ChannelDelta; online: ChannelDelta } }[] }
+export interface ProjectedStoreMenu { menu: StoreMenuV1; contentHash: string; nextChangeAt: string | null }
+export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Date): ProjectedStoreMenu;
+```
+1. **Offers (Q4): raw `OfferInForce` with `basis`**, and the projection calls `resolveOfferPrice` (from `./resolve-price`) on each.
+   That is §3's "resolved by `resolveOfferPrice`": `project.ts` still does no money arithmetic, and the one decision of what a
+   row means stays in one function. No row in force for a (variant, channel) → `{ orderable: false, notOffered: 'no_offer' }`;
+   a `notOffered` result → `orderable: false` with that reason (I19). `orderable` comes from offers only, never 86 (R12);
+   `dinerOrderable` is the item flag passed through, not combined into `orderable`.
+2. **Guards (throw, a caller bug):** `storeId` absent from `snapshot.stores`; `entry.at.getTime() !== at.getTime()` (rows in
+   force at another instant would be silently wrong; K2 forbids re-deriving "in force" in TypeScript).
+3. **What appears:** a variant iff it and its item are `active` and it is orderable on at least one channel; an item iff at
+   least one variant appears; a category iff it holds an appearing item or is the parent of an appearing category. A
+   not-orderable channel of an appearing variant carries its reason. An option value appears iff active and orderable on a
+   channel; option channels are independent of the variant's.
+4. **I9:** a variant's groups = its own active links if it has any, else its item's active links; never the union. Inactive
+   groups are skipped. A group whose values all drop still appears with `values: []`.
+5. **I10:** `refillItemIds` = active `packageRefills` rows of that package variant whose refill item appears in this projection,
+   sorted by id; `[]` on every non-package variant and on a package with no rows. Empty never means all.
+6. **I15 / K10:** `nextChangeAt` = the minimum of `upcoming` that is `> at`, as `toISOString()`, else `null`. A future option
+   offer counts. Store-channel rows count (an online rule follows them, K10). R12's "offer or rule" means online pricing
+   **rules** (they are `menu_offers` rows); **depletion rules do not count** (they never appear in the menu, so they cannot change it).
+   Catalog edits are not dated: the carrier sees them as a new `contentHash`.
+7. **Order:** the projection sorts every list itself, so input row order never changes the output: categories, items, values by
+   (`sortOrder`, `name`, `id`); variants by (`isDefault` first, `sortOrder`, `label ?? ''`, `id`); groups by (link `sortOrder`,
+   `name`, `id`). Strings compare by UTF-16 code unit (`<`), never `localeCompare`.
+8. **`contentHash` (I14):** lowercase hex sha256 (`node:crypto`) of the UTF-8 bytes of `canonicalJson(menu)`: object keys sorted
+   by code unit at every depth, arrays kept in the order above, no whitespace, `JSON.stringify` for strings and numbers, `null`
+   kept, `undefined` never emitted (the builder writes a local ~10-line `canonicalJson`; the `@shareat/db` one is off limits).
+   Hashed: `menu` only. **Not hashed:** `nextChangeAt`, `at`; there is no generated-at stamp anywhere in the output. So the same
+   menu at two instants gives the same hash. Money stays 2-decimal text exactly as the repo or `resolveOfferPrice` gives it.
