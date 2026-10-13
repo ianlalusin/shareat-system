@@ -258,13 +258,13 @@ describe('R. compare reads the snapshot and v2Figures and runs S2 (verdict, no_d
   );
 
   it(
-    'R4 (R12, exit code): a v1-only supplier debt with no v2 entry is open, classed UNEXPLAINED (R9 matching is not wired, so NOT_DOUBLE_ENTERED does not fire), and exitCode 2; a recorded V2_DEFECT disposition at that exact delta is read and classes the line V2_DEFECT (week stays open: 0 compared days, S2 ruling, exitCode 2); the CLI path READS dispositions. Mutant: dispositions ignored. Red today: runDualRun undefined',
+    'R4 (R12, exit code): a v1-only supplier debt with no v2 entry is open, classed NOT_DOUBLE_ENTERED (S4b: R9 document matching is wired, and v2 holds no candidate), and exitCode 2; a recorded V2_DEFECT disposition at that exact delta is read and classes the line V2_DEFECT (week stays open: 0 compared days, S2 ruling, exitCode 2); the CLI path READS dispositions. Mutant: dispositions ignored. Red today: runDualRun undefined',
     async () => {
       const f = await fixture('r4');
       const open = await run(f, { apply: false });
       expect(weekOf(open, f.storeA.code)).toMatchObject({ verdict: 'open' });
       expect(apLineOf(weekOf(open, f.storeA.code))).toMatchObject({ v1: 50000, v2: 0, delta: -50000 });
-      expect(apLineOf(weekOf(open, f.storeA.code)).class).toBe('UNEXPLAINED');
+      expect(apLineOf(weekOf(open, f.storeA.code)).class).toBe('NOT_DOUBLE_ENTERED');
       expect(open.exitCode).toBe(2);
       await sql`insert into dual_run_dispositions (org_id, store_id, week_start, kind, line_key, delta_at, class, ref, note, created_by)
                 values (${f.orgId}, ${f.storeA.id}, '2026-10-19', 'ap_supplier', ${f.supId}, '-500.00', 'V2_DEFECT', 'DEF-901', 'invoice not entered', ${f.admin.personId})`;
