@@ -7,6 +7,7 @@
  */
 import type { Actor } from '@shareat/auth';
 import { auditLogRepo, menuRepo, transaction, type Tx } from '@shareat/db';
+import { compareDecimal, decimal } from '@shareat/core/money';
 import { parseDecimalInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
 
@@ -49,6 +50,21 @@ export function parseMenuAmount(raw: unknown, rawLabel: string, humanLabel: stri
   const value = parseDecimalInput(raw, '14,2', rawLabel, humanLabel);
   if (!signed && value.startsWith('-')) {
     throw refuse(`${rawLabel} - "${raw}" is negative; an amount cannot be below zero.`, `${humanLabel} - can't be below zero.`);
+  }
+  return value;
+}
+
+/** A markup percent: signed text, at most FOUR decimals (`numeric(8,4)`), strictly above -100 (a price of nothing or less). */
+export function parseMarkupPercent(raw: unknown, rawLabel: string, humanLabel: string): string {
+  if (typeof raw !== 'string') {
+    throw refuse(
+      `${rawLabel} - the percent must be text with at most four decimal places, not a number.`,
+      `${humanLabel} - enter it as a percent with at most four decimal places.`,
+    );
+  }
+  const value = parseDecimalInput(raw, '8,4', rawLabel, humanLabel);
+  if (compareDecimal(value, decimal('-100', '8,4')) <= 0) {
+    throw refuse(`${rawLabel} - "${raw}" would take the price to nothing or below.`, `${humanLabel} - must be above -100 (that would make the price free or negative).`);
   }
   return value;
 }

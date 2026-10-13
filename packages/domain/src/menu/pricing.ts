@@ -10,9 +10,9 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { menuRepo, type Tx } from '@shareat/db';
-import { MENU_CHANNELS, MENU_DEPLETION_MODES, type MenuChannel, type MenuDepletionMode } from '@shareat/db/schema';
+import { MENU_CHANNELS, MENU_DEPLETION_MODES, MENU_PRICING_MODES, type MenuChannel, type MenuDepletionMode, type MenuPricingMode } from '@shareat/db/schema';
 import { gone, refuse } from '../shared/refusal';
-import { audit, inTx, parseMenuAmount, parseMenuQuantity, requireNotBackdated, requireScheduled } from './shared';
+import { audit, inTx, parseMarkupPercent, parseMenuAmount, parseMenuQuantity, requireNotBackdated, requireScheduled } from './shared';
 
 // -------------------------------------------------------------------------------------------------------------------
 // Depletion rules (R6): the pos_item_maps shape, per variant, effective-dated
@@ -105,6 +105,16 @@ export interface SetMenuOfferInput {
    * missing amount on anything else).
    */
   amount?: string | null;
+  /**
+   * R15 (Ian, Q4), ONLINE channel only. `fixed` (default) = `amount` as typed. `percent_markup` = the store price in force at the
+   * same instant x (100 + `markupPercent`) / 100; `fixed_markup` = that store price + `fixedMarkupAmount`. A rule row carries its
+   * figure and no amount; the price is resolved on read (`resolveOfferPrice`), never stored.
+   */
+  pricingMode?: MenuPricingMode;
+  /** Text, signed, at most FOUR decimals, above -100 (-10 = ten percent lower). */
+  markupPercent?: string;
+  /** Text, signed, at most two decimals. */
+  fixedMarkupAmount?: string;
   /** A package sold as a bundle: the guests the bundle price covers. Needs `extraHeadAmount`. */
   bundleHeads?: number;
   /** Text, at most two decimals: the price per guest beyond `bundleHeads`. */
@@ -117,7 +127,37 @@ export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: 
   return inTx(tx, async (trx) => {
     await authorize(trx, actor, 'set_menu_price', { storeId: input.storeId });
     const channel = requireChannel(input.channel, 'setMenuOffer');
-    const amount = input.amount == null ? null : parseMenuAmount(input.amount, 'setMenuOffer: the price', 'The price', false);
+    const pricingMode = input.pricingMode ?? 'fixed';
+    if (!(MENU_PRICING_MODES as readonly unknown[]).includes(pricingMode)) {
+      throw refuse('setMenuOffer: pricing mode must be fixed, fixed_markup or percent_markup.', 'Choose a fixed price, a peso markup or a percent markup.');
+    }
+    const isRule = pricingMode !== 'fixed';
+    if (isRule && channel !== 'online') {
+      throw refuse('setMenuOffer: a price rule is for the online channel only.', 'A price rule can only be set for online ordering. The store price is typed.');
+    }
+    if (isRule && (input.amount != null || input.bundleHeads !== undefined || input.extraHeadAmount !== undefined)) {
+      throw refuse(
+        'setMenuOffer: a rule row carries its figure and no amount or bundle fields.',
+        'An online price rule follows the store price, so it has no price of its own. Remove the amount.',
+      );
+    }
+    if (!isRule && (input.markupPercent !== undefined || input.fixedMarkupAmount !== undefined)) {
+      throw refuse('setMenuOffer: markup figures need a markup pricing mode.', 'A markup figure only applies to an online price rule.');
+    }
+    let markupPercent: string | null = null;
+    let fixedMarkupAmount: string | null = null;
+    if (pricingMode === 'percent_markup') {
+      if (input.fixedMarkupAmount !== undefined || input.markupPercent === undefined) {
+        throw refuse('setMenuOffer: percent_markup needs markupPercent and no fixedMarkupAmount.', 'Enter the percent to add to (or, negative, take off) the store price.');
+      }
+      markupPercent = parseMarkupPercent(input.markupPercent, 'setMenuOffer: the markup percent', 'The markup percent');
+    } else if (pricingMode === 'fixed_markup') {
+      if (input.markupPercent !== undefined || input.fixedMarkupAmount === undefined) {
+        throw refuse('setMenuOffer: fixed_markup needs fixedMarkupAmount and no markupPercent.', 'Enter the peso amount to add to (or, negative, take off) the store price.');
+      }
+      fixedMarkupAmount = parseMenuAmount(input.fixedMarkupAmount, 'setMenuOffer: the markup amount', 'The markup amount', true);
+    }
+    const amount = isRule || input.amount == null ? null : parseMenuAmount(input.amount, 'setMenuOffer: the price', 'The price', false);
     const hasHeads = input.bundleHeads !== undefined;
     const hasExtra = input.extraHeadAmount !== undefined;
     if (hasHeads !== hasExtra) {
@@ -131,7 +171,12 @@ export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: 
     }
     const extra = hasExtra ? parseMenuAmount(input.extraHeadAmount, 'setMenuOffer: the extra-guest price', 'The extra-guest price', false) : null;
     await requireNotBackdated(trx, input.effectiveFrom, 'setMenuOffer', 'prices');
-    await requireVariant(trx, actor, input.variantId, 'setMenuOffer');
+    const variant = await requireVariant(trx, actor, input.variantId, 'setMenuOffer');
+    // R2: a refill is a zero-price serving. The database refuses an amount or a rule on one; say so first, in a sentence.
+    const item = await menuRepo.getItem(trx, actor.orgId, variant.menuItemId);
+    if (item?.itemType === 'refill' && (amount !== null || isRule || hasHeads)) {
+      throw refuse('setMenuOffer: a refill carries no price or price rule.', 'A refill is a free serving a package entitles. It has no price, so it cannot take one.');
+    }
     const row = await menuRepo.insertOffer(trx, {
       orgId: actor.orgId,
       storeId: input.storeId,
@@ -142,6 +187,9 @@ export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: 
       bundleHeads: hasHeads ? (input.bundleHeads as number) : null,
       extraHeadAmount: extra,
       withdrawn: false,
+      pricingMode,
+      markupPercent,
+      fixedMarkupAmount,
       createdBy: actor.personId,
     });
     await audit(trx, actor, 'menu_offer_set', 'menu_offers', row.id, null, row);
@@ -190,8 +238,10 @@ export async function cancelScheduledOffer(actor: Actor, input: { id: string; st
   });
 }
 
-async function requireVariant(trx: Tx, actor: Actor, id: string, rawLabel: string): Promise<void> {
-  if (!(await menuRepo.getVariant(trx, actor.orgId, id))) throw gone(`${rawLabel}: variant ${id} does not exist.`, 'variant');
+async function requireVariant(trx: Tx, actor: Actor, id: string, rawLabel: string) {
+  const variant = await menuRepo.getVariant(trx, actor.orgId, id);
+  if (!variant) throw gone(`${rawLabel}: variant ${id} does not exist.`, 'variant');
+  return variant;
 }
 
 // -------------------------------------------------------------------------------------------------------------------

@@ -23,8 +23,17 @@ import {
   menuOptionOffers,
   menuOptionValues,
   menuPackageRefills,
+  menuItemRequests,
 } from '../../schema/menu';
-import type { MenuChannel, MenuDepletionMode, MenuItemType, MenuSelectionMode, MenuStatus } from '../../schema/menu';
+import type {
+  MenuChannel,
+  MenuDepletionMode,
+  MenuItemType,
+  MenuPricingMode,
+  MenuRequestStatus,
+  MenuSelectionMode,
+  MenuStatus,
+} from '../../schema/menu';
 import type { Tx } from '../client';
 
 export type MenuCategoryRow = typeof menuCategories.$inferSelect;
@@ -37,6 +46,7 @@ export type MenuPackageRefillRow = typeof menuPackageRefills.$inferSelect;
 export type MenuDepletionRuleRow = typeof menuDepletionRules.$inferSelect;
 export type MenuOfferRow = typeof menuOffers.$inferSelect;
 export type MenuOptionOfferRow = typeof menuOptionOffers.$inferSelect;
+export type MenuItemRequestRow = typeof menuItemRequests.$inferSelect;
 
 /**
  * An instant that survives a JavaScript `Date` round trip. `now()` carries microseconds, a `Date` carries milliseconds, so a
@@ -350,6 +360,12 @@ export interface InsertOfferInput {
   bundleHeads: number | null;
   extraHeadAmount: string | null;
   withdrawn: boolean;
+  /** R15: `fixed` (default) or an online rule; a rule row carries `markupPercent` / `fixedMarkupAmount` and no amount. */
+  pricingMode?: MenuPricingMode;
+  /** `numeric(8,4)` as text, signed, above -100. */
+  markupPercent?: string | null;
+  /** `numeric(14,2)` as text, signed. */
+  fixedMarkupAmount?: string | null;
   createdBy: string;
 }
 
@@ -404,15 +420,28 @@ export async function deleteOptionOffer(tx: Tx, id: string): Promise<void> {
 // ---------------------------------------------------------------------------------------------------------------------
 // Reads: what is offered, and the history
 // ---------------------------------------------------------------------------------------------------------------------
-export interface OfferInForce {
-  readonly id: string;
-  readonly variantId: string;
-  readonly channel: MenuChannel;
-  /** 2-decimal text. Unit price, per-head price, or the bundle price; null on a refill offer (a zero-price serving). */
+/** A price row as stored, in the shape `resolveOfferPrice` reads. Money is 2-decimal text, the percent 4-decimal text. */
+export interface OfferPriceFields {
+  readonly withdrawn: boolean;
+  readonly pricingMode: MenuPricingMode;
+  /** Unit price, per-head price, or bundle price; null on a refill, a withdrawn row, or a rule row. */
   readonly amount: string | null;
   readonly bundleHeads: number | null;
   readonly extraHeadAmount: string | null;
+  readonly markupPercent: string | null;
+  readonly fixedMarkupAmount: string | null;
+}
+
+/**
+ * The row in force for one variant and channel, withdrawn rows INCLUDED (`withdrawn` says so). An ONLINE row carries `basis`: the
+ * STORE-channel row in force at the SAME `at` (null when the store has none), which a rule is computed from (R15).
+ */
+export interface OfferInForce extends OfferPriceFields {
+  readonly id: string;
+  readonly variantId: string;
+  readonly channel: MenuChannel;
   readonly effectiveFrom: Date;
+  readonly basis: OfferPriceFields | null;
 }
 
 export interface OptionOfferInForce {
@@ -426,27 +455,42 @@ export interface OptionOfferInForce {
 
 type Raw = Record<string, unknown>;
 
+const priceFields = (r: Raw, p: string): OfferPriceFields => ({
+  withdrawn: Boolean(r[`${p}withdrawn`]),
+  pricingMode: r[`${p}pricing_mode`] as MenuPricingMode,
+  amount: r[`${p}amount`] == null ? null : String(r[`${p}amount`]),
+  bundleHeads: r[`${p}bundle_heads`] == null ? null : Number(r[`${p}bundle_heads`]),
+  extraHeadAmount: r[`${p}extra_head_amount`] == null ? null : String(r[`${p}extra_head_amount`]),
+  markupPercent: r[`${p}markup_percent`] == null ? null : String(r[`${p}markup_percent`]),
+  fixedMarkupAmount: r[`${p}fixed_markup_amount`] == null ? null : String(r[`${p}fixed_markup_amount`]),
+});
+
 /**
- * What a store OFFERS at `at`, per variant and channel: the newest row at or before `at` (via `menu_offer_in_force`), kept
- * only if it is not a withdrawal. A variant with no row, or whose newest row is a withdrawal, is simply absent.
+ * The newest row at or before `at` for each variant and channel of a store (via `menu_offer_in_force`), withdrawals included;
+ * a variant with no row at all is absent. An online row comes with its store basis from the same function at the same `at`.
+ * Whether a row means "offered", and at what price, is `resolveOfferPrice`'s decision in the domain.
  */
 export async function offersInForce(tx: Tx, storeId: string, at: Date): Promise<OfferInForce[]> {
+  const when = at.toISOString();
   const rows = (await tx.execute(sql`
-    select f.id, f.variant_id, f.channel, f.amount::text as amount, f.bundle_heads, f.extra_head_amount::text as extra_head_amount,
-           f.effective_from
-      from (select distinct variant_id, channel from menu_offers where store_id = ${storeId} and effective_from <= ${at.toISOString()}::timestamptz) k
-     cross join lateral menu_offer_in_force(${storeId}, k.variant_id, k.channel, ${at.toISOString()}::timestamptz) f
-     where not f.withdrawn
+    select f.id, f.variant_id, f.channel, f.effective_from, f.withdrawn, f.pricing_mode, f.amount::text as amount, f.bundle_heads,
+           f.extra_head_amount::text as extra_head_amount, f.markup_percent::text as markup_percent,
+           f.fixed_markup_amount::text as fixed_markup_amount,
+           b.id as b_id, b.withdrawn as b_withdrawn, b.pricing_mode as b_pricing_mode, b.amount::text as b_amount,
+           b.bundle_heads as b_bundle_heads, b.extra_head_amount::text as b_extra_head_amount,
+           b.markup_percent::text as b_markup_percent, b.fixed_markup_amount::text as b_fixed_markup_amount
+      from (select distinct variant_id, channel from menu_offers where store_id = ${storeId} and effective_from <= ${when}::timestamptz) k
+     cross join lateral menu_offer_in_force(${storeId}, k.variant_id, k.channel, ${when}::timestamptz) f
+      left join lateral menu_offer_in_force(${storeId}, k.variant_id, 'store', ${when}::timestamptz) b on k.channel = 'online'
      order by f.variant_id, f.channel
   `)) as unknown as Raw[];
   return rows.map((r) => ({
     id: String(r.id),
     variantId: String(r.variant_id),
     channel: r.channel as MenuChannel,
-    amount: r.amount === null ? null : String(r.amount),
-    bundleHeads: r.bundle_heads === null ? null : Number(r.bundle_heads),
-    extraHeadAmount: r.extra_head_amount === null ? null : String(r.extra_head_amount),
     effectiveFrom: new Date(r.effective_from as string),
+    ...priceFields(r, ''),
+    basis: r.b_id == null ? null : priceFields(r, 'b_'),
   }));
 }
 
@@ -475,4 +519,72 @@ export async function offerHistory(tx: Tx, storeId: string, variantId: string): 
     .from(menuOffers)
     .where(and(eq(menuOffers.storeId, storeId), eq(menuOffers.variantId, variantId)))
     .orderBy(desc(menuOffers.effectiveFrom), asc(menuOffers.channel));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Item requests (R14): a manager asks for an item; a super admin resolves it once
+// ---------------------------------------------------------------------------------------------------------------------
+export async function getRequest(tx: Tx, orgId: string, id: string, forUpdate = false): Promise<MenuItemRequestRow | undefined> {
+  const q = tx.select().from(menuItemRequests).where(and(eq(menuItemRequests.id, id), eq(menuItemRequests.orgId, orgId)));
+  const [row] = forUpdate ? await q.for('update') : await q;
+  return row;
+}
+
+export async function insertRequest(
+  tx: Tx,
+  input: { orgId: string; storeId: string; requestedBy: string; name: string; itemType: MenuItemType; categoryId: string | null; note: string | null },
+): Promise<MenuItemRequestRow> {
+  const [row] = await tx
+    .insert(menuItemRequests)
+    .values({ ...input, createdBy: input.requestedBy })
+    .returning();
+  return row!;
+}
+
+/** The one status move a request makes (open -> approved | duplicate | rejected | withdrawn); the trigger refuses a second. */
+export async function resolveRequest(
+  tx: Tx,
+  id: string,
+  patch: { status: Exclude<MenuRequestStatus, 'open'>; resolvedBy: string; resolvedItemId?: string | null; resolutionNote?: string | null },
+): Promise<MenuItemRequestRow> {
+  const [row] = await tx
+    .update(menuItemRequests)
+    .set({
+      status: patch.status,
+      resolvedBy: patch.resolvedBy,
+      resolvedItemId: patch.resolvedItemId ?? null,
+      resolutionNote: patch.resolutionNote ?? null,
+      resolvedAt: sql`now()`,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(menuItemRequests.id, id))
+    .returning();
+  return row!;
+}
+
+export interface SimilarMenuItem {
+  readonly id: string;
+  readonly name: string;
+  readonly itemType: MenuItemType;
+  /** 1 for a normalised exact-name match, else the pg_trgm similarity (at least 0.4). */
+  readonly similarity: number;
+}
+
+/**
+ * The duplicate check (R14c), deterministic: a normalised exact name (case and whitespace) first, then `pg_trgm` similarity at
+ * or above 0.4. Active and retired items both count (a retired one is still the thing being asked for). Best match first.
+ */
+export async function similarMenuItems(tx: Tx, orgId: string, name: string, limit = 5): Promise<SimilarMenuItem[]> {
+  const rows = (await tx.execute(sql`
+    select id, name, item_type,
+           case when regexp_replace(lower(trim(name)), '[[:space:]]+', ' ', 'g') = regexp_replace(lower(trim(${name}::text)), '[[:space:]]+', ' ', 'g')
+                then 1.0 else similarity(lower(name), lower(${name}::text)) end as score
+      from menu_items
+     where org_id = ${orgId}
+       and (regexp_replace(lower(trim(name)), '[[:space:]]+', ' ', 'g') = regexp_replace(lower(trim(${name}::text)), '[[:space:]]+', ' ', 'g')
+            or similarity(lower(name), lower(${name}::text)) >= 0.4)
+     order by score desc, name
+     limit ${limit}
+  `)) as unknown as Raw[];
+  return rows.map((r) => ({ id: String(r.id), name: String(r.name), itemType: r.item_type as MenuItemType, similarity: Number(r.score) }));
 }

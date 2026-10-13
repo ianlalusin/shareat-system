@@ -20,6 +20,7 @@
  */
 import { decimal } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
+import { divideRoundHalfUp, pow10, textOf } from '../shared/exact-decimal';
 
 export interface BranchPriceRule {
   pricingMode: 'fixed' | 'fixed_markup' | 'percent_markup';
@@ -74,26 +75,6 @@ function ruleFigure<S extends `${number},${number}`>(value: string | null | unde
     );
   }
   return exactOf(minted, what);
-}
-
-const pow10 = (n: number): bigint => 10n ** BigInt(n);
-
-/** `numerator / denominator` (denominator > 0), rounded half-up on the absolute value. */
-function divideRoundHalfUp(numerator: bigint, denominator: bigint): bigint {
-  const negative = numerator < 0n;
-  const a = negative ? -numerator : numerator;
-  const q = a / denominator;
-  const rounded = (a % denominator) * 2n >= denominator ? q + 1n : q;
-  return negative ? -rounded : rounded;
-}
-
-/** An integer count of `10^-places` units as text, never through a float. */
-function textOf(units: bigint, places: number): string {
-  const negative = units < 0n;
-  const abs = negative ? -units : units;
-  const f = pow10(places);
-  const frac = places > 0 ? `.${(abs % f).toString().padStart(places, '0')}` : '';
-  return `${negative && abs !== 0n ? '-' : ''}${abs / f}${frac}`;
 }
 
 /** Bring two exact values to one scale. */

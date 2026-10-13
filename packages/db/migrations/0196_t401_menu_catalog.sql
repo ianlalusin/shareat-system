@@ -190,6 +190,7 @@ CREATE TABLE "menu_depletion_rules" (
 		OR ("mode" = 'recipe' AND "recipe_id" IS NOT NULL AND "item_id" IS NULL)
 		OR ("mode" = 'no_stock' AND "item_id" IS NULL AND "recipe_id" IS NULL)
 	),
+	CONSTRAINT "menu_depletion_rules_quantity_per_sale_finite_check" CHECK ("quantity_per_sale" > '-Infinity'::numeric AND "quantity_per_sale" < 'Infinity'::numeric),
 	CONSTRAINT "menu_depletion_rules_quantity_check" CHECK ("quantity_per_sale" IS NULL OR ("quantity_per_sale" > 0 AND "quantity_per_sale" < 'Infinity'::numeric))
 );--> statement-breakpoint
 
@@ -221,6 +222,10 @@ CREATE TABLE "menu_offers" (
 		OR ("pricing_mode" = 'fixed_markup' AND "fixed_markup_amount" IS NOT NULL AND "fixed_markup_amount" > '-Infinity'::numeric AND "fixed_markup_amount" < 'Infinity'::numeric
 			AND "amount" IS NULL AND "bundle_heads" IS NULL AND "extra_head_amount" IS NULL AND "markup_percent" IS NULL)
 	),
+	CONSTRAINT "menu_offers_amount_finite_check" CHECK ("amount" > '-Infinity'::numeric AND "amount" < 'Infinity'::numeric),
+	CONSTRAINT "menu_offers_extra_head_amount_finite_check" CHECK ("extra_head_amount" > '-Infinity'::numeric AND "extra_head_amount" < 'Infinity'::numeric),
+	CONSTRAINT "menu_offers_markup_percent_finite_check" CHECK ("markup_percent" > '-Infinity'::numeric AND "markup_percent" < 'Infinity'::numeric),
+	CONSTRAINT "menu_offers_fixed_markup_amount_finite_check" CHECK ("fixed_markup_amount" > '-Infinity'::numeric AND "fixed_markup_amount" < 'Infinity'::numeric),
 	CONSTRAINT "menu_offers_amount_check" CHECK ("amount" IS NULL OR ("amount" >= 0 AND "amount" < 'Infinity'::numeric)),
 	CONSTRAINT "menu_offers_bundle_pair_check" CHECK (("bundle_heads" IS NULL) = ("extra_head_amount" IS NULL)),
 	CONSTRAINT "menu_offers_bundle_heads_check" CHECK ("bundle_heads" IS NULL OR "bundle_heads" >= 1),
@@ -240,6 +245,7 @@ CREATE TABLE "menu_option_offers" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "menu_option_offers_slot_unique" UNIQUE ("store_id","option_value_id","channel","effective_from"),
 	CONSTRAINT "menu_option_offers_channel_check" CHECK ("channel" in ('store','online')),
+	CONSTRAINT "menu_option_offers_price_delta_finite_check" CHECK ("price_delta" > '-Infinity'::numeric AND "price_delta" < 'Infinity'::numeric),
 	CONSTRAINT "menu_option_offers_delta_shape_check" CHECK (
 		("withdrawn" AND "price_delta" IS NULL)
 		OR (NOT "withdrawn" AND "price_delta" IS NOT NULL AND "price_delta" > '-Infinity'::numeric AND "price_delta" < 'Infinity'::numeric)
@@ -270,6 +276,7 @@ CREATE TABLE "menu_item_requests" (
 		("status" = 'open' AND "resolved_item_id" IS NULL AND "resolved_by" IS NULL AND "resolved_at" IS NULL AND "resolution_note" IS NULL)
 		OR ("status" <> 'open' AND "resolved_by" IS NOT NULL AND "resolved_at" IS NOT NULL)
 	),
+	CONSTRAINT "menu_item_requests_item_only_when_resolved_check" CHECK ("resolved_item_id" IS NULL OR "status" IN ('approved','duplicate')),
 	CONSTRAINT "menu_item_requests_item_needed_check" CHECK ("status" NOT IN ('approved','duplicate') OR "resolved_item_id" IS NOT NULL),
 	CONSTRAINT "menu_item_requests_reject_note_check" CHECK ("status" <> 'rejected' OR length(trim(coalesce("resolution_note", ''))) > 0)
 );--> statement-breakpoint
@@ -298,9 +305,9 @@ CREATE TABLE "menu_usage_source_switches" (
 	"difference_count" integer,
 	"created_by" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "menu_usage_source_switches_source_check" CHECK ("source" in ('pos_item_maps','menu_rules')),
+	CONSTRAINT "menu_usage_source_switches_source_check" CHECK ("source" in ('v1_pos_map','menu_rules')),
 	CONSTRAINT "menu_usage_source_switches_difference_count_check" CHECK ("difference_count" IS NULL OR "difference_count" >= 0),
-	CONSTRAINT "menu_usage_source_switches_reason_check" CHECK (NOT ("source" = 'menu_rules' AND "difference_count" > 0) OR length(trim(coalesce("reason", ''))) > 0)
+	CONSTRAINT "menu_usage_source_switches_reason_check" CHECK (NOT ("source" = 'menu_rules' AND ("difference_count" IS NULL OR "difference_count" > 0)) OR length(trim(coalesce("reason", ''))) > 0)
 );--> statement-breakpoint
 
 ALTER TABLE "menu_categories" ADD CONSTRAINT "menu_categories_org_id_organizations_id_fk"
@@ -772,6 +779,9 @@ BEGIN
 	IF EXISTS (SELECT 1 FROM "menu_item_variants" v WHERE v."menu_item_id" = NEW."id" AND "menu_variant_has_live_offer"(v."id")) THEN
 		RAISE EXCEPTION 'this item cannot be retired while an offer for one of its variants is in force or scheduled (withdraw first)' USING ERRCODE = '23514';
 	END IF;
+	IF EXISTS (SELECT 1 FROM "menu_pos_v1_links" l JOIN "menu_item_variants" v ON v."id" = l."variant_id" WHERE v."menu_item_id" = NEW."id" AND l."status" = 'active') THEN
+		RAISE EXCEPTION 'this item cannot be retired while an active v1 POS link points at one of its variants (deactivate the link first)' USING ERRCODE = '23514';
+	END IF;
 	RETURN NEW;
 END;
 $$;--> statement-breakpoint
@@ -789,10 +799,17 @@ CREATE TRIGGER "menu_items_retire_guard" BEFORE UPDATE OF "status" ON "menu_item
 -- Variants.
 -- ---------------------------------------------------------------------------------------------
 CREATE FUNCTION "menu_item_variants_retire_guard"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+	v_item uuid;
 BEGIN
+	SELECT v."menu_item_id" INTO v_item FROM "menu_item_variants" v WHERE v."id" = NEW."id";
+	PERFORM "menu_lock_keys"(ARRAY[v_item]);
 	PERFORM "menu_lock_key"(NEW."id");
 	IF "menu_variant_has_live_offer"(NEW."id") THEN
 		RAISE EXCEPTION 'this variant cannot be retired while an offer for it is in force or scheduled (withdraw first)' USING ERRCODE = '23514';
+	END IF;
+	IF EXISTS (SELECT 1 FROM "menu_pos_v1_links" l WHERE l."variant_id" = NEW."id" AND l."status" = 'active') THEN
+		RAISE EXCEPTION 'this variant cannot be retired while an active v1 POS link points at it (deactivate the link first)' USING ERRCODE = '23514';
 	END IF;
 	RETURN NEW;
 END;
@@ -866,19 +883,31 @@ CREATE TRIGGER "menu_package_refills_pair_guard" BEFORE INSERT ON "menu_package_
 -- Item requests (R14): a request resolves once; its identity is frozen.
 -- ---------------------------------------------------------------------------------------------
 CREATE FUNCTION "menu_item_requests_guard"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+	v_type text;
 BEGIN
-	IF NEW."name" IS DISTINCT FROM OLD."name" OR NEW."store_id" IS DISTINCT FROM OLD."store_id"
-	   OR NEW."requested_by" IS DISTINCT FROM OLD."requested_by" OR NEW."item_type" IS DISTINCT FROM OLD."item_type" THEN
-		RAISE EXCEPTION 'name, store_id, requested_by and item_type of an item request are frozen (withdraw it and file a new one)' USING ERRCODE = '23514';
+	IF NEW."resolved_item_id" IS NOT NULL THEN
+		SELECT i."item_type" INTO v_type FROM "menu_items" i WHERE i."id" = NEW."resolved_item_id";
+		-- NULL: the item is missing; the foreign key reports that
+		IF v_type IS NOT NULL AND v_type <> NEW."item_type" THEN
+			RAISE EXCEPTION 'the resolved item must be of the requested item_type (% requested, % found)', NEW."item_type", v_type USING ERRCODE = '23514';
+		END IF;
 	END IF;
-	IF OLD."status" <> 'open' THEN
-		RAISE EXCEPTION 'a resolved item request (%) never changes again', OLD."status" USING ERRCODE = '23514';
+	IF TG_OP = 'UPDATE' THEN
+		IF NEW."name" IS DISTINCT FROM OLD."name" OR NEW."store_id" IS DISTINCT FROM OLD."store_id"
+		   OR NEW."requested_by" IS DISTINCT FROM OLD."requested_by" OR NEW."item_type" IS DISTINCT FROM OLD."item_type"
+		   OR NEW."created_by" IS DISTINCT FROM OLD."created_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+			RAISE EXCEPTION 'name, store_id, requested_by, item_type, created_by and created_at of an item request are frozen (withdraw it and file a new one)' USING ERRCODE = '23514';
+		END IF;
+		IF OLD."status" <> 'open' THEN
+			RAISE EXCEPTION 'a resolved item request (%) never changes again', OLD."status" USING ERRCODE = '23514';
+		END IF;
 	END IF;
 	RETURN NEW;
 END;
 $$;--> statement-breakpoint
 
-CREATE TRIGGER "menu_item_requests_guard" BEFORE UPDATE ON "menu_item_requests"
+CREATE TRIGGER "menu_item_requests_guard" BEFORE INSERT OR UPDATE ON "menu_item_requests"
 	FOR EACH ROW EXECUTE FUNCTION "menu_item_requests_guard"();--> statement-breakpoint
 
 -- ---------------------------------------------------------------------------------------------
@@ -940,6 +969,14 @@ CREATE TRIGGER "menu_usage_source_switches_insert_guard" BEFORE INSERT ON "menu_
 CREATE TRIGGER "menu_usage_source_switches_update_guard" BEFORE UPDATE ON "menu_usage_source_switches"
 	FOR EACH ROW EXECUTE FUNCTION "menu_history_update_guard"();--> statement-breakpoint
 ALTER TABLE "menu_usage_source_switches" ENABLE ALWAYS TRIGGER "menu_usage_source_switches_update_guard";--> statement-breakpoint
+CREATE FUNCTION "menu_usage_source_switches_delete_guard"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+	RAISE EXCEPTION 'menu_usage_source_switches is append-only: a row is never deleted' USING ERRCODE = '23514';
+END;
+$$;--> statement-breakpoint
+CREATE TRIGGER "menu_usage_source_switches_delete_guard" BEFORE DELETE ON "menu_usage_source_switches"
+	FOR EACH ROW EXECUTE FUNCTION "menu_usage_source_switches_delete_guard"();--> statement-breakpoint
+ALTER TABLE "menu_usage_source_switches" ENABLE ALWAYS TRIGGER "menu_usage_source_switches_delete_guard";--> statement-breakpoint
 
 ALTER TABLE "menu_categories" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "menu_categories" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -1010,3 +1047,33 @@ GRANT SELECT, INSERT, DELETE ON "menu_option_offers" TO "shareat_app";--> statem
 GRANT SELECT, INSERT, UPDATE ON "menu_item_requests" TO "shareat_app";--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON "menu_pos_v1_links" TO "shareat_app";--> statement-breakpoint
 GRANT SELECT, INSERT ON "menu_usage_source_switches" TO "shareat_app";
+--> statement-breakpoint
+-- add_menu_item OWNER BACKFILL (the seventh super-admin-only capability, spec section 3; same shape as 0188's B0188).
+-- SUPER_ADMIN_ONLY_CAPABILITIES is materialised as person_grants once, at createFirstAdmin, so an org created before today
+-- holds six and would silently lose "super admin may add an item" when add_menu_item lands. Every OWNER (an ACTIVE admin
+-- with live grants of all SIX current ones) gets one live org-wide add_menu_item grant (source owner). Idempotent: a person
+-- who already holds a live org-wide one is skipped. person_grants is FORCE ROW LEVEL SECURITY, so the block runs with
+-- row_security off (the 0166 pattern): only a role RLS cannot filter (doadmin in production) can apply it; any other role
+-- fails LOUDLY (SQLSTATE 42501) instead of granting nobody. row_security is restored after.
+-- PRECHECK (read only, doadmin): SELECT p.display_name, count(DISTINCT g.grant_name) FROM person_grants g JOIN persons p ON p.id = g.person_id
+--   JOIN person_roles r ON r.person_id = g.person_id AND r.role = 'admin' AND r.revoked_at IS NULL
+--   WHERE g.revoked_at IS NULL AND g.grant_name IN ('approve_item','post_journal_entry','cross_org_access','view_franchise_sales','unlink_store_from_pos','verify_own_sales_day')
+--   GROUP BY 1 HAVING count(DISTINCT g.grant_name) = 6;   -- expect only Ian
+-- B0196:begin
+SET LOCAL row_security = off;
+--> statement-breakpoint
+INSERT INTO "person_grants" ("person_id", "grant_name", "granted_by", "grant_source")
+SELECT g."person_id", 'add_menu_item', NULL, 'owner'
+  FROM "person_grants" g
+ WHERE g."revoked_at" IS NULL
+   AND g."grant_name" IN ('approve_item', 'post_journal_entry', 'cross_org_access', 'view_franchise_sales', 'unlink_store_from_pos', 'verify_own_sales_day')
+   AND EXISTS (SELECT 1 FROM "person_roles" r
+                WHERE r."person_id" = g."person_id" AND r."role" = 'admin' AND r."revoked_at" IS NULL)
+   AND NOT EXISTS (SELECT 1 FROM "person_grants" u
+                    WHERE u."person_id" = g."person_id" AND u."grant_name" = 'add_menu_item'
+                      AND u."revoked_at" IS NULL AND u."store_id" IS NULL)
+ GROUP BY g."person_id"
+HAVING count(DISTINCT g."grant_name") = 6;
+--> statement-breakpoint
+SET LOCAL row_security = on;
+-- B0196:end

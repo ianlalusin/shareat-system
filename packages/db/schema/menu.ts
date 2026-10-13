@@ -57,7 +57,7 @@ export type MenuRequestStatus = (typeof MENU_REQUEST_STATUSES)[number];
 export const MENU_LINK_STATUSES = ['active', 'inactive'] as const;
 export type MenuLinkStatus = (typeof MENU_LINK_STATUSES)[number];
 
-export const MENU_USAGE_SOURCES = ['pos_item_maps', 'menu_rules'] as const;
+export const MENU_USAGE_SOURCES = ['v1_pos_map', 'menu_rules'] as const;
 export type MenuUsageSource = (typeof MENU_USAGE_SOURCES)[number];
 
 export const MENU_DEPLETION_MODES = ['direct', 'recipe', 'no_stock'] as const;
@@ -399,6 +399,7 @@ export const menuDepletionRules = pgTable(
   (t) => [
     unique('menu_depletion_rules_variant_effective_unique').on(t.variantId, t.effectiveFrom),
     index('menu_depletion_rules_org_idx').on(t.orgId),
+    check('menu_depletion_rules_quantity_per_sale_finite_check', sql`${t.quantityPerSale} > '-Infinity'::numeric AND ${t.quantityPerSale} < 'Infinity'::numeric`),
     check('menu_depletion_rules_mode_check', sql`${t.mode} in ('direct','recipe','no_stock')`),
     check(
       'menu_depletion_rules_mode_shape_check',
@@ -474,6 +475,10 @@ export const menuOffers = pgTable(
     unique('menu_offers_slot_unique').on(t.storeId, t.variantId, t.channel, t.effectiveFrom),
     index('menu_offers_org_store_idx').on(t.orgId, t.storeId, t.effectiveFrom),
     index('menu_offers_variant_idx').on(t.variantId),
+    check('menu_offers_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric AND ${t.amount} < 'Infinity'::numeric`),
+    check('menu_offers_extra_head_amount_finite_check', sql`${t.extraHeadAmount} > '-Infinity'::numeric AND ${t.extraHeadAmount} < 'Infinity'::numeric`),
+    check('menu_offers_markup_percent_finite_check', sql`${t.markupPercent} > '-Infinity'::numeric AND ${t.markupPercent} < 'Infinity'::numeric`),
+    check('menu_offers_fixed_markup_amount_finite_check', sql`${t.fixedMarkupAmount} > '-Infinity'::numeric AND ${t.fixedMarkupAmount} < 'Infinity'::numeric`),
     check('menu_offers_channel_check', sql`${t.channel} in ('store','online')`),
     check(
       'menu_offers_withdrawn_no_amounts_check',
@@ -542,6 +547,7 @@ export const menuOptionOffers = pgTable(
   (t) => [
     unique('menu_option_offers_slot_unique').on(t.storeId, t.optionValueId, t.channel, t.effectiveFrom),
     index('menu_option_offers_value_idx').on(t.optionValueId),
+    check('menu_option_offers_price_delta_finite_check', sql`${t.priceDelta} > '-Infinity'::numeric AND ${t.priceDelta} < 'Infinity'::numeric`),
     check('menu_option_offers_channel_check', sql`${t.channel} in ('store','online')`),
     check(
       'menu_option_offers_delta_shape_check',
@@ -609,6 +615,7 @@ export const menuItemRequests = pgTable(
       sql`(${t.status} = 'open' AND ${t.resolvedItemId} IS NULL AND ${t.resolvedBy} IS NULL AND ${t.resolvedAt} IS NULL AND ${t.resolutionNote} IS NULL)
         OR (${t.status} <> 'open' AND ${t.resolvedBy} IS NOT NULL AND ${t.resolvedAt} IS NOT NULL)`,
     ),
+    check('menu_item_requests_item_only_when_resolved_check', sql`${t.resolvedItemId} IS NULL OR ${t.status} IN ('approved','duplicate')`),
     check('menu_item_requests_item_needed_check', sql`${t.status} NOT IN ('approved','duplicate') OR ${t.resolvedItemId} IS NOT NULL`),
     check('menu_item_requests_reject_note_check', sql`${t.status} <> 'rejected' OR length(trim(coalesce(${t.resolutionNote}, ''))) > 0`),
     foreignKey({
@@ -725,11 +732,11 @@ export const menuUsageSourceSwitches = pgTable(
   },
   (t) => [
     index('menu_usage_source_switches_store_idx').on(t.storeId, t.createdAt),
-    check('menu_usage_source_switches_source_check', sql`${t.source} in ('pos_item_maps','menu_rules')`),
+    check('menu_usage_source_switches_source_check', sql`${t.source} in ('v1_pos_map','menu_rules')`),
     check('menu_usage_source_switches_difference_count_check', sql`${t.differenceCount} IS NULL OR ${t.differenceCount} >= 0`),
     check(
       'menu_usage_source_switches_reason_check',
-      sql`NOT (${t.source} = 'menu_rules' AND ${t.differenceCount} > 0) OR length(trim(coalesce(${t.reason}, ''))) > 0`,
+      sql`NOT (${t.source} = 'menu_rules' AND (${t.differenceCount} IS NULL OR ${t.differenceCount} > 0)) OR length(trim(coalesce(${t.reason}, ''))) > 0`,
     ),
     foreignKey({
       columns: [t.orgId, t.storeId],

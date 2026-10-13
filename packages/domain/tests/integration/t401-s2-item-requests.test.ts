@@ -113,7 +113,7 @@ describe('resolving a request is SUPER ADMIN only (add_menu_item); a request res
     const r = await open(c, 'Wagyu Platter');
     const items = await itemCount(c);
     const audit = await auditCount(c.orgId);
-    const runs = [
+    const runs: (() => Promise<unknown>)[] = [
       () => asOrg(c.orgId, (tx) => approveMenuItemRequest(c.admin, { id: r.id, categoryId: c.categoryId }, tx)),
       () => asOrg(c.orgId, (tx) => markMenuItemRequestDuplicate(c.admin, { id: r.id, itemId: existing.itemId }, tx)),
       () => asOrg(c.orgId, (tx) => rejectMenuItemRequest(c.admin, { id: r.id, note: 'no' }, tx)),

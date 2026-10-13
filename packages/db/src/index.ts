@@ -312,6 +312,9 @@ export type {
   MenuDepletionRuleRow,
   MenuOfferRow,
   MenuOptionOfferRow,
+  MenuItemRequestRow,
+  SimilarMenuItem,
+  OfferPriceFields,
   OfferInForce,
   OptionOfferInForce,
 } from './repo/menu';

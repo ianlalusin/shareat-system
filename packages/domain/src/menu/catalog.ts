@@ -1,7 +1,8 @@
 /**
  * T-401 S2 - categories, items and variants. docs/tasks/401-erp-menu-catalog-master.md R1, R2, R9 and the S1 audit rulings.
  *
- * Every function: `(actor, input, tx?)`, `authorize('manage_menu')` first, one `audit_log` row in the same transaction.
+ * Every function: `(actor, input, tx?)`, `authorize()` first, one `audit_log` row in the same transaction. Gates (Ian, Q2):
+ * `add_menu_item` (super admin only) for createMenuItem and addMenuVariant; `manage_menu` (super admin, admin) for everything else here.
  * The database triggers refuse what must never happen (a retired category holding an active item, an item_type change
  * once priced, a retire while a live offer exists); this file turns the commonest of them into sentences and keeps the
  * one rule the database cannot see from one row: an item is created WITH its default variant, and is never brought back
@@ -122,7 +123,7 @@ function requireRefillNotSold(itemType: MenuItemType, soldALaCarte: boolean, sol
 /** Creates the item AND its default variant (unlabelled, active) in the caller's transaction. One audit row, naming both. */
 export async function createMenuItem(actor: Actor, input: CreateMenuItemInput, tx?: Tx): Promise<{ id: string; defaultVariantId: string }> {
   return inTx(tx, async (trx) => {
-    await authorize(trx, actor, 'manage_menu', {});
+    await authorize(trx, actor, 'add_menu_item', {});
     const name = requireName(input.name, 'createMenuItem', 'An item');
     const itemType = requireItemType(input.itemType, 'createMenuItem');
     const soldALaCarte = input.soldALaCarte ?? itemType === 'a_la_carte';
@@ -236,7 +237,7 @@ export async function addMenuVariant(
   tx?: Tx,
 ): Promise<{ id: string }> {
   return inTx(tx, async (trx) => {
-    await authorize(trx, actor, 'manage_menu', {});
+    await authorize(trx, actor, 'add_menu_item', {});
     const label = requireName(input.label, 'addMenuVariant', 'A variant');
     const item = await menuRepo.getItem(trx, actor.orgId, input.menuItemId, true);
     if (!item) throw gone(`addMenuVariant: item ${input.menuItemId} does not exist.`, 'menu item');

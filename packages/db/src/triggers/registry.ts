@@ -640,4 +640,10 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: "A usage-source switch is never updated (0196, ENABLE ALWAYS). Decides only from TG_OP.",
   },
+  menu_usage_source_switches_delete_guard: {
+    table: 'menu_usage_source_switches',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A usage-source switch is never deleted (0196, ENABLE ALWAYS). Decides only from TG_OP.',
+  },
 } as const;

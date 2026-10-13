@@ -144,7 +144,7 @@ async function populate(f: MenuFx) {
   await sql`insert into menu_pos_v1_links (org_id, store_id, pos_item_key, variant_id, status, created_by)
             values (${f.orgId}, ${f.storeId}, 'KEY-POP', ${f.variantId}, 'active', ${f.personId})`;
   await sql`insert into menu_usage_source_switches (org_id, store_id, source, created_by)
-            values (${f.orgId}, ${f.storeId}, 'pos_item_maps', ${f.personId})`;
+            values (${f.orgId}, ${f.storeId}, 'v1_pos_map', ${f.personId})`;
 }
 
 describe('I11 -- org isolation', () => {
@@ -197,7 +197,7 @@ describe('I11 -- org isolation', () => {
       menu_pos_v1_links: (tx) => tx`insert into menu_pos_v1_links (org_id, store_id, pos_item_key, variant_id, status, created_by)
                                     values (${A}, ${b.storeId}, 'SNEAKY-KEY', ${b.variantId}, 'active', ${by})`,
       menu_usage_source_switches: (tx) => tx`insert into menu_usage_source_switches (org_id, store_id, source, created_by)
-                                             values (${A}, ${b.storeId}, 'pos_item_maps', ${by})`,
+                                             values (${A}, ${b.storeId}, 'v1_pos_map', ${by})`,
     };
     for (const t of MENU_TABLES) {
       const r = await asApp(b.orgId, (tx) => stmts[t](tx));

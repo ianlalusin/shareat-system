@@ -165,7 +165,7 @@ export const insLink = (f: { orgId: string; personId: string; storeId: string },
     values (${f.orgId}, ${f.storeId}, ${key ?? uid('posKey')}, ${variantId}, ${locationId}, 'active', ${f.personId}) returning id`;
 
 /** A usage-source switch row (R7). */
-export const insSwitch = (f: { orgId: string; personId: string; storeId: string }, source = 'pos_item_maps', reason: string | null = null, diff: number | null = null) =>
+export const insSwitch = (f: { orgId: string; personId: string; storeId: string }, source = 'v1_pos_map', reason: string | null = null, diff: number | null = null) =>
   sql<{ id: string }[]>`
     insert into menu_usage_source_switches (org_id, store_id, source, reason, difference_count, created_by)
     values (${f.orgId}, ${f.storeId}, ${source}, ${reason}, ${diff}, ${f.personId}) returning id`;

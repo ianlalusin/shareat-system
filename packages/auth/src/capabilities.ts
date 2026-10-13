@@ -237,9 +237,12 @@ export type Capability =
   | 'manage_price_lists'
   // T-401 S2 - the ERP menu and catalog master. view_menu/manage_menu/set_menu_depletion are org; set_menu_price is store.
   | 'view_menu'
+  | 'add_menu_item'
   | 'manage_menu'
+  | 'request_menu_item'
   | 'set_menu_price'
   | 'set_menu_depletion'
+  | 'switch_usage_source'
   /** T-171 (DEF-129, 2026-09-03). What THIS commissary offers and at what manual cost, plus the
    *  link that says which branch may order here. Store-scoped to the COMMISSARY. Manager+. */
   | 'manage_commissary_offerings'
@@ -373,9 +376,12 @@ export const CAPABILITIES: readonly Capability[] = [
   'set_channel_payout',
   'manage_price_lists',
   'view_menu',
+  'add_menu_item',
   'manage_menu',
+  'request_menu_item',
   'set_menu_price',
   'set_menu_depletion',
+  'switch_usage_source',
   'manage_commissary_offerings',
   'manage_commissary_map',
   'manage_fixed_assets',
@@ -551,9 +557,12 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   manage_price_lists: 'org',
   // T-401. The menu is org master data; a price is per store (position-grantable per store, T-318).
   view_menu: 'org',
+  add_menu_item: 'org',
   manage_menu: 'org',
+  request_menu_item: 'store',
   set_menu_price: 'store',
   set_menu_depletion: 'org',
+  switch_usage_source: 'store',
   // T-171. STORE-scoped, unlike price lists: an offering belongs to one commissary, a map to one
   // branch, and invariant 9 says a caller may only edit the side they hold.
   manage_commissary_offerings: 'store',
@@ -744,9 +753,12 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   set_channel_payout: 'admin',
   manage_price_lists: 'admin',
   view_menu: 'sales',
+  add_menu_item: 'sales',
   manage_menu: 'sales',
+  request_menu_item: 'sales',
   set_menu_price: 'sales',
   set_menu_depletion: 'sales',
+  switch_usage_source: 'sales',
 
   cross_org_access: 'franchise',
   view_franchise_sales: 'franchise',
@@ -956,12 +968,16 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   /** T-350 (DEF-477). Ian, 2026-09-28: admin only. */
   set_channel_payout: { super_admin: true, admin: true, manager: false, staff: false },
   manage_price_lists: { super_admin: true, admin: true, manager: false, staff: false },
-  // T-401 (Q1 option a): one editor. Read is manager+; the menu and its prices are admin; a depletion rule is
-  // manager+ (the manager knows the recipe), same bar as manage_pos_map.
+  // T-401 (Ian, 2026-10-13). Items are centralised: only super admin ADDS an item or variant (and resolves requests).
+  // Editing the rest of the menu stays admin. A manager prices their own store (store scope is what limits "own") and
+  // may request an item. A depletion rule is a stock recipe: "only admin can edit recipe" (manager is a cross here).
   view_menu: { super_admin: true, admin: true, manager: true, staff: false },
+  add_menu_item: { super_admin: true, admin: false, manager: false, staff: false },
   manage_menu: { super_admin: true, admin: true, manager: false, staff: false },
-  set_menu_price: { super_admin: true, admin: true, manager: false, staff: false },
-  set_menu_depletion: { super_admin: true, admin: true, manager: true, staff: false },
+  request_menu_item: { super_admin: true, admin: true, manager: true, staff: false },
+  set_menu_price: { super_admin: true, admin: true, manager: true, staff: false },
+  set_menu_depletion: { super_admin: true, admin: true, manager: false, staff: false },
+  switch_usage_source: { super_admin: true, admin: true, manager: false, staff: false },
   // T-171. Manager+, same bar as manage_items: a store manager curates what their commissary
   // offers and what their branch receives it as. ⚠️ NOT admin-only like price lists — a map row
   // is operational setup ("which of my items is this"), not a commercial price decision.
@@ -1176,9 +1192,12 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   set_channel_payout: "change where a sales channel's payouts bank",
   manage_price_lists: 'manage price lists',
   view_menu: 'view the menu and its prices',
+  add_menu_item: 'add items and variants to the menu',
   manage_menu: 'edit the menu',
+  request_menu_item: 'ask for a new menu item',
   set_menu_price: 'set menu prices',
   set_menu_depletion: 'set what a menu item uses from stock',
+  switch_usage_source: "switch where a store's stock usage comes from",
   manage_commissary_offerings: 'choose what the commissary offers',
   manage_commissary_map: 'match commissary items to stock items',
   manage_fixed_assets: 'manage fixed assets',

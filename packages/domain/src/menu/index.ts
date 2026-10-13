@@ -5,3 +5,5 @@
 export * from './catalog';
 export * from './options';
 export * from './pricing';
+export * from './requests';
+export * from './resolve-price';

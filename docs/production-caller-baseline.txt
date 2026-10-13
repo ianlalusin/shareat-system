@@ -12,6 +12,7 @@ addUsageLine
 adjudicateRange
 allocationsFor
 applyCreditAction
+approveMenuItemRequest
 arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
@@ -28,7 +29,6 @@ confirmTradeOrder
 convertSpecimen
 countedVariances
 createMenuCategory
-createMenuItem
 createOptionGroup
 createRecipe
 customerReturnableQuantity
@@ -71,6 +71,7 @@ listRecipeLines
 listRoster
 listWriteOffsForCharge
 loadCountSheet
+markMenuItemRequestDuplicate
 markReviewed
 mintUniqueToken
 newCorrelationId
@@ -94,10 +95,13 @@ rateFor
 realSourceTypesForSpecName
 recentRuns
 reconcileSupplier
+rejectMenuItemRequest
 remainingFor
 remainingOf
 removeUsageLine
+requestMenuItem
 resolveFingerprintMatchToken
+resolveOfferPrice
 retireMenuCategory
 retireMenuItem
 retireMenuVariant
@@ -137,4 +141,5 @@ upsertPolicy
 validateFingerprintTemplates
 voidShift
 withPrincipal
+withdrawMenuItemRequest
 withdrawMenuOffer

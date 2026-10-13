@@ -230,16 +230,16 @@ describe('I22 -- a v1 link always has a rule', () => {
 
 // =================================================================================================
 describe('I26 -- switches are append-only history', () => {
-  it('pos_item_maps accepted with no reason; menu_rules with difference_count > 0 and no reason -> 23514; with a reason accepted', async () => {
+  it('v1_pos_map accepted with no reason; menu_rules with difference_count > 0 and no reason -> 23514; with a reason accepted', async () => {
     const f = await menuFixture('i26a');
-    expect(await refusal(() => insSwitch(f, 'pos_item_maps'))).toBeUndefined();
+    expect(await refusal(() => insSwitch(f, 'v1_pos_map'))).toBeUndefined();
     expect(await refusal(() => insSwitch(f, 'menu_rules', null, 0))).toBeUndefined();
     expect((await refusal(() => insSwitch(f, 'menu_rules', null, 2)))?.code).toBe('23514');
     expect((await refusal(() => insSwitch(f, 'menu_rules', '   ', 2)))?.code).toBe('23514');
     expect(await refusal(() => insSwitch(f, 'menu_rules', 'Lipa signed off the 7-day diff', 2))).toBeUndefined();
   });
 
-  it('source outside pos_item_maps|menu_rules and a negative difference_count -> 23514', async () => {
+  it('source outside v1_pos_map|menu_rules and a negative difference_count -> 23514', async () => {
     const f = await menuFixture('i26b');
     expect((await refusal(() => insSwitch(f, 'both')))?.code).toBe('23514');
     expect((await refusal(() => insSwitch(f, 'menu_rules', 'x', -1)))?.code).toBe('23514');
@@ -249,23 +249,23 @@ describe('I26 -- switches are append-only history', () => {
     const f = await menuFixture('i26c');
     const [row] = await sql<{ id: string; past: boolean }[]>`
       insert into menu_usage_source_switches (org_id, store_id, source, created_at, created_by)
-      values (${f.orgId}, ${f.storeId}, 'pos_item_maps', now() - interval '3 days', ${f.personId})
+      values (${f.orgId}, ${f.storeId}, 'v1_pos_map', now() - interval '3 days', ${f.personId})
       returning id, (created_at < now() - interval '1 minute') as past`;
     expect(row!.past, 'the back-dated created_at was stored').toBe(false);
   });
 
   it('UPDATE is refused for the owner (append-only) and the row is unchanged', async () => {
     const f = await menuFixture('i26d');
-    const [s] = await insSwitch(f, 'pos_item_maps');
+    const [s] = await insSwitch(f, 'v1_pos_map');
     const err = await refusal(() => sql`update menu_usage_source_switches set source = 'menu_rules', reason = 'sneaky' where id = ${s!.id}`);
     expect(err, 'a switch row was UPDATEd').toBeDefined();
     expect(err!.message).toMatch(/append-only|never updated|immutable/i);
-    expect((await sql<{ s: string }[]>`select source s from menu_usage_source_switches where id = ${s!.id}`)[0]!.s).toBe('pos_item_maps');
+    expect((await sql<{ s: string }[]>`select source s from menu_usage_source_switches where id = ${s!.id}`)[0]!.s).toBe('v1_pos_map');
   });
 
   it('UPDATE is refused even under session_replication_role = replica (ENABLE ALWAYS) (mutant: guard left at origin)', async () => {
     const f = await menuFixture('i26e');
-    const [s] = await insSwitch(f, 'pos_item_maps');
+    const [s] = await insSwitch(f, 'v1_pos_map');
     const err = await refusal(() =>
       sql.begin(async (tx) => {
         await tx.unsafe(`set local session_replication_role = 'replica'`);
@@ -278,7 +278,7 @@ describe('I26 -- switches are append-only history', () => {
 
   it('shareat_app holds no UPDATE and no DELETE (42501 each)', async () => {
     const f = await menuFixture('i26f');
-    const [s] = await insSwitch(f, 'pos_item_maps');
+    const [s] = await insSwitch(f, 'v1_pos_map');
     const up = await asApp(f.orgId, (tx) => tx.unsafe(`update menu_usage_source_switches set reason = 'x' where id = '${s!.id}'`));
     expect(up.err?.code).toBe('42501');
     const del = await asApp(f.orgId, (tx) => tx.unsafe(`delete from menu_usage_source_switches where id = '${s!.id}'`));
@@ -287,7 +287,7 @@ describe('I26 -- switches are append-only history', () => {
 
   it('the latest row by created_at is the store\'s source (history is queryable in order)', async () => {
     const f = await menuFixture('i26g');
-    await insSwitch(f, 'pos_item_maps');
+    await insSwitch(f, 'v1_pos_map');
     await sql`select pg_sleep(0.05)`;
     await insSwitch(f, 'menu_rules', null, 0);
     const [r] = await sql<{ source: string }[]>`select source from menu_usage_source_switches where store_id = ${f.storeId} order by created_at desc limit 1`;
@@ -348,12 +348,138 @@ describe('R10 -- the new tables carry same-org composite FKs (23503 on a cross-o
     const a = await menuFixture('fk3a');
     const b = await menuFixture('fk3b');
     const e1 = await refusal(
-      () => sql`insert into menu_usage_source_switches (org_id, store_id, source, created_by) values (${a.orgId}, ${b.storeId}, 'pos_item_maps', ${a.personId})`,
+      () => sql`insert into menu_usage_source_switches (org_id, store_id, source, created_by) values (${a.orgId}, ${b.storeId}, 'v1_pos_map', ${a.personId})`,
     );
     expect(e1?.code, 'store_id').toBe('23503');
     const e2 = await refusal(
-      () => sql`insert into menu_usage_source_switches (org_id, store_id, source, created_by) values (${a.orgId}, ${a.storeId}, 'pos_item_maps', ${b.personId})`,
+      () => sql`insert into menu_usage_source_switches (org_id, store_id, source, created_by) values (${a.orgId}, ${a.storeId}, 'v1_pos_map', ${b.personId})`,
     );
     expect(e2?.code, 'created_by').toBe('23503');
+  });
+});
+
+// =================================================================================================
+// Cleanup round - S1-amend audit findings.
+// =================================================================================================
+describe('A1 -- a switch to menu_rules always states how many differences the comparison found', () => {
+  it('menu_rules with difference_count NULL and no reason -> 23514; NULL count WITH a reason accepted (mutant: NULL slips past "> 0")', async () => {
+    const f = await menuFixture('a1');
+    const err = await refusal(() => insSwitch(f, 'menu_rules', null, null));
+    expect(err, 'a menu_rules switch with no comparison count and no reason was accepted').toBeDefined();
+    expect(err!.code).toBe('23514');
+    expect((await refusal(() => insSwitch(f, 'menu_rules', '  ', null)))?.code).toBe('23514');
+    expect(await refusal(() => insSwitch(f, 'menu_rules', 'accepted by Ian', null))).toBeUndefined();
+  });
+});
+
+describe('A2 -- retiring a variant or item that an ACTIVE v1 link points at is refused', () => {
+  async function linkedSibling() {
+    const f = await menuFixture('a2');
+    const sib = await newItem(f, 'a_la_carte');
+    const [v] = await sql<{ id: string }[]>`
+      insert into menu_item_variants (org_id, menu_item_id, label, is_default, sort_order, status, created_by)
+      values (${f.orgId}, ${sib.itemId}, 'Large', false, 1, 'active', ${f.personId}) returning id`;
+    await insRule(f, v!.id);
+    await insRule(f, sib.variantId);
+    const [l] = await insLink(f, v!.id, uid('K'));
+    const [l2] = await insLink(f, sib.variantId, uid('K'));
+    return { f, itemId: sib.itemId, variantId: v!.id, linkId: l!.id, defaultLinkId: l2!.id };
+  }
+
+  it('variant: refused while the link is active (message names the link); allowed once the link is inactive', async () => {
+    const { f, variantId, linkId } = await linkedSibling();
+    const err = await refusal(() => sql`update menu_item_variants set status = 'retired' where id = ${variantId}`);
+    expect(err, 'a variant with an active v1 link was retired').toBeDefined();
+    expect(err!.message).toMatch(/link|v1|pos/i);
+    expect((await sql<{ s: string }[]>`select status s from menu_item_variants where id = ${variantId}`)[0]!.s).toBe('active');
+    await sql`update menu_pos_v1_links set status = 'inactive' where id = ${linkId}`;
+    expect(await refusal(() => sql`update menu_item_variants set status = 'retired' where id = ${variantId}`), `f=${f.orgId}`).toBeUndefined();
+  });
+
+  it('item: refused while any of its variants has an active link; allowed once all links are inactive', async () => {
+    const { itemId, linkId, defaultLinkId } = await linkedSibling();
+    const err = await refusal(() => sql`update menu_items set status = 'retired' where id = ${itemId}`);
+    expect(err, 'an item whose variant has an active v1 link was retired').toBeDefined();
+    expect(err!.message).toMatch(/link|v1|pos/i);
+    await sql`update menu_pos_v1_links set status = 'inactive' where id = ${linkId}`;
+    expect(await refusal(() => sql`update menu_items set status = 'retired' where id = ${itemId}`)).toBeDefined(); // default link still active
+    await sql`update menu_pos_v1_links set status = 'inactive' where id = ${defaultLinkId}`;
+    expect(await refusal(() => sql`update menu_items set status = 'retired' where id = ${itemId}`)).toBeUndefined();
+  });
+});
+
+describe('A3 -- a switch row is never DELETEd, even by the owner and even in replica mode (ENABLE ALWAYS)', () => {
+  it('owner DELETE refused; the row survives', async () => {
+    const f = await menuFixture('a3a');
+    const [s] = await insSwitch(f, 'v1_pos_map');
+    const err = await refusal(() => sql`delete from menu_usage_source_switches where id = ${s!.id}`);
+    expect(err, 'the owner deleted a switch row').toBeDefined();
+    expect(err!.message).toMatch(/append-only|never deleted|immutable/i);
+    expect((await sql<{ n: number }[]>`select count(*)::int n from menu_usage_source_switches where id = ${s!.id}`)[0]!.n).toBe(1);
+  });
+
+  it('DELETE under session_replication_role = replica is refused too (mutant: delete guard left at origin)', async () => {
+    const f = await menuFixture('a3b');
+    const [s] = await insSwitch(f, 'v1_pos_map');
+    const err = await refusal(() =>
+      sql.begin(async (tx) => {
+        await tx.unsafe(`set local session_replication_role = 'replica'`);
+        await tx`delete from menu_usage_source_switches where id = ${s!.id}`;
+      }),
+    );
+    expect(err, 'a switch row was DELETEd in replica mode').toBeDefined();
+    expect(err!.message).toMatch(/append-only|never deleted|immutable/i);
+    expect((await sql<{ n: number }[]>`select count(*)::int n from menu_usage_source_switches where id = ${s!.id}`)[0]!.n).toBe(1);
+  });
+
+  it('live: a DELETE trigger on menu_usage_source_switches exists and is ENABLE ALWAYS', async () => {
+    const rows = await sql<{ e: string }[]>`
+      select tg.tgenabled::text e from pg_trigger tg join pg_class c on c.oid = tg.tgrelid
+       where not tg.tgisinternal and c.relname = 'menu_usage_source_switches' and (tg.tgtype & 8) <> 0`;
+    expect(rows.length, 'no DELETE trigger on menu_usage_source_switches').toBeGreaterThan(0);
+    expect(rows.map((r) => r.e)).toContain('A');
+  });
+});
+
+describe('A4 -- request provenance is frozen, and the resolved item must fit the resolution', () => {
+  it.each([
+    ['created_by', (other: string) => `created_by = '${other}'`],
+    ['created_at', () => `created_at = created_at - interval '1 day'`],
+    ['org_id', (_o: string, otherOrg: string) => `org_id = '${otherOrg}'`],
+  ])('UPDATE of %s on a request is refused and the value is unchanged', async (col, set) => {
+    const f = await menuFixture('a4a');
+    const g = await menuFixture('a4b'); // a second org, for the org_id case
+    const [other] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Other') returning id`;
+    const [r] = await insRequest(f);
+    const before = (await sql.unsafe(`select ${col}::text v from menu_item_requests where id = '${r!.id}'`))[0]!.v;
+    const err = await refusal(() => sql.unsafe(`update menu_item_requests set ${set(other!.id, g.orgId)} where id = '${r!.id}'`));
+    expect(err, `${col} was changed`).toBeDefined();
+    expect((await sql.unsafe(`select ${col}::text v from menu_item_requests where id = '${r!.id}'`))[0]!.v).toBe(before);
+  });
+
+  it('resolved_item_id on a REJECTED or WITHDRAWN row is refused (an item id only belongs to approved/duplicate)', async () => {
+    const f = await menuFixture('a4c');
+    for (const [status, note] of [['rejected', 'no'], ['withdrawn', null]] as const) {
+      const [r] = await insRequest(f);
+      const err = await refusal(
+        () => sql`update menu_item_requests set status = ${status}, resolved_item_id = ${f.itemId}, resolved_by = ${f.personId}, resolved_at = now(), resolution_note = ${note} where id = ${r!.id}`,
+      );
+      expect(err?.code, `${status} + resolved_item_id`).toBe('23514');
+    }
+  });
+
+  it.each([['approved'], ['duplicate']])('%s: resolved_item_id must be an item of the SAME item_type as the request', async (status) => {
+    const f = await menuFixture('a4d');
+    const pkg = await newItem(f, 'package');
+    const refill = await newItem(f, 'refill');
+    const set = (id: string, item: string) =>
+      sql`update menu_item_requests set status = ${status}, resolved_item_id = ${item}, resolved_by = ${f.personId}, resolved_at = now() where id = ${id}`;
+    const [r1] = await insRequest(f); // item_type a_la_carte
+    const e1 = await refusal(() => set(r1!.id, pkg.itemId));
+    expect(e1, `${status} with a package item for an a_la_carte request was accepted`).toBeDefined();
+    expect(e1!.message).toMatch(/item_type|type/i);
+    expect(await refusal(() => set(r1!.id, refill.itemId))).toBeDefined();
+    expect((await sql<{ s: string }[]>`select status s from menu_item_requests where id = ${r1!.id}`)[0]!.s).toBe('open');
+    expect(await refusal(() => set(r1!.id, f.itemId))).toBeUndefined(); // a_la_carte item: control
   });
 });
