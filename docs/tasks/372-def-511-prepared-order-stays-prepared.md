@@ -90,7 +90,7 @@ S1 to S5 are un-gated: Ian answered Q1 and Q2 on 2026-09-30. ⛔ **Part b of S6 
   - At receipt, `fees = deliveryFee + otherFees` rides into what the branch owes the commissary
     (`ERP-rebuild/src/lib/actions/branch-order-receive.actions.ts:136-137`).
   - v2 therefore posts **both** fees, as one haulage figure (R6).
-- **The trap is already named.** `docs/HANDOFF-INVENTORY-LANE.md:123-128` warns that the obvious shape can drive
+- **The trap is already named.** `docs/archive/HANDOFF-INVENTORY-LANE.md:123-128` warns that the obvious shape can drive
   the commissary's expense **negative** when the haulage was its own driver's time. That is Q1.
 - **There is no DB rule that fees are non-negative.**
   - `trade_orders` has finite CHECKs only (`packages/db/schema/trade.ts:171-172`).

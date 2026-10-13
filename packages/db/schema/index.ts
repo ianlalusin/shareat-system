@@ -139,3 +139,6 @@ export * from './pos-v1';
 
 // T-392 S3 - the dual-run comparator: reports (one per store-week version), their lines, and dispositions.
 export * from './dual-run';
+
+// T-401 S1 - the ERP menu and catalog master: categories, items, variants, option groups, links, refills, depletion rules, offers.
+export * from './menu';

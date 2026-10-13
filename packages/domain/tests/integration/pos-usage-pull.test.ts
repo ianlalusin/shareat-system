@@ -53,7 +53,7 @@ let orgA: string, storeA: string, staffId: string, managerId: string, walkInA: s
 let kitchen: string, display: string, stockroom: string;
 let itemCoke: string, itemCheese: string, itemSauce: string, itemMeat: string;
 let recipeId: string;
-let staffActor: Actor, managerActor: Actor;
+let staffActor: Actor, managerActor: Actor, adminActor: Actor;
 
 const locations = (): LocationLike[] => [
   { id: kitchen, role: 'operating', purpose: 'normal', isDefault: true, status: 'active' },
@@ -153,6 +153,11 @@ beforeEach(async () => {
   await sql`insert into person_store_scope (person_id, store_id) values (${managerId}, ${storeA})`;
   staffActor = { personId: staffId, orgId: orgA };
   managerActor = { personId: managerId, orgId: orgA };
+  // T-403: mapping is admin-only; the manager keeps everything else.
+  const [admin] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgA},'Admin') returning id`;
+  await sql`insert into person_roles (person_id, org_id, role) values (${admin!.id}, ${orgA}, 'admin')`;
+  await sql`insert into person_store_scope (person_id, store_id) values (${admin!.id}, ${storeA})`;
+  adminActor = { personId: admin!.id, orgId: orgA };
 
   const [t] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${orgA},'STK','Stockroom') returning id`;
   const [rk] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${orgA},${storeA},'KIT','Kitchen',${t!.id},'operating',true,${staffId}) returning id`;
@@ -206,7 +211,7 @@ describe('T-177 — 1. physical quantity: POS already nets sold+comped-voided, n
   it('⭐ physicalQty 11 (from 10 sold, 2 comped, 1 voided) → 11 consumed, not 10 and not 12', async () => {
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
     const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]));
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1',
     }));
 
@@ -229,7 +234,7 @@ describe('T-177 — 2. a recipe map explodes; an unconvertible unit blocks that 
   it('cheese line converts and finalizes; sauce line is blocked and never offered as confirmable', async () => {
     await stockUp(itemCheese, kitchen, '10', '50.0000', '2026-08-01');
     const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'samgyup', posItemName: 'Samgyup Box', physicalQty: '5' }]));
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'samgyup', posItemName: 'Samgyup Box', mode: 'recipe', recipeId,
     }));
 
@@ -257,7 +262,7 @@ describe('T-177 — 2. a recipe map explodes; an unconvertible unit blocks that 
 describe('T-177 — 3. a no_stock map consumes nothing and does not appear in the orphan section', () => {
   it('produces no plan line at all', async () => {
     const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'delivery-fee', posItemName: 'Delivery Fee', physicalQty: '3' }]));
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'delivery-fee', posItemName: 'Delivery Fee', mode: 'no_stock',
     }));
     const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
@@ -312,7 +317,7 @@ describe('T-177 — 5/6. PLAN_CHANGED: the confirm-what-you-saw write contract',
   it('⭐ changing the MAPPING between plan and finalize refuses the finalize, and nothing is written', async () => {
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
     const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]));
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1',
     }));
 
@@ -326,7 +331,7 @@ describe('T-177 — 5/6. PLAN_CHANGED: the confirm-what-you-saw write contract',
     // T-375 S5: usage reads a STORED feed, so the POS data cannot change under a plan (a changed feed hits the
     // "changed" sentence first, U3). What can still move is the mapping: coke stops being a stock item, so the
     // rebuild no longer produces the confirmed key.
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'no_stock',
     }));
     const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [confirmedKey] }));
@@ -340,7 +345,7 @@ describe('T-177 — 5/6. PLAN_CHANGED: the confirm-what-you-saw write contract',
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
     await stockUp(itemCheese, kitchen, '10', '50.0000', '2026-08-01');
     const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]));
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1',
     }));
     const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
@@ -381,8 +386,8 @@ describe('T-177 — 8. finalizing one section leaves the others open; a second f
       { posItemKey: 'samgyup', posItemName: 'Samgyup Box', physicalQty: '5' },
       { posItemKey: 'mystery', posItemName: 'Mystery Item', physicalQty: '1' },
     ]));
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }));
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'samgyup', posItemName: 'Samgyup Box', mode: 'recipe', recipeId }));
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, { orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }));
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, { orgId: orgA, storeId: storeA, posItemKey: 'samgyup', posItemName: 'Samgyup Box', mode: 'recipe', recipeId }));
 
     const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
@@ -415,7 +420,7 @@ describe('T-177 — 9. finalizing posts through T-164 — cost asserted', () => 
   it('raw_material -> food -> 5100, FIFO cost = 11 @ 10.00', async () => {
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
     const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]));
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }));
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, { orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }));
     const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
@@ -443,8 +448,8 @@ describe('T-177 — 10. (T-388 I4) a frozen room waits: its lines are held, the 
       { posItemKey: 'cheese-direct', posItemName: 'Cheese Direct', physicalQty: '2' },
     ]));
     // Coke resolves to kitchen (no override); cheese-as-direct resolves to display (its own override).
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }));
-    await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'cheese-direct', posItemName: 'Cheese Direct', mode: 'direct', itemId: itemCheese, quantityPerSale: '1', locationId: display }));
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, { orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }));
+    await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, { orgId: orgA, storeId: storeA, posItemKey: 'cheese-direct', posItemName: 'Cheese Direct', mode: 'direct', itemId: itemCheese, quantityPerSale: '1', locationId: display }));
 
     const sessionId = await freezeKitchen();
 
@@ -489,7 +494,7 @@ describe('T-177 — 11. ⭐ meat maps and pulls normally — the carve-out is go
   it('a meat_slab item maps direct and finalizes exactly like any other kind', async () => {
     await stockUp(itemMeat, kitchen, '20', '300.0000', '2026-08-01');
     const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'pork-skewers', posItemName: 'Pork Skewers', physicalQty: '10' }]));
-    const upserted = await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
+    const upserted = await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'pork-skewers', posItemName: 'Pork Skewers', mode: 'direct', itemId: itemMeat, quantityPerSale: '0.5',
     }));
     expect(upserted.ok).toBe(true);
@@ -509,28 +514,28 @@ describe('T-177 — 11. ⭐ meat maps and pulls normally — the carve-out is go
 
 describe('T-177 — 12. a second direct map onto an already-mapped item needs confirmation', () => {
   it('refused without confirmation, accepted with it', async () => {
-    const first = await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
+    const first = await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'coke-can', posItemName: 'Coke Can', mode: 'direct', itemId: itemCoke, quantityPerSale: '1',
     }));
     expect(first.ok).toBe(true);
 
-    const second = await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
+    const second = await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'coke-bottle', posItemName: 'Coke Bottle', mode: 'direct', itemId: itemCoke, quantityPerSale: '1',
     }));
     expect(second.ok).toBe(false);
     if (second.ok) return;
     expect(second.needsConfirmation).toBe(true);
 
-    const confirmed = await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
+    const confirmed = await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, {
       orgId: orgA, storeId: storeA, posItemKey: 'coke-bottle', posItemName: 'Coke Bottle', mode: 'direct', itemId: itemCoke, quantityPerSale: '1', confirmShared: true,
     }));
     expect(confirmed.ok).toBe(true);
   });
 
   it('a recipe map never needs confirmation, even sharing a recipe already used elsewhere', async () => {
-    const first = await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'samgyup-a', posItemName: 'Samgyup A', mode: 'recipe', recipeId }));
+    const first = await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, { orgId: orgA, storeId: storeA, posItemKey: 'samgyup-a', posItemName: 'Samgyup A', mode: 'recipe', recipeId }));
     expect(first.ok).toBe(true);
-    const second = await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey: 'samgyup-b', posItemName: 'Samgyup B', mode: 'recipe', recipeId }));
+    const second = await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, { orgId: orgA, storeId: storeA, posItemKey: 'samgyup-b', posItemName: 'Samgyup B', mode: 'recipe', recipeId }));
     expect(second.ok).toBe(true);
   });
 });

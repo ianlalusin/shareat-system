@@ -1,77 +1,118 @@
-# Handoff — 2026-10-11 evening (orchestrator; PR #16 open: 0192 + 0193, CI re-running)
+# Handoff — 2026-10-12 (orchestrator; PR #20 green, waiting on Ian's 0194 precheck)
 
 ## Where things stand
-**Production (`159.223.46.224`, erp2.shareat.net) runs migration 0191** (PR #10 merged and deployed 10 Oct; T-386
-recode applied with Ian, post-check `{ not_shaped: 0 }`). **PR #16** (`release/2026-10-11`, head `5abdc83`) carries
-T-386 S6 (**0192** item-code CHECK), T-391 S1 (**0193** buying unit + v1_master_links), T-391 S2+S3, T-390 S2/S3/S5,
-T-392 S1+S2, T-393 (backups, built, NOT switched on), T-389 S4/S5, and today's CI test fixes. It merges only when
-CI is green **and** Ian has run prechecks **P0192a / P0193** (`docs/ops/README.md`) **and** says go.
-⚠️ **Do not push `main` directly** — a push to main runs CI then Deploy, which would apply 0192/0193 before the
-prechecks. Local main is ahead of origin/main; today's work is saved on the branch `wrap/2026-10-11` and in PR #16.
-Next free migration **0195** (0194 is T-398 S1, on its lane).
+**Production (`159.223.46.224`, erp2.shareat.net) runs PR #16 (`e3856fb`), migration 0193.** It was deployed 12 Oct by
+Deploy run 38163887950.
 
-## Gates (main `e0a941f`)
-- typecheck 0 (at `5abdc83`; only docs and one test file changed since).
-- Unit, full run: 5556 passed, 49 failed, 3 skipped. A rerun of the 26 failing files with `--testTimeout 60000`: 296 passed, 2 failed. Both were real and are fixed in `e0a941f`: the t348 class baseline, and the pipe count on bible rows 308-312. Those files now pass 41/41. Everything else was load timeouts.
-- Build: not run locally (CI builds).
-- Integration: the full suite runs in CI on PR #16 (a local full run is unreliable under lane load).
-- The 5 CI failures from PR #16's second run were fixed test-side (`470f697`): t390-s2 shaped item codes,
-  t393 password-leak helper `tests/integration/t393-no-leak.ts`, t342 1b runs the real C2 purge. All 5 files green on
-  a lane DB.
+**PR #20** (`lane/t398-s1`) is **CI green** and carries:
+- T-398 S1: **migration 0194**, 229 same-org composite FKs;
+- DEF-640: the cutover purge takes one performer per org;
+- T-391 S4-S6: the master-data load (suppliers/customers, positions/staff) and the readiness report;
+- docs.
+
+PR #20 merges only after Ian runs the read-only precheck **P0194a/b** (`docs/ops/README.md`, 0194 row) and gives his go.
+Merge it **in a quiet window, or with `shareat-erp` stopped**: 0194 locks persons/stores per FK until COMMIT.
+
+Next free migration: **0196**. 0195 is T-392 S3 on `lane/t392-s3`, and it merges after #20.
+
+CI runs on GitHub-hosted runners again. Ian first said "keep" the self-hosted runner `ians-pc`, then removed it: on that
+runner, memory starvation made tests time out.
+
+## Gates (main, wrap-up 12 Oct)
+See the wrap-up commit message for the real typecheck and unit numbers. The full integration suite ran green on PR #20's CI
+(run 38187295489), which is main plus 0194.
 
 ## What happened this session
-- **T-391 S3** merged (item apply). **S4** (suppliers and customers) built green, audited; 4 audit fixes in flight
-  (ruling P13). Rulings P9-P13 are in the T-391 spec.
-- **T-390 S5** browser smoke passed end to end except asset valuation (no asset shell in the smoke DB).
-  Found **DEF-637** (/prepaid empty state after a save, unconfirmed) and **DEF-638** (refused POST shows its reason ~12 s late).
-- **T-398 S1** (0194, 229 same-org FKs) committed on its lane, `247c537`. It gets its own PR and the 0194 precheck.
-- **T-387** (UI session) rulings recorded as bible rows **308-312**; roadmap updated. S1-S4 on main; S8 in PR #14;
-  S5-S7 on `release/t387-s5-s7`, one PR after #14.
-- Caller baseline regenerated (`a3c0ca2`): `loadCountSheet` is now dead (superseded by `loadRoomCountSheet`), and a
-  follow-up chip exists to remove it.
+- **PR #16 merged and deployed.** Before that, five rounds of test-side CI fixes:
+  - shaped item codes;
+  - the t393 password-leak helper;
+  - the t342 real purge;
+  - the t348 baseline;
+  - the T-387 kit-markup needles;
+  - the drill's redacted key.
+- **T-391 BUILD DONE (S1-S6).**
+  - S4 and S5 each had two audit rounds. Their rulings are in the spec: P9-P13 and S10-S14.
+  - S6 added **`canAt()`**, which shares `authorize()`'s decision code. authorize behaves exactly as before (auth tests
+    655/655), and a census test keeps canAt out of `apps/**`.
+- **T-398 S1 audited.** The audit fixes were RESET lock_timeout, the P0194 precheck and the deploy note.
+  Its CI then found **DEF-640**: the cutover purge recorded C2 for every org under one person. Fixed on the lane.
+- **T-392:**
+  - S3 is built: migration 0195 and the v2 figures. It went through two Opus rulings rounds and a money audit.
+  - S4 is built, but its audit requires key-mapping fixes.
+  - The tender keys were ruled by Opus: credit, other, staff cash, COGS.
+  - New slices: **S1b**, read v1 `channel_sales` before 2 Nov (an orchestrator decision), and **S4b**, document-level
+    matching (R9).
+- **T-387 (UI session):** all 8 slices are on main (#14, #19). Bible rows 308-312.
+- **Defects:**
+  - DEF-637: /prepaid shows empty after a save (unconfirmed).
+  - DEF-638: a refused POST is slow to say why.
+  - DEF-639: the PIN budget allowed 11 instead of 10 on CI. Diagnosed as a WSL2 clock step, not a race.
+  - DEF-640: the purge performer, fixed in PR #20.
 
 ## Pick up here
-1. **PR #16:** CI green → Ian runs P0192a/P0193 → merge on his go → watch Deploy → record in `docs/ops/README.md`.
-   If CI is red, fix test-side on a lane branched from main, then push main's HEAD to `release/2026-10-11`.
-   If the UI session merges #14 first, merge origin/main into the release branch.
-2. **T-391 S4** is built, with the audit fixes applied and green (unit 48/48, integration 97/97), committed `8395e11` on `lane/t391-s4` (pushed; wt-t385, DB `shareat_test_t391s4`). **Next: a fresh auditor pass on the P13 fixes** (`applyMasterData` precheck, `plan.listed`, unmapped VAT holds, bad credit days nulled), then merge to main. Then S5 (staff), S6 (readiness).
-3. **T-398 S1 PR** with Ian's 0194 precheck; T-392 S3 (migration 0195); T-390 S4 after the T-391 apply.
+1. **PR #20:**
+   - Ian runs P0194, then picks a quiet window.
+   - Merge, then watch Deploy.
+   - Record the result in `docs/ops/README.md`.
+   - Merge `origin/main` into local main.
+2. **T-392 S4 audit round** (`wt-t385`, `lane/t392-s4`, DB `shareat_test_t392s4`, WIP committed):
+   - The tester's cases a-l pin the audit findings and the tender keys (spec section "S4 tender keys").
+   - The builder makes them green.
+   - Then re-audit, commit, and merge after S3.
+3. **T-392 S3** (`lane/t392-s3` `5eb5c7b`) merges after #20. Then S4, then **S1b** and **S4b**, then the **S5** screens.
+   All of it must land before the 2 Nov dual run.
+4. **T-391 rollout with Ian:** extract on his machine, answer the sheets, dry run, then apply per store. T-390 S4
+   follows the T-391 apply.
 
-## Lanes (Sonnet subagents of the orchestrator; none live after this session)
+## Lanes (Sonnet subagents; none live after this session)
 | Worktree | Branch | Lane DB | State |
 |---|---|---|---|
-| `wt-t385` | lane/t391-s4 | shareat_test_t391s4 | committed `8395e11` (pushed), needs re-audit, then merge |
-| `wt-t386` | lane/t398-s1 | shareat_test_t398s1 | committed `247c537`, unmerged |
-| `wt-t390` | lane/ci16-fixes | shareat_test_ci16 | merged, free |
-| `wt-t391` | lane/t390-s5 | — | merged, free |
-Smoke DB `shareat_test_smoke383` is at 0193 and has had the C2 purge **and an opening entry POSTED** — recreate it
-before the next cutover smoke.
+| `wt-t385` | lane/t392-s4 | shareat_test_t392s4 (0195) | WIP committed, audit round in flight |
+| `wt-t386` | lane/t398-s1 | — | = PR #20, green |
+| `wt-t390` | lane/t392-s3 | shareat_test_t392s3 (0195) | committed `5eb5c7b`, pushed |
+| `wt-t391` | lane/t390-s5 (merged) | — | free |
+
+## Loose ends not covered above (swept 12 Oct, pre-cleanup)
+| Item | State | Owner / next step |
+|---|---|---|
+| ~~PR #17 T-399 runner caches~~ | **CLOSED 12 Oct** (Ian: the self-hosted runner is gone, so there's nothing to cache for). Branch deleted on origin | Do not revive. `wt-t399` is left for local cleanup |
+| **PR #18** T-400 integration on 2 workers (`lane/t400-parallel-integration`, `wt-t400`) | open; no task doc | Rebase on main after #20, re-run CI, fill Outcome numbers, merge or close |
+| Uncommitted on main: `loadCountSheet` + `countTotalsByItem` removed (superseded by `loadMergedLines`, T-390 S5); t390-s1 test and `production-caller-baseline.txt` updated to match | **verified safe 12 Oct**: no references left, `tsc -p apps/erp` 0 errors, t390-s1 2/2 green | Ian said not to commit it on its own; commit it at the next wrap-up |
+| `docs/ops/home-backup/` (moved from `webapps\shareat-db-home-backup`; no secrets) | untracked; pointer added in `docs/ops/README.md` Backups | Commit it at the next wrap-up |
+| Leftover folders `webapps\wt-t387-s3` (partial, git no longer tracks it) and `webapps\wt-t384-s1a` (empty, locked by a process) | not deleted | Delete them only by the reparse-point method in memory `worktree-node-modules-junction`. **Never** `rm -rf` or `git worktree remove --force` |
+| `docs/ops/self-hosted-runner.md` | stale: the runner was removed 12 Oct | Banner it or archive it |
+| `.claude/launch.json` | **trimmed 12 Oct** to `erp` only | — |
+| Old lane handoffs (inventory, T-387, merge reviews, pending-verification) | **moved 12 Oct** to `docs/archive/` (see its README); links repointed | History only |
+| `~/.claude/skills/orchestrator/tools/` | **591 one-off files** (smoke scripts, screenshots, tokens, probe SQL) **moved 12 Oct** to `tools/_archive-2026-10-12/`; 12 live tools remain | Write new one-off probes to the scratchpad, not `tools/` |
+| Open specs with no lane (on ROADMAP, not in Pick-up): T-325, 326, 328, 335, 336, 338, 339, 347, 348, 377, 378, 379, 380, 382, 393; T-343 and T-375 part-built | parked behind T-392 / 2 Nov | Next orchestrator ranks them after the dual run |
+| Remote branches `checkpoint-logs`, `claude/beautiful-bohr-sfpkxt` | **deleted 12 Oct** (Ian's go) | — |
 
 ## Do not decide these alone — they are Ian's
-- `def636-staff-roster-cap` (recommended `enrol_staff` at that store). t395-q1. POS "collected" follow-ups.
-- The prechecks P0192a / P0193 / (later) P0194.
+- **P0194**, and the deploy window for PR #20.
+- `def636-staff-roster-cap` (recommended: `enrol_staff` at the store).
+- Whether a cancelled order's badge is red in lists.
 
 ## Traps that have actually bitten
-- **CI runs on the self-hosted runner `ians-pc` (Ian: "keep", 11 Oct).** When the PC is short of RAM, integration tests stall into lock/hook timeouts (PR #14: 83 min, 8 timeout failures). Before re-running CI, keep the PC quiet: no dev server, no lane suites.
-- Pushing main deploys. Use the release branch / PR.
-- `node -e` with backticks in bash leaves stray files named like `{console.log(r)`; write a script file.
-- Two agents on one lane DB truncate each other's fixtures. A crashed drill test leaves `foo_drill` behind, and the
-  auto-mode classifier blocks a subagent's DROP.
-- The full unit suite times out under lane load; rerun failed files with `--testTimeout 60000`.
-- Lane worktrees hold a `node_modules` junction: never `rm -rf` / `worktree remove --force`.
+- **Pushing main deploys.** Ship through a PR. Local main is ahead of origin, and `wrap/2026-10-11` mirrors it.
+- **Lane DBs:**
+  - `make-test-dbs.mjs` and `drop-test-db.mjs` must run from the MAIN tree; they read `.env.local`.
+  - To migrate a lane DB with the lane's migrations, run `RUN_WITH_DB_CWD=<worktree> run-with-db.mjs <db> npm run db:migrate`.
+- **Line endings:** Sonnet builders sometimes write CRLF.
+  - Check with `tr -cd '\r' < f | wc -c`. `grep -c $'\r'` can count lines instead.
+- **The shared `shareat_test` DB:** a subagent once ran without TEST_DATABASE_URL and hit it. Recreated 12 Oct.
+- **Same-org FKs (0194):** a fixture that crosses orgs now fails at the DB. Fix the fixture; never add an exemption.
 
 ## The paste-ready prompt
 ```
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global
-/orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all), docs/RULES.md, and
-docs/plans/remaining-build-plan.md §0b. GREP the register and bible, never Read them whole.
-State: production at 0191. PR #16 (release/2026-10-11) carries 0192+0193: merge only when CI is green, after Ian's
-P0192a/P0193 prechecks, on his go. NEVER push main directly (it deploys). Local main is ahead of origin; the branch
-wrap/2026-10-11 holds it.
-Next: re-audit T-391 S4 (lane/t391-s4 8395e11, audit fixes per spec ruling P13), merge, then T-391 S5/S6; T-398 S1 own PR
-(0194 precheck); T-392 S3 (migration 0195). Next free migration 0195.
+/orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all), docs/RULES.md and
+docs/tasks/392-dual-run-comparator.md (status line + every rulings section at the end). GREP the register and
+bible, never Read them whole.
+State: production at 0193 (PR #16). PR #20 (lane/t398-s1: 0194 + DEF-640 + T-391 S4-S6) is CI green; merge only after
+Ian's P0194 precheck and his go, in a quiet window. NEVER push main directly (it deploys).
+Next: T-392 S4 audit round in wt-t385 (builder makes the tester's a-l green), then S3 → S4 → S1b → S4b → S5, all before
+the 2 Nov dual run. Next free migration 0196. Also clear the "Loose ends" table (PR #18, uncommitted count-sheet cleanup, open specs).
 STANDING: lanes are Sonnet subagents (tester/builder/auditor separate, own _test DB, worktrees; workers never run
-git); Opus for specs and a fresh Opus review of money/auth specs; never commit a lane while its agent runs;
-byte-check \r and \x08; republish docs/WHATS-LEFT.html after every DEF close; CI once a day (row 296).
-Messages are short.
+git; LF only); Opus for specs/money rulings and a fresh Opus review of money/auth specs; never commit a lane while its
+agent runs; byte-check \r and \x08; republish docs/WHATS-LEFT.html after every DEF close. Messages are short.
 ```

@@ -128,3 +128,7 @@ export * from './organizations';
 // (admin-only), this one is `manage_store_settings` (manager ✅).
 export * from './sales-channels';
 export * from './dual-run';
+
+// T-401 S2 - the ERP menu and catalog master: categories, items, variants, option groups, depletion rules, and the
+// append-only effective-dated offers (a store's price). Nothing reads it in production until the POS v2 carrier (P1).
+export * from './menu';

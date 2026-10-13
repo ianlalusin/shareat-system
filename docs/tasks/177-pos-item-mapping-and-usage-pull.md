@@ -197,3 +197,5 @@ Per-sale decrement is a different architecture and nobody has asked for it.
       (auto-derived by `authorize.test.ts`'s invariant 5 from `CAPABILITY_MATRIX` itself, plus
       `request_pos_map` added to that file's `UNIVERSALLY_GRANTED` list since it is staff-open).
 - [x] `docs/ROADMAP.html` updated.
+
+> **Temporary bridge (Ian, 2026-10-13, T-403):** v1 POS mappings are a bridge only. Each store's mappings are deleted once that store is on POS v2. `manage_pos_map` is admin-only as of T-403.

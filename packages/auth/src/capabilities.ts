@@ -235,6 +235,14 @@ export type Capability =
    *  `set_cash_policy` above. */
   | 'set_channel_payout'
   | 'manage_price_lists'
+  // T-401 S2 - the ERP menu and catalog master. view_menu/manage_menu/set_menu_depletion are org; set_menu_price is store.
+  | 'view_menu'
+  | 'add_menu_item'
+  | 'manage_menu'
+  | 'request_menu_item'
+  | 'set_menu_price'
+  | 'set_menu_depletion'
+  | 'switch_usage_source'
   /** T-171 (DEF-129, 2026-09-03). What THIS commissary offers and at what manual cost, plus the
    *  link that says which branch may order here. Store-scoped to the COMMISSARY. Manager+. */
   | 'manage_commissary_offerings'
@@ -253,6 +261,8 @@ export type Capability =
   | 'post_production'
   | 'edit_posted_production'
   | 'void_production'
+  /** T-403. Admin-only: a production recipe decides how much stock a batch consumes (Ian, 2026-10-13). */
+  | 'manage_recipes'
   // T-178 — order/channel wastage disposition. Recording is staff-open, same bar as
   // record_wastage/record_statutory_discount — frictionless, or it goes unrecorded. Resolving and
   // charging are supervisory, same asymmetry as resolve_trade_discrepancy/
@@ -268,8 +278,8 @@ export type Capability =
   /** T-178. ⛔ Manager+: undoing a backstop's own auto-charge within its 30-day window. */
   | 'reverse_auto_charge'
   // T-177 — POS item mapping and the daily usage pull.
-  /** T-177. Manager+, same bar as `manage_locations`/`manage_items`: a standing "this POS item
-   *  means this stock item" decision is configuration, curated by whoever runs the store. */
+  /** T-177, narrowed by T-403 to admin-only (Ian, 2026-10-13): a standing "this POS item means this stock
+   *  item" decision decides how much stock a sale consumes. Still store-scoped. */
   | 'manage_pos_map'
   /** T-177 invariant 7. Staff-open, same bar as `record_stock_movement` — "the person who hits an
    *  unmappable item mid-pull is the person who knows," and the request itself moves no stock. */
@@ -367,6 +377,13 @@ export const CAPABILITIES: readonly Capability[] = [
   'set_cash_policy',
   'set_channel_payout',
   'manage_price_lists',
+  'view_menu',
+  'add_menu_item',
+  'manage_menu',
+  'request_menu_item',
+  'set_menu_price',
+  'set_menu_depletion',
+  'switch_usage_source',
   'manage_commissary_offerings',
   'manage_commissary_map',
   'manage_fixed_assets',
@@ -381,6 +398,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'resolve_order_wastage',
   'charge_staff_for_wastage',
   'reverse_auto_charge',
+  'manage_recipes',
   'manage_pos_map',
   'request_pos_map',
   'decide_pos_map_request',
@@ -540,6 +558,14 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   set_cash_policy: 'store',
   set_channel_payout: 'store',
   manage_price_lists: 'org',
+  // T-401. The menu is org master data; a price is per store (position-grantable per store, T-318).
+  view_menu: 'org',
+  add_menu_item: 'org',
+  manage_menu: 'org',
+  request_menu_item: 'store',
+  set_menu_price: 'store',
+  set_menu_depletion: 'org',
+  switch_usage_source: 'store',
   // T-171. STORE-scoped, unlike price lists: an offering belongs to one commissary, a map to one
   // branch, and invariant 9 says a caller may only edit the side they hold.
   manage_commissary_offerings: 'store',
@@ -557,6 +583,8 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   post_production: 'store',
   edit_posted_production: 'store',
   void_production: 'store',
+  // T-403. Recipes are org-wide master data, same scope as manage_items.
+  manage_recipes: 'org',
 
   // T-178. Every order wastage carries a store_id and posts a store-scoped 1220/5300/1230 leg.
   record_order_wastage: 'store',
@@ -661,6 +689,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   post_production: 'production',
   edit_posted_production: 'production',
   void_production: 'production',
+  manage_recipes: 'production', // T-403
   manage_pos_map: 'production',
   request_pos_map: 'production',
   decide_pos_map_request: 'production',
@@ -729,6 +758,13 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   set_cash_policy: 'admin',
   set_channel_payout: 'admin',
   manage_price_lists: 'admin',
+  view_menu: 'sales',
+  add_menu_item: 'sales',
+  manage_menu: 'sales',
+  request_menu_item: 'sales',
+  set_menu_price: 'sales',
+  set_menu_depletion: 'sales',
+  switch_usage_source: 'sales',
 
   cross_org_access: 'franchise',
   view_franchise_sales: 'franchise',
@@ -938,6 +974,16 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   /** T-350 (DEF-477). Ian, 2026-09-28: admin only. */
   set_channel_payout: { super_admin: true, admin: true, manager: false, staff: false },
   manage_price_lists: { super_admin: true, admin: true, manager: false, staff: false },
+  // T-401 (Ian, 2026-10-13). Items are centralised: only super admin ADDS an item or variant (and resolves requests).
+  // Editing the rest of the menu stays admin. A manager prices their own store (store scope is what limits "own") and
+  // may request an item. A depletion rule is a stock recipe: "only admin can edit recipe" (manager is a cross here).
+  view_menu: { super_admin: true, admin: true, manager: true, staff: false },
+  add_menu_item: { super_admin: true, admin: false, manager: false, staff: false },
+  manage_menu: { super_admin: true, admin: true, manager: false, staff: false },
+  request_menu_item: { super_admin: true, admin: true, manager: true, staff: false },
+  set_menu_price: { super_admin: true, admin: true, manager: true, staff: false },
+  set_menu_depletion: { super_admin: true, admin: true, manager: false, staff: false },
+  switch_usage_source: { super_admin: true, admin: true, manager: false, staff: false },
   // T-171. Manager+, same bar as manage_items: a store manager curates what their commissary
   // offers and what their branch receives it as. ⚠️ NOT admin-only like price lists — a map row
   // is operational setup ("which of my items is this"), not a commercial price decision.
@@ -961,6 +1007,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   post_production: { super_admin: true, admin: true, manager: true, staff: false },
   edit_posted_production: { super_admin: true, admin: true, manager: true, staff: false },
   void_production: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-403 (Ian, 2026-10-13): only admin edits a recipe; managers keep posting/voiding.
+  manage_recipes: { super_admin: true, admin: true, manager: false, staff: false },
 
   // T-178. Recording is staff-open — frictionless, or it goes unrecorded, same bar as
   // record_wastage/record_statutory_discount. Resolving and charging are supervisory: a
@@ -977,7 +1025,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // unmappable item is staff-open, same bar as record_stock_movement — the person who hits it is
   // the person who knows. Deciding a request and finalizing a pull are both supervisory: the
   // former is a judgement call, the latter is the step that writes real usage records and posts.
-  manage_pos_map: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-403: manage_pos_map narrowed to admin-only (manager ✗); request/decide unchanged.
+  manage_pos_map: { super_admin: true, admin: true, manager: false, staff: false },
   request_pos_map: { super_admin: true, admin: true, manager: true, staff: false },
   decide_pos_map_request: { super_admin: true, admin: true, manager: true, staff: false },
   finalize_pos_usage_pull: { super_admin: true, admin: true, manager: true, staff: false },
@@ -1151,6 +1200,13 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   set_cash_policy: "set a store's cash policy",
   set_channel_payout: "change where a sales channel's payouts bank",
   manage_price_lists: 'manage price lists',
+  view_menu: 'view the menu and its prices',
+  add_menu_item: 'add items and variants to the menu',
+  manage_menu: 'edit the menu',
+  request_menu_item: 'ask for a new menu item',
+  set_menu_price: 'set menu prices',
+  set_menu_depletion: 'set what a menu item uses from stock',
+  switch_usage_source: "switch where a store's stock usage comes from",
   manage_commissary_offerings: 'choose what the commissary offers',
   manage_commissary_map: 'match commissary items to stock items',
   manage_fixed_assets: 'manage fixed assets',
@@ -1161,6 +1217,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   post_production: 'post a production run',
   edit_posted_production: 'edit a posted production run',
   void_production: 'void a production run',
+  manage_recipes: 'create or change a recipe',
   record_order_wastage: 'record order wastage',
   resolve_order_wastage: 'decide who pays for a wasted order',
   charge_staff_for_wastage: 'charge a staff member for wastage',

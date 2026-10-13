@@ -59,7 +59,7 @@ let orgA: string, storeA: string, staffId: string, managerId: string, walkInA: s
 let kitchen: string, display: string, stockroom: string;
 let itemCoke: string, itemCheese: string, itemSauce: string, itemMeat: string;
 let recipeId: string;
-let staffActor: Actor, managerActor: Actor;
+let staffActor: Actor, managerActor: Actor, adminActor: Actor;
 
 const locations = (): LocationLike[] => [
   { id: kitchen, role: 'operating', purpose: 'normal', isDefault: true, status: 'active' },
@@ -159,6 +159,11 @@ beforeEach(async () => {
   await sql`insert into person_store_scope (person_id, store_id) values (${managerId}, ${storeA})`;
   staffActor = { personId: staffId, orgId: orgA };
   managerActor = { personId: managerId, orgId: orgA };
+  // T-403: mapping is admin-only.
+  const [admin] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgA},'Admin') returning id`;
+  await sql`insert into person_roles (person_id, org_id, role) values (${admin!.id}, ${orgA}, 'admin')`;
+  await sql`insert into person_store_scope (person_id, store_id) values (${admin!.id}, ${storeA})`;
+  adminActor = { personId: admin!.id, orgId: orgA };
 
   const [t] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${orgA},'STK','Stockroom') returning id`;
   const [rk] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${orgA},${storeA},'KIT','Kitchen',${t!.id},'operating',true,${staffId}) returning id`;
@@ -217,14 +222,14 @@ const cokeSentence = (onHandText: string, need = '3') =>
   `Coke: ${need} pcs sold, ${onHandText} on hand in Kitchen. Receive or count it, then finalize again.`;
 
 async function mapDirect(posItemKey: string, posItemName: string, itemId: string, locationId?: string) {
-  const r = await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, {
+  const r = await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, {
     orgId: orgA, storeId: storeA, posItemKey, posItemName, mode: 'direct', itemId, quantityPerSale: '1',
     ...(locationId ? { locationId } : {}),
   }));
   expect(r.ok, r.ok ? '' : String((r as { reason?: string }).reason)).toBe(true);
 }
 async function mapRecipe(posItemKey: string, posItemName: string, recipe: string) {
-  const r = await asOrg(orgA, (tx) => upsertPosItemMap(tx, managerActor, { orgId: orgA, storeId: storeA, posItemKey, posItemName, mode: 'recipe', recipeId: recipe }));
+  const r = await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, { orgId: orgA, storeId: storeA, posItemKey, posItemName, mode: 'recipe', recipeId: recipe }));
   expect(r.ok, r.ok ? '' : String((r as { reason?: string }).reason)).toBe(true);
 }
 async function planOf(dayId: string) {
