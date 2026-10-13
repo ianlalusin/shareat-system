@@ -235,6 +235,11 @@ export type Capability =
    *  `set_cash_policy` above. */
   | 'set_channel_payout'
   | 'manage_price_lists'
+  // T-401 S2 - the ERP menu and catalog master. view_menu/manage_menu/set_menu_depletion are org; set_menu_price is store.
+  | 'view_menu'
+  | 'manage_menu'
+  | 'set_menu_price'
+  | 'set_menu_depletion'
   /** T-171 (DEF-129, 2026-09-03). What THIS commissary offers and at what manual cost, plus the
    *  link that says which branch may order here. Store-scoped to the COMMISSARY. Manager+. */
   | 'manage_commissary_offerings'
@@ -367,6 +372,10 @@ export const CAPABILITIES: readonly Capability[] = [
   'set_cash_policy',
   'set_channel_payout',
   'manage_price_lists',
+  'view_menu',
+  'manage_menu',
+  'set_menu_price',
+  'set_menu_depletion',
   'manage_commissary_offerings',
   'manage_commissary_map',
   'manage_fixed_assets',
@@ -540,6 +549,11 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   set_cash_policy: 'store',
   set_channel_payout: 'store',
   manage_price_lists: 'org',
+  // T-401. The menu is org master data; a price is per store (position-grantable per store, T-318).
+  view_menu: 'org',
+  manage_menu: 'org',
+  set_menu_price: 'store',
+  set_menu_depletion: 'org',
   // T-171. STORE-scoped, unlike price lists: an offering belongs to one commissary, a map to one
   // branch, and invariant 9 says a caller may only edit the side they hold.
   manage_commissary_offerings: 'store',
@@ -729,6 +743,10 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   set_cash_policy: 'admin',
   set_channel_payout: 'admin',
   manage_price_lists: 'admin',
+  view_menu: 'sales',
+  manage_menu: 'sales',
+  set_menu_price: 'sales',
+  set_menu_depletion: 'sales',
 
   cross_org_access: 'franchise',
   view_franchise_sales: 'franchise',
@@ -938,6 +956,12 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   /** T-350 (DEF-477). Ian, 2026-09-28: admin only. */
   set_channel_payout: { super_admin: true, admin: true, manager: false, staff: false },
   manage_price_lists: { super_admin: true, admin: true, manager: false, staff: false },
+  // T-401 (Q1 option a): one editor. Read is manager+; the menu and its prices are admin; a depletion rule is
+  // manager+ (the manager knows the recipe), same bar as manage_pos_map.
+  view_menu: { super_admin: true, admin: true, manager: true, staff: false },
+  manage_menu: { super_admin: true, admin: true, manager: false, staff: false },
+  set_menu_price: { super_admin: true, admin: true, manager: false, staff: false },
+  set_menu_depletion: { super_admin: true, admin: true, manager: true, staff: false },
   // T-171. Manager+, same bar as manage_items: a store manager curates what their commissary
   // offers and what their branch receives it as. ⚠️ NOT admin-only like price lists — a map row
   // is operational setup ("which of my items is this"), not a commercial price decision.
@@ -1151,6 +1175,10 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   set_cash_policy: "set a store's cash policy",
   set_channel_payout: "change where a sales channel's payouts bank",
   manage_price_lists: 'manage price lists',
+  view_menu: 'view the menu and its prices',
+  manage_menu: 'edit the menu',
+  set_menu_price: 'set menu prices',
+  set_menu_depletion: 'set what a menu item uses from stock',
   manage_commissary_offerings: 'choose what the commissary offers',
   manage_commissary_map: 'match commissary items to stock items',
   manage_fixed_assets: 'manage fixed assets',

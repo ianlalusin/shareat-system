@@ -1,0 +1,478 @@
+/**
+ * T-401 S2 - the only place SQL is written for the ERP menu and catalog master. docs/tasks/401-erp-menu-catalog-master.md.
+ *
+ * Plain reads and writes on the ten tables of migration 0196 (`packages/db/schema/menu.ts`). No rule lives here: the domain
+ * (`packages/domain/src/menu`) authorizes, validates, audits and decides; the database's triggers refuse what must never
+ * happen (back-dating, UPDATE of history, an offer with no depletion rule). Every function takes the caller's transaction
+ * first, so the audit row and the write commit or roll back together.
+ *
+ * "In force at t" is written ONCE, in SQL (K2): `menu_offer_in_force` / `menu_option_offer_in_force`. `offersInForce` and
+ * `optionOffersInForce` call those functions; nothing here re-states the rule.
+ *
+ * Money is `numeric(14,2)` and travels as a string (bible section 6).
+ */
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import {
+  menuCategories,
+  menuDepletionRules,
+  menuItems,
+  menuItemVariants,
+  menuOffers,
+  menuOptionGroupLinks,
+  menuOptionGroups,
+  menuOptionOffers,
+  menuOptionValues,
+  menuPackageRefills,
+} from '../../schema/menu';
+import type { MenuChannel, MenuDepletionMode, MenuItemType, MenuSelectionMode, MenuStatus } from '../../schema/menu';
+import type { Tx } from '../client';
+
+export type MenuCategoryRow = typeof menuCategories.$inferSelect;
+export type MenuItemRow = typeof menuItems.$inferSelect;
+export type MenuVariantRow = typeof menuItemVariants.$inferSelect;
+export type MenuOptionGroupRow = typeof menuOptionGroups.$inferSelect;
+export type MenuOptionValueRow = typeof menuOptionValues.$inferSelect;
+export type MenuOptionGroupLinkRow = typeof menuOptionGroupLinks.$inferSelect;
+export type MenuPackageRefillRow = typeof menuPackageRefills.$inferSelect;
+export type MenuDepletionRuleRow = typeof menuDepletionRules.$inferSelect;
+export type MenuOfferRow = typeof menuOffers.$inferSelect;
+export type MenuOptionOfferRow = typeof menuOptionOffers.$inferSelect;
+
+/**
+ * An instant that survives a JavaScript `Date` round trip. `now()` carries microseconds, a `Date` carries milliseconds, so a
+ * "from now" row read back as a `Date` would sit up to 1 ms BEFORE the database's own value and compare as not yet in force.
+ * Rounding UP to the millisecond keeps the row at or after `now()` (the back-dating guard accepts it) and makes the stored
+ * value exactly representable. Used only when the caller gave no `effectiveFrom`.
+ */
+const NOW_MS = sql`date_trunc('milliseconds', now() + interval '999 microseconds')`;
+
+/** The database's clock, for refusing a back-dated or already-in-effect row with a sentence instead of a trigger message. */
+export async function dbNow(tx: Tx): Promise<Date> {
+  const rows = (await tx.execute(sql`select now() as t`)) as unknown as { t: string | Date }[];
+  return new Date(rows[0]!.t);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Categories
+// ---------------------------------------------------------------------------------------------------------------------
+export async function getCategory(tx: Tx, orgId: string, id: string): Promise<MenuCategoryRow | undefined> {
+  const [row] = await tx.select().from(menuCategories).where(and(eq(menuCategories.id, id), eq(menuCategories.orgId, orgId)));
+  return row;
+}
+
+export async function findCategoryByName(tx: Tx, orgId: string, name: string): Promise<MenuCategoryRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(menuCategories)
+    .where(and(eq(menuCategories.orgId, orgId), sql`lower(${menuCategories.name}) = lower(${name})`));
+  return row;
+}
+
+export async function insertCategory(
+  tx: Tx,
+  input: { orgId: string; name: string; parentId?: string | null; sortOrder?: number; createdBy: string },
+): Promise<MenuCategoryRow> {
+  const [row] = await tx.insert(menuCategories).values(input).returning();
+  return row!;
+}
+
+export async function updateCategory(
+  tx: Tx,
+  id: string,
+  patch: { name?: string; parentId?: string | null; sortOrder?: number; status?: MenuStatus },
+): Promise<MenuCategoryRow> {
+  const [row] = await tx
+    .update(menuCategories)
+    .set({ ...patch, updatedAt: sql`now()` })
+    .where(eq(menuCategories.id, id))
+    .returning();
+  return row!;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Items and variants
+// ---------------------------------------------------------------------------------------------------------------------
+/** `forUpdate` locks the row, so a check that reads its variants cannot interleave with another edit of the same item. */
+export async function getItem(tx: Tx, orgId: string, id: string, forUpdate = false): Promise<MenuItemRow | undefined> {
+  const q = tx.select().from(menuItems).where(and(eq(menuItems.id, id), eq(menuItems.orgId, orgId)));
+  const [row] = forUpdate ? await q.for('update') : await q;
+  return row;
+}
+
+export async function findItemByTypeAndName(
+  tx: Tx,
+  orgId: string,
+  itemType: MenuItemType,
+  name: string,
+): Promise<MenuItemRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(menuItems)
+    .where(and(eq(menuItems.orgId, orgId), eq(menuItems.itemType, itemType), sql`lower(${menuItems.name}) = lower(${name})`));
+  return row;
+}
+
+export interface InsertItemInput {
+  orgId: string;
+  categoryId: string;
+  name: string;
+  description?: string | null;
+  itemType: MenuItemType;
+  soldALaCarte: boolean;
+  soldInPackageSession: boolean;
+  dinerOrderable: boolean;
+  sortOrder?: number;
+  createdBy: string;
+}
+
+export async function insertItem(tx: Tx, input: InsertItemInput): Promise<MenuItemRow> {
+  const [row] = await tx.insert(menuItems).values(input).returning();
+  return row!;
+}
+
+export interface ItemPatch {
+  categoryId?: string;
+  name?: string;
+  description?: string | null;
+  itemType?: MenuItemType;
+  soldALaCarte?: boolean;
+  soldInPackageSession?: boolean;
+  dinerOrderable?: boolean;
+  sortOrder?: number;
+  status?: MenuStatus;
+}
+
+export async function updateItem(tx: Tx, id: string, patch: ItemPatch): Promise<MenuItemRow> {
+  const [row] = await tx
+    .update(menuItems)
+    .set({ ...patch, updatedAt: sql`now()` })
+    .where(eq(menuItems.id, id))
+    .returning();
+  return row!;
+}
+
+export async function getVariant(tx: Tx, orgId: string, id: string): Promise<MenuVariantRow | undefined> {
+  const [row] = await tx.select().from(menuItemVariants).where(and(eq(menuItemVariants.id, id), eq(menuItemVariants.orgId, orgId)));
+  return row;
+}
+
+export async function variantsOfItem(tx: Tx, orgId: string, menuItemId: string): Promise<MenuVariantRow[]> {
+  return tx
+    .select()
+    .from(menuItemVariants)
+    .where(and(eq(menuItemVariants.menuItemId, menuItemId), eq(menuItemVariants.orgId, orgId)))
+    .orderBy(asc(menuItemVariants.sortOrder), asc(menuItemVariants.createdAt));
+}
+
+export async function insertVariant(
+  tx: Tx,
+  input: { orgId: string; menuItemId: string; label: string | null; isDefault: boolean; sortOrder?: number; createdBy: string },
+): Promise<MenuVariantRow> {
+  const [row] = await tx.insert(menuItemVariants).values(input).returning();
+  return row!;
+}
+
+export async function updateVariant(
+  tx: Tx,
+  id: string,
+  patch: { label?: string | null; sortOrder?: number; status?: MenuStatus },
+): Promise<MenuVariantRow> {
+  const [row] = await tx
+    .update(menuItemVariants)
+    .set({ ...patch, updatedAt: sql`now()` })
+    .where(eq(menuItemVariants.id, id))
+    .returning();
+  return row!;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Option groups, values, links
+// ---------------------------------------------------------------------------------------------------------------------
+export async function getOptionGroup(tx: Tx, orgId: string, id: string): Promise<MenuOptionGroupRow | undefined> {
+  const [row] = await tx.select().from(menuOptionGroups).where(and(eq(menuOptionGroups.id, id), eq(menuOptionGroups.orgId, orgId)));
+  return row;
+}
+
+export async function insertOptionGroup(
+  tx: Tx,
+  input: {
+    orgId: string;
+    name: string;
+    selectionMode: MenuSelectionMode;
+    minSelections: number;
+    maxSelections: number;
+    createdBy: string;
+  },
+): Promise<MenuOptionGroupRow> {
+  const [row] = await tx.insert(menuOptionGroups).values(input).returning();
+  return row!;
+}
+
+export async function updateOptionGroup(
+  tx: Tx,
+  id: string,
+  patch: { name?: string; selectionMode?: MenuSelectionMode; minSelections?: number; maxSelections?: number; status?: MenuStatus },
+): Promise<MenuOptionGroupRow> {
+  const [row] = await tx
+    .update(menuOptionGroups)
+    .set({ ...patch, updatedAt: sql`now()` })
+    .where(eq(menuOptionGroups.id, id))
+    .returning();
+  return row!;
+}
+
+export async function getOptionValue(tx: Tx, orgId: string, id: string): Promise<MenuOptionValueRow | undefined> {
+  const [row] = await tx.select().from(menuOptionValues).where(and(eq(menuOptionValues.id, id), eq(menuOptionValues.orgId, orgId)));
+  return row;
+}
+
+export async function insertOptionValue(
+  tx: Tx,
+  input: { orgId: string; optionGroupId: string; name: string; sortOrder?: number; createdBy: string },
+): Promise<MenuOptionValueRow> {
+  const [row] = await tx.insert(menuOptionValues).values(input).returning();
+  return row!;
+}
+
+export async function updateOptionValue(
+  tx: Tx,
+  id: string,
+  patch: { name?: string; sortOrder?: number; status?: MenuStatus },
+): Promise<MenuOptionValueRow> {
+  const [row] = await tx
+    .update(menuOptionValues)
+    .set({ ...patch, updatedAt: sql`now()` })
+    .where(eq(menuOptionValues.id, id))
+    .returning();
+  return row!;
+}
+
+export async function getLink(tx: Tx, orgId: string, id: string): Promise<MenuOptionGroupLinkRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(menuOptionGroupLinks)
+    .where(and(eq(menuOptionGroupLinks.id, id), eq(menuOptionGroupLinks.orgId, orgId)));
+  return row;
+}
+
+export async function insertLink(
+  tx: Tx,
+  input: { orgId: string; optionGroupId: string; menuItemId: string | null; variantId: string | null; sortOrder?: number; createdBy: string },
+): Promise<MenuOptionGroupLinkRow> {
+  const [row] = await tx.insert(menuOptionGroupLinks).values(input).returning();
+  return row!;
+}
+
+export async function deleteLink(tx: Tx, id: string): Promise<void> {
+  await tx.delete(menuOptionGroupLinks).where(eq(menuOptionGroupLinks.id, id));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Package refills
+// ---------------------------------------------------------------------------------------------------------------------
+export async function refillItemIdsOfPackage(tx: Tx, orgId: string, packageVariantId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ refillItemId: menuPackageRefills.refillItemId })
+    .from(menuPackageRefills)
+    .where(and(eq(menuPackageRefills.packageVariantId, packageVariantId), eq(menuPackageRefills.orgId, orgId)))
+    .orderBy(asc(menuPackageRefills.refillItemId));
+  return rows.map((r) => r.refillItemId);
+}
+
+export async function insertPackageRefills(
+  tx: Tx,
+  input: { orgId: string; packageVariantId: string; refillItemIds: string[]; createdBy: string },
+): Promise<void> {
+  if (input.refillItemIds.length === 0) return;
+  await tx.insert(menuPackageRefills).values(
+    input.refillItemIds.map((refillItemId) => ({
+      orgId: input.orgId,
+      packageVariantId: input.packageVariantId,
+      refillItemId,
+      createdBy: input.createdBy,
+    })),
+  );
+}
+
+export async function deletePackageRefills(tx: Tx, packageVariantId: string, refillItemIds: string[]): Promise<void> {
+  if (refillItemIds.length === 0) return;
+  await tx
+    .delete(menuPackageRefills)
+    .where(and(eq(menuPackageRefills.packageVariantId, packageVariantId), inArray(menuPackageRefills.refillItemId, refillItemIds)));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Depletion rules (history: insert, and delete of a scheduled one only)
+// ---------------------------------------------------------------------------------------------------------------------
+export interface InsertRuleInput {
+  orgId: string;
+  variantId: string;
+  /** Omitted = "from now" (rounded up to the millisecond, see NOW_MS). */
+  effectiveFrom?: Date;
+  mode: MenuDepletionMode;
+  itemId: string | null;
+  recipeId: string | null;
+  /** `numeric(14,6)` as text, or null. */
+  quantityPerSale: string | null;
+  createdBy: string;
+}
+
+export async function insertRule(tx: Tx, input: InsertRuleInput): Promise<MenuDepletionRuleRow> {
+  const { effectiveFrom, ...rest } = input;
+  const [row] = await tx
+    .insert(menuDepletionRules)
+    .values({ ...rest, effectiveFrom: effectiveFrom ?? NOW_MS })
+    .returning();
+  return row!;
+}
+
+export async function getRule(tx: Tx, orgId: string, id: string): Promise<MenuDepletionRuleRow | undefined> {
+  const [row] = await tx.select().from(menuDepletionRules).where(and(eq(menuDepletionRules.id, id), eq(menuDepletionRules.orgId, orgId)));
+  return row;
+}
+
+export async function deleteRule(tx: Tx, id: string): Promise<void> {
+  await tx.delete(menuDepletionRules).where(eq(menuDepletionRules.id, id));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Offers and option offers (history: insert, and delete of a scheduled one only)
+// ---------------------------------------------------------------------------------------------------------------------
+export interface InsertOfferInput {
+  orgId: string;
+  storeId: string;
+  variantId: string;
+  channel: MenuChannel;
+  /** Omitted = "from now" (rounded up to the millisecond, see NOW_MS). */
+  effectiveFrom?: Date;
+  /** `numeric(14,2)` as text; null on a withdrawn row or a refill. */
+  amount: string | null;
+  bundleHeads: number | null;
+  extraHeadAmount: string | null;
+  withdrawn: boolean;
+  createdBy: string;
+}
+
+export async function insertOffer(tx: Tx, input: InsertOfferInput): Promise<MenuOfferRow> {
+  const { effectiveFrom, ...rest } = input;
+  const [row] = await tx
+    .insert(menuOffers)
+    .values({ ...rest, effectiveFrom: effectiveFrom ?? NOW_MS })
+    .returning();
+  return row!;
+}
+
+export async function getOffer(tx: Tx, orgId: string, id: string): Promise<MenuOfferRow | undefined> {
+  const [row] = await tx.select().from(menuOffers).where(and(eq(menuOffers.id, id), eq(menuOffers.orgId, orgId)));
+  return row;
+}
+
+export async function deleteOffer(tx: Tx, id: string): Promise<void> {
+  await tx.delete(menuOffers).where(eq(menuOffers.id, id));
+}
+
+export interface InsertOptionOfferInput {
+  orgId: string;
+  storeId: string;
+  optionValueId: string;
+  channel: MenuChannel;
+  effectiveFrom?: Date;
+  /** Signed `numeric(14,2)` as text; null only on a withdrawn row. */
+  priceDelta: string | null;
+  withdrawn: boolean;
+  createdBy: string;
+}
+
+export async function insertOptionOffer(tx: Tx, input: InsertOptionOfferInput): Promise<MenuOptionOfferRow> {
+  const { effectiveFrom, ...rest } = input;
+  const [row] = await tx
+    .insert(menuOptionOffers)
+    .values({ ...rest, effectiveFrom: effectiveFrom ?? NOW_MS })
+    .returning();
+  return row!;
+}
+
+export async function getOptionOffer(tx: Tx, orgId: string, id: string): Promise<MenuOptionOfferRow | undefined> {
+  const [row] = await tx.select().from(menuOptionOffers).where(and(eq(menuOptionOffers.id, id), eq(menuOptionOffers.orgId, orgId)));
+  return row;
+}
+
+export async function deleteOptionOffer(tx: Tx, id: string): Promise<void> {
+  await tx.delete(menuOptionOffers).where(eq(menuOptionOffers.id, id));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Reads: what is offered, and the history
+// ---------------------------------------------------------------------------------------------------------------------
+export interface OfferInForce {
+  readonly id: string;
+  readonly variantId: string;
+  readonly channel: MenuChannel;
+  /** 2-decimal text. Unit price, per-head price, or the bundle price; null on a refill offer (a zero-price serving). */
+  readonly amount: string | null;
+  readonly bundleHeads: number | null;
+  readonly extraHeadAmount: string | null;
+  readonly effectiveFrom: Date;
+}
+
+export interface OptionOfferInForce {
+  readonly id: string;
+  readonly optionValueId: string;
+  readonly channel: MenuChannel;
+  /** Signed 2-decimal text. */
+  readonly priceDelta: string;
+  readonly effectiveFrom: Date;
+}
+
+type Raw = Record<string, unknown>;
+
+/**
+ * What a store OFFERS at `at`, per variant and channel: the newest row at or before `at` (via `menu_offer_in_force`), kept
+ * only if it is not a withdrawal. A variant with no row, or whose newest row is a withdrawal, is simply absent.
+ */
+export async function offersInForce(tx: Tx, storeId: string, at: Date): Promise<OfferInForce[]> {
+  const rows = (await tx.execute(sql`
+    select f.id, f.variant_id, f.channel, f.amount::text as amount, f.bundle_heads, f.extra_head_amount::text as extra_head_amount,
+           f.effective_from
+      from (select distinct variant_id, channel from menu_offers where store_id = ${storeId} and effective_from <= ${at.toISOString()}::timestamptz) k
+     cross join lateral menu_offer_in_force(${storeId}, k.variant_id, k.channel, ${at.toISOString()}::timestamptz) f
+     where not f.withdrawn
+     order by f.variant_id, f.channel
+  `)) as unknown as Raw[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    variantId: String(r.variant_id),
+    channel: r.channel as MenuChannel,
+    amount: r.amount === null ? null : String(r.amount),
+    bundleHeads: r.bundle_heads === null ? null : Number(r.bundle_heads),
+    extraHeadAmount: r.extra_head_amount === null ? null : String(r.extra_head_amount),
+    effectiveFrom: new Date(r.effective_from as string),
+  }));
+}
+
+/** Same rule for option-value deltas, per channel: no row in force, or a withdrawn one, means not offered there. */
+export async function optionOffersInForce(tx: Tx, storeId: string, at: Date): Promise<OptionOfferInForce[]> {
+  const rows = (await tx.execute(sql`
+    select f.id, f.option_value_id, f.channel, f.price_delta::text as price_delta, f.effective_from
+      from (select distinct option_value_id, channel from menu_option_offers where store_id = ${storeId} and effective_from <= ${at.toISOString()}::timestamptz) k
+     cross join lateral menu_option_offer_in_force(${storeId}, k.option_value_id, k.channel, ${at.toISOString()}::timestamptz) f
+     where not f.withdrawn
+     order by f.option_value_id, f.channel
+  `)) as unknown as Raw[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    optionValueId: String(r.option_value_id),
+    channel: r.channel as MenuChannel,
+    priceDelta: String(r.price_delta),
+    effectiveFrom: new Date(r.effective_from as string),
+  }));
+}
+
+/** Every offer row for one variant at one store (both channels, withdrawals and scheduled changes included), newest first. */
+export async function offerHistory(tx: Tx, storeId: string, variantId: string): Promise<MenuOfferRow[]> {
+  return tx
+    .select()
+    .from(menuOffers)
+    .where(and(eq(menuOffers.storeId, storeId), eq(menuOffers.variantId, variantId)))
+    .orderBy(desc(menuOffers.effectiveFrom), asc(menuOffers.channel));
+}

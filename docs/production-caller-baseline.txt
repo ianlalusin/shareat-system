@@ -6,6 +6,8 @@ Th
 __setPhase5AvailableForTests
 acknowledgementHistory
 activateTerminal
+addMenuVariant
+addOptionValue
 addUsageLine
 adjudicateRange
 allocationsFor
@@ -14,6 +16,9 @@ arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
+cancelScheduledDepletionRule
+cancelScheduledOffer
+cancelScheduledOptionOffer
 capitalizeFromExpense
 checkValuesMatch
 childLogger
@@ -22,12 +27,17 @@ closeYear
 confirmTradeOrder
 convertSpecimen
 countedVariances
+createMenuCategory
+createMenuItem
+createOptionGroup
 createRecipe
 customerReturnableQuantity
 datesInWeek
 declareSupplierItem
 depreciateAsset
 depreciationDrift
+editOptionGroup
+editOptionValue
 editPostedProductionAction
 elevateManager
 endShift
@@ -49,6 +59,7 @@ isStartDecisionMaterial
 jobResult
 linesOf
 linkInvoiceToReceipt
+linkOptionGroup
 listAdjustments
 listAvailableCommissaries
 listCategoryLives
@@ -63,6 +74,9 @@ loadCountSheet
 markReviewed
 mintUniqueToken
 newCorrelationId
+offerHistory
+offersInForce
+optionOffersInForce
 pendingItemRequests
 periodForDate
 periodKeyOf
@@ -84,6 +98,9 @@ remainingFor
 remainingOf
 removeUsageLine
 resolveFingerprintMatchToken
+retireMenuCategory
+retireMenuItem
+retireMenuVariant
 returnableQuantity
 reverseOwnerEntry
 revokeRoleById
@@ -95,7 +112,11 @@ sampleCandidates
 scaleRecipeToTarget
 seedCanonicalPositions
 setCostBasisItem
+setDepletionRule
 setItemPricing
+setMenuOffer
+setOptionOffer
+setPackageRefills
 setTillFloat
 signOffPack
 sumTender
@@ -107,6 +128,7 @@ unclosedShiftCount
 undeclareSupplierItem
 undepositedFunds
 undoWriteOff
+unlinkOptionGroup
 unmappedStatuses
 updateMoneyAccount
 updateOwner
@@ -115,3 +137,4 @@ upsertPolicy
 validateFingerprintTemplates
 voidShift
 withPrincipal
+withdrawMenuOffer
