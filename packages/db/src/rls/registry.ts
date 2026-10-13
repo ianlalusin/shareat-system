@@ -312,7 +312,23 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'UPDATE/DELETE unconditionally as a second, independent lock. The INSERT policy also checks ' +
       'actor_person_id belongs to the org (DEF-183 pattern, S3 amendment M6). UPDATE and DELETE are ' +
       'also REVOKEd from the app role (0168, T-354), so an attempt is a loud 42501, not a silent ' +
-      '0-row success.',
+      '0-row success. T-402 (migration 0197) made it a PARTITIONED table (LIST retention_class, then RANGE ' +
+      'recorded_at per Manila year): the policies and the app grants live on the PARENT only; every partition ' +
+      'is REVOKEd from the app role, ENABLE + FORCE RLS with no policy, and carries the append-only trigger ' +
+      'ENABLE ALWAYS (R6).',
+  },
+  audit_log_event_keys: {
+    scope: 'org_column',
+    reason:
+      'T-402 R10 (migration 0197): offline-event idempotency keys, one per (org, key). SELECT, INSERT and ' +
+      'DELETE policies only, each on org_id = app_current_org(); the app role has no UPDATE (a key is never ' +
+      'rewritten). A key lives as long as its audit_log row.',
+  },
+  authz_denial_counts: {
+    scope: 'org_column',
+    reason:
+      'T-402 R9 (migration 0197): hourly counters of aggregated authorisation denials. A policy per granted ' +
+      'command (SELECT, INSERT, UPDATE, DELETE), each on org_id = app_current_org(). Not the log: not append-only.',
   },
 
   // T-122 — expenses: non-inventory spend (docs/tasks/122-expenses.md, bible rows 118-120).

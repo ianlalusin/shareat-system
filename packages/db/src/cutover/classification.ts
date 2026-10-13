@@ -173,6 +173,19 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'entry that no longer exists after cutover is exactly audit_log’s own reasoning: pointing at ' +
       'a deleted id is worse than no record at all.',
   },
+  audit_log_event_keys: {
+    class: 'purge',
+    reason:
+      'T-402 R10 idempotency keys of offline events: each key lives exactly as long as its audit_log row, ' +
+      'so it is purged with audit_log (R15 dumps audit_log first). Truncated in the same statement as its ' +
+      'parent: the composite FK to audit_log is satisfied within one multi-table TRUNCATE.',
+  },
+  authz_denial_counts: {
+    class: 'purge',
+    reason:
+      'T-402 R9 hourly counters of un-rolled authorisation denials: rehearsal and pilot noise, not production ' +
+      'history. Dropped at cutover with the log they summarise.',
+  },
   audit_log: {
     class: 'purge',
     // T-350 S3 amendment M3 (planner ruling) — org-scoped since migration 0167, but classification
@@ -180,7 +193,9 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     // history, regardless of which org wrote it.
     reason:
       'Rows written before cutover record rehearsal and pilot actions, not production history; ' +
-      'they are dropped at cutover.',
+      'they are dropped at cutover. T-402 (migration 0197): audit_log is now PARTITIONED; TRUNCATE of the ' +
+      'parent truncates every partition, and a partition is its parent for this classification (R6). ' +
+      'R15 (S3) dumps the table before the purge.',
   },
 
   // ---- T-122: expenses ------------------------------------------------------------------
@@ -1333,7 +1348,9 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   'supplier_invoices',
   'journal_lines',
   'journal_entries',
+  'audit_log_event_keys',
   'audit_log',
+  'authz_denial_counts',
   'etl_reconciliation',
   'etl_quarantine',
   'etl_source_documents',

@@ -55,7 +55,7 @@ const OPEN_BASELINE = { count: 223, sha256: '341d656a156ce5e35006ba7dfba23171f82
 /** Planner-ruled permanent exceptions. Empty until S5 adds the inter-entity links. */
 const BY_DESIGN_PIN: readonly string[] = [];
 const ORG_LESS_PIN: readonly string[] = ['etl_quarantine', 'etl_reconciliation', 'etl_runs', 'etl_source_documents'];
-const NO_FK_PIN = { count: 26, sha256: 'aa5b1c19e4f13d6746cee042c9d7a05c11fb6c22f4a612863e90d5cb4914491d' } as const;
+const NO_FK_PIN = { count: 27, sha256: '120bb2f5377f2b7afca47c14d1e83affd8974d0575c38ff3a19f105f581dda7a' } as const;
 const JSONB_PIN = { count: 9, sha256: 'c6ed3b6390ba20d384ed7ad17b22b6fc66e2ade9b0cb2867c115aa36f7d8d16b' } as const;
 
 const openKeys = (l: readonly OpenFkEntry[]) => l.map((e) => e.fk);
@@ -389,7 +389,7 @@ async function readNoFkColumns(q: Q): Promise<string[]> {
   const rows = await q<{ t: string; col: string }[]>`
     select c.relname as t, a.attname as col
     from pg_class c join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
-    where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'
+    where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p') and not c.relispartition
       and (a.attname like '%\_id' or a.attname like '%\_ids' or a.attname like '%\_by')
       and a.attname <> 'org_id'
       and not exists (select 1 from pg_constraint k where k.conrelid = c.oid and k.contype = 'f' and a.attnum = any(k.conkey))
@@ -400,7 +400,7 @@ async function readJsonbColumns(q: Q): Promise<string[]> {
   const rows = await q<{ t: string; col: string }[]>`
     select c.relname as t, a.attname as col
     from pg_class c join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
-    where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and a.atttypid in ('jsonb'::regtype, 'json'::regtype)
+    where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p') and not c.relispartition and a.atttypid in ('jsonb'::regtype, 'json'::regtype)
     order by 1, 2`;
   return rows.map((r) => `${r.t}.${r.col}`);
 }

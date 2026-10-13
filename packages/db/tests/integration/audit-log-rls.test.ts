@@ -48,8 +48,8 @@ async function orgAndPerson(hint: string) {
  *  does not exist yet, so this throws 42703 today for every caller. */
 async function seedRow(orgId: string, personId: string) {
   const [row] = await sql<{ id: string }[]>`
-    insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source)
-    values (${orgId}, ${personId}, 'set_channel_payout', 'sales_channels', ${randomUUID()}, ${sql.json({ moneyAccountId: null })}, ${sql.json({ moneyAccountId: 'x' })}, 'web')
+    insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source, category, sensitivity, severity, retention_class)
+    values (${orgId}, ${personId}, 'set_channel_payout', 'sales_channels', ${randomUUID()}, ${sql.json({ moneyAccountId: null })}, ${sql.json({ moneyAccountId: 'x' })}, 'web', 'settings', 'normal', 5, 'r10y')
     returning id`;
   return row!.id;
 }
@@ -96,8 +96,8 @@ describe('L3 (M1) — org A inserting a row naming org B\'s org_id: 42501 (WITH 
     const b = await orgAndPerson('l3b');
     const err = await caught(
       asOrg(a.orgId, (tx) => tx`
-        insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source)
-        values (${b.orgId}, ${a.personId}, 'set_channel_payout', 'sales_channels', ${randomUUID()}, null, null, 'web')`),
+        insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source, category, sensitivity, severity, retention_class)
+        values (${b.orgId}, ${a.personId}, 'set_channel_payout', 'sales_channels', ${randomUUID()}, null, null, 'web', 'settings', 'normal', 5, 'r10y')`),
     );
     expect(err, 'expected a refusal at all').toBeInstanceOf(Error);
     expect(err?.code, "wanted 42501 (WITH CHECK) after 0167 — was red today: 42703 (no org_id column), the wrong reason").toBe('42501');
@@ -135,8 +135,8 @@ describe('L7 (M6) — an insert naming another org\'s person as actor: 42501', (
     const b = await orgAndPerson('l7b');
     const err = await caught(
       asOrg(a.orgId, (tx) => tx`
-        insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source)
-        values (${a.orgId}, ${b.personId}, 'set_channel_payout', 'sales_channels', ${randomUUID()}, null, null, 'web')`),
+        insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source, category, sensitivity, severity, retention_class)
+        values (${a.orgId}, ${b.personId}, 'set_channel_payout', 'sales_channels', ${randomUUID()}, null, null, 'web', 'settings', 'normal', 5, 'r10y')`),
     );
     expect(err, 'expected a refusal at all').toBeInstanceOf(Error);
     expect(err?.code, 'wanted 42501 (actor must belong to the same org) — was red today: 42703').toBe('42501');
@@ -152,8 +152,8 @@ describe('L6 (M2, guard) — the cutover purge TRUNCATE passes the append-only t
       // this leg's own claim (TRUNCATE bypasses row triggers) is about the TRUNCATE, not the
       // column gap L1-L3/L7 already prove, and stays true whether the trigger exists yet or not.
       const [row] = await sql<{ id: string }[]>`
-        insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source)
-        values (${a.orgId}, ${a.personId}, 'set_channel_payout', 'sales_channels', ${randomUUID()}, null, null, 'web')
+        insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source, category, sensitivity, severity, retention_class)
+        values (${a.orgId}, ${a.personId}, 'set_channel_payout', 'sales_channels', ${randomUUID()}, null, null, 'web', 'settings', 'normal', 5, 'r10y')
         returning id`;
       const id = row!.id;
       const before = await sql<{ id: string }[]>`select id from audit_log where id = ${id}`;
