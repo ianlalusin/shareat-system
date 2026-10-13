@@ -137,7 +137,7 @@ export async function seedReport(sql: postgres.Sql, orgId: string, r: SeedReport
     );
     return rep.id;
   });
-  await sql`update dual_run_reports set created_at = ${r.createdAt ?? '2026-10-27T00:00:00Z'}::timestamptz where id = ${id}`;
+  await sql`update dual_run_reports set created_at = ${r.createdAt ?? '2026-10-01T00:00:00Z'}::timestamptz where id = ${id}`;
   return id;
 }
 

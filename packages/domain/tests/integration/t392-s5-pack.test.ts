@@ -189,6 +189,36 @@ describe('50. staleness and the whole-org authorization', () => {
   );
 });
 
+describe('53. the per-store rule covers EVERY dual-running store (active ones), reported or not', () => {
+  it(
+    'an active store with NO report in the range counts 0 days: reason "Padre 0 < 10", not signable (v2 has no franchise/test flag: a franchise is another org, a test store is inactive). Mutant: stores without reports skipped. Red today: gap in builder',
+    async () => {
+      const f = await makeFixture(sql, '53a');
+      await seedPack(f);
+      expect((await pack(f)).signable, 'premise: signable with the two reporting stores').toBe(true);
+      const [s] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${f.orgId}, ${`ZA${Date.now()}`}, 'Padre', true) returning id`;
+      await sql`insert into person_store_scope (person_id, store_id) values (${f.admin.personId}, ${s!.id})`;
+      const p = await pack(f);
+      expect(p.signable).toBe(false);
+      expect(p.reasons.join(' | ')).toContain('Padre 0 < 10');
+    },
+    60_000,
+  );
+
+  it(
+    'an INACTIVE store (a test store) with no report does not block the pack. Mutant: inactive stores counted. Red today: gap in builder',
+    async () => {
+      const f = await makeFixture(sql, '53b');
+      await seedPack(f);
+      await sql`insert into stores (org_id, code, name, is_active) values (${f.orgId}, ${`ZB${Date.now()}`}, 'Test Commissary', false)`;
+      const p = await pack(f);
+      expect(p.reasons).toEqual([]);
+      expect(p.signable).toBe(true);
+    },
+    60_000,
+  );
+});
+
 describe('51. defect list and class totals', () => {
   const lines: SeedLine[] = [
     line('cash_bank', 'A', '0.00', '100.00', 'V2_DEFECT'),
@@ -205,10 +235,10 @@ describe('51. defect list and class totals', () => {
       await seedPack(f, { lipaLines: lines });
       const d = (lineKey: string, deltaAt: string, cls: 'V1_DEFECT' | 'V2_DEFECT', ref: string, createdAt: string, kind = 'cash_bank') =>
         seedDisposition(sql, f, { storeId: f.lipa.id, weekStart: W1, kind, lineKey, deltaAt, class: cls, ref, createdAt });
-      await d('A', '100.00', 'V2_DEFECT', 'DEF-901', '2026-10-26T00:00:00Z');
-      await d('B', '-100.00', 'V2_DEFECT', 'DEF-902', '2026-10-26T00:00:00Z');
-      await d('B', '-100.00', 'V2_DEFECT', 'DEF-999', '2026-10-28T00:00:00Z'); // newer than the version: not the ref shown
-      await d('C', '50.00', 'V1_DEFECT', 'DEF-903', '2026-10-26T00:00:00Z', 'ap_supplier');
+      await d('A', '100.00', 'V2_DEFECT', 'DEF-901', '2026-09-30T00:00:00Z');
+      await d('B', '-100.00', 'V2_DEFECT', 'DEF-902', '2026-09-30T00:00:00Z');
+      await d('B', '-100.00', 'V2_DEFECT', 'DEF-999', '2026-10-02T00:00:00Z'); // newer than the version: not the ref shown
+      await d('C', '50.00', 'V1_DEFECT', 'DEF-903', '2026-09-30T00:00:00Z', 'ap_supplier');
       const p = await pack(f);
       const refOf = (kind: string, key: string) => p.defects.find((x: Any) => x.kind === kind && x.lineKey === key && x.storeId === f.lipa.id)?.ref;
       expect(p.defects).toHaveLength(3);
@@ -233,9 +263,9 @@ describe('51. defect list and class totals', () => {
       await seedPack(f, { lipaLines: lines });
       const d = (lineKey: string, deltaAt: string, ref: string, createdAt: string) =>
         seedDisposition(sql, f, { storeId: f.lipa.id, weekStart: W1, kind: 'cash_bank', lineKey, deltaAt, class: 'V2_DEFECT', ref, createdAt });
-      await d('A', '100.00', 'DEF-901', '2026-10-26T00:00:00Z'); // matches delta 100.00
-      await d('A', '90.00', 'DEF-950', '2026-10-28T00:00:00Z'); // newer than the version, disagrees: ignored by the cut-off
-      await d('B', '-80.00', 'DEF-902', '2026-10-26T00:00:00Z'); // latest at/before the version disagrees with delta -100.00
+      await d('A', '100.00', 'DEF-901', '2026-09-30T00:00:00Z'); // matches delta 100.00
+      await d('A', '90.00', 'DEF-950', '2026-10-02T00:00:00Z'); // newer than the version, disagrees: ignored by the cut-off
+      await d('B', '-80.00', 'DEF-902', '2026-09-30T00:00:00Z'); // latest at/before the version disagrees with delta -100.00
       const v = await weekView(f, f.lipa.id, W1);
       const l = (kind: string, key: string) => v.lines.find((x: Any) => x.kind === kind && x.lineKey === key);
       expect(l('cash_bank', 'A').reCheck).toBe(false);

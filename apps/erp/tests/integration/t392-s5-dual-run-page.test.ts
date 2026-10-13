@@ -183,6 +183,22 @@ describe('52. the week page: the form is for admins, on actionable lines, offeri
     60_000,
   );
 
+  it(
+    'a malformed percent-encoding in the store or week segment is notFound, not a URIError / 500. Mutant: decodeURIComponent unguarded',
+    async () => {
+      const f = await makeFixture(sql, '52e');
+      await seed(f);
+      h.current = f.admin;
+      for (const params of [{ store: '%E0%A4%A', week: W }, { store: f.lipa.code, week: '%E0%A4%A' }]) {
+        const err = await WeekPage({ params: Promise.resolve(params), searchParams: Promise.resolve({}) }).then(() => undefined, (e: Any) => e);
+        expect(err, 'must throw notFound').toBeDefined();
+        expect(err).not.toBeInstanceOf(URIError);
+        expect(String(err?.digest ?? err?.message)).toMatch(/NOT_FOUND|404/);
+      }
+    },
+    60_000,
+  );
+
   it('nav.tsx holds /reports/dual-run labelled "Dual run", after "POS reconciliation"', () => {
     const nav = readFileSync(fileURLToPath(new URL('../../src/components/nav.tsx', import.meta.url)), 'utf8');
     const pos = nav.indexOf('POS reconciliation');
@@ -233,12 +249,32 @@ describe('31. the server action: recording is refused for anyone but an admin, i
       const f = await makeFixture(sql, '31b');
       await seed(f);
       h.current = f.admin;
-      for (const over of [{ ref: 'def-1' }, { ref: 'DEF-1x' }, { class: 'INVENTORY_BASIS' }, { note: '' }]) {
+      for (const over of [{ ref: 'def-1' }, { ref: 'DEF-1x' }, { class: 'INVENTORY_BASIS' }, { note: '' }] as Record<string, string>[]) {
         h.flash.length = 0;
         await recordAction(form(f, over));
         expect(h.flash[0]?.flash.error, JSON.stringify(over)).toBeTruthy();
         expect(await disp(f)).toBe(0);
       }
+    },
+    60_000,
+  );
+
+  it(
+    'a forged storeId (another org store) is refused: error flash, no row in either org, and nothing of the other org store (code, name, id) appears in the flash or the redirect. Mutant: store looked up before the authorization',
+    async () => {
+      const f = await makeFixture(sql, '31c');
+      await seed(f);
+      const [other] = await sql<Any[]>`select id, code, name from stores where org_id = ${f.foreignAdmin.orgId}`;
+      h.current = f.admin;
+      h.flash.length = 0;
+      await recordAction(form(f, { storeId: other.id }));
+      expect(h.flash).toHaveLength(1);
+      expect(h.flash[0]!.flash.error, 'an error flash').toBeTruthy();
+      const seen = JSON.stringify(h.flash);
+      for (const secret of [other.code, other.name, other.id]) expect(seen.includes(secret), `leaked ${secret}`).toBe(false);
+      expect(await disp(f)).toBe(0);
+      const [n] = await sql<Any[]>`select count(*)::int n from dual_run_dispositions where org_id = ${f.foreignAdmin.orgId}`;
+      expect(n.n).toBe(0);
     },
     60_000,
   );
