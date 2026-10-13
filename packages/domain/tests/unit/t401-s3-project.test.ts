@@ -176,7 +176,7 @@ describe('I14 - projection is pure, deterministic, carrier-neutral', () => {
   });
   it('project.ts imports no firebase, @shareat/db, or fetch', () => {
     const src = readFileSync(resolve(__dirname, '../../src/menu/project.ts'), 'utf8');
-    const imports = [...src.matchAll(/^\s*(?:import|export)\b[^;]*?from\s+['"]([^'"]+)['"]/gms)].map((m) => m[1]);
+    const imports = [...src.matchAll(/^\s*(?:import|export)\b[^;]*?from\s+['"]([^'"]+)['"]/gms)].map((m) => m[1] ?? '');
     expect(imports.filter((s) => /firebase|@shareat\/db|\/db\//.test(s))).toEqual([]);
     expect(/\bfetch\s*\(/.test(src)).toBe(false);
     expect(/firebase/i.test(src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ''))).toBe(false);
@@ -251,7 +251,7 @@ describe('visibility: a variant appears only if orderable on at least one channe
     const snap = base();
     snap.items[0].dinerOrderable = false;
     const p = proj(snap);
-    expect(p.menu.items.find((i: any) => i.id === 'i1').dinerOrderable).toBe(false);
+    expect(p.menu.items.find((i: any) => i.id === 'i1')?.dinerOrderable).toBe(false);
     expect(chan(p, 'v1').store.orderable).toBe(true);
   });
   it('an option value appears iff active and orderable on a channel; channels are independent', () => {
@@ -327,12 +327,24 @@ describe('sort orders (UTF-16 code unit; input order never matters)', () => {
     expect(p.menu.categories.map((c: any) => c.id)).toEqual(['c0', 'c1', 'c2', 'c3']);
     expect(p.menu.items.map((i: any) => i.id)).toEqual(['r1', 'i1', 'ip', 'r2']);
   });
+  it('categories come in tree order: parent before its children, siblings by (sortOrder, name, id)', () => {
+    const snap = base({
+      categories: [
+        { id: 'cC', name: 'Alpha', parentId: 'cP', sortOrder: 0, status: 'active' },
+        { id: 'cP', name: 'Zeta', parentId: null, sortOrder: 1, status: 'active' },
+        { id: 'cR', name: 'Beta', parentId: null, sortOrder: 1, status: 'active' },
+      ],
+    });
+    snap.items = snap.items.map((i: any) => ({ ...i, categoryId: i.id === 'i1' ? 'cC' : 'cR' }));
+    // A flat sort would put the child cC first (sortOrder 0, name Alpha). Tree order: root Beta, root Zeta, then Zeta child.
+    expect(proj(snap).menu.categories.map((c: any) => c.id)).toEqual(['cR', 'cP', 'cC']);
+  });
   it('variants: default first, then sortOrder, label, id', () => {
     const v = (id: string, label: string | null, isDefault: boolean, sortOrder: number) => ({ id, menuItemId: 'i1', label, isDefault, sortOrder, status: 'active' });
     const snap = base({ variants: [v('x3', 'B', false, 2), v('x1', 'Z', false, 1), v('x2', 'A', false, 2), v('x0', null, true, 9), ...base().variants.slice(1)] });
     for (const id of ['x0', 'x1', 'x2', 'x3']) snap.stores[0].offers.push(offer(id, 'store', '10.00'));
     const item = proj(snap).menu.items.find((i: any) => i.id === 'i1');
-    expect(item.variants.map((x: any) => x.id)).toEqual(['x0', 'x1', 'x2', 'x3']);
+    expect(item?.variants.map((x: any) => x.id)).toEqual(['x0', 'x1', 'x2', 'x3']);
   });
   it('option groups by (link sortOrder, name, id); values by (sortOrder, name, id)', () => {
     const snap = base({
