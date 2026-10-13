@@ -21,7 +21,7 @@
  * now structural — *you cannot un-buy something* because an observation is not a row.
  */
 import { sql } from 'drizzle-orm';
-import { index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { index, pgTable, text, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { items } from './items';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -51,6 +51,15 @@ export const supplierItems = pgTable(
     uniqueIndex('supplier_items_supplier_item_key').on(t.supplierId, t.itemId),
     index('supplier_items_org_idx').on(t.orgId),
     index('supplier_items_item_idx').on(t.itemId),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'supplier_items_created_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

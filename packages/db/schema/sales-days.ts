@@ -167,6 +167,15 @@ export const salesChannels = pgTable(
       foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
       name: 'sales_channels_destination_money_account_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'sales_channels_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -330,7 +339,36 @@ export const salesDays = pgTable(
     check('sales_days_cash_collected_finite_check', sql`${t.cashCollected} > '-Infinity'::numeric and ${t.cashCollected} < 'Infinity'::numeric`),
     check('sales_days_online_collected_finite_check', sql`${t.onlineCollected} > '-Infinity'::numeric and ${t.onlineCollected} < 'Infinity'::numeric`),
     check('sales_days_credit_sales_finite_check', sql`${t.creditSales} > '-Infinity'::numeric and ${t.creditSales} < 'Infinity'::numeric`),
-    // NOTE: the sales_days_figure_lock trigger (BEFORE INSERT OR UPDATE; derivation flag owned by repo/sales-days.ts withSalesDayDerivation; errors sales_days_figures_locked) is hand-added in migration 0185 (T-375 S4, R6) - the link-aware lock, not expressible here.
+    // NOTE: the sales_days_figure_lock trigger (BEFORE INSERT OR UPDATE; derivation flag owned by repo/sales-days.ts withSalesDayDerivation; errors sales_days_figures_locked) is hand-added in migration 0185 (T-375 S4, R6) - the link-aware lock, not expressible here.,
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'sales_days_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'sales_days_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.submittedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'sales_days_submitted_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.verifiedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'sales_days_verified_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.voidedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'sales_days_voided_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

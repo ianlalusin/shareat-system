@@ -16,6 +16,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -152,5 +153,18 @@ export const stores = pgTable(
       sql`${t.unremittedCeiling} is null or ${t.unremittedCeiling} > 0`,
     ),
     check('stores_unremitted_ceiling_finite_check', sql`${t.unremittedCeiling} > '-Infinity'::numeric and ${t.unremittedCeiling} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.wastageMonitorPersonId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'stores_wastage_monitor_person_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: stores_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0194 (T-398 S1 /
+    // DEF-491), no Drizzle mirror here. Trivially true (id alone is already unique); it exists so
+    // the 76 composite `(org_id, "<col>") REFERENCES stores (org_id, id)` same-org FKs declared
+    // beside their own tables have a real unique target.
   ],
 );

@@ -1,6 +1,6 @@
 # T-392: Dual-run comparator, v1 vs v2, per store per week (absorbs T-114b)
 
-**Status:** SPEC APPROVED WITH CHANGES 2026-10-11 (fresh Opus review applied). Drafted 2026-10-11 by the Opus planner.
+**Status:** S1, S2 DONE (on main). **S3 BUILT** 2026-10-12 on `lane/t392-s3` (`5eb5c7b`, pushed; migration **0195**; integration 102/102 on a fresh DB). It sits on lane/t398-s1 (0194) and **merges after PR #20**. Two Opus rulings rounds and the money audit applied (see the S3 rulings sections at the end). Repo functions insertReport/insertDisposition/linesOf/v2Figures have test callers only until S4/S5. Next: S4 (CLI + domain run), S5 (screens). | Earlier: SPEC APPROVED WITH CHANGES 2026-10-11 (fresh Opus review applied). Drafted 2026-10-11 by the Opus planner.
 (≈5.5 lane-days, five slices; the plan says M-L 4.5, see §Research "Where this spec disagrees".) Migration **0NNN,
 the next free number at merge** (0194 is reserved for T-398 S1). Five questions for Ian below; the recommended option
 is what gets built.
@@ -350,3 +350,19 @@ disposition from any script.
 - [ ] **Run against real data:** Lipa's week of 19 Oct extracted and compared on production, and its verdict, line
       count by class and top 5 deltas reported. *The report against real data is the deliverable, not the code.*
 - [ ] Any spec defect reported, not worked around.
+
+## S3 rulings (fresh Opus planner, 2026-10-12, binding; supersede the text above where they differ)
+1. **Correction dating.** `postPosCorrection` posts `source_type 'sale'`, `source_id = sales_day_pos_corrections.id`. Resolve, in order: (a) `reversal_of_entry_id` → the original's resolved date, recursively; (b) `source_type 'sale'` and the source_id found in `sales_day_pos_corrections` → that sales day's `business_date`; (c) same source as an earlier POSTED entry → the earliest one's `entry_date`. Unresolvable entries keep their own date and are listed in `datedLater`. Only `sales_tender` and `expense_category` re-date; `cash_bank` and `ap_supplier` keep the entry's own date. (R5a's "e.g. `sale.pos-correction`" under same-source is wrong per the posting code.)
+2. **Staff cash** is its own kind `staff_cash`, keyed by the GL code of the store's `custodian='staff'` money account. Employee-party lines are summed per store. Any other party on that code goes to `staff_cash` under its real party, and S2 classes it UNEXPLAINED. The 1110 cash line excludes staff cash.
+3. **no_data `=>` compared_days = 0**, not iff. `ties`, `open` or `explained` with 0 compared days are valid. R12 should read "no data on either side" (inv 17).
+4. Disposition `ref` is NOT NULL plus the regex CHECK.
+5. **Expense key is per category**, joined via `source_type='expense_payment'`, `source_id = expenses.id` → `category_id`. A line with no expense source carries no `categoryId`, is keyed by GL code, and S2 classes it UNMAPPED_KEY.
+6. `kind` CHECK on lines and dispositions: `cash_bank, staff_cash, sales_tender, expense_category, ap_supplier, inventory_basis, unassigned_store`. `v2Figures` also returns `inventory_basis` (1310 + GRNI receipts, COGS; §2).
+7. **Store and person FKs use 0194's same-org composite FKs** (`<table>_store_id_same_org_fk`, `created_by` → persons `(org_id, id)`). S3 does not add its own and does not use a trigger. **S3 = migration 0195 and merges after 0194 (T-398 S1).** If 0194 slips, S3 waits.
+Money columns, `v1_counter` and `opening_gap` included, are `numeric(14,2)`.
+
+## S3 money rulings (fresh Opus planner, after the S3 audit, 2026-10-12; binding)
+- **v2 amount sign.** `amount` = debit − credit, except on account 2110, where it is credit − debit. That is each line's natural balance and the same sign v1-figures uses for that kind. `debit` and `credit` stay raw, and `byDay` follows `amount`.
+- **inventory_basis codes:** 1310, 1320, 1330, 1340, 5100, 5110–5170, 5175, 5200, 5300, 5400, 5450. 2120 (GRNI) is **excluded**: with it, a receipt would net to 0. **expense_category** covers lines on `expense_categories.account_code` minus that list, only from entries whose reversal-chain root is `source_type 'expense_payment'`. Lines from any other source on those codes (depreciation, amortisation, payroll, drawings, disposals, prepaid write-offs) are outside the tie set and are not emitted. A guard test checks that every COGS-group category code is in the list.
+- **A correction** is one of: an entry with `reversal_of_entry_id`; a POS correction (`sales_day_pos_corrections.id = source_id`); a later entry from a source that already has an earlier entry of any status, ordered by (entry_date, id). **datedLater** holds corrections with no posted original. The earliest entry of its source is never a correction.
+- **dual_run_lines.org_id** is NOT NULL, with a composite FK `(org_id, report_id)` → reports `(org_id, id)`, and **no trigger**. The repo copies org_id from the report (`INSERT … SELECT r.org_id …`). A report id from another org inserts nothing and raises.

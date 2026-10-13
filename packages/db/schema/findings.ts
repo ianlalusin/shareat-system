@@ -25,7 +25,7 @@
  * merely discouraged.
  */
 import { sql } from 'drizzle-orm';
-import { check, date, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, date, index, pgTable, text, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
@@ -64,6 +64,20 @@ export const findingAcknowledgements = pgTable(
      */
     index('finding_acknowledgements_key_idx').on(t.orgId, t.findingKey, t.acknowledgedAt),
     index('finding_acknowledgements_org_kind_idx').on(t.orgId, t.kind),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.acknowledgedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'finding_acknowledgements_acknowledged_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'finding_acknowledgements_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -140,6 +154,15 @@ export const findingOccurrences = pgTable(
       .where(sql`${t.closedOn} is null`),
     index('finding_occurrences_period_idx').on(t.orgId, t.openedOn),
     index('finding_occurrences_store_idx').on(t.orgId, t.storeId, t.openedOn),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'finding_occurrences_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -172,5 +195,14 @@ export const findingViews = pgTable(
   (t) => [
     uniqueIndex('finding_views_person_day_idx').on(t.orgId, t.personId, t.viewedOn),
     index('finding_views_org_day_idx').on(t.orgId, t.viewedOn),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.personId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'finding_views_person_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

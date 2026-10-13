@@ -11,7 +11,7 @@
  * `rls/registry.ts` — RLS enabled with no staff policy at all, so no tenant could ever read it.
  */
 import { sql } from 'drizzle-orm';
-import { check, index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { check, index, jsonb, pgTable, text, timestamp, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
 
@@ -59,5 +59,14 @@ export const auditLog = pgTable(
       'audit_log_source_check',
       sql`${t.source} in ('web', 'pos', 'customer', 'website', 'apk', 'kiosk', 'cron', 'ingestor', 'etl')`,
     ),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.actorPersonId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'audit_log_actor_person_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

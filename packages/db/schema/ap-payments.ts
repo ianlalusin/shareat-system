@@ -109,6 +109,25 @@ export const apPayments = pgTable(
       foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
       name: 'ap_payments_money_account_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'ap_payments_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'ap_payments_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.voidedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'ap_payments_voided_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

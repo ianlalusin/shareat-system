@@ -426,6 +426,12 @@ export async function storeBelongsToOrg(tx: Tx, storeId: string, orgId: string):
   return row !== undefined;
 }
 
+/** The org a store belongs to (under the caller's RLS a foreign store reads as absent), for `canAt`. */
+export async function orgIdOfStore(tx: Tx, storeId: string): Promise<string | null> {
+  const [row] = await tx.select({ orgId: stores.orgId }).from(stores).where(eq(stores.id, storeId)).limit(1);
+  return row?.orgId ?? null;
+}
+
 /** Every ACTIVE store in the org — the "every row" side of "all = every row". */
 export async function activeStoreIdsForOrg(tx: Tx, orgId: string): Promise<string[]> {
   const rows = await tx.select({ id: stores.id }).from(stores).where(and(eq(stores.orgId, orgId), eq(stores.isActive, true)));

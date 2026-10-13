@@ -34,6 +34,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { departments, stockLocations } from './stock-locations';
 import { items } from './items';
@@ -109,6 +110,35 @@ export const stockUsageRecords = pgTable(
     ),
     index('stock_usage_store_status_idx').on(t.storeId, t.status, t.usedOn),
     index('stock_usage_org_idx').on(t.orgId),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.chargePersonId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'stock_usage_records_charge_person_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'stock_usage_records_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.postedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'stock_usage_records_posted_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'stock_usage_records_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.voidedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'stock_usage_records_voided_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

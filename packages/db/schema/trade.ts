@@ -24,7 +24,7 @@
  * for period-batched invoices, which is a visible trigger rather than a guess.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { arCharges } from './ar';
 import { expenseCategories } from './expenses';
 import { customers } from './customers';
@@ -173,6 +173,60 @@ export const tradeOrders = pgTable(
     check('trade_orders_total_amount_finite_check', sql`${t.totalAmount} > '-Infinity'::numeric and ${t.totalAmount} < 'Infinity'::numeric`),
     check('trade_orders_delivery_fee_finite_check', sql`${t.deliveryFee} > '-Infinity'::numeric and ${t.deliveryFee} < 'Infinity'::numeric`),
     check('trade_orders_other_fees_finite_check', sql`${t.otherFees} > '-Infinity'::numeric and ${t.otherFees} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.acceptedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'trade_orders_accepted_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'trade_orders_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.creditOverrideBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'trade_orders_credit_override_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.dispatchedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'trade_orders_dispatched_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.readyBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'trade_orders_ready_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.receivedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'trade_orders_received_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.rejectedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'trade_orders_rejected_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.requestedByStoreId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'trade_orders_requested_by_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'trade_orders_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.voidedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'trade_orders_voided_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

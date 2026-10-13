@@ -38,7 +38,13 @@ export const persons = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
-  (t) => [check('persons_kind_check', sql`${t.kind} in ('person', 'terminal')`)],
+  (t) => [
+    check('persons_kind_check', sql`${t.kind} in ('person', 'terminal')`),
+    // NOTE: persons_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0194 (T-398 S1 /
+    // DEF-491), no Drizzle mirror here. Trivially true (id alone is already unique); it exists so
+    // the 153 composite `(org_id, "<col>") REFERENCES persons (org_id, id)` same-org FKs declared
+    // beside their own tables have a real unique target.
+  ],
 );
 
 export const personIdentities = pgTable(

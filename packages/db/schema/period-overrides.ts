@@ -18,7 +18,7 @@
  * docs/plans/264-slice3-plan.md).
  */
 import { sql } from 'drizzle-orm';
-import { check, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { check, pgTable, text, timestamp, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { fiscalPeriods } from './fiscal-periods';
 import { journalEntries } from './journal';
 import { organizations } from './organizations';
@@ -88,5 +88,14 @@ export const periodOverrides = pgTable(
       'period_overrides_status_at_post_check',
       sql`${t.periodStatusAtPost} in ('open', 'closed')`,
     ),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.actorPersonId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'period_overrides_actor_person_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
