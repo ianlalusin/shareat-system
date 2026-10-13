@@ -26,8 +26,12 @@ const SECRET_TOKENS: ReadonlySet<string> = new Set([
   'cookie',
   'authorization',
   'jwt',
+  'pwd',
+  'passwd',
+  'cvv',
+  'apikey',
 ]);
-const SECRET_PAIRS: ReadonlySet<string> = new Set(['api+key', 'private+key', 'session+id', 'refresh+token']);
+const SECRET_PAIRS: ReadonlySet<string> = new Set(['api+key', 'private+key', 'session+id', 'refresh+token', 'access+key', 'card+number']);
 
 /** Lower-case tokens of a key: camelCase boundaries, `_`, `-` and whitespace separate them. */
 export function keyTokens(key: string): string[] {
@@ -42,6 +46,7 @@ export function keyTokens(key: string): string[] {
 export function isSecretKey(key: string): boolean {
   const t = keyTokens(key);
   if (t.some((x) => SECRET_TOKENS.has(x))) return true;
+  if (t.length === 1 && t[0] === 'session') return true; // a bare `session` (a token); sessionStart etc. are not
   for (let i = 0; i + 1 < t.length; i++) {
     if (SECRET_PAIRS.has(`${t[i]}+${t[i + 1]}`)) return true;
   }
@@ -55,10 +60,11 @@ function isAccountNumberKey(key: string): boolean {
 
 const SCRYPT_SHAPE = /scrypt\$/;
 const JWT_SHAPE = /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/;
+const BEARER_SHAPE = /^Bearer\s+\S/;
 const SESSION_TOKEN_SHAPE = /^sess(?:ion)?[_-][A-Za-z0-9_-]{16,}$/i;
 
 function secretShapedString(s: string): boolean {
-  return SCRYPT_SHAPE.test(s) || JWT_SHAPE.test(s) || SESSION_TOKEN_SHAPE.test(s);
+  return SCRYPT_SHAPE.test(s) || JWT_SHAPE.test(s) || BEARER_SHAPE.test(s) || SESSION_TOKEN_SHAPE.test(s);
 }
 
 export interface RedactOptions {
@@ -73,6 +79,14 @@ export interface RedactResult {
 function mask(v: unknown): unknown {
   if (v === null || v === undefined) return v ?? null;
   return `••••${String(v).slice(-4)}`;
+}
+
+/** An account-number key holding an array or object: every leaf is masked, nothing is left whole. */
+function maskDeep(v: unknown): unknown {
+  if (v === null || v === undefined) return null;
+  if (Array.isArray(v)) return v.map(maskDeep);
+  if (typeof v === 'object') return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, maskDeep(x)]));
+  return mask(v);
 }
 
 function changedFlagName(key: string): string {
@@ -102,9 +116,9 @@ function walk(value: unknown, path: string, other: unknown, hasOther: boolean, o
         copy[k] = REDACTED;
         out.push(p);
       }
-    } else if (isAccountNumberKey(k) && (v === null || typeof v === 'string' || typeof v === 'number')) {
-      copy[k] = mask(v);
-      if (hasOther) {
+    } else if (isAccountNumberKey(k)) {
+      copy[k] = maskDeep(v);
+      if (hasOther && (v === null || typeof v === 'string' || typeof v === 'number')) {
         const o = otherObj ? otherObj[k] : undefined;
         copy[changedFlagName(k)] = String(v ?? '') !== String(o ?? '');
       }

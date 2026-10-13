@@ -42,13 +42,13 @@ const tokens = (key: string): string[] =>
     .split(/[\s_-]+/)
     .filter(Boolean)
     .map((t) => t.toLowerCase());
-const SECRET_TOKENS = new Set(['password', 'passcode', 'secret', 'token', 'otp', 'hash', 'salt', 'scrypt', 'cookie', 'authorization', 'jwt']);
+const SECRET_TOKENS = new Set(['password', 'passcode', 'secret', 'token', 'otp', 'hash', 'salt', 'scrypt', 'cookie', 'authorization', 'jwt', 'pwd', 'passwd', 'apikey', 'session', 'cvv']);
 const isSecretKey = (k: string) => {
   const t = tokens(k);
   if (t.some((x) => SECRET_TOKENS.has(x))) return true;
   for (let i = 0; i + 1 < t.length; i++) {
     const pair = `${t[i]}+${t[i + 1]}`;
-    if (['api+key', 'private+key', 'session+id', 'refresh+token'].includes(pair)) return true;
+    if (['api+key', 'private+key', 'session+id', 'refresh+token', 'access+key', 'card+number'].includes(pair)) return true;
   }
   return false;
 };
@@ -69,11 +69,14 @@ function scanValue(v: unknown, path: string, key: string | null, out: Finding[])
     return;
   }
   if (typeof v === 'object') {
+    // an account-number key holding an array/object: its digits live in the children, under other keys
+    if (key !== null && isAccountNumberKey(key) && /\d{8,}/.test(JSON.stringify(v))) out.push({ rule: 'unmasked account number inside a container', path });
     for (const [k, x] of Object.entries(v as Record<string, unknown>)) scanValue(x, `${path}.${k}`, k, out);
     return;
   }
   const s = String(v);
   if (/scrypt\$/.test(s)) out.push({ rule: 'scrypt hash', path });
+  if (/^Bearer /.test(s)) out.push({ rule: 'Bearer credential', path });
   if (/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\./.test(s)) out.push({ rule: 'JWT', path });
   if (key !== null) {
     if (hasToken(key, 'pin') && /^\d{4,8}$/.test(s)) out.push({ rule: '4-8 digit value under a pin key', path });
@@ -102,9 +105,14 @@ describe('the scanner itself (so a green scan means something)', () => {
     expect(scanRows(row({ bankAccountNumber: '1234567890123' }))).toHaveLength(1);
     expect(scanRows(row({ sessionId: 'abc' }))).toHaveLength(1);
     expect(scanRows(row({ list: [{ api_key: 'k' }] }))).toHaveLength(1);
+    expect(scanRows(row({ bankAccountNumber: ['1234567890'] })).length, 'array under an account key').toBeGreaterThan(0);
+    expect(scanRows(row({ accountNumber: { v: '1234567890' } })).length, 'object under an account key').toBeGreaterThan(0);
+    expect(scanRows(row({ note: 'Bearer abc.def' }))).toHaveLength(1);
+    expect(scanRows(row({ pwd: 'x' }))).toHaveLength(1);
+    expect(scanRows(row({ cardNumber: '4111111111111111' })).length).toBeGreaterThan(0);
   });
   it('passes clean and masked payloads and the false-positive keys (negative controls)', () => {
-    expect(scanRows(row({ pin: '[REDACTED]', bankAccountNumber: '••••0123', pinned: '1234', note: 'ok', staffCode: '123456', shipping: 12345678 }))).toEqual([]);
+    expect(scanRows(row({ pin: '[REDACTED]', bankAccountNumber: '••••0123', pinned: '1234', note: 'ok', staffCode: '123456', shipping: 12345678, passage: 'p', cardboard: 'c', bankAccountNumberList: ['••••0123'] }))).toEqual([]);
   });
 });
 
@@ -135,6 +143,11 @@ describe('Invariant 18 - one scan of ALL of audit_log', () => {
           token: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln',
           sessionId: 'sess_0123456789abcdef',
           note: 'ok',
+          accountNumber: ['1234567890'],
+          cardNumber: '4111111111111111',
+          memo: 'Bearer abc.def',
+          nested: { bankAccountNumber: { v: '1234567890' } },
+          note2: 'ok',
         },
         source: 'web',
       });

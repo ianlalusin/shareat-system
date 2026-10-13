@@ -343,6 +343,8 @@ describe('role hierarchy sanity — authority strictly nests (CAPABILITY-MATRIX.
 describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', () => {
   it('is exactly the admin-minus-manager delta of the matrix', () => {
     const expected = CAPABILITIES.filter((c) => CAPABILITY_MATRIX[c].admin && !CAPABILITY_MATRIX[c].manager).sort();
+    // T-402 (Ian): with no admin the manager serves as admin, so the restricted activity log IS lent to them.
+    expect(ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER).toContain('view_activity_log_restricted' satisfies Capability);
     expect([...ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER].sort()).toEqual(expected);
   });
 
@@ -393,7 +395,7 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         // admin-yes / manager-no, so the derived set gains both. Deliberate: an org with no admin lends them to a manager.
         'manage_pos_map',
         'manage_recipes',
-        // ⭐ T-402 S1b: `view_activity_log_restricted` is admin-yes / manager-no (org), so the derived set gains it.
+        // ⭐ T-402 S1b: `view_activity_log_restricted` is admin-yes / manager-no (org), so the derived set gains it (Ian: with no admin the manager serves as admin).
         'view_activity_log_restricted',
         'grant_capability',
         'manage_price_lists',

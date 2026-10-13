@@ -396,3 +396,9 @@ from production then.
 - search_path in the two partition functions is pg_catalog, public.
 - set_staff_code is security/high.
 - **Deploy:** 0197 holds ACCESS EXCLUSIVE on audit_log for the whole conversion, and the old app's audit writes fail between migrate and restart. Deploy in a quiet window, or with shareat-erp stopped (Ian's call at merge time).
+
+## S1b audit rulings (2026-10-13; binding)
+- **Ian:** in an org with no admin, the manager serves as admin, so `view_activity_log_restricted` is lent to that manager (ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER). A manager in an org that has an admin cannot read restricted rows.
+- `set_staff_code` is viewed by admins only (it is a credential change). `reopen_pin_sign_in` stays store-viewable.
+- appendClientEvent claims the event key before it inserts the row (exactly one row per event), refuses reserved entries, and hashes the REDACTED canonical envelope.
+- Redaction also masks account numbers held in arrays or objects, and covers pwd, passwd, apikey, session, accessKey, cvv and card_number keys, plus "Bearer " values under any key.

@@ -236,6 +236,11 @@ describe('T-402 S1b - the entries the spec names are in, graded as written (R3, 
     });
   }
 
+  it('orchestrator ruling (S1b audit): set_staff_code is admin-viewed (a manager cannot see staff codes); reopen_pin_sign_in stays store-viewable', () => {
+    expect(catalogueEntry('set_staff_code')!.viewers).toBe('admin');
+    expect(catalogueEntry('reopen_pin_sign_in')!.viewers).toBe('store');
+  });
+
   it('R13: there is no self-service diner password reset event', () => {
     expect(AUDIT_CATALOGUE.filter((e) => /password_reset/.test(e.action)).map((e) => e.action).sort()).toEqual([
       'customer.password_reset_by_manager',

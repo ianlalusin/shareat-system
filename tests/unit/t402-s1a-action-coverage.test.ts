@@ -87,6 +87,14 @@ describe('T-402 S1a - every audit action the code writes is labelled, in both pl
     expect(diff, 'labels differ between 0197 and the catalogue').toEqual([]);
   });
 
+  it('S1b audit: a written action that is NOT dotted must be in 0197 list (a new snake_case string would be copied without a label); the check itself can fail', () => {
+    const mig = migrationLabels();
+    const offenders = (names: Iterable<string>) => [...names].filter((a) => !a.includes('.') && !mig.has(a)).sort();
+    expect(offenders(actions.keys()), 'new actions must be dotted <area>.<verb>').toEqual([]);
+    // positive control: the rule does flag an undotted newcomer and lets a dotted one and a listed legacy one through
+    expect(offenders(['brand_new_snake_case', 'area.verb', 'rename_item'])).toEqual(['brand_new_snake_case']);
+  });
+
   it('no live (non-reserved) catalogue entry is unwritten - a stale entry hides a rename', () => {
     const stale = AUDIT_CATALOGUE.filter((e) => !e.reserved && !actions.has(e.action)).map((e) => e.action).sort();
     expect(stale).toEqual([]);

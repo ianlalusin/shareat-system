@@ -40,10 +40,14 @@ describe('isSecretKey (R5, Invariant 6)', () => {
     'password', 'passwordHash', 'newPassword', 'PASSWORD', 'passcode', 'pin', 'PIN', 'pinHash', 'pin_hash', 'userPin', 'old-pin',
     'token', 'accessToken', 'refresh_token', 'secret', 'clientSecret', 'otp', 'hash', 'salt', 'scrypt', 'cookie', 'authorization',
     'jwt', 'apiKey', 'api_key', 'API-KEY', 'Api_Key', 'privateKey', 'private_key', 'sessionId', 'session_id', 'SESSION-ID',
+    // S1b audit: abbreviations and the card family
+    'pwd', 'passwd', 'newPwd', 'apikey', 'APIKEY', 'session', 'accessKey', 'access_key', 'cvv', 'CVV', 'card_number', 'cardNumber', 'CardNumber',
   ];
   const SAFE = [
     'pinned', 'isPinned', 'spinach', 'opinion', 'shipping', 'hashtag', 'tokenized', 'note', 'storeId', 'bankName', 'staffCode',
     'sessionStart', 'primaryKey', 'monkey', 'keyboard', 'apiVersion', 'privateNote', 'sessions', 'identity', 'saltine', 'cookies',
+    // S1b audit controls: look like the new tokens, are not
+    'passage', 'cardboard', 'cardType', 'pwdx', 'cvvs', 'accessLevel', 'sessionStart', 'discard',
   ];
   for (const k of SECRET) it(`redacts the key ${k}`, () => expect(isSecretKey(k), k).toBe(true));
   for (const k of SAFE) it(`keeps the key ${k} (false-positive list)`, () => expect(isSecretKey(k), k).toBe(false));
@@ -102,6 +106,29 @@ describe('redactPayload (R5, Invariants 6 and 7)', () => {
     const same = redactPayload(before, { compareWith: { ...before } });
     expect((same.value as Record<string, unknown>).bankAccountNumberChanged).toBe(false);
     expect(JSON.stringify([a.value, b.value])).not.toMatch(/\d{5,}/);
+  });
+
+  it('S1b audit: a value starting "Bearer " is redacted under ANY key; one that merely contains the word is kept', () => {
+    const { value, redactedKeys } = redactPayload({ note: 'Bearer abc123.def', header: 'Bearer x', memo: 'The Bearer was late', other: 'bearer-of-news' });
+    expect(value).toEqual({ note: '[REDACTED]', header: '[REDACTED]', memo: 'The Bearer was late', other: 'bearer-of-news' });
+    expect([...redactedKeys].sort()).toEqual(['header', 'note']);
+  });
+
+  it('S1b audit: the new secret keys are redacted in a payload, and passage/cardboard survive', () => {
+    const { value } = redactPayload({ pwd: 'a', passwd: 'b', apikey: 'c', session: 'd', accessKey: 'e', cvv: '123', cardNumber: '4111111111111111', card_number: '4111111111111111', passage: 'p', cardboard: 'c' });
+    expect(value).toEqual({
+      pwd: '[REDACTED]', passwd: '[REDACTED]', apikey: '[REDACTED]', session: '[REDACTED]', accessKey: '[REDACTED]', cvv: '[REDACTED]',
+      cardNumber: '[REDACTED]', card_number: '[REDACTED]', passage: 'p', cardboard: 'c',
+    });
+  });
+
+  it('S1b audit: an account-number key holding an ARRAY or an OBJECT never leaves the digits in the payload (masked or redacted whole)', () => {
+    const { value } = redactPayload({
+      bankAccountNumber: ['1234567890', '0987654321'],
+      accountNumber: { v: '1234567890', nested: { x: 99887766554 } },
+      other: { accountNumber: ['1234567890'] },
+    });
+    expect(JSON.stringify(value)).not.toMatch(/\d{5,}/);
   });
 
   it('R5 masking mutant "changed flag computed after masking": two different numbers ending in the same 4 digits still read changed', () => {

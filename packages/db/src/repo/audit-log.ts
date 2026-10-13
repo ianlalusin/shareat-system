@@ -13,7 +13,7 @@
  * null); `appendClientEvent` is the storage half of the R10 offline envelope (S3 owns the rest).
  */
 import { createHash } from 'node:crypto';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { refuse } from '../refusal';
 import { auditLog, auditLogEventKeys } from '../../schema/audit-log';
@@ -277,11 +277,14 @@ function replayOrConflict(
 }
 
 /**
- * R10, storage half. One offline event, idempotent on `eventKey`: the same key with the same canonical-JSON hash
- * returns the first row (`replayed: true`) and inserts nothing; the same key with another hash is refused
- * (AUDIT_EVENT_KEY_CONFLICT; S3 writes the `security.event_replay_conflict` row in its own transaction). The action
- * must list `attested.source` in its `clientSources` (AUDIT_SOURCE_NOT_ALLOWED). Reserved is NOT checked here: the
- * allowlist is the gate for this path, and S3 owns the rest (store attestation, verified actor).
+ * R10, storage half. One offline event, idempotent on `eventKey`: the same key returns the first row
+ * (`replayed: true`) and inserts nothing, whatever differs only in a redacted secret; the same key with another
+ * redacted-canonical hash is refused (AUDIT_EVENT_KEY_CONFLICT; S3 writes `security.event_replay_conflict` in its own
+ * transaction). The key is CLAIMED first, by a transaction-scoped advisory lock on (org, key), so two concurrent
+ * uploads cannot both insert: the loser waits for the winner's commit, then finds its key and writes nothing. A
+ * reserved entry is refused even when `clientSources` allows the source (AUDIT_ACTION_RESERVED); the source must be
+ * on the allowlist (AUDIT_SOURCE_NOT_ALLOWED). The hash is over the REDACTED canonical envelope, so a stored hash
+ * cannot be used to test guesses of a PIN. S3 owns the rest (store attestation, verified actor).
  */
 export async function appendClientEvent(
   tx: Tx,
@@ -290,6 +293,9 @@ export async function appendClientEvent(
   attested: ClientEventAttested,
 ): Promise<{ id: string; replayed: boolean }> {
   const entry = lookup(envelope.action);
+  if (entry.reserved) {
+    throw refuse(`AUDIT_ACTION_RESERVED: ${entry.action} has no writer yet`, NOT_RECORDED);
+  }
   if (!(entry.clientSources as readonly string[]).includes(attested.source)) {
     throw refuse(`AUDIT_SOURCE_NOT_ALLOWED: ${entry.action} may not be sent by ${attested.source}`, 'That event could not be recorded in the activity log.');
   }
@@ -302,11 +308,13 @@ export async function appendClientEvent(
         entityId: envelope.entityId,
         storeId: envelope.storeId,
         occurredAt: envelope.occurredAt,
-        before: envelope.before,
-        after: envelope.after,
+        before: redactPayload(envelope.before).value,
+        after: redactPayload(envelope.after).value,
       }),
     )
     .digest('hex');
+  // Claim the key: serialises concurrent uploads of the same (org, key) until this transaction ends.
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`audit-event-key:${orgId}:${envelope.eventKey}`}, 0))`);
   const existing = await readEventKey(tx, orgId, envelope.eventKey);
   if (existing) return replayOrConflict(existing, hash, envelope.eventKey);
   const inserted = await insertRow(tx, orgId, {
@@ -322,23 +330,12 @@ export async function appendClientEvent(
     uploadedByPersonId: attested.uploadedByPersonId,
     eventKey: envelope.eventKey,
   });
-  const claimed = await tx
-    .insert(auditLogEventKeys)
-    .values({
-      orgId,
-      eventKey: envelope.eventKey,
-      payloadSha256: hash,
-      auditLogId: inserted.id,
-      retentionClass: entry.retention,
-      recordedAt: inserted.recordedAt,
-    })
-    .onConflictDoNothing()
-    .returning({ eventKey: auditLogEventKeys.eventKey });
-  if (claimed.length === 0) {
-    // Lost a race with a concurrent upload of the same key: the other row is the first one.
-    const winner = await readEventKey(tx, orgId, envelope.eventKey);
-    if (winner) return replayOrConflict(winner, hash, envelope.eventKey);
-  }
+  // The key row is built in SQL from the stored audit row: recorded_at keeps its microseconds (a JS Date would
+  // round to ms and the composite FK to audit_log would never match).
+  await tx.execute(sql`
+    insert into audit_log_event_keys (org_id, event_key, payload_sha256, audit_log_id, retention_class, recorded_at)
+    select org_id, event_key, ${hash}, id, retention_class, recorded_at
+    from audit_log where org_id = ${orgId} and id = ${inserted.id}`);
   return { id: inserted.id, replayed: false };
 }
 

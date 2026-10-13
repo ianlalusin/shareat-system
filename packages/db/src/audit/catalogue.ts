@@ -99,7 +99,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('rename_item', 'stock', 'normal', 'org', 'items', 'T-391'),
   def('retire_item', 'stock', 'normal', 'org', 'items', 'T-383'),
   def('restore_item', 'stock', 'normal', 'org', 'items', 'T-383'),
-  def('set_staff_code', 'security', 'high', 'store', 'employments', 'T-391'),
+  def('set_staff_code', 'security', 'high', 'store', 'employments', 'T-391', { viewers: 'admin' }),
   def('link_store_to_pos', 'settings', 'normal', 'store', 'pos_v1_store_links', 'T-375'),
   def('unlink_store_from_pos', 'settings', 'normal', 'store', 'pos_v1_store_links', 'T-382'),
   def('create_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
