@@ -616,3 +616,8 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
    kept, `undefined` never emitted (the builder writes a local ~10-line `canonicalJson`; the `@shareat/db` one is off limits).
    Hashed: `menu` only. **Not hashed:** `nextChangeAt`, `at`; there is no generated-at stamp anywhere in the output. So the same
    menu at two instants gives the same hash. Money stays 2-decimal text exactly as the repo or `resolveOfferPrice` gives it.
+
+## S3 orchestrator rulings (2026-10-14)
+- **Category order is a tree order:** parents before their children; siblings sorted by (sortOrder, name, id). Supersedes the flat (sortOrder, name, id) in rule 7 for categories.
+- **Type name clash:** project.ts's not-offered reason type is named `MenuNotOfferedReason` (resolve-price keeps `NotOfferedReason`).
+- **No production caller in S3** (by design: the first slice that projects live data builds `menuSnapshot` and calls `projectStoreMenu`). callers.mjs's test-only flag on `projectStoreMenu` is accepted for S3 only, and that later slice must add the caller.
