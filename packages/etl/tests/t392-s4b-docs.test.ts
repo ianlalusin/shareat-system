@@ -63,7 +63,7 @@ const D = (day: number): string => `2026-10-${String(day).padStart(2, '0')}`;
 
 /** v1 side of compareStoreWeek exactly as the domain builds it (cash__staff re-kinded to staff_cash). */
 function v1Side(snapshot: Any, w: { weekStart: string; through: string }): Any {
-  const f = computeV1Figures(snapshot, w).stores[L];
+  const f = computeV1Figures(snapshot, w).stores[L]!;
   return {
     lines: f.lines.map((l: Any) => (l.kind === 'cash_bank' && l.key === 'cash__staff' ? { ...l, kind: 'staff_cash' } : l)),
     tradingDays: f.tradingDays, cashResidual: f.cashResidual, scope: f.scope, flags: f.flags,
@@ -145,7 +145,7 @@ describe('inv 38 (v1 side) - document sums equal the line amounts', () => {
   // Mutants: window = the week only (the week-3 / through+3 docs vanish); a status filter that differs from the figures.
   it('per (kind, key), the posted docs dated in the week sum to the v1 line amount, over a fixture with a voided leg, a net-zero group and docs outside the week', async () => {
     const snapshot = bigSnapshot();
-    const figs = computeV1Figures(snapshot, W19).stores[L];
+    const figs = computeV1Figures(snapshot, W19).stores[L]!;
     const all: Any[] = await v1Docs(snapshot, W19);
     const inWeek = (d: Any): boolean => d.date >= W19.weekStart && d.date <= W19.through;
     const groups = new Map<string, number>();

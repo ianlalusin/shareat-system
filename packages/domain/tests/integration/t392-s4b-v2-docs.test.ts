@@ -459,6 +459,9 @@ describe('inv 39 (repo) - unposted documents', () => {
           `sales_tender|1140|money_account|${f.gcash}|2026-10-22|300.00|`,
           `sales_tender|1220|channel|${chNon}|2026-10-22|200.00|`,
           `sales_tender|1110|||2026-10-23|50.00|`,
+          `cash_bank|1140|money_account|${f.gcash}|2026-10-22|-90.00|`, // ruling A: the draft AP payment's money-account side
+          `cash_bank|1110|||2026-10-22|700.00|`, // ruling B: the open day's pending cash side
+          `cash_bank|1110|||2026-10-23|50.00|`, // ruling B: the submitted day's
         ].sort(),
       );
     },
@@ -486,7 +489,17 @@ describe('inv 42 - another store, another org, a voided invoice', () => {
       expect(a[0]).toMatchObject({ kind: 'ap_supplier', state: 'unposted', receiptNo: 'MINE-1' });
       expect(mine).toBeTruthy();
       const b = await docsOf(f, f.storeB.id);
-      expect(b.map((d) => d.amount).sort()).toEqual(['-456.00', '321.00', '456.00', '654.00'].sort());
+      const shapeB = (d: V2Doc): string => `${d.kind}|${d.glCode}|${d.state}|${d.amount}`;
+      expect(b.map(shapeB).sort()).toEqual(
+        [
+          'ap_supplier|2110|unposted|321.00',
+          'expense_category|' + cat!.account_code + '|unposted|456.00',
+          'cash_bank|1110|unposted|-456.00',
+          'sales_tender|1110|unposted|654.00',
+          'cash_bank|1110|unposted|654.00', // ruling B: store B's OWN open day, cash side, filed under store B
+        ].sort(),
+      );
+      expect(a.some((d) => d.amount.includes('654') || d.kind === 'cash_bank'), 'nothing of store B under store A').toBe(false);
       // an actor of another organisation reads nothing of org A (RLS), even when it names org A's ids
       const other = await fixture('i42x');
       expect(await docsOf(f, f.storeA.id, W19, other.orgId, f.orgId)).toEqual([]);
@@ -589,6 +602,28 @@ describe('inv 39 (run) - NOT_DOUBLE_ENTERED, PENDING_V2 and the age rule, end to
     expect(lineOf(far.w, 'expense_category', far.cat.id).class).toBe('PENDING_V2');
     expect(far.w.verdict).toBe('open');
   }, 180_000);
+});
+
+describe('inv 39 (run, staff cash) - a draft expense paid from the staff float', () => {
+  // Orchestrator ruling: the pending funding doc is keyed staff cash (staff_cash / cash__staff), not 1120:none.
+  // Mutant: the draft funding doc keyed 1120:none (the v1 cash__staff line then reads NOT_DOUBLE_ENTERED / UNEXPLAINED).
+  it('v1 cash__staff payment 500.00 and a v2 draft expense paid from the staff-custodian account: staff_cash/cash__staff and the category line are PENDING_V2, the week explained', async () => {
+    const f = await fixture('r39s');
+    const [cat] = await categories(f, 1);
+    await tiedDay(f, '2026-10-20');
+    const x = await expenseRow(f, { categoryId: cat!.id, date: '2026-10-24', amount: '500.00', status: 'draft' });
+    await paymentRow(x, 'cash', '500.00', f.staff);
+    const snapshot = snap({
+      journal: [v1CashSale('2026-10-20'), v1Leg({ businessDate: '2026-10-24', sourceType: 'expense_payment', sourceId: 'e1', accountId: 'cash__staff', amount: 500, direction: 'out' })],
+      expenses: [v1Expense('e1', 'OPEX', 500, '2026-10-24')],
+      salesDays: [v1SalesDay(L, '2026-10-20', 1000)],
+    });
+    const out = await run(f, { snapshot, keysText: serialiseKeysCsv(keyRows(f, [cashKey, catKey('ent-e1', cat!.id)])) });
+    const w = weekOf(out, f);
+    expect(lineOf(w, 'staff_cash', 'cash__staff')).toMatchObject({ v1: -50000, v2: 0, class: 'PENDING_V2', paired: false });
+    expect(lineOf(w, 'expense_category', cat!.id).class).toBe('PENDING_V2');
+    expect(w).toMatchObject({ verdict: 'explained', comparedDays: 1 });
+  }, 120_000);
 });
 
 describe('inv 40 (run) - DATE_SHIFT across the week boundary, both weeks', () => {
@@ -735,4 +770,95 @@ describe('orchestrator request - a ticked keys-sheet row channel__grab1 -> chann
     expect(tender.map((l: Any) => l.key), JSON.stringify(tender)).toEqual([`channel:${ch}`]);
     expect(tender[0]).toMatchObject({ v1: 125000, v2: 125000, delta: 0, class: 'TIES' });
   }, 120_000);
+});
+
+// ======================================================================================================
+// audit-driven cases A-E (orchestrator rulings)
+// ======================================================================================================
+describe('audit rulings A-E', () => {
+  // A. Mutant: the draft ap_payment emits only its 2110 side, so the v1 cash payment leg reads NOT_DOUBLE_ENTERED.
+  it('A: a draft AP payment also emits its money-account side; a v1 posted AP cash payment reads PENDING_V2 on the cash line and the ap line', async () => {
+    const f = await fixture('ruleA');
+    await tiedDay(f, '2026-10-20');
+    await sql`insert into ap_payments (org_id, store_id, supplier_id, business_date, amount, money_account_id, status, created_by)
+              values (${f.orgId}, ${f.storeA.id}, ${f.supId}, '2026-10-24', '90.00', ${f.cash}, 'draft', ${f.personId})`;
+    const snapshot = snap({
+      journal: [
+        v1CashSale('2026-10-20'),
+        v1Leg({ businessDate: '2026-10-24', sourceType: 'ap_payment', sourceId: 'pay1', accountId: 'ap__sup1', amount: 90, direction: 'out', supplierId: 'sup1' }),
+        v1Leg({ businessDate: '2026-10-24', sourceType: 'ap_payment', sourceId: 'pay1', accountId: 'cash__cashier', amount: 90, direction: 'out' }),
+      ],
+      salesDays: [v1SalesDay(L, '2026-10-20', 1000)],
+    });
+    const w = weekOf(await run(f, { snapshot, keysText: serialiseKeysCsv(keyRows(f, [cashKey])) }), f);
+    expect(lineOf(w, 'cash_bank', '1110')).toMatchObject({ class: 'PENDING_V2', paired: false });
+    expect(lineOf(w, 'ap_supplier', f.supId).class).toBe('PENDING_V2');
+    expect(w.verdict).toBe('explained');
+  }, 120_000);
+
+  // B. Mutant: the open day emits only sales_tender, so the v1 sale cash leg reads NOT_DOUBLE_ENTERED on cash_bank.
+  it('B: an open (unverified) sales day also emits its pending cash side; the v1 sale cash leg reads PENDING_V2 on cash_bank and sales_tender', async () => {
+    const f = await fixture('ruleB');
+    await tiedDay(f, '2026-10-20');
+    await sql`insert into sales_days (org_id, store_id, business_date, status, total_sales, unli_sales, ala_carte_sales, cash_collected, created_by)
+              values (${f.orgId}, ${f.storeA.id}, '2026-10-24', 'open', '700.00', '700.00', '0.00', '700.00', ${f.personId})`;
+    const snapshot = snap({
+      journal: [v1CashSale('2026-10-20'), v1Leg({ businessDate: '2026-10-24', sourceId: 'sale-open', amount: 700 })],
+      salesDays: [v1SalesDay(L, '2026-10-20', 1000), v1SalesDay(L, '2026-10-24', 700)],
+    });
+    const w = weekOf(await run(f, { snapshot, keysText: serialiseKeysCsv(keyRows(f, [cashKey])) }), f);
+    expect(lineOf(w, 'cash_bank', '1110')).toMatchObject({ class: 'PENDING_V2', paired: false });
+    expect(lineOf(w, 'sales_tender', '1110').class).toBe('PENDING_V2');
+    expect(w.verdict).toBe('explained');
+  }, 120_000);
+
+  // C. Mutant: every pending invoice emits a 2110 doc, double-counting the AP a draft expense already stands for.
+  it('C: a pending supplier invoice attached to a DRAFT expense emits no separate 2110 doc', async () => {
+    const f = await fixture('ruleC');
+    const [cat] = await categories(f, 1);
+    const x = await expenseRow(f, { categoryId: cat!.id, date: '2026-10-23', amount: '300.00', status: 'draft', invoiceNo: 'SI-C' });
+    await paymentRow(x, 'credit', '300.00', null);
+    await sql`update supplier_invoices set status = 'pending' where id = (select supplier_invoice_id from expenses where id = ${x})`;
+    await invoiceRow(f, { no: 'FREE-1', date: '2026-10-22', total: '55.00', status: 'pending' }); // a free-standing one still appears
+    const un = (await docsOf(f, f.storeA.id)).filter((d) => d.state === 'unposted');
+    const ap = un.filter((d) => d.kind === 'ap_supplier').map((d) => d.amount).sort();
+    expect(ap, JSON.stringify(un)).toEqual(['300.00', '55.00']); // 300.00 = the expense's credit row, once
+    expect(un.filter((d) => d.receiptNo === 'SI-C')).toEqual([]);
+  }, 120_000);
+
+  // D. Mutant: the funding doc is filed under the expense's store.
+  it("D: a draft expense paid from ANOTHER store's money account emits its funding doc under the money account's store", async () => {
+    const f = await fixture('ruleD');
+    const [cat] = await categories(f, 1);
+    const bTill = await moneyAcct(f.orgId, f.storeB.id, uid('BTill'), 'cash', '1110', 'cashier');
+    const x = await expenseRow(f, { categoryId: cat!.id, date: '2026-10-23', amount: '210.00', status: 'draft' });
+    await paymentRow(x, 'cash', '210.00', bTill);
+    const a = (await docsOf(f, f.storeA.id)).filter((d) => d.state === 'unposted');
+    const b = (await docsOf(f, f.storeB.id)).filter((d) => d.state === 'unposted');
+    expect(a.map((d) => `${d.kind}|${d.amount}`)).toEqual(['expense_category|210.00']);
+    expect(b.map((d) => `${d.kind}|${d.glCode}|${d.amount}`)).toEqual(['cash_bank|1110|-210.00']);
+  }, 120_000);
+
+  // E. Mutant: DATE_SHIFT window unbounded (or off by one).
+  async function shift(v2Date: string) {
+    const f = await fixture('ruleE');
+    const [cat] = await categories(f, 1);
+    await tiedDay(f, '2026-10-20');
+    await postedExpense(f, cat!.id, cat!.account_code, v2Date, '500.00');
+    const snapshot = snap({
+      journal: [v1CashSale('2026-10-20'), v1Leg({ businessDate: '2026-10-21', sourceType: 'expense_payment', sourceId: 'eE', amount: 500, direction: 'out' })],
+      expenses: [v1Expense('eE', 'OPEX', 500, '2026-10-21')],
+      salesDays: [v1SalesDay(L, '2026-10-20', 1000)],
+    });
+    const w = weekOf(await run(f, { snapshot, keysText: serialiseKeysCsv(keyRows(f, [cashKey, catKey('ent-eE', cat!.id)])) }), f);
+    return { w, cat: cat! };
+  }
+  it('E: documents 7 days apart pair as DATE_SHIFT; 8 days apart do not', async () => {
+    const seven = await shift('2026-10-28');
+    expect(lineOf(seven.w, 'expense_category', seven.cat.id)).toMatchObject({ class: 'DATE_SHIFT', paired: true });
+    expect(seven.w.verdict).toBe('explained');
+    const eight = await shift('2026-10-29');
+    expect(lineOf(eight.w, 'expense_category', eight.cat.id).class).not.toBe('DATE_SHIFT');
+    expect(eight.w.verdict).toBe('open');
+  }, 180_000);
 });

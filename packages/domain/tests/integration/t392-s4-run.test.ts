@@ -338,9 +338,10 @@ describe('I. idempotence and versions (R8, invariant 26)', () => {
     async () => {
       const f = await fixture('i1');
       await postApInvoice(f, '2026-10-21', '500.00');
-      const first = await run(f);
+      const sameLeg = apLeg(500); // v1 ids are stable: a re-extract holds the SAME leg
+      const first = await run(f, { snapshot: snap({ journal: [sameLeg] }) });
       const before = await counts(f);
-      const second = await run(f, { snapshot: snap({ journal: [apLeg(500)], extractedAt: '2026-10-27T01:00:00.000Z' }), snapshotSha: sha256('another extract') });
+      const second = await run(f, { snapshot: snap({ journal: [sameLeg], extractedAt: '2026-10-27T01:00:00.000Z' }), snapshotSha: sha256('another extract') });
       expect(weekOf(first, f.storeA.code).status).toBe('inserted');
       expect(weekOf(second, f.storeA.code).status).toBe('unchanged');
       expect(weekOf(second, f.storeA.code).reportId).toBe(weekOf(first, f.storeA.code).reportId);
@@ -384,7 +385,8 @@ describe('I. idempotence and versions (R8, invariant 26)', () => {
     async () => {
       const f = await fixture('i3');
       await postApInvoice(f, '2026-10-21', '500.00');
-      const [a, b] = await Promise.all([run(f, { storeCodes: [f.storeA.code] }), run(f, { storeCodes: [f.storeA.code] })]);
+      const sameSnap = snap({ journal: [apLeg(500)] });
+      const [a, b] = await Promise.all([run(f, { snapshot: sameSnap, storeCodes: [f.storeA.code] }), run(f, { snapshot: sameSnap, storeCodes: [f.storeA.code] })]);
       const statuses = [weekOf(a, f.storeA.code).status, weekOf(b, f.storeA.code).status].sort();
       expect(statuses).toEqual(['inserted', 'unchanged']);
       expect((await counts(f)).reports).toBe(1);
@@ -494,13 +496,14 @@ describe('A. authorization and refusals (nothing is written on any of them)', ()
     async () => {
       const f = await fixture('a3');
       await postApInvoice(f, '2026-10-21', '500.00');
-      await run(f, { snapshot: snap({ journal: [apLeg(500)], extractedAt: '2026-10-28T01:00:00.000Z' }) });
+      const sameLeg = apLeg(500);
+      await run(f, { snapshot: snap({ journal: [sameLeg], extractedAt: '2026-10-28T01:00:00.000Z' }) });
       const before = await counts(f);
       await expect(
         run(f, { snapshot: snap({ journal: [apLeg(999)], extractedAt: '2026-10-27T01:00:00.000Z' }) }),
       ).rejects.toThrow(/older/i);
       expect(await counts(f)).toEqual(before);
-      const same = await run(f, { snapshot: snap({ journal: [apLeg(500)], extractedAt: '2026-10-28T01:00:00.000Z' }) });
+      const same = await run(f, { snapshot: snap({ journal: [sameLeg], extractedAt: '2026-10-28T01:00:00.000Z' }) });
       expect(weekOf(same, f.storeA.code).status).toBe('unchanged');
     },
     90_000,
