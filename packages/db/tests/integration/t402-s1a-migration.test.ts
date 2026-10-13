@@ -297,6 +297,14 @@ describe('S1a invariant 13 / 13a - the copy: every row, labelled, masked, store-
     expect(same.after?.bankAccountName, 'non-secret keys are untouched').toBe('Acme Inc');
   });
 
+  it('set_staff_code is labelled security/high (a credential change) and reopen_pin_sign_in stays security/high, both r10y', async () => {
+    const rows = await s<{ id: string; category: string; sensitivity: string; retention_class: string }[]>`
+      select id, category, sensitivity, retention_class from audit_log where id in (${seed.ids['set_staff_code']!}, ${seed.ids['reopen_pin_sign_in']!})`;
+    const by = (label: string) => rows.find((r) => r.id === seed.ids[label]);
+    expect(by('set_staff_code')).toMatchObject({ category: 'security', sensitivity: 'high', retention_class: 'r10y' });
+    expect(by('reopen_pin_sign_in')).toMatchObject({ category: 'security', sensitivity: 'high', retention_class: 'r10y' });
+  });
+
   it('the old table is gone and the new parent carries what 0167/0168 gave the old one: two policies, trigger ENABLE ALWAYS everywhere, app SELECT+INSERT only', async () => {
     const pols = await s<{ polname: string }[]>`select polname from pg_policy where polrelid = 'public.audit_log'::regclass order by polname`;
     expect(pols.map((p) => p.polname)).toEqual(['audit_log_org_append', 'audit_log_org_read']);

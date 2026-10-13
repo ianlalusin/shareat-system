@@ -14,7 +14,7 @@
 -- restore, apply this, compare per-action counts) and, on production, the pre-deploy backup.
 --
 -- THE COPY (step 3 of the contract). Every existing row gets category / sensitivity / severity / retention_class
--- from the VALUES list below (the 22 actions the 20 call sites write today; byte-identical strings, because
+-- from the VALUES list below (every action the code writes today, 48; byte-identical strings, because
 -- latestForEntity reads by action). The migration RAISEs if ANY existing row carries an action that is not in the
 -- list (it never guesses a label) and RAISEs if the copied count differs from the source count. recorded_at =
 -- occurred_at. store_id is backfilled from after->>'storeId' / before->>'storeId' ONLY when that store belongs to
@@ -43,6 +43,10 @@
 -- audit_log_event_keys pins each key to its log row with a composite FK;
 -- S5 must delete an r2y year's keys BEFORE dropping that year's partition.
 --
+-- DEPLOY NOTE: this migration holds ACCESS EXCLUSIVE on audit_log for the whole conversion, and the OLD app's audit
+-- writes (no category) fail between migrate and restart. Deploy in a quiet window, or with shareat-erp stopped.
+-- S1a ships only together with S1b (one PR): alone it would keep logging full supplier bank numbers.
+--
 -- Every statement is its own breakpoint. HAND-WRITTEN, per ADR-012 section 5. Never edited after apply (RULES 1 rule 9).
 
 SET LOCAL lock_timeout = '5s';
@@ -51,7 +55,7 @@ SET LOCAL lock_timeout = '5s';
 SET LOCAL row_security = off;
 --> statement-breakpoint
 
--- Labels for the 22 existing actions. Retention and severity are derived below, never listed by hand.
+-- Labels for every action the code writes (repo-wide scan; tests/unit/t402-s1a-action-coverage.test.ts keeps this list and LEGACY_LABELS identical). Retention and severity are derived below, never listed by hand.
 CREATE TEMP TABLE t402_labels (action text PRIMARY KEY, category text NOT NULL, sensitivity text NOT NULL);
 --> statement-breakpoint
 
@@ -68,7 +72,7 @@ INSERT INTO t402_labels (action, category, sensitivity) VALUES
 	('rename_item', 'stock', 'normal'),
 	('retire_item', 'stock', 'normal'),
 	('restore_item', 'stock', 'normal'),
-	('set_staff_code', 'staff', 'normal'),
+	('set_staff_code', 'security', 'high'),
 	('link_store_to_pos', 'settings', 'normal'),
 	('unlink_store_from_pos', 'settings', 'normal'),
 	('create_tender', 'money', 'normal'),
@@ -77,7 +81,33 @@ INSERT INTO t402_labels (action, category, sensitivity) VALUES
 	('retire_tender', 'money', 'normal'),
 	('edit_sales_day', 'money', 'high'),
 	('reimport_sales_day', 'money', 'high'),
-	('set_platform_sales', 'money', 'normal');
+	('set_platform_sales', 'money', 'normal'),
+	('dual_run.compare', 'money', 'normal'),
+	('master_data_load', 'data', 'high'),
+	('menu_category_create', 'menu_price', 'normal'),
+	('menu_category_edit', 'menu_price', 'normal'),
+	('menu_item_create', 'menu_price', 'normal'),
+	('menu_item_edit', 'menu_price', 'normal'),
+	('menu_variant_create', 'menu_price', 'normal'),
+	('menu_variant_edit', 'menu_price', 'normal'),
+	('menu_offer_set', 'menu_price', 'high'),
+	('menu_offer_cancel', 'menu_price', 'high'),
+	('menu_offer_withdraw', 'menu_price', 'high'),
+	('menu_option_offer_cancel', 'menu_price', 'high'),
+	('menu_depletion_rule_set', 'stock', 'high'),
+	('menu_depletion_rule_cancel', 'stock', 'high'),
+	('menu_item_request', 'menu_price', 'normal'),
+	('menu_item_request_approve', 'menu_price', 'normal'),
+	('menu_item_request_duplicate', 'menu_price', 'normal'),
+	('menu_item_request_reject', 'menu_price', 'normal'),
+	('menu_item_request_withdraw', 'menu_price', 'normal'),
+	('menu_option_group_create', 'menu_price', 'normal'),
+	('menu_option_group_edit', 'menu_price', 'normal'),
+	('menu_option_group_link', 'menu_price', 'normal'),
+	('menu_option_group_unlink', 'menu_price', 'normal'),
+	('menu_option_value_create', 'menu_price', 'normal'),
+	('menu_option_value_edit', 'menu_price', 'normal'),
+	('menu_package_refills_set', 'menu_price', 'normal');
 --> statement-breakpoint
 
 -- Source facts, captured before anything moves. min_year is the minimum Manila year present (or the current one).
@@ -122,7 +152,7 @@ ALTER INDEX "audit_log_org_occurred_at_idx" RENAME TO "audit_log_t402_old_org_oc
 -- The partition recipe (R6). One function so the migration and S5's job cannot drift apart.
 CREATE FUNCTION audit_log_harden_partition(p_rel regclass) RETURNS void
 LANGUAGE plpgsql
-SET search_path = public, pg_catalog
+SET search_path = pg_catalog, public
 AS $$
 BEGIN
 	EXECUTE format('REVOKE ALL ON %s FROM "shareat_app"', p_rel);
@@ -137,7 +167,7 @@ $$;
 -- Idempotent: an existing partition is returned untouched. Needs the table owner (CREATE TABLE ... PARTITION OF).
 CREATE FUNCTION audit_log_create_year_partition(p_class text, p_year integer) RETURNS regclass
 LANGUAGE plpgsql
-SET search_path = public, pg_catalog
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
 	v_parent text;
@@ -152,17 +182,55 @@ BEGIN
 	END IF;
 	v_parent := format('audit_log_%s', p_class);
 	v_name := format('audit_log_%s_%s', p_class, p_year);
-	v_rel := to_regclass(quote_ident(v_name));
+	v_rel := to_regclass(format('public.%I', v_name));
 	IF v_rel IS NOT NULL THEN
 		RETURN v_rel;
 	END IF;
 	EXECUTE format(
-		'CREATE TABLE %I PARTITION OF %I FOR VALUES FROM (%L) TO (%L)',
+		'CREATE TABLE public.%I PARTITION OF public.%I FOR VALUES FROM (%L) TO (%L)',
 		v_name, v_parent, format('%s-01-01 00:00:00+08', p_year), format('%s-01-01 00:00:00+08', p_year + 1)
 	);
-	v_rel := to_regclass(quote_ident(v_name));
+	v_rel := to_regclass(format('public.%I', v_name));
 	PERFORM audit_log_harden_partition(v_rel);
 	RETURN v_rel;
+END
+$$;
+--> statement-breakpoint
+
+-- The ONLY sanctioned way to remove a partition (S5's route): r2y ONLY, refuses r10y. A plain DROP of a partition
+-- the event-keys FK references is refused by Postgres, so the caller (S5) deletes that year's keys per org FIRST; this
+-- function REFUSES if any remain (it checks across all orgs; row security off so a non-BYPASSRLS owner fails loudly
+-- rather than seeing none), then DETACHes and DROPs. Row triggers do not fire on DROP.
+CREATE FUNCTION audit_log_drop_year_partition(p_class text, p_year integer) RETURNS void
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+SET row_security = off
+AS $$
+DECLARE
+	v_name text;
+	v_from timestamptz;
+	v_to timestamptz;
+BEGIN
+	IF p_class IS DISTINCT FROM 'r2y' THEN
+		RAISE EXCEPTION 'audit_log_drop_year_partition: only the r2y class may be dropped (asked for %); the 10-year class is never dropped', p_class;
+	END IF;
+	v_from := (format('%s-01-01 00:00:00+08', p_year))::timestamptz;
+	v_to := (format('%s-01-01 00:00:00+08', p_year + 1))::timestamptz;
+	-- Found by BOUND, not by name: whatever the partition is called, it is the r2y child covering exactly this Manila year.
+	SELECT c.relname INTO v_name
+	FROM pg_inherits i
+	JOIN pg_class c ON c.oid = i.inhrelid
+	WHERE i.inhparent = 'public.audit_log_r2y'::regclass
+	  AND (regexp_match(pg_get_expr(c.relpartbound, c.oid), '''([^'']+)''[^'']+''([^'']+)'''))[1]::timestamptz = v_from
+	  AND (regexp_match(pg_get_expr(c.relpartbound, c.oid), '''([^'']+)''[^'']+''([^'']+)'''))[2]::timestamptz = v_to;
+	IF v_name IS NULL THEN
+		RAISE EXCEPTION 'audit_log_drop_year_partition: no r2y partition covers %', p_year;
+	END IF;
+	IF EXISTS (SELECT 1 FROM "audit_log_event_keys" WHERE "retention_class" = 'r2y' AND "recorded_at" >= v_from AND "recorded_at" < v_to) THEN
+		RAISE EXCEPTION 'audit_log_drop_year_partition: event keys still point at r2y %; delete them per org first (S5 step 1)', p_year;
+	END IF;
+	EXECUTE format('ALTER TABLE public.%I DETACH PARTITION public.%I', 'audit_log_r2y', v_name);
+	EXECUTE format('DROP TABLE public.%I', v_name);
 END
 $$;
 --> statement-breakpoint
@@ -171,6 +239,9 @@ REVOKE ALL ON FUNCTION audit_log_harden_partition(regclass) FROM PUBLIC;
 --> statement-breakpoint
 
 REVOKE ALL ON FUNCTION audit_log_create_year_partition(text, integer) FROM PUBLIC;
+--> statement-breakpoint
+
+REVOKE ALL ON FUNCTION audit_log_drop_year_partition(text, integer) FROM PUBLIC;
 --> statement-breakpoint
 
 CREATE TABLE "audit_log" (
@@ -206,6 +277,10 @@ CREATE TABLE "audit_log" (
 --> statement-breakpoint
 
 -- 0194's same-org twins (RLS checks only this row's org_id and the FK check runs as the owner).
+-- Target of audit_log_event_keys' org-bound FK. Includes both partition keys, as a partitioned UNIQUE must.
+ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_org_id_id_unique" UNIQUE ("org_id", "id", "retention_class", "recorded_at");
+--> statement-breakpoint
+
 ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_actor_person_id_same_org_fk" FOREIGN KEY ("org_id", "actor_person_id") REFERENCES "persons" ("org_id", "id") ON DELETE RESTRICT;
 --> statement-breakpoint
 
@@ -373,14 +448,14 @@ CREATE TABLE "audit_log_event_keys" (
 	CONSTRAINT "audit_log_event_keys_pkey" PRIMARY KEY ("org_id", "event_key"),
 	CONSTRAINT "audit_log_event_keys_sha256_check" CHECK ("payload_sha256" ~ '^[0-9a-f]{64}$'),
 	CONSTRAINT "audit_log_event_keys_retention_class_check" CHECK ("retention_class" IN ('r10y', 'r2y')),
-	CONSTRAINT "audit_log_event_keys_audit_log_fk" FOREIGN KEY ("audit_log_id", "retention_class", "recorded_at") REFERENCES "audit_log" ("id", "retention_class", "recorded_at") ON DELETE RESTRICT
+	CONSTRAINT "audit_log_event_keys_audit_log_fk" FOREIGN KEY ("org_id", "audit_log_id", "retention_class", "recorded_at") REFERENCES "audit_log" ("org_id", "id", "retention_class", "recorded_at") ON DELETE RESTRICT
 );
 --> statement-breakpoint
 
 CREATE INDEX "audit_log_event_keys_retention_idx" ON "audit_log_event_keys" ("org_id", "retention_class", "recorded_at");
 --> statement-breakpoint
 
-CREATE INDEX "audit_log_event_keys_audit_log_idx" ON "audit_log_event_keys" ("audit_log_id", "retention_class", "recorded_at");
+CREATE INDEX "audit_log_event_keys_audit_log_idx" ON "audit_log_event_keys" ("org_id", "audit_log_id", "retention_class", "recorded_at");
 --> statement-breakpoint
 
 ALTER TABLE "audit_log_event_keys" ENABLE ROW LEVEL SECURITY;

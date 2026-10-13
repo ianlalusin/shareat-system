@@ -387,3 +387,12 @@ from production then.
    at cutover, including security events from the dual run. Consistent with ADR-007 (pilot data), kept as is; named
    here so nobody expects pre-cutover history to survive.
 4. **`append`'s "a system caller writes the row directly" comment** (repo header) is superseded by `appendSystem`.
+
+## S1a audit rulings (orchestrator, 2026-10-13; binding)
+- **S1a ships only together with S1b, in one PR.** S1a alone would keep logging full supplier bank numbers through the live writer.
+- The action list in repo/audit-log.ts and in 0197 is rebuilt from a repo-wide scan (the menu_* actions and dual_run.compare included). A unit test fails if any written action is missing from either list. At rebase, also compare it with production's distinct actions.
+- The cutover purge truncates audit_log and audit_log_event_keys in one statement.
+- The audit_log_event_keys FK includes org_id.
+- search_path in the two partition functions is pg_catalog, public.
+- set_staff_code is security/high.
+- **Deploy:** 0197 holds ACCESS EXCLUSIVE on audit_log for the whole conversion, and the old app's audit writes fail between migrate and restart. Deploy in a quiet window, or with shareat-erp stopped (Ian's call at merge time).

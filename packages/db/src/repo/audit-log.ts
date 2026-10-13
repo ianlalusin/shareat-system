@@ -27,7 +27,7 @@ export type AuditLogSource =
 /**
  * T-402 S1a - TEMPORARY. The table now requires category, sensitivity, severity and retention_class (NOT NULL,
  * CHECK-bound). Until S1b ships the event catalogue (`packages/db/src/audit/catalogue.ts`, which becomes the only
- * source of these labels and also owns redaction and scope checks), the 22 actions the 20 existing call sites write
+ * source of these labels and also owns redaction and scope checks), every action the code writes today (48, from a repo-wide scan; tests/unit/t402-s1a-action-coverage.test.ts keeps it equal to 0197's list)
  * carry their labels here - the SAME list as migration 0197's copy step, so a row written today is labelled exactly
  * like the row the migration copied. S1b deletes this map. An action not in it throws: a label is never guessed.
  */
@@ -44,7 +44,7 @@ const LEGACY_LABELS: Readonly<Record<string, { category: AuditCategory; sensitiv
   rename_item: { category: 'stock', sensitivity: 'normal' },
   retire_item: { category: 'stock', sensitivity: 'normal' },
   restore_item: { category: 'stock', sensitivity: 'normal' },
-  set_staff_code: { category: 'staff', sensitivity: 'normal' },
+  set_staff_code: { category: 'security', sensitivity: 'high' },
   link_store_to_pos: { category: 'settings', sensitivity: 'normal' },
   unlink_store_from_pos: { category: 'settings', sensitivity: 'normal' },
   create_tender: { category: 'money', sensitivity: 'normal' },
@@ -54,6 +54,32 @@ const LEGACY_LABELS: Readonly<Record<string, { category: AuditCategory; sensitiv
   edit_sales_day: { category: 'money', sensitivity: 'high' },
   reimport_sales_day: { category: 'money', sensitivity: 'high' },
   set_platform_sales: { category: 'money', sensitivity: 'normal' },
+  'dual_run.compare': { category: 'money', sensitivity: 'normal' },
+  master_data_load: { category: 'data', sensitivity: 'high' },
+  menu_category_create: { category: 'menu_price', sensitivity: 'normal' },
+  menu_category_edit: { category: 'menu_price', sensitivity: 'normal' },
+  menu_item_create: { category: 'menu_price', sensitivity: 'normal' },
+  menu_item_edit: { category: 'menu_price', sensitivity: 'normal' },
+  menu_variant_create: { category: 'menu_price', sensitivity: 'normal' },
+  menu_variant_edit: { category: 'menu_price', sensitivity: 'normal' },
+  menu_offer_set: { category: 'menu_price', sensitivity: 'high' },
+  menu_offer_cancel: { category: 'menu_price', sensitivity: 'high' },
+  menu_offer_withdraw: { category: 'menu_price', sensitivity: 'high' },
+  menu_option_offer_cancel: { category: 'menu_price', sensitivity: 'high' },
+  menu_depletion_rule_set: { category: 'stock', sensitivity: 'high' },
+  menu_depletion_rule_cancel: { category: 'stock', sensitivity: 'high' },
+  menu_item_request: { category: 'menu_price', sensitivity: 'normal' },
+  menu_item_request_approve: { category: 'menu_price', sensitivity: 'normal' },
+  menu_item_request_duplicate: { category: 'menu_price', sensitivity: 'normal' },
+  menu_item_request_reject: { category: 'menu_price', sensitivity: 'normal' },
+  menu_item_request_withdraw: { category: 'menu_price', sensitivity: 'normal' },
+  menu_option_group_create: { category: 'menu_price', sensitivity: 'normal' },
+  menu_option_group_edit: { category: 'menu_price', sensitivity: 'normal' },
+  menu_option_group_link: { category: 'menu_price', sensitivity: 'normal' },
+  menu_option_group_unlink: { category: 'menu_price', sensitivity: 'normal' },
+  menu_option_value_create: { category: 'menu_price', sensitivity: 'normal' },
+  menu_option_value_edit: { category: 'menu_price', sensitivity: 'normal' },
+  menu_package_refills_set: { category: 'menu_price', sensitivity: 'normal' },
 };
 
 type AuditCategory = (typeof auditLog.$inferInsert)['category'];
