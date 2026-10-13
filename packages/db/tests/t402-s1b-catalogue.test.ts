@@ -225,6 +225,14 @@ const SPEC: ReadonlyArray<readonly [string, string, string, Partial<CatalogueEnt
   ['customer.password_reset_refused', 'security', 'high'],
 ];
 
+/** T-402 S2: the entries its slice makes live. Not here: authorize_denied_summary (S5), event_replay_conflict and event_store_mismatch (S3). */
+const S2_LIVE: ReadonlySet<string> = new Set([
+  'auth.signin_succeeded', 'auth.signin_refused', 'auth.pin_signin_succeeded', 'auth.pin_paused', 'auth.pin_stopped_for_day',
+  'session.ended', 'session.ended_all', 'credential.linked', 'credential.unlinked', 'credential.pin_set',
+  'role.assigned', 'capability.granted', 'manager.elevated', 'security.authorize_denied',
+  'employment.created', 'employment.ended', 'employment.positions_set',
+]);
+
 describe('T-402 S1b - the entries the spec names are in, graded as written (R3, R4, R13, seed table)', () => {
   for (const [action, category, sensitivity, extra] of SPEC) {
     it(`${action}: ${category}/${sensitivity}${extra ? ' ' + JSON.stringify(extra) : ''}, shipped reserved until its slice/app exists`, () => {
@@ -232,7 +240,8 @@ describe('T-402 S1b - the entries the spec names are in, graded as written (R3, 
       expect(e, `${action} missing`).toBeDefined();
       expect(e!.category).toBe(category);
       expect(e!.sensitivity).toBe(sensitivity);
-      expect(e!.reserved, `${action} has no caller at S1b`).toBe(true);
+      // T-402 S2 flips its 17 entries live (they gain a caller); every other entry stays reserved until its slice/app exists.
+      expect(e!.reserved, `${action} reserved?`).toBe(!S2_LIVE.has(action));
       for (const [k, v] of Object.entries(extra ?? {})) expect((e as unknown as Record<string, unknown>)[k], `${action}.${k}`).toEqual(v);
     });
   }
