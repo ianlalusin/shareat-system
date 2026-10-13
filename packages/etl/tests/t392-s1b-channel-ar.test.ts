@@ -237,3 +237,116 @@ describe('S1b through the comparator', () => {
     expect(r.verdict).toBe('open');
   });
 });
+
+// ---- audit round additions -------------------------------------------------------------------------------------------
+// Item 1 (run parsed rows through the domain keyMapFor) is NOT written: keyMapFor is module-private in
+// packages/domain/src/dual-run/index.ts (not exported), and the tester may not edit source. Reported as a question.
+const M = 'dZUyvX4q824JBSVDAfE9';
+const twoStores = (): Any[] => [
+  { id: L, name: 'SharEat Lipa', salesChannels: CHANNELS_RAW },
+  { id: M, name: 'SharEat Malvar', salesChannels: [{ channelId: 'grab1', name: 'Grab Malvar', isRemittedDaily: false }] },
+];
+const snapTwo = (raw: Any): Any => buildSnapshot({ stores: twoStores(), ...raw }, { from: WEEK, through: '2026-10-25', extractedAt: '2026-10-26T01:00:00.000Z' });
+const figStore = (snapshot: Any, id: string): Any => computeV1Figures(snapshot, { weekStart: WEEK }).stores[id];
+
+describe('S1b discriminator negatives (item 2)', () => {
+  it('a sale leg on ar__channel_grab1 with legKey ar:channel_other, and charge-shaped expense_payment / adjustment legs, stay in scope', () => {
+    const legs = [
+      chLeg('x1', '2026-10-21', 10, { legKey: 'ar:channel_other' }),
+      chLeg('x2', '2026-10-21', 20, { sourceType: 'expense_payment' }),
+      chLeg('x3', '2026-10-21', 40, { sourceType: 'adjustment' }),
+    ];
+    const f = figOf(snapOf({ journal: legs }));
+    expect(f.lines.filter((x: Any) => String(x.key).startsWith('channel__')), 'no channel line').toEqual([]);
+    const sc = (t: string): Any => f.scope.find((s: Any) => s.sourceType === t);
+    expect(sc('sale')).toMatchObject({ legs: 1, in: 1000 });
+    expect(sc('expense_payment')).toMatchObject({ legs: 1, in: 2000 });
+    expect(sc('adjustment')).toMatchObject({ legs: 1, in: 4000 });
+    expect(f.posted).toEqual({ legs: 3, in: 7000, out: 0 });
+  });
+});
+
+describe('S1b channel line edges (item 3)', () => {
+  it('an out charge (reversal) gives a negative day', () => {
+    const f = figOf(snapOf({ journal: [chLeg('c1', '2026-10-21', 1250), chLeg('c2', '2026-10-24', 100, { direction: 'out' })] }));
+    const l = tender(f, 'channel__grab1');
+    expect(l, 'channel line').toBeDefined();
+    expect(l.days['2026-10-24']).toBe(-10000);
+    expect(l.out).toBe(10000);
+    expect(l.amount).toBe(115000);
+  });
+
+  it('a charge outside the window is excluded, and another store never leaks in; two stores with the same channelId stay separate', () => {
+    const snapshot = snapTwo({
+      journal: [
+        chLeg('in1', '2026-10-21', 1250),
+        chLeg('far', '2026-12-05', 777),
+        chLeg('late', '2026-10-27', 555),
+        chLeg('m1', '2026-10-21', 300, { storeId: M }),
+      ],
+    });
+    expect(snapshot.journal.find((j: Any) => j.id === 'far')).toBeUndefined();
+    const l = tender(figStore(snapshot, L), 'channel__grab1');
+    expect(l, 'Lipa channel line').toBeDefined();
+    expect(l.amount).toBe(125000);
+    expect(l.legs).toBe(1);
+    const m = tender(figStore(snapshot, M), 'channel__grab1');
+    expect(m, 'Malvar channel line').toBeDefined();
+    expect(m.amount).toBe(30000);
+    expect(m.legs).toBe(1);
+  });
+});
+
+describe('S1b PII, receipts, re-run, key shape, remitted-field flag', () => {
+  it('[item 4] customerName / notes / referenceNo on a journal leg and an expense never reach the snapshot or the files', async () => {
+    const pii = { customerName: 'PII-CUSTOMER-NAME', notes: 'PII-LEG-NOTES', referenceNo: 'PII-REFNO' };
+    const fs = fakeFirestore({
+      stores: [{ id: L, data: { name: 'SharEat Lipa', salesChannels: CHANNELS_RAW } }],
+      [`stores/${L}/journal`]: journal().map((j, i) => ({ id: j.id, data: strip(i < 3 ? { ...j, ...pii } : j) })),
+      [`stores/${L}/expenses`]: [{ id: 'ex1', data: strip(expenseRaw({ receiptId: 'rc1', ...pii })) }],
+      [`stores/${L}/receipts`]: receiptsRaw().map((r) => ({ id: r.id, data: strip(r) })),
+    });
+    const outDir = mkdtempSync(join(tmpdir(), 't392-s1b-pii-'));
+    const m: Any = await import('../../../scripts/lib/dual-run-extract');
+    const result = await m.runDualRunExtract(makeReadOnlyV1Client(fs as Any), {
+      from: WEEK, through: '2026-10-25', outDir, env: { NODE_ENV: 'development' }, now: new Date('2026-10-26T01:00:00.000Z'),
+    });
+    expect(result.snapshot.journal.find((j: Any) => j.id === 'ch_grab1_2026-10-21')).toBeDefined();
+    const text = readdirSync(outDir).map((f) => readFileSync(join(outDir, f), 'utf8')).join('\n');
+    for (const p of [...PII, 'PII-LEG-NOTES']) expect(text.includes(p), p).toBe(false);
+  });
+
+  it('[item 5] an existing TICKED channel__grab1 row with a v2 key survives pre-fill unchanged', () => {
+    const existing = [{ section: 'money' as const, v1Store: L, v1Key: 'channel__grab1', v1Label: 'my own label', v2Key: `channel:${CH_UUID}`, ticked: true }];
+    const rows = prefillKeys({ snapshot: snapOf({ journal: journal() }), existing, v2: V2_CATALOGUE });
+    expect(rows.filter((r) => r.v1Key === 'channel__grab1')).toEqual(existing);
+  });
+
+  it('[item 6] an expense in store A pointing at a receipt id that exists only in store B drops that receipt', () => {
+    const s = snapTwo({
+      expenses: [expenseRaw({ receiptId: 'rcB' })],
+      receipts: [{ id: 'rcB', storeId: M, receiptNo: 'SI-B-1' }],
+    });
+    expect(s.expenses.find((e: Any) => e.id === 'ex1').receiptId).toBe('rcB');
+    expect(s.receipts ?? []).toEqual([]);
+  });
+
+  it('[item 7] a ticked channel__ row whose v2_key is not a real UUID shape is refused (36 hyphens, 36 hex digits, short hex)', () => {
+    const row = (v2Key: string): Any => ({ section: 'money', v1Store: L, v1Key: 'channel__grab1', v1Label: 'x', v2Key, ticked: true });
+    for (const bad of ['channel:' + '-'.repeat(36), 'channel:' + 'a'.repeat(36), 'channel:3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6']) {
+      expect(() => parseKeysCsv(serialiseKeysCsv([row(bad)])), bad).toThrow();
+    }
+    expect(() => parseKeysCsv(serialiseKeysCsv([row(`channel:${CH_UUID}`)]))).not.toThrow();
+  });
+
+  it('[item 8] a day whose only sale leg is a channel charge (dineInSales 0) does NOT raise V1_REMITTED_FIELD_ZERO', () => {
+    const snapshot = snapOf({
+      journal: [chLeg('ch_grab1_2026-10-21', '2026-10-21', 1250)],
+      salesDays: [{ id: '2026-10-21', storeId: L, status: 'verified', dineInSales: 0, onlineBreakdown: {}, creditSales: 0, otherPaymentSales: 0 }],
+    });
+    const f = figOf(snapshot);
+    expect(f.tradingDays).toEqual(['2026-10-21']);
+    expect(f.flags.filter((x: Any) => x.code === 'V1_REMITTED_FIELD_ZERO')).toEqual([]);
+    expect(f.cashResidual['2026-10-21']).toBe(0);
+  });
+});
