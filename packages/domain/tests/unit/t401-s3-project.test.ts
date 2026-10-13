@@ -366,3 +366,73 @@ describe('sort orders (UTF-16 code unit; input order never matters)', () => {
     expect(proj(rev).menu).toEqual(proj(snap).menu);
   });
 });
+
+describe('S3 audit gaps: category edge cases, withdrawn basis, full-reversal hash', () => {
+  const cat = (id: string, parentId: string | null, name = id, sortOrder = 1, status = 'active') => ({ id, name, parentId, sortOrder, status });
+  const oneItemIn = (categoryId: string, categories: unknown[]) => {
+    const snap = base({ categories });
+    snap.items = snap.items.map((i: any) => ({ ...i, categoryId }));
+    return snap;
+  };
+  const catIds = (p: any): string[] => p.menu.categories.map((c: any) => c.id);
+
+  it('a category cycle A to B to A loses nothing and is deterministic under reversal', () => {
+    const cats = [cat('A', 'B'), cat('B', 'A')];
+    const snap = oneItemIn('A', cats);
+    const p = proj(snap);
+    expect([...catIds(p)].sort()).toEqual(['A', 'B']);
+    expect(p.menu.items.length).toBe(4);
+    expect(proj(oneItemIn('A', [...cats].reverse())).contentHash).toBe(p.contentHash);
+  });
+  it('a self-parent category appears once with its items', () => {
+    const p = proj(oneItemIn('A', [cat('A', 'A')]));
+    expect(catIds(p)).toEqual(['A']);
+    expect(p.menu.items.length).toBe(4);
+  });
+  it('a category whose parent is missing is treated as a root and still appears', () => {
+    const p = proj(oneItemIn('A', [cat('A', 'ghost')]));
+    expect(catIds(p)).toEqual(['A']);
+    expect(p.menu.items.length).toBe(4);
+  });
+  it('a parent with no appearing item of its own is still shown as the ancestor of one that has', () => {
+    const p = proj(oneItemIn('C', [cat('G', null), cat('P', 'G'), cat('C', 'P')]));
+    expect(catIds(p)).toEqual(['G', 'P', 'C']);
+  });
+  it('an online rule whose store basis is withdrawn is not offered: withdrawn', () => {
+    const snap = base();
+    snap.stores[0].offers.push(online('v1', { pricingMode: 'percent_markup', markupPercent: '10.0000', basis: { ...priceFixed(null), withdrawn: true } }));
+    expect(chan(proj(snap), 'v1').online).toEqual({ orderable: false, notOffered: 'withdrawn' });
+  });
+  it('an item in a retired category is not projected (no dangling categoryId)', () => {
+    const snap = base({ categories: [cat('c1', null), cat('c2', null, 'c2', 2, 'retired')] });
+    snap.items[0].categoryId = 'c2';
+    const p = proj(snap);
+    expect(p.menu.items.map((i: any) => i.id)).not.toContain('i1');
+    expect(catIds(p)).not.toContain('c2');
+    for (const i of p.menu.items) expect(catIds(p)).toContain(i.categoryId);
+  });
+  it('an item whose category is absent is not projected', () => {
+    const snap = base();
+    snap.items[0].categoryId = 'ghost';
+    const p = proj(snap);
+    expect(p.menu.items.map((i: any) => i.id)).not.toContain('i1');
+    for (const i of p.menu.items) expect(catIds(p)).toContain(i.categoryId);
+  });
+  it('reversing categories, optionValues, optionGroupLinks and optionGroups too gives the same hash', () => {
+    const snap = base({
+      categories: [cat('c1', null, 'Mains'), cat('c2', 'c1', 'Sub', 2)],
+      optionGroupLinks: [
+        { id: 'l1', optionGroupId: 'gA', menuItemId: 'i1', variantId: null, sortOrder: 2, status: 'active' },
+        { id: 'l2', optionGroupId: 'gB', menuItemId: 'i1', variantId: null, sortOrder: 1, status: 'active' }],
+    });
+    snap.items[1].categoryId = 'c2';
+    snap.optionValues.push({ id: 'o0', optionGroupId: 'gA', name: 'Aaa', sortOrder: 1, status: 'active' });
+    snap.stores[0].optionOffers.push({ optionValueId: 'o0', channel: 'store', priceDelta: '0.00' });
+    const rev = {
+      ...snap, categories: [...snap.categories].reverse(), optionValues: [...snap.optionValues].reverse(),
+      optionGroupLinks: [...snap.optionGroupLinks].reverse(), optionGroups: [...snap.optionGroups].reverse(),
+      stores: [{ ...snap.stores[0], optionOffers: [...snap.stores[0].optionOffers].reverse() }],
+    };
+    expect(proj(rev).contentHash).toBe(proj(snap).contentHash);
+  });
+});
