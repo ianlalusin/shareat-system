@@ -31,7 +31,7 @@ function literalOf(src: string, name: string, exported: boolean): string | null 
 function derivesFromConversionDate(src: string): boolean {
   return (
     /^const CONVERSION = CONVERSION_DATE;/m.test(src) &&
-    /import\s*\{[^}]*\bCONVERSION_DATE\b[^}]*\}\s*from\s*'\.\/tie-out'/.test(src)
+    /import\s*\{[^}]*\bCONVERSION_DATE\b[^}]*\}\s*from\s*'\.\/conversion-date'/.test(src)
   );
 }
 
@@ -47,15 +47,22 @@ describe('T-394 S1 I7 - the five conversion-date copies are one date', () => {
     expect(PURGE_AS_OF, 'tests/integration/t390-real-purge.ts PURGE_AS_OF').toBe(TIE_OUT_DATE);
   });
 
-  it('7.b opening-stock.ts has no private copy: CONVERSION is CONVERSION_DATE imported from ./tie-out (R7)', () => {
+  it('7.b opening-stock.ts has no private copy: CONVERSION is CONVERSION_DATE imported from the leaf ./conversion-date (R7; importing ./tie-out is a cycle)', () => {
     expect(literalOf(openingSrc, 'CONVERSION', false), 'a literal private copy is the DEF-642 shape').toBeNull();
     expect(derivesFromConversionDate(openingSrc)).toBe(true);
+  });
+
+  it('7.b2 the leaf packages/domain/src/cutover/conversion-date.ts holds the literal and tie-out.ts re-exports it', () => {
+    const leaf = read('packages/domain/src/cutover/conversion-date.ts');
+    expect(literalOf(leaf, 'CONVERSION_DATE', true)).toBe(TIE_OUT_DATE);
+    expect(read('packages/domain/src/cutover/tie-out.ts')).toMatch(/from '\.\/conversion-date'/);
   });
 
   it('7.c the matchers themselves see the mutants: a changed literal, a restored private copy', () => {
     expect(literalOf("export const CONVERSION_DATE = '2027-02-01';", 'CONVERSION_DATE', true)).not.toBe(TIE_OUT_DATE);
     expect(literalOf("const CONVERSION = '2026-12-31';", 'CONVERSION', false)).toBe('2026-12-31');
     expect(derivesFromConversionDate("const CONVERSION = '2027-01-01';\n")).toBe(false);
-    expect(derivesFromConversionDate("import { CONVERSION_DATE } from './tie-out';\nconst CONVERSION = CONVERSION_DATE;\n")).toBe(true);
+    expect(derivesFromConversionDate("import { CONVERSION_DATE } from './tie-out';\nconst CONVERSION = CONVERSION_DATE;\n")).toBe(false);
+    expect(derivesFromConversionDate("import { CONVERSION_DATE } from './conversion-date';\nconst CONVERSION = CONVERSION_DATE;\n")).toBe(true);
   });
 });

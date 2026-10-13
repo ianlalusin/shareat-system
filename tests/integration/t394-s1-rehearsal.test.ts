@@ -84,8 +84,8 @@ describe('T-394 S1 I3 - liveness: a second session on the target is found and na
   });
 
   it('3.b with the decoy gone the verdict equals "no other session exists" (own pid excluded)', async () => {
-    const [{ n }] = await sql<{ n: number }[]>`
-      select count(*)::int as n from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid()`;
+    const n = (await sql<{ n: number }[]>`
+      select count(*)::int as n from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid()`)[0]!.n;
     const r = await checkLiveness(sql);
     expect(r.ok).toBe(n === 0);
     expect(r.sessions.length).toBe(n);
@@ -225,9 +225,14 @@ describe('T-394 S1 I5 - after the real purge on the copy', () => {
 
   it('5.e a row left in a purge-class table fails purge_tables_empty', async () => {
     const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${orgId} and starts_on = '2027-01-01'`;
-    await sql`
-      insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, idempotency_key, memo, posted_by, status)
-      values (${orgId}, '2027-01-02', ${period!.id}, 'manual_journal', ${uid('src')}, ${uid('key')}, 't394 leftover', ${personId}, 'draft')`;
+    await sql.begin(async (tx) => {
+      const [e] = await tx<{ id: string }[]>`
+        insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, idempotency_key, memo, posted_by, status)
+        values (${orgId}, '2027-01-02', ${period!.id}, 'manual_journal', ${uid('src')}, ${uid('key')}, 't394 leftover', ${personId}, 'draft')
+        returning id`;
+      await tx`insert into journal_lines (entry_id, line_no, account_id, debit, credit) values (${e!.id}, 1, ${cash}, '5.00', 0)`;
+      await tx`insert into journal_lines (entry_id, line_no, account_id, debit, credit) values (${e!.id}, 2, ${income}, 0, '5.00')`;
+    });
     const r = await checkPostPurge(sql, start, { conversionDate: PURGE_AS_OF });
     expect(r.ok).toBe(false);
     expect(r.failures.map((f) => f.check)).toContain('purge_tables_empty');

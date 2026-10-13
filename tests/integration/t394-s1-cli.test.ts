@@ -127,7 +127,7 @@ describe('T-394 S1 I4a - migrate aims its child at the target, not at the enviro
     const t = postgres(urlFor(TARGET_DB), { max: 1, onnotice: () => {} });
     const d = postgres(urlFor(DECOY_DB), { max: 1, onnotice: () => {} });
     try {
-      const [{ n }] = await t<{ n: number }[]>`select count(*)::int as n from drizzle.__drizzle_migrations`;
+      const n = (await t<{ n: number }[]>`select count(*)::int as n from drizzle.__drizzle_migrations`)[0]!.n;
       expect(n).toBeGreaterThan(100);
       const decoyHas = await d<{ s: string }[]>`select nspname as s from pg_namespace where nspname in ('drizzle', 'public') and exists (select 1 from pg_class c where c.relnamespace = pg_namespace.oid and c.relkind = 'r')`;
       expect(decoyHas, 'the decoy must hold no table at all').toEqual([]);
@@ -187,7 +187,7 @@ describe('T-394 S1 I3, I4, I5 - start / predump / purge on the migrated copy', (
       const p = cli(withDb('purge', TARGET_DB, ['--by', personId]));
       expect(p.status, p.text.slice(-400)).toBe(2);
       expect(p.text).toContain('t394-live-app');
-      const [{ n }] = await live<{ n: number }[]>`select count(*)::int as n from cutover_steps where step_code = 'C2'`;
+      const n = (await live<{ n: number }[]>`select count(*)::int as n from cutover_steps where step_code = 'C2'`)[0]!.n;
       expect(n, 'a refused purge writes nothing').toBe(0);
     } finally {
       await live.end({ timeout: 5 });
@@ -219,9 +219,9 @@ describe('T-394 S1 I3, I4, I5 - start / predump / purge on the migrated copy', (
         select o.id from organizations o
         where not exists (select 1 from cutover_steps c where c.org_id = o.id and c.step_code = 'C2')`;
       expect(missing, 'every org must have its C2 row').toEqual([]);
-      const [{ n }] = await t<{ n: number }[]>`select count(*)::int as n from journal_entries`;
+      const n = (await t<{ n: number }[]>`select count(*)::int as n from journal_entries`)[0]!.n;
       expect(n).toBe(0);
-      const [{ k }] = await t<{ k: number }[]>`select count(*)::int as k from persons`;
+      const k = (await t<{ k: number }[]>`select count(*)::int as k from persons`)[0]!.k;
       expect(k).toBeGreaterThanOrEqual(1);
     } finally {
       await t.end({ timeout: 5 });

@@ -62,7 +62,7 @@ describe('T-394 S1 I4 - purge runs the real CLI three times, in order, on the gu
     for (const c of f.calls) expect([c.command, ...c.args].join(' ')).toMatch(/scripts[\\/]cutover-purge\.ts|cutover:purge/);
     const base = ['--confirm-database', DB, '--yes-really-not-local'];
     expect(tailFromConfirm(f.calls[0]!)).toEqual(base);
-    expect(tailFromConfirm(f.calls[1]!)).toEqual([...base, '--rehearse']);
+    expect(tailFromConfirm(f.calls[1]!)).toEqual([...base, '--rehearse', '--as-of', KEEP_FROM]);
     expect(tailFromConfirm(f.calls[2]!)).toEqual([...base, '--apply', '--as-of', KEEP_FROM, '--by', BY]);
     expect(KEEP_FROM).toBe('2027-01-01');
   });
