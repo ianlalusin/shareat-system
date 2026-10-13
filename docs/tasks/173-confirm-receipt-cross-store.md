@@ -269,42 +269,42 @@ which already posts the four-leg cross-store shape with cash in place of goods.
 - [ ] ⭐ `CAPABILITY-MATRIX.md` gains **exactly one** row for this path — `confirm_receipt`. A
       reviewer finding a second AP-booking capability has found §5 reproduced.
 - [ ] `docs/ROADMAP.html` updated.
-
-## 12. ⚠️ Built on 2026-08-29, and the two things deliberately left
-
-**Built:** `dispatchOrder` and `confirmReceipt` (`packages/domain/src/commissary/transfer.ts`) ·
-`packages/db/src/repo/deliveries.ts` · migrations `0069`/`0070` ·
-`packages/domain/tests/integration/commissary-transfer.test.ts` (20 tests) ·
-`docs/POSTING-PATTERNS.md` · cutover + RLS registry entries · thirteen missing exports from
-`packages/domain/src/index.ts` (DEF-097).
-
-### ⛔ 1. T-151's outbound delivery fee does NOT ride the entry yet
-
-§4 says the fee *"rides the same entry: it lands on the receiving store and touches no item's
-cost."* ⚠️ **That sentence does not determine a posting, and guessing one is the specific way
-this pattern has gone wrong before.** `trade_orders.deliveryFee`'s own comment says *"with no
-separate freight leg and no freight account"*, while T-151 invariant 2 says it must not enter the
-item's cost — and those two together leave no account for it to land in. The obvious shape
-(credit a freight expense at the commissary, debit one at the branch) risks driving the
-commissary's expense **negative** when the haulage was its own driver's time and was never booked
-as freight at all: exactly the failure the T-133 correction called out, where the inventory shape
-*"drove the seller's `1330` negative and left the cost stranded."*
-
-⭐ **What it needs is the v1 read, not a decision from this chair** — `branch-order-receive.
-actions.ts`'s handling of `deliveryFee`, and whether v1 books it at all. Until then a transfer
-with a fee posts the goods correctly and silently ignores the fee, which is visible (the fee sits
-on the order and in no entry) rather than wrong-in-the-books.
-
-### ⚠️ 2. `confirm_receipt` is not yet in `CAPABILITY-MATRIX.md`
-
-§5's argument — *"there is no second gate"* — is satisfied structurally: the posting happens
-inside the confirm transaction and no `autoBookBranchDeliveryExpenses` function exists to gate
-differently. But the matrix row and the **two-sided access check** (invariant 8: a commissary-side
-and a branch-side actor are both legitimate callers) belong with the action that authorises a real
-caller, and there is no caller yet. ⛔ Adding the row now would put a ✅ in the matrix with no test
-that can prove its ✗ fires, which the matrix's own rule forbids. It goes in with the receive page.
-
-### ⚠️ 3. Everything with a URL
-
-`apps/erp/src/app/commissary/**` is unbuilt and unverifiable while port 9008 is held by another
-lane — logged in `docs/PENDING-VERIFICATION.md` with the rest of the wave.
+
+## 12. ⚠️ Built on 2026-08-29, and the two things deliberately left
+
+**Built:** `dispatchOrder` and `confirmReceipt` (`packages/domain/src/commissary/transfer.ts`) ·
+`packages/db/src/repo/deliveries.ts` · migrations `0069`/`0070` ·
+`packages/domain/tests/integration/commissary-transfer.test.ts` (20 tests) ·
+`docs/POSTING-PATTERNS.md` · cutover + RLS registry entries · thirteen missing exports from
+`packages/domain/src/index.ts` (DEF-097).
+
+### ⛔ 1. T-151's outbound delivery fee does NOT ride the entry yet
+
+§4 says the fee *"rides the same entry: it lands on the receiving store and touches no item's
+cost."* ⚠️ **That sentence does not determine a posting, and guessing one is the specific way
+this pattern has gone wrong before.** `trade_orders.deliveryFee`'s own comment says *"with no
+separate freight leg and no freight account"*, while T-151 invariant 2 says it must not enter the
+item's cost — and those two together leave no account for it to land in. The obvious shape
+(credit a freight expense at the commissary, debit one at the branch) risks driving the
+commissary's expense **negative** when the haulage was its own driver's time and was never booked
+as freight at all: exactly the failure the T-133 correction called out, where the inventory shape
+*"drove the seller's `1330` negative and left the cost stranded."*
+
+⭐ **What it needs is the v1 read, not a decision from this chair** — `branch-order-receive.
+actions.ts`'s handling of `deliveryFee`, and whether v1 books it at all. Until then a transfer
+with a fee posts the goods correctly and silently ignores the fee, which is visible (the fee sits
+on the order and in no entry) rather than wrong-in-the-books.
+
+### ⚠️ 2. `confirm_receipt` is not yet in `CAPABILITY-MATRIX.md`
+
+§5's argument — *"there is no second gate"* — is satisfied structurally: the posting happens
+inside the confirm transaction and no `autoBookBranchDeliveryExpenses` function exists to gate
+differently. But the matrix row and the **two-sided access check** (invariant 8: a commissary-side
+and a branch-side actor are both legitimate callers) belong with the action that authorises a real
+caller, and there is no caller yet. ⛔ Adding the row now would put a ✅ in the matrix with no test
+that can prove its ✗ fires, which the matrix's own rule forbids. It goes in with the receive page.
+
+### ⚠️ 3. Everything with a URL
+
+`apps/erp/src/app/commissary/**` is unbuilt and unverifiable while port 9008 is held by another
+lane — logged in `docs/archive/PENDING-VERIFICATION.md` with the rest of the wave.

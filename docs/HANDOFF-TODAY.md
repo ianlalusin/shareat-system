@@ -72,6 +72,21 @@ See the wrap-up commit message for the real typecheck and unit numbers. The full
 | `wt-t390` | lane/t392-s3 | shareat_test_t392s3 (0195) | committed `5eb5c7b`, pushed |
 | `wt-t391` | lane/t390-s5 (merged) | — | free |
 
+## Loose ends not covered above (swept 12 Oct, pre-cleanup)
+| Item | State | Owner / next step |
+|---|---|---|
+| ~~PR #17 T-399 runner caches~~ | **CLOSED 12 Oct** (Ian: the self-hosted runner is gone, so there's nothing to cache for). Branch deleted on origin | Do not revive. `wt-t399` is left for local cleanup |
+| **PR #18** T-400 integration on 2 workers (`lane/t400-parallel-integration`, `wt-t400`) | open; no task doc | Rebase on main after #20, re-run CI, fill Outcome numbers, merge or close |
+| Uncommitted on main: `loadCountSheet` + `countTotalsByItem` removed (superseded by `loadMergedLines`, T-390 S5); t390-s1 test and `production-caller-baseline.txt` updated to match | **verified safe 12 Oct**: no references left, `tsc -p apps/erp` 0 errors, t390-s1 2/2 green | Ian said not to commit it on its own; commit it at the next wrap-up |
+| `docs/ops/home-backup/` (moved from `webapps\shareat-db-home-backup`; no secrets) | untracked; pointer added in `docs/ops/README.md` Backups | Commit it at the next wrap-up |
+| Leftover folders `webapps\wt-t387-s3` (partial, git no longer tracks it) and `webapps\wt-t384-s1a` (empty, locked by a process) | not deleted | Delete them only by the reparse-point method in memory `worktree-node-modules-junction`. **Never** `rm -rf` or `git worktree remove --force` |
+| `docs/ops/self-hosted-runner.md` | stale: the runner was removed 12 Oct | Banner it or archive it |
+| `.claude/launch.json` | **trimmed 12 Oct** to `erp` only | — |
+| Old lane handoffs (inventory, T-387, merge reviews, pending-verification) | **moved 12 Oct** to `docs/archive/` (see its README); links repointed | History only |
+| `~/.claude/skills/orchestrator/tools/` | **591 one-off files** (smoke scripts, screenshots, tokens, probe SQL) **moved 12 Oct** to `tools/_archive-2026-10-12/`; 12 live tools remain | Write new one-off probes to the scratchpad, not `tools/` |
+| Open specs with no lane (on ROADMAP, not in Pick-up): T-325, 326, 328, 335, 336, 338, 339, 347, 348, 377, 378, 379, 380, 382, 393; T-343 and T-375 part-built | parked behind T-392 / 2 Nov | Next orchestrator ranks them after the dual run |
+| Remote branches `checkpoint-logs`, `claude/beautiful-bohr-sfpkxt` | **deleted 12 Oct** (Ian's go) | — |
+
 ## Do not decide these alone — they are Ian's
 - **P0194**, and the deploy window for PR #20.
 - `def636-staff-roster-cap` (recommended: `enrol_staff` at the store).
@@ -96,7 +111,7 @@ bible, never Read them whole.
 State: production at 0193 (PR #16). PR #20 (lane/t398-s1: 0194 + DEF-640 + T-391 S4-S6) is CI green; merge only after
 Ian's P0194 precheck and his go, in a quiet window. NEVER push main directly (it deploys).
 Next: T-392 S4 audit round in wt-t385 (builder makes the tester's a-l green), then S3 → S4 → S1b → S4b → S5, all before
-the 2 Nov dual run. Next free migration 0196.
+the 2 Nov dual run. Next free migration 0196. Also clear the "Loose ends" table (PR #18, uncommitted count-sheet cleanup, open specs).
 STANDING: lanes are Sonnet subagents (tester/builder/auditor separate, own _test DB, worktrees; workers never run
 git; LF only); Opus for specs/money rulings and a fresh Opus review of money/auth specs; never commit a lane while its
 agent runs; byte-check \r and \x08; republish docs/WHATS-LEFT.html after every DEF close. Messages are short.

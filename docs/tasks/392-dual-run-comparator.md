@@ -380,6 +380,7 @@ The tester's pins stand:
 - `no_data` means no data on either side.
 - *(orchestrator, at S4 READY)* A store-week with 0 compared days is `open` (S2's pinned coordinator ruling), or `no_data` when there is no data on either side; it is never `explained` by default.
 - **Gap, its own slice S4b:** document-level matching (R9) is not wired. `runDualRun` passes empty `v1Docs`/`v2Docs`, because S3's repo has no v2 document reader, so an unmatched delta stays UNEXPLAINED and never becomes NOT_DOUBLE_ENTERED. S4b adds the v2 document reader and wires R9 before the go/no-go pack (S5) relies on those classes.
+- *(orchestrator, at the S4 audit-fix READY, 2026-10-12)* `v2Figures` (the repo) keeps one `inventory_basis` line per GL code, as S3 F14-F16 pin. The domain keys them all `COGS`, so the comparator sees one line per store-week, as the tender-keys ruling requires. v2 credit comes only from `ar_charge` 1210 debits, so 1210 is taken out of the `source_type='sale'` branch to avoid counting it twice.
 - The builder chose these keys: money/category sheet `v2Key` is the GL code or the account/category UUID; v1 `supplier_advance__x` maps to `1240:<supplier uuid>`; inventory_basis is keyed by GL code on the v2 side and `COGS` on the v1 side (always INVENTORY_BASIS). The audit row's entity_id is a fresh UUID per run.
 
 ## S4 tender keys (fresh Opus planner, 2026-10-12; binding)

@@ -104,8 +104,8 @@ found) · **How** = READ (file and caller read) or GREPPED (name matched only) �
 |---|---|---|---|
 | `gen-toc.ts` | `tests/unit/toc-freshness.test.ts:4` **imports** it · `.claude/skills/wrap-up/SKILL.md:97-162` · 10 task docs | READ | **KEEP** — unit suite imports it; the wrap-up skill requires `npm run toc` |
 | `production-caller-census.mjs` | `tests/unit/production-caller-ratchet.test.ts:63` **spawns** it · `docs/production-caller-baseline.txt` | READ | **KEEP** — unit suite executes it on every run |
-| `dev-seed.ts` | `docs/HANDOFF-INVENTORY-LANE.md`, DEFECTS-REGISTER, 8 task docs · `dev-seed-inventory.ts` header · `bootstrap-org.ts` header | READ | **KEEP** — the local-DB seed; refuses non-`*_dev` databases |
-| `dev-seed-inventory.ts` | `docs/HANDOFF-INVENTORY-LANE.md`, `docs/PENDING-VERIFICATION.md` | READ | **KEEP** — the inventory worked case for local screens |
+| `dev-seed.ts` | `docs/archive/HANDOFF-INVENTORY-LANE.md`, DEFECTS-REGISTER, 8 task docs · `dev-seed-inventory.ts` header · `bootstrap-org.ts` header | READ | **KEEP** — the local-DB seed; refuses non-`*_dev` databases |
+| `dev-seed-inventory.ts` | `docs/archive/HANDOFF-INVENTORY-LANE.md`, `docs/archive/PENDING-VERIFICATION.md` | READ | **KEEP** — the inventory worked case for local screens |
 | `money-positivity-census.ts` | T-325 / DEF-376: exists to be the non-test caller of `scanMoneyPositivitySites` (2026-09-19, one day old) · `t327-schema-coverage-finite-check.test.ts:85` cites it | READ | **KEEP** — deleting it re-opens the DEF-376 "test-only export" finding; ⚠️ Tier B edits the domain module it imports |
 
 ### No caller found — UNKNOWN, ruled KEEP by Ian 2026-09-20 (6)
