@@ -196,7 +196,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // `bypass_count_freeze` and `can_adjust_inventory`: the first three are NOT added (no caller —
   // the same debt as `import_commissary_catalogue`), and the last two already exist as
   // `charge_staff_for_discrepancy` / `adjust_inventory`.
-  it('finds exactly 108 capability rows — NOT the "36" the task documents say in prose', () => {
+  it('finds exactly 109 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -234,7 +234,8 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // 2026-10-09 (t385-q1 = a). ⛔ RED until the builder adds the row: today's document has 100.
     const { rows } = parseCapabilityMatrixDoc();
     // ⭐ 101 -> 108 (T-401 S2): seven menu capabilities (view_menu, add_menu_item, manage_menu, request_menu_item, set_menu_price, set_menu_depletion, switch_usage_source).
-    expect(rows.length).toBe(108);
+    expect(rows.length).toBe(109);
+    // ⭐ 108 -> 109 (T-403): `manage_recipes` (org, admin-only).
   });
 
   it('has no duplicate capability names', () => {
@@ -305,13 +306,14 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 108 capabilities', () => {
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 109 capabilities', () => {
     // ⭐ 99 -> 100 (T-382 S1, A3): `unlink_store_from_pos`. ⛔ RED until the builder adds it to capabilities.ts.
     // ⭐ 100 -> 101 (T-385 S3, A3): `verify_own_sales_day`. ⛔ RED until the builder adds it to capabilities.ts.
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities.
-    expect(CAPABILITIES.length).toBe(108);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(108);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(108);
+    expect(CAPABILITIES.length).toBe(109);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(109);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(109);
+    // ⭐ 108 -> 109 (T-403): `manage_recipes`.
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -386,6 +388,10 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         // is the top of the tree and somebody must be able to. It is materialised as an auditable
         // row rather than inferred at check time.
         'manage_stores',
+        // ⭐ T-403: `manage_pos_map` LEFT manager (admin-only now) and `manage_recipes` is new admin-only; both are
+        // admin-yes / manager-no, so the derived set gains both. Deliberate: an org with no admin lends them to a manager.
+        'manage_pos_map',
+        'manage_recipes',
         'grant_capability',
         'manage_price_lists',
         'manage_fixed_assets',

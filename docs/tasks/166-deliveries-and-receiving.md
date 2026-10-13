@@ -201,7 +201,7 @@ times a rate" is how two halves of one system come to disagree about what a deli
 
 | Piece | Why |
 |---|---|
-| `/inventory/deliveries` route | ⛔ Port 9008 held all day. See `docs/PENDING-VERIFICATION.md` |
+| `/inventory/deliveries` route | ⛔ Port 9008 held all day. See `docs/archive/PENDING-VERIFICATION.md` |
 | Void with its cascade | Needs the route to be useful, and its refusal condition (any layer consumed) needs T-168's usage path to be testable against |
 | The expense/invoice link | T-163's `linkInvoiceToReceipt` exists and is tested; wiring it to a delivery is the AP screen's job |
 

@@ -366,3 +366,36 @@ Money columns, `v1_counter` and `opening_gap` included, are `numeric(14,2)`.
 - **inventory_basis codes:** 1310, 1320, 1330, 1340, 5100, 5110–5170, 5175, 5200, 5300, 5400, 5450. 2120 (GRNI) is **excluded**: with it, a receipt would net to 0. **expense_category** covers lines on `expense_categories.account_code` minus that list, only from entries whose reversal-chain root is `source_type 'expense_payment'`. Lines from any other source on those codes (depreciation, amortisation, payroll, drawings, disposals, prepaid write-offs) are outside the tie set and are not emitted. A guard test checks that every COGS-group category code is in the list.
 - **A correction** is one of: an entry with `reversal_of_entry_id`; a POS correction (`sales_day_pos_corrections.id = source_id`); a later entry from a source that already has an earlier entry of any status, ordered by (entry_date, id). **datedLater** holds corrections with no posted original. The earliest entry of its source is never a correction.
 - **dual_run_lines.org_id** is NOT NULL, with a composite FK `(org_id, report_id)` → reports `(org_id, id)`, and **no trigger**. The repo copies org_id from the report (`INSERT … SELECT r.org_id …`). A report id from another org inserts nothing and raises.
+
+## S4 rulings (orchestrator, at S4 RED, 2026-10-12)
+The tester's pins stand:
+- A compare run is authorized by **`run_cutover`** (org-scoped; the dual run is a cutover activity), checked before the lock or any write.
+- Every apply run writes one audit row (`dual_run.compare`), including a run where every week is `unchanged`.
+- The snapshot file's mode/owner check is POSIX-only by default; an injected `stat` is always enforced.
+- A snapshot spanning several weeks gives one report per Monday-week, with `through` = min(Sunday, snapshot.through).
+- R13's "posted sales day" means `sales_days.status = 'verified'`.
+- The `ap_supplier` `line_key` is the v2 supplier UUID, or `v1:ap__<id>` when unmapped.
+- `extract` runs with no v2 catalogue (`v2?`, empty by default).
+- "Older extract" is strict: an equal `extractedAt` is allowed.
+- `no_data` means no data on either side.
+- *(orchestrator, at S4 READY)* A store-week with 0 compared days is `open` (S2's pinned coordinator ruling), or `no_data` when there is no data on either side; it is never `explained` by default.
+- **Gap, its own slice S4b:** document-level matching (R9) is not wired. `runDualRun` passes empty `v1Docs`/`v2Docs`, because S3's repo has no v2 document reader, so an unmatched delta stays UNEXPLAINED and never becomes NOT_DOUBLE_ENTERED. S4b adds the v2 document reader and wires R9 before the go/no-go pack (S5) relies on those classes.
+- *(orchestrator, at the S4 audit-fix READY, 2026-10-12)* `v2Figures` (the repo) keeps one `inventory_basis` line per GL code, as S3 F14-F16 pin. The domain keys them all `COGS`, so the comparator sees one line per store-week, as the tender-keys ruling requires. v2 credit comes only from `ar_charge` 1210 debits, so 1210 is taken out of the `source_type='sale'` branch to avoid counting it twice.
+- The builder chose these keys: money/category sheet `v2Key` is the GL code or the account/category UUID; v1 `supplier_advance__x` maps to `1240:<supplier uuid>`; inventory_basis is keyed by GL code on the v2 side and `COGS` on the v1 side (always INVENTORY_BASIS). The audit row's entity_id is a fresh UUID per run.
+
+## S4 tender keys (fresh Opus planner, 2026-10-12; binding)
+- **sales_tender keys.** `cash__cashier` and `online__{id}` use the keys sheet's `money` rows.
+- **`credit`** is a stated mapping with no sheet row:
+  - v1: `salesDay.creditSales`.
+  - v2: debits to 1210 at the store from entries whose reversal-chain root is `source_type 'ar_charge'`, summed over customers and dated by entry date. 1210 credits are excluded.
+  - v2Figures must add these lines to `sales_tender` under `credit`.
+- **`other`** has one `money` row per store (v1_key `other`):
+  - its v2_key is a money account, `channel:<id>` or `none`;
+  - `none` makes a non-zero v1 `other` NOT_DOUBLE_ENTERED;
+  - an unticked row is UNMAPPED_KEY.
+- **Channel receivables.** v2 1220/1221/1222 sales-day debits are keyed `channel:<channelId>`. The v1 side comes from the `channel_sales` flow.
+  - **Orchestrator decision (2026-10-12): S1 reads that flow. This is new slice S1b, which adds the `channel_sales` arTransactions to the whitelist and v1 figures.**
+  - Until S1b lands, those lines are UNEXPLAINED (CHANNEL_AR_FLOW).
+  - S1b must land before the 2 Nov dual run.
+- **Staff cash** is a stated mapping with no sheet row: v1 `cash__staff` (re-kinded) ↔ v2 `staff_cash`, line key `cash__staff`. Pre-fill skips it, and a sheet row for it is refused.
+- **inventory_basis** is one line per store-week, key `COGS`. v2 = Σ(debit − credit) over the S3 inventory_basis codes, with byDay summed per date. Store-less lines stay on `unassigned_store`.

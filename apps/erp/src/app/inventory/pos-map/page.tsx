@@ -1,7 +1,8 @@
 import Link from 'next/link';
+import { authorize, AuthorizationError } from '@shareat/auth';
 import { requireSession } from '../../../lib/session';
 import { upsertPosItemMapAction, decideMapRequestAction } from './actions';
-import { listStores, posMapScreenData } from './lib';
+import { listStores, posMapScreenData, withOrgPrincipal } from './lib';
 import { Page } from '@/components/shell/Page';
 import { Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
@@ -36,6 +37,16 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
   }
 
   const { maps, requests, items, recipes, locations } = await posMapScreenData(actor.orgId, storeId);
+  // T-403: only admin edits a mapping. The server refusal is the real guard; this hides a form that would always fail.
+  const canEditMap = await withOrgPrincipal(actor.orgId, async (tx) => {
+    try {
+      await authorize(tx, actor, 'manage_pos_map', { storeId });
+      return true;
+    } catch (err) {
+      if (err instanceof AuthorizationError) return false;
+      throw err;
+    }
+  });
   const openRequests = requests.filter((r) => r.status === 'requested');
 
   return (
@@ -98,6 +109,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
         </section>
       )}
 
+      {canEditMap && (
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium">New / edit mapping</h2>
         <form action={upsertPosItemMapAction} className="mt-3 space-y-3">
@@ -156,6 +168,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
           </Button>
         </form>
       </section>
+      )}
 
       <section>
         <h2 className="text-lg font-medium">Active maps ({maps.filter((m) => m.status === 'active').length})</h2>

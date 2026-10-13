@@ -237,7 +237,7 @@ which would be a silent re-costing (T-162 invariant 7). Asserted per layer.
 
 | Piece | Why |
 |---|---|
-| The `/inventory/usage` route | ⛔ Port 9008 held all day — `docs/PENDING-VERIFICATION.md` |
+| The `/inventory/usage` route | ⛔ Port 9008 held all day — `docs/archive/PENDING-VERIFICATION.md` |
 | The adjustment posting path | `kind='adjustment'` is storable and location-exempt; its signed posting is T-164's `postCountVariance`, and its document is T-169's count session |
 | The staff-charge leg | Phase 5, and §11.4 is what happens until then |
 

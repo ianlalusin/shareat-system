@@ -251,6 +251,10 @@ nothing behind them the moment a second organisation exists.
 
 Spec: `docs/tasks/393-nightly-backup-and-restore.md`. Ian, 2026-10-10: *no backup for now, set up soon*. Nothing here arms itself.
 
+**Off-cloud copy (separate from T-393):** `docs/ops/home-backup/` is a nightly `pg_dump` from the managed DB to the
+home PC, run by Windows Task Scheduler. Its README covers setup. It has lived in the repo since 2026-10-12; before that
+it sat in `webapps\shareat-db-home-backup`. Whether it is installed on the home PC is not recorded here.
+
 - **Install the client.** Re-running `provision.sh` adds PGDG's apt repository and `postgresql-client-18` (pg_dump refuses a server newer than itself; production is 18.x). It also installs `shareat-db-backup.{service,timer}` and arms nothing.
 - **Env** in `/srv/shareat-shared/.env.local` (`.env.example` has the block): `SPACES_ENDPOINT`, `SPACES_REGION`, `SPACES_BUCKET=shareat-pg-backups`, `SPACES_KEY`, `SPACES_SECRET`, `BACKUP_HEARTBEAT_URL`. The source is `SYSTEM_DATABASE_URL`, which must be on the **direct** port 25060 (25061, the pooler, is refused). The bucket must be the dedicated one: `shareat-erp-backups` (Frappe) is refused by name.
 - **Prove the key first, writing nothing:** `npm run db-backup -- --store=spaces --dry-run` lists `postgres/`.

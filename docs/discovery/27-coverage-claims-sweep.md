@@ -79,7 +79,7 @@ someone re-counted.
    `stock_movements_check_not_frozen_trg`"*, that trigger exists.
 2. **Plans quoting v1 are not making v2 promises.** 28 of 30 "missing" symbols were v1 field names
    in descriptive passages. A naive sweep reports 30 defects; 28 would be wrong.
-3. **`docs/PENDING-VERIFICATION.md` worked exactly as intended.** Written 2026-08-29 by the session
+3. **`docs/archive/PENDING-VERIFICATION.md` worked exactly as intended.** Written 2026-08-29 by the session
    that could not get port 9008, it names its own unbuilt screens, **corrects an earlier
    overstatement by that same session** (*"I described the screens for five finished tasks as
    blocked. That was wrong"*), and was closed by DEF-135 on 2026-09-03 — which found **four engine
