@@ -209,7 +209,7 @@ export default async function DashboardPage({
             <Link
               key={s.label}
               href={s.href}
-              className="dash-rise flex min-h-11 flex-col gap-2 border-surface-border py-6 pr-6 sm:border-r"
+              className="dash-rise flex min-h-11 flex-col gap-2 border-surface-border py-6 px-6 sm:border-r"
             >
               <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{s.label}</span>
               <span className="font-display text-[40px] font-bold leading-[0.95] tabular-nums">
