@@ -71,6 +71,25 @@ const V1_FEED_NAMES = new RegExp(
   ].join('|'),
 );
 
+const V1_TABLE = String.raw`"?(?:pos_item_maps|pos_map_requests|pos_v1_[a-z_]+|pos_usage_pulls?[a-z_]*|tenders|sales_days|channel_sales)"?\b`;
+const V1_WRITE_OR_DDL = new RegExp(
+  [
+    String.raw`\binsert\s+into\s+(?:only\s+)?(?:public\.)?${V1_TABLE}`,
+    String.raw`\bupdate\s+(?:only\s+)?(?:public\.)?${V1_TABLE}`,
+    String.raw`\bdelete\s+from\s+(?:only\s+)?(?:public\.)?${V1_TABLE}`,
+    String.raw`\btruncate\s+(?:table\s+)?(?:only\s+)?(?:public\.)?${V1_TABLE}`,
+    String.raw`\balter\s+(?:table|index|policy)\s+(?:if\s+exists\s+)?(?:only\s+)?(?:public\.)?${V1_TABLE}`,
+    String.raw`\bdrop\s+(?:table|trigger|index|policy|rule)\b[^;]*?${V1_TABLE}`,
+    String.raw`\bcreate\s+(?:unique\s+)?(?:or\s+replace\s+)?(?:constraint\s+)?(?:trigger|index|policy|rule)\b[^;]*?\bon\s+(?:only\s+)?(?:public\.)?${V1_TABLE}`,
+    String.raw`\b(?:grant|revoke)\b[^;]*?\bon\s+(?:table\s+)?(?:public\.)?${V1_TABLE}`,
+  ].join('|'),
+  'i',
+);
+/** The first write or DDL statement on a v1 feed table in (comment-stripped) SQL, or undefined. Reads (FROM/JOIN) pass. */
+function v1FeedWriteOrDdl(sqlText: string): string | undefined {
+  return V1_WRITE_OR_DDL.exec(sqlText)?.[0];
+}
+
 const feedFiles = [...V1_FEED_DIRS.flatMap((d) => files(join(root, d))), ...V1_FEED_FILES.map((f) => join(root, f)).filter(existsSync)];
 const menuFiles = [...files(join(root, 'packages/domain/src/menu')), ...['packages/db/src/repo/menu.ts'].map((f) => join(root, f)).filter(existsSync)];
 
@@ -99,13 +118,32 @@ describe('T-401 I16 -- the live v1 feed is untouched', () => {
     expect(hits, 'menu files that reach the v1 feed').toEqual([]);
   });
 
-  it('(3) migration 0196 has no executable SQL touching a v1-feed table', () => {
+  it('(3) migration 0196 has no executable SQL that WRITES or ALTERS a v1-feed table (read-only references are allowed)', () => {
     const dir = join(root, 'packages/db/migrations');
     const mig = readdirSync(dir).find((n) => /^0196_.*\.sql$/.test(n));
     expect(mig, 'migration 0196').toBeDefined();
-    const sqlText = code(read(join(dir, mig!)));
-    const m = /\bpos_item_maps\b|\bpos_map_requests\b|\bpos_v1_[a-z_]+\b|\bpos_usage_pulls?[a-z_]*\b|\btenders\b|\bsales_days\b|\bchannel_sales\b/.exec(sqlText);
-    expect(m?.[0], 'a v1 feed table named in executable SQL').toBeUndefined();
+    const hit = v1FeedWriteOrDdl(code(read(join(dir, mig!))));
+    expect(hit, 'a write or DDL on a v1 feed table in executable SQL').toBeUndefined();
+  });
+
+  it('(3) detector bites: writes and DDL on v1 tables are flagged; a read-only reference is not', () => {
+    for (const bad of [
+      "UPDATE pos_item_maps SET status = 'x' WHERE true;",
+      'CREATE TRIGGER x AFTER INSERT ON pos_item_maps FOR EACH ROW EXECUTE FUNCTION f();',
+      'INSERT INTO pos_map_requests (a) VALUES (1);',
+      'DELETE FROM sales_days WHERE true;',
+      'TRUNCATE TABLE pos_usage_pulls;',
+      'ALTER TABLE "tenders" ADD COLUMN z int;',
+      'DROP TABLE channel_sales;',
+      'CREATE INDEX i ON sales_days (id);',
+      'GRANT SELECT ON pos_item_maps TO app;',
+      'REVOKE ALL ON TABLE pos_v1_batches FROM app;',
+    ]) expect(v1FeedWriteOrDdl(code(bad)), bad).toBeDefined();
+    for (const ok of [
+      'SELECT 1 FROM pos_item_maps WHERE x = p_item;',
+      'IF EXISTS (SELECT 1 FROM pos_item_maps m WHERE m.item_id = p_item) THEN RETURN true; END IF;',
+      '-- UPDATE pos_item_maps SET a = 1\nSELECT 1;',
+    ]) expect(v1FeedWriteOrDdl(code(ok)), ok).toBeUndefined();
   });
 
   it('the detectors themselves bite (so a green (1)/(2) means something)', () => {
