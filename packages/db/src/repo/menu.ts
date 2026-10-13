@@ -34,6 +34,7 @@ import type {
   MenuSelectionMode,
   MenuStatus,
 } from '../../schema/menu';
+import type { Decimal } from '@shareat/core/money';
 import type { Tx } from '../client';
 
 export type MenuCategoryRow = typeof menuCategories.$inferSelect;
@@ -358,15 +359,23 @@ export interface InsertRuleInput {
   itemId: string | null;
   recipeId: string | null;
   /** `numeric(14,6)` as text, or null. */
-  quantityPerSale: string | null;
+  quantityPerSale: Decimal<'14,6'> | null;
   createdBy: string;
 }
 
 export async function insertRule(tx: Tx, input: InsertRuleInput): Promise<MenuDepletionRuleRow> {
-  const { effectiveFrom, ...rest } = input;
   const [row] = await tx
     .insert(menuDepletionRules)
-    .values({ ...rest, effectiveFrom: effectiveFrom ?? NOW_MS })
+    .values({
+      orgId: input.orgId,
+      variantId: input.variantId,
+      effectiveFrom: input.effectiveFrom ?? NOW_MS,
+      mode: input.mode,
+      itemId: input.itemId,
+      recipeId: input.recipeId,
+      quantityPerSale: input.quantityPerSale,
+      createdBy: input.createdBy,
+    })
     .returning();
   return row!;
 }
@@ -391,24 +400,37 @@ export interface InsertOfferInput {
   /** Omitted = "from now" (rounded up to the millisecond, see NOW_MS). */
   effectiveFrom?: Date;
   /** `numeric(14,2)` as text; null on a withdrawn row or a refill. */
-  amount: string | null;
+  amount: Decimal<'14,2'> | null;
   bundleHeads: number | null;
-  extraHeadAmount: string | null;
+  extraHeadAmount: Decimal<'14,2'> | null;
   withdrawn: boolean;
   /** R15: `fixed` (default) or an online rule; a rule row carries `markupPercent` / `fixedMarkupAmount` and no amount. */
   pricingMode?: MenuPricingMode;
   /** `numeric(8,4)` as text, signed, above -100. */
-  markupPercent?: string | null;
+  markupPercent?: Decimal<'8,4'> | null;
   /** `numeric(14,2)` as text, signed. */
-  fixedMarkupAmount?: string | null;
+  fixedMarkupAmount?: Decimal<'14,2'> | null;
   createdBy: string;
 }
 
 export async function insertOffer(tx: Tx, input: InsertOfferInput): Promise<MenuOfferRow> {
-  const { effectiveFrom, ...rest } = input;
   const [row] = await tx
     .insert(menuOffers)
-    .values({ ...rest, effectiveFrom: effectiveFrom ?? NOW_MS })
+    .values({
+      orgId: input.orgId,
+      storeId: input.storeId,
+      variantId: input.variantId,
+      channel: input.channel,
+      effectiveFrom: input.effectiveFrom ?? NOW_MS,
+      amount: input.amount,
+      bundleHeads: input.bundleHeads,
+      extraHeadAmount: input.extraHeadAmount,
+      withdrawn: input.withdrawn,
+      pricingMode: input.pricingMode,
+      markupPercent: input.markupPercent,
+      fixedMarkupAmount: input.fixedMarkupAmount,
+      createdBy: input.createdBy,
+    })
     .returning();
   return row!;
 }
@@ -429,16 +451,24 @@ export interface InsertOptionOfferInput {
   channel: MenuChannel;
   effectiveFrom?: Date;
   /** Signed `numeric(14,2)` as text; null only on a withdrawn row. */
-  priceDelta: string | null;
+  priceDelta: Decimal<'14,2'> | null;
   withdrawn: boolean;
   createdBy: string;
 }
 
 export async function insertOptionOffer(tx: Tx, input: InsertOptionOfferInput): Promise<MenuOptionOfferRow> {
-  const { effectiveFrom, ...rest } = input;
   const [row] = await tx
     .insert(menuOptionOffers)
-    .values({ ...rest, effectiveFrom: effectiveFrom ?? NOW_MS })
+    .values({
+      orgId: input.orgId,
+      storeId: input.storeId,
+      optionValueId: input.optionValueId,
+      channel: input.channel,
+      effectiveFrom: input.effectiveFrom ?? NOW_MS,
+      priceDelta: input.priceDelta,
+      withdrawn: input.withdrawn,
+      createdBy: input.createdBy,
+    })
     .returning();
   return row!;
 }

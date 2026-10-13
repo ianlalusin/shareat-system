@@ -11,6 +11,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { menuRepo, type Tx } from '@shareat/db';
 import { MENU_CHANNELS, MENU_DEPLETION_MODES, MENU_PRICING_MODES, type MenuChannel, type MenuDepletionMode, type MenuPricingMode } from '@shareat/db/schema';
+import type { Decimal } from '@shareat/core/money';
 import { gone, refuse } from '../shared/refusal';
 import { audit, inTx, parseMarkupPercent, requireHistorySlot, parseMenuAmount, parseMenuQuantity, requireNotBackdated, requireScheduled } from './shared';
 
@@ -38,7 +39,7 @@ export async function setDepletionRule(actor: Actor, input: SetDepletionRuleInpu
     const shapeError = (sentence: string) => refuse(`setDepletionRule: ${input.mode} - ${sentence}`, sentence);
     let itemId: string | null = null;
     let recipeId: string | null = null;
-    let quantity: string | null = null;
+    let quantity: Decimal<'14,6'> | null = null;
     if (input.mode === 'direct') {
       if (!input.itemId || input.recipeId) throw shapeError('A stock-item rule names a stock item and no recipe.');
       if (input.quantityPerSale === undefined) throw shapeError('A stock-item rule needs the quantity used per sale.');
@@ -145,8 +146,8 @@ export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: 
     if (!isRule && (input.markupPercent !== undefined || input.fixedMarkupAmount !== undefined)) {
       throw refuse('setMenuOffer: markup figures need a markup pricing mode.', 'A markup figure only applies to an online price rule.');
     }
-    let markupPercent: string | null = null;
-    let fixedMarkupAmount: string | null = null;
+    let markupPercent: Decimal<'8,4'> | null = null;
+    let fixedMarkupAmount: Decimal<'14,2'> | null = null;
     if (pricingMode === 'percent_markup') {
       if (input.fixedMarkupAmount !== undefined || input.markupPercent === undefined) {
         throw refuse('setMenuOffer: percent_markup needs markupPercent and no fixedMarkupAmount.', 'Enter the percent to add to (or, negative, take off) the store price.');

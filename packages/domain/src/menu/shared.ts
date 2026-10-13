@@ -7,7 +7,7 @@
  */
 import type { Actor } from '@shareat/auth';
 import { auditLogRepo, menuRepo, transaction, type Tx } from '@shareat/db';
-import { compareDecimal, decimal } from '@shareat/core/money';
+import { compareDecimal, decimal, type Decimal } from '@shareat/core/money';
 import { parseDecimalInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
 
@@ -40,7 +40,7 @@ export function requireName(raw: unknown, rawLabel: string, humanLabel: string):
  * A money amount: text only, at most two decimals, finite. `signed` is for option deltas ("no rice, -10" is real, R4);
  * an offer amount is never negative. A JavaScript number is refused outright: `0.1 + 0.2` is not money.
  */
-export function parseMenuAmount(raw: unknown, rawLabel: string, humanLabel: string, signed: boolean): string {
+export function parseMenuAmount(raw: unknown, rawLabel: string, humanLabel: string, signed: boolean): Decimal<'14,2'> {
   if (typeof raw !== 'string') {
     throw refuse(
       `${rawLabel} - the amount must be text with at most two decimal places, not a number.`,
@@ -55,7 +55,7 @@ export function parseMenuAmount(raw: unknown, rawLabel: string, humanLabel: stri
 }
 
 /** A markup percent: signed text, at most FOUR decimals (`numeric(8,4)`), strictly above -100 (a price of nothing or less). */
-export function parseMarkupPercent(raw: unknown, rawLabel: string, humanLabel: string): string {
+export function parseMarkupPercent(raw: unknown, rawLabel: string, humanLabel: string): Decimal<'8,4'> {
   if (typeof raw !== 'string') {
     throw refuse(
       `${rawLabel} - the percent must be text with at most four decimal places, not a number.`,
@@ -70,7 +70,7 @@ export function parseMarkupPercent(raw: unknown, rawLabel: string, humanLabel: s
 }
 
 /** A depletion quantity: `numeric(14,6)`, text only, more than six decimals refused, strictly above zero. */
-export function parseMenuQuantity(raw: unknown, rawLabel: string, humanLabel: string): string {
+export function parseMenuQuantity(raw: unknown, rawLabel: string, humanLabel: string): Decimal<'14,6'> {
   if (typeof raw !== 'string') {
     throw refuse(
       `${rawLabel} - the quantity must be text with at most six decimal places, not a number.`,
