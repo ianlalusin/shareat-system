@@ -431,7 +431,7 @@ export function compareStoreWeek(input: CompareInput): StoreWeekResult {
   let verdict: Verdict;
   const empty =
     !anyFigure && input.v1.tradingDays.length === 0 && input.v2.tradingDays.length === 0 && flags.length === 0 &&
-    input.v1Docs.length === 0 && input.v2Docs.length === 0 && input.dispositions.length === 0 && scope.length === 0;
+    input.dispositions.length === 0 && scope.length === 0;
   if (empty) verdict = 'no_data';
   else if (flags.length > 0 || anyOpenDay || closed.some((c) => c.blocked)) verdict = 'open';
   else if (comparedDays.length === 0) verdict = 'open';
