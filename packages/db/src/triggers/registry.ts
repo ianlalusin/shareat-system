@@ -616,4 +616,28 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: 'A variant\u2019s parent item is fixed once it has an offer or package refill (0196). Reads other rows.',
   },
+  menu_item_requests_guard: {
+    table: 'menu_item_requests',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "A request resolves once and its identity columns are frozen (0196). Decides from OLD/NEW status.",
+  },
+  menu_pos_v1_links_guard: {
+    table: 'menu_pos_v1_links',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "A link needs an active variant with a depletion rule in force now, a location in its store, immutable identity (0196). Reads other rows and the clock.",
+  },
+  menu_usage_source_switches_insert_guard: {
+    table: 'menu_usage_source_switches',
+    mode: 'origin',
+    kind: 'derivation',
+    reason: "A switch is immediate: created_at is set to now() (0196). Derives a value from the clock.",
+  },
+  menu_usage_source_switches_update_guard: {
+    table: 'menu_usage_source_switches',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: "A usage-source switch is never updated (0196, ENABLE ALWAYS). Decides only from TG_OP.",
+  },
 } as const;

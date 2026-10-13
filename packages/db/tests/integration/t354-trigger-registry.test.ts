@@ -97,7 +97,7 @@ async function livePgTriggers(): Promise<{ tgname: string; table: string; tgenab
 }
 
 describe('T1 — registry floor', () => {
-  it('TRIGGER_REGISTRY has >=57 entries, exactly 26 with mode:\'always\', and those 26 names equal R1\'s table — was red today: the import fails, triggers/registry.ts does not exist', async () => {
+  it('TRIGGER_REGISTRY has >=57 entries, exactly 27 with mode:\'always\', and those 27 names equal R1\'s table — was red today: the import fails, triggers/registry.ts does not exist', async () => {
     const mod = await loadRegistry();
     expect(mod, 'triggers/registry.ts does not exist yet').toBeDefined();
     const reg = mod!.TRIGGER_REGISTRY;
@@ -105,8 +105,8 @@ describe('T1 — registry floor', () => {
 
     const always = Object.entries(reg).filter(([, e]) => e.mode === 'always');
     // T-386 S2 (2026-10-09): 22 -> 23, DELIBERATELY. item_code_counters_forward_only (migration 0189) is ENABLE ALWAYS: the mark only rises.
-    // T-401 S1: three history update guards (menu_offers / menu_option_offers / menu_depletion_rules, migration 0196): 23 -> 26.
-    expect(always.length, 'expected exactly 26 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196)').toBe(26);
+    // T-401 S1: three history update guards (menu_offers / menu_option_offers / menu_depletion_rules, migration 0196) 23 -> 26, + menu_usage_source_switches update guard (R7, I26) 26 -> 27.
+    expect(always.length, 'expected exactly 27 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196)').toBe(27);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {

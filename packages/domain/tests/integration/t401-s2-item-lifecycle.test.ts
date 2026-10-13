@@ -4,6 +4,7 @@
  * is the database guaranteeing at most one plus the retire check"). TESTER, not BUILDER. Real Postgres.
  *
  * ## Assumed contract
+ *   (Actor: SUPER ADMIN - add_menu_item; admin is refused, Q2. editMenuItem stays manage_menu, admin may.)
  *   createMenuItem(actor, { categoryId, name, itemType, soldALaCarte?, ... }, tx?) -> { id, defaultVariantId }
  *   editMenuItem(actor, { id, status: 'active' }, tx?)    re-activates a retired item (there is no separate reactivate function in the spec)
  *   A refusal is a throw or { ok:false, reason }; the item stays retired.
@@ -25,7 +26,7 @@ afterAll(async () => {
 describe('createMenuItem creates its default variant in the same transaction (S1 audit ruling)', () => {
   it('one item, exactly one variant: default, unlabelled, active; the returned ids name them', async () => {
     const c = await cast('lc-create');
-    const r = await asOrg(c.orgId, (tx) => createMenuItem(c.admin, { categoryId: c.categoryId, name: 'Samgyupsal', itemType: 'a_la_carte' }, tx));
+    const r = await asOrg(c.orgId, (tx) => createMenuItem(c.superAdmin, { categoryId: c.categoryId, name: 'Samgyupsal', itemType: 'a_la_carte' }, tx));
     const vs = await sql<{ id: string; label: string | null; is_default: boolean; status: string }[]>`
       select id, label, is_default, status from menu_item_variants where menu_item_id = ${r.id}`;
     expect(vs).toHaveLength(1);
@@ -35,7 +36,7 @@ describe('createMenuItem creates its default variant in the same transaction (S1
   it('every item type gets one (a package and a refill too: a refill is a variant that cannot carry a price, not a variant-less item)', async () => {
     const c = await cast('lc-types');
     for (const itemType of ['package', 'refill'] as const) {
-      const r = await asOrg(c.orgId, (tx) => createMenuItem(c.admin, { categoryId: c.categoryId, name: `Thing ${itemType}`, itemType }, tx));
+      const r = await asOrg(c.orgId, (tx) => createMenuItem(c.superAdmin, { categoryId: c.categoryId, name: `Thing ${itemType}`, itemType }, tx));
       const [n] = await sql<{ n: number }[]>`select count(*)::int as n from menu_item_variants where menu_item_id = ${r.id} and is_default`;
       expect(n!.n, itemType).toBe(1);
     }
@@ -45,7 +46,7 @@ describe('createMenuItem creates its default variant in the same transaction (S1
     const c = await cast('lc-tx');
     await expect(
       asOrg(c.orgId, async (tx) => {
-        await createMenuItem(c.admin, { categoryId: c.categoryId, name: 'Ghost', itemType: 'a_la_carte' }, tx);
+        await createMenuItem(c.superAdmin, { categoryId: c.categoryId, name: 'Ghost', itemType: 'a_la_carte' }, tx);
         throw new Error('rollback on purpose');
       }),
     ).rejects.toThrow('rollback on purpose');
@@ -61,7 +62,7 @@ describe('createMenuItem creates its default variant in the same transaction (S1
     const c = await cast('lc-dup');
     await rawItem(c, 'a_la_carte', 'Samgyupsal');
     const r = await asOrg(c.orgId, (tx) =>
-      attempt(() => createMenuItem(c.admin, { categoryId: c.categoryId, name: 'samgyupsal', itemType: 'a_la_carte' }, tx)));
+      attempt(() => createMenuItem(c.superAdmin, { categoryId: c.categoryId, name: 'samgyupsal', itemType: 'a_la_carte' }, tx)));
     expect(r.failed, 'a duplicate (org, type, lower(name)) item was accepted').toBe(true);
     const [i] = await sql<{ n: number }[]>`select count(*)::int as n from menu_items where org_id = ${c.orgId}`;
     const [v] = await sql<{ n: number }[]>`select count(*)::int as n from menu_item_variants where org_id = ${c.orgId}`;

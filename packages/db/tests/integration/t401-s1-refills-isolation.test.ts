@@ -111,7 +111,7 @@ describe('I10 -- package refills: package -> refill only; unique pair; unlink al
 });
 
 // =================================================================================================
-const TEN = [
+const MENU_TABLES = [
   'menu_categories',
   'menu_items',
   'menu_item_variants',
@@ -122,9 +122,12 @@ const TEN = [
   'menu_depletion_rules',
   'menu_offers',
   'menu_option_offers',
+  'menu_item_requests',
+  'menu_pos_v1_links',
+  'menu_usage_source_switches',
 ] as const;
 
-/** Org A populated in all ten tables (as the owner). */
+/** Org A populated in all thirteen tables (as the owner). */
 async function populate(f: MenuFx) {
   const pkg = await newItem(f, 'package');
   const refill = await newItem(f, 'refill');
@@ -136,14 +139,20 @@ async function populate(f: MenuFx) {
   await insRule(f, f.variantId);
   await insOffer(f, f.variantId, '10.00');
   await insOptionOffer(f, valueId, '1.00');
+  await sql`insert into menu_item_requests (org_id, store_id, requested_by, name, item_type, note, status, created_by)
+            values (${f.orgId}, ${f.storeId}, ${f.personId}, 'Req', 'a_la_carte', 'x', 'open', ${f.personId})`;
+  await sql`insert into menu_pos_v1_links (org_id, store_id, pos_item_key, variant_id, status, created_by)
+            values (${f.orgId}, ${f.storeId}, 'KEY-POP', ${f.variantId}, 'active', ${f.personId})`;
+  await sql`insert into menu_usage_source_switches (org_id, store_id, source, created_by)
+            values (${f.orgId}, ${f.storeId}, 'pos_item_maps', ${f.personId})`;
 }
 
 describe('I11 -- org isolation', () => {
-  it('as shareat_app, org B reads 0 rows of org A in each of the ten tables; org A reads its own (mutant: one table missing its policy)', async () => {
+  it('as shareat_app, org B reads 0 rows of org A in each of the thirteen tables; org A reads its own (mutant: one table missing its policy)', async () => {
     const a = await menuFixture('i11a');
     const b = await menuFixture('i11b');
     await populate(a);
-    for (const t of TEN) {
+    for (const t of MENU_TABLES) {
       const own = await asApp(a.orgId, async (tx) => (await tx.unsafe(`select count(*)::int as n from ${t} where org_id = '${a.orgId}'`))[0]!.n as number);
       expect(own.err, `${t}: org A could not read its own rows: ${own.err?.message}`).toBeUndefined();
       expect(own.value, `${t}: org A sees none of its own rows (positive control)`).toBeGreaterThan(0);
@@ -153,7 +162,7 @@ describe('I11 -- org isolation', () => {
     }
   });
 
-  it('as shareat_app (org B), an INSERT stamped org A is refused by RLS (42501) on ALL TEN tables, with every other column valid', async () => {
+  it('as shareat_app (org B), an INSERT stamped org A is refused by RLS (42501) on ALL THIRTEEN tables, with every other column valid', async () => {
     const a = await menuFixture('i11c');
     const b = await menuFixture('i11d');
     await populate(b); // B's rules, variants etc. exist, so the only thing wrong with each row is the org stamp
@@ -163,7 +172,7 @@ describe('I11 -- org isolation', () => {
     const bo2 = await newOption(b);
     const A = a.orgId;
     const by = b.personId; // valid in the inserting org
-    const stmts: Record<(typeof TEN)[number], (tx: postgres.TransactionSql) => Promise<unknown>> = {
+    const stmts: Record<(typeof MENU_TABLES)[number], (tx: postgres.TransactionSql) => Promise<unknown>> = {
       menu_categories: (tx) => tx`insert into menu_categories (org_id, name, sort_order, status, created_by) values (${A}, 'Sneaky', 0, 'active', ${by})`,
       menu_items: (tx) => tx`insert into menu_items (org_id, category_id, name, item_type, sold_a_la_carte, sold_in_package_session, diner_orderable, sort_order, status, created_by)
                              values (${A}, ${b.categoryId}, 'Sneaky', 'a_la_carte', true, false, true, 0, 'active', ${by})`,
@@ -183,8 +192,14 @@ describe('I11 -- org isolation', () => {
                               values (${A}, ${b.storeId}, ${b.variantId}, 'online', now(), 10, false, ${by})`,
       menu_option_offers: (tx) => tx`insert into menu_option_offers (org_id, store_id, option_value_id, channel, effective_from, price_delta, withdrawn, created_by)
                                      values (${A}, ${b.storeId}, ${bo.valueId}, 'online', now(), 1, false, ${by})`,
+      menu_item_requests: (tx) => tx`insert into menu_item_requests (org_id, store_id, requested_by, name, item_type, note, status, created_by)
+                                     values (${A}, ${b.storeId}, ${by}, 'Sneaky', 'a_la_carte', 'x', 'open', ${by})`,
+      menu_pos_v1_links: (tx) => tx`insert into menu_pos_v1_links (org_id, store_id, pos_item_key, variant_id, status, created_by)
+                                    values (${A}, ${b.storeId}, 'SNEAKY-KEY', ${b.variantId}, 'active', ${by})`,
+      menu_usage_source_switches: (tx) => tx`insert into menu_usage_source_switches (org_id, store_id, source, created_by)
+                                             values (${A}, ${b.storeId}, 'pos_item_maps', ${by})`,
     };
-    for (const t of TEN) {
+    for (const t of MENU_TABLES) {
       const r = await asApp(b.orgId, (tx) => stmts[t](tx));
       expect(r.err, `${t}: cross-org INSERT accepted`).toBeDefined();
       expect(r.err!.code, `${t}: ${r.err!.message}`).toBe('42501');
@@ -192,11 +207,11 @@ describe('I11 -- org isolation', () => {
     }
   });
 
-  it('FORCE ROW LEVEL SECURITY is on for all ten menu tables (the owner does not bypass the policy)', async () => {
+  it('FORCE ROW LEVEL SECURITY is on for all thirteen menu tables (the owner does not bypass the policy)', async () => {
     const rows = await sql<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }[]>`
       select relname, relrowsecurity, relforcerowsecurity from pg_class
-       where relnamespace = 'public'::regnamespace and relkind = 'r' and relname = any(${[...TEN]})`;
-    expect(rows.map((r) => r.relname).sort()).toEqual([...TEN].sort());
+       where relnamespace = 'public'::regnamespace and relkind = 'r' and relname = any(${[...MENU_TABLES]})`;
+    expect(rows.map((r) => r.relname).sort()).toEqual([...MENU_TABLES].sort());
     const notForced = rows.filter((r) => !r.relrowsecurity || !r.relforcerowsecurity).map((r) => r.relname);
     expect(notForced, `RLS not enabled+forced on: ${notForced.join(', ')}`).toEqual([]);
   });

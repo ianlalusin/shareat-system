@@ -2,6 +2,11 @@
 -- docs/tasks/401-erp-menu-catalog-master.md sections 2 (R1-R13), 3 and 4. Hand-authored per ADR-012 s5.
 -- Builds on 0194 (UNIQUE (org_id, id) on persons and stores) and 0195 (journal head).
 --
+-- AMENDED 2026-10-13 (Ian's answers, spec R7 R14 R15): thirteen tables, not ten. Adds menu_item_requests (a manager's request
+-- for an item, resolved once by a super admin), menu_pos_v1_links (store x v1 POS item key -> variant) and
+-- menu_usage_source_switches (append-only history of which stock-usage source a store reads); menu_offers gains the
+-- online price RULE columns (pricing_mode, markup_percent, fixed_markup_amount); stock_locations gains UNIQUE (org_id, id).
+--
 -- WHAT. menu_categories, menu_items, menu_item_variants, menu_option_groups, menu_option_values,
 -- menu_option_group_links, menu_package_refills, menu_depletion_rules, menu_offers, menu_option_offers.
 -- "Offer" means a STORE'S PRICE ROW for a variant on a channel (R5): append-only, effective-dated, never UPDATEd,
@@ -50,6 +55,7 @@ SET LOCAL lock_timeout = '5s';
 
 ALTER TABLE "items" ADD CONSTRAINT "items_org_id_id_unique" UNIQUE ("org_id","id");--> statement-breakpoint
 ALTER TABLE "production_recipes" ADD CONSTRAINT "production_recipes_org_id_id_unique" UNIQUE ("org_id","id");--> statement-breakpoint
+ALTER TABLE "stock_locations" ADD CONSTRAINT "stock_locations_org_id_id_unique" UNIQUE ("org_id","id");--> statement-breakpoint
 
 CREATE TABLE "menu_categories" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
@@ -198,11 +204,23 @@ CREATE TABLE "menu_offers" (
 	"bundle_heads" integer,
 	"extra_head_amount" numeric(14,2),
 	"withdrawn" boolean DEFAULT false NOT NULL,
+	"pricing_mode" text DEFAULT 'fixed' NOT NULL,
+	"markup_percent" numeric(8,4),
+	"fixed_markup_amount" numeric(14,2),
 	"created_by" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "menu_offers_slot_unique" UNIQUE ("store_id","variant_id","channel","effective_from"),
 	CONSTRAINT "menu_offers_channel_check" CHECK ("channel" in ('store','online')),
-	CONSTRAINT "menu_offers_withdrawn_no_amounts_check" CHECK (NOT "withdrawn" OR ("amount" IS NULL AND "bundle_heads" IS NULL AND "extra_head_amount" IS NULL)),
+	CONSTRAINT "menu_offers_withdrawn_no_amounts_check" CHECK (NOT "withdrawn" OR ("pricing_mode" = 'fixed' AND "amount" IS NULL AND "bundle_heads" IS NULL AND "extra_head_amount" IS NULL AND "markup_percent" IS NULL AND "fixed_markup_amount" IS NULL)),
+	CONSTRAINT "menu_offers_pricing_mode_check" CHECK ("pricing_mode" in ('fixed','fixed_markup','percent_markup')),
+	CONSTRAINT "menu_offers_store_channel_fixed_check" CHECK ("channel" = 'online' OR "pricing_mode" = 'fixed'),
+	CONSTRAINT "menu_offers_rule_shape_check" CHECK (
+		("pricing_mode" = 'fixed' AND "markup_percent" IS NULL AND "fixed_markup_amount" IS NULL)
+		OR ("pricing_mode" = 'percent_markup' AND "markup_percent" IS NOT NULL AND "markup_percent" > -100 AND "markup_percent" < 'Infinity'::numeric
+			AND "amount" IS NULL AND "bundle_heads" IS NULL AND "extra_head_amount" IS NULL AND "fixed_markup_amount" IS NULL)
+		OR ("pricing_mode" = 'fixed_markup' AND "fixed_markup_amount" IS NOT NULL AND "fixed_markup_amount" > '-Infinity'::numeric AND "fixed_markup_amount" < 'Infinity'::numeric
+			AND "amount" IS NULL AND "bundle_heads" IS NULL AND "extra_head_amount" IS NULL AND "markup_percent" IS NULL)
+	),
 	CONSTRAINT "menu_offers_amount_check" CHECK ("amount" IS NULL OR ("amount" >= 0 AND "amount" < 'Infinity'::numeric)),
 	CONSTRAINT "menu_offers_bundle_pair_check" CHECK (("bundle_heads" IS NULL) = ("extra_head_amount" IS NULL)),
 	CONSTRAINT "menu_offers_bundle_heads_check" CHECK ("bundle_heads" IS NULL OR "bundle_heads" >= 1),
@@ -226,6 +244,63 @@ CREATE TABLE "menu_option_offers" (
 		("withdrawn" AND "price_delta" IS NULL)
 		OR (NOT "withdrawn" AND "price_delta" IS NOT NULL AND "price_delta" > '-Infinity'::numeric AND "price_delta" < 'Infinity'::numeric)
 	)
+);--> statement-breakpoint
+
+CREATE TABLE "menu_item_requests" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"org_id" uuid NOT NULL,
+	"store_id" uuid NOT NULL,
+	"requested_by" uuid NOT NULL,
+	"name" text NOT NULL,
+	"item_type" text NOT NULL,
+	"category_id" uuid,
+	"note" text,
+	"status" text DEFAULT 'open' NOT NULL,
+	"resolved_item_id" uuid,
+	"resolved_by" uuid,
+	"resolved_at" timestamp with time zone,
+	"resolution_note" text,
+	"created_by" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
+	CONSTRAINT "menu_item_requests_name_not_blank_check" CHECK (length(trim("name")) > 0),
+	CONSTRAINT "menu_item_requests_item_type_check" CHECK ("item_type" in ('a_la_carte','package','refill')),
+	CONSTRAINT "menu_item_requests_status_check" CHECK ("status" in ('open','approved','duplicate','rejected','withdrawn')),
+	CONSTRAINT "menu_item_requests_resolved_shape_check" CHECK (
+		("status" = 'open' AND "resolved_item_id" IS NULL AND "resolved_by" IS NULL AND "resolved_at" IS NULL AND "resolution_note" IS NULL)
+		OR ("status" <> 'open' AND "resolved_by" IS NOT NULL AND "resolved_at" IS NOT NULL)
+	),
+	CONSTRAINT "menu_item_requests_item_needed_check" CHECK ("status" NOT IN ('approved','duplicate') OR "resolved_item_id" IS NOT NULL),
+	CONSTRAINT "menu_item_requests_reject_note_check" CHECK ("status" <> 'rejected' OR length(trim(coalesce("resolution_note", ''))) > 0)
+);--> statement-breakpoint
+
+CREATE TABLE "menu_pos_v1_links" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"org_id" uuid NOT NULL,
+	"store_id" uuid NOT NULL,
+	"pos_item_key" text NOT NULL,
+	"variant_id" uuid NOT NULL,
+	"location_id" uuid,
+	"status" text DEFAULT 'active' NOT NULL,
+	"created_by" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
+	CONSTRAINT "menu_pos_v1_links_key_not_blank_check" CHECK (length(trim("pos_item_key")) > 0),
+	CONSTRAINT "menu_pos_v1_links_status_check" CHECK ("status" in ('active','inactive'))
+);--> statement-breakpoint
+
+CREATE TABLE "menu_usage_source_switches" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"org_id" uuid NOT NULL,
+	"store_id" uuid NOT NULL,
+	"source" text NOT NULL,
+	"reason" text,
+	"difference_count" integer,
+	"created_by" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "menu_usage_source_switches_source_check" CHECK ("source" in ('pos_item_maps','menu_rules')),
+	CONSTRAINT "menu_usage_source_switches_difference_count_check" CHECK ("difference_count" IS NULL OR "difference_count" >= 0),
+	CONSTRAINT "menu_usage_source_switches_reason_check" CHECK (NOT ("source" = 'menu_rules' AND "difference_count" > 0) OR length(trim(coalesce("reason", ''))) > 0)
 );--> statement-breakpoint
 
 ALTER TABLE "menu_categories" ADD CONSTRAINT "menu_categories_org_id_organizations_id_fk"
@@ -362,6 +437,68 @@ ALTER TABLE "menu_option_offers" ADD CONSTRAINT "menu_option_offers_created_by_f
 ALTER TABLE "menu_option_offers" ADD CONSTRAINT "menu_option_offers_created_by_same_org_fk"
 	FOREIGN KEY ("org_id","created_by") REFERENCES "persons"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
 
+
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_org_id_organizations_id_fk"
+	FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_store_id_fk"
+	FOREIGN KEY ("store_id") REFERENCES "stores"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_store_id_same_org_fk"
+	FOREIGN KEY ("org_id","store_id") REFERENCES "stores"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_requested_by_fk"
+	FOREIGN KEY ("requested_by") REFERENCES "persons"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_requested_by_same_org_fk"
+	FOREIGN KEY ("org_id","requested_by") REFERENCES "persons"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_category_id_fk"
+	FOREIGN KEY ("category_id") REFERENCES "menu_categories"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_category_id_same_org_fk"
+	FOREIGN KEY ("org_id","category_id") REFERENCES "menu_categories"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_resolved_item_id_fk"
+	FOREIGN KEY ("resolved_item_id") REFERENCES "menu_items"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_resolved_item_id_same_org_fk"
+	FOREIGN KEY ("org_id","resolved_item_id") REFERENCES "menu_items"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_resolved_by_fk"
+	FOREIGN KEY ("resolved_by") REFERENCES "persons"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_resolved_by_same_org_fk"
+	FOREIGN KEY ("org_id","resolved_by") REFERENCES "persons"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_created_by_fk"
+	FOREIGN KEY ("created_by") REFERENCES "persons"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" ADD CONSTRAINT "menu_item_requests_created_by_same_org_fk"
+	FOREIGN KEY ("org_id","created_by") REFERENCES "persons"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
+
+ALTER TABLE "menu_pos_v1_links" ADD CONSTRAINT "menu_pos_v1_links_org_id_organizations_id_fk"
+	FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_pos_v1_links" ADD CONSTRAINT "menu_pos_v1_links_store_id_fk"
+	FOREIGN KEY ("store_id") REFERENCES "stores"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_pos_v1_links" ADD CONSTRAINT "menu_pos_v1_links_store_id_same_org_fk"
+	FOREIGN KEY ("org_id","store_id") REFERENCES "stores"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_pos_v1_links" ADD CONSTRAINT "menu_pos_v1_links_variant_id_fk"
+	FOREIGN KEY ("variant_id") REFERENCES "menu_item_variants"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_pos_v1_links" ADD CONSTRAINT "menu_pos_v1_links_variant_id_same_org_fk"
+	FOREIGN KEY ("org_id","variant_id") REFERENCES "menu_item_variants"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_pos_v1_links" ADD CONSTRAINT "menu_pos_v1_links_location_id_fk"
+	FOREIGN KEY ("location_id") REFERENCES "stock_locations"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_pos_v1_links" ADD CONSTRAINT "menu_pos_v1_links_location_id_same_org_fk"
+	FOREIGN KEY ("org_id","location_id") REFERENCES "stock_locations"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_pos_v1_links" ADD CONSTRAINT "menu_pos_v1_links_created_by_fk"
+	FOREIGN KEY ("created_by") REFERENCES "persons"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_pos_v1_links" ADD CONSTRAINT "menu_pos_v1_links_created_by_same_org_fk"
+	FOREIGN KEY ("org_id","created_by") REFERENCES "persons"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
+
+ALTER TABLE "menu_usage_source_switches" ADD CONSTRAINT "menu_usage_source_switches_org_id_organizations_id_fk"
+	FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_usage_source_switches" ADD CONSTRAINT "menu_usage_source_switches_store_id_fk"
+	FOREIGN KEY ("store_id") REFERENCES "stores"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_usage_source_switches" ADD CONSTRAINT "menu_usage_source_switches_store_id_same_org_fk"
+	FOREIGN KEY ("org_id","store_id") REFERENCES "stores"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_usage_source_switches" ADD CONSTRAINT "menu_usage_source_switches_created_by_fk"
+	FOREIGN KEY ("created_by") REFERENCES "persons"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "menu_usage_source_switches" ADD CONSTRAINT "menu_usage_source_switches_created_by_same_org_fk"
+	FOREIGN KEY ("org_id","created_by") REFERENCES "persons"("org_id","id") ON DELETE RESTRICT;--> statement-breakpoint
+
+CREATE INDEX "menu_item_requests_org_status_idx" ON "menu_item_requests" ("org_id","status");--> statement-breakpoint
+CREATE UNIQUE INDEX "menu_pos_v1_links_active_key" ON "menu_pos_v1_links" ("store_id","pos_item_key") WHERE "status" = 'active';--> statement-breakpoint
+CREATE INDEX "menu_pos_v1_links_variant_idx" ON "menu_pos_v1_links" ("variant_id");--> statement-breakpoint
+CREATE INDEX "menu_usage_source_switches_store_idx" ON "menu_usage_source_switches" ("store_id","created_at" DESC);--> statement-breakpoint
 
 CREATE UNIQUE INDEX "menu_categories_org_name_key" ON "menu_categories" ("org_id", lower("name"));--> statement-breakpoint
 CREATE INDEX "menu_categories_parent_idx" ON "menu_categories" ("parent_id");--> statement-breakpoint
@@ -531,11 +668,11 @@ BEGIN
 		IF v_vstatus = 'retired' OR v_istatus = 'retired' THEN
 			RAISE EXCEPTION 'a live offer cannot be set for a retired variant or a variant of a retired item' USING ERRCODE = '23514';
 		END IF;
-		IF v_type = 'refill' AND NEW."amount" IS NOT NULL THEN
-			RAISE EXCEPTION 'a refill offer carries no amount (a refill is a zero-price serving)' USING ERRCODE = '23514';
+		IF v_type = 'refill' AND (NEW."amount" IS NOT NULL OR NEW."pricing_mode" <> 'fixed') THEN
+			RAISE EXCEPTION 'a refill offer carries no amount and no price rule (a refill is a zero-price serving)' USING ERRCODE = '23514';
 		END IF;
-		IF v_type IS NOT NULL AND v_type <> 'refill' AND NEW."amount" IS NULL THEN
-			RAISE EXCEPTION 'a live offer for a % item needs an amount', v_type USING ERRCODE = '23514';
+		IF v_type IS NOT NULL AND v_type <> 'refill' AND NEW."pricing_mode" = 'fixed' AND NEW."amount" IS NULL THEN
+			RAISE EXCEPTION 'a live fixed offer for a % item needs an amount', v_type USING ERRCODE = '23514';
 		END IF;
 		IF NOT EXISTS (SELECT 1 FROM "menu_depletion_rules" r
 		                WHERE r."variant_id" = NEW."variant_id" AND r."effective_from" <= NEW."effective_from") THEN
@@ -725,6 +862,85 @@ $$;--> statement-breakpoint
 CREATE TRIGGER "menu_package_refills_pair_guard" BEFORE INSERT ON "menu_package_refills"
 	FOR EACH ROW EXECUTE FUNCTION "menu_package_refills_pair_guard"();--> statement-breakpoint
 
+-- ---------------------------------------------------------------------------------------------
+-- Item requests (R14): a request resolves once; its identity is frozen.
+-- ---------------------------------------------------------------------------------------------
+CREATE FUNCTION "menu_item_requests_guard"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+	IF NEW."name" IS DISTINCT FROM OLD."name" OR NEW."store_id" IS DISTINCT FROM OLD."store_id"
+	   OR NEW."requested_by" IS DISTINCT FROM OLD."requested_by" OR NEW."item_type" IS DISTINCT FROM OLD."item_type" THEN
+		RAISE EXCEPTION 'name, store_id, requested_by and item_type of an item request are frozen (withdraw it and file a new one)' USING ERRCODE = '23514';
+	END IF;
+	IF OLD."status" <> 'open' THEN
+		RAISE EXCEPTION 'a resolved item request (%) never changes again', OLD."status" USING ERRCODE = '23514';
+	END IF;
+	RETURN NEW;
+END;
+$$;--> statement-breakpoint
+
+CREATE TRIGGER "menu_item_requests_guard" BEFORE UPDATE ON "menu_item_requests"
+	FOR EACH ROW EXECUTE FUNCTION "menu_item_requests_guard"();--> statement-breakpoint
+
+-- ---------------------------------------------------------------------------------------------
+-- v1 POS links (R7): a link points only at an active variant that has a depletion rule in force now.
+-- ---------------------------------------------------------------------------------------------
+CREATE FUNCTION "menu_pos_v1_links_guard"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+	v_item uuid;
+	v_vstatus text;
+	v_istatus text;
+	v_loc_org uuid;
+	v_loc_store uuid;
+BEGIN
+	IF TG_OP = 'UPDATE' AND (NEW."variant_id" IS DISTINCT FROM OLD."variant_id" OR NEW."store_id" IS DISTINCT FROM OLD."store_id"
+	   OR NEW."pos_item_key" IS DISTINCT FROM OLD."pos_item_key") THEN
+		RAISE EXCEPTION 'variant_id, store_id and pos_item_key of a link are immutable (relink = deactivate and insert a new link)' USING ERRCODE = '23514';
+	END IF;
+	IF NEW."location_id" IS NOT NULL AND (TG_OP = 'INSERT' OR NEW."location_id" IS DISTINCT FROM OLD."location_id") THEN
+		SELECT l."org_id", l."store_id" INTO v_loc_org, v_loc_store FROM "stock_locations" l WHERE l."id" = NEW."location_id";
+		-- another org's location is reported by the same-org foreign key
+		IF v_loc_org = NEW."org_id" AND v_loc_store <> NEW."store_id" THEN
+			RAISE EXCEPTION 'the stock location must belong to the link''s store' USING ERRCODE = '23514';
+		END IF;
+	END IF;
+	IF NEW."status" = 'active' AND (TG_OP = 'INSERT' OR OLD."status" <> 'active') THEN
+		SELECT v."menu_item_id" INTO v_item FROM "menu_item_variants" v WHERE v."id" = NEW."variant_id";
+		IF v_item IS NOT NULL THEN
+			PERFORM "menu_lock_keys"(ARRAY[v_item]);
+			PERFORM "menu_lock_key"(NEW."variant_id");
+			SELECT v."status", i."status" INTO v_vstatus, v_istatus
+			  FROM "menu_item_variants" v JOIN "menu_items" i ON i."id" = v."menu_item_id" WHERE v."id" = NEW."variant_id";
+			IF v_vstatus = 'retired' OR v_istatus = 'retired' THEN
+				RAISE EXCEPTION 'a link cannot point at a retired variant or a variant of a retired item' USING ERRCODE = '23514';
+			END IF;
+			IF NOT EXISTS (SELECT 1 FROM "menu_depletion_rules" r WHERE r."variant_id" = NEW."variant_id" AND r."effective_from" <= now()) THEN
+				RAISE EXCEPTION 'a link needs a depletion rule in force now for its variant: set the rule first' USING ERRCODE = '23514';
+			END IF;
+		END IF;
+	END IF;
+	RETURN NEW;
+END;
+$$;--> statement-breakpoint
+
+CREATE TRIGGER "menu_pos_v1_links_guard" BEFORE INSERT OR UPDATE ON "menu_pos_v1_links"
+	FOR EACH ROW EXECUTE FUNCTION "menu_pos_v1_links_guard"();--> statement-breakpoint
+
+-- ---------------------------------------------------------------------------------------------
+-- Usage-source switches (R7): immediate, append-only history.
+-- ---------------------------------------------------------------------------------------------
+CREATE FUNCTION "menu_usage_source_switches_insert_guard"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+	NEW."created_at" := now();
+	RETURN NEW;
+END;
+$$;--> statement-breakpoint
+
+CREATE TRIGGER "menu_usage_source_switches_insert_guard" BEFORE INSERT ON "menu_usage_source_switches"
+	FOR EACH ROW EXECUTE FUNCTION "menu_usage_source_switches_insert_guard"();--> statement-breakpoint
+CREATE TRIGGER "menu_usage_source_switches_update_guard" BEFORE UPDATE ON "menu_usage_source_switches"
+	FOR EACH ROW EXECUTE FUNCTION "menu_history_update_guard"();--> statement-breakpoint
+ALTER TABLE "menu_usage_source_switches" ENABLE ALWAYS TRIGGER "menu_usage_source_switches_update_guard";--> statement-breakpoint
+
 ALTER TABLE "menu_categories" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "menu_categories" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "menu_items" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -745,6 +961,13 @@ ALTER TABLE "menu_offers" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "menu_offers" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "menu_option_offers" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "menu_option_offers" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+
+ALTER TABLE "menu_item_requests" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "menu_item_requests" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "menu_pos_v1_links" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "menu_pos_v1_links" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "menu_usage_source_switches" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "menu_usage_source_switches" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 
 CREATE POLICY "menu_categories_org_isolation" ON "menu_categories"
 	USING ("org_id" = app_current_org()) WITH CHECK ("org_id" = app_current_org());--> statement-breakpoint
@@ -767,6 +990,13 @@ CREATE POLICY "menu_offers_org_isolation" ON "menu_offers"
 CREATE POLICY "menu_option_offers_org_isolation" ON "menu_option_offers"
 	USING ("org_id" = app_current_org()) WITH CHECK ("org_id" = app_current_org());--> statement-breakpoint
 
+CREATE POLICY "menu_item_requests_org_isolation" ON "menu_item_requests"
+	USING ("org_id" = app_current_org()) WITH CHECK ("org_id" = app_current_org());--> statement-breakpoint
+CREATE POLICY "menu_pos_v1_links_org_isolation" ON "menu_pos_v1_links"
+	USING ("org_id" = app_current_org()) WITH CHECK ("org_id" = app_current_org());--> statement-breakpoint
+CREATE POLICY "menu_usage_source_switches_org_isolation" ON "menu_usage_source_switches"
+	USING ("org_id" = app_current_org()) WITH CHECK ("org_id" = app_current_org());--> statement-breakpoint
+
 GRANT SELECT, INSERT, UPDATE ON "menu_categories" TO "shareat_app";--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON "menu_items" TO "shareat_app";--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON "menu_item_variants" TO "shareat_app";--> statement-breakpoint
@@ -776,4 +1006,7 @@ GRANT SELECT, INSERT, DELETE ON "menu_option_group_links" TO "shareat_app";--> s
 GRANT SELECT, INSERT, DELETE ON "menu_package_refills" TO "shareat_app";--> statement-breakpoint
 GRANT SELECT, INSERT, DELETE ON "menu_depletion_rules" TO "shareat_app";--> statement-breakpoint
 GRANT SELECT, INSERT, DELETE ON "menu_offers" TO "shareat_app";--> statement-breakpoint
-GRANT SELECT, INSERT, DELETE ON "menu_option_offers" TO "shareat_app";
+GRANT SELECT, INSERT, DELETE ON "menu_option_offers" TO "shareat_app";--> statement-breakpoint
+GRANT SELECT, INSERT, UPDATE ON "menu_item_requests" TO "shareat_app";--> statement-breakpoint
+GRANT SELECT, INSERT, UPDATE ON "menu_pos_v1_links" TO "shareat_app";--> statement-breakpoint
+GRANT SELECT, INSERT ON "menu_usage_source_switches" TO "shareat_app";

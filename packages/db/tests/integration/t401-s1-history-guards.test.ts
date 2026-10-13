@@ -5,7 +5,7 @@
  */
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { insOffer, insOptionOffer, insRule, insWithdrawn, menuFixture, newItem, newOption, refusal, sql } from './_fixtures/t401-menu';
+import { insOffer, insOptionOffer, insRule, insSwitch, insWithdrawn, menuFixture, newItem, newOption, refusal, sql } from './_fixtures/t401-menu';
 
 afterAll(async () => {
   await sql.end({ timeout: 5 });
@@ -22,7 +22,7 @@ async function inReplica(fn: (tx: typeof sql) => PromiseLike<unknown>) {
 }
 
 // =================================================================================================
-describe('H1 -- the three history UPDATE guards are ENABLE ALWAYS: an UPDATE is refused even in replica mode', () => {
+describe('H1 -- the four history UPDATE guards are ENABLE ALWAYS: an UPDATE is refused even in replica mode', () => {
   it('(sanity) the connection is a superuser, so replica mode is really in force', async () => {
     const [r] = await sql<{ s: boolean }[]>`select rolsuper s from pg_roles where rolname = current_user`;
     expect(r!.s).toBe(true);
@@ -32,12 +32,14 @@ describe('H1 -- the three history UPDATE guards are ENABLE ALWAYS: an UPDATE is 
     ['menu_offers', 'amount'],
     ['menu_option_offers', 'price_delta'],
     ['menu_depletion_rules', 'quantity_per_sale'],
+    ['menu_usage_source_switches', 'difference_count'],
   ])('%s: UPDATE under session_replication_role = replica is refused and the row is unchanged', async (table, col) => {
     const f = await menuFixture(`h1-${table}`);
     await insRule(f, f.variantId);
     const { valueId } = await newOption(f);
     if (table === 'menu_offers') await insOffer(f, f.variantId, '10.00');
     if (table === 'menu_option_offers') await insOptionOffer(f, valueId, '5.00');
+    if (table === 'menu_usage_source_switches') await insSwitch(f, 'menu_rules', 'signed off', 1);
     const [{ id, before }] = (await sql.unsafe(`select id, ${col}::text as before from ${table} where org_id = '${f.orgId}' limit 1`)) as unknown as [{ id: string; before: string }];
     const err = await inReplica((tx) => tx.unsafe(`update ${table} set ${col} = 1.5 where id = '${id}'`));
     expect(err, `${table}: an UPDATE in replica mode was ACCEPTED (the guard is ENABLE ORIGIN, not ALWAYS)`).toBeDefined();
@@ -46,15 +48,17 @@ describe('H1 -- the three history UPDATE guards are ENABLE ALWAYS: an UPDATE is 
     expect(after).toBe(before);
   });
 
-  it('live tgenabled is A for the three update guards', async () => {
-    const rows = await sql<{ tgname: string; e: string }[]>`
-      select tgname, tgenabled::text e from pg_trigger
-       where tgname in ('menu_offers_update_guard', 'menu_option_offers_update_guard', 'menu_depletion_rules_update_guard')`;
-    expect(rows.map((r) => `${r.tgname}=${r.e}`).sort()).toEqual([
-      'menu_depletion_rules_update_guard=A',
-      'menu_offers_update_guard=A',
-      'menu_option_offers_update_guard=A',
-    ]);
+  it('live tgenabled is A (ENABLE ALWAYS) for an UPDATE trigger on each of the four history tables', async () => {
+    const rows = await sql<{ t: string; e: string }[]>`
+      select c.relname t, tg.tgenabled::text e
+        from pg_trigger tg join pg_class c on c.oid = tg.tgrelid
+       where not tg.tgisinternal and (tg.tgtype & 16) <> 0
+         and c.relname in ('menu_offers', 'menu_option_offers', 'menu_depletion_rules', 'menu_usage_source_switches')`;
+    for (const t of ['menu_offers', 'menu_option_offers', 'menu_depletion_rules', 'menu_usage_source_switches']) {
+      const mine = rows.filter((r) => r.t === t);
+      expect(mine.length, `${t}: no UPDATE trigger at all`).toBeGreaterThan(0);
+      expect(mine.map((r) => r.e), `${t}: UPDATE guard is not ENABLE ALWAYS`).toContain('A');
+    }
   });
 });
 

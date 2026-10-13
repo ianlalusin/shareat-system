@@ -1,7 +1,7 @@
 /**
  * T-401 S1 (migration 0196) - the ERP menu and catalog master. docs/tasks/401-erp-menu-catalog-master.md sections 2-4.
  *
- * Ten org-scoped tables. The variant is the sellable unit (R1). "Offer" means a STORE'S PRICE ROW for a variant on a
+ * Thirteen org-scoped tables (ten at first; Ian's answers added requests, v1 links and usage-source switches). The variant is the sellable unit (R1). "Offer" means a STORE'S PRICE ROW for a variant on a
  * channel (R5): append-only, effective-dated, never UPDATEd, never back-dated; the offer in force at time t is the row
  * with the greatest `effective_from <= t`, `withdrawn` means "not sold from then", and no row means not offered. The
  * same shape carries depletion rules (R6) and option-value price deltas.
@@ -33,6 +33,7 @@ import { items } from './items';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { productionRecipes } from './production';
+import { stockLocations } from './stock-locations';
 import { stores } from './stores';
 
 export const MENU_STATUSES = ['active', 'retired'] as const;
@@ -47,10 +48,22 @@ export type MenuSelectionMode = (typeof MENU_SELECTION_MODES)[number];
 export const MENU_CHANNELS = ['store', 'online'] as const;
 export type MenuChannel = (typeof MENU_CHANNELS)[number];
 
+export const MENU_PRICING_MODES = ['fixed', 'fixed_markup', 'percent_markup'] as const;
+export type MenuPricingMode = (typeof MENU_PRICING_MODES)[number];
+
+export const MENU_REQUEST_STATUSES = ['open', 'approved', 'duplicate', 'rejected', 'withdrawn'] as const;
+export type MenuRequestStatus = (typeof MENU_REQUEST_STATUSES)[number];
+
+export const MENU_LINK_STATUSES = ['active', 'inactive'] as const;
+export type MenuLinkStatus = (typeof MENU_LINK_STATUSES)[number];
+
+export const MENU_USAGE_SOURCES = ['pos_item_maps', 'menu_rules'] as const;
+export type MenuUsageSource = (typeof MENU_USAGE_SOURCES)[number];
+
 export const MENU_DEPLETION_MODES = ['direct', 'recipe', 'no_stock'] as const;
 export type MenuDepletionMode = (typeof MENU_DEPLETION_MODES)[number];
 
-// NOTE: items_org_id_id_unique and production_recipes_org_id_id_unique UNIQUE (org_id, id) are hand-added in
+// NOTE: items_org_id_id_unique, production_recipes_org_id_id_unique and stock_locations_org_id_id_unique UNIQUE (org_id, id) are hand-added in
 // migration 0196 (no Drizzle mirror on items.ts / production.ts): trivially true, they give the composite FKs below a
 // real unique target (R10, the 0194 pattern).
 
@@ -446,6 +459,12 @@ export const menuOffers = pgTable(
     bundleHeads: integer('bundle_heads'),
     extraHeadAmount: numeric('extra_head_amount', { precision: 14, scale: 2 }),
     withdrawn: boolean('withdrawn').notNull().default(false),
+    /** R15: `fixed` = `amount` as typed; `online` rows may instead follow the store price by a rule, resolved at read. */
+    pricingMode: text('pricing_mode', { enum: MENU_PRICING_MODES }).notNull().default('fixed'),
+    /** Signed percent over the store price (`percent_markup`), > -100. */
+    markupPercent: numeric('markup_percent', { precision: 8, scale: 4 }),
+    /** Signed peso amount over the store price (`fixed_markup`). */
+    fixedMarkupAmount: numeric('fixed_markup_amount', { precision: 14, scale: 2 }),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => persons.id, { onDelete: 'restrict' }),
@@ -458,7 +477,17 @@ export const menuOffers = pgTable(
     check('menu_offers_channel_check', sql`${t.channel} in ('store','online')`),
     check(
       'menu_offers_withdrawn_no_amounts_check',
-      sql`NOT ${t.withdrawn} OR (${t.amount} IS NULL AND ${t.bundleHeads} IS NULL AND ${t.extraHeadAmount} IS NULL)`,
+      sql`NOT ${t.withdrawn} OR (${t.pricingMode} = 'fixed' AND ${t.amount} IS NULL AND ${t.bundleHeads} IS NULL AND ${t.extraHeadAmount} IS NULL AND ${t.markupPercent} IS NULL AND ${t.fixedMarkupAmount} IS NULL)`,
+    ),
+    check('menu_offers_pricing_mode_check', sql`${t.pricingMode} in ('fixed','fixed_markup','percent_markup')`),
+    check('menu_offers_store_channel_fixed_check', sql`${t.channel} = 'online' OR ${t.pricingMode} = 'fixed'`),
+    check(
+      'menu_offers_rule_shape_check',
+      sql`(${t.pricingMode} = 'fixed' AND ${t.markupPercent} IS NULL AND ${t.fixedMarkupAmount} IS NULL)
+        OR (${t.pricingMode} = 'percent_markup' AND ${t.markupPercent} IS NOT NULL AND ${t.markupPercent} > -100 AND ${t.markupPercent} < 'Infinity'::numeric
+          AND ${t.amount} IS NULL AND ${t.bundleHeads} IS NULL AND ${t.extraHeadAmount} IS NULL AND ${t.fixedMarkupAmount} IS NULL)
+        OR (${t.pricingMode} = 'fixed_markup' AND ${t.fixedMarkupAmount} IS NOT NULL AND ${t.fixedMarkupAmount} > '-Infinity'::numeric AND ${t.fixedMarkupAmount} < 'Infinity'::numeric
+          AND ${t.amount} IS NULL AND ${t.bundleHeads} IS NULL AND ${t.extraHeadAmount} IS NULL AND ${t.markupPercent} IS NULL)`,
     ),
     check('menu_offers_amount_check', sql`${t.amount} IS NULL OR (${t.amount} >= 0 AND ${t.amount} < 'Infinity'::numeric)`),
     check('menu_offers_bundle_pair_check', sql`(${t.bundleHeads} IS NULL) = (${t.extraHeadAmount} IS NULL)`),
@@ -534,5 +563,184 @@ export const menuOptionOffers = pgTable(
       name: 'menu_option_offers_created_by_same_org_fk',
     }).onDelete('restrict'),
     // NOTE: triggers menu_option_offers_insert_guard / _update_guard / _delete_guard, hand-added in migration 0196.
+  ],
+);
+
+/**
+ * R14: a manager asks for an item; only a super admin resolves it (approve creates the item, duplicate points at an
+ * existing one, reject needs a note). A request resolves once and its identity columns are frozen (trigger, 0196).
+ */
+export const menuItemRequests = pgTable(
+  'menu_item_requests',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'restrict' }),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => persons.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    itemType: text('item_type', { enum: MENU_ITEM_TYPES }).notNull(),
+    /** A hint only. */
+    categoryId: uuid('category_id').references(() => menuCategories.id, { onDelete: 'restrict' }),
+    note: text('note'),
+    status: text('status', { enum: MENU_REQUEST_STATUSES }).notNull().default('open'),
+    resolvedItemId: uuid('resolved_item_id').references(() => menuItems.id, { onDelete: 'restrict' }),
+    resolvedBy: uuid('resolved_by').references(() => persons.id, { onDelete: 'restrict' }),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    resolutionNote: text('resolution_note'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => persons.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('menu_item_requests_org_status_idx').on(t.orgId, t.status),
+    check('menu_item_requests_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+    check('menu_item_requests_item_type_check', sql`${t.itemType} in ('a_la_carte','package','refill')`),
+    check('menu_item_requests_status_check', sql`${t.status} in ('open','approved','duplicate','rejected','withdrawn')`),
+    check(
+      'menu_item_requests_resolved_shape_check',
+      sql`(${t.status} = 'open' AND ${t.resolvedItemId} IS NULL AND ${t.resolvedBy} IS NULL AND ${t.resolvedAt} IS NULL AND ${t.resolutionNote} IS NULL)
+        OR (${t.status} <> 'open' AND ${t.resolvedBy} IS NOT NULL AND ${t.resolvedAt} IS NOT NULL)`,
+    ),
+    check('menu_item_requests_item_needed_check', sql`${t.status} NOT IN ('approved','duplicate') OR ${t.resolvedItemId} IS NOT NULL`),
+    check('menu_item_requests_reject_note_check', sql`${t.status} <> 'rejected' OR length(trim(coalesce(${t.resolutionNote}, ''))) > 0`),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'menu_item_requests_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.requestedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'menu_item_requests_requested_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.categoryId],
+      foreignColumns: [menuCategories.orgId, menuCategories.id],
+      name: 'menu_item_requests_category_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.resolvedItemId],
+      foreignColumns: [menuItems.orgId, menuItems.id],
+      name: 'menu_item_requests_resolved_item_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.resolvedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'menu_item_requests_resolved_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'menu_item_requests_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: trigger menu_item_requests_guard (resolves once; name, store_id, requested_by, item_type frozen), hand-added in migration 0196.
+  ],
+);
+
+/**
+ * R7: store x v1 POS item key -> variant. A store fact, so it carries the store's own stock-location override. A link
+ * may only be made (or re-activated) to an active variant with a depletion rule in force now; variant, store and key
+ * are immutable (relink = deactivate + insert). Triggers hand-added in migration 0196.
+ */
+export const menuPosV1Links = pgTable(
+  'menu_pos_v1_links',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'restrict' }),
+    posItemKey: text('pos_item_key').notNull(),
+    variantId: uuid('variant_id')
+      .notNull()
+      .references(() => menuItemVariants.id, { onDelete: 'restrict' }),
+    locationId: uuid('location_id').references(() => stockLocations.id, { onDelete: 'restrict' }),
+    status: text('status', { enum: MENU_LINK_STATUSES }).notNull().default('active'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => persons.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    // NOTE: menu_pos_v1_links_active_key UNIQUE (store_id, pos_item_key) WHERE status = 'active', hand-added in migration 0196.
+    index('menu_pos_v1_links_variant_idx').on(t.variantId),
+    check('menu_pos_v1_links_key_not_blank_check', sql`length(trim(${t.posItemKey})) > 0`),
+    check('menu_pos_v1_links_status_check', sql`${t.status} in ('active','inactive')`),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'menu_pos_v1_links_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.variantId],
+      foreignColumns: [menuItemVariants.orgId, menuItemVariants.id],
+      name: 'menu_pos_v1_links_variant_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.locationId],
+      foreignColumns: [stockLocations.orgId, stockLocations.id],
+      name: 'menu_pos_v1_links_location_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'menu_pos_v1_links_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: trigger menu_pos_v1_links_guard (rule in force, active variant, location in the store, identity immutable), hand-added in migration 0196.
+  ],
+);
+
+/**
+ * R7: which stock-usage source a store reads. Append-only history; the latest row by created_at is the source, no row
+ * means pos_item_maps. A switch is immediate: the insert trigger sets created_at = now(); the UPDATE guard is ENABLE ALWAYS.
+ */
+export const menuUsageSourceSwitches = pgTable(
+  'menu_usage_source_switches',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'restrict' }),
+    source: text('source', { enum: MENU_USAGE_SOURCES }).notNull(),
+    reason: text('reason'),
+    differenceCount: integer('difference_count'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => persons.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('menu_usage_source_switches_store_idx').on(t.storeId, t.createdAt),
+    check('menu_usage_source_switches_source_check', sql`${t.source} in ('pos_item_maps','menu_rules')`),
+    check('menu_usage_source_switches_difference_count_check', sql`${t.differenceCount} IS NULL OR ${t.differenceCount} >= 0`),
+    check(
+      'menu_usage_source_switches_reason_check',
+      sql`NOT (${t.source} = 'menu_rules' AND ${t.differenceCount} > 0) OR length(trim(coalesce(${t.reason}, ''))) > 0`,
+    ),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'menu_usage_source_switches_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'menu_usage_source_switches_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: triggers menu_usage_source_switches_insert_guard and _update_guard (ENABLE ALWAYS), hand-added in migration 0196.
   ],
 );

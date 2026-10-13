@@ -9,7 +9,7 @@
  */
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { insOffer, insOptionOffer, insRule, insWithdrawn, menuFixture, newItem, newOption, refusal, sql, uid } from './_fixtures/t401-menu';
+import { insOffer, insOptionOffer, insRule, insRuleOffer, insWithdrawn, menuFixture, newItem, newOption, refusal, sql, uid } from './_fixtures/t401-menu';
 
 afterAll(async () => {
   await sql.end({ timeout: 5 });
@@ -393,5 +393,118 @@ describe('I13 (DB half) -- offer amounts >= 0, deltas signed, everything finite'
     );
     expect(dup?.code).toBe('23505');
     expect(await refusal(() => insOffer(f, f.variantId, '10', '1 day', 'online'))).toBeUndefined();
+  });
+});
+
+// =================================================================================================
+// I20 -- online price RULES (R15, Q4): pricing_mode fixed | fixed_markup | percent_markup on `online` offers.
+// The rule is resolved at read in the domain; the DATABASE only guarantees the row has one coherent shape.
+// markup_percent more than 4 dp and fixed_markup_amount more than 2 dp are refused by the DOMAIN (I13b, S2), not
+// by a CHECK (numeric(8,4) / numeric(14,2) would round), so no DB leg asserts them here.
+// =================================================================================================
+describe('I20 -- rule shape in the database', () => {
+  async function live(hint: string) {
+    const f = await menuFixture(hint);
+    await insRule(f, f.variantId);
+    return f;
+  }
+
+  it('control: a fixed online offer with an amount is accepted and defaults pricing_mode to fixed', async () => {
+    const f = await live('i20ctl');
+    expect(await refusal(() => insOffer(f, f.variantId, '10.00', null, 'online'))).toBeUndefined();
+    const [row] = await sql<{ m: string }[]>`select pricing_mode m from menu_offers where org_id = ${f.orgId}`;
+    expect(row!.m).toBe('fixed');
+  });
+
+  it('percent_markup online row with NULL amount is ACCEPTED (a live FIXED row needs an amount, a rule does not)', async () => {
+    const f = await live('i20pct');
+    const err = await refusal(() => insRuleOffer(f, f.variantId, { mode: 'percent_markup', pct: '7.5' }));
+    expect(err, `percent_markup with no amount must pass: ${err?.message}`).toBeUndefined();
+  });
+
+  it('fixed_markup online row with NULL amount is ACCEPTED; a signed (negative) peso amount is accepted', async () => {
+    const f = await live('i20fix');
+    expect(await refusal(() => insRuleOffer(f, f.variantId, { mode: 'fixed_markup', fixed: '-5.00' }))).toBeUndefined();
+  });
+
+  it('`store` channel with a rule mode is refused (23514)', async () => {
+    const f = await live('i20store');
+    expect((await refusal(() => insRuleOffer(f, f.variantId, { mode: 'percent_markup', pct: '5', channel: 'store' })))?.code).toBe('23514');
+    expect((await refusal(() => insRuleOffer(f, f.variantId, { mode: 'fixed_markup', fixed: '5', channel: 'store' })))?.code).toBe('23514');
+  });
+
+  it.each([
+    ['percent_markup carrying an amount (which wins?)', { mode: 'percent_markup', pct: '5', amount: '90.00' }],
+    ['percent_markup carrying fixed_markup_amount', { mode: 'percent_markup', pct: '5', fixed: '1.00' }],
+    ['percent_markup with NULL markup_percent', { mode: 'percent_markup' }],
+    ['percent_markup carrying bundle columns', { mode: 'percent_markup', pct: '5', heads: 4, extra: '10' }],
+    ['fixed_markup carrying an amount', { mode: 'fixed_markup', fixed: '5', amount: '90.00' }],
+    ['fixed_markup carrying markup_percent', { mode: 'fixed_markup', fixed: '5', pct: '5' }],
+    ['fixed_markup with NULL fixed_markup_amount', { mode: 'fixed_markup' }],
+    ['a FIXED row carrying markup_percent', { mode: 'fixed', amount: '10.00', pct: '5' }],
+    ['a FIXED row carrying fixed_markup_amount', { mode: 'fixed', amount: '10.00', fixed: '5' }],
+    ['unknown pricing_mode', { mode: 'cost_plus', amount: '10.00' }],
+  ])('%s -> 23514 (mutant: rule-shape CHECK dropped)', async (_l, r) => {
+    const f = await live('i20bad');
+    expect((await refusal(() => insRuleOffer(f, f.variantId, r)))?.code).toBe('23514');
+  });
+
+  it('markup_percent = -100 refused, -99.9999 accepted; NaN refused', async () => {
+    const f = await live('i20rng');
+    expect((await refusal(() => insRuleOffer(f, f.variantId, { mode: 'percent_markup', pct: '-100' })))?.code).toBe('23514');
+    expect((await refusal(() => insRuleOffer(f, f.variantId, { mode: 'percent_markup', pct: '-150' })))?.code).toBe('23514');
+    expect((await refusal(() => insRuleOffer(f, f.variantId, { mode: 'percent_markup', pct: 'NaN' })))?.code).toBe('23514');
+    expect(await refusal(() => insRuleOffer(f, f.variantId, { mode: 'percent_markup', pct: '-99.9999' }))).toBeUndefined();
+  });
+
+  it('fixed_markup_amount NaN is refused', async () => {
+    const f = await live('i20nan');
+    expect((await refusal(() => insRuleOffer(f, f.variantId, { mode: 'fixed_markup', fixed: 'NaN' })))?.code).toBe('23514');
+  });
+
+  it('a REFILL with any rule is refused (refill => fixed and NULL amount)', async () => {
+    const f = await menuFixture('i20ref');
+    const refill = await newItem(f, 'refill');
+    await insRule(f, refill.variantId);
+    const e1 = await refusal(() => insRuleOffer(f, refill.variantId, { mode: 'percent_markup', pct: '5' }));
+    const e2 = await refusal(() => insRuleOffer(f, refill.variantId, { mode: 'fixed_markup', fixed: '5' }));
+    expect(e1, 'a refill percent_markup was accepted').toBeDefined();
+    expect(e2, 'a refill fixed_markup was accepted').toBeDefined();
+    expect(e1!.message).toMatch(/refill/i);
+    // control: a plain refill offer (fixed, NULL amount) is still fine
+    expect(await refusal(() => insOffer(f, refill.variantId, null, null, 'online'))).toBeUndefined();
+  });
+
+  it('a WITHDRAWN row carrying any rule column or a non-fixed mode is refused; a plain withdrawal is accepted', async () => {
+    const f = await live('i20wd');
+    for (const r of [
+      { mode: 'fixed', pct: '5', withdrawn: true },
+      { mode: 'fixed', fixed: '5', withdrawn: true },
+      { mode: 'percent_markup', pct: '5', withdrawn: true },
+      { mode: 'fixed_markup', fixed: '5', withdrawn: true },
+    ]) {
+      expect((await refusal(() => insRuleOffer(f, f.variantId, r)))?.code, JSON.stringify(r)).toBe('23514');
+    }
+    expect(await refusal(() => insRuleOffer(f, f.variantId, { mode: 'fixed', withdrawn: true }))).toBeUndefined();
+  });
+
+  it('a rule offer still needs a depletion rule in force (R6 covers live rule rows too)', async () => {
+    const f = await menuFixture('i20nr'); // no depletion rule
+    const err = await refusal(() => insRuleOffer(f, f.variantId, { mode: 'percent_markup', pct: '5' }));
+    expect(err, 'a rule offer for a variant with no depletion rule was accepted').toBeDefined();
+    expect(err!.message).toMatch(/depletion|rule/i);
+  });
+
+  it('bundle: a store (fixed) package offer keeps its bundle columns; the online rule row carries none', async () => {
+    const f = await menuFixture('i20bun');
+    const pkg = await newItem(f, 'package');
+    await insRule(f, pkg.variantId);
+    expect(
+      await refusal(
+        () => sql`insert into menu_offers (org_id, store_id, variant_id, channel, amount, bundle_heads, extra_head_amount, withdrawn, created_by)
+                  values (${f.orgId}, ${f.storeId}, ${pkg.variantId}, 'store', 999, 4, 199, false, ${f.personId})`,
+      ),
+    ).toBeUndefined();
+    expect(await refusal(() => insRuleOffer(f, pkg.variantId, { mode: 'percent_markup', pct: '10' }))).toBeUndefined();
   });
 });

@@ -7,7 +7,7 @@
  *           withdrawMenuOffer(actor, { storeId, variantId, channel, effectiveFrom?: Date }, tx?)         -> { id }
  *           setOptionOffer(actor, { storeId, optionValueId, channel, priceDelta, effectiveFrom?: Date }, tx?) -> { id }
  *   repo    menuRepo.offersInForce(tx, storeId, at: Date)        -> rows [{ variantId, channel, amount: string }] of what is OFFERED at `at`
- *                                                                   (a withdrawn row in force, or no row, is simply absent)
+ *                                                                   (a withdrawn row in force may be returned with withdrawn=true, or be absent: these tests ignore withdrawn rows either way)
  *           menuRepo.optionOffersInForce(tx, storeId, at: Date)  -> rows [{ optionValueId, channel, priceDelta: string }], same rule
  *           menuRepo.offerHistory(tx, storeId, variantId)        -> every row for the variant at the store, any order
  *   `effectiveFrom` omitted = the database now() default (a JS clock is always a little in the past and the DB refuses that, I1b).
@@ -56,7 +56,7 @@ describe('I2 -- the offer in force at t is the row with the greatest effective_f
     const t2 = await fromOf(later.id, 'menu_offers');
     const t3 = await fromOf(gone.id, 'menu_offers');
 
-    const amountAt = async (at: Date) => (await offeredAt(c, at)).find((r) => r.variantId === variantId && r.channel === 'store')?.amount;
+    const amountAt = async (at: Date) => (await offeredAt(c, at)).find((r) => r.variantId === variantId && r.channel === 'store' && !r.withdrawn)?.amount;
     expect(await amountAt(ms(t1, -1)), 'before the first row: not offered').toBeUndefined();
     expect(await amountAt(t1), 'exactly at effective_from the row IS in force (<=, not <)').toBe('100.00');
     expect(await amountAt(ms(t2, -1)), 'one ms before the scheduled change the old price holds').toBe('100.00');
@@ -81,10 +81,10 @@ describe('I2 -- the offer in force at t is the row with the greatest effective_f
     await rawRule(c, variantId);
     const s = await asOrg(c.orgId, (tx) => setMenuOffer(c.admin, { storeId: c.storeA, variantId, channel: 'store', amount: '100.00' }, tx));
     const t = await fromOf(s.id, 'menu_offers');
-    const rows = await offeredAt(c, ms(t, 1000));
+    const rows = (await offeredAt(c, ms(t, 1000))).filter((r) => !r.withdrawn);
     expect(rows.filter((r) => r.variantId === variantId).map((r) => r.channel)).toEqual(['store']);
     await asOrg(c.orgId, (tx) => setMenuOffer(c.admin, { storeId: c.storeA, variantId, channel: 'online', amount: '110.00' }, tx));
-    const both = (await offeredAt(c, new Date(Date.now() + 5000))).filter((r) => r.variantId === variantId);
+    const both = (await offeredAt(c, new Date(Date.now() + 5000))).filter((r) => r.variantId === variantId && !r.withdrawn);
     expect(Object.fromEntries(both.map((r) => [r.channel, r.amount]))).toEqual({ store: '100.00', online: '110.00' });
   });
 
@@ -129,7 +129,7 @@ describe('I2 -- the offer in force at t is the row with the greatest effective_f
       select to_char(effective_from at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as iso from menu_offers where id = ${o.id}`;
     expect(stored!.iso).toBe('2026-11-30T16:00:00Z');
 
-    const amountAt = async (at: Date) => (await offeredAt(c, at)).find((r) => r.variantId === variantId)?.amount;
+    const amountAt = async (at: Date) => (await offeredAt(c, at)).find((r) => r.variantId === variantId && !r.withdrawn)?.amount;
     expect(await amountAt(new Date('2026-11-30T15:59:59.999Z')), '23:59:59.999 Manila on 30 Nov: not yet').toBeUndefined();
     expect(await amountAt(new Date('2026-11-30T16:00:00.000Z')), '00:00 Manila on 1 Dec: in force').toBe('150.00');
     expect(await amountAt(new Date('2026-12-01T00:00:00.000Z')), '08:00 Manila on 1 Dec: still in force').toBe('150.00');

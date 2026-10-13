@@ -1,6 +1,9 @@
 # T-401: the ERP menu and catalog master (POS v2 P1 prerequisite)
 
-**Status:** SPEC APPROVED WITH CHANGES 2026-10-13 (fresh Opus review applied); not scheduled: build after the 2 Nov dual-run work unless Ian says otherwise. Written at HEAD a9e299b.
+**Status:** SPEC APPROVED WITH CHANGES 2026-10-13 (revised after Ian's answers; fresh Opus review applied). S1 built on lane, to be amended in place.
+(S1 = migration 0196 on `lane/t401-s1`, commit 16ab42a, worktree `wt-t401`; not merged, not deployed, so 0196 is edited
+in place, never followed by a 0197 fix-up. S2 is half-built and paused; §6a lists the tests that Ian's answers make wrong.)
+Earlier status: SPEC APPROVED WITH CHANGES 2026-10-13 (fresh Opus review applied). Written at HEAD a9e299b.
 **Review cuts (orchestrator, 2026-10-13; Ian may override any):** (a) the v1 import is deferred to the P1 carrier window; (b) the drift page is dropped; (c) S4 is trimmed to three routes.
 **Model:** Sonnet lanes, tester first then builder, per slice. Any amendment is written in plan mode (Opus).
 **Migration:** ONE, hand-authored (ADR-012 §5), number = next free at merge (0194 is held by T-398 S1's lane today).
@@ -10,10 +13,19 @@ ADR-015 §2 (P1: "Postgres owns ... menu with depletion rule"), §7 (hot set gai
 `docs/discovery/09-pos-system.md` §1.2, `10-customer-app.md` §7, `pos-pull-redesign-proposal.md` (orphans disappear
 once every menu item carries a depletion rule).
 
-⛔ **Not cutover work.** POS v1 keeps selling through 1 Jan 2027 and beyond, store by store. Nothing in this task may read
-from, write to, or change the behaviour of the live v1 feed: `pos_v1_store_links`, `pos_v1_day_feeds`, `tenders`,
+⛔ **Not cutover work.** POS v1 keeps selling through 1 Jan 2027 and beyond, store by store. S1-S4 may not read from,
+write to, or change the behaviour of the live v1 feed: `pos_v1_store_links`, `pos_v1_day_feeds`, `tenders`,
 `pos_item_maps`, `pos_map_requests`, `pos_usage_pulls*`, `packages/domain/src/pos/**` (T-375, T-382, T-384, T-177, T-388).
-The menu built here has **no reader in production** until the POS v2 carrier spec (P1) wires one.
+**One exception, by Ian's Q3 ruling (2026-10-13): S5** adds a single seam file, `packages/domain/src/pos/depletion-source.ts`,
+through which the usage pull of a store that has been **switched** reads menu depletion rules for its **linked** POS items.
+A store with no switch row behaves byte-for-byte as today (R7, I16). The rest of the menu still has no production reader
+until the POS v2 carrier spec (P1) wires one.
+
+**Ian's rulings 2026-10-13 (§11 answered).** Q1 managers price their own store · Q2 one org menu; only super admin adds
+items; managers request them, with a duplicate check · Q3 the v1 usage pull reads menu rules now, safely (S5) · Q4 a
+separate online price, which may be a rule over the store price · Q5 flavours are an option group shared by many items.
+Binding context: **AI is to be a central hub for the whole app family.** The AI parts of Q2 (AI duplicate check,
+photo-assisted item entry) are a separate task built on that hub (§7a); T-401 builds the request workflow they plug into.
 
 ---
 
@@ -32,7 +44,7 @@ master with variants and modifier groups, a per-location price/availability laye
 we take the append-only half (no `valid_upto` to keep true: the next row ends the previous). Not adopted: Odoo's
 generic pricelist rule engine (formulae, quantity breaks), it is promotions/discounts territory, which row 307 lists
 separately; a generic product-configurator (unbounded attribute matrices), v1 never needed more than one variant axis.
-Effort weighed: 10 tables, one migration, ≈ 6.25 lane-days (§6). The payoff is P1's whole menu half, DEF-595's end
+Effort weighed: 13 tables, one migration, ≈ 10.75 lane-days (§6, re-sized 2026-10-13 after Ian's answers). The payoff is P1's whole menu half, DEF-595's end
 state (packages deplete through refill servings) and the deletion of three v1 editors.
 
 **v1 shapes counted (code read 2026-10-13, POS `e26d0c1a`, CUSTOMER `36adce0`).** Global `products` (`kind single|group|variant`,
@@ -76,6 +88,9 @@ are edited in place, and carry no store or time. Different subject, different ru
 - **R3, flavours are option values.** v1's `flavors` / `storeFlavors` / `requiresFlavor` / `allowedFlavorIds` become
   an option group (e.g. "Flavour", single, min 1) linked to the refill (or package) variants that need it, values at
   delta 0. One mechanism instead of two. A per-store flavour switch is an option-value **offer** (R5).
+  **Ian, Q5 (2026-10-13): confirmed, and "flavours attach to many items".** One "Flavour" group is linked to every
+  item or variant that uses it (`menu_option_group_links` already allows one group to many targets); adding a flavour
+  adds one value, seen by all of them. No schema change.
 - **R4, option groups.** `menu_option_groups` (name, `selection_mode single|multi`, `min_selections`,
   `max_selections`; required = `min_selections > 0`, never a separate boolean) with `menu_option_values`. Linked to an
   item or to a variant; **a variant's links, if any, replace its item's** (v1's resolver, `CUSTOMER/src/lib/catalog/
@@ -112,9 +127,60 @@ are edited in place, and carry no store or time. Different subject, different ru
   `no_stock` (the head fee); its **refill** variants carry the serving's rule, which P3 applies per served refill
   ticket: DEF-595's end state. Option values may carry a rule; none means nothing extra is consumed. Quantities are in
   the stock item's base unit (as `pos_item_maps`).
-- **R7, the menu does NOT feed the v1 usage pull.** `pos_item_maps` stays the pull's only authority until P2 retires
-  the pull per store. No code path joins them, and no drift report is built here (review cut (b)); the deferred
-  import seeds depletion rules from `pos_item_maps` when it runs (§7). (Q3.)
+- **R7 (REPLACED by Ian's Q3, 2026-10-13: "yes, switch now"), the v1 usage pull may read menu rules, per store, by
+  switch.** Smallest correct cut-over, built in S5:
+  1. **Link, store by store.** `menu_pos_v1_links (store, pos_item_key, variant, location_id)` says "this v1 POS item
+     at this store is that menu variant". It is a store fact (the v1 key is per store, `stores/{s}/inventory` doc id),
+     so it carries the store's own stock-location override (the `pos_item_maps.location_id` column, which an org rule
+     cannot hold). A link may only be made to a variant with a depletion rule **in force now** (trigger), and rules are
+     append-only with no withdraw, so a linked item always has a rule from then on.
+  2. **Switch, store by store.** `menu_usage_source_switches (store, source pos_item_maps | menu_rules, reason,
+     difference_count)`, append-only; the latest row is the store's source; **no row = `pos_item_maps`** (today).
+  3. **What the pull does.** Source `pos_item_maps`: exactly today's code path (`listActiveMaps`), untouched.
+     Source `menu_rules`: a sold v1 item with an active link uses its variant's rule **in force at the instant the plan
+     is built** (the same "current mapping at plan time" semantics `pos_item_maps` has today, so a rule added this
+     morning resolves yesterday's orphan exactly as a map does now; finalize rebuilds at its own instant and the
+     existing plan/finalize diff refuses only a confirmed key that disappeared, `usage-pull.ts:519-523`, and a changed
+     **posted** line, `:542-557`). ⚠️ **That diff is not enough for a source change:** plan keys are
+     `direct:${posItemKey}` (`plan.ts:183`), so a map → rule swap with the same key, or a quantity change, keeps the key
+     and passes for every not-yet-posted line. So two guards: **`switchUsageSource` locks the store row (`FOR UPDATE`)
+     and is refused while the store has any `planned` pull** (that includes a partly finalized one: status stays
+     `planned` until every section is stamped, `schema/pos-mapping.ts:197`); and **`setDepletionRule` /
+     `cancelScheduledDepletionRule` are refused for a variant linked at a switched store that has a `planned` pull**,
+     naming the store and business date ("finish or void the 12 Oct pull at Lipa first"). An **unlinked** item falls
+     back to its `pos_item_maps` row, and with neither it is an orphan, as today. The pull's audit row carries
+     `depletionSource` **only when the store is switched**; an unswitched store's audit payload is unchanged (I16).
+  4. **Compare before switching (dry run).** `compareDepletionSources(store, days = 7)` rebuilds the plan both ways
+     from the **stored** day feeds (T-375: usage never calls POS): per business date, the feed is
+     `posV1Repo.latestForDay(tx, org, store, date, 'sold_items')` (`packages/db/src/repo/pos-v1.ts:353`, the feed usage
+     itself reads) and the location is that day's pull location (`pos_usage_pulls.location_id`) if a non-void pull
+     exists, else the store's default usage location. It lists every difference per day: lines only one side has,
+     quantity and location differences, orphans each side. **It also diffs every active link's rule against the
+     store's active map for that key whether or not the item sold in the window** (shape, item, recipe, quantity,
+     location), so a slow seller cannot hide a difference. Read-only, writes nothing. Both plans come from one
+     two-way builder in `depletion-source.ts` (`rebuildLines` is private to `usage-pull.ts`; the builder calls the
+     same `explodePosSales` with each lookup map).
+  5. **Switching to `menu_rules` is refused unless** the comparison, run inside the same call over the last 7 stored
+     feeds (or all if fewer, at least 1), shows **zero differences**, or the actor passes `acceptDifferences` with a
+     reason; the count and reason are stored on the switch row. **Switching back to `pos_item_maps` is always allowed,
+     immediate, no comparison** (the rollback is one click).
+  6. **Seeding.** `seedLinkFromMap(store, posItemKey, variant)` makes the link from the store's active map and, when the
+     variant has no rule in force, sets the rule to that map's shape from now. This pulls forward the one part of the
+     deferred import (§7) the switch cannot live without; the menu items themselves are still entered by hand (super
+     admin, R14) until the import exists.
+  7. **What happens to `pos_item_maps`.** Nothing. It is not migrated, edited or deleted by this task. It stays the
+     authority for every unswitched store and the fallback for unlinked items in switched ones; map editing and map
+     requests keep working. P2 retires it per store as before. The links table is also what P2 needs (it replaces the
+     deferred import's planned `v1_master_links` extension for v1 POS item keys).
+  ⚠️ **The new coupling, stated:** a menu rule is org-level, so once two switched stores link to one variant, changing
+  that rule changes both stores' usage. `setDepletionRule` therefore returns, and the screen shows, the switched
+  stores linked to the variant before saving (K7), **and it calls `authorize(actor, 'set_menu_depletion', store)` for
+  every switched store with an active link to the variant**: `set_menu_depletion` is org-scoped, but such a rule
+  changes live stock at those stores, so a manager scoped to Lipa only cannot change a rule Malvar's usage follows.
+  8. **Stock item retirement.** `retireReadout` (`packages/db/src/repo/items.ts:1111-1135`) today counts on-hand,
+     active `pos_item_maps` and active recipes; S5 adds `activeMenuRules`: depletion rules **in force or scheduled**
+     naming the item (directly, or through a recipe that uses it) on a variant with an active link at a switched
+     store. Retiring a stock item that a switched store's usage still depletes is refused like an active map.
 - **R8, a package names its refills.** `menu_package_refills (package_variant, refill_item)`. No "empty means all"
   sentinel (v1 `storePackages.refillsAllowed: []`); the deferred import expands that sentinel to the explicit list.
 - **R9, categories.** `menu_categories`, org-level, one optional level of parent (v1 `category` + `subCategory`),
@@ -138,6 +204,43 @@ are edited in place, and carry no store or time. Different subject, different ru
 - **R13, out of this table set:** daypart menus (v1 `menuSchedules`), kitchen routing (a store-settings spec keys on `menu_item_variants.id`), refill
   cooldowns (DEF-021, store settings), images (diner content: public storage is decided with row 280's hosting
   move), discounts/charges/tenders, loyalty rewards.
+- **R14, who edits what (Ian, Q1 + Q2, 2026-10-13).** (a) **Prices are per store and a manager sets them for their
+  own store** (`set_menu_price` manager ✅, store-scoped: the store scope of `authorize()` is what keeps "their own").
+  Admin and super admin price any store they are scoped to. (b) **Items are centralised: only super admin adds an
+  item or a variant** (new `add_menu_item`, super ✅ only). Editing the rest of the menu (categories, option groups,
+  links, package refills, item edits and retirement) stays `manage_menu` (super + admin): Ian ruled on *adding*, not
+  editing; if he wants editing super-only too it is one cell. (c) **A manager requests an item** (`request_menu_item`,
+  store-scoped, manager ✅, admin ✅, super ✅): `menu_item_requests` (store, name, item type, category hint, note,
+  status `open | approved | duplicate | rejected | withdrawn`). At submit the domain runs a **deterministic duplicate
+  check** (normalised exact name, then `pg_trgm` `similarity ≥ 0.4`, the extension is installed since 0050) and
+  returns the likely matches so the requester can use an existing item instead; the request is still allowed after
+  seeing them. **Only super admin resolves it** (orchestrator ruling 2026-10-13, consistent with "only super admin adds
+  items"; all three under `add_menu_item`): **approve** (creates the item with `createMenuItem` in the same transaction
+  and records it), **duplicate** (points at the existing item; the requester sees which), or **reject** (reason). A
+  requester may **withdraw only their own** open request.
+  The **AI** duplicate check and photo-assisted entry are the separate task in §7a; they write to this same table, so
+  nothing here is thrown away.
+- **R15, online price can be a rule (Ian, Q4, 2026-10-13: "we have this in commissary pricing v1, so items with volatile
+  price adjust automatically").** Reuses the commissary model **as is**: the mode names are v1's and v2's
+  `PRICING_MODES = fixed | fixed_markup | percent_markup` (`packages/db/schema/items.ts:342`, T-151; v1
+  `ERP-rebuild/src/lib/financial/commissary/pricing.ts:81`), with `markup_percent numeric(8,4)` and
+  `fixed_markup_amount numeric(14,2)` as in `item_pricing`. The **basis is the store-channel price in force at the
+  same instant** (commissary's basis is landed cost; ours is the counter price). So:
+  `fixed` = `amount` as typed (a manual online price, today's behaviour) · `percent_markup` = store × (100 + p)/100,
+  `p` signed (−10 = 10 % lower), `p > −100` · `fixed_markup` = store ± a peso amount (signed). **The rule is resolved at
+  read, never stored**, exactly as T-151's `branchPriceFor` resolves at read (no stored online price can go stale):
+  when the store price changes, the online price follows from that instant with no second write. Rules are on the
+  `online` channel only (`store` rows are always `fixed`), on **offers rows** (so they are append-only and effective-
+  dated like every price: changing a rule is a new row). **Rounding:** exact decimal arithmetic, rounded **once,
+  half-up on the absolute value, to the centavo**, the same rule as `computeBranchPrice`
+  (`packages/domain/src/items/branch-price.ts:82-88`); the S2 builder extracts that pure step into one shared helper
+  rather than writing a second (examples: ₱85.50 at +7.5 % = 91.9125 → **91.91**; ₱10.10 at +5 % = 10.605 → **10.61**;
+  ₱99.00 at −10 % = **89.10**). A **bundle** store offer: the rule applies to both `amount` and `extra_head_amount`,
+  and the online row inherits `bundle_heads` from the store offer (a rule row carries no bundle columns). A rule whose
+  basis is missing (no store offer in force, or the store offer withdrawn) means **not offered online** at that
+  instant; a rule that resolves **below ₱0.00** also means not offered online, with the reason `rule_below_zero`
+  shown on `/menu/prices`; it is never clamped to zero. Refills: no rule (they carry no price). Option-value deltas
+  online stay `fixed` only (deltas are small; a rule there is a later ask, not built).
 
 ---
 
@@ -148,7 +251,8 @@ Same-org composite FKs on every org→org reference (R10).
 
 **Parent uniques the composite FKs need (purely additive, S1 adds them):** `UNIQUE (org_id, id)` on `items`,
 `production_recipes`, `menu_categories`, `menu_items`, `menu_item_variants`, `menu_option_groups` and
-`menu_option_values`. `stores` and `persons` get theirs from T-398 S1 (migration 0194); S1 builds after it, and if
+`menu_option_values`, plus **`stock_locations`** (new 2026-10-13, for `menu_pos_v1_links.location_id`; add it only if it
+is not already there). `stores` and `persons` get theirs from T-398 S1 (migration 0194); S1 builds after it, and if
 0194 is not on main when S1 starts, S1 stops and reports rather than adding them itself. Grants: SELECT+INSERT for `shareat_app`; UPDATE only where
 marked; DELETE only where marked.
 
@@ -164,12 +268,34 @@ marked; DELETE only where marked.
 | `menu_depletion_rules` | `variant_id`, `effective_from timestamptz`, `mode`, `item_id`, `recipe_id`, `quantity_per_sale numeric(14,6)` | the `pos_item_maps_mode_shape_check` shape; qty > 0 finite; UNIQUE (variant, effective_from); triggers: INSERT refused when `effective_from < now()`; no UPDATE; DELETE only while `effective_from > now()` **and** no live offer would be left without a rule in force (R6) | no | future only |
 | `menu_offers` | `store_id`, `variant_id`, `channel store|online`, `effective_from`, `amount numeric(14,2)` NULL, `bundle_heads int` NULL, `extra_head_amount numeric(14,2)` NULL, `withdrawn bool` | UNIQUE (store, variant, channel, effective_from); CHECK withdrawn ⇒ amounts NULL; CHECK amount ≥ 0 finite; CHECK (bundle_heads NULL) = (extra_head_amount NULL), bundle_heads ≥ 1; triggers: refill ⇒ amount NULL, non-refill live ⇒ amount NOT NULL; bundle only on a package; **live offer needs a depletion rule in force** (R6); store and variant same org; INSERT refused when `effective_from < now()`; append-only as above | no | future only |
 | `menu_option_offers` | `store_id`, `option_value_id`, `channel store|online`, `effective_from`, `price_delta numeric(14,2)` NULL, `withdrawn bool` | UNIQUE (store, option_value, channel, effective_from); CHECK withdrawn ⇒ delta NULL, live ⇒ delta NOT NULL; delta signed, finite (R4); no back-dating, append-only, future-only DELETE as `menu_offers`. No row in force = not offered on that channel. Replaces v1's `stores/{s}/optionOverrides/main` disable list | no | future only |
+| `menu_item_requests` **(new, R14)** | `store_id`, `requested_by → persons`, `name`, `item_type`, `category_id` NULL (a hint), `note`, `status open|approved|duplicate|rejected|withdrawn`, `resolved_item_id → menu_items` NULL, `resolved_by → persons` NULL, `resolved_at` NULL, `resolution_note` NULL, `updated_at` | CHECK name not blank; CHECK status `open` ⇔ all `resolved_*` NULL; CHECK `approved`/`duplicate` ⇒ `resolved_item_id` NOT NULL; CHECK `rejected` ⇒ `resolution_note` not blank; trigger: only `open → approved|duplicate|rejected|withdrawn`, a resolved request never changes again; trigger: `name`, `store_id`, `requested_by`, `item_type` frozen on UPDATE; index (org, status) | yes (status workflow only) | no |
+| `menu_pos_v1_links` **(new, R7)** | `store_id`, `pos_item_key text`, `variant_id`, `location_id → stock_locations` NULL, `status active|inactive`, `updated_at` | UNIQUE (store, pos_item_key) WHERE active; CHECK key not blank; trigger on INSERT and on re-activation: the variant has a depletion rule **in force now** and is active; trigger: `variant_id`, `store_id`, `pos_item_key` immutable (relink = deactivate + insert); location's store = link's store | yes (status, location) | no |
+| `menu_usage_source_switches` **(new, R7)** | `store_id`, `source pos_item_maps|menu_rules`, `reason text` NULL, `difference_count int ≥ 0` NULL | the instant is `created_at` (no `effective_from`: a switch is immediate, never scheduled, never back-dated; INSERT trigger sets `created_at = now()`); CHECK `menu_rules` with `difference_count > 0` ⇒ reason not blank; append-only: UPDATE guard `ENABLE ALWAYS`, no DELETE grant; index (store, created_at desc) | no | no |
 
-`v1_master_links` is **not** touched here: extending its entity list belongs to the deferred import (§7).
+**The three new tables follow R10 exactly as the first ten:** `ENABLE` **and `FORCE ROW LEVEL SECURITY`**, the
+`org_column` policy, and composite same-org FKs `(org_id, col) → parent(org_id, id)` for every org-scoped reference:
+`menu_item_requests.store_id`, `requested_by`, `resolved_by`, `resolved_item_id`, `category_id`;
+`menu_pos_v1_links.store_id`, `variant_id`, `location_id`; `menu_usage_source_switches.store_id` (and `created_by`
+on all three, as on the ten).
 
-**Registries (the build refuses otherwise):** `packages/db/src/rls/registry.ts`: all ten `org_column`.
-`packages/db/src/cutover/classification.ts`: all ten `keep` (standing configuration, same class as `pos_item_maps`
-and `tenders`; an offer history is the price record, not pilot activity).
+**`menu_offers` gains three columns (R15, Q4) in 0196 in place:** `pricing_mode text NOT NULL DEFAULT 'fixed'`
+(CHECK in `fixed, fixed_markup, percent_markup`), `markup_percent numeric(8,4)` NULL, `fixed_markup_amount numeric(14,2)`
+NULL. New CHECKs: `menu_offers_store_channel_fixed_check` (channel `store` ⇒ mode `fixed`);
+`menu_offers_rule_shape_check` (`fixed` ⇒ both rule columns NULL; `percent_markup` ⇒ `markup_percent` NOT NULL, finite,
+`> -100`, `amount`, bundle columns and `fixed_markup_amount` NULL; `fixed_markup` ⇒ `fixed_markup_amount` NOT NULL and
+finite (signed), `amount`, bundle columns and `markup_percent` NULL); `menu_offers_withdrawn_no_amounts_check` widens
+to "withdrawn ⇒ mode `fixed` and every amount and rule column NULL". The insert guard's "non-refill live ⇒ amount NOT
+NULL" becomes "non-refill live **fixed** ⇒ amount NOT NULL", and "refill ⇒ amount NULL" becomes "refill ⇒ mode `fixed`
+and amount NULL". The K2 SQL function `menu_offer_in_force` keeps returning raw rows; the rule is resolved in the
+domain (R15), never in a trigger or a stored column.
+
+`v1_master_links` is **not** touched here: `menu_pos_v1_links` is the v1-POS-key link (R7.7); the deferred import may
+still extend `v1_master_links` for the global catalog ids (§7).
+
+**Registries (the build refuses otherwise):** `packages/db/src/rls/registry.ts`: all **thirteen** `org_column`.
+`packages/db/src/cutover/classification.ts`: all thirteen `keep` (standing configuration, same class as `pos_item_maps`
+and `tenders`; an offer history is the price record, not pilot activity; a switch row is configuration; a request is
+the item master's intake, kept with it).
 
 **Capabilities** (`packages/auth/src/capabilities.ts`, every map; area `sales`; `docs/decisions/CAPABILITY-MATRIX.md`
 "Configuration" rows; position defaults: none new).
@@ -177,18 +303,28 @@ and `tenders`; an offer history is the price record, not pilot activity).
 | Capability | Scope | super | admin | manager | staff | Notes |
 |---|---|:--:|:--:|:--:|:--:|---|
 | `view_menu` | org | ✅ | ✅ | ✅ | ✗ | Read the menu, offers and their history. Staff position-granted only (T-318) |
-| `manage_menu` | org | ✅ | ✅ | ✗ | ✗ | Categories, items, variants, option groups, links, package refills. Row 307: one editor; the menu is org master data, same bar as `manage_price_lists` (Q1) |
-| `set_menu_price` | store | ✅ | ✅ | ✗ | ✗ | Append an offer or option offer; schedule; cancel a future one. "Pricing is a commercial decision" (`manage_price_lists` row) (Q1) |
+| `add_menu_item` **(new)** | org | ✅ | ✗ | ✗ | ✗ | `createMenuItem`, `addMenuVariant`, and every request resolution (approve, duplicate, reject). Ian, Q2: "items are centralised and ONLY super admin adds them" |
+| `manage_menu` | org | ✅ | ✅ | ✗ | ✗ | Categories, item and variant edits and retirement, option groups, links, package refills. Row 307: one editor. Does **not** resolve requests |
+| `request_menu_item` **(new)** | store | ✅ | ✅ | ✅ | ✗ | Ask for an item to be added; see the duplicate check; withdraw one's own open request (R14) |
+| `set_menu_price` | store | ✅ | ✅ | **✅** | ✗ | Append an offer (fixed or online rule) or option offer; schedule; cancel a future one. **Ian, Q1: managers set prices for their own store** (changed from ✗) |
 | `set_menu_depletion` | org | ✅ | ✅ | ✅ | ✗ | Depletion rules. Same bar as `manage_pos_map` / `manage_items`: the manager knows the recipe |
+| `switch_usage_source` **(new, S5)** | store | ✅ | ✅ | ✗ | ✗ | Switch a store's usage pull to menu rules or back (R7.5). It changes what live stock posts, so it sits above the map editors. Links themselves use the existing `manage_pos_map` (store, manager ✅): a link is the same store fact a map is |
 
 **Domain** (`packages/domain/src/menu/`): `createMenuCategory`, `editMenuCategory`, `retireMenuCategory`,
 `createMenuItem` (creates its default variant), `editMenuItem`, `retireMenuItem`, `addMenuVariant`, `editMenuVariant`,
 `retireMenuVariant`, `createOptionGroup`, `editOptionGroup`, `addOptionValue`, `editOptionValue`, `linkOptionGroup`,
 `unlinkOptionGroup`, `setPackageRefills`, `setDepletionRule`, `cancelScheduledDepletionRule`, `setMenuOffer`,
-`withdrawMenuOffer`, `cancelScheduledOffer`, `setOptionOffer`, `cancelScheduledOptionOffer`; every one takes `(actor,
-input, tx?)`, calls `authorize()` first, writes one `audit_log` row. Reads in `packages/db/src/repo/menu.ts`:
-`menuSnapshot(orgId)`, `offerHistory(storeId, variantId)`, `offersInForce(storeId, at)`.
-Projection in `packages/domain/src/menu/project.ts` (R12).
+`withdrawMenuOffer`, `cancelScheduledOffer`, `setOptionOffer`, `cancelScheduledOptionOffer`; **added 2026-10-13:**
+`requestMenuItem` (returns `possibleDuplicates`), `withdrawMenuItemRequest`, `approveMenuItemRequest`,
+`markMenuItemRequestDuplicate`, `rejectMenuItemRequest` (S2); `resolveOfferPrice` (pure, R15: offer + store basis →
+`{ amount, extraHeadAmount, bundleHeads } | { notOffered: 'no_basis' | 'withdrawn' | 'rule_below_zero' }`);
+`linkPosV1Item`, `unlinkPosV1Item`, `seedLinkFromMap`, `compareDepletionSources`, `switchUsageSource` (S5). Every
+mutating one takes `(actor, input, tx?)`, calls `authorize()` first, writes one `audit_log` row. Reads in
+`packages/db/src/repo/menu.ts`: `menuSnapshot(orgId)`, `offerHistory(storeId, variantId)`, `offersInForce(storeId, at)`
+(online rule rows come back with their store basis row, both from `menu_offer_in_force` at the same `at`),
+`similarMenuItems(orgId, name)`, `usageSourceInForce(storeId)`, `activeLinks(storeId)`.
+Projection in `packages/domain/src/menu/project.ts` (R12); it receives online prices already resolved by
+`resolveOfferPrice`, so it does no money arithmetic of its own.
 
 ---
 
@@ -208,14 +344,24 @@ Projection in `packages/domain/src/menu/project.ts` (R12).
 | I8 | `item_type` cannot change once a variant has an offer; names are unique per org and type | S1 test: type change refused; a `refill` and an `a_la_carte` item both named "Pork" accepted; two `refill` items named "pork"/"Pork" refused | trigger checks variants instead of offers |
 | I9 | A variant's option links replace its item's | `t401-s3-project.test.ts`: item links A, variant links B → projection shows B only; variant without links → A | resolver merges A ∪ B |
 | I10 | Package refills: package → refill only; no empty-means-all | S1 + S3 tests: wrong types refused; package with no rows projects no refills | projection treats empty as all |
-| I11 | Org isolation | S1 test as app role: org B reads 0 rows of org A's ten tables; composite FK refuses an offer pointing at org B's store and a variant pointing at org B's item | one table missing its policy (the registry test also catches it) |
-| I12 | Capabilities: every ✅ has a ✗ that fires | `t401-s2-capabilities.test.ts`: manager refused `manage_menu` and `set_menu_price`; staff refused `set_menu_depletion` and `view_menu`; a staff member granted `set_menu_price` **for store A by position** (T-318) succeeds at A and is refused at B; positive: a manager may `set_menu_depletion` | `set_menu_price` scoped `org` instead of `store` |
+| I11 | Org isolation | S1 test as app role: org B reads 0 rows of org A's **thirteen** tables; composite FK refuses an offer pointing at org B's store and a variant pointing at org B's item | one table missing its policy (the registry test also catches it) |
+| I12 | Capabilities: every ✅ has a ✗ that fires (**revised for Q1/Q2**) | `t401-s2-capabilities.test.ts` + `packages/auth/tests/t401-capability-cells.test.ts`: **a manager may `setMenuOffer` at a store they are scoped to and is refused at a store they are not**; admin is refused `createMenuItem` / `addMenuVariant` (`add_menu_item`) while super admin may; manager refused `manage_menu`; staff refused `set_menu_depletion`, `view_menu`, `request_menu_item`; a staff member granted `set_menu_price` **for store A by position** (T-318) succeeds at A and is refused at B; manager refused `switch_usage_source`; **a manager scoped to store A only is refused `setDepletionRule` on a variant linked at switched store B** (S5); positive: a manager may `set_menu_depletion` (unlinked or own-store-linked variant) and `request_menu_item` | `set_menu_price` scoped `org` instead of `store` (the manager then prices every store); `add_menu_item` wired like `manage_menu` (admin adds items) |
 | I13 | Money: offer amounts ≥ 0, deltas signed, all finite; no float arithmetic in domain | S1 CHECK test; S2 test passes `'0.1' + '0.2'`-shaped inputs through `@shareat/core/money` | domain uses `Number()` |
-| I13b | More than 2 decimal places is refused, never rounded | S2 test: `setMenuOffer` with `'10.005'` refused with a named message, and no row written | domain lets the cast round |
+| I13b | More than 2 decimal places is refused, never rounded (rule figures: `markup_percent` more than **4**, `fixed_markup_amount` more than **2**) | S2 test: `setMenuOffer` with `'10.005'` refused with a named message, and no row written; an online `percent_markup` of `'7.12345'` refused (4 dp `'7.1234'` accepted); a `fixed_markup` of `'-5.005'` refused | domain lets the cast round |
 | I14 | Projection is pure, deterministic, carrier-neutral | S3: same snapshot twice → same hash; key order shuffled → same hash; a unit test greps `project.ts` imports for `firebase`, `@shareat/db`, `fetch` | hash over non-canonical JSON |
 | I15 | `nextChangeAt` names the next scheduled change | S3: future offer at T → `nextChangeAt = T`; none → null | returns last instead of next |
-| I16 | ⛔ The live v1 feed is untouched | S2 unit guard: no file under `packages/domain/src/pos/**` or `packages/domain/src/sales-days/**` imports `menu`; the existing T-177/T-375/T-382/T-384/T-388 suites pass unchanged on the S1 migration | a builder "helpfully" reads `menu_depletion_rules` in `plan.ts` |
+| I16 | ⛔ The live v1 feed is untouched **except through one seam, and an unswitched store is byte-identical** (revised for Q3) | S2 unit guard `tests/unit/t401-v1-feed-untouched.test.ts`: no file under `packages/domain/src/pos/**` or `packages/domain/src/sales-days/**` imports `menu` **except `pos/depletion-source.ts`** (S5 adds that one allow-list entry, nothing else); the existing T-177/T-375/T-382/T-384/T-388 suites pass **unchanged** on the S1 migration and again after S5; S5 test: a store with no switch row builds a plan, and writes audit payloads, deep-equal to the **golden** output the S5 tester captures from `main` **before the builder edits anything** (committed as a fixture) for the same stored feed; `depletionSource` appears in the audit payload only for a switched store | a builder reads `menu_depletion_rules` in `plan.ts`; S5 changes `listActiveMaps` or the no-switch path |
 | I17 | Every audited write | S2: each mutating function leaves one `audit_log` row naming actor and entity | one function skips the audit |
+| I18 | **Online rule resolution (Q4).** `percent_markup` and `fixed_markup` online prices are computed from the store offer in force **at the queried instant**, rounded once half-up to the centavo | `t401-s2-online-rule.test.ts`: store ₱85.50, online +7.5 % → 91.91; ₱10.10 at +5 % → 10.61; ₱99.00 at −10 % → 89.10; ₱99.00 + (−₱5.00) → 94.00; **store price changes at T → online price at T+1s follows with no new online row**; bundle store offer → rule applied to `amount` and `extra_head_amount`, `bundle_heads` inherited | resolver reads the store offer in force at the **online row's `effective_from`** instead of at *t* (the online price then never follows); rounding per step instead of once |
+| I19 | Rule edge cases: no basis or a withdrawn basis means not offered online; a result below zero means not offered online, never 0.00 | same file: store withdrawn → `notOffered: 'withdrawn'`; no store row → `'no_basis'`; ₱3.00 + (−₱5.00) → `'rule_below_zero'`; the projection marks each not orderable online | clamp to `0.00` |
+| I20 | Rule shape in the DB | S1 test: `store` channel with `percent_markup` refused; `percent_markup` with an `amount` refused; `markup_percent = -100` refused, `-99.9999` accepted; `fixed_markup` with NULL amount column accepted; a refill with any rule refused; withdrawn with a rule column refused | rule-shape CHECK dropped (an `amount` and a rule on one row: which wins?) |
+| I21 | **Only super admin adds an item; a request resolves once** (Q2) | S1 test (requests table): status `open → approved` with no `resolved_item_id` refused; a resolved request updated again refused; `rejected` without a note refused. S2 test `t401-s2-item-requests.test.ts`: manager `requestMenuItem` "Samgyupsal Set" with "Samgyupsal set" already on the menu returns it in `possibleDuplicates`; approve by super admin creates the item **and** resolves the request in one transaction (roll back → neither); approve, mark-duplicate and reject by **admin** each refused (`add_menu_item`); duplicate needs an existing item id; a manager cannot request for a store outside their scope; **manager B cannot withdraw manager A's request** (refused, request stays `open`). S1: an UPDATE changing `name`, `store_id`, `requested_by` or `item_type` refused | approval creates the item on another connection, or leaves the request `open`; resolution gated by `manage_menu` (admin resolves) |
+| I22 | A v1 link always has a rule | S1 test: link to a variant with no rule in force refused; with a rule only scheduled for the future refused; with a rule in force accepted; two active links for one (store, key) refused; changing `variant_id` refused (relink = deactivate + insert) | trigger accepts "any rule exists" |
+| I23 | **Usage source resolution (Q3).** Switched store: linked key → menu rule in force at plan time, with the link's location; unlinked key → its `pos_item_maps` row; neither → orphan. Unswitched store: maps only | `t401-s5-depletion-source.test.ts` (domain integration, stored feed fixture): three sold keys (linked, map-only, neither) → menu line, map line, orphan; a rule added **after** the business day but before the plan resolves that day's line (plan-time semantics, as maps do today); **`switchUsageSource` refused while the store has a `planned` pull, including one with the direct section already stamped; accepted once it is finalized or void**; **`setDepletionRule` on a variant linked at a switched store with a `planned` pull refused, naming store and date** | fallback skipped (map-only items become orphans on switch day); source read from the link instead of the switch row |
+| I24 | **No blind switch.** Switching to `menu_rules` runs the comparison itself; with differences it is refused unless `acceptDifferences` + a reason, stored with the count; switching back needs nothing | `t401-s5-switch.test.ts`: 7 stored feeds, one key's rule differs from its map → refused naming the day and key; with reason → accepted, row carries `difference_count = 1`; switch back accepted at once and the next plan is maps-only; `compareDepletionSources` writes no row (row counts before/after equal) | switch skips the comparison; comparison writes a plan or a pull row |
+| I25 | `seedLinkFromMap` copies the map exactly | S5 test: a `direct` map (item, qty 0.25, location L) → link with location L and, the variant having no rule, a rule `direct`/item/0.25 from now; the comparison for that key is then zero-difference; a variant that already has a different rule keeps it and the difference is reported, not overwritten | seed overwrites an existing org rule (silently changes another switched store) |
+| I26 | Switches are append-only history | S1 test: UPDATE refused even in replica mode (`ENABLE ALWAYS`); DELETE not granted; `created_at` supplied in the past is overwritten to `now()` | UPDATE guard left `ENABLE` (origin only) |
+| I27 | A stock item a switched store still depletes through the menu cannot be retired | S5 test: item X used by a rule on a variant linked at switched store A → `retireReadout.activeMenuRules = 1` and retire refused; store A switched back (or link inactive) → 0 and retire allowed (if nothing else holds it); a rule only **scheduled** also counts | readout counts `pos_item_maps` only |
 
 ---
 
@@ -225,7 +371,9 @@ Projection in `packages/domain/src/menu/project.ts` (R12).
 |---|---|---|
 | `/menu` | Items by category; filters: type, status, store, "no depletion rule", "not offered at store X". Categories are created, renamed, sorted and retired **inline** here | `manage_menu` (categories) |
 | `/menu/items/[id]` | Item, its variants, option groups (inherited vs own; groups and values created and edited **inline**), package refills, depletion history, and a per-store offer table with the full history and any scheduled change | `manage_menu`, `set_menu_depletion`, `set_menu_price` |
-| `/menu/prices` | Store picker → grid of variants × channel: price in force, scheduled change, "set new price from [date/time]" (default now), withdraw, cancel scheduled; option-value deltas per channel below. ⚠️ The date/time is read as **Asia/Manila** through `@shareat/core/datetime` and stored as an **instant** (timestamptz), never as a business date: 00:00 Manila on 1 Dec is `2026-11-30T16:00Z` (I2) | `set_menu_price` |
+| `/menu/prices` | Store picker (a manager sees only their own stores, Q1) → grid of variants × channel: price in force, scheduled change, "set new price from [date/time]" (default now), withdraw, cancel scheduled; option-value deltas per channel below. **Online column (Q4):** "Fixed ₱ / % over store / ₱ over store" with the resolved price shown beside the rule and a `rule_below_zero` or "no counter price" warning. ⚠️ The date/time is read as **Asia/Manila** through `@shareat/core/datetime` and stored as an **instant** (timestamptz), never as a business date: 00:00 Manila on 1 Dec is `2026-11-30T16:00Z` (I2) | `set_menu_price` |
+| `/menu/requests` **(new, Q2)** | A manager: "Request an item" (name, type, category hint, note) → the duplicate check's matches shown first ("Samgyupsal Set already exists: use it?"), then submit; their requests and outcomes. Super admin: the open queue, each with its matches; approve (opens the new-item form pre-filled), mark duplicate (pick the item), reject (reason) | `request_menu_item`; `add_menu_item` (super admin) to resolve |
+| `/menu/usage-source` **(new, S5, Q3)** | Store picker → current source and its history; links table (v1 POS key and name from the store's maps and feeds → variant, location), "seed from map", unlink; **Compare** (last 7 stored days, differences per day and key); **Switch to menu rules** (refused with the list if differences, or with a typed reason) and **Switch back** (always available) | `manage_pos_map` (links), `switch_usage_source` |
 
 Every write is a server action that calls the domain (bible §7); a refused save keeps the typing (T-389 pattern).
 A price is never typed into a URL (T-380). Smoketest on 9008 per `docs/SMOKETEST.md`.
@@ -236,32 +384,94 @@ A price is never typed into a URL (T-380). Smoketest on 9008 per `docs/SMOKETEST
 
 | Slice | Size | Depends on | TESTER writes | BUILDER writes |
 |---|---|---|---|---|
-| **S1** schema + migration | M 2.0 | T-398 S1 merged (0194: `UNIQUE (org_id, id)` on stores and persons, its census, the next number) | `packages/db/tests/integration/t401-s1-*.test.ts` (I1, I1b, I3-I8, I5b, I10-I11, I13 DB half) | `packages/db/schema/menu.ts`, `schema/index.ts`, `schema/v1-master-links.ts` (entity list + NOTE), `schema/items.ts` (the `sellable_retail` comment only), `migrations/NNNN_t401_menu_catalog.sql`, `migrations/meta/_journal.json`, `src/rls/registry.ts`, `src/cutover/classification.ts` |
-| **S2** domain, repo, capabilities | M 2.0 | S1 | `packages/domain/tests/integration/t401-s2-*.test.ts`, `packages/auth/tests/**/t401-*.test.ts`, `tests/unit/t401-v1-feed-untouched.test.ts` (I2, I12, I13, I13b, I16, I17) | `packages/domain/src/menu/*.ts` (not `project.ts`), `packages/domain/src/index.ts`, `packages/db/src/repo/menu.ts`, `packages/db/src/repo/index.ts`, `packages/auth/src/capabilities.ts`, `docs/decisions/CAPABILITY-MATRIX.md` (four rows), `docs/production-caller-baseline.txt` |
+| **S1** schema + migration | M 2.0 | T-398 S1 merged (0194: `UNIQUE (org_id, id)` on stores and persons, its census, the next number) | `packages/db/tests/integration/t401-s1-*.test.ts` (I1, I1b, I3-I8, I5b, I10-I11, I13 DB half; amend: I20, I21 DB half, I22, I26) | `packages/db/schema/menu.ts`, `schema/index.ts`, `schema/v1-master-links.ts` (entity list + NOTE), `schema/items.ts` (the `sellable_retail` comment only), `migrations/NNNN_t401_menu_catalog.sql`, `migrations/meta/_journal.json`, `src/rls/registry.ts`, `src/cutover/classification.ts` |
+| **S2** domain, repo, capabilities | M 2.75 | S1 | `packages/domain/tests/integration/t401-s2-*.test.ts`, `packages/auth/tests/**/t401-*.test.ts`, `tests/unit/t401-v1-feed-untouched.test.ts` (I2, I12, I13, I13b, I16, I17; amend: I18, I19, I21) | `packages/domain/src/menu/*.ts` (not `project.ts`), `packages/domain/src/index.ts`, `packages/db/src/repo/menu.ts`, `packages/db/src/repo/index.ts`, `packages/auth/src/capabilities.ts` (**all seven** capabilities, including S5's `switch_usage_source`, so S5 never edits it), `docs/decisions/CAPABILITY-MATRIX.md` (**seven rows**), `packages/domain/src/items/branch-price.ts` (extract the once-only half-up rounding step into the shared helper R15 uses; behaviour unchanged), `docs/production-caller-baseline.txt` |
 | **S3** projection | S 0.75 | S2 (repo types) | `packages/domain/tests/unit/t401-s3-project.test.ts` (I9, I10, I14, I15) | `packages/domain/src/menu/project.ts` |
-| **S4** ERP screens (`/menu`, `/menu/items/[id]`, `/menu/prices`) | M 1.5 | S2 | `apps/erp/tests/integration/t401-s4-*.test.ts` (server actions refuse without capability; prices form round-trip including the Manila-midnight case; inline category and option-group edits) | `apps/erp/src/app/menu/**`, `apps/erp/src/components/nav.tsx` (one entry) |
+| **S4** ERP screens (`/menu`, `/menu/items/[id]`, `/menu/prices`, `/menu/requests`) | M 2.0 (was 1.5: + requests page, online-rule column) | S2 | `apps/erp/tests/integration/t401-s4-*.test.ts` (server actions refuse without capability; prices form round-trip including the Manila-midnight case and an online % rule; a manager's store picker lists only their stores; inline category and option-group edits; request → duplicate shown → submit; approve as super admin) | `apps/erp/src/app/menu/**` (not `usage-source/`), `apps/erp/src/components/nav.tsx` (one entry) |
+| **S5** v1 usage pull switch (Q3) **(new)** | M 2.5 | S2; T-388 merged (it is) | **first** the golden no-switch plan and audit fixture captured from `main` (I16); `packages/domain/tests/integration/t401-s5-*.test.ts` (I23-I25, I27), `tests/unit/t401-v1-feed-untouched.test.ts` (the one allow-list entry, I16), `apps/erp/tests/integration/t401-s5-usage-source.test.ts` | `packages/domain/src/pos/depletion-source.ts` (**new; the only new file under `pos/**`**; holds the lookup loader and the two-way plan builder), `packages/domain/src/pos/usage-pull.ts` (**`rebuildLines` only**: its `listActiveMaps` call becomes `loadDepletionLookups`, and the audit payload gains `depletionSource`; nothing else in the file), `packages/domain/src/menu/links.ts`, `menu/compare.ts`, `packages/db/src/repo/menu.ts` (links, switches), `packages/db/src/repo/items.ts` (`retireReadout` only) and its caller in `packages/domain/src/items/index.ts` (the retire refusal), `apps/erp/src/app/menu/usage-source/**`, `docs/production-caller-baseline.txt` |
 
-Total ≈ 6.25 lane-days. S3 and S4 may run in parallel **only** on separate lane databases (bible §3.4).
+Total ≈ 10.75 lane-days (S1 2.75 = 2.0 built + 0.75 amend, S2 2.75, S3 0.75, S4 2.0, S5 2.5; was 6.25); **8.75 still to
+do**. (The first revision's 9.75 mis-added these figures.) S3 and S4 may
+run in parallel **only** on separate lane databases (bible §3.4). **S5 runs last and alone in its window**: it is the
+only slice that touches the live pull, so it gets the full suite on a fresh gate DB before merge, and no store is
+switched in production until Ian picks the first store after a zero-difference comparison there.
+
+**Re-sizing (2026-10-13).** S1 amend (in place, 0196): + 3 tables, + 3 `menu_offers` columns and 2 CHECKs, 2 guard
+edits, `stock_locations` unique; ≈ 0.75. S2: was 2.0, + requests workflow and duplicate check 0.5, + `resolveOfferPrice`
+and the shared rounding helper 0.25 → 2.75. Cost and risk per question: Q1 ≈ 0 (one cell, tests flip); Q2 ≈ 1.0 across
+S1/S2/S4, low risk (new tables, no live reader); Q4 ≈ 0.75, low risk (resolved at read, reuses T-151's maths); Q5 0;
+**Q3 ≈ 3.25 (S5 plus its S1 tables), the only change with production risk**, contained by the per-store switch, the
+mandatory comparison and the one-click rollback.
+
 
 ---
+
+## 6a. S1/S2 tests Ian's answers make wrong (tester: change these first; all in `wt-t401`)
+
+| File | Case | Change |
+|---|---|---|
+| `packages/domain/tests/integration/t401-s2-capabilities.test.ts:95` | "manager is refused setMenuOffer at a store they are scoped to (mutant: manager allowed, Q1 option b)" | **Inverts**: manager succeeds at own store and is refused at a store outside their scope (the fixture scopes every role to both stores, `_fixtures/t401-s2-menu.ts:5`: add a manager scoped to A only) |
+| same file `:78` | "manager is refused createMenuCategory and createMenuItem with manage_menu" | Split: `createMenuCategory` stays `manage_menu`; the `createMenuItem` refusal names `add_menu_item` |
+| same file `:87` | "positive: admin and super_admin may" | `createMenuItem`: super admin only; admin refused with `add_menu_item`. Categories: both still may |
+| same file `:122` | "positive: admin and super_admin may set a price at either store" | Keep; add manager at own store |
+| `packages/auth/tests/t401-capability-cells.test.ts:21` (cell table) | `set_menu_price` manager ✗ | manager ✅; add `add_menu_item`, `request_menu_item`, `switch_usage_source` cells |
+| same file `:30` | "the only store-scoped one of the four is set_menu_price" | **Wrong**: seven capabilities, three store-scoped (`set_menu_price`, `request_menu_item`, `switch_usage_source`) |
+| same file `:35` | "the four names are Capability members" | Seven names |
+| `t401-s2-item-lifecycle.test.ts:28,38,48,64` and `t401-s2-audit.test.ts:95,97` | `createMenuItem(c.admin, …)` / `addMenuVariant` as admin | Actor becomes `c.superAdmin` (admin is now refused) |
+| `packages/db/tests/integration/t401-s1-refills-isolation.test.ts:142,156,195` | "each of the ten tables", "ALL TEN", "all ten menu tables" | Thirteen |
+| `t401-s1-offer-rules.test.ts:34` | "non-refill live offer with NULL amount refused" | Still right for `fixed`; add: a `percent_markup` online row with NULL amount is **accepted** (I20) |
+| `t401-s1-offer-rules.test.ts:43` | withdrawn with an amount refused | Extend to the rule columns (I20) |
+| `t401-s1-history-guards.test.ts:31,49` | "the three history UPDATE guards", "tgenabled is A for the three" | Four (adds `menu_usage_source_switches`, I26) |
+
+Not wrong: I1, I1b, I2 (the channel case stays true for `fixed` rows), I3 refill case, I5-I8, I10, I13, I13b,
+concurrency C1-C5, money tests.
 
 ## 7. Out of scope
 
 Sales receipts, ordering, table state, KDS, kitchen tickets and routing, refill cooldowns and requests (DEF-021), the
 86/sold-out event, discounts, charges, tenders (the tender master stays T-375's), loyalty rewards and the loyalty ledger,
 store settings, images and diner content, the carrier (Firestore mirror or device outbox, row 280), any change to the
-v1 usage pull or day feed (R7, I16), retiring `items.sellable_retail` (a follow-up once P2 reads the menu), BIR item
+v1 day feed, any change to the usage pull beyond S5's seam (R7, I16), online **rules** on option-value deltas (R15),
+deleting or migrating `pos_item_maps` (R7.7), retiring `items.sellable_retail` (a follow-up once P2 reads the menu), BIR item
 codes, the Website `/menu` (DEF-011), editing the bible (the P1 carrier spec amends §5.3), a drift report between
-`pos_item_maps` and menu rules (review cut (b)), separate category and option-group pages (review cut (c)).
+`pos_item_maps` and menu rules (review cut (b); S5's comparison is per store and on demand, not a standing report),
+separate category and option-group pages (review cut (c)), every AI feature (§7a).
 
 **The one-time v1 import is deferred to the P1 carrier window (review cut (a)).** Run now, it goes stale while v1
 keeps selling, so menus would be entered twice. When it is specced, it follows T-391's extract, plan, sheet and apply
 pattern; it extends `v1_master_links` with menu entities (the per-store POS inventory doc id → variant link P2 needs);
-it writes offers at the apply time and never back-dates (I1b); it maps v1's "online price ≤ 0 = withheld" to a
+it writes offers at the apply time and never back-dates (I1b); it fills `menu_pos_v1_links` (R7, in place of the planned
+`v1_master_links` POS-key extension) and never overwrites a link or rule S5 already made; it maps v1's "online price ≤ 0 = withheld" to a
 withdrawn `online` offer and an unset online price to an `online` offer equal to the store price; it expands v1's
 "empty means all refills"; it seeds depletion rules from `pos_item_maps` where stores agree and lists the rest on a
 sheet; it routes Padre Garcia into its own org; and its `extract` produces the census of v1 shapes first. Its
 idempotence and org-routing invariants belong to that spec.
+
+## 7a. The AI parts of Q2: a separate task, on the AI hub
+
+Ian, 2026-10-13: AI checks whether a requested item already exists and tells the requester; AI-assisted item addition
+(upload a picture, AI searches product details) with the human approving; and **AI is to be a central hub for the
+whole app family**. Recorded as binding context. Built **outside T-401**, as a new task (next free number), "AI hub:
+menu item assist", which first needs a short **AI hub ADR** extending ADR-014: one provider client, keys, a per-call
+cost and audit log, prompt versioning, and one human-approval contract every AI suggestion follows, callable from ERP,
+POS, CUSTOMER and the Website. Sizing: hub ADR S 0.5 (planner) + hub foundation M ≈ 2.0 + menu assist M ≈ 2.0
+(semantic duplicate match over `menu_items` returning the same `possibleDuplicates` shape; photo → draft name,
+description, type and category on a **request**, never an item; super admin still approves through
+`approveMenuItemRequest`). **What T-401 hands it:** the `menu_item_requests` table, the `possibleDuplicates` contract
+and the approval function, so AI only adds suggestions to a human flow that already works without it. Open for that
+spec, not this one: where uploaded item photos are stored (R13 leaves images to row 280's hosting move), and confirming
+that sending a **menu** photo to the provider is not the receipt-photo case row 251 forbade.
+
+## Ian ruling on recipes (2026-10-13; binding)
+"Only admin can edit recipe." `set_menu_depletion` (the menu depletion rule, which is the stock recipe of a menu variant) is **super admin and admin only**; manager is ✗ (with a ✗ test). This supersedes the manager ✅ in the capability table and removes review finding 2's cross-store authorize (admin is org-wide). Ian 2026-10-13 ("go with recommendation"): it also applies to `manage_pos_map` (the v1 bridge mapping, admin-only; delete each store's mapping after it moves to POS v2) and to production recipes. Both are done in T-403, not here. **Q6 ANSWERED: the online rule follows the counter price.**
+
+## Ian ruling on stock usage (2026-10-13; binding)
+"Stock usage can simultaneously be posted. The cashier may count the same item that the server also records. We will just be queueing them, then we will allow all staff to see who moves what so they can cross-check. All drafts: the manager posts." So:
+- Several people at a store may record usage for the same item at the same time. Each entry is its own **draft** with its author; nothing is merged or refused because another draft exists.
+- Every staff member at the store can see the queue: who recorded what, when and how much, so duplicates are caught by people cross-checking.
+- Only the **manager posts** the drafts (approves, edits or rejects each). Posting is what moves stock.
+- The S5 refusal (no usage-source switch and no depletion-rule change while a store has a pull in status planned) still stands. It does not block anyone recording drafts; it only stops the recipe from changing underneath a draft the manager has not posted.
+- Whether this replaces or sits beside today's v1 usage pull and the existing stock-usage drafts is to be confirmed in the S5 build against the current usage code; flag any conflict to the orchestrator.
 
 ## S1 audit rulings (orchestrator, 2026-10-13; binding)
 - Every check that reads another row (rule in force, live offer, retire) first locks the variant row (`FOR UPDATE`) or takes a per-variant advisory lock, so concurrent edits serialise.
@@ -272,10 +482,11 @@ idempotence and org-routing invariants belong to that spec.
 
 ## 8. Done when
 
-- [ ] I1-I17 (with I1b, I5b, I13b) green; each tester file was red first for the stated reason; each mutant named in §4 was tried and killed.
+- [ ] I1-I26 (with I1b, I5b, I13b) green; each tester file was red first for the stated reason; each mutant named in §4 was tried and killed.
 - [ ] Migration applies from zero in CI; registry, classification, journal, DEF-491 census (if on main) and app-boundary tests green.
-- [ ] Full suite green on the wrap-up PR; the T-177/T-375/T-382/T-384/T-388 suites unchanged and green.
-- [ ] `/menu/**` smoketested on 9008 as admin (create a category inline, item, variant, option group inline, depletion rule, price now, price scheduled at Manila midnight, cancel) and as manager (read-only, depletion editable, price refused).
+- [ ] Full suite green on the wrap-up PR; the T-177/T-375/T-382/T-384/T-388 suites, and the T-151/T-371 branch-price
+  suites (after S2's rounding extraction), unchanged and green.
+- [ ] `/menu/**` smoketested on 9008 as admin (create a category inline, item, variant, option group inline, depletion rule, price now, price scheduled at Manila midnight, cancel) and as manager (menu read-only, depletion editable, **price set at own store, refused at another**, item request with a duplicate shown); as super admin approve that request; an online `% over store` rule follows a store price change. S5: compare and switch a test store, then switch back.
 - [ ] `npm run build` green with the dev server stopped; typecheck clean; LF only.
 
 ## 9. Outcome
@@ -286,27 +497,38 @@ _(filled by the lanes: commits, test counts.)_
 
 | # | Risk | Mitigation |
 |---|---|---|
-| K1 | Two depletion truths during dual existence (`pos_item_maps` per store, menu rule per org) drift | R7: no join; the menu has no production reader until P1, the deferred import seeds rules from the maps, and P2 retires the map per store |
+| K1 | Two depletion truths during dual existence (`pos_item_maps` per store, menu rule per org) drift | **Revised for Q3:** per store, one source is in force (the switch row); within a switched store each sold item has exactly one source (link → rule, else map). The comparison shows drift before a switch and on demand after it; P2 retires the map per store |
+| K7 **(Q3)** | One org rule now drives several switched stores: a manager fixing "their" recipe changes another store's usage | `setDepletionRule` returns the switched stores linked to the variant and `/menu/items/[id]` lists them before save; `seedLinkFromMap` never overwrites an existing rule (I25); a store-specific recipe is a separate variant, linked only there |
+| K8 **(Q3)** | A bad switch posts wrong usage for real days | Switch is per store, compared over 7 stored days first (I24), and reversible at once; a pull already finalised is voided and re-run through the existing `voidPosUsagePull` path, as for a bad map today. First store chosen by Ian |
+| K9 **(Q3)** | The menu is empty until someone enters it (the v1 import stays deferred), so "switch now" has nothing to switch to | Stated plainly to Ian: S5 pays off only for items super admin has entered; `seedLinkFromMap` copies each store's existing map into the rule so entry is name + category + link, not recipe re-typing. Pulling the import forward is a separate decision |
+| K10 **(Q4)** | Volatile online price surprises a diner mid-order | Price resolves at the instant the order line is priced (P2), like any offer; the projection's `nextChangeAt` already includes store price changes, so the carrier republishes when an online rule's basis moves |
 | K2 | An effective-dated "in force" query written twice (projection, repo) disagrees | One SQL function `menu_offer_in_force(store, variant, channel, at)` in the migration; repo and tests both call it; the projection receives rows already resolved |
 | K3 | Org-level menu does not fit a store that sells something unique | A store-unique item is an org item offered at one store only. If Ian wants store-owned items (Q2 (b)), it is a new column, not a new table |
 | K4 | The P1 carrier wants a stored snapshot (version number the till reports) | R12 returns a deterministic hash; a `store_menu_versions` table, if wanted, is the carrier spec's addition and needs no change here |
 | K5 | v1 has no price history, so comparisons of "price before" the import are impossible | Stated, not hidden: the first offer row is written at import time and is never back-dated (I1b) |
 | K6 | T-398 S1's census lands after S1 and finds a bare FK | R10 builds the composite FKs now; S1 waits on T-398 S1 merging if both are in flight |
 
-## 11. Questions for Ian (Open Questions page; recommended option is what gets built)
+## 11. Questions for Ian: Q1-Q5 ANSWERED 2026-10-13; Q6 OPEN (Open Questions page)
 
-- **Q1, who edits the menu and prices?** (a) admin and super-admin only; a branch manager, and a franchise owner
-  (manager), asks you · (b) managers set prices for their own store; the menu itself stays admin · (c) managers edit
-  both. **Recommended (a)**: one editor is row 307's point, and pricing is already admin-only for wholesale; you are
-  admin of Padre Garcia's org too.
-- **Q2, can a store own an item no other store sees in the editor?** (a) no: one org menu, a store simply does not
-  offer it · (b) yes, a store-only item. **Recommended (a)**: fewer moving parts; "not offered" already hides it.
-- **Q3, should the v1 usage pull start reading the menu's depletion rules before P2?** (a) no, `pos_item_maps` stays
-  its only source until P2 · (b) yes, switch now. **Recommended (a)**: the live
-  pull is not touched while v1 sells (row 307's sequencing, T-388 just stabilised it).
-- **Q4, does an online price ever differ from the counter price?** (a) keep a separate `online` channel price (v1
-  has `onlinePrice`) · (b) one price everywhere. **Recommended (a)**: v1 already carries it, the cost is one column
-  value per offer, and dropping it is your call, not ours (§1.2d).
-- **Q5, flavours as an option group on the refill (and package) instead of a separate flavour list?** (a) yes ·
-  (b) keep a separate flavour master. **Recommended (a)**: same thing to the cashier and the diner, one editor, one
-  per-store switch.
+- **Q1, who edits the menu and prices? ANSWERED (b):** Ian: *"managers set prices for THEIR OWN store"* (not admin-only).
+  → R14(a), `set_menu_price` manager ✅ store-scoped, I12 revised.
+- **Q2, can a store own an item? ANSWERED (a), extended:** Ian: one org menu, as recommended; *"items are centralised
+  and ONLY super admin adds them; managers REQUEST an item to be added; AI checks whether it already exists and tells
+  the requester so they can use the existing one; AI-assisted item addition (upload a picture, AI searches product
+  details) with the human approving."* → R14(b)(c), `add_menu_item`, `menu_item_requests`, I21; AI parts §7a.
+- **Q3, should the v1 usage pull read menu rules before P2? ANSWERED (b):** Ian: *"YES, switch now … design this
+  SAFELY: v1 POS keeps selling until 1 Jan 2027."* → R7 replaced, S5, I16 revised, I22-I25, K7-K9.
+- **Q4, does an online price differ? ANSWERED (a), extended:** Ian: keep a separate online price, *"AND an online price
+  can be a RULE: % higher/lower than the store price, a ± peso amount, or a manual fixed price — we have this in
+  commissary pricing v1, so items with volatile price adjust automatically."* → R15, I18-I20, K10.
+- **Q5, flavours as an option group? ANSWERED (a):** Ian: as recommended; *"flavours attach to many items."* → R3 note.
+
+- **Q6 (OPEN, added 2026-10-13 by the review), what does an online rule follow?** "Online rule follows the counter
+  price (as specced), or should it follow ingredient cost like commissary pricing?" (a) the counter price: "online
+  = counter + 10 %", so one counter change moves both · (b) ingredient cost: "online = landed cost × 3", the
+  commissary basis (`lastTwoLandedMax`, T-151), so a pork price rise lifts the online price by itself, but the counter
+  price would still be typed by hand and the two could cross. **Recommended (a)**: a menu item is many ingredients
+  (cost = a recipe roll-up the menu does not hold yet), and diners compare the online price with the counter price,
+  not with cost. Built as (a) unless Ian says otherwise; (b) later is a new `pricing_basis` column, not a redesign.
+
+Earlier wording of the questions and the planner's recommendations are in git history (commit 68a77f0).

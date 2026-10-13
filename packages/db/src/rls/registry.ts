@@ -1000,6 +1000,18 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
   },
+  menu_item_requests: {
+    scope: 'org_column',
+    reason: 'An item request: a store manager asking for a menu item; org-scoped like the menu.',
+  },
+  menu_pos_v1_links: {
+    scope: 'org_column',
+    reason: 'A store’s v1 POS item key linked to a menu variant; org-scoped, the store belongs to one org.',
+  },
+  menu_usage_source_switches: {
+    scope: 'org_column',
+    reason: 'Which stock-usage source a store reads; the store belongs to one org.',
+  },
 };
 
 export function rlsScopeOf(table: string): RlsEntry | undefined {

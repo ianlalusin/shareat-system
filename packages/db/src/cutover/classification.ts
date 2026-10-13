@@ -1258,6 +1258,18 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'keep',
     reason: 'A store’s option-price history: the price record, kept like menu_offers.',
   },
+  menu_item_requests: {
+    class: 'keep',
+    reason: 'The intake of the item master: kept with the menu it feeds.',
+  },
+  menu_pos_v1_links: {
+    class: 'keep',
+    reason: 'Standing configuration (which v1 POS item is which variant), the same class as pos_item_maps.',
+  },
+  menu_usage_source_switches: {
+    class: 'keep',
+    reason: 'Configuration history: which source each store reads, kept so the cut-over is traceable.',
+  },
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */

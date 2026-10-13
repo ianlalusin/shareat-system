@@ -2,7 +2,8 @@
  * T-401 S2 shared fixture (TESTER). Raw SQL for everything the domain under test is NOT the subject of, so a red test
  * names the function it proves and not a neighbour. One org per call (uid-unique codes, no truncation, files can share a DB).
  *
- * Cast of an org: stores A and B; admin / manager / staff (role rows, all scoped to BOTH stores so a refusal is the
+ * Cast of an org: stores A and B; admin / super admin / manager / manager2 / staff
+ * (managerA = a manager scoped to store A only) (role rows, all scoped to BOTH stores so a refusal is the
  * capability's, not a scope accident); `grantedStaff` = staff role + the position grant `set_menu_price` for store A ONLY (T-318).
  */
 import { config } from 'dotenv';
@@ -33,6 +34,10 @@ export interface Cast {
   admin: Actor;
   superAdmin: Actor;
   manager: Actor;
+  /** manager scoped to store A ONLY (Q1: a manager prices their own store; refused at B). */
+  managerA: Actor;
+  /** a second manager scoped to both stores (for "manager B cannot withdraw manager A's request"). */
+  manager2: Actor;
   staff: Actor;
   /** staff role + position grant of set_menu_price for storeA only (scoped to both stores, so only the grant decides). */
   grantedStaff: Actor;
@@ -59,6 +64,8 @@ export async function cast(hint: string): Promise<Cast> {
   const admin = await person(orgId, 'Admin', 'admin', [storeA, storeB]);
   const superAdmin = await person(orgId, 'Super', 'super_admin', [storeA, storeB]);
   const manager = await person(orgId, 'Manager', 'manager', [storeA, storeB]);
+  const managerA = await person(orgId, 'Manager A', 'manager', [storeA]);
+  const manager2 = await person(orgId, 'Manager 2', 'manager', [storeA, storeB]);
   const staff = await person(orgId, 'Staff', 'staff', [storeA, storeB]);
   const grantedStaff = await person(orgId, 'Granted staff', 'staff', [storeA, storeB]);
   const [emp] = await sql<{ id: string }[]>`
@@ -78,7 +85,7 @@ export async function cast(hint: string): Promise<Cast> {
   const [cat] = await sql<{ id: string }[]>`
     insert into menu_categories (org_id, name, sort_order, status, created_by)
     values (${orgId}, ${uid('Cat')}, 0, 'active', ${admin.personId}) returning id`;
-  return { orgId, storeA, storeB, admin, superAdmin, manager, staff, grantedStaff, stockItemId: stock!.id, recipeId: recipe!.id, categoryId: cat!.id };
+  return { orgId, storeA, storeB, admin, superAdmin, manager, managerA, manager2, staff, grantedStaff, stockItemId: stock!.id, recipeId: recipe!.id, categoryId: cat!.id };
 }
 
 /** A menu item plus its default variant, by raw SQL (the domain's createMenuItem is not the subject here). */

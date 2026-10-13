@@ -142,3 +142,40 @@ export const insOptionOffer = (f: Who & { storeId: string }, valueId: string, de
           values (${f.orgId}, ${f.storeId}, ${valueId}, ${channel}, ${delta}, false, ${f.personId}) returning id`
     : sql`insert into menu_option_offers (org_id, store_id, option_value_id, channel, effective_from, price_delta, withdrawn, created_by)
           values (${f.orgId}, ${f.storeId}, ${valueId}, ${channel}, now() + ${at}::interval, ${delta}, false, ${f.personId}) returning id`;
+
+/** A stock location in `storeId` (needs a location type in the same org). */
+export async function newLocation(f: { orgId: string; personId: string }, storeId: string) {
+  const [t] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${f.orgId}, ${uid('LT')}, 'Stockroom') returning id`;
+  const [l] = await sql<{ id: string }[]>`
+    insert into stock_locations (org_id, store_id, code, name, type_id, created_by)
+    values (${f.orgId}, ${storeId}, ${uid('LOC')}, 'Main', ${t!.id}, ${f.personId}) returning id`;
+  return l!.id;
+}
+
+/** An OPEN item request (R14). */
+export const insRequest = (f: { orgId: string; personId: string; storeId: string }, name?: string) =>
+  sql<{ id: string }[]>`
+    insert into menu_item_requests (org_id, store_id, requested_by, name, item_type, note, status, created_by)
+    values (${f.orgId}, ${f.storeId}, ${f.personId}, ${name ?? uid('Req')}, 'a_la_carte', 'please', 'open', ${f.personId}) returning id`;
+
+/** A v1 POS link (R7). Variant needs a rule in force now. */
+export const insLink = (f: { orgId: string; personId: string; storeId: string }, variantId: string, key?: string, locationId: string | null = null) =>
+  sql<{ id: string }[]>`
+    insert into menu_pos_v1_links (org_id, store_id, pos_item_key, variant_id, location_id, status, created_by)
+    values (${f.orgId}, ${f.storeId}, ${key ?? uid('posKey')}, ${variantId}, ${locationId}, 'active', ${f.personId}) returning id`;
+
+/** A usage-source switch row (R7). */
+export const insSwitch = (f: { orgId: string; personId: string; storeId: string }, source = 'pos_item_maps', reason: string | null = null, diff: number | null = null) =>
+  sql<{ id: string }[]>`
+    insert into menu_usage_source_switches (org_id, store_id, source, reason, difference_count, created_by)
+    values (${f.orgId}, ${f.storeId}, ${source}, ${reason}, ${diff}, ${f.personId}) returning id`;
+
+/** An online rule offer; pass the rule columns as written (null = SQL NULL). */
+export const insRuleOffer = (
+  f: { orgId: string; personId: string; storeId: string },
+  variantId: string,
+  r: { mode: string; amount?: string | null; pct?: string | null; fixed?: string | null; channel?: string; heads?: number | null; extra?: string | null; withdrawn?: boolean },
+) =>
+  sql`insert into menu_offers (org_id, store_id, variant_id, channel, amount, bundle_heads, extra_head_amount, pricing_mode, markup_percent, fixed_markup_amount, withdrawn, created_by)
+      values (${f.orgId}, ${f.storeId}, ${variantId}, ${r.channel ?? 'online'}, ${r.amount ?? null}, ${r.heads ?? null}, ${r.extra ?? null},
+              ${r.mode}, ${r.pct ?? null}, ${r.fixed ?? null}, ${r.withdrawn ?? false}, ${f.personId}) returning id`;
