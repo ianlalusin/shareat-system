@@ -110,9 +110,6 @@ function checkWritable(entry: CatalogueEntry, kind: 'person' | 'system', storeId
   checkScope(entry, storeId);
 }
 
-const CLOCK_FUTURE_MS = 5 * 60 * 1000;
-const CLOCK_PAST_MS = 30 * 24 * 3600 * 1000;
-
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
@@ -185,9 +182,11 @@ interface RowInput {
 
 async function insertRow(tx: Tx, orgId: string, r: RowInput): Promise<{ id: string; recordedAt: Date }> {
   const p = prepare(r.before, r.after);
+  // One clock: the database's now() judges the device time (R10: > 5 min ahead or > 30 days behind is suspect).
   const clockSuspect =
-    r.occurredAt !== undefined &&
-    (r.occurredAt.getTime() > Date.now() + CLOCK_FUTURE_MS || r.occurredAt.getTime() < Date.now() - CLOCK_PAST_MS);
+    r.occurredAt === undefined
+      ? false
+      : sql<boolean>`(${r.occurredAt.toISOString()}::timestamptz > now() + interval '5 minutes' or ${r.occurredAt.toISOString()}::timestamptz < now() - interval '30 days')`;
   const [row] = await tx
     .insert(auditLog)
     .values({
