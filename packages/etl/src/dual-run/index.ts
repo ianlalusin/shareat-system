@@ -6,3 +6,4 @@ export * from './keys';
 export * from './classes';
 export * from './compare';
 export * from './verdict';
+export * from './docs';

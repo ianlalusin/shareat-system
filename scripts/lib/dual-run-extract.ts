@@ -18,7 +18,7 @@ import { normaliseBusinessDate } from '../../packages/etl/src/dual-run/week';
 import { parseKeysCsv, prefillKeys, serialiseKeysCsv, type V2KeyCatalogue } from '../../packages/etl/src/dual-run/keys';
 
 const EMPTY_CATALOGUE: V2KeyCatalogue = { stores: [], money: [], categories: [] };
-const COLLECTIONS = ['journal', 'expenses', 'salesDays', 'suppliers', 'paymentAccounts'] as const;
+const COLLECTIONS = ['journal', 'expenses', 'salesDays', 'suppliers', 'paymentAccounts', 'receipts'] as const;
 const sha256 = (data: string | Buffer): string => createHash('sha256').update(data).digest('hex');
 
 export interface DualRunExtractOptions {
@@ -52,7 +52,7 @@ export async function runDualRunExtract(client: ReadOnlyV1Client, opts: DualRunE
   if (!through) throw new Error(`--through ${JSON.stringify(opts.through)} is not a real calendar date (YYYY-MM-DD)`);
   if (through < from) throw new Error(`--through ${through} is before --from ${from}`);
 
-  const roster = (await client.collection('stores').get()).docs.map((d) => ({ id: d.id, name: String(d.data().name ?? '') }));
+  const roster = (await client.collection('stores').get()).docs.map((d) => ({ id: d.id, name: String(d.data().name ?? ''), salesChannels: d.data().salesChannels }));
   // buildSnapshot refuses a store it does not know and names the excluded ones; asking it about the roster alone tells us
   // which ids are operating, so an excluded store is never read. An operating store not asked for is not part of this extract.
   const operating = new Set(buildSnapshot({ stores: roster }, { from, through }).stores.map((s) => s.id));
@@ -65,7 +65,7 @@ export async function runDualRunExtract(client: ReadOnlyV1Client, opts: DualRunE
   const selected = roster.filter((s) => !operating.has(s.id) || asked === null || asked.has(s.id));
   const readIds = selected.filter((s) => operating.has(s.id)).map((s) => s.id);
 
-  const raw: Record<string, unknown[]> = { stores: selected, journal: [], expenses: [], salesDays: [], suppliers: [], paymentAccounts: [] };
+  const raw: Record<string, unknown[]> = { stores: selected, journal: [], expenses: [], salesDays: [], suppliers: [], paymentAccounts: [], receipts: [] };
   for (const storeId of readIds) {
     for (const c of COLLECTIONS) {
       const docs = (await client.collection(`stores/${storeId}/${c}`).get()).docs;

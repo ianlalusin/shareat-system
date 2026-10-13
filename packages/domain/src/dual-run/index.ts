@@ -29,7 +29,8 @@ import {
 } from '@shareat/db';
 import { STAFF_CASH_KEY, assertNoStaffCashRow, assertStoresTicked, parseKeysCsv, type KeyRow } from '../../../etl/src/dual-run/keys';
 import { CLASS_CATALOGUE, type ClassCode } from '../../../etl/src/dual-run/classes';
-import { compareStoreWeek, type Disposition, type StoreWeekResult } from '../../../etl/src/dual-run/compare';
+import { compareStoreWeek, type CompareDoc, type Disposition, type StoreWeekResult } from '../../../etl/src/dual-run/compare';
+import { normaliseReceiptNo, v1Documents } from '../../../etl/src/dual-run/docs';
 import { computeV1Figures, type V1LineKind, type V1StoreFigures, type V1Warning } from '../../../etl/src/dual-run/v1-figures';
 import type { ExcludedStore, V1Snapshot } from '../../../etl/src/dual-run/snapshot';
 import { addDays, weekStartOf } from '../../../etl/src/dual-run/week';
@@ -92,7 +93,7 @@ const cmp = (a: string, b: string): number => a.localeCompare(b, 'en');
 const isAfter = (a: string, b: string): boolean => Math.sign(cmp(a, b)) === 1;
 
 /** The v2 key a v2 line carries into the comparator; the keys sheet and the supplier links map v1 onto these. */
-function v2KeyOf(l: DualRunV2Line): string {
+function v2KeyOf(l: Pick<DualRunV2Line, 'kind' | 'glCode' | 'partyType' | 'partyId' | 'categoryId'>): string {
   switch (l.kind) {
     case 'sales_tender':
       // credit sales: the debits to 1210 from ar_charge entries are one stated line, no sheet row (S4 tender keys).
@@ -211,6 +212,7 @@ export async function runDualRun(tx: Tx | null, actor: Actor, input: RunDualRunI
       }
       const figures = v1.stores[t.v1StoreId]!;
       const v2 = await dualRunRepo.v2Figures(tx, orgId, { storeId: t.storeId, weekStart, through });
+      const v2Rows = await dualRunRepo.v2Documents(tx, orgId, { storeId: t.storeId, weekStart, through });
       const tradingDays = await dualRunRepo.verifiedSalesDays(tx, orgId, t.storeId, weekStart, through);
       const dispositions: Disposition[] = (await dualRunRepo.dispositionsFor(tx, orgId, t.storeId, weekStart)).map((d) => ({
         orgId,
@@ -241,10 +243,24 @@ export async function runDualRun(tx: Tx | null, actor: Actor, input: RunDualRunI
           tradingDays,
         },
         keyMap: keyMapFor(t.v1StoreId, rows, figures, links.get(t.v1StoreId) ?? new Map()),
-        // Document-level matching (R9) needs v2 documents, which S3's repo does not read: an unmatched delta stays UNEXPLAINED
-        // (open) rather than being called NOT_DOUBLE_ENTERED without having looked at v2.
-        v1Docs: [],
-        v2Docs: [],
+        // Document-level matching (R9): v1's documents come from the snapshot, v2's from the repo's document reader.
+        v1Docs: v1Documents(snapshot, { storeId: t.v1StoreId, weekStart, through }),
+        v2Docs: v2Rows.map(
+          (d): CompareDoc => {
+            const norm = d.receiptNo ? normaliseReceiptNo(d.receiptNo) : '';
+            return {
+              id: d.id,
+              kind: d.kind as V1LineKind,
+              // an unposted staff-float funding row is staff cash (v1 cash__staff), not `<gl>:none`
+              key: d.kind === 'staff_cash' && d.state === 'unposted' ? STAFF_CASH_KEY : v2KeyOf(d),
+              date: d.date,
+              amount: cents(d.amount),
+              state: d.state,
+              channel: d.partyType === 'channel',
+              ...(norm !== '' ? { receiptId: `rn:${norm}` } : {}),
+            };
+          },
+        ),
         dispositions,
       });
       const existing = apply
