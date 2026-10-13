@@ -22,6 +22,7 @@ export interface V2KeyCatalogue {
 /** Staff cash is a stated mapping (v1 `cash__staff` <-> v2 `staff_cash`): it has no keys-sheet row (S4 tender keys ruling). */
 export const STAFF_CASH_KEY = 'cash__staff';
 
+const CHANNEL_V2_KEY = /^channel:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const HEADER = ['section', 'v1_store', 'v1_key', 'v1_label', 'v2_key', 'ticked'];
 const SECTION_ORDER: Record<string, number> = { store: 0, money: 1, category: 2 };
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -76,9 +77,13 @@ export function parseKeysCsv(text: string): KeyRow[] {
     if (section !== 'store' && section !== 'money' && section !== 'category') {
       throw new Error(`keys csv: row ${n + 2} has unknown section ${JSON.stringify(section)}`);
     }
+    const v2Key = r[4] ?? '';
+    const ticked = (r[5] ?? '').trim().toUpperCase() === 'Y';
+    if (ticked && section === 'money' && (r[2] ?? '').startsWith('channel__') && !CHANNEL_V2_KEY.test(v2Key.trim())) {
+      throw new Error(`keys csv: row ${n + 2} (${r[2]}) is a channel receivable; its v2_key must be channel:<sales channel id>, not ${JSON.stringify(v2Key)}`);
+    }
     return {
-      section, v1Store: r[1] ?? '', v1Key: r[2] ?? '', v1Label: r[3] ?? '', v2Key: r[4] ?? '',
-      ticked: (r[5] ?? '').trim().toUpperCase() === 'Y',
+      section, v1Store: r[1] ?? '', v1Key: r[2] ?? '', v1Label: r[3] ?? '', v2Key, ticked,
     };
   });
 }
@@ -107,6 +112,19 @@ export function prefillKeys(input: { snapshot: V1Snapshot; existing: KeyRow[]; v
   for (const l of snapshot.journal) {
     if (storeIds.has(l.storeId) && l.accountId !== STAFF_CASH_KEY && (l.accountId.startsWith('cash__') || l.accountId.startsWith('online__'))) {
       put('money', l.storeId, l.accountId, accountName(l.storeId, l.accountId), v2.money);
+    }
+  }
+  // S1b: channel receivables. A non-remitted channel, and any channel seen on a charge leg, gets an unticked money row.
+  const channelName = new Map<string, string>();
+  for (const c of snapshot.channels ?? []) {
+    if (!storeIds.has(c.storeId)) continue;
+    channelName.set(`${c.storeId}|${c.channelId}`, c.name);
+    if (c.isRemittedDaily === false) put('money', c.storeId, `channel__${c.channelId}`, c.name || c.channelId, []);
+  }
+  for (const l of snapshot.journal) {
+    const m = l.sourceType === 'sale' ? /^ar__channel_(.+)$/.exec(l.accountId) : null;
+    if (m && storeIds.has(l.storeId) && l.legKey === `ar:channel_${m[1]}`) {
+      put('money', l.storeId, `channel__${m[1]}`, channelName.get(`${l.storeId}|${m[1]}`) || m[1]!, []);
     }
   }
   for (const a of snapshot.paymentAccounts) {
