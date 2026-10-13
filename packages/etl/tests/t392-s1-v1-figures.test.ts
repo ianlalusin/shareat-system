@@ -489,7 +489,7 @@ describe('keys sheet: store / money / category (R7)', () => {
     expect(rows.every((r: Any) => r.ticked === false)).toBe(true);
     expect(rowsOf(rows, 'store').map((r) => r.v1Key).sort()).toEqual([L, M, B, D].sort()); // operating stores only: no Padre Garcia
     const lipaMoney = rowsOf(rows, 'money').filter((r) => r.v1Store === L).map((r) => r.v1Key).sort();
-    expect(lipaMoney).toEqual(['cash__cashier', 'cash__office', 'cash__staff', 'online__gcash', 'online__maya']);
+    expect(lipaMoney).toEqual(['cash__cashier', 'cash__office', 'online__gcash', 'online__maya']); // cash__staff is a stated mapping, never pre-filled (S4 ruling)
     const lipaCat = rowsOf(rows, 'category').filter((r) => r.v1Store === L).map((r) => r.v1Key).sort();
     expect(lipaCat).toEqual(['ent-equip', 'ent-misc', 'ent-pers', 'ent-pork', 'ent-rent', 'ent-util']);
     expect(new Set(rows.map((r: Any) => `${r.section}|${r.v1Store}|${r.v1Key}`)).size).toBe(rows.length);

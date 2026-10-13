@@ -49,7 +49,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - name must contain "_test".`);
 }
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -58,8 +58,9 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, withOrgPrincipal, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import * as domain from '@shareat/domain';
-import { postEntry } from '@shareat/domain';
+import { postEntry, reverseEntry } from '@shareat/domain';
 import { serialiseKeysCsv, type KeyRow } from '../../../etl/src/dual-run/keys';
+import { v1SalesDay } from '../../../etl/tests/fixtures/t392-v1-sales-day';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Any = any;
@@ -154,7 +155,7 @@ const cashSaleLeg = (amount: number, date: string): Any => ({
   id: `leg${++legSeq}`, storeId: L, businessDate: date, sourceType: 'sale', sourceId: `sale${legSeq}`, legKey: `k${legSeq}`,
   accountId: 'cash__cashier', direction: 'in', amount, status: 'posted',
 });
-const salesDay = (date: string, dineIn: number): Any => ({ id: date, storeId: L, status: 'verified', dineInSales: dineIn, onlineBreakdown: {}, creditSales: 0, otherPaymentSales: 0 });
+const salesDay = (date: string, remitted: number): Any => v1SalesDay(L, date, remitted);
 
 /** v2: Dr 1310 / Cr 2110 for a supplier owed (the invoice), at store A. */
 const postApInvoice = (f: Fx, date: string, amount: string, supplier = f.supId) =>
@@ -594,7 +595,7 @@ describe('M. one comparison line per fact (audit rulings a-c, l)', () => {
 });
 
 describe('T. tender keys (S4 tender keys ruling, i-k)', () => {
-  const salesDayWith = (date: string, extra: Any): Any => ({ ...salesDay(date, 0), ...extra });
+  const salesDayWith = (date: string, extra: Any): Any => v1SalesDay(L, date, 300, extra);
 
   it(
     'T1 (i): credit: v1 creditSales 300 and a v2 ar_charge Dr 1210 300 (customer party) at the store give ONE sales_tender line keyed `credit`, delta 0, with no keys-sheet row; a 1210 CREDIT (a collection) is excluded. Mutant: collection counted / credit needs a sheet row. Red if credit is unmapped',
@@ -609,7 +610,7 @@ describe('T. tender keys (S4 tender keys ruling, i-k)', () => {
         { accountCode: '1110', storeId: f.storeA.id, debit: '120.00' },
         { accountCode: '1210', storeId: f.storeA.id, partyType: 'customer', partyId: uid('cust'), credit: '120.00' },
       ]);
-      const out = await run(f, { snapshot: snap({ salesDays: [salesDayWith('2026-10-21', { creditSales: 300, dineInSales: 300 })] }), apply: false });
+      const out = await run(f, { snapshot: snap({ salesDays: [salesDayWith('2026-10-21', { creditSales: 300 })] }), apply: false });
       const credit = linesOfKind(out, f.storeA.code, 'sales_tender').filter((l: Any) => l.key === 'credit');
       expect(credit, JSON.stringify(credit)).toHaveLength(1);
       expect(credit[0]).toMatchObject({ v1: 30000, v2: 30000, delta: 0 });
@@ -642,7 +643,7 @@ describe('T. tender keys (S4 tender keys ruling, i-k)', () => {
   );
 
   it(
-    'T3 (j): other with row `none`: a non-zero v1 other 200 is NOT_DOUBLE_ENTERED where S2 can express it without R9 matching, else it is reported as what it becomes (this case prints the class and only requires it to be a named class, not TIES); an UNTICKED other row is UNMAPPED_KEY. Red if other is silently dropped',
+    'T3 (j): other with row `none`: a non-zero v1 other 200 is class NOT_DOUBLE_ENTERED exactly (not UNEXPLAINED); an UNTICKED other row is UNMAPPED_KEY. Red if other is silently dropped',
     async () => {
       const f = await fixture('t3');
       const snapshot = snap({ salesDays: [{ ...salesDay('2026-10-21', 200), otherPaymentSales: 200 }] });
@@ -651,8 +652,7 @@ describe('T. tender keys (S4 tender keys ruling, i-k)', () => {
       const la = linesOfKind(a, f.storeA.code, 'sales_tender').find((l: Any) => l.v1 === 20000);
       expect(la, JSON.stringify(a.weeks)).toBeDefined();
       expect(la.delta).toBe(-20000);
-      console.log(`[t392-s4 T3] other=none class: ${la.class}`);
-      expect(['NOT_DOUBLE_ENTERED', 'UNEXPLAINED']).toContain(la.class);
+      expect(la.class).toBe('NOT_DOUBLE_ENTERED');
       const unticked: KeyRow = { ...none, v2Key: '', ticked: false };
       const b = await run(f, { snapshot, keysText: serialiseKeysCsv(keyRows(f, [unticked])), apply: false });
       const lb = linesOfKind(b, f.storeA.code, 'sales_tender').find((l: Any) => l.v1 === 20000);
@@ -668,6 +668,147 @@ describe('T. tender keys (S4 tender keys ruling, i-k)', () => {
       const staffRow: KeyRow = { section: 'money', v1Store: L, v1Key: 'cash__staff', v1Label: 'cash staff', v2Key: '1120', ticked: true };
       await expect(run(f, { keysText: serialiseKeysCsv(keyRows(f, [staffRow])), apply: false })).rejects.toThrow(/cash__staff|staff/i);
       expect(await counts(f)).toEqual({ reports: 0, lines: 0, audit: 0 });
+    },
+    60_000,
+  );
+});
+
+describe('U. S4 audit round: channel keys, staff cash parties, credit provenance', () => {
+  const channelRow = (f: Fx, v2Key: string): KeyRow => ({ section: 'money', v1Store: L, v1Key: 'other', v1Label: 'other', v2Key, ticked: true });
+  const tenders = (out: Any, f: Fx): Any[] => linesOfKind(out, f.storeA.code, 'sales_tender');
+
+  it(
+    'U1 (audit 1): v2 sales-day debits to 1220 (the code that takes a channel party; 1221/1222 take none) for two channels give one sales_tender line PER channel, keyed channel:<id>, never one `1220` line. Red while the key is the GL code',
+    async () => {
+      const f = await fixture('u1');
+      const ch1 = randomUUID();
+      const ch2 = randomUUID();
+      await postRaw(f, '2026-10-21', 'sale', [
+        { accountCode: '1220', storeId: f.storeA.id, partyType: 'channel', partyId: ch1, debit: '100.00' },
+        { accountCode: '1220', storeId: f.storeA.id, partyType: 'channel', partyId: ch2, debit: '50.00' },
+        { accountCode: '4100', storeId: f.storeA.id, credit: '150.00' },
+      ]);
+      const out = await run(f, { snapshot: snap(), apply: false });
+      const t = tenders(out, f);
+      const keys = t.map((l: Any) => l.key).sort();
+      expect(keys, JSON.stringify(t)).toEqual([`channel:${ch1}`, `channel:${ch2}`].sort());
+      expect(t.find((l: Any) => l.key === `channel:${ch1}`)).toMatchObject({ v2: 10000 });
+      expect(t.find((l: Any) => l.key === `channel:${ch2}`)).toMatchObject({ v2: 5000 });
+    },
+    60_000,
+  );
+
+  it(
+    'U2 (audit 1): an `other` sheet row with v2_key channel:<id> pairs v1 other 100 with the v2 1220 debit of that channel: ONE line keyed channel:<id>, delta 0. Red while 1220 is keyed by GL code',
+    async () => {
+      const f = await fixture('u2');
+      const ch = randomUUID();
+      await postRaw(f, '2026-10-21', 'sale', [
+        { accountCode: '1220', storeId: f.storeA.id, partyType: 'channel', partyId: ch, debit: '100.00' },
+        { accountCode: '4100', storeId: f.storeA.id, credit: '100.00' },
+      ]);
+      const out = await run(f, {
+        snapshot: snap({ salesDays: [v1SalesDay(L, '2026-10-21', 100, { otherPaymentSales: 100 })] }),
+        keysText: serialiseKeysCsv(keyRows(f, [channelRow(f, `channel:${ch}`)])), apply: false,
+      });
+      const t = tenders(out, f).filter((l: Any) => l.v1 === 10000 || l.v2 === 10000);
+      expect(t, JSON.stringify(tenders(out, f))).toHaveLength(1);
+      expect(t[0]).toMatchObject({ key: `channel:${ch}`, v1: 10000, v2: 10000, delta: 0 });
+    },
+    60_000,
+  );
+
+  const staffMoney = async (f: Fx, gl: string) => {
+    const have = await sql<Any[]>`select 1 from money_accounts where org_id = ${f.orgId} and store_id = ${f.storeA.id} and custodian = 'staff' and gl_account_code = ${gl}`;
+    if (have.length === 0) {
+      await sql`insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+                values (${f.orgId}, ${f.storeA.id}, ${`Staff cash ${gl}`}, 'cash', ${gl}, 'staff')`;
+    }
+  };
+
+  it(
+    'U3 (audit 5): a party-less line on a staff-custodian code (1130 here, which takes no party, as 1120 requires one) is not keyed cash__staff and is not summed into it; its own key keeps the amount. Red while a null party falls back to cash__staff',
+    async () => {
+      const f = await fixture('u3');
+      await staffMoney(f, '1130');
+      await postRaw(f, '2026-10-22', 'money_transfer', [
+        { accountCode: '1130', storeId: f.storeA.id, debit: '300.00' },
+        { accountCode: '4100', storeId: f.storeA.id, credit: '300.00' },
+      ]);
+      const out = await run(f, { snapshot: snap(), apply: false });
+      const staff = linesOfKind(out, f.storeA.code, 'staff_cash');
+      expect(staff.find((l: Any) => l.key === 'cash__staff')?.v2 ?? 0, JSON.stringify(staff)).toBe(0);
+      const orphan = staff.find((l: Any) => l.v2 === 30000);
+      expect(orphan, JSON.stringify(staff)).toBeDefined();
+      expect(orphan.key).toMatch(/^1130/);
+    },
+    60_000,
+  );
+
+  it(
+    'U4 (audit 5): a NON-employee party on the staff-custodian code is keyed 1120:<party id> and stays out of cash__staff',
+    async () => {
+      const f = await fixture('u4');
+      await staffMoney(f, '1120');
+      await postRaw(f, '2026-10-22', 'money_transfer', [
+        { accountCode: '1120', storeId: f.storeA.id, partyType: 'supplier', partyId: f.supId, debit: '70.00' },
+        { accountCode: '4100', storeId: f.storeA.id, credit: '70.00' },
+      ]);
+      const out = await run(f, { snapshot: snap(), apply: false });
+      const staff = linesOfKind(out, f.storeA.code, 'staff_cash');
+      expect(staff.map((l: Any) => l.key), JSON.stringify(staff)).toEqual([`1120:${f.supId}`]);
+      expect(staff[0]).toMatchObject({ v2: 7000 });
+    },
+    60_000,
+  );
+
+  const creditOf = (out: Any, f: Fx): Any[] => tenders(out, f).filter((l: Any) => l.key === 'credit' || l.key.includes('1210'));
+  const v1Credit = (): Any => snap({ salesDays: [v1SalesDay(L, '2026-10-21', 300, { creditSales: 300 })] });
+
+  it(
+    'U5 (audit 7 i): a REVERSED ar_charge: the original 1210 debit counts (v2 credit 300), the reversal credit does not (not 0, not 600)',
+    async () => {
+      const f = await fixture('u5');
+      const e = await postRaw(f, '2026-10-21', 'ar_charge', [
+        { accountCode: '1210', storeId: f.storeA.id, partyType: 'customer', partyId: randomUUID(), debit: '300.00' },
+        { accountCode: '4100', storeId: f.storeA.id, credit: '300.00' },
+      ]);
+      await withOrgPrincipal(f.orgId, (tx) => reverseEntry(tx, { entryId: (e as Any).entryId, reason: 'void', reversalDate: '2026-10-22' }));
+      const out = await run(f, { snapshot: v1Credit(), apply: false });
+      const c = creditOf(out, f);
+      expect(c, JSON.stringify(c)).toHaveLength(1);
+      expect(c[0]).toMatchObject({ key: 'credit', v1: 30000, v2: 30000 });
+    },
+    60_000,
+  );
+
+  it(
+    'U6 (audit 7 ii): a 1210 debit whose root is NOT an ar_charge (an adjustment) is not credit: v2 credit stays 0',
+    async () => {
+      const f = await fixture('u6');
+      await postRaw(f, '2026-10-21', 'adjustment', [
+        { accountCode: '1210', storeId: f.storeA.id, partyType: 'customer', partyId: randomUUID(), debit: '300.00' },
+        { accountCode: '4100', storeId: f.storeA.id, credit: '300.00' },
+      ]);
+      const out = await run(f, { snapshot: v1Credit(), apply: false });
+      const c = creditOf(out, f);
+      expect(c.every((l: Any) => l.v2 === 0), JSON.stringify(c)).toBe(true);
+    },
+    60_000,
+  );
+
+  it(
+    'U7 (audit 7 iii): a sale-source entry that touches 1210 yields no sales_tender line keyed 1210 and no v2 credit',
+    async () => {
+      const f = await fixture('u7');
+      await postRaw(f, '2026-10-21', 'sale', [
+        { accountCode: '1210', storeId: f.storeA.id, partyType: 'customer', partyId: randomUUID(), debit: '300.00' },
+        { accountCode: '4100', storeId: f.storeA.id, credit: '300.00' },
+      ]);
+      const out = await run(f, { snapshot: v1Credit(), apply: false });
+      const c = creditOf(out, f);
+      expect(c.some((l: Any) => l.key.includes('1210')), JSON.stringify(c)).toBe(false);
+      expect(c.every((l: Any) => l.v2 === 0), JSON.stringify(c)).toBe(true);
     },
     60_000,
   );
@@ -806,5 +947,19 @@ describe('X. the compare command: exit codes and the snapshot file (audit ruling
       expect(await counts(f)).toEqual({ reports: 0, lines: 0, audit: 0 });
     },
     200_000,
+  );
+
+  it(
+    'X7 (audit 4): the CLI prints each week\'s SUB_CENTAVO warning on a dry run AND on --apply. Red while warnings are only returned, never printed',
+    async () => {
+      const f = await fixture('x7');
+      await postApInvoice(f, '2026-10-21', '500.00');
+      const mk = () => files(snap({ journal: [apLeg(500.004)] }), serialiseKeysCsv(keyRows(f)));
+      const dry = cli(f, mk(), []);
+      expect(dry.all, dry.all).toMatch(/SUB_CENTAVO/);
+      const applied = cli(f, mk(), ['--apply']);
+      expect(applied.all, applied.all).toMatch(/SUB_CENTAVO/);
+    },
+    300_000,
   );
 });

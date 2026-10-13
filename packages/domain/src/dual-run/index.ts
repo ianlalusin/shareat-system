@@ -27,10 +27,10 @@ import {
   type DualRunV2Line,
   type Tx,
 } from '@shareat/db';
-import { assertStoresTicked, parseKeysCsv, type KeyRow } from '../../../etl/src/dual-run/keys';
+import { STAFF_CASH_KEY, assertNoStaffCashRow, assertStoresTicked, parseKeysCsv, type KeyRow } from '../../../etl/src/dual-run/keys';
 import { CLASS_CATALOGUE, type ClassCode } from '../../../etl/src/dual-run/classes';
 import { compareStoreWeek, type Disposition, type StoreWeekResult } from '../../../etl/src/dual-run/compare';
-import { computeV1Figures, type V1LineKind, type V1StoreFigures } from '../../../etl/src/dual-run/v1-figures';
+import { computeV1Figures, type V1LineKind, type V1StoreFigures, type V1Warning } from '../../../etl/src/dual-run/v1-figures';
 import type { ExcludedStore, V1Snapshot } from '../../../etl/src/dual-run/snapshot';
 import { addDays, weekStartOf } from '../../../etl/src/dual-run/week';
 
@@ -68,6 +68,8 @@ export interface RunDualRunWeek {
   lineCount: number;
   lines: RunDualRunLine[];
   status: 'dry' | 'inserted' | 'unchanged';
+  /** v1 values that were not whole centavos (reported, never silently rounded). */
+  warnings: V1Warning[];
   /** Apply only; for an 'unchanged' week, the current report. */
   reportId?: string;
 }
@@ -92,8 +94,20 @@ const isAfter = (a: string, b: string): boolean => Math.sign(cmp(a, b)) === 1;
 /** The v2 key a v2 line carries into the comparator; the keys sheet and the supplier links map v1 onto these. */
 function v2KeyOf(l: DualRunV2Line): string {
   switch (l.kind) {
-    case 'cash_bank':
     case 'sales_tender':
+      // credit sales: the debits to 1210 from ar_charge entries are one stated line, no sheet row (S4 tender keys).
+      if (l.glCode === '1210') return 'credit';
+      // 1220 takes a channel party: one line per channel. 1221/1222 take none and stay keyed by GL code.
+      if (l.partyType === 'channel' && l.partyId) return `channel:${l.partyId}`;
+      return l.partyType === 'money_account' && l.partyId ? l.partyId : l.glCode;
+    case 'inventory_basis':
+      // one line per store-week, key COGS (S4 tender keys): the per-code lines of v2Figures are summed by the comparator.
+      return 'COGS';
+    case 'staff_cash':
+      // employee lines are summed per store under the stated key; any other party stays under itself (S2: UNEXPLAINED).
+      if (l.partyType === 'employee') return STAFF_CASH_KEY;
+      return `${l.glCode}:${l.partyId ?? 'none'}`;
+    case 'cash_bank':
       return l.partyType === 'money_account' && l.partyId ? l.partyId : l.glCode;
     case 'expense_category':
       return l.categoryId ?? l.glCode;
@@ -129,6 +143,8 @@ function keyMapFor(
     if (m && v2) map[`ap_supplier|${l.key}`] = m[1] === 'ap' ? v2 : `1240:${v2}`;
   }
   map['inventory_basis|COGS'] = 'COGS';
+  map['sales_tender|credit'] = 'credit';
+  map[`staff_cash|${STAFF_CASH_KEY}`] = STAFF_CASH_KEY;
   return map;
 }
 
@@ -152,6 +168,7 @@ export async function runDualRun(tx: Tx | null, actor: Actor, input: RunDualRunI
   const orgId = actor.orgId;
   const keysSha = sha256(input.keysText);
   const rows = parseKeysCsv(input.keysText);
+  assertNoStaffCashRow(rows);
   assertStoresTicked(rows, snapshot.stores.map((s) => s.id));
 
   // Each snapshot store -> its v2 store, by the ticked store row's code.
@@ -211,7 +228,8 @@ export async function runDualRun(tx: Tx | null, actor: Actor, input: RunDualRunI
         storeId: t.storeId,
         weekStart,
         through,
-        v1: { lines: figures.lines, tradingDays: figures.tradingDays, cashResidual: figures.cashResidual, scope: figures.scope, flags: figures.flags },
+        // v1 `cash__staff` is staff cash, a kind of its own (S4 tender keys): re-kinded so it meets v2 `staff_cash`.
+        v1: { lines: figures.lines.map((l) => (l.kind === 'cash_bank' && l.key === STAFF_CASH_KEY ? { ...l, kind: 'staff_cash' as V1LineKind } : l)), tradingDays: figures.tradingDays, cashResidual: figures.cashResidual, scope: figures.scope, flags: figures.flags },
         v2: {
           // staff_cash and unassigned_store are v2-only kinds (S3 rulings 2 and 6); the comparator treats a kind as a label.
           lines: v2.lines.map((l) => ({
@@ -253,6 +271,7 @@ export async function runDualRun(tx: Tx | null, actor: Actor, input: RunDualRunI
           comparedDays: result.comparedDays.length,
           lineCount: result.lines.length,
           lines: result.lines.map((l) => ({ kind: l.kind, key: l.key, v1: l.v1, v2: l.v2, delta: l.delta, class: l.class, paired: l.paired })),
+          warnings: figures.warnings,
           status: apply ? (existing ? 'unchanged' : 'inserted') : 'dry',
           ...(existing ? { reportId: existing.id } : {}),
         },
@@ -315,6 +334,7 @@ export async function runDualRun(tx: Tx | null, actor: Actor, input: RunDualRunI
           verdict: p.week.verdict,
           status: p.week.status,
           lineCount: p.week.lineCount,
+          warnings: p.week.warnings,
         })),
       },
       source: 'etl',

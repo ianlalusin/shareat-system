@@ -41,6 +41,15 @@ function fail(message: string): never {
 const pesos = (centavos: number): string => (centavos / 100).toFixed(2);
 const list = (flag: string): string[] | undefined => arg(flag)?.split(',').map((s) => s.trim()).filter(Boolean);
 
+/** `--stores` must carry a value: a trailing flag or another flag as its value is a usage error, never a swallowed argument. */
+function assertStoresValue(): void {
+  const i = process.argv.indexOf('--stores');
+  if (i < 0) return;
+  const v = process.argv[i + 1];
+  if (v === undefined || v.startsWith('--') || v.trim() === '') fail(`usage: --stores needs a value (a comma separated list of store codes or ids).
+${USAGE}`);
+}
+
 async function extract(): Promise<number> {
   // Before a credential is read, Firestore is opened or the disk is touched.
   if (process.env.NODE_ENV === 'production') {
@@ -95,13 +104,19 @@ async function compare(): Promise<number> {
     }
     for (const w of outcome.weeks) {
       console.log(`\n${w.storeCode}  week ${w.weekStart} through ${w.through}  ${w.verdict.toUpperCase()}  compared days ${w.comparedDays}  lines ${w.lineCount}  [${w.status}]`);
+      for (const x of w.warnings) console.log(`  WARNING ${x.code} ${x.docId} value ${x.value}`);
       for (const l of w.lines) {
         console.log(`  ${l.kind.padEnd(16)} ${l.key.padEnd(40)} v1 ${pesos(l.v1).padStart(12)}  v2 ${pesos(l.v2).padStart(12)}  delta ${pesos(l.delta).padStart(12)}  ${l.class}${l.paired ? ' (paired)' : ''}`);
       }
     }
     if (apply) {
-      removeSnapshotFile(resolve(snapshotPath));
-      console.log(`\nSnapshot deleted (sha256 ${outcome.snapshotSha} kept on the reports).`);
+      try {
+        removeSnapshotFile(resolve(snapshotPath));
+        console.log(`\nSnapshot deleted (sha256 ${outcome.snapshotSha} kept on the reports).`);
+      } catch (err) {
+        // The books are already committed: this is not a failed run. Say what is left to do.
+        console.error(`\nThe reports are written, but the snapshot could not be deleted (${err instanceof Error ? err.message : String(err)}). Delete it by hand: ${resolve(snapshotPath)}`);
+      }
     }
     return outcome.exitCode;
   } finally {
@@ -111,6 +126,7 @@ async function compare(): Promise<number> {
 
 async function main(): Promise<number> {
   const sub = process.argv[2];
+  if (sub === 'extract' || sub === 'compare') assertStoresValue();
   if (sub === 'extract') return extract();
   if (sub === 'compare') return compare();
   console.error(`${sub ? `unknown subcommand ${JSON.stringify(sub)}\n` : ''}${USAGE}`);
