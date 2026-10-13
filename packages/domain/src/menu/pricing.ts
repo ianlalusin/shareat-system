@@ -69,7 +69,7 @@ export async function setDepletionRule(actor: Actor, input: SetDepletionRuleInpu
       quantityPerSale: quantity,
       createdBy: actor.personId,
     });
-    await audit(trx, actor, 'menu_depletion_rule_set', 'menu_depletion_rules', row.id, null, row);
+    await audit(trx, actor, 'menu_depletion_rule_set', null, row.id, null, row);
     return { id: row.id };
   });
 }
@@ -82,7 +82,7 @@ export async function cancelScheduledDepletionRule(actor: Actor, input: { id: st
     if (!row) throw gone(`cancelScheduledDepletionRule: rule ${input.id} does not exist.`, 'depletion rule');
     await requireScheduled(trx, row.effectiveFrom, 'cancelScheduledDepletionRule', 'rule');
     await menuRepo.deleteRule(trx, row.id);
-    await audit(trx, actor, 'menu_depletion_rule_cancel', 'menu_depletion_rules', row.id, row, null);
+    await audit(trx, actor, 'menu_depletion_rule_cancel', null, row.id, row, null);
     return { id: row.id };
   });
 }
@@ -195,7 +195,7 @@ export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: 
       fixedMarkupAmount,
       createdBy: actor.personId,
     });
-    await audit(trx, actor, 'menu_offer_set', 'menu_offers', row.id, null, row);
+    await audit(trx, actor, 'menu_offer_set', input.storeId, row.id, null, row);
     return { id: row.id };
   });
 }
@@ -224,7 +224,7 @@ export async function withdrawMenuOffer(
       withdrawn: true,
       createdBy: actor.personId,
     });
-    await audit(trx, actor, 'menu_offer_withdraw', 'menu_offers', row.id, null, row);
+    await audit(trx, actor, 'menu_offer_withdraw', input.storeId, row.id, null, row);
     return { id: row.id };
   });
 }
@@ -237,7 +237,7 @@ export async function cancelScheduledOffer(actor: Actor, input: { id: string; st
     if (!row || row.storeId !== input.storeId) throw gone(`cancelScheduledOffer: offer ${input.id} does not exist at this store.`, 'scheduled price');
     await requireScheduled(trx, row.effectiveFrom, 'cancelScheduledOffer', 'price');
     await menuRepo.deleteOffer(trx, row.id);
-    await audit(trx, actor, 'menu_offer_cancel', 'menu_offers', row.id, row, null);
+    await audit(trx, actor, 'menu_offer_cancel', input.storeId, row.id, row, null);
     return { id: row.id };
   });
 }
@@ -279,7 +279,9 @@ export async function setOptionOffer(
       withdrawn: priceDelta === null,
       createdBy: actor.personId,
     });
-    await audit(trx, actor, priceDelta === null ? 'menu_option_offer_withdraw' : 'menu_option_offer_set', 'menu_option_offers', row.id, null, row);
+    // Two literal calls (not a ternary) so the T-402 build guard, which reads the action as a literal, sees both actions.
+    if (priceDelta === null) await audit(trx, actor, 'menu.option_offer_withdraw', input.storeId, row.id, null, row);
+    else await audit(trx, actor, 'menu.option_offer_set', input.storeId, row.id, null, row);
     return { id: row.id };
   });
 }
@@ -291,7 +293,7 @@ export async function cancelScheduledOptionOffer(actor: Actor, input: { id: stri
     if (!row || row.storeId !== input.storeId) throw gone(`cancelScheduledOptionOffer: option offer ${input.id} does not exist at this store.`, 'scheduled option price');
     await requireScheduled(trx, row.effectiveFrom, 'cancelScheduledOptionOffer', 'price');
     await menuRepo.deleteOptionOffer(trx, row.id);
-    await audit(trx, actor, 'menu_option_offer_cancel', 'menu_option_offers', row.id, row, null);
+    await audit(trx, actor, 'menu_option_offer_cancel', input.storeId, row.id, row, null);
     return { id: row.id };
   });
 }

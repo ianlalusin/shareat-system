@@ -226,9 +226,9 @@ describe('S4 apply - suppliers: create, link, audit', () => {
         expect(got.some((x) => x.id === l.v2_id)).toBe(true); // I4
       }
 
-      const a = await audits(e.orgId, 'master_data_load');
+      const a = await audits(e.orgId, 'master_data.suppliers_load');
       expect(a).toHaveLength(1);
-      expect(['supplier', 'suppliers']).toContain(a[0].entity);
+      expect(a[0].entity).toBe('suppliers');
       expect(a[0]).toMatchObject({ source: 'etl', actor_person_id: e.superA.personId });
       expect(a[0].after).toMatchObject({ snapshotSha: SHA, created: 2, linked: 3, held: 0 });
       expect(JSON.stringify(a[0].after.stores)).toMatch(/LIPA/);
@@ -259,7 +259,7 @@ describe('S4 apply - suppliers: create, link, audit', () => {
       expect(JSON.stringify(row)).not.toContain(FULL);
       expect(String(row!.bank_account_number ?? '').replace(/[^0-9]/g, '').length).toBeLessThanOrEqual(4);
       expect(row!.bank_account_number).toBe('************3456');
-      expect(JSON.stringify(await audits(e.orgId, 'master_data_load'))).not.toContain(FULL);
+      expect(JSON.stringify([...(await audits(e.orgId, 'master_data.suppliers_load')), ...(await audits(e.orgId, 'master_data.customers_load'))])).not.toContain(FULL);
     },
     60_000,
   );

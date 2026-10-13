@@ -157,7 +157,7 @@ export async function changeItemBaseUnit(
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,
       action: 'change_item_base_unit',
-      entity: 'items',
+      storeId: null,
       entityId: input.itemId,
       before: { baseUnit: item.baseUnit },
       after: { baseUnit: input.baseUnit },
@@ -223,7 +223,7 @@ export async function setItemPurchaseUnit(
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,
       action: 'set_item_purchase_unit',
-      entity: 'items',
+      storeId: null,
       entityId: input.itemId,
       before: { purchaseUnit: item.purchaseUnit, purchaseFactor: item.purchaseFactor },
       after: { purchaseUnit: input.purchaseUnit, purchaseFactor: factor },
@@ -272,7 +272,7 @@ export async function renameItem(
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,
       action: 'rename_item',
-      entity: 'items',
+      storeId: null,
       entityId: input.itemId,
       before: { name: item.name, code: item.code },
       after: { name, code },
@@ -307,7 +307,7 @@ export async function setItemStatus(
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,
       action: input.status === 'inactive' ? 'retire_item' : 'restore_item',
-      entity: 'items',
+      storeId: null,
       entityId: input.itemId,
       before: { status: item.status },
       after: { status: input.status },

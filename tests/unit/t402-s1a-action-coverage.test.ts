@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { AUDIT_CATALOGUE, catalogueEntry } from '../../packages/db/src/audit/catalogue';
 
 /**
  * T-402 S1a audit - ACTION COVERAGE. `append` refuses an action it has no label for (UNKNOWN_AUDIT_ACTION) and
@@ -44,16 +45,6 @@ function writtenActions(): { actions: Map<string, string[]>; dynamic: string[] }
   return { actions, dynamic };
 }
 
-function legacyLabelKeys(): Map<string, string> {
-  const src = readFileSync(join(ROOT, 'packages/db/src/repo/audit-log.ts'), 'utf8');
-  const start = src.indexOf('const LEGACY_LABELS');
-  expect(start, 'LEGACY_LABELS exists in repo/audit-log.ts').toBeGreaterThan(-1);
-  const block = src.slice(start, src.indexOf('};', start));
-  const out = new Map<string, string>();
-  for (const m of block.matchAll(/^\s*'?([a-z][a-z0-9_.]*)'?:\s*\{\s*category:\s*'(\w+)',\s*sensitivity:\s*'(\w+)'/gm)) out.set(m[1]!, `${m[2]}/${m[3]}`);
-  return out;
-}
-
 function migrationLabels(): Map<string, string> {
   const dir = join(ROOT, 'packages/db/migrations');
   const file = readdirSync(dir).find((f) => /^\d+_t402_.*\.sql$/.test(f));
@@ -74,7 +65,7 @@ describe('T-402 S1a - every audit action the code writes is labelled, in both pl
     expect(actions.size).toBeGreaterThanOrEqual(22 + 23);
     expect(actions.has('dual_run.compare')).toBe(true);
     expect(actions.has('menu_item_create')).toBe(true);
-    expect(actions.has('master_data_load')).toBe(true);
+    expect(actions.has('master_data.items_load'), 'master_data_load was split by the T-402 ruling').toBe(true);
     expect(actions.has('retire_item'), 'ternary action in items/index.ts').toBe(true);
     expect(actions.has('restore_item')).toBe(true);
   });
@@ -83,32 +74,26 @@ describe('T-402 S1a - every audit action the code writes is labelled, in both pl
     expect(dynamic).toEqual([]);
   });
 
-  it('every written action is in LEGACY_LABELS (repo/audit-log.ts) - else append throws UNKNOWN_AUDIT_ACTION in production', () => {
-    const legacy = legacyLabelKeys();
-    const missing = [...actions.keys()].filter((a) => !legacy.has(a)).sort();
-    expect(missing, `written but unlabelled in LEGACY_LABELS: ${missing.join(', ')}`).toEqual([]);
+  it('every action the code writes resolves to a NON-reserved catalogue entry - else append throws UNKNOWN_AUDIT_ACTION / AUDIT_ACTION_RESERVED in production', () => {
+    const bad = [...actions.keys()].filter((a) => !catalogueEntry(a) || catalogueEntry(a)!.reserved).sort();
+    expect(bad, `written but not live in the catalogue: ${bad.join(', ')}`).toEqual([]);
   });
 
-  it('every written action is in migration 0197\'s VALUES list - else the migration RAISEs on production rows', () => {
+  it('every action in migration 0197 list is catalogued (a legacy one may be reserved), with the SAME category/sensitivity (a copied row is labelled like a written one)', () => {
     const mig = migrationLabels();
-    const missing = [...actions.keys()].filter((a) => !mig.has(a)).sort();
-    expect(missing, `written but not in the migration list: ${missing.join(', ')}`).toEqual([]);
+    const missing = [...mig.keys()].filter((a) => !catalogueEntry(a)).sort();
+    expect(missing, `in the migration but not catalogued: ${missing.join(', ')}`).toEqual([]);
+    const diff = [...mig].filter(([a, l]) => `${catalogueEntry(a)!.category}/${catalogueEntry(a)!.sensitivity}` !== l).map(([a]) => a);
+    expect(diff, 'labels differ between 0197 and the catalogue').toEqual([]);
   });
 
-  it('LEGACY_LABELS and the migration list are the SAME set with the SAME labels (a row written today is labelled like a copied one)', () => {
-    const legacy = legacyLabelKeys();
-    const mig = migrationLabels();
-    expect([...legacy.keys()].sort()).toEqual([...mig.keys()].sort());
-    expect(Object.fromEntries(legacy)).toEqual(Object.fromEntries(mig));
-  });
-
-  it('no label is listed for an action nothing writes (a stale label hides a rename)', () => {
-    const stale = [...legacyLabelKeys().keys()].filter((a) => !actions.has(a)).sort();
+  it('no live (non-reserved) catalogue entry is unwritten - a stale entry hides a rename', () => {
+    const stale = AUDIT_CATALOGUE.filter((e) => !e.reserved && !actions.has(e.action)).map((e) => e.action).sort();
     expect(stale).toEqual([]);
   });
 
   it('set_staff_code is security/high (it changes a credential) in both lists; reopen_pin_sign_in stays security/high', () => {
-    for (const [name, m] of [['LEGACY_LABELS', legacyLabelKeys()], ['migration', migrationLabels()]] as const) {
+    for (const [name, m] of [['catalogue', new Map(AUDIT_CATALOGUE.map((e) => [e.action, `${e.category}/${e.sensitivity}`]))], ['migration', migrationLabels()]] as const) {
       expect({ list: name, staff: m.get('set_staff_code') }).toEqual({ list: name, staff: 'security/high' });
       expect({ list: name, reopen: m.get('reopen_pin_sign_in') }).toEqual({ list: name, reopen: 'security/high' });
     }

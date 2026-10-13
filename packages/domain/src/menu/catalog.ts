@@ -40,7 +40,7 @@ export async function createMenuCategory(actor: Actor, input: CreateMenuCategory
       sortOrder: input.sortOrder ?? 0,
       createdBy: actor.personId,
     });
-    await audit(trx, actor, 'menu_category_create', 'menu_categories', row.id, null, row);
+    await audit(trx, actor, 'menu_category_create', null, row.id, null, row);
     return { id: row.id };
   });
 }
@@ -73,7 +73,7 @@ export async function editMenuCategory(actor: Actor, input: EditMenuCategoryInpu
     ]);
     if (Object.keys(patch).length === 0) return { id: row.id };
     const after = await menuRepo.updateCategory(trx, row.id, patch);
-    await audit(trx, actor, 'menu_category_edit', 'menu_categories', row.id, row, after);
+    await audit(trx, actor, 'menu_category_edit', null, row.id, row, after);
     return { id: row.id };
   });
 }
@@ -152,7 +152,7 @@ export async function createMenuItem(actor: Actor, input: CreateMenuItemInput, t
       isDefault: true,
       createdBy: actor.personId,
     });
-    await audit(trx, actor, 'menu_item_create', 'menu_items', item.id, null, { ...item, defaultVariantId: variant.id });
+    await audit(trx, actor, 'menu_item_create', null, item.id, null, { ...item, defaultVariantId: variant.id });
     return { id: item.id, defaultVariantId: variant.id };
   });
 }
@@ -218,7 +218,7 @@ export async function editMenuItem(actor: Actor, input: EditMenuItemInput, tx?: 
       }
     }
     const after = await menuRepo.updateItem(trx, row.id, patch);
-    await audit(trx, actor, 'menu_item_edit', 'menu_items', row.id, row, after);
+    await audit(trx, actor, 'menu_item_edit', null, row.id, row, after);
     return { id: row.id };
   });
 }
@@ -253,7 +253,7 @@ export async function addMenuVariant(
       sortOrder: input.sortOrder ?? 0,
       createdBy: actor.personId,
     });
-    await audit(trx, actor, 'menu_variant_create', 'menu_item_variants', row.id, null, row);
+    await audit(trx, actor, 'menu_variant_create', null, row.id, null, row);
     return { id: row.id };
   });
 }
@@ -280,7 +280,7 @@ export async function editMenuVariant(actor: Actor, input: EditMenuVariantInput,
     const patch = changedFields(row, { label, sortOrder: input.sortOrder, status: input.status }, ['label', 'sortOrder', 'status']);
     if (Object.keys(patch).length === 0) return { id: row.id };
     const after = await menuRepo.updateVariant(trx, row.id, patch);
-    await audit(trx, actor, 'menu_variant_edit', 'menu_item_variants', row.id, row, after);
+    await audit(trx, actor, 'menu_variant_edit', null, row.id, row, after);
     return { id: row.id };
   });
 }

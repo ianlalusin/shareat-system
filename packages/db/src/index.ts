@@ -187,6 +187,16 @@ export * as tradeRepo from './repo/trade';
 export * as channelSettlementsRepo from './repo/channel-settlements';
 export * as auditLogRepo from './repo/audit-log';
 export type { AuditLogSource } from './repo/audit-log';
+export {
+  AUDIT_CATALOGUE,
+  catalogueEntry,
+  catalogueProblems,
+  retentionFor,
+  severityFor,
+} from './audit/catalogue';
+export type { AuditCategory, AuditRetention, AuditSensitivity, CatalogueEntry as AuditCatalogueEntry } from './audit/catalogue';
+export { isSecretKey, keyTokens, redactPayload } from './audit/redact';
+export { canonicalJson } from './audit/canonical-json';
 export * as findingsRepo from './repo/findings';
 // T-245 — the prerequisite-refusal counter. docs/tasks/245-prerequisite-refusal-counter.md.
 export * as prerequisiteRefusalsRepo from './repo/prerequisite-refusals';

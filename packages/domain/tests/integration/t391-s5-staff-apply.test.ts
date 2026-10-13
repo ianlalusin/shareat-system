@@ -346,8 +346,8 @@ describe('S5 apply - persons, employments, positions, links, audit', () => {
       const pids = new Set((await personsOf(e.orgId)).map((x) => x.id));
       for (const l of pl) expect(pids.has(l.v2_id)).toBe(true); // I4
 
-      const a = await audits(e.orgId, 'master_data_load');
-      const staffAudit = a.filter((x) => ['staff', 'employments'].includes(x.entity));
+      const a = await audits(e.orgId, 'master_data.staff_load');
+      const staffAudit = a.filter((x) => x.entity === 'staff');
       expect(staffAudit).toHaveLength(1);
       expect(staffAudit[0]).toMatchObject({ source: 'etl', actor_person_id: e.superA.personId });
       expect(staffAudit[0]!.after).toMatchObject({ snapshotSha: SHA, created: 4, held: 0 });
@@ -375,7 +375,7 @@ describe('S5 apply - persons, employments, positions, links, audit', () => {
         expect(ps.map((x) => x.name)).toEqual(['Grill Master']);
       }
       expect((await empPositions(got.find((x) => x.display_name === 'Mal Three')!.id)).map((x) => x.name)).toEqual(['Cook']);
-      const pa = (await audits(e.orgId, 'master_data_load')).filter((x) => ['positions', 'position'].includes(x.entity));
+      const pa = (await audits(e.orgId, 'master_data.positions_load')).filter((x) => x.entity === 'positions');
       expect(pa).toHaveLength(1);
     },
     90_000,

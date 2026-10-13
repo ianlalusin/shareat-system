@@ -98,7 +98,7 @@ async function run(tx: Tx, actor: Actor, input: SetPlatformSalesInput): Promise<
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'set_platform_sales',
-    entity: 'sales_days',
+    storeId: day.storeId,
     entityId: day.id,
     before: { platformRows: before },
     after: { platformRows: after },

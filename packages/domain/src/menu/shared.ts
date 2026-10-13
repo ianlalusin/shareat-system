@@ -16,17 +16,21 @@ export async function inTx<T>(tx: Tx | undefined, run: (trx: Tx) => Promise<T>):
   return tx ? run(tx) : transaction(run);
 }
 
-/** Exactly one audit row per write, in the write's own transaction. `before`/`after` are the rows as stored. */
+/**
+ * Exactly one audit row per write, in the write's own transaction. `before`/`after` are the rows as stored.
+ * T-402 R1/R14: `storeId` is the store the write belongs to (`null` for an org-level menu change); the entity,
+ * category and sensitivity come from the event catalogue, not from here.
+ */
 export async function audit(
   tx: Tx,
   actor: Actor,
   action: string,
-  entity: string,
+  storeId: string | null,
   entityId: string,
   before: unknown,
   after: unknown,
 ): Promise<void> {
-  await auditLogRepo.append(tx, actor.orgId, { actorPersonId: actor.personId, action, entity, entityId, before, after, source: 'web' });
+  await auditLogRepo.append(tx, actor.orgId, { actorPersonId: actor.personId, action, storeId, entityId, before, after, source: 'web' });
 }
 
 /** A required, trimmed, non-blank name. */

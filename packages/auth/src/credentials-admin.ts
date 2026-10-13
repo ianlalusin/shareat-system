@@ -300,7 +300,7 @@ export async function reopenPinSignIn(tx: Tx, actor: Actor, storeId: string): Pr
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'reopen_pin_sign_in',
-    entity: 'store',
+    storeId: storeId,
     entityId: storeId,
     before: { stoppedAt: result.stoppedAt ? result.stoppedAt.toISOString() : null },
     after: { reopenedAt: result.reopenedAt ? result.reopenedAt.toISOString() : null },

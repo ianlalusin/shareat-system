@@ -97,7 +97,7 @@ describe('G1 — latestForEntity filters by org even when two orgs share an enti
       auditLogRepo.append(tx, orgA.orgId, {
         actorPersonId: orgA.adminId,
         action: 'set_channel_payout',
-        entity: 'sales_channels',
+        storeId: orgA.storeId, // set_channel_payout is store-scoped in the catalogue
         entityId: sharedEntityId,
         before: { marker: 'orgA' },
         after: { marker: 'orgA' },
@@ -111,7 +111,7 @@ describe('G1 — latestForEntity filters by org even when two orgs share an enti
       auditLogRepo.append(tx, orgB.orgId, {
         actorPersonId: orgB.adminId,
         action: 'set_channel_payout',
-        entity: 'sales_channels',
+        storeId: orgB.storeId, // set_channel_payout is store-scoped in the catalogue
         entityId: sharedEntityId,
         before: { marker: 'orgB' },
         after: { marker: 'orgB' },

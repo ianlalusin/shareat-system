@@ -146,7 +146,7 @@ const links = (orgId: string) =>
 const counters = async (orgId: string) =>
   (await sql<Any[]>`select stem, last_seq from item_code_counters where org_id = ${orgId} order by stem`).map((r) => `${r.stem}:${r.last_seq}`);
 const loadAudits = (orgId: string) =>
-  sql<Any[]>`select action, entity, after, source, actor_person_id from audit_log where org_id = ${orgId} and action = 'master_data_load' order by occurred_at, id`;
+  sql<Any[]>`select action, entity, after, source, actor_person_id from audit_log where org_id = ${orgId} and action = 'master_data.items_load' order by occurred_at, id`;
 const allAuditCount = async (orgId: string) => Number((await sql<Any[]>`select count(*)::int as n from audit_log where org_id = ${orgId}`)[0]!.n);
 const state = async (orgId: string) => ({
   items: await items(orgId), links: await links(orgId), counters: await counters(orgId), audit: await allAuditCount(orgId),
@@ -209,8 +209,8 @@ describe('S3 apply - creates and links exactly the plan', () => {
 
       const audits = await loadAudits(e.orgId);
       expect(audits).toHaveLength(1);
-      expect(audits[0]).toMatchObject({ action: 'master_data_load', actor_person_id: e.superA.personId });
-      expect(['item', 'items']).toContain(audits[0].entity);
+      expect(audits[0]).toMatchObject({ action: 'master_data.items_load', entity: 'items', actor_person_id: e.superA.personId });
+      expect(audits[0].entity).toBe('items');
       expect(audits[0].after).toMatchObject({ snapshotSha: SHA, created: 4, linked: wantLinks, held: 0 });
       expect(JSON.stringify(audits[0].after.stores)).toMatch(/LIPA/);
     },

@@ -112,19 +112,19 @@ describe('L1 — gridCapabilityGroups: area order, exactly-91-once, and the 76/1
   // ⭐ 93 -> 99 (T-401): seven menu capabilities join, SIX of them offerable: view_menu, manage_menu, set_menu_depletion (org),
   // request_menu_item, set_menu_price, switch_usage_source (store). `add_menu_item` is super-admin-only, so it is in
   // SUPER_ADMIN_ONLY_CAPABILITIES and never offerable (asserted below).
-  it('the 99 offerable capabilities each appear exactly once across every area of every scope', () => {
+  it('the 101 offerable capabilities each appear exactly once across every area of every scope', () => {
     const rendered = groups.flatMap((g) => g.areas.flatMap((a) => a.capabilities.map((c) => c.capability)));
-    expect(rendered.length).toBe(99);
-    expect(new Set(rendered).size, 'no capability appears twice').toBe(99);
+    expect(rendered.length).toBe(101);
+    expect(new Set(rendered).size, 'no capability appears twice').toBe(101);
     expect(rendered).not.toContain('add_menu_item');
   });
 
   // ⭐ store 76 -> 77 (T-350/DEF-477): `set_channel_payout` joins store, same as `set_cash_policy`.
-  it('store holds 77, org holds 16 (§1\'s totals)', () => {
+  it('store holds 81, org holds 20 (§1\'s totals)', () => {
     const countFor = (scope: (typeof SCOPE_ORDER)[number]) =>
       groups.find((g) => g.scope === scope)!.areas.reduce((n, a) => n + a.capabilities.length, 0);
-    expect(countFor('store')).toBe(80);
-    expect(countFor('org')).toBe(19);
+    expect(countFor('store')).toBe(81); // T-402 S1b: +view_activity_log
+    expect(countFor('org')).toBe(20); // T-402 S1b: +view_activity_log_restricted
   });
 
   it('NEGATIVE: no area group is ever empty — gridCapabilityGroups filters them out', () => {

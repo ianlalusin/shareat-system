@@ -284,7 +284,7 @@ export async function editSupplier(
       await auditLogRepo.append(trx, actor.orgId, {
         actorPersonId: actor.personId,
         action: 'set_supplier_credit_terms',
-        entity: 'suppliers',
+        storeId: null,
         entityId: input.supplierId,
         before: { creditTermsDays: existing.creditTermsDays },
         after: { creditTermsDays },
@@ -299,7 +299,7 @@ export async function editSupplier(
       await auditLogRepo.append(trx, actor.orgId, {
         actorPersonId: actor.personId,
         action: 'set_supplier_status',
-        entity: 'suppliers',
+        storeId: null,
         entityId: input.supplierId,
         before: { status: existing.status },
         after: { status: input.status },
@@ -331,7 +331,7 @@ export async function editSupplier(
       await auditLogRepo.append(trx, actor.orgId, {
         actorPersonId: actor.personId,
         action: 'set_supplier_bank_account',
-        entity: 'suppliers',
+        storeId: null,
         entityId: input.supplierId,
         before: bankBefore,
         after: bankAfter,
@@ -369,7 +369,7 @@ export async function setSupplierCounterpartyStore(
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,
       action: 'set_supplier_counterparty_store',
-      entity: 'suppliers',
+      storeId: null,
       entityId: input.supplierId,
       before: { counterpartyStoreId: existing.counterpartyStoreId },
       after: { counterpartyStoreId: input.storeId },

@@ -11,6 +11,8 @@ addOptionValue
 addUsageLine
 adjudicateRange
 allocationsFor
+appendClientEvent
+appendSystem
 applyCreditAction
 approveMenuItemRequest
 arrivalLag
@@ -21,6 +23,7 @@ cancelScheduledDepletionRule
 cancelScheduledOffer
 cancelScheduledOptionOffer
 capitalizeFromExpense
+catalogueProblems
 checkValuesMatch
 childLogger
 closeAsLateReceipt
