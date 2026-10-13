@@ -318,12 +318,18 @@ describe('one organisation, not two — bible invariant 7', () => {
     const o2 = await mkOrg('leak-2');
     const p1 = await mkPerson(o1.orgId, 'Org A Staff');
     await hireAt(o1.orgId, p1, o1.storeA);
-    // Give them an employment in org B's store too — so the GATE cannot be what refuses this, and
-    // the assertion is really about the credential lookup.
-    await sql`
+    // Before migration 0194 (T-398 S1) this gave org A's person an employment in org B's store, so the GATE could not be what refused
+    // the sign-in. 0194 makes (org_id, person_id) a same-org composite FK, so that fixture is impossible by construction. The DB now
+    // refuses it (23503 naming the constraint) and the sign-in assertion below stands on the credential lookup alone.
+    const crossOrg = await sql`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
       values (${o2.orgId}, ${o2.storeA}, ${p1}, ${uid('SC')}, 'regular', '2026-01-01')
-    `;
+    `.then(
+      () => null,
+      (e: { code?: string; constraint_name?: string }) => e,
+    );
+    expect(crossOrg?.code, 'a cross-org employment is refused by the DB').toBe('23503');
+    expect(crossOrg?.constraint_name).toBe('employments_person_id_same_org_fk');
     await asOrg(o1.orgId, (tx) => setPin(tx, { orgId: o1.orgId, personId: p1, storeId: o1.storeA, pin: '446622' }));
 
     await expect(

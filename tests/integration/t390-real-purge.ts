@@ -12,18 +12,45 @@ import type postgres from 'postgres';
  */
 export const PURGE_AS_OF = '2027-01-01';
 
+/**
+ * DEF-640: the purge takes ONE same-org performer per organization (0194's same-org FK). `performedBy` is the person for their own
+ * org (a string) and/or an explicit orgId -> personId map; every other org that exists at purge time gets its earliest person, and a
+ * person is created for an org that has none, as production would require an operator to.
+ */
+export async function performersForAllOrgs(
+  sql: postgres.Sql,
+  performedBy: string | Record<string, string>,
+): Promise<Record<string, string>> {
+  const map: Record<string, string> = typeof performedBy === 'string' ? {} : { ...performedBy };
+  if (typeof performedBy === 'string') {
+    const [p] = await sql<{ org_id: string }[]>`select org_id from persons where id = ${performedBy}`;
+    if (p) map[p.org_id] = performedBy;
+  }
+  for (const o of await sql<{ id: string }[]>`select id from organizations`) {
+    if (map[o.id]) continue;
+    const [any] = await sql<{ id: string }[]>`select id from persons where org_id = ${o.id} order by id limit 1`;
+    if (any) map[o.id] = any.id;
+    else {
+      const [made] = await sql<{ id: string }[]>`
+        insert into persons (org_id, display_name) values (${o.id}, 'C2 performer') returning id`;
+      map[o.id] = made!.id;
+    }
+  }
+  return map;
+}
+
 export async function realPurge(
   sql: postgres.Sql,
-  performedBy: string,
+  performedBy: string | Record<string, string>,
   opts: { rollback?: boolean } = {},
 ): Promise<void> {
   const { planPurge, applyPurge } = await import('../../packages/db/src/cutover/purge');
+  const map = await performersForAllOrgs(sql, performedBy);
   const ROLLBACK = Symbol('rehearsal rollback');
   try {
     await sql.begin(async (tx) => {
       const plan = await planPurge(tx, PURGE_AS_OF);
-      // `performedBy` is the S2 option (R8); the cast keeps this file compiling before the builder adds it to ApplyPurgeOptions.
-      await applyPurge(tx, plan, { performedBy } as unknown as Parameters<typeof applyPurge>[2]);
+      await applyPurge(tx, plan, { performedBy: map });
       if (opts.rollback) throw ROLLBACK;
     });
   } catch (e) {
