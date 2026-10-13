@@ -19,6 +19,9 @@ export interface V2KeyCatalogue {
   categories: { key: string; name: string }[];
 }
 
+/** Staff cash is a stated mapping (v1 `cash__staff` <-> v2 `staff_cash`): it has no keys-sheet row (S4 tender keys ruling). */
+export const STAFF_CASH_KEY = 'cash__staff';
+
 const HEADER = ['section', 'v1_store', 'v1_key', 'v1_label', 'v2_key', 'ticked'];
 const SECTION_ORDER: Record<string, number> = { store: 0, money: 1, category: 2 };
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -102,7 +105,7 @@ export function prefillKeys(input: { snapshot: V1Snapshot; existing: KeyRow[]; v
     return accountId.replace('__', ' ').replace(/_/g, ' ');
   };
   for (const l of snapshot.journal) {
-    if (storeIds.has(l.storeId) && (l.accountId.startsWith('cash__') || l.accountId.startsWith('online__'))) {
+    if (storeIds.has(l.storeId) && l.accountId !== STAFF_CASH_KEY && (l.accountId.startsWith('cash__') || l.accountId.startsWith('online__'))) {
       put('money', l.storeId, l.accountId, accountName(l.storeId, l.accountId), v2.money);
     }
   }
@@ -135,4 +138,12 @@ export function assertStoresTicked(rows: KeyRow[], v1StoreIds: string[]): void {
     else if (row.v2Key.trim() === '') problems.push(`${id} (${row.v1Label}): ticked but has no v2 key`);
   }
   if (problems.length > 0) throw new Error(`keys sheet: v1 stores not mapped - ${problems.join('; ')}`);
+}
+
+/** A sheet row for staff cash is a refusal: the mapping is stated, and a sheet row would silently override it. */
+export function assertNoStaffCashRow(rows: KeyRow[]): void {
+  const bad = rows.filter((r) => r.section === 'money' && r.v1Key === STAFF_CASH_KEY);
+  if (bad.length > 0) {
+    throw new Error(`keys sheet: ${STAFF_CASH_KEY} has no sheet row (staff cash is a stated mapping); delete the row for ${bad.map((r) => r.v1Store).join(', ')}`);
+  }
 }

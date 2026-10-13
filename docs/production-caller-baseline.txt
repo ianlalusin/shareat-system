@@ -14,14 +14,11 @@ arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
-buildSnapshot
 capitalizeFromExpense
 checkValuesMatch
 childLogger
 closeAsLateReceipt
 closeYear
-compareStoreWeek
-computeV1Figures
 confirmTradeOrder
 convertSpecimen
 countedVariances
@@ -46,7 +43,6 @@ getRecipe
 hasFingerprint
 hasOtherActiveAdmin
 insertDisposition
-insertReport
 isConvertibleUnit
 isHeaderCode
 isStartDecisionMaterial
@@ -116,8 +112,6 @@ updateMoneyAccount
 updateOwner
 upsertCategoryLife
 upsertPolicy
-v2Figures
 validateFingerprintTemplates
 voidShift
-weekStartOf
 withPrincipal

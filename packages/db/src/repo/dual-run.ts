@@ -15,7 +15,7 @@
  *    source also holds a DRAFT, is listed in `datedLater`.
  * The week is `weekStart..through` (Manila business dates: entry_date is already one, nothing here reads the clock).
  */
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, between, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import {
@@ -25,6 +25,9 @@ import {
   type DualRunKind,
   type DualRunVerdict,
 } from '../../schema/dual-run';
+import { salesDays } from '../../schema/sales-days';
+import { stores } from '../../schema/stores';
+import { recordGone } from './record-gone';
 
 const INVENTORY_CODES = ['1310', '1320', '1330', '1340', '5100', '5110', '5120', '5130', '5140', '5150', '5160', '5170', '5175', '5200', '5300', '5400', '5450'];
 const invList = () => sql.join(INVENTORY_CODES.map((c) => sql`${c}`), sql`, `);
@@ -124,7 +127,7 @@ export async function insertLines(tx: Tx, reportId: string, lines: readonly Line
   if (lines.length === 0) return;
   // org_id is the REPORT's (S3 money ruling e). A report this principal cannot see (another org's) yields no row: raise.
   const [rep] = await tx.select({ orgId: dualRunReports.orgId }).from(dualRunReports).where(eq(dualRunReports.id, reportId));
-  if (!rep) throw new Error(`dual_run_lines: report ${reportId} not found in this org; nothing inserted`);
+  if (!rep) throw recordGone(`dual_run_lines: report ${reportId} not found in this org; nothing inserted`, 'dual-run report');
   await tx.insert(dualRunLines).values(
     lines.map((l) => ({
       orgId: rep.orgId,
@@ -186,6 +189,93 @@ export async function linesOf(tx: Tx, reportId: string): Promise<LineRow[]> {
     v1Counter: r.v1Counter,
     openingGap: r.openingGap,
   }));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// reads for the run (T-392 S4)
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** The org's stores with these codes (RLS keeps another org's invisible). */
+export async function storesByCode(tx: Tx, orgId: string, codes: readonly string[]): Promise<{ id: string; code: string }[]> {
+  if (codes.length === 0) return [];
+  return tx.select({ id: stores.id, code: stores.code }).from(stores).where(and(eq(stores.orgId, orgId), inArray(stores.code, [...codes])));
+}
+
+/** Business dates of the store's VERIFIED sales days in the window: v2's trading days (R13). */
+export async function verifiedSalesDays(tx: Tx, orgId: string, storeId: string, weekStart: string, through: string): Promise<string[]> {
+  const rows = await tx
+    .select({ d: salesDays.businessDate })
+    .from(salesDays)
+    .where(and(eq(salesDays.orgId, orgId), eq(salesDays.storeId, storeId), eq(salesDays.status, 'verified'), between(salesDays.businessDate, weekStart, through)))
+    .orderBy(asc(salesDays.businessDate));
+  return rows.map((r) => r.d);
+}
+
+export interface DispositionRow {
+  kind: DualRunKind;
+  lineKey: string;
+  deltaAt: string;
+  class: 'V1_DEFECT' | 'V2_DEFECT';
+  ref: string;
+  createdAt: Date;
+}
+
+/** Every disposition recorded for a store-week (the comparator picks the latest per line). */
+export async function dispositionsFor(tx: Tx, orgId: string, storeId: string, weekStart: string): Promise<DispositionRow[]> {
+  return tx
+    .select({
+      kind: dualRunDispositions.kind,
+      lineKey: dualRunDispositions.lineKey,
+      deltaAt: dualRunDispositions.deltaAt,
+      class: dualRunDispositions.class,
+      ref: dualRunDispositions.ref,
+      createdAt: dualRunDispositions.createdAt,
+    })
+    .from(dualRunDispositions)
+    .where(and(eq(dualRunDispositions.orgId, orgId), eq(dualRunDispositions.storeId, storeId), eq(dualRunDispositions.weekStart, weekStart)))
+    .orderBy(asc(dualRunDispositions.createdAt), asc(dualRunDispositions.id));
+}
+
+export interface ReportIdentity {
+  orgId: string;
+  storeId: string;
+  weekStart: string;
+  through: string;
+  v1Fingerprint: string;
+  keysSha: string;
+  v2Fingerprint: string;
+}
+
+/** The report version with exactly this R8 identity, if one exists. */
+export async function findReport(tx: Tx, key: ReportIdentity): Promise<{ id: string } | undefined> {
+  const [row] = await tx
+    .select({ id: dualRunReports.id })
+    .from(dualRunReports)
+    .where(
+      and(
+        eq(dualRunReports.orgId, key.orgId),
+        eq(dualRunReports.storeId, key.storeId),
+        eq(dualRunReports.weekStart, key.weekStart),
+        eq(dualRunReports.through, key.through),
+        eq(dualRunReports.v1Fingerprint, key.v1Fingerprint),
+        eq(dualRunReports.keysSha, key.keysSha),
+        eq(dualRunReports.v2Fingerprint, key.v2Fingerprint),
+      ),
+    )
+    .orderBy(desc(dualRunReports.createdAt))
+    .limit(1);
+  return row;
+}
+
+/** The newest `v1_extracted_at` among the store-week's report versions; null when it has none. */
+export async function latestExtractedAt(tx: Tx, orgId: string, storeId: string, weekStart: string): Promise<Date | null> {
+  const [row] = await tx
+    .select({ at: dualRunReports.v1ExtractedAt })
+    .from(dualRunReports)
+    .where(and(eq(dualRunReports.orgId, orgId), eq(dualRunReports.storeId, storeId), eq(dualRunReports.weekStart, weekStart)))
+    .orderBy(desc(dualRunReports.v1ExtractedAt))
+    .limit(1);
+  return row?.at ?? null;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -320,13 +410,22 @@ export async function v2Figures(
         union all
         -- sales tender: the tender side of a sale entry, a correction placed on the day it corrects.
         select 'sales_tender', l.store_id, l.code,
-               case when l.party_type = 'money_account' then l.party_type end,
-               case when l.party_type = 'money_account' then l.party_id end,
+               case when l.party_type in ('money_account', 'channel') then l.party_type end,
+               case when l.party_type in ('money_account', 'channel') then l.party_id end,
                null::uuid, l.eff_date, l.debit, l.credit
         from l
         where l.store_id = ${storeId}::uuid and l.source_type = 'sale'
-          and ((l.code ~ '^11[0-9]{2}$' and l.code not in (select code from staff)) or l.code in ('1210', '1220', '1221', '1222'))
+          and ((l.code ~ '^11[0-9]{2}$' and l.code not in (select code from staff)) or l.code in ('1220', '1221', '1222'))
           and l.eff_date between ${weekStart}::date and ${through}::date
+        union all
+        -- credit sales (S4 tender keys): DEBITS to 1210 from entries whose reversal-chain root is an ar_charge, by entry date;
+        -- 1210 credits (collections, and a charge's reversal) are excluded.
+        select 'sales_tender', l.store_id, l.code, null::text, null::text, null::uuid, l.own_date,
+               l.debit, l.credit
+        from l
+        where l.store_id = ${storeId}::uuid and l.code = '1210' and l.root_src = 'ar_charge'
+          and l.debit > 0
+          and l.own_date between ${weekStart}::date and ${through}::date
         union all
         -- expense category: lines on a category account; the category is known only from an expense source (ruling 5).
         select 'expense_category', l.store_id, l.code, null::text, null::text,
