@@ -75,6 +75,7 @@ const LEGACY: Readonly<Record<string, string>> = {
   menu_item_request_duplicate: 'menu_price/normal', menu_item_request_reject: 'menu_price/normal',
   menu_item_request_withdraw: 'menu_price/normal', menu_option_group_create: 'menu_price/normal',
   menu_option_group_edit: 'menu_price/normal', menu_option_group_link: 'menu_price/normal', menu_option_group_unlink: 'menu_price/normal',
+  recode_item: 'stock/normal', // one-time T-386 S5 recode script rows live in production; reserved (no caller)
   menu_option_value_create: 'menu_price/normal', menu_option_value_edit: 'menu_price/normal', menu_package_refills_set: 'menu_price/normal',
 };
 
@@ -122,13 +123,13 @@ describe('T-402 S1b - the catalogue is closed, typed and in one file (R2, R3, R4
     }
   });
 
-  it('Invariant 10/13: all 48 legacy actions are present, NOT reserved (except the split master_data_load), with exactly the labels migration 0197 copied them under', () => {
+  it('Invariant 10/13: all 49 legacy actions are present, NOT reserved (except the split master_data_load and the retired recode_item), with exactly the labels migration 0197 copied them under', () => {
     for (const [action, label] of Object.entries(LEGACY)) {
       const e = catalogueEntry(action);
       expect(e, `${action} missing from the catalogue`).toBeDefined();
       expect(`${e!.category}/${e!.sensitivity}`, `${action} label`).toBe(label);
       // orchestrator ruling: master_data_load is split into master_data.*_load; the legacy string stays catalogued but reserved
-      expect(e!.reserved, `${action} reserved?`).toBe(action === 'master_data_load');
+      expect(e!.reserved, `${action} reserved?`).toBe(action === 'master_data_load' || action === 'recode_item');
       expect(e!.clientSources, `${action} is server-only`).toEqual([]);
     }
   });

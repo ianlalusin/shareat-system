@@ -104,6 +104,8 @@ const ACTIONS = [
   'set_staff_code', 'link_store_to_pos', 'unlink_store_from_pos',
   'create_tender', 'update_tender', 'reactivate_tender', 'retire_tender',
   'edit_sales_day', 'reimport_sales_day', 'set_platform_sales',
+  // production holds rows of this action from the one-time T-386 S5 recode script (commit 2a62961, since removed); the first prod deploy of 0197 refused it
+  'recode_item',
 ] as const;
 
 const BANK_BEFORE = { bankName: 'BDO', bankAccountName: 'Acme', bankAccountNumber: '001234567890' };
@@ -237,6 +239,13 @@ describe('S1a invariant 13 / 13a - the copy: every row, labelled, masked, store-
     }
     const reopen = rows.find((r) => r.id === seed.ids['reopen_pin_sign_in']);
     expect(reopen?.category, 'reopen_pin_sign_in is a security event (R3)').toBe('security');
+  });
+
+  it('a recode_item row (written once in production by the removed T-386 S5 script) is copied as stock/normal, r10y', async () => {
+    const [r] = await s<{ category: string; sensitivity: string; severity: number; retention_class: string }[]>`
+      select category, sensitivity, severity, retention_class from audit_log where id = ${seed.ids['recode_item']!}`;
+    expect(r, 'the recode_item row survived the copy').toBeDefined();
+    expect(r).toEqual({ category: 'stock', sensitivity: 'normal', severity: 5, retention_class: 'r10y' });
   });
 
   it('recorded_at = occurred_at for every copied row (R1 + Contract 3 step 3)', async () => {
