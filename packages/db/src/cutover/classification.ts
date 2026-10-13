@@ -1216,6 +1216,48 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     notBefore: '2027-01-31',
     reason: 'As dual_run_reports: the defect refs a person recorded against a delta; part of the same evidence.',
   },
+
+  // ---- T-401 S1: the ERP menu and catalog master (migration 0196) -----------------------------
+  menu_categories: {
+    class: 'keep',
+    reason: 'The menu’s categories: standing configuration, same class as pos_item_maps. Nobody re-keys a menu on 1 January.',
+  },
+  menu_items: {
+    class: 'keep',
+    reason: 'A menu item is standing configuration (T-401), the same class as pos_item_maps and tenders.',
+  },
+  menu_item_variants: {
+    class: 'keep',
+    reason: 'The sellable unit of a menu item: standing configuration, kept with its item.',
+  },
+  menu_option_groups: {
+    class: 'keep',
+    reason: 'Option groups (flavours, sizes, add-ons) are standing configuration, kept with the menu.',
+  },
+  menu_option_values: {
+    class: 'keep',
+    reason: 'The values of an option group: standing configuration, kept with their group.',
+  },
+  menu_option_group_links: {
+    class: 'keep',
+    reason: 'Which option groups an item or variant offers: standing configuration, kept with the menu.',
+  },
+  menu_package_refills: {
+    class: 'keep',
+    reason: 'Which refills a package entitles: standing configuration, kept with the menu.',
+  },
+  menu_depletion_rules: {
+    class: 'keep',
+    reason: 'What a sale consumes (the pos_item_maps shape, effective-dated): standing configuration, the depletion history is the record.',
+  },
+  menu_offers: {
+    class: 'keep',
+    reason: 'A store’s price history: an offer history is the price record, not pilot activity, so it is kept (T-401 spec section 3).',
+  },
+  menu_option_offers: {
+    class: 'keep',
+    reason: 'A store’s option-price history: the price record, kept like menu_offers.',
+  },
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */

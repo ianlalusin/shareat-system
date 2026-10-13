@@ -55,6 +55,10 @@ const ALWAYS_TRIGGERS = [
   // T-375 S1 (migration 0183): the two history guards - a day feed and a POS correction are never edited or deleted.
   { table: 'pos_v1_day_feeds', trigger: 'pos_v1_day_feeds_append_only' },
   { table: 'sales_day_pos_corrections', trigger: 'sales_day_pos_corrections_append_only' },
+  // T-401 S1 (migration 0196): three history update guards.
+  { table: 'menu_offers', trigger: 'menu_offers_update_guard' },
+  { table: 'menu_option_offers', trigger: 'menu_option_offers_update_guard' },
+  { table: 'menu_depletion_rules', trigger: 'menu_depletion_rules_update_guard' },
 ] as const;
 
 /** The six mirror enqueuers + the money-account seeder — must stay live `'O'` (T5, and R2's list). */
@@ -93,7 +97,7 @@ async function livePgTriggers(): Promise<{ tgname: string; table: string; tgenab
 }
 
 describe('T1 — registry floor', () => {
-  it('TRIGGER_REGISTRY has >=57 entries, exactly 23 with mode:\'always\', and those 23 names equal R1\'s table — was red today: the import fails, triggers/registry.ts does not exist', async () => {
+  it('TRIGGER_REGISTRY has >=57 entries, exactly 26 with mode:\'always\', and those 26 names equal R1\'s table — was red today: the import fails, triggers/registry.ts does not exist', async () => {
     const mod = await loadRegistry();
     expect(mod, 'triggers/registry.ts does not exist yet').toBeDefined();
     const reg = mod!.TRIGGER_REGISTRY;
@@ -101,7 +105,8 @@ describe('T1 — registry floor', () => {
 
     const always = Object.entries(reg).filter(([, e]) => e.mode === 'always');
     // T-386 S2 (2026-10-09): 22 -> 23, DELIBERATELY. item_code_counters_forward_only (migration 0189) is ENABLE ALWAYS: the mark only rises.
-    expect(always.length, 'expected exactly 23 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189)').toBe(23);
+    // T-401 S1: three history update guards (menu_offers / menu_option_offers / menu_depletion_rules, migration 0196): 23 -> 26.
+    expect(always.length, 'expected exactly 26 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196)').toBe(26);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {

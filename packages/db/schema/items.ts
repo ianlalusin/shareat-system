@@ -118,8 +118,9 @@ export const items = pgTable(
      * across channels rather than a product per channel.
      */
     isPurchasable: boolean('is_purchasable').notNull().default(true),
-    /** À la carte: dine-in, take-out, online. ⚠️ POS owns the menu; this is the ERP's statement
-     *  of intent, which POS reads — never a second copy of POS's product list. */
+    /** À la carte: dine-in, take-out, online. ⚠️ T-401 (migration 0196): the ERP now owns the menu (`menu_items`,
+     *  `menu_item_variants`, `menu_offers`; bible row 307). This flag is the older statement of intent and is retired
+     *  in a follow-up once POS v2 reads the menu; it is never a second copy of the menu. */
     sellableRetail: boolean('sellable_retail').notNull().default(false),
     /** A franchisee or external buyer. Enforced at `setPrice`: no wholesale rate without it. */
     sellableWholesale: boolean('sellable_wholesale').notNull().default(false),

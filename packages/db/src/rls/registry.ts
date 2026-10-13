@@ -958,6 +958,48 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'What a person asserted about one delta (V1_DEFECT or V2_DEFECT with a DEF ref); org-scoped like its report.',
   },
+
+  // ---- T-401 S1: the ERP menu and catalog master (migration 0196) -----------------------------
+  menu_categories: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_items: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_item_variants: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_option_groups: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_option_values: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_option_group_links: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_package_refills: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_depletion_rules: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_offers: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_option_offers: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
 };
 
 export function rlsScopeOf(table: string): RlsEntry | undefined {
