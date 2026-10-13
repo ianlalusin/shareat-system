@@ -44,7 +44,7 @@ export async function requestMenuItem(
       categoryId: input.categoryId ?? null,
       note: input.note?.trim() || null,
     });
-    await audit(trx, actor, 'menu_item_request', 'menu_item_requests', row.id, null, row);
+    await audit(trx, actor, 'menu_item_request', row.storeId, row.id, null, row);
     const similar = await menuRepo.similarMenuItems(trx, actor.orgId, name);
     return { id: row.id, possibleDuplicates: similar.map((m) => ({ id: m.id, name: m.name, itemType: m.itemType })) };
   });
@@ -74,7 +74,7 @@ export async function withdrawMenuItemRequest(actor: Actor, input: { id: string 
     }
     await openRequest(trx, actor, input.id, 'withdrawMenuItemRequest');
     const after = await menuRepo.resolveRequest(trx, row.id, { status: 'withdrawn', resolvedBy: actor.personId });
-    await audit(trx, actor, 'menu_item_request_withdraw', 'menu_item_requests', row.id, row, after);
+    await audit(trx, actor, 'menu_item_request_withdraw', row.storeId, row.id, row, after);
     return { id: row.id };
   });
 }
@@ -90,7 +90,7 @@ export async function approveMenuItemRequest(
     const row = await openRequest(trx, actor, input.id, 'approveMenuItemRequest');
     const item = await createMenuItem(actor, { categoryId: input.categoryId, name: row.name, itemType: row.itemType }, trx);
     const after = await menuRepo.resolveRequest(trx, row.id, { status: 'approved', resolvedBy: actor.personId, resolvedItemId: item.id });
-    await audit(trx, actor, 'menu_item_request_approve', 'menu_item_requests', row.id, row, after);
+    await audit(trx, actor, 'menu_item_request_approve', row.storeId, row.id, row, after);
     return { itemId: item.id };
   });
 }
@@ -104,7 +104,7 @@ export async function markMenuItemRequestDuplicate(actor: Actor, input: { id: st
       throw gone(`markMenuItemRequestDuplicate: item ${input.itemId} does not exist.`, 'menu item');
     }
     const after = await menuRepo.resolveRequest(trx, row.id, { status: 'duplicate', resolvedBy: actor.personId, resolvedItemId: input.itemId });
-    await audit(trx, actor, 'menu_item_request_duplicate', 'menu_item_requests', row.id, row, after);
+    await audit(trx, actor, 'menu_item_request_duplicate', row.storeId, row.id, row, after);
     return { id: row.id };
   });
 }
@@ -117,7 +117,7 @@ export async function rejectMenuItemRequest(actor: Actor, input: { id: string; n
     if (!note) throw refuse('rejectMenuItemRequest: a reason is required.', 'Say why the request is rejected, so the requester knows.');
     const row = await openRequest(trx, actor, input.id, 'rejectMenuItemRequest');
     const after = await menuRepo.resolveRequest(trx, row.id, { status: 'rejected', resolvedBy: actor.personId, resolutionNote: note });
-    await audit(trx, actor, 'menu_item_request_reject', 'menu_item_requests', row.id, row, after);
+    await audit(trx, actor, 'menu_item_request_reject', row.storeId, row.id, row, after);
     return { id: row.id };
   });
 }

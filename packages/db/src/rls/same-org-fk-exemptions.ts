@@ -278,6 +278,7 @@ export const NO_FK_REFERENCES: readonly NoFkReference[] = [
   { column: 'attendance_credentials.card_id', kind: 'external-key', reason: 'physical card number printed on a badge; not a row reference' },
   { column: 'attendance_punches.client_punch_id', kind: 'idempotency-key', reason: 'client-generated idempotency key from the offline clock terminal' },
   { column: 'attendance_punches.device_id', kind: 'external-key', reason: 'device identifier string reported by the terminal; not a row reference' },
+  { column: 'audit_log.device_id', kind: 'external-key', reason: 'T-402: the device that recorded an offline event (POS v2 tablet); no device table exists until POS v2 P1; validated against the attested terminal at upload, not by FK' },
   { column: 'audit_log.entity_id', kind: 'polymorphic', reason: 'audit rows carry their own org_id; entity_id points at whichever table entity_type names, so no single FK is possible' },
   { column: 'clock_terminals.firebase_uid', kind: 'external-key', reason: 'Firebase Auth uid of the terminal account' },
   { column: 'etl_runs.started_by', kind: 'external-key', reason: 'operator label of an ETL run; the ETL tables have no tenancy' },

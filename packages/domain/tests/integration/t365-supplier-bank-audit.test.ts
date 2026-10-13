@@ -66,6 +66,13 @@ interface BankValue {
   bankAccountName: string | null;
   bankAccountNumber: string | null;
 }
+/** T-402 S1b / Q6: the audit row keeps only the last 4 digits ('••••1111') and a '<key>Changed' flag (unmasked before vs after). */
+const M = (bankName: string | null, bankAccountName: string | null, masked: string | null, changed: boolean) => ({
+  bankName,
+  bankAccountName,
+  bankAccountNumber: masked,
+  bankAccountNumberChanged: changed,
+});
 const T = (bankName: string | null, bankAccountName: string | null, bankAccountNumber: string | null): BankValue => ({
   bankName,
   bankAccountName,
@@ -112,8 +119,8 @@ describe('D1 — a real change to one bank field', () => {
     const rows = await bankAuditRows(s.id);
     expect(rows.length, 'BANK +1').toBe(before.length + 1);
     const row = rows.at(-1)!;
-    expect(row.before).toEqual(T('BDO', 'Acme Inc', '1111'));
-    expect(row.after).toEqual(T('BDO', 'Acme Inc', '2222'));
+    expect(row.before).toEqual(M('BDO', 'Acme Inc', '••••1111', true));
+    expect(row.after).toEqual(M('BDO', 'Acme Inc', '••••2222', true));
     expect(row.actor_person_id).toBe(f.manager.personId);
     expect(row.source).toBe('web');
   });
@@ -127,8 +134,8 @@ describe('D2 — supplier with no bank; all three set', () => {
     await asOrg(f.orgId, (tx) => editSupplier(tx, f.manager, { supplierId: id, bankName: 'BPI', bankAccountName: 'New Co', bankAccountNumber: '5555' }));
     const rows = await bankAuditRows(id);
     expect(rows.length).toBe(before.length + 1);
-    expect(rows.at(-1)!.before).toEqual(T(null, null, null));
-    expect(rows.at(-1)!.after).toEqual(T('BPI', 'New Co', '5555'));
+    expect(rows.at(-1)!.before).toEqual(M(null, null, null, true));
+    expect(rows.at(-1)!.after).toEqual(M('BPI', 'New Co', '••••5555', true));
   });
 });
 
@@ -141,7 +148,7 @@ describe('D3 — clearing one field', () => {
     expect((await bankColumnsOf(s.id)).bank_account_number).toBeNull();
     const rows = await bankAuditRows(s.id);
     expect(rows.length).toBe(before.length + 1);
-    expect(rows.at(-1)!.after).toEqual(T('BDO', 'Acme Inc', null));
+    expect(rows.at(-1)!.after).toEqual(M('BDO', 'Acme Inc', null, true));
   });
 });
 
@@ -263,8 +270,8 @@ describe('D13 — the chain: two edits in a row', () => {
     const rows = await bankAuditRows(s.id);
     expect(rows.length).toBe(before.length + 2);
     const [r1, r2] = rows.slice(-2) as [AuditRow, AuditRow];
-    expect((r1.after as BankValue).bankAccountNumber).toBe('2222');
-    expect((r2.before as BankValue).bankAccountNumber).toBe('2222');
-    expect((r2.after as BankValue).bankAccountNumber).toBe('3333');
+    expect((r1.after as BankValue).bankAccountNumber).toBe('••••2222');
+    expect((r2.before as BankValue).bankAccountNumber).toBe('••••2222');
+    expect((r2.after as BankValue).bankAccountNumber).toBe('••••3333');
   });
 });

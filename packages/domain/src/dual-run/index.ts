@@ -319,7 +319,7 @@ export async function runDualRun(tx: Tx | null, actor: Actor, input: RunDualRunI
     await auditLogRepo.append(tx, orgId, {
       actorPersonId: actor.personId,
       action: 'dual_run.compare',
-      entity: 'dual_run',
+      storeId: null,
       entityId: randomUUID(),
       before: null,
       after: {

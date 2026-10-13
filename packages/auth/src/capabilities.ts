@@ -293,6 +293,10 @@ export type Capability =
   | 'unlink_store_from_pos'
   /** T-385 S3: the super-admin exception to "the person who submitted a sales day may not verify it". */
   | 'verify_own_sales_day'
+  /** T-402 R8. Read the activity log: managers see their own store's rows (viewers = 'store' entries only). */
+  | 'view_activity_log'
+  /** T-402 R8. Also org-level rows and the admin-viewed entries (grants, credential changes, denials, exports, cutover). */
+  | 'view_activity_log_restricted'
   // Platform — super-admin only
   | 'cross_org_access'
   | 'view_franchise_sales';
@@ -405,6 +409,8 @@ export const CAPABILITIES: readonly Capability[] = [
   'finalize_pos_usage_pull',
   'unlink_store_from_pos',
   'verify_own_sales_day',
+  'view_activity_log',
+  'view_activity_log_restricted',
   'cross_org_access',
   'view_franchise_sales',
 ];
@@ -600,6 +606,8 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   finalize_pos_usage_pull: 'store',
   unlink_store_from_pos: 'org',
   verify_own_sales_day: 'org',
+  view_activity_log: 'store',
+  view_activity_log_restricted: 'org',
 
   cross_org_access: 'platform',
   view_franchise_sales: 'platform',
@@ -696,6 +704,8 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   finalize_pos_usage_pull: 'production',
   unlink_store_from_pos: 'sales',
   verify_own_sales_day: 'sales',
+  view_activity_log: 'admin',
+  view_activity_log_restricted: 'admin',
 
   confirm_receipt: 'commissary',
   resolve_trade_discrepancy: 'commissary',
@@ -1032,6 +1042,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   finalize_pos_usage_pull: { super_admin: true, admin: true, manager: true, staff: false },
   unlink_store_from_pos: { super_admin: true, admin: false, manager: false, staff: false },
   verify_own_sales_day: { super_admin: true, admin: false, manager: false, staff: false },
+  view_activity_log: { super_admin: true, admin: true, manager: true, staff: false },
+  view_activity_log_restricted: { super_admin: true, admin: true, manager: false, staff: false },
 
   cross_org_access: { super_admin: true, admin: false, manager: false, staff: false },
   view_franchise_sales: { super_admin: true, admin: false, manager: false, staff: false },
@@ -1228,6 +1240,8 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   finalize_pos_usage_pull: "finalise the day's POS usage figures",
   unlink_store_from_pos: 'unlink a store from POS',
   verify_own_sales_day: 'verify a sales day you submitted yourself',
+  view_activity_log: "view the activity log of your store",
+  view_activity_log_restricted: 'view the whole activity log, including grants, exports and denials',
   cross_org_access: 'access another organisation (break-glass)',
   view_franchise_sales: 'view franchise sales',
 };

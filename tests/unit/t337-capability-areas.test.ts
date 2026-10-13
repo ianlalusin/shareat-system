@@ -17,7 +17,7 @@ import { CAPABILITIES, CAPABILITY_AREA, CAPABILITY_AREAS, type Capability, type 
 // watching tsc refuse — a runtime `expect` cannot observe a type error.
 // -------------------------------------------------------------------------------------
 
-describe('U1 — CAPABILITY_AREA is keyed on exactly the 109 capabilities; every area is used', () => {
+describe('U1 — CAPABILITY_AREA is keyed on exactly the 111 capabilities; every area is used', () => {
   it('keys set-equal CAPABILITIES', () => {
     expect([...Object.keys(CAPABILITY_AREA)].sort()).toEqual([...CAPABILITIES].sort());
   });
@@ -59,9 +59,9 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 109 capabilities; every
     // ⭐ 98 -> 99 (T-350/DEF-477): `set_channel_payout` joins CAPABILITY_AREA.
     // ⭐ 99 -> 100 (T-382 S1, A4): `unlink_store_from_pos` joins CAPABILITY_AREA.
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day` joins CAPABILITY_AREA.
-    expect(Object.keys(_control).length, 'positive control: unmutated form has all 109 keys').toBe(109);
-    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(108);
-    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(110);
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 111 keys').toBe(111);
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(110);
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(112);
   });
 });
 
@@ -122,6 +122,8 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
   admin: [
     'manage_users', 'manage_stores', 'grant_capability', 'manage_store_settings', 'set_cash_policy',
     'manage_price_lists',
+    // ⭐ T-402 S1b: the two activity-log capabilities (area admin, packages/auth/src/capabilities.ts).
+    'view_activity_log', 'view_activity_log_restricted',
     // ⭐ T-350/DEF-477: `set_channel_payout` — same area as `set_cash_policy` directly above
     // (packages/auth/src/capabilities.ts:721, matching :720), same reasoning: admin-only routing
     // of an existing resource, not a new one.
@@ -131,7 +133,7 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
 };
 
 describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', () => {
-  it('every capability inverts to the oracle\'s area, and the counts match §1 (109 total)', () => {
+  it('every capability inverts to the oracle\'s area, and the counts match §1 (111 total)', () => {
     const inverted: Record<string, string[]> = {};
     for (const [cap, area] of Object.entries(CAPABILITY_AREA)) (inverted[area] ??= []).push(cap);
     const sortedInverted = Object.fromEntries(Object.entries(inverted).map(([k, v]) => [k, [...v].sort()]));
@@ -143,7 +145,7 @@ describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', ()
     const total = Object.values(ORACLE).reduce((sum, caps) => sum + caps.length, 0);
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day`.
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities, area sales.
-    expect(total).toBe(109);
+    expect(total).toBe(111);
     // ⭐ 108 -> 109 (T-403): `manage_recipes` joins production.
   });
 

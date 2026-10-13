@@ -50,7 +50,7 @@ export async function createOptionGroup(actor: Actor, input: CreateOptionGroupIn
       maxSelections: input.maxSelections,
       createdBy: actor.personId,
     });
-    await audit(trx, actor, 'menu_option_group_create', 'menu_option_groups', row.id, null, row);
+    await audit(trx, actor, 'menu_option_group_create', null, row.id, null, row);
     return { id: row.id };
   });
 }
@@ -82,7 +82,7 @@ export async function editOptionGroup(actor: Actor, input: EditOptionGroupInput,
       patch.maxSelections ?? row.maxSelections,
     );
     const after = await menuRepo.updateOptionGroup(trx, row.id, patch);
-    await audit(trx, actor, 'menu_option_group_edit', 'menu_option_groups', row.id, row, after);
+    await audit(trx, actor, 'menu_option_group_edit', null, row.id, row, after);
     return { id: row.id };
   });
 }
@@ -107,7 +107,7 @@ export async function addOptionValue(
       sortOrder: input.sortOrder ?? 0,
       createdBy: actor.personId,
     });
-    await audit(trx, actor, 'menu_option_value_create', 'menu_option_values', row.id, null, row);
+    await audit(trx, actor, 'menu_option_value_create', null, row.id, null, row);
     return { id: row.id };
   });
 }
@@ -125,7 +125,7 @@ export async function editOptionValue(
     const patch = changedFields(row, { name, sortOrder: input.sortOrder, status: input.status }, ['name', 'sortOrder', 'status']);
     if (Object.keys(patch).length === 0) return { id: row.id };
     const after = await menuRepo.updateOptionValue(trx, row.id, patch);
-    await audit(trx, actor, 'menu_option_value_edit', 'menu_option_values', row.id, row, after);
+    await audit(trx, actor, 'menu_option_value_edit', null, row.id, row, after);
     return { id: row.id };
   });
 }
@@ -165,7 +165,7 @@ export async function linkOptionGroup(actor: Actor, input: LinkOptionGroupInput,
       sortOrder: input.sortOrder ?? 0,
       createdBy: actor.personId,
     });
-    await audit(trx, actor, 'menu_option_group_link', 'menu_option_group_links', row.id, null, row);
+    await audit(trx, actor, 'menu_option_group_link', null, row.id, null, row);
     return { id: row.id };
   });
 }
@@ -176,7 +176,7 @@ export async function unlinkOptionGroup(actor: Actor, input: { id: string }, tx?
     const row = await menuRepo.getLink(trx, actor.orgId, input.id);
     if (!row) throw gone(`unlinkOptionGroup: link ${input.id} does not exist.`, 'option group link');
     await menuRepo.deleteLink(trx, row.id);
-    await audit(trx, actor, 'menu_option_group_unlink', 'menu_option_group_links', row.id, row, null);
+    await audit(trx, actor, 'menu_option_group_unlink', null, row.id, row, null);
     return { id: row.id };
   });
 }
@@ -213,7 +213,7 @@ export async function setPackageRefills(
       trx,
       actor,
       'menu_package_refills_set',
-      'menu_package_refills',
+      null,
       variant.id,
       current.length ? { packageVariantId: variant.id, refillItemIds: current } : null,
       wanted.length ? { packageVariantId: variant.id, refillItemIds: wanted } : null,

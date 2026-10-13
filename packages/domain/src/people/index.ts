@@ -138,7 +138,7 @@ export async function createEmployment(
     await auditLogRepo.append(tx, actor.orgId, {
       actorPersonId: actor.personId,
       action: 'set_staff_code',
-      entity: 'employments',
+      storeId: input.storeId,
       entityId: employment.id,
       before: null,
       after: { staffCode: override, storeId: input.storeId, personId: input.personId },

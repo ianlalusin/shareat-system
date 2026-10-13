@@ -170,6 +170,8 @@ they need weekly, the boundary is wrong.
 | `manage_prepaid_items` | org | ✅ | ✅ | ✗ | ✗ | T-125. Separate from `manage_fixed_assets` on purpose — the asset register and the insurance policies are not the same trust |
 | `run_amortisation` | org | ✅ | ✅ | ✗ | ✗ | **Scheduled, not clicked**, same as `run_depreciation`. v1's stopped scheduler is DEF-044 |
 | `manage_chart_of_accounts` | org | ✅ | ✅ | ✗ | ✗ | The technical residue. Exactly what Ian was right not to hand over |
+| `view_activity_log` | store | ✅ | ✅ | ✅ | ✗ | T-402 R8 (area admin). Read the activity log of the stores in your list, only the entries whose catalogue `viewers` is `store`. Reading it is not itself logged |
+| `view_activity_log_restricted` | org | ✅ | ✅ | ✗ | ✗ | T-402 R8. Also org-level rows and the admin-viewed entries (grants, credential changes, authorisation denials, data exports, cutover); the only one that may export the log. Anyone holding it also holds `view_activity_log` |
 
 ## Platform — super-admin only
 

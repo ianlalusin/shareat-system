@@ -90,7 +90,7 @@ async function runEdit(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'edit_sales_day',
-    entity: 'sales_days',
+    storeId: day.storeId,
     entityId: day.id,
     before,
     after,

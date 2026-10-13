@@ -111,9 +111,12 @@ describe('T-120 — RLS org isolation', () => {
     // A table's owner bypasses RLS by DEFAULT. Without FORCE, the role that created the
     // tables ignores every policy while all of these tests still pass — the most commonly
     // missed step in a Postgres RLS setup, and silent when missed.
+    // T-402: a partitioned table is relkind 'p', and a partition (relispartition) is its parent for this census -
+    // every partition's own RLS/grant/policy state is asserted by t402-s1a-storage.test.ts invariant 12c.
     const rows = await sql<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }[]>`
       select relname, relrowsecurity, relforcerowsecurity
-      from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'
+      from pg_class where relnamespace = 'public'::regnamespace and relkind in ('r', 'p')
+        and not relispartition
         and relname not like '%drizzle%'
     `;
     const notEnabled = rows.filter((r) => !r.relrowsecurity).map((r) => r.relname);

@@ -92,7 +92,7 @@ async function livePgTriggers(): Promise<{ tgname: string; table: string; tgenab
     from pg_trigger t
     join pg_class c on c.oid = t.tgrelid
     join pg_namespace n on n.oid = c.relnamespace
-    where not t.tgisinternal and n.nspname = 'public'
+    where not t.tgisinternal and n.nspname = 'public' and t.tgparentid = 0
   `;
 }
 
