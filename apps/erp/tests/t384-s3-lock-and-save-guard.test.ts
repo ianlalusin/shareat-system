@@ -157,6 +157,7 @@ const COMMANDS: Record<string, string> = {
   'Build plan': 'generates a plan (an action, not data entry)',
   'Keep &ldquo;&rdquo;': 'items/page: a permanent item merge (label is Keep &ldquo;{name}&rdquo;)',
   'Request item': 'files a request (moves a status)',
+  'Mark duplicate': 'closes a menu item request as a duplicate (moves a status)',
   'Clear': 'clears a held value / flag (an action)',
   'Switch': 'switches the active store / context',
   'Assign role': 'grants access',

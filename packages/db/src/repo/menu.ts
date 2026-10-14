@@ -24,6 +24,8 @@ import {
   menuOptionValues,
   menuPackageRefills,
   menuItemRequests,
+  menuPosV1Links,
+  menuUsageSourceSwitches,
 } from '../../schema/menu';
 import type {
   MenuChannel,
@@ -33,6 +35,7 @@ import type {
   MenuRequestStatus,
   MenuSelectionMode,
   MenuStatus,
+  MenuUsageSource,
 } from '../../schema/menu';
 import type { Decimal } from '@shareat/core/money';
 import type { Tx } from '../client';
@@ -48,6 +51,8 @@ export type MenuDepletionRuleRow = typeof menuDepletionRules.$inferSelect;
 export type MenuOfferRow = typeof menuOffers.$inferSelect;
 export type MenuOptionOfferRow = typeof menuOptionOffers.$inferSelect;
 export type MenuItemRequestRow = typeof menuItemRequests.$inferSelect;
+export type MenuPosV1LinkRow = typeof menuPosV1Links.$inferSelect;
+export type MenuUsageSwitchRow = typeof menuUsageSourceSwitches.$inferSelect;
 
 /**
  * An instant that survives a JavaScript `Date` round trip. `now()` carries microseconds, a `Date` carries milliseconds, so a
@@ -652,4 +657,171 @@ export async function similarMenuItems(tx: Tx, orgId: string, name: string, limi
      limit ${limit}
   `)) as unknown as Raw[];
   return rows.map((r) => ({ id: String(r.id), name: String(r.name), itemType: r.item_type as MenuItemType, similarity: Number(r.score) }));
+}
+
+export interface SimilarOpenRequest {
+  readonly id: string;
+  readonly name: string;
+  readonly itemType: MenuItemType;
+}
+
+/**
+ * Open (not yet decided) item requests whose name looks like `name`: the same normalised-exact-or-trigram test as
+ * `similarMenuItems`, so a second manager does not file what a first already asked for.
+ */
+export async function similarOpenRequests(tx: Tx, orgId: string, name: string, limit = 5): Promise<SimilarOpenRequest[]> {
+  const rows = (await tx.execute(sql`
+    select id, name, item_type,
+           case when regexp_replace(lower(trim(name)), '[[:space:]]+', ' ', 'g') = regexp_replace(lower(trim(${name}::text)), '[[:space:]]+', ' ', 'g')
+                then 1.0 else similarity(lower(name), lower(${name}::text)) end as score
+      from menu_item_requests
+     where org_id = ${orgId} and status = 'open'
+       and (regexp_replace(lower(trim(name)), '[[:space:]]+', ' ', 'g') = regexp_replace(lower(trim(${name}::text)), '[[:space:]]+', ' ', 'g')
+            or similarity(lower(name), lower(${name}::text)) >= 0.4)
+     order by score desc, name
+     limit ${limit}
+  `)) as unknown as Raw[];
+  return rows.map((r) => ({ id: String(r.id), name: String(r.name), itemType: r.item_type as MenuItemType }));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// S5 (Q3): v1 POS links, usage-source switches, and the rule in force at "plan time"
+// ---------------------------------------------------------------------------------------------------------------------
+/** The latest switch row of a store is its usage source; no row means the v1 POS item maps (today's behaviour). */
+export async function usageSourceInForce(tx: Tx, storeId: string): Promise<MenuUsageSource> {
+  const [row] = await tx
+    .select({ source: menuUsageSourceSwitches.source })
+    .from(menuUsageSourceSwitches)
+    .where(eq(menuUsageSourceSwitches.storeId, storeId))
+    .orderBy(desc(menuUsageSourceSwitches.createdAt), desc(menuUsageSourceSwitches.id))
+    .limit(1);
+  return row?.source ?? 'v1_pos_map';
+}
+
+/** A store's switch history, newest first. */
+export async function usageSwitchHistory(tx: Tx, storeId: string, limit = 20): Promise<MenuUsageSwitchRow[]> {
+  return tx
+    .select()
+    .from(menuUsageSourceSwitches)
+    .where(eq(menuUsageSourceSwitches.storeId, storeId))
+    .orderBy(desc(menuUsageSourceSwitches.createdAt), desc(menuUsageSourceSwitches.id))
+    .limit(limit);
+}
+
+export async function insertUsageSwitch(
+  tx: Tx,
+  input: { orgId: string; storeId: string; source: MenuUsageSource; reason: string | null; differenceCount: number | null; createdBy: string },
+): Promise<MenuUsageSwitchRow> {
+  const [row] = await tx.insert(menuUsageSourceSwitches).values(input).returning();
+  return row!;
+}
+
+export async function listActiveLinks(tx: Tx, storeId: string): Promise<MenuPosV1LinkRow[]> {
+  return tx
+    .select()
+    .from(menuPosV1Links)
+    .where(and(eq(menuPosV1Links.storeId, storeId), eq(menuPosV1Links.status, 'active')))
+    .orderBy(asc(menuPosV1Links.posItemKey), asc(menuPosV1Links.id));
+}
+
+export async function getActiveLink(tx: Tx, storeId: string, posItemKey: string): Promise<MenuPosV1LinkRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(menuPosV1Links)
+    .where(and(eq(menuPosV1Links.storeId, storeId), eq(menuPosV1Links.posItemKey, posItemKey), eq(menuPosV1Links.status, 'active')));
+  return row;
+}
+
+export async function insertPosV1Link(
+  tx: Tx,
+  input: { orgId: string; storeId: string; posItemKey: string; variantId: string; locationId: string | null; createdBy: string },
+): Promise<MenuPosV1LinkRow> {
+  const [row] = await tx.insert(menuPosV1Links).values({ ...input, status: 'active' }).returning();
+  return row!;
+}
+
+export async function deactivatePosV1Link(tx: Tx, id: string): Promise<void> {
+  await tx.update(menuPosV1Links).set({ status: 'inactive', updatedAt: sql`now()` }).where(eq(menuPosV1Links.id, id));
+}
+
+/** The stores that hold an ACTIVE link to this variant AND whose usage source is the menu rules right now. */
+export async function switchedStoresLinkedToVariant(tx: Tx, orgId: string, variantId: string): Promise<string[]> {
+  const rows = (await tx.execute(sql`
+    select distinct l.store_id as store_id
+    from menu_pos_v1_links l
+    where l.org_id = ${orgId} and l.variant_id = ${variantId} and l.status = 'active'
+      and coalesce((select s.source from menu_usage_source_switches s where s.store_id = l.store_id
+                    order by s.created_at desc, s.id desc limit 1), 'v1_pos_map') = 'menu_rules'
+  `)) as unknown as { store_id: string }[];
+  return rows.map((r) => r.store_id);
+}
+
+export interface RuleInForce {
+  variantId: string;
+  mode: MenuDepletionMode;
+  itemId: string | null;
+  recipeId: string | null;
+  quantityPerSale: string | null;
+}
+
+/** For each variant, the newest rule at or before `asOf` (default: the database's now()): the same "current at plan time" meaning a v1 map has. */
+export async function rulesInForce(tx: Tx, orgId: string, variantIds: readonly string[], asOf?: Date): Promise<Map<string, RuleInForce>> {
+  const out = new Map<string, RuleInForce>();
+  if (variantIds.length === 0) return out;
+  const rows = await tx
+    .select({
+      variantId: menuDepletionRules.variantId,
+      mode: menuDepletionRules.mode,
+      itemId: menuDepletionRules.itemId,
+      recipeId: menuDepletionRules.recipeId,
+      quantityPerSale: menuDepletionRules.quantityPerSale,
+    })
+    .from(menuDepletionRules)
+    .where(and(eq(menuDepletionRules.orgId, orgId), inArray(menuDepletionRules.variantId, [...variantIds]), (asOf ? sql`${menuDepletionRules.effectiveFrom} <= ${asOf.toISOString()}::timestamptz` : sql`${menuDepletionRules.effectiveFrom} <= now()`)))
+    .orderBy(desc(menuDepletionRules.effectiveFrom), desc(menuDepletionRules.createdAt), desc(menuDepletionRules.id));
+  for (const r of rows) if (!out.has(r.variantId)) out.set(r.variantId, r);
+  return out;
+}
+
+/** Locks the variant row (the seed's pre-check lock) and returns it. */
+export async function getVariantForUpdate(tx: Tx, orgId: string, id: string): Promise<MenuVariantRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(menuItemVariants)
+    .where(and(eq(menuItemVariants.id, id), eq(menuItemVariants.orgId, orgId)))
+    .for('update');
+  return row;
+}
+
+/** How many rule rows the variant has at all, in force, scheduled or superseded (a seed creates a rule only at zero). */
+export async function ruleRowCount(tx: Tx, variantId: string): Promise<number> {
+  const rows = (await tx.execute(sql`select count(*)::int as n from menu_depletion_rules where variant_id = ${variantId}`)) as unknown as { n: number }[];
+  return Number(rows[0]?.n ?? 0);
+}
+
+/**
+ * A rule row effective at THIS transaction's now(), exactly (no millisecond rounding). The link trigger accepts a rule with
+ * `effective_from <= now()`, and `NOW_MS` rounds up and could sit a hair after now() inside the same transaction.
+ */
+export async function insertRuleAtTxNow(tx: Tx, input: Omit<InsertRuleInput, 'effectiveFrom'>): Promise<MenuDepletionRuleRow> {
+  const [row] = await tx
+    .insert(menuDepletionRules)
+    .values({
+      orgId: input.orgId,
+      variantId: input.variantId,
+      effectiveFrom: sql`now()`,
+      mode: input.mode,
+      itemId: input.itemId,
+      recipeId: input.recipeId,
+      quantityPerSale: input.quantityPerSale,
+      createdBy: input.createdBy,
+    })
+    .returning();
+  return row!;
+}
+
+/** The database's wall clock right now (not the transaction's start), to the millisecond: the instant a usage plan is built "as of". */
+export async function clockNow(tx: Tx): Promise<Date> {
+  const rows = (await tx.execute(sql`select date_trunc('milliseconds', clock_timestamp()) as t`)) as unknown as { t: string | Date }[];
+  return new Date(rows[0]!.t);
 }

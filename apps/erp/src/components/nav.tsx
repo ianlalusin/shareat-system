@@ -95,6 +95,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/commissary/catalogue', label: 'Commissary catalogue' },
       { href: '/commissary/discrepancies', label: 'Transit discrepancies' },
       { href: '/items', label: 'Items' },
+      // T-401 S4 — what the stores sell: categories, items, variants, prices and item requests (one nav entry; /menu links the rest).
+      { href: '/menu', label: 'Menu' },
     ],
   },
   {
