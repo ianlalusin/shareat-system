@@ -175,7 +175,7 @@ describe('/menu/requests - what each person sees', () => {
 
 describe('resolving a request (super admin only)', () => {
   async function open(w: Awaited<ReturnType<typeof world>>, name = 'Wagyu Platter') {
-    await run(ACTIONS, 'submitItemRequestAction', w.c.managerA, asked(w.c, { name }));
+    await run(ACTIONS, 'submitItemRequestAction', w.c.managerA, asked(w.c, { name, confirmed: '1' }));
     return (await byName(w.c, name))[0]!;
   }
 
