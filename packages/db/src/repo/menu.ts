@@ -653,3 +653,28 @@ export async function similarMenuItems(tx: Tx, orgId: string, name: string, limi
   `)) as unknown as Raw[];
   return rows.map((r) => ({ id: String(r.id), name: String(r.name), itemType: r.item_type as MenuItemType, similarity: Number(r.score) }));
 }
+
+export interface SimilarOpenRequest {
+  readonly id: string;
+  readonly name: string;
+  readonly itemType: MenuItemType;
+}
+
+/**
+ * Open (not yet decided) item requests whose name looks like `name`: the same normalised-exact-or-trigram test as
+ * `similarMenuItems`, so a second manager does not file what a first already asked for.
+ */
+export async function similarOpenRequests(tx: Tx, orgId: string, name: string, limit = 5): Promise<SimilarOpenRequest[]> {
+  const rows = (await tx.execute(sql`
+    select id, name, item_type,
+           case when regexp_replace(lower(trim(name)), '[[:space:]]+', ' ', 'g') = regexp_replace(lower(trim(${name}::text)), '[[:space:]]+', ' ', 'g')
+                then 1.0 else similarity(lower(name), lower(${name}::text)) end as score
+      from menu_item_requests
+     where org_id = ${orgId} and status = 'open'
+       and (regexp_replace(lower(trim(name)), '[[:space:]]+', ' ', 'g') = regexp_replace(lower(trim(${name}::text)), '[[:space:]]+', ' ', 'g')
+            or similarity(lower(name), lower(${name}::text)) >= 0.4)
+     order by score desc, name
+     limit ${limit}
+  `)) as unknown as Raw[];
+  return rows.map((r) => ({ id: String(r.id), name: String(r.name), itemType: r.item_type as MenuItemType }));
+}

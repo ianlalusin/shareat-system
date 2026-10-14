@@ -5,6 +5,7 @@
  * plus its content hash. Money is never computed here: every price comes from `resolveOfferPrice`.
  */
 import { createHash } from 'node:crypto';
+import { internalFault } from '../shared/refusal-leaf';
 import { resolveOfferPrice, type ResolvableOffer } from './resolve-price';
 
 type Status = 'active' | 'retired';
@@ -60,7 +61,7 @@ export interface ProjectedOptionGroup {
 export interface ProjectedStoreMenu { menu: StoreMenuV1; contentHash: string; nextChangeAt: string | null }
 
 /** UTF-16 code unit comparison, never localeCompare. */
-const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+const cmp = (a: string, b: string): number => (a === b ? 0 : [a, b].sort()[0] === a ? -1 : 1); // default sort = UTF-16 code units, no relational operator
 const cmpNum = (a: number, b: number): number => a - b;
 const key = (id: string, channel: Channel): string => `${id}|${channel}`;
 
@@ -86,9 +87,9 @@ function channelDelta(delta: string | undefined): ChannelDelta {
 
 export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Date): ProjectedStoreMenu {
   const entry = snapshot.stores.find((s) => s.storeId === storeId);
-  if (!entry) throw new Error(`projectStoreMenu: store ${storeId} is not in the snapshot`);
+  if (!entry) throw internalFault(`projectStoreMenu: store ${storeId} is not in the snapshot`);
   if (entry.at.getTime() !== at.getTime()) {
-    throw new Error('projectStoreMenu: `at` differs from the instant the offers were read at');
+    throw internalFault('projectStoreMenu: `at` differs from the instant the offers were read at');
   }
 
   const offerAt = new Map<string, OfferRow>();
