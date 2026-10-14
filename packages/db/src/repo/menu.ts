@@ -764,8 +764,8 @@ export interface RuleInForce {
   quantityPerSale: string | null;
 }
 
-/** For each variant, the newest rule at or before the database's now(): the same "current at plan time" meaning a v1 map has. */
-export async function rulesInForce(tx: Tx, orgId: string, variantIds: readonly string[]): Promise<Map<string, RuleInForce>> {
+/** For each variant, the newest rule at or before `asOf` (default: the database's now()): the same "current at plan time" meaning a v1 map has. */
+export async function rulesInForce(tx: Tx, orgId: string, variantIds: readonly string[], asOf?: Date): Promise<Map<string, RuleInForce>> {
   const out = new Map<string, RuleInForce>();
   if (variantIds.length === 0) return out;
   const rows = await tx
@@ -777,7 +777,7 @@ export async function rulesInForce(tx: Tx, orgId: string, variantIds: readonly s
       quantityPerSale: menuDepletionRules.quantityPerSale,
     })
     .from(menuDepletionRules)
-    .where(and(eq(menuDepletionRules.orgId, orgId), inArray(menuDepletionRules.variantId, [...variantIds]), sql`${menuDepletionRules.effectiveFrom} <= now()`))
+    .where(and(eq(menuDepletionRules.orgId, orgId), inArray(menuDepletionRules.variantId, [...variantIds]), (asOf ? sql`${menuDepletionRules.effectiveFrom} <= ${asOf.toISOString()}::timestamptz` : sql`${menuDepletionRules.effectiveFrom} <= now()`)))
     .orderBy(desc(menuDepletionRules.effectiveFrom), desc(menuDepletionRules.createdAt), desc(menuDepletionRules.id));
   for (const r of rows) if (!out.has(r.variantId)) out.set(r.variantId, r);
   return out;
@@ -818,4 +818,10 @@ export async function insertRuleAtTxNow(tx: Tx, input: Omit<InsertRuleInput, 'ef
     })
     .returning();
   return row!;
+}
+
+/** The database's wall clock right now (not the transaction's start), to the millisecond: the instant a usage plan is built "as of". */
+export async function clockNow(tx: Tx): Promise<Date> {
+  const rows = (await tx.execute(sql`select date_trunc('milliseconds', clock_timestamp()) as t`)) as unknown as { t: string | Date }[];
+  return new Date(rows[0]!.t);
 }

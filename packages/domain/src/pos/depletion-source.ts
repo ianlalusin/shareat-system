@@ -16,9 +16,9 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { decimal } from '@shareat/core/money';
 import type { BusinessDate } from '@shareat/core/datetime';
-import { menuRepo, posMappingRepo, posV1Repo, stockLocationsRepo, storesRepo, type Tx } from '@shareat/db';
+import { accessRepo, menuRepo, posMappingRepo, posV1Repo, stockLocationsRepo, storesRepo, type Tx } from '@shareat/db';
 import type { MenuUsageSource } from '@shareat/db/schema';
-import { audit, inTx } from '../menu/shared';
+import { audit, inTx, parseMenuQuantity, requireUsableRuleTarget } from '../menu/shared';
 import { gone, humanDate, refuse } from '../shared/refusal';
 import { explodePosSales, type MapLookup, type PlanLine, type RecipeLookup } from './plan';
 import { soldItemsFromFeed } from './v1-sold-items';
@@ -70,15 +70,23 @@ async function loadRecipes(tx: Tx, orgId: string, lookups: readonly ReadonlyMap<
   return new Map(rows.filter((r) => r.status === 'active').map((r) => [r.id, { outputQuantity: r.outputQuantity, lines: r.lines }]));
 }
 
+/** The instant a usage plan is built "as of" (the database's clock). Stored on the pull as its snapshot time; finalize rebuilds as of it. */
+export async function planInstant(tx: Tx): Promise<Date> {
+  return menuRepo.clockNow(tx);
+}
+
 /**
- * What the usage pull explodes against, at THIS instant (plan time, and finalize's rebuild). An unswitched store reads exactly
- * what it read before S5 (`listActiveMaps` and the recipes they name): nothing about the menu is touched.
+ * What the usage pull explodes against, AS OF `asOf`: plan time, and finalize's rebuild at the PLAN's instant (so a rule that comes
+ * due between plan and finalize cannot change a pull in progress). Takes the store row FOR KEY SHARE first, the lock a switch,
+ * link or rule change takes FOR UPDATE, so they cannot interleave with planning. An unswitched store reads exactly what it read
+ * before S5 (`listActiveMaps` and the recipes they name): nothing about the menu is touched.
  */
-export async function loadDepletionLookups(tx: Tx, orgId: string, storeId: string): Promise<DepletionLookups> {
+export async function loadDepletionLookups(tx: Tx, orgId: string, storeId: string, asOf: Date): Promise<DepletionLookups> {
+  await posV1Repo.lockStoreForShare(tx, orgId, storeId);
   const source = await menuRepo.usageSourceInForce(tx, storeId);
   const maps = await posMappingRepo.listActiveMaps(tx, storeId);
   const links = source === 'menu_rules' ? await menuRepo.listActiveLinks(tx, storeId) : [];
-  const rules = source === 'menu_rules' ? await menuRepo.rulesInForce(tx, orgId, links.map((l) => l.variantId)) : new Map();
+  const rules = source === 'menu_rules' ? await menuRepo.rulesInForce(tx, orgId, links.map((l) => l.variantId), asOf) : new Map();
   const mapsByPosItemKey = lookupsFor(source, maps, links, rules);
   return { mapsByPosItemKey, recipesById: await loadRecipes(tx, orgId, [mapsByPosItemKey]) };
 }
@@ -239,6 +247,9 @@ async function computeComparison(tx: Tx, orgId: string, storeId: string, days: n
 export async function compareDepletionSources(actor: Actor, input: { storeId: string; days?: number }, tx?: Tx): Promise<SourceComparison> {
   return inTx(tx, async (trx) => {
     await authorize(trx, actor, 'view_menu', {});
+    if (!(await accessRepo.storeIdsForPerson(trx, actor.personId)).includes(input.storeId)) {
+      throw refuse(`compareDepletionSources: store ${input.storeId} is outside the store scope of person ${actor.personId}.`, 'You are not assigned to that store, so you cannot compare its usage sources.');
+    }
     if (!(await storesRepo.getById(trx, actor.orgId, input.storeId))) {
       throw gone(`compareDepletionSources: store ${input.storeId} does not exist.`, 'store');
     }
@@ -269,6 +280,14 @@ export async function switchUsageSource(
     }
     const store = await lockedStore(trx, actor.orgId, input.storeId);
     const reason = input.reason?.trim() ? input.reason.trim() : null;
+    // A store with no switch row is on the POS item maps, so switching to maps there is a no-op too.
+    const current = await menuRepo.usageSourceInForce(trx, input.storeId);
+    if (current === input.source) {
+      throw refuse(
+        `switchUsageSource: ${store.name} already reads ${input.source}.`,
+        `${store.name} already reads its stock usage from ${input.source === 'menu_rules' ? 'the menu rules' : 'the POS item maps'}, so there is nothing to switch.`,
+      );
+    }
 
     let differenceCount: number | null = null;
     if (input.source === 'menu_rules') {
@@ -394,6 +413,13 @@ export async function seedLinkFromMap(
 
     let ruleId: string | null = null;
     if ((await menuRepo.ruleRowCount(trx, input.variantId)) === 0) {
+      // The map becomes an org rule: it must be a whole, usable shape (a sentence, never a raw database error).
+      const incomplete = (what: string) =>
+        refuse(`seedLinkFromMap: the map for "${key}" is ${what}.`, `The POS item map for "${key}" is incomplete (${what}), so it cannot become a menu rule. Fix the map first.`);
+      if (map.mode === 'direct' && (!map.itemId || map.quantityPerSale === null)) throw incomplete('a stock-item map with no item or no quantity');
+      if (map.mode === 'recipe' && !map.recipeId) throw incomplete('a recipe map with no recipe');
+      if (map.mode === 'direct') parseMenuQuantity(map.quantityPerSale, `seedLinkFromMap: the map quantity for "${key}"`, 'The quantity per sale on the POS item map');
+      await requireUsableRuleTarget(trx, actor.orgId, { itemId: map.mode === 'direct' ? map.itemId : null, recipeId: map.mode === 'recipe' ? map.recipeId : null }, 'seedLinkFromMap');
       const rule = await menuRepo.insertRuleAtTxNow(trx, {
         orgId: actor.orgId,
         variantId: input.variantId,

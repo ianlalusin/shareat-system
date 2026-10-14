@@ -14,7 +14,7 @@ import { MENU_CHANNELS, MENU_DEPLETION_MODES, MENU_PRICING_MODES, type MenuChann
 import type { Decimal } from '@shareat/core/money';
 import { gone, refuse } from '../shared/refusal';
 import { assertNoPlannedPullAtLinkedSwitchedStores } from '../pos/depletion-source';
-import { audit, inTx, parseMarkupPercent, requireHistorySlot, parseMenuAmount, parseMenuQuantity, requireNotBackdated, requireScheduled } from './shared';
+import { audit, inTx, parseMarkupPercent, requireUsableRuleTarget, requireHistorySlot, parseMenuAmount, parseMenuQuantity, requireNotBackdated, requireScheduled } from './shared';
 
 // -------------------------------------------------------------------------------------------------------------------
 // Depletion rules (R6): the pos_item_maps shape, per variant, effective-dated
@@ -59,6 +59,7 @@ export async function setDepletionRule(actor: Actor, input: SetDepletionRuleInpu
     if (!(await menuRepo.getVariant(trx, actor.orgId, input.variantId))) {
       throw gone(`setDepletionRule: variant ${input.variantId} does not exist.`, 'variant');
     }
+    await requireUsableRuleTarget(trx, actor.orgId, { itemId, recipeId }, 'setDepletionRule');
     // S5: a rule is org-wide; a store that reads the menu rules and links this variant must not have a pull in progress.
     await assertNoPlannedPullAtLinkedSwitchedStores(trx, actor.orgId, input.variantId);
     await requireHistorySlot(trx, input.variantId, { kind: 'rule', variantId: input.variantId }, input.effectiveFrom, 'setDepletionRule');

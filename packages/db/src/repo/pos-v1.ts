@@ -172,6 +172,14 @@ export async function lockStoreForUpdate(tx: Tx, orgId: string, storeId: string)
   return row;
 }
 
+/**
+ * T-401 S5: the store row under `FOR KEY SHARE`. Planning a usage pull takes it so a usage-source switch, a link or a rule change
+ * (which take the row `FOR UPDATE`) can never interleave with a plan being built; two plans do not block each other.
+ */
+export async function lockStoreForShare(tx: Tx, orgId: string, storeId: string): Promise<void> {
+  await tx.select({ id: stores.id }).from(stores).where(and(eq(stores.orgId, orgId), eq(stores.id, storeId))).limit(1).for('key share');
+}
+
 /** The sales channel row under `FOR UPDATE` (defence in depth for the link's channel checks). */
 export async function lockChannelForUpdate(tx: Tx, orgId: string, channelId: string): Promise<void> {
   await tx

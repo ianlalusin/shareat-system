@@ -40,7 +40,6 @@ formatConversionSummary
 formatCoverageReport
 getAllocationsForPayment
 getItemForProduction
-getRecipe
 hasFingerprint
 hasOtherActiveAdmin
 insertDisposition
