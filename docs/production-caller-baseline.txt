@@ -12,7 +12,6 @@ addUsageLine
 adjudicateRange
 allocationsFor
 appendClientEvent
-appendSystem
 applyCreditAction
 approveMenuItemRequest
 arrivalLag
@@ -48,6 +47,7 @@ expectedAccumulated
 findCurrentDocument
 findLiveOfKind
 findPostedSettlementForChannelDay
+flushSecurityEvents
 formatConversionSummary
 formatCoverageReport
 getAllocationsForPayment

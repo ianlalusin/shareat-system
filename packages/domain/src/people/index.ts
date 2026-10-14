@@ -198,6 +198,23 @@ export async function createEmployment(
   // T-289 moment 3 — a hire applies whatever position defaults the assigned positions carry.
   await reconcilePositionGrants(tx, actor, { personId: input.personId, storeId: input.storeId });
 
+  // T-402 S2 - last, so a refused hire (every throw above) leaves no row, and a rolled-back hire takes it with it.
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'employment.created',
+    storeId: input.storeId,
+    entityId: employment.id,
+    before: null,
+    after: {
+      personId: input.personId,
+      storeId: input.storeId,
+      staffCode,
+      employmentStatus: input.employmentStatus,
+      startedOn: input.startedOn,
+    },
+    source: input.source ?? 'web',
+  });
+
   return employment;
 }
 
@@ -309,6 +326,16 @@ export async function endEmployment(
     }
   }
 
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'employment.ended',
+    storeId: existing.storeId,
+    entityId: existing.id,
+    before: { employmentStatus: existing.employmentStatus, endedOn: existing.endedOn },
+    after: { employmentStatus: input.employmentStatus, endedOn: input.endedOn, personId: existing.personId },
+    source: 'web',
+  });
+
   return closed;
 }
 
@@ -335,6 +362,16 @@ export async function setEmploymentPositions(
   // T-289 moment 4 — a positions change reconciles the new set: capabilities the old positions
   // defaulted and the new ones do not are revoked; capabilities the new ones default are granted.
   await reconcilePositionGrants(tx, actor, { personId: existing.personId, storeId: existing.storeId });
+
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'employment.positions_set',
+    storeId: existing.storeId,
+    entityId: existing.id,
+    before: null,
+    after: { personId: existing.personId, positionIds: input.positionIds, primaryPositionId: input.primaryPositionId },
+    source: 'web',
+  });
 }
 
 /** Add or rename a store's own position. ⛔ Canonical positions are not editable by a store. */
