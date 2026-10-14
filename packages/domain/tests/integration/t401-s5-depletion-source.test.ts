@@ -141,14 +141,19 @@ describe('I23 -- usage source resolution at plan time', () => {
     expect(Object.fromEntries(out.map((r) => [r.item_id, Number(r.q)]))).toEqual({ [w.cheese]: 1 });
   }, 120_000);
 
-  it('(ambiguous in the spec, see report) a SWITCHED store records depletionSource = menu_rules in an audit row of the pull; an unswitched one never does', async () => {
+  it('S5 ruling 1: a switched store writes NO audit row for its pull, in plan or in finalize (the source is derivable from the switch row)', async () => {
     const w = await world('i23g');
     await rawSwitch(w, w.a.storeId, 'menu_rules', 'no links', 0);
-    const d = await day(w, [{ key: 'neither', qty: 1 }]);
-    await planOnly(w, w.a.storeId, d, w.a.kitchen);
-    const rows = await sql<{ entity: string; after: unknown }[]>`select entity, after from audit_log where org_id = ${w.orgId} and entity = 'pos_usage_pulls'`;
-    expect(rows.length, 'an audit row for the pull of a switched store').toBeGreaterThan(0);
-    expect(JSON.stringify(rows.map((r) => r.after))).toContain('"depletionSource":"menu_rules"');
+    await rawMap(w, w.a.storeId, 'coke', { mode: 'direct', itemId: w.coke, quantityPerSale: '1' });
+    await stockUp(w, w.a.storeId, w.a.kitchen, w.coke, '10');
+    const before = (await sql<{ id: string }[]>`select id from audit_log where org_id = ${w.orgId}`).length;
+    const d = await day(w, [{ key: 'coke', qty: 1 }, { key: 'neither', qty: 1 }]);
+    const plan = await planOnly(w, w.a.storeId, d, w.a.kitchen);
+    await asOrg(w.orgId, (tx) => finalizeSections(tx, w.manager, { pullId: plan.pullId, sections: ['direct', 'recipe', 'orphan'], confirmedKeys: ['direct:coke'] }));
+    const rows = await sql<{ entity: string; after: unknown }[]>`select entity, after from audit_log where org_id = ${w.orgId}`;
+    expect(rows.filter((r) => r.entity === 'pos_usage_pulls'), 'no pull audit row').toEqual([]);
+    expect(JSON.stringify(rows.map((r) => r.after))).not.toContain('depletionSource');
+    expect(before, 'setup wrote only its own rows').toBeGreaterThanOrEqual(0);
   }, 120_000);
 });
 

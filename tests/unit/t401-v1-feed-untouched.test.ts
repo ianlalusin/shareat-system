@@ -96,6 +96,10 @@ function v1FeedWriteOrDdl(sqlText: string): string | undefined {
  */
 const FEED_FILES_ALLOWED_TO_NAME_MENU: readonly string[] = ['packages/domain/src/pos/depletion-source.ts'];
 
+/** S5 ruling 2: guard (2) allows exactly ONE import specifier from menu/** into the v1 feed: the seam. Every other ../pos/* import still fails. */
+const SEAM_IMPORT = /from\s+['"]\.\.\/pos\/depletion-source['"]/g;
+const withoutSeamImport = (src: string): string => src.replace(SEAM_IMPORT, '');
+
 const feedFiles = [...V1_FEED_DIRS.flatMap((d) => files(join(root, d))), ...V1_FEED_FILES.map((f) => join(root, f)).filter(existsSync)];
 const menuFiles = [...files(join(root, 'packages/domain/src/menu')), ...['packages/db/src/repo/menu.ts'].map((f) => join(root, f)).filter(existsSync)];
 
@@ -127,7 +131,7 @@ describe('T-401 I16 -- the live v1 feed is untouched', () => {
 
   it('(2) no menu file imports or names a v1-feed module or table: never written, never read, never joined (R7)', () => {
     const hits = menuFiles
-      .map((f) => ({ f: rel(f), m: V1_FEED_NAMES.exec(code(read(f))) }))
+      .map((f) => ({ f: rel(f), m: V1_FEED_NAMES.exec(withoutSeamImport(code(read(f)))) }))
       .filter((x) => x.m)
       .map((x) => `${x.f}: ${x.m![0]}`);
     expect(hits, 'menu files that reach the v1 feed').toEqual([]);
@@ -159,6 +163,24 @@ describe('T-401 I16 -- the live v1 feed is untouched', () => {
       'IF EXISTS (SELECT 1 FROM pos_item_maps m WHERE m.item_id = p_item) THEN RETURN true; END IF;',
       '-- UPDATE pos_item_maps SET a = 1\nSELECT 1;',
     ]) expect(v1FeedWriteOrDdl(code(ok)), ok).toBeUndefined();
+  });
+
+  it('S5: the single seam import is allowed from menu/**, every other ../pos/* import is not (no second allow-list)', () => {
+    expect(V1_FEED_NAMES.test(withoutSeamImport(code("import { assertNoPlannedPullAtLinkedSwitchedStores } from '../pos/depletion-source';")))).toBe(false);
+    for (const bad of ["import { x } from '../pos/plan';", "import { x } from '../pos/usage-pull';", "import { x } from '../pos/depletion-source/extra';", "import { x } from '../../pos/depletion-source';"]) {
+      expect(V1_FEED_NAMES.test(withoutSeamImport(code(bad))), bad).toBe(true);
+    }
+  });
+
+  it('S5: the seam writes only menu tables - no insert/update/delete/DDL on a v1 table, no v1 repo write call (red until S5 writes it)', () => {
+    const seam = join(root, 'packages/domain/src/pos/depletion-source.ts');
+    expect(existsSync(seam), 'packages/domain/src/pos/depletion-source.ts exists').toBe(true);
+    const src = code(read(seam));
+    expect(v1FeedWriteOrDdl(src), 'raw SQL write on a v1 table').toBeUndefined();
+    const drizzleWrite = /\b(?:insert|update|delete)\s*\(\s*(?:posItemMaps|posMapRequests|posUsagePulls?\w*|posV1\w*|tenders|salesDays|channelSales)\b/;
+    expect(drizzleWrite.exec(src)?.[0], 'drizzle write on a v1 table').toBeUndefined();
+    const repoWrite = /\b(?:posMappingRepo|posV1Repo|salesDaysRepo|stockUsageRepo)\.(?:insert|upsert|replace|mark|refresh|set|void|update|delete|create|save|import)\w*/;
+    expect(repoWrite.exec(src)?.[0], 'v1 repo write call').toBeUndefined();
   });
 
   it('the detectors themselves bite (so a green (1)/(2) means something)', () => {
