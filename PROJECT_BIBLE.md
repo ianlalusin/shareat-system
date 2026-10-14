@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1648` 13. Decision log
-- `1649–1668` 14. Amendment protocol
-- `1669–1673` 15. Engineering standards — the industry practices this project follows
-  - `1674–1679` 15.1 Build order: walking skeleton first
-  - `1680–1691` 15.2 Golden-master testing — the most important practice here
-  - `1692–1700` 15.3 Strangler Fig, not big-bang cutover
-  - `1701–1705` 15.4 No dual-write
-  - `1706–1714` 15.5 Expand/contract migrations
-  - `1715–1723` 15.6 Observability from day zero, not later
-  - `1724–1728` 15.7 CI gates
-  - `1729–1733` 15.8 Backups and a tested restore
-  - `1734–1738` 15.9 Twelve-Factor config
-  - `1739–1746` 15.10 Append-only ledgers — but not event sourcing
-  - `1747–1751` 15.11 Defence in depth
-  - `1752–1780` 15.12 Skills are lenses, not assurance
-  - `1781–1787` 15.13 Reconciliation is a permanent feature
-- `1788–1792` 16. The accounting spine
-  - `1793–1824` 16.0 What we are actually fixing — the diagnosis
-  - `1825–1868` 16.1 The ten invariants — non-negotiable
-  - `1869–1883` 16.2 The oracle: how "correct" is tested
-  - `1884–1905` 16.3 The model — header + lines, not legs
-  - `1906–1925` 16.4 Deliberately simpler than ERPNext
-  - `1926–1992` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1993–2017` 16.6 What v1 already gets right — preserve the intent
-  - `2018–2039` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2040–2054` 16.8 What v1's accounting already gets right
-  - `2055–2098` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2099–2149` 16.10 Posting patterns — one canonical pattern per business event
-  - `2150–2182` 16.11 Inventory's accounting integration
+- `1329–1654` 13. Decision log
+- `1655–1674` 14. Amendment protocol
+- `1675–1679` 15. Engineering standards — the industry practices this project follows
+  - `1680–1685` 15.1 Build order: walking skeleton first
+  - `1686–1697` 15.2 Golden-master testing — the most important practice here
+  - `1698–1706` 15.3 Strangler Fig, not big-bang cutover
+  - `1707–1711` 15.4 No dual-write
+  - `1712–1720` 15.5 Expand/contract migrations
+  - `1721–1729` 15.6 Observability from day zero, not later
+  - `1730–1734` 15.7 CI gates
+  - `1735–1739` 15.8 Backups and a tested restore
+  - `1740–1744` 15.9 Twelve-Factor config
+  - `1745–1752` 15.10 Append-only ledgers — but not event sourcing
+  - `1753–1757` 15.11 Defence in depth
+  - `1758–1786` 15.12 Skills are lenses, not assurance
+  - `1787–1793` 15.13 Reconciliation is a permanent feature
+- `1794–1798` 16. The accounting spine
+  - `1799–1830` 16.0 What we are actually fixing — the diagnosis
+  - `1831–1874` 16.1 The ten invariants — non-negotiable
+  - `1875–1889` 16.2 The oracle: how "correct" is tested
+  - `1890–1911` 16.3 The model — header + lines, not legs
+  - `1912–1931` 16.4 Deliberately simpler than ERPNext
+  - `1932–1998` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1999–2023` 16.6 What v1 already gets right — preserve the intent
+  - `2024–2045` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2046–2060` 16.8 What v1's accounting already gets right
+  - `2061–2104` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2105–2155` 16.10 Posting patterns — one canonical pattern per business event
+  - `2156–2188` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1645,6 +1645,12 @@ just a patch.**
 | 310 | 2026-10-11 | **ACTIVE NAV IS RED (T-387).** Ian: *"make active nav red."* The current nav item fills with `--brand`, white text, in both themes. | Ian's ruling | Yes — CSS only |
 | 311 | 2026-10-11 | **ONE RED PRIMARY PER VIEW (T-387).** Ian: *"demote extras."* A view has one red primary action; a repeated Save is secondary. `SubmitButton` gained a `variant` prop. Ian also ruled *"merge when green"* for every T-387 PR. | Ian's ruling; several red buttons on one view diluted the primary action | Yes — per-call `variant` |
 | 312 | 2026-10-11 | **TWO T-387 SPEC NOTES.** (1) `useFormStatus` exists in the App Router (Next's bundled React 19) but not in the react-dom 18.3.1 Vitest loads, so tests use the shim `apps/erp/tests/helpers/form-status-setup.ts` — a test-only bridge, never imported by source. (2) `attendance_days` RLS is org-level; the store boundary is the repo filter (§15.11 layering), not RLS. | Recorded so the next reader does not "fix" the shim or add store RLS | Yes |
+| 313 | 2026-10-13 | **ONE TABLET PER STORE RUNS THE POS; THE ERP RUNS ON ANY OTHER DEVICE.** Ian: *"we only allow 1 tablet per store now"*. There is no second billing tablet, so no in-store server and no tablet-to-tablet sync. | Ian's ruling (posv2 plan) | No: shapes POS v2 offline design |
+| 314 | 2026-10-13 | **DINER SIGN-UP PROVES THE PHONE WITH ONE SMS CODE; LOGIN IS PHONE + PASSWORD; ONLY A MANAGER RESETS A PASSWORD, IN PERSON.** This followed a read-only count of about 20-25 logins and 15-27 new accounts a month, so codes at sign-up cost under ₱30 a month. There is no self-service reset. | Ian's ruling | No: customer app v2 |
+| 315 | 2026-10-13 | **RECIPES ARE SHAREAT STANDARDS.** Sauce/batch production recipes and the menu guide recipes are edited by admins only and can never be granted below admin. Stores and the Padre Garcia franchise only suggest changes. Slab-slicing yields have no standard and always record actuals. The guide recipe sets expected usage; usage within ±10% (an org default, with an admin override per item) is accepted, and outside it is flagged for the manager's explicit check and a reason before posting. | Ian's rulings (T-401, T-403) | Yes: T-403 built; tolerance and suggestions are T-401 S5 and a follow-up |
+| 316 | 2026-10-13 | **MENU MASTER (T-401) RULINGS.** Managers set prices for their own store. Only super admin adds items; managers request them. The online price can be a rule over the counter price (%, ±₱ or fixed). The v1 usage pull switches per store to the menu recipes, after a 7-day comparison, and can switch back. Flavours are an option group. | Ian's answers Q1-Q6 | Yes: S1+S2 shipped (0196) |
+| 317 | 2026-10-13 | **ACTIVITY LOG BUILT NOW (T-402), PULLED FORWARD FROM PHASE 7 A2 (overrides Q11 (a) for this item).** It extends the immutable audit_log with a tag and a sensitivity from one fixed catalogue, plus redaction. Retention is 10 years for money/order/menu-price/customer events and 2 years for low-sensitivity events only. Dropping a 2-year partition is a deliberate, catalogued deletion under §4.2 rule 9. Managers see their own store. In an org with no admin, the manager serves as admin for the restricted log. | Ian ("build now", "go with recommendation", the admin-less flip) | Yes: S1a+S1b shipped (0197) |
+| 318 | 2026-10-13 | **POS v2: STORE ORDERS SHOW ON THE POS SCREEN.** Commissary orders, transfers and other orders addressed to a store appear on the POS, the always-on screen, so the cashier is notified immediately. **Stock-usage drafts are queued from many staff at once, visible to all store staff, and posted by the manager.** | Ian's rulings | No: POS v2 / T-401 S5 |
 
 ## 14. Amendment protocol
 

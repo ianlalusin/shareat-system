@@ -1,6 +1,6 @@
 # T-403: Recipes and the v1 POS mapping are admin-only
 
-**Status:** SPEC 2026-10-13 (orchestrator). Ian, 2026-10-13: "only admin can edit recipe", then "go with recommendation":
+**Status:** **DONE 2026-10-13, live** (PR #22). Follow-up: recipe capabilities non-offerable to positions; recipe-suggestion queue. | Earlier: SPEC 2026-10-13 (orchestrator). Ian, 2026-10-13: "only admin can edit recipe", then "go with recommendation":
 the rule covers production recipes and the v1 POS item mapping (`manage_pos_map`) as well as the T-401 menu recipes.
 
 ## Goal

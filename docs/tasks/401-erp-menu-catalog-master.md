@@ -1,6 +1,6 @@
 # T-401: the ERP menu and catalog master (POS v2 P1 prerequisite)
 
-**Status:** SPEC APPROVED WITH CHANGES 2026-10-13 (revised after Ian's answers; fresh Opus review applied). S1 built on lane, to be amended in place.
+**Status:** **S1+S2 DONE 2026-10-13, live** (PR #22, migration 0196; four S1 audit rounds and two S2). Next: S3 store-menu projection, S4 screens, S5 v1 usage switch + ±10% tolerance. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-13 (revised after Ian's answers; fresh Opus review applied). S1 built on lane, to be amended in place.
 (S1 = migration 0196 on `lane/t401-s1`, commit 16ab42a, worktree `wt-t401`; not merged, not deployed, so 0196 is edited
 in place, never followed by a 0197 fix-up. S2 is half-built and paused; §6a lists the tests that Ian's answers make wrong.)
 Earlier status: SPEC APPROVED WITH CHANGES 2026-10-13 (fresh Opus review applied). Written at HEAD a9e299b.
@@ -462,6 +462,16 @@ and the approval function, so AI only adds suggestions to a human flow that alre
 spec, not this one: where uploaded item photos are stored (R13 leaves images to row 280's hosting move), and confirming
 that sending a **menu** photo to the provider is not the receipt-photo case row 251 forbade.
 
+## Ian ruling on usage tolerance (2026-10-13; binding; S5)
+"The recipe will serve as basis of usage report. We can also set up a margin: when the recipe expects 1 kg of carrots from today's sales, usage allowed is ±10%. Inside it can be accepted; outside it flag for manual verification before acceptance." So:
+- The guide recipe × the day's sales gives the **expected usage** per stock item. Staff counts and drafts give the **actual usage**. The manager posts.
+- A line whose actual usage is within the tolerance of expected can be accepted as normal. A line outside it is **flagged**: it cannot be posted until the manager verifies it explicitly and types a reason. Flag and reason are written to the activity log (T-402, category stock).
+- Default tolerance is **±10%**, an org setting; a per-item override is allowed (admin only, since it is part of the standard). An item with expected 0 and actual > 0, or the reverse, is always flagged.
+- Slab slicing yields are not subject to this rule: they have no standard and record actuals (production, T-176).
+- Sauce/batch production recipes are Shareat standards (admin only, T-403). Recording a batch output outside the same tolerance of the recipe's expected output is flagged the same way; build it with this slice or as a T-176 follow-up, whichever the S5 planner finds smaller.
+- Recipes are Shareat standards: never grantable below admin (Ian chose option B). Stores suggest changes through a request queue, approved by an admin.
+- **Franchise (Ian, 2026-10-13, answer (a)): Shareat's main branch controls Padre Garcia's recipes too.** Padre Garcia (a separate org, T-398) may only suggest changes. Open design point for the planner, not decided here: Padre Garcia's org needs the Shareat standards without Shareat admins writing into another org. One option is a published standard that the franchise org receives read-only and cannot edit. Settle it in the T-398 S5/S7 or a T-401 follow-up spec before Padre Garcia sells with recipes.
+
 ## Ian ruling on recipes (2026-10-13; binding)
 "Only admin can edit recipe." `set_menu_depletion` (the menu depletion rule, which is the stock recipe of a menu variant) is **super admin and admin only**; manager is ✗ (with a ✗ test). This supersedes the manager ✅ in the capability table and removes review finding 2's cross-store authorize (admin is org-wide). Ian 2026-10-13 ("go with recommendation"): it also applies to `manage_pos_map` (the v1 bridge mapping, admin-only; delete each store's mapping after it moves to POS v2) and to production recipes. Both are done in T-403, not here. **Q6 ANSWERED: the online rule follows the counter price.**
 
@@ -538,3 +548,78 @@ _(filled by the lanes: commits, test counts.)_
   not with cost. Built as (a) unless Ian says otherwise; (b) later is a new `pricing_basis` column, not a redesign.
 
 Earlier wording of the questions and the planner's recommendations are in git history (commit 68a77f0).
+
+## S3 projection types (planner, 2026-10-14; binding)
+All types live in `packages/domain/src/menu/project.ts` and are **structural** (it may not import `@shareat/db`, I14); repo rows
+and `OfferInForce` / `OptionOfferInForce` must be assignable to them. **`menuRepo.menuSnapshot` is NOT built in S3**: S3 is
+pure, takes a plain object, and the tester builds snapshots by hand. The loader is built by the first slice that projects live
+data (the P1 carrier spec), with its return type checked against `MenuSnapshot`. S3 builder scope is unchanged (`project.ts`).
+```ts
+type Status = 'active' | 'retired'; type Channel = 'store' | 'online';
+export interface MenuSnapshot {                       // org catalog + per-store offers; rows in any order
+  readonly categories: readonly { id: string; name: string; parentId: string | null; sortOrder: number; status: Status }[];
+  readonly items: readonly { id: string; categoryId: string; name: string; description: string | null; itemType: 'a_la_carte' | 'package' | 'refill';
+    soldALaCarte: boolean; soldInPackageSession: boolean; dinerOrderable: boolean; sortOrder: number; status: Status }[];
+  readonly variants: readonly { id: string; menuItemId: string; label: string | null; isDefault: boolean; sortOrder: number; status: Status }[];
+  readonly optionGroups: readonly { id: string; name: string; selectionMode: 'single' | 'multi'; minSelections: number; maxSelections: number; status: Status }[];
+  readonly optionValues: readonly { id: string; optionGroupId: string; name: string; sortOrder: number; status: Status }[];
+  readonly optionGroupLinks: readonly { id: string; optionGroupId: string; menuItemId: string | null; variantId: string | null; sortOrder: number; status: Status }[];
+  readonly packageRefills: readonly { packageVariantId: string; refillItemId: string; status: Status }[];
+  readonly stores: readonly StoreOffersAt[];
+}
+export interface StoreOffersAt {
+  readonly storeId: string;
+  readonly at: Date;                                  // the instant offersInForce / optionOffersInForce were read at
+  readonly offers: readonly (ResolvableOffer & { variantId: string; channel: Channel; effectiveFrom: Date })[]; // = offersInForce(storeId, at), raw, with basis
+  readonly optionOffers: readonly { optionValueId: string; channel: Channel; priceDelta: string }[];           // = optionOffersInForce(storeId, at)
+  readonly upcoming: readonly Date[];                 // effective_from of every menu_offers AND menu_option_offers row of this store > at, both channels
+}
+export type NotOfferedReason = 'no_offer' | 'withdrawn' | 'no_basis' | 'rule_below_zero';  // 'no_offer' = no row in force
+export type ChannelOffer = { orderable: true; amount: string | null; bundleHeads: number | null; extraHeadAmount: string | null }
+                         | { orderable: false; notOffered: NotOfferedReason };
+export type ChannelDelta = { orderable: true; priceDelta: string } | { orderable: false; notOffered: 'no_offer' };
+export interface StoreMenuV1 { schemaVersion: 1; storeId: string; categories: ProjectedCategory[]; items: ProjectedItem[] }
+export interface ProjectedCategory { id: string; name: string; parentId: string | null; sortOrder: number }
+export interface ProjectedItem { id: string; categoryId: string; name: string; description: string | null; itemType: 'a_la_carte' | 'package' | 'refill';
+  soldALaCarte: boolean; soldInPackageSession: boolean; dinerOrderable: boolean; sortOrder: number; variants: ProjectedVariant[] }
+export interface ProjectedVariant { id: string; label: string | null; isDefault: boolean; sortOrder: number;
+  channels: { store: ChannelOffer; online: ChannelOffer }; optionGroups: ProjectedOptionGroup[]; refillItemIds: string[] }
+export interface ProjectedOptionGroup { id: string; name: string; selectionMode: 'single' | 'multi'; minSelections: number; maxSelections: number;
+  values: { id: string; name: string; sortOrder: number; channels: { store: ChannelDelta; online: ChannelDelta } }[] }
+export interface ProjectedStoreMenu { menu: StoreMenuV1; contentHash: string; nextChangeAt: string | null }
+export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Date): ProjectedStoreMenu;
+```
+1. **Offers (Q4): raw `OfferInForce` with `basis`**, and the projection calls `resolveOfferPrice` (from `./resolve-price`) on each.
+   That is §3's "resolved by `resolveOfferPrice`": `project.ts` still does no money arithmetic, and the one decision of what a
+   row means stays in one function. No row in force for a (variant, channel) → `{ orderable: false, notOffered: 'no_offer' }`;
+   a `notOffered` result → `orderable: false` with that reason (I19). `orderable` comes from offers only, never 86 (R12);
+   `dinerOrderable` is the item flag passed through, not combined into `orderable`.
+2. **Guards (throw, a caller bug):** `storeId` absent from `snapshot.stores`; `entry.at.getTime() !== at.getTime()` (rows in
+   force at another instant would be silently wrong; K2 forbids re-deriving "in force" in TypeScript).
+3. **What appears:** a variant iff it and its item are `active` and it is orderable on at least one channel; an item iff at
+   least one variant appears; a category iff it holds an appearing item or is the parent of an appearing category. A
+   not-orderable channel of an appearing variant carries its reason. An option value appears iff active and orderable on a
+   channel; option channels are independent of the variant's.
+4. **I9:** a variant's groups = its own active links if it has any, else its item's active links; never the union. Inactive
+   groups are skipped. A group whose values all drop still appears with `values: []`.
+5. **I10:** `refillItemIds` = active `packageRefills` rows of that package variant whose refill item appears in this projection,
+   sorted by id; `[]` on every non-package variant and on a package with no rows. Empty never means all.
+6. **I15 / K10:** `nextChangeAt` = the minimum of `upcoming` that is `> at`, as `toISOString()`, else `null`. A future option
+   offer counts. Store-channel rows count (an online rule follows them, K10). R12's "offer or rule" means online pricing
+   **rules** (they are `menu_offers` rows); **depletion rules do not count** (they never appear in the menu, so they cannot change it).
+   Catalog edits are not dated: the carrier sees them as a new `contentHash`.
+7. **Order:** the projection sorts every list itself, so input row order never changes the output: categories, items, values by
+   (`sortOrder`, `name`, `id`); variants by (`isDefault` first, `sortOrder`, `label ?? ''`, `id`); groups by (link `sortOrder`,
+   `name`, `id`). Strings compare by UTF-16 code unit (`<`), never `localeCompare`.
+8. **`contentHash` (I14):** lowercase hex sha256 (`node:crypto`) of the UTF-8 bytes of `canonicalJson(menu)`: object keys sorted
+   by code unit at every depth, arrays kept in the order above, no whitespace, `JSON.stringify` for strings and numbers, `null`
+   kept, `undefined` never emitted (the builder writes a local ~10-line `canonicalJson`; the `@shareat/db` one is off limits).
+   Hashed: `menu` only. **Not hashed:** `nextChangeAt`, `at`; there is no generated-at stamp anywhere in the output. So the same
+   menu at two instants gives the same hash. Money stays 2-decimal text exactly as the repo or `resolveOfferPrice` gives it.
+
+## S3 orchestrator rulings (2026-10-14)
+- **Category order is a tree order:** parents before their children; siblings sorted by (sortOrder, name, id). Supersedes the flat (sortOrder, name, id) in rule 7 for categories.
+- **Type name clash:** project.ts's not-offered reason type is named `MenuNotOfferedReason` (resolve-price keeps `NotOfferedReason`).
+- **No production caller in S3** (by design: the first slice that projects live data builds `menuSnapshot` and calls `projectStoreMenu`). callers.mjs's test-only flag on `projectStoreMenu` is accepted for S3 only, and that later slice must add the caller.
+- *(orchestrator, after the S3 audit)* **An item whose category is retired or absent is not projected** (no dangling `categoryId` in the carrier). Retiring a category hides its items from every store menu; the S4 screen should warn before retiring a category that still holds offered items.
+- *(orchestrator, after the S3 audit)* **The snapshot's caller guarantees uniqueness** of offers per (variant, channel) and of package refill rows (the DB unique constraints already do). The projection does not guard against duplicates.
