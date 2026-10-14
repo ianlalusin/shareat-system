@@ -45,6 +45,8 @@ interface Case {
   allowed: (ctx: Ctx) => Attempt[];
   /** the rows that must not move on a refusal and move by allowed.length on success */
   rows: (ctx: Ctx) => Promise<number>;
+  /** rows moved by ONE allowed attempt (default +1; a cancel or an unlink is -1) */
+  delta?: number;
 }
 
 interface Ctx {
@@ -60,6 +62,12 @@ interface Ctx {
   pkgItem: string;
   pkgVariant: string;
   refillItem: string;
+  variantSched: string;
+  schedA: string; // scheduled store-channel offers (A / B) on variantSched
+  schedB: string;
+  optSchedA: string; // scheduled option offers (A / B) on valueId2
+  optSchedB: string;
+  linkId: string; // a link of a dedicated group to itemId
   open: { a: string[]; b: string[]; c: string[]; d: string[]; w: string[] }; // open request ids per case
 }
 
@@ -86,8 +94,27 @@ function ctx(): Promise<Ctx> {
     const mkReq = async (name: string, who: Actor, store: string): Promise<string> =>
       (await sql<{ id: string }[]>`
         insert into menu_item_requests (org_id, store_id, requested_by, name, item_type, created_by) values (${c.orgId}, ${store}, ${who.personId}, ${name}, 'a_la_carte', ${who.personId}) returning id`)[0]!.id;
+    const sched = await rawItem(c, 'a_la_carte', uid('Sched'));
+    await rawRule(c, sched.variantId);
+    const mkOffer = async (store: string): Promise<string> =>
+      (await sql<{ id: string }[]>`
+        insert into menu_offers (org_id, store_id, variant_id, channel, effective_from, amount, created_by)
+        values (${c.orgId}, ${store}, ${sched.variantId}, 'store', now() + interval '30 days', 60.00, ${c.admin.personId}) returning id`)[0]!.id;
+    const mkOptOffer = async (store: string): Promise<string> =>
+      (await sql<{ id: string }[]>`
+        insert into menu_option_offers (org_id, store_id, option_value_id, channel, effective_from, price_delta, created_by)
+        values (${c.orgId}, ${store}, ${v2!.id}, 'store', now() + interval '30 days', 3.00, ${c.admin.personId}) returning id`)[0]!.id;
+    const linkOpt = await rawOption(c);
+    const [link] = await sql<{ id: string }[]>`
+      insert into menu_option_group_links (org_id, option_group_id, menu_item_id, created_by) values (${c.orgId}, ${linkOpt.groupId}, ${item.itemId}, ${c.admin.personId}) returning id`;
     return {
       c,
+      variantSched: sched.variantId,
+      schedA: await mkOffer(c.storeA),
+      schedB: await mkOffer(c.storeB),
+      optSchedA: await mkOptOffer(c.storeA),
+      optSchedB: await mkOptOffer(c.storeB),
+      linkId: link!.id,
       itemId: item.itemId,
       variantId: item.variantId,
       variant2: second.variantId,
@@ -142,7 +169,10 @@ const cases: Case[] = [
     name: 'retireCategoryAction (manage_menu)',
     load: MENU_ACTIONS, action: 'retireCategoryAction', path: P_MENU,
     rows: async (x) => n(sql`select count(*)::int as n from menu_categories where org_id = ${x.c.orgId} and status = 'retired'`),
-    refused: (x) => [{ who: x.c.manager, label: 'manager', form: fd({ id: x.catEmpty }) }],
+    refused: (x) => [
+      { who: x.c.manager, label: 'manager', form: fd({ id: x.catEmpty }) },
+      { who: x.c.staff, label: 'staff', form: fd({ id: x.catEmpty }) },
+    ],
     allowed: (x) => [{ who: x.c.admin, label: 'admin', form: fd({ id: x.catEmpty }) }],
   },
   {
@@ -290,6 +320,38 @@ const cases: Case[] = [
     ],
     allowed: (x) => [{ who: x.c.managerA, label: 'manager at A', form: fd({ storeId: x.c.storeA, optionValueId: x.valueId, channel: 'store', priceDelta: '5.00' }) }],
   },
+  {
+    name: 'unlinkOptionGroupAction (manage_menu)',
+    load: ITEM_ACTIONS, action: 'unlinkOptionGroupAction', path: P_ITEM, delta: -1, rows: orgCount('menu_option_group_links'),
+    refused: (x) => [
+      { who: x.c.manager, label: 'manager', form: fd({ menuItemId: x.itemId, linkId: x.linkId }) },
+      { who: x.c.staff, label: 'staff', form: fd({ menuItemId: x.itemId, linkId: x.linkId }) },
+    ],
+    allowed: (x) => [{ who: x.c.admin, label: 'admin', form: fd({ menuItemId: x.itemId, linkId: x.linkId }) }],
+  },
+  {
+    name: 'cancelScheduledPriceAction (set_menu_price: store scoped; an offer of another store cannot be cancelled by naming yours)',
+    load: PRICE_ACTIONS, action: 'cancelScheduledPriceAction', path: P_PRICES, delta: -1,
+    rows: async (x) => n(sql`select count(*)::int as n from menu_offers where org_id = ${x.c.orgId} and effective_from > now()`),
+    refused: (x) => [
+      { who: x.c.staff, label: 'staff', form: fd({ storeId: x.c.storeA, offerId: x.schedA }) },
+      { who: x.c.managerA, label: 'manager scoped to A, at B', form: fd({ storeId: x.c.storeB, offerId: x.schedB }) },
+      { who: x.c.grantedStaff, label: 'staff granted at A, at B', form: fd({ storeId: x.c.storeB, offerId: x.schedB }) },
+      { who: x.c.managerA, label: 'manager at A naming the offer of B with store A', form: fd({ storeId: x.c.storeA, offerId: x.schedB }) },
+    ],
+    allowed: (x) => [{ who: x.c.managerA, label: 'manager at A', form: fd({ storeId: x.c.storeA, offerId: x.schedA }) }],
+  },
+  {
+    name: 'cancelScheduledOptionPriceAction (set_menu_price: store scoped; an option offer of another store cannot be cancelled by naming yours)',
+    load: PRICE_ACTIONS, action: 'cancelScheduledOptionPriceAction', path: P_PRICES, delta: -1,
+    rows: async (x) => n(sql`select count(*)::int as n from menu_option_offers where org_id = ${x.c.orgId} and effective_from > now()`),
+    refused: (x) => [
+      { who: x.c.staff, label: 'staff', form: fd({ storeId: x.c.storeA, optionOfferId: x.optSchedA }) },
+      { who: x.c.managerA, label: 'manager scoped to A, at B', form: fd({ storeId: x.c.storeB, optionOfferId: x.optSchedB }) },
+      { who: x.c.managerA, label: 'manager at A naming the option offer of B with store A', form: fd({ storeId: x.c.storeA, optionOfferId: x.optSchedB }) },
+    ],
+    allowed: (x) => [{ who: x.c.managerA, label: 'manager at A', form: fd({ storeId: x.c.storeA, optionOfferId: x.optSchedA }) }],
+  },
   // ------------------------------------------------------------------------------------------------ request_menu_item (STORE scoped)
   {
     name: 'submitItemRequestAction (request_menu_item: store scoped; staff refused)',
@@ -335,7 +397,7 @@ describe.each(cases)('$name', (tc) => {
       // createItemAction lands on the new item's own page, everything else on the page it was submitted from
       if (tc.action !== 'createItemAction') expect(out.path).toBe(tc.path(x));
       else expect(out.path).toMatch(/^\/menu\/items\/[0-9a-f-]{36}$/);
-      expect(await tc.rows(x), `${tc.action} as ${a.label}: one new row`).toBe(before + 1);
+      expect(await tc.rows(x), `${tc.action} as ${a.label}: rows moved by ${tc.delta ?? 1}`).toBe(before + (tc.delta ?? 1));
     }
   });
 });

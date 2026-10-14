@@ -43,6 +43,26 @@ const reqs = (c: Cast) =>
       from menu_item_requests where org_id = ${c.orgId} order by created_at, id`;
 const byName = async (c: Cast, name: string) => (await reqs(c)).filter((r) => r.name === name);
 
+interface Actor2 {
+  personId: string;
+  orgId: string;
+}
+
+/** The value the page's "Send request anyway" button carries (the token shape is the builder's; the tests do not assume it). */
+function confirmToken(html: string): string {
+  const m = /<(?:input|button)\b[^>]*\sname="confirmed"[^>]*\svalue="([^"]*)"|<(?:input|button)\b[^>]*\svalue="([^"]*)"[^>]*\sname="confirmed"/.exec(html);
+  expect(m, 'the warning page carries a name="confirmed" control').not.toBeNull();
+  return (m![1] ?? m![2])!;
+}
+/** What a person does: submit; if warned, press "Send request anyway" on the page they were shown. */
+async function submitChecked(c: Cast, who: Actor2, fields: Record<string, string>) {
+  const base = { storeId: c.storeA, itemType: 'a_la_carte', ...fields };
+  const first = await run(ACTIONS, 'submitItemRequestAction', who, fd(base));
+  if (!first.flash.warning) return first;
+  const token = confirmToken(await render(PAGE, who, { flashFrom: first.url }));
+  return run(ACTIONS, 'submitItemRequestAction', who, fd({ ...base, confirmed: token }));
+}
+
 async function world(hint: string) {
   const c = await cast(`s4rq-${hint}`);
   const existing = await rawItem(c, 'a_la_carte', 'Samgyupsal Set');
@@ -68,14 +88,19 @@ describe('request -> duplicate shown -> submit (manager)', () => {
     const withWarning = await render(PAGE, w.c.managerA, { flashFrom: out.url });
     expect(plain(withWarning)).toContain('Samgyupsal Set');
     expect(plain(withWarning)).toContain('Send request anyway');
-    expect(withWarning).toMatch(/name="confirmed"[^>]*value="1"|value="1"[^>]*name="confirmed"/);
+    const token = confirmToken(withWarning);
+    expect(token, 'a per-name token, never the bare "1"').not.toBe('1');
+    expect(token.length).toBeGreaterThanOrEqual(8);
+    await rawItem(w.c, 'a_la_carte', 'Pork Belly Set');
+    const other = await run(ACTIONS, 'submitItemRequestAction', w.c.managerA, asked(w.c, { name: 'Pork Belly Set' }));
+    expect(confirmToken(await render(PAGE, w.c.managerA, { flashFrom: other.url })), 'a different name carries a different token').not.toBe(token);
     const plainPage = await render(PAGE, w.c.managerA, {});
     expect(plain(plainPage)).not.toContain('Send request anyway');
   });
 
   it('step 2: the same form with confirmed=1 creates the open request for that manager and store ("Request sent."); name, type, category hint and note are kept', async () => {
     const w = await world('confirm');
-    const out = await run(ACTIONS, 'submitItemRequestAction', w.c.managerA, asked(w.c, { name: 'Samgyupsal Set', confirmed: '1', note: 'guests ask for it', categoryId: w.c.categoryId }));
+    const out = await submitChecked(w.c, w.c.managerA, { name: 'Samgyupsal Set', note: 'guests ask for it', categoryId: w.c.categoryId });
     expect(out.flash.error).toBeUndefined();
     expect(out.flash.ok).toBe('Request sent.');
     const [row] = await byName(w.c, 'Samgyupsal Set');
@@ -106,6 +131,38 @@ describe('request -> duplicate shown -> submit (manager)', () => {
     const out = await run(ACTIONS, 'withdrawItemRequestAction', w.c.managerA, fd({ id: row!.id }));
     expect(out.flash.ok).toBe('Request withdrawn.');
     expect((await byName(w.c, 'Wagyu Platter'))[0]!.status).toBe('withdrawn');
+  });
+});
+
+describe('the duplicate check cannot be skipped by reusing a confirmation', () => {
+  it('warn on A, then "confirm" with a DIFFERENT look-alike B: B is checked again (warning, nothing written)', async () => {
+    const w = await world('bound');
+    await rawItem(w.c, 'a_la_carte', 'Pork Belly Set');
+    const first = await run(ACTIONS, 'submitItemRequestAction', w.c.managerA, asked(w.c, { name: 'Samgyupsal Set' }));
+    expect(first.flash.warning).toBeTruthy();
+    const token = confirmToken(await render(PAGE, w.c.managerA, { flashFrom: first.url }));
+    for (const reuse of [token, '1']) {
+      const b = await run(ACTIONS, 'submitItemRequestAction', w.c.managerA, asked(w.c, { name: 'Pork Belly Set', confirmed: reuse }));
+      expect(b.flash.warning, `B with confirmation "${reuse}" is warned about again`).toContain('Pork Belly Set');
+      expect(b.flash.ok).toBeUndefined();
+      expect(await reqs(w.c), 'nothing written').toHaveLength(0);
+    }
+    const a = await run(ACTIONS, 'submitItemRequestAction', w.c.managerA, asked(w.c, { name: 'Samgyupsal Set', confirmed: token }));
+    expect(a.flash.ok, 'the confirmation still works for the name it was shown for').toBe('Request sent.');
+    expect(await reqs(w.c)).toHaveLength(1);
+  });
+
+  it('an OPEN request counts as a look-alike: a second ask for the same / similar name shows the warning and writes nothing', async () => {
+    const w = await world('open-dup');
+    const one = await run(ACTIONS, 'submitItemRequestAction', w.c.managerA, asked(w.c));
+    expect(one.flash.ok).toBe('Request sent.');
+    for (const [who, name] of [[w.c.manager2, 'wagyu  platter'], [w.c.managerA, 'Wagyu Platter']] as const) {
+      const again = await run(ACTIONS, 'submitItemRequestAction', who, asked(w.c, { name }));
+      expect(again.flash.warning, `"${name}" while one is open`).toContain('Wagyu Platter');
+      expect(again.flash.ok).toBeUndefined();
+    }
+    expect(await byName(w.c, 'Wagyu Platter')).toHaveLength(1);
+    expect(await reqs(w.c)).toHaveLength(1);
   });
 });
 
@@ -159,7 +216,7 @@ describe('/menu/requests - what each person sees', () => {
 
   it('the super admin sees the open queue (all stores, all requesters) with each request\'s likely matches and the three buttons; the approve box pre-selects the category hint', async () => {
     const w = await world('queue');
-    await run(ACTIONS, 'submitItemRequestAction', w.c.manager, asked(w.c, { name: 'Samgyupsal Set', confirmed: '1', categoryId: w.c.categoryId }));
+    await submitChecked(w.c, w.c.manager, { name: 'Samgyupsal Set', categoryId: w.c.categoryId });
     await run(ACTIONS, 'submitItemRequestAction', w.c.manager2, fd({ storeId: w.c.storeB, name: 'Wagyu Platter', itemType: 'a_la_carte' }));
     const html = await render(PAGE, w.c.superAdmin, {});
     const t = plain(html);
@@ -175,7 +232,7 @@ describe('/menu/requests - what each person sees', () => {
 
 describe('resolving a request (super admin only)', () => {
   async function open(w: Awaited<ReturnType<typeof world>>, name = 'Wagyu Platter') {
-    await run(ACTIONS, 'submitItemRequestAction', w.c.managerA, asked(w.c, { name, confirmed: '1' }));
+    await submitChecked(w.c, w.c.managerA, { name });
     return (await byName(w.c, name))[0]!;
   }
 
@@ -241,8 +298,3 @@ describe('resolving a request (super admin only)', () => {
     expect(t).toContain('dessert menu is closed');
   });
 });
-
-interface Actor2 {
-  personId: string;
-  orgId: string;
-}
