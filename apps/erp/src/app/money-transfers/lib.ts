@@ -4,7 +4,7 @@
  * `withOrgPrincipal` comes from the expenses screens rather than being duplicated — one
  * RLS-principal wrapper, one place to get it wrong.
  */
-import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { type Actor, can } from '@shareat/auth';
 import { moneyAccountsRepo, moneyTransfersRepo, type MoneyTransferListRow } from '@shareat/db';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
 
@@ -47,13 +47,7 @@ export async function listTransferableAccounts(actor: Actor, balances?: readonly
   return withOrgPrincipal(actor.orgId, async (tx) => {
     const allowed = new Set<string>();
     for (const s of stores) {
-      try {
-        await authorize(tx, actor, 'transfer_funds', { storeId: s.id });
-        allowed.add(s.id);
-      } catch (err) {
-        if (err instanceof AuthorizationError) continue;
-        throw err;
-      }
+      if (await can(tx, actor, 'transfer_funds', { storeId: s.id })) allowed.add(s.id);
     }
     if (allowed.size === 0) return [];
     // Given the org-wide balances the caller already read, narrow them instead of reading every ledger twice.

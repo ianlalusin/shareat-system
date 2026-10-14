@@ -36,7 +36,7 @@ import {
   tradeRepo,
   type Tx,
 } from '@shareat/db';
-import { authorize, AuthorizationError, type Actor, type Capability } from '@shareat/auth';
+import { authorize, AuthorizationError, type Actor, type Capability, can } from '@shareat/auth';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFiguresReconcile } from '../shared/reconcile';
 import { parseQuantityInput } from '../shared/quantity-input';
@@ -67,17 +67,14 @@ async function authorizeEither(
   actor: Actor,
   attempts: readonly { capability: Capability; storeId: string }[],
 ): Promise<void> {
-  let firstRefusal: AuthorizationError | undefined;
+  // T-402 S2 (A2): every alternative is asked with the non-logging `can()`; only when ALL are refused is the FIRST asked
+  // again with `authorize()`, which logs one real denial and throws the same refusal the old first-failure path did.
   for (const attempt of attempts) {
-    try {
-      await authorize(tx, actor, attempt.capability, { storeId: attempt.storeId });
-      return;
-    } catch (e) {
-      if (!(e instanceof AuthorizationError)) throw e;
-      firstRefusal ??= e;
-    }
+    if (await can(tx, actor, attempt.capability, { storeId: attempt.storeId })) return;
   }
-  throw firstRefusal ?? new AuthorizationError('authorizeEither: nothing to try', attempts[0]!.capability);
+  const first = attempts[0];
+  if (first) await authorize(tx, actor, first.capability, { storeId: first.storeId });
+  throw new AuthorizationError('authorizeEither: nothing to try', attempts[0]!.capability);
 }
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { closedStockPeriodSentence, closedStockPeriodSentenceToday } from '../stock/period-guard';

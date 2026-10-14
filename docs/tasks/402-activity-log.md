@@ -402,3 +402,55 @@ from production then.
 - `set_staff_code` is viewed by admins only (it is a credential change). `reopen_pin_sign_in` stays store-viewable.
 - appendClientEvent claims the event key before it inserts the row (exactly one row per event), refuses reserved entries, and hashes the REDACTED canonical envelope.
 - Redaction also masks account numbers held in arrays or objects, and covers pwd, passwd, apikey, session, accessKey, cvv and card_number keys, plus "Bearer " values under any key.
+
+## S2 audit rulings (Opus planner, 2026-10-14; binding)
+**One rule behind all of them: a security event never holds a second connection, never blocks the caller, and never
+changes the caller's outcome.** Failure-path and post-commit events go through one in-process outbox.
+- **A1 (HIGH #1, outbox).** `security-events.ts` becomes an outbox. `enqueue*()` is SYNCHRONOUS and returns void;
+  `authorize()` calls it and throws its refusal without awaiting anything. Denials are coalesced in a Map keyed
+  `(org, actor, capability, store, hour_bucket)` -> `{ count, firstAt }`; other events are a plain list. A flush is
+  scheduled with `setImmediate` (one in flight at a time; denials arriving during a flush schedule the next one). The
+  flush writes ONE `withOrgPrincipal` transaction per org, sequentially, so the outbox holds at most one connection
+  and no caller ever waits on it (no deadlock at any pool size). `registerDenial` takes `count`: first-of-day writes
+  the row and increments `count - 1`; otherwise increments `count`. An in-process `seenToday` set (cleared when the
+  Manila day changes) skips the advisory lock + `audit_log` scan for keys already written today; the scan stays as
+  the multi-process truth. Cap: 10,000 distinct keys + 1,000 list events; beyond that, drop and count, one
+  `logger.warn` per flush. Accepted loss: what is buffered when the process dies or a flush's DB write fails (one
+  `logger.error` per org per flush, entries dropped, no retry). Export `flushSecurityEvents(): Promise<void>` (drains
+  and awaits in-flight) for tests. Inv 17 is unchanged in outcome; its tests call `flushSecurityEvents()` first.
+- **A2 (HIGH #1, probes).** New `can(tx, actor, capability, ctx): Promise<boolean>` in `authorize.ts` = `decide() ===
+  null`, writes nothing. `authorize()` stays the logging gate, so a forgotten mutation check still logs (fail-safe
+  direction). Every render probe and every try-A-then-fall-back-to-B check uses `can()`. **The sweep is in S2**, as
+  its own commit: 28 files hold `instanceof AuthorizationError` (21 `authorize(` calls in 13 page/layout files; the
+  rest in `lib.ts`, `route.ts`, `lib/` and 7 domain files incl. `sales-days/verify.ts`, `ar`, `trade`, `files`,
+  `attendance/adjustments`). The builder classifies each site: probe/fallback -> `can()`; real gate or error mapping
+  -> unchanged. If S3 is editing the same domain files, the orchestrator sequences the merge. **Enforced** by a
+  guard test scanning `apps/erp/src` + `packages/domain/src` for a `catch` that tests `instanceof
+  AuthorizationError` and then returns a boolean or calls `authorize(` again; an allow-list must stay empty.
+- **A3 (MEDIUM #2).** The flush resolves `storeId` once per key: a non-uuid, unknown or other-org store is recorded
+  as `store_id = null` with `after.deniedAtStore = 'unknown'` (the raw string is never stored or logged). Failures
+  log once per flush, never per request (A1), so the swallow can no longer amplify logs.
+- **A4 (MEDIUM #3).** No silent skip. `elevateManager` takes `orgId` in its input (callers pass `actor.orgId`);
+  `endShift` / `endAllForDevice`, when `ended > 0` and the org cannot be resolved, THROW, rolling the change back.
+  An unrecorded critical elevation is worse than a refused one.
+- **A5 (MEDIUM #4).** `signInWithFirebase(null)` / `signOut(null)`: the success event is enqueued after
+  `authTransaction` commits (outbox), never awaited, never thrown to the caller. With a caller `tx` it stays in that tx.
+- **A6 (LOW #5).** An event lives where its charge lives: in `runPinSignInWithThrottle` (caller tx), pause/stop are
+  written in `throttleTx`, so a rollback removes both. In the null path (charge already committed) they are enqueued.
+- **A7 (LOW #6), deferred.** A bad token has no trustworthy org: one logger line, like inv 16. A disabled / ended /
+  revoked person is DEF-649's to fix; the orchestrator adds to DEF-649: "its fix writes `auth.signin_refused`,
+  reason `employment_ended` / `credential_revoked`". Fix the catalogue's `signin_refused` text now to list only the
+  written reasons (`terminal_credential`, `not_a_firebase_credential`).
+- **A8 (LOW #7), fix now.** The first-of-day scan adds `recorded_at >= <Manila day start>` (recorded_at >=
+  occurred_at always) and `recorded_at < <day end> + interval '1 day'`, so only the current partition is scanned.
+- **Tests (tester adds, in `t402-s2-security-events.test.ts` unless named):** (T1) with `withOrgPrincipal` mocked
+  to never resolve, a denied `authorize()` still rejects promptly with the same `AuthorizationError` - mutant:
+  awaited write; (T2) 5 denied `can()` + flush -> zero `audit_log` and zero counter rows - mutant: `can` calls
+  `authorize`; (T3) guard test `packages/auth/tests/t402-s2-no-logging-probes.test.ts` (A2) - mutant: one probe
+  restored; (T4) 25 denials in a rolled-back caller tx -> after flush 1 row + 24 counted, and the flush opened one
+  transaction for that org - mutant: per-denial write; (T5) non-uuid and other-org `storeId` -> counted under null
+  store, raw value nowhere, no `logger.error`; (T6) forced flush DB error -> one `logger.error`, caller's refusal
+  unchanged; (T7) key cap: 10,001 keys -> one drop warning, buffer bounded; (T8) `elevateManager` / `endShift` with
+  an unresolvable org throw and leave no grant / no ended session; (T9) `signInWithFirebase(null)` with the audit
+  write forced to fail still returns the session; (T10) PIN caller-tx path rolled back -> no charge and no pause
+  event; (T11) EXPLAIN of the first-of-day query touches one `audit_log` partition - mutant: bound removed.

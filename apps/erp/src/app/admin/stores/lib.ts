@@ -8,7 +8,7 @@
 import { manilaToday, storesRepo, stockLocationsRepo, type StoreRow } from '@shareat/db';
 import { storeReadiness, type ReadinessCheck } from '@shareat/domain';
 import { withOrgPrincipal } from '../../expenses/lib';
-import { AuthorizationError, type Actor } from '@shareat/auth';
+import { type Actor, can } from '@shareat/auth';
 
 export { withOrgPrincipal };
 export type { StoreRow, ReadinessCheck };
@@ -60,13 +60,10 @@ export async function storeDetail(actor: Actor, storeId: string): Promise<StoreD
   return withOrgPrincipal(actor.orgId, async (tx) => {
     const store = await storesRepo.getById(tx, actor.orgId, storeId);
     if (!store) return null;
-    try {
-      return { store, readiness: await storeReadiness(tx, actor, store) };
-    } catch (err) {
-      // ⛔ Only an authorization denial becomes a page. Anything else is a real fault and must keep
-      // throwing — swallowing it here would hide a broken query behind "you lack access".
-      if (err instanceof AuthorizationError) return { store, readiness: null };
-      throw err;
-    }
+    // T-402 S2 (A2): asked with the non-logging `can()`, so a plain viewer opening a store is not a logged denial.
+    // ⛔ Only a "no" becomes a page. Anything else is a real fault and must keep throwing - swallowing it here would
+    // hide a broken query behind "you lack access".
+    if (!(await can(tx, actor, 'manage_stores', {}))) return { store, readiness: null };
+    return { store, readiness: await storeReadiness(tx, actor, store) };
   });
 }

@@ -7,7 +7,6 @@ addUsageLine
 adjudicateRange
 allocationsFor
 appendClientEvent
-appendSystem
 applyCreditAction
 arrivalLag
 assetsMissingCapitalisation
@@ -36,6 +35,7 @@ expectedAccumulated
 findCurrentDocument
 findLiveOfKind
 findPostedSettlementForChannelDay
+flushSecurityEvents
 formatConversionSummary
 formatCoverageReport
 getAllocationsForPayment

@@ -15,10 +15,18 @@
 import type { Tx } from '@shareat/db';
 // `transaction` remains for endShift / credential supersede — NOT auth-door work: both take a
 // person already resolved, and no caller passes null, so the fallback is unreached today.
-import { sessionsRepo, pinAttemptsRepo, accessRepo, authTransaction, transaction, withOrgPrincipal } from '@shareat/db';
+import { sessionsRepo, pinAttemptsRepo, accessRepo, auditLogRepo, authzDenialCountsRepo, authTransaction, refuse, transaction, withOrgPrincipal } from '@shareat/db';
+import { logger } from '@shareat/core/logger';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import type { Actor } from './authorize';
 import { AuthenticationError } from './errors';
+import {
+  enqueueFirebaseSignedIn,
+  enqueuePinPaused,
+  enqueuePinStoppedForDay,
+  enqueueSessionEnded,
+  enqueueSigninRefused,
+} from './security-events';
 import {
   hashPin,
   hashesMatch,
@@ -99,6 +107,7 @@ export async function signInWithPin(
       deviceId: input.deviceId ?? null,
     }),
   );
+  noteRefusedCharge(null, charge, input);
   refuseIfCharged(charge);
 
   // ⭐ T-302 / B1 - **under a real principal, not the auth door.** This line read
@@ -117,7 +126,13 @@ export async function signInWithPin(
   // key-derivation mistake cannot by itself cross a tenant boundary.
   //
   // On any failure nothing more is written: the charge already counted it.
-  const result = await withOrgPrincipal(input.orgId, (trx) => runPinSignIn(trx, input));
+  let result: SignInResult;
+  try {
+    result = await withOrgPrincipal(input.orgId, (trx) => runPinSignIn(trx, input));
+  } catch (err) {
+    notePauseStarted(null, charge, input);
+    throw err;
+  }
   await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.refundOnSuccess(ptx, input.storeId, charge));
   return result;
 }
@@ -133,8 +148,15 @@ async function runPinSignInWithThrottle(
     storeId: input.storeId,
     deviceId: input.deviceId ?? null,
   });
+  await noteRefusedCharge(throttleTx, charge, input);
   refuseIfCharged(charge);
-  const result = await runPinSignIn(credentialTx, input);
+  let result: SignInResult;
+  try {
+    result = await runPinSignIn(credentialTx, input);
+  } catch (err) {
+    await notePauseStarted(throttleTx, charge, input);
+    throw err;
+  }
   await pinAttemptsRepo.refundOnSuccess(throttleTx, input.storeId, charge);
   return result;
 }
@@ -143,6 +165,57 @@ async function runPinSignInWithThrottle(
  *  it names the way out, as T-303 §Q3 requires. */
 const STOPPED_MESSAGE =
   'PIN sign-in is stopped at this store after too many wrong PINs today. A manager can reopen it: sign in with email and password, then open Staff.';
+
+type PinInput = { orgId: string; storeId: string; deviceId?: string };
+type AnyCharge = Awaited<ReturnType<typeof pinAttemptsRepo.chargeAttempt>>;
+
+/**
+ * T-402 S2 (A6): an event lives where its charge lives. With a caller transaction (`throttleTx`) the stop is written IN it,
+ * so a rollback removes the charge and the event together; with `null` the charge already committed on its own, so the
+ * event goes to the outbox. The attempt that TRIPPED the daily budget writes `auth.pin_stopped_for_day`; an already-stopped
+ * store writes nothing more.
+ */
+function noteRefusedCharge(throttleTx: null, charge: AnyCharge, input: PinInput): void;
+function noteRefusedCharge(throttleTx: Tx, charge: AnyCharge, input: PinInput): Promise<void>;
+function noteRefusedCharge(throttleTx: Tx | null, charge: AnyCharge, input: PinInput): Promise<void> | void {
+  if (!(charge.refused === 'stopped' && charge.newlyStopped)) return throttleTx ? Promise.resolve() : undefined;
+  if (!throttleTx) return enqueuePinStoppedForDay(input.orgId, input.storeId, input.deviceId ?? null);
+  return auditLogRepo
+    .appendSystem(throttleTx, input.orgId, {
+      action: 'auth.pin_stopped_for_day',
+      storeId: input.storeId,
+      entityId: input.storeId,
+      before: null,
+      after: { storeId: input.storeId, dailyMissBudget: pinAttemptsRepo.DAILY_MISS_BUDGET },
+      source: 'web',
+      deviceId: input.deviceId ?? null,
+    })
+    .then(() => undefined);
+}
+
+/** As above for the tier-1 pause: the attempt that STARTED it, once it has failed. A paused terminal's refused attempts write nothing. */
+function notePauseStarted(throttleTx: null, charge: AnyCharge, input: PinInput): void;
+function notePauseStarted(throttleTx: Tx, charge: AnyCharge, input: PinInput): Promise<void>;
+function notePauseStarted(throttleTx: Tx | null, charge: AnyCharge, input: PinInput): Promise<void> | void {
+  if (!(charge.refused === null && charge.startedPause)) return throttleTx ? Promise.resolve() : undefined;
+  if (!throttleTx) return enqueuePinPaused(input.orgId, input.storeId, input.deviceId ?? null);
+  return auditLogRepo
+    .appendSystem(throttleTx, input.orgId, {
+      action: 'auth.pin_paused',
+      storeId: input.storeId,
+      entityId: input.storeId,
+      before: null,
+      after: {
+        storeId: input.storeId,
+        missThreshold: pinAttemptsRepo.MISS_THRESHOLD,
+        windowSeconds: pinAttemptsRepo.MISS_WINDOW_SECONDS,
+        cooldownSeconds: pinAttemptsRepo.LOCK_COOLDOWN_SECONDS,
+      },
+      source: 'web',
+      deviceId: input.deviceId ?? null,
+    })
+    .then(() => undefined);
+}
 
 /** Narrows a `Charge` to the charged variant, throwing the refusal sentence otherwise. */
 function refuseIfCharged(
@@ -244,7 +317,7 @@ async function runPinSignIn(
     throw new AuthenticationError(BAD_PIN);
   }
 
-  return issue(tx, {
+  const signedIn = await issue(tx, {
     personId: credential.personId,
     credentialId: credential.id,
     credentialKind: 'pin',
@@ -252,6 +325,19 @@ async function runPinSignIn(
     deviceId: input.deviceId ?? null,
     ttlMs: PIN_SESSION_TTL_MS,
   });
+  // T-402 S2: a success is written in the SAME transaction as the session (it rolls back with it). Individual PIN
+  // misses are not copied into audit_log: `sign_in_attempts` already is that log.
+  await auditLogRepo.append(tx, input.orgId, {
+    actorPersonId: signedIn.personId,
+    action: 'auth.pin_signin_succeeded',
+    storeId: input.storeId,
+    entityId: signedIn.personId,
+    before: null,
+    after: { sessionId: signedIn.sessionId, credentialKind: 'pin' },
+    source: 'web',
+    deviceId: input.deviceId ?? null,
+  });
+  return signedIn;
 }
 
 /**
@@ -266,16 +352,42 @@ export async function signInWithFirebase(
   tx: Tx | null,
   input: { verifiedUid: string },
 ): Promise<SignInResult> {
-  if (tx) return runFirebaseSignIn(tx, input);
-  // DEF-288, as above.
-  return authTransaction((trx) => runFirebaseSignIn(trx, input));
+  if (tx) {
+    const signedIn = await runFirebaseSignIn(tx, input);
+    await appendFirebaseSignIn(tx, signedIn.orgId, signedIn.result);
+    return signedIn.result;
+  }
+  // DEF-288, as above. The success event goes to the outbox once the session has committed (A5): the auth door has no
+  // org principal, so it cannot insert into the org-scoped audit_log, and the caller must never wait on or fail for it.
+  const signedIn = await authTransaction((trx) => runFirebaseSignIn(trx, input));
+  enqueueFirebaseSignedIn(signedIn.orgId, signedIn.result);
+  return signedIn.result;
+}
+
+async function appendFirebaseSignIn(tx: Tx, orgId: string, result: SignInResult): Promise<void> {
+  await auditLogRepo.append(tx, orgId, {
+    actorPersonId: result.personId,
+    action: 'auth.signin_succeeded',
+    storeId: null,
+    entityId: result.personId,
+    before: null,
+    after: { sessionId: result.sessionId, credentialKind: 'firebase' },
+    source: 'web',
+  });
 }
 
 const NOT_LINKED = 'Sign-in failed: this account is not linked to a person in this system.';
 
-async function runFirebaseSignIn(tx: Tx, input: { verifiedUid: string }): Promise<SignInResult> {
+async function runFirebaseSignIn(tx: Tx, input: { verifiedUid: string }): Promise<{ result: SignInResult; orgId: string }> {
   const credential = await sessionsRepo.findActiveCredentialByExternalId(tx, input.verifiedUid);
-  if (!credential || credential.kind !== 'firebase') {
+  if (!credential) {
+    // T-402 R11 / Invariant 16: an identifier that belongs to no account has no org to file an event under (a row
+    // with a null org would be an unauthenticated write amplifier), so it is one logger line and nothing in audit_log.
+    logger.warn({ event: 'signin.unknown_identifier' }, 'signin.unknown_identifier');
+    throw new AuthenticationError(NOT_LINKED);
+  }
+  if (credential.kind !== 'firebase') {
+    enqueueSigninRefused(credential.personOrgId, credential.personId, 'not_a_firebase_credential');
     throw new AuthenticationError(NOT_LINKED);
   }
   // ⛔⛔ T-304 invariant 8 — FULL STOP, not "only when called from the admin form."
@@ -287,9 +399,10 @@ async function runFirebaseSignIn(tx: Tx, input: { verifiedUid: string }): Promis
   // distinguishing message, because "you used the wrong form" is not information layer 2 needs to
   // withhold, but neither does it need advertising that terminal credentials exist at all.
   if (credential.personKind === 'terminal') {
+    enqueueSigninRefused(credential.personOrgId, credential.personId, 'terminal_credential');
     throw new AuthenticationError(NOT_LINKED);
   }
-  return issue(tx, {
+  const result = await issue(tx, {
     personId: credential.personId,
     credentialId: credential.id,
     credentialKind: 'firebase',
@@ -297,6 +410,7 @@ async function runFirebaseSignIn(tx: Tx, input: { verifiedUid: string }): Promis
     deviceId: null,
     ttlMs: BROWSER_SESSION_TTL_MS,
   });
+  return { result, orgId: credential.personOrgId };
 }
 
 /** T-304 §Q1 — layer 1's own flat sentence. Distinct from `NOT_LINKED`: this box is never shown
@@ -428,20 +542,41 @@ async function runResolve(tx: Tx, token: string): Promise<ResolvedSession> {
 // -------------------------------------------------------------------------------------
 
 /** The explicit half of Ian's "both". Idempotent — signing out twice is not an error. */
+const UNRECORDABLE = 'That change could not be recorded in the activity log, so it was not made. Please tell the developers.';
+
+type EndedSession = { id: string; personId: string; orgId: string; credentialKind: string };
+
 export async function signOut(tx: Tx | null, token: string): Promise<void> {
-  const run = async (trx: Tx) => {
+  const run = async (trx: Tx): Promise<EndedSession | undefined> => {
     const live = await sessionsRepo.findLiveByTokenHash(trx, sessionTokenHash(token));
     // ⛔ "Already gone, or never was" — and until DEF-288 there was a THIRD meaning this
     // could not tell apart: PRESENT BUT INVISIBLE. Read without a principal, an existing live
     // session returns zero rows and no error, so this returned here, `ended_at` was never
     // written, and sign-out reported success having done nothing. The auth door is what keeps
     // those two cases two rather than three.
-    if (!live) return;
+    if (!live) return undefined;
     await sessionsRepo.endSession(trx, live.id, 'signed_out');
+    return live;
   };
-  if (tx) return run(tx);
+  // T-402 S2: one `session.ended` when a live session was actually ended (a repeat or a junk token writes nothing).
+  const record = (trx: Tx, live: EndedSession) =>
+    auditLogRepo.append(trx, live.orgId, {
+      actorPersonId: live.personId,
+      action: 'session.ended',
+      storeId: null,
+      entityId: live.id,
+      before: null,
+      after: { reason: 'signed_out', credentialKind: live.credentialKind },
+      source: 'web',
+    });
+  if (tx) {
+    const live = await run(tx);
+    if (live) await record(tx, live);
+    return;
+  }
   // DEF-288: reads the session by token hash, which is org-scoped via `persons` — same gap.
-  return authTransaction(run);
+  const live = await authTransaction(run);
+  if (live) enqueueSessionEnded(live.orgId, live);
 }
 
 /**
@@ -455,9 +590,27 @@ export async function endShift(
   tx: Tx | null,
   input: { personId: string; storeId: string },
 ): Promise<{ ended: number }> {
-  const run = async (trx: Tx) => ({
-    ended: await sessionsRepo.endAllForPerson(trx, input.personId, 'shift_end', input.storeId),
-  });
+  const run = async (trx: Tx) => {
+    const ended = await sessionsRepo.endAllForPerson(trx, input.personId, 'shift_end', input.storeId);
+    if (ended > 0) {
+      const orgId = await authzDenialCountsRepo.orgIdOfPerson(trx, input.personId);
+      if (!orgId) throw refuse(UNRECORDABLE, UNRECORDABLE); // A4: an unrecorded change is refused, not skipped
+      {
+        // T-402 S2: one `session.ended` for the shift hand-over (not one per session, and never an ended_all).
+        // The person is the entity id: `endAllForPerson` returns a count, not the session ids.
+        await auditLogRepo.append(trx, orgId, {
+          actorPersonId: input.personId,
+          action: 'session.ended',
+          storeId: null,
+          entityId: input.personId,
+          before: null,
+          after: { reason: 'shift_end', atStoreId: input.storeId, ended },
+          source: 'web',
+        });
+      }
+    }
+    return { ended };
+  };
   if (tx) return run(tx);
   return transaction(run);
 }
@@ -473,11 +626,40 @@ export async function endShift(
  */
 export async function endAllForDevice(
   tx: Tx | null,
-  input: { deviceId: string },
+  input: { deviceId: string; /** Who revoked it, when a person did (T-402 S2); omitted, the event has no actor. */ actorPersonId?: string },
 ): Promise<{ ended: number }> {
-  const run = async (trx: Tx) => ({
-    ended: await sessionsRepo.endAllForDevice(trx, input.deviceId, 'revoked'),
-  });
+  const run = async (trx: Tx) => {
+    const ended = await sessionsRepo.endAllForDevice(trx, input.deviceId, 'revoked');
+    if (ended > 0) {
+      const orgId = await authzDenialCountsRepo.orgIdOfPerson(trx, input.deviceId);
+      if (!orgId) throw refuse(UNRECORDABLE, UNRECORDABLE); // A4: an unrecorded change is refused, not skipped
+      {
+        // T-402 S2: one `session.ended_all` for the call (high), not one row per session.
+        const after = { reason: 'revoked', deviceId: input.deviceId, ended };
+        if (input.actorPersonId) {
+          await auditLogRepo.append(trx, orgId, {
+            actorPersonId: input.actorPersonId,
+            action: 'session.ended_all',
+            storeId: null,
+            entityId: input.deviceId,
+            before: null,
+            after,
+            source: 'web',
+          });
+        } else {
+          await auditLogRepo.appendSystem(trx, orgId, {
+            action: 'session.ended_all',
+            storeId: null,
+            entityId: input.deviceId,
+            before: null,
+            after,
+            source: 'web',
+          });
+        }
+      }
+    }
+    return { ended };
+  };
   if (tx) return run(tx);
   return transaction(run);
 }
@@ -512,7 +694,14 @@ export const PIN_SUPERSEDED_REASON = 'Superseded by a newly issued PIN.';
  */
 export async function setPin(
   tx: Tx | null,
-  input: { orgId: string; personId: string; storeId: string; pin: string },
+  input: {
+    orgId: string;
+    personId: string;
+    storeId: string;
+    pin: string;
+    /** T-402 S2: who issued it. Given, one `credential.pin_set` is written for that actor; omitted (seed scripts, first-run setup), nothing is. */
+    actorPersonId?: string;
+  },
 ): Promise<{ credentialId: string }> {
   const run = async (trx: Tx) => {
     if (!isValidPinFormat(input.pin)) {
@@ -584,6 +773,18 @@ export async function setPin(
     // at branch A that was opened with the credential this call just revoked — DEF-228's own
     // lesson ("I changed my PIN" not meaning what the person thinks) reproduced one table over.
     await sessionsRepo.endAllForPerson(trx, input.personId, 'superseded');
+    if (input.actorPersonId) {
+      // No PIN, hash or lookup hash in the payload: only that one was set, where, and what it replaced.
+      await auditLogRepo.append(trx, input.orgId, {
+        actorPersonId: input.actorPersonId,
+        action: 'credential.pin_set',
+        storeId: null,
+        entityId: input.personId,
+        before: null,
+        after: { credentialId: id, kind: 'pin', issuedAtStoreId: input.storeId, replacedCredentials: livePins.length },
+        source: 'web',
+      });
+    }
     return { credentialId: id };
   };
   if (tx) return run(tx);

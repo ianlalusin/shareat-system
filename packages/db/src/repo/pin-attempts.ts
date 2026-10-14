@@ -42,8 +42,9 @@ function autoReopen(opts: ReopenOpts): number | null {
 // T-395 S2: statusForStore (below) is the Staff panel's read-only status; its caller is staff/page.tsx.
 
 export type Charge =
-  | { refused: 'stopped' | 'locked'; until: Date | null }
-  | { refused: null; missId: string; lockoutId: string | null };
+  /** `newlyStopped` (T-402 S2): this very attempt tripped the daily budget (not an already-stopped store). */
+  | { refused: 'stopped' | 'locked'; until: Date | null; newlyStopped?: boolean }
+  | { refused: null; missId: string; lockoutId: string | null; startedPause: boolean };
 
 /**
  * T-395 R14 / invariant I12 - charge every attempt BEFORE the credential lookup, in ONE
@@ -100,7 +101,7 @@ export async function chargeAttempt(
       insert into sign_in_attempts (org_id, store_id, device_id, kind)
       values (${orgId}, ${storeId}, ${deviceId}::uuid, 'stopped')
     `);
-    return { refused: 'stopped', until: null };
+    return { refused: 'stopped', until: null, newlyStopped: true };
   }
 
   // 3. PAUSE CHECK (T-303's lock-clobber rule: a refused attempt writes nothing).
@@ -156,7 +157,7 @@ export async function chargeAttempt(
     delete from sign_in_attempts where id in (select id from batch)
   `);
 
-  return { refused: null, missId: miss[0]!.id, lockoutId }; // INSERT ... RETURNING always yields the row
+  return { refused: null, missId: miss[0]!.id, lockoutId, startedPause: !!bumped[0]?.startedPause }; // INSERT ... RETURNING always yields the row
 }
 
 /**

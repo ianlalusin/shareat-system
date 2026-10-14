@@ -42,7 +42,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { closeDb, withOrgPrincipal } from '@shareat/db';
-import { AuthorizationError, type Actor } from '@shareat/auth';
+import { flushSecurityEvents, AuthorizationError, type Actor } from '@shareat/auth';
 import { parseStoreMap } from '../../../etl/src/master-data/store-map';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -183,7 +183,16 @@ const links = (orgId: string, entity: string) =>
   sql<Any[]>`select entity, v1_store_id, v1_id, v2_id, v1_unit, factor_to_base, created_by from v1_master_links where org_id = ${orgId} and entity = ${entity} order by v1_id`;
 const audits = (orgId: string, action: string) =>
   sql<Any[]>`select action, entity, entity_id, before, after, source, actor_person_id from audit_log where org_id = ${orgId} and action = ${action} order by occurred_at, id`;
-const auditCount = async (orgId: string) => Number((await sql<Any[]>`select count(*)::int as n from audit_log where org_id = ${orgId}`)[0]!.n);
+// T-402 S2: a refused authorize() now leaves a first-of-day `security.authorize_denied` row (written outside the refused
+// transaction), so "nothing was written" counts every row except those; the denial rows are asserted explicitly where a test refuses.
+const auditCount = async (orgId: string) => {
+  await flushSecurityEvents(); // denials are written by the outbox after the refusal (T-402 S2 A1)
+  return Number((await sql<Any[]>`select count(*)::int as n from audit_log where org_id = ${orgId} and action <> 'security.authorize_denied'`)[0]!.n);
+};
+const denialCount = async (orgId: string) => {
+  await flushSecurityEvents();
+  return Number((await sql<Any[]>`select count(*)::int as n from audit_log where org_id = ${orgId} and action = 'security.authorize_denied'`)[0]!.n);
+};
 const count = async (table: string, orgId: string) => Number((await sql.unsafe(`select count(*)::int as n from ${table} where org_id = $1`, [orgId]))[0]!.n);
 const state = async (orgId: string) => ({
   persons: await personsOf(orgId),
@@ -233,7 +242,10 @@ describe('S5 apply - the staffCode override (S9)', () => {
       const b = await newPerson(e, 'Plain Two');
       const emp = await hire(e, e.superA, a, 'LIPA', { staffCode: 'SE-014' });
       expect(emp.staffCode).toBe('SE-014');
-      const au = await sql<Any[]>`select action, after, actor_person_id from audit_log where org_id = ${e.orgId} and entity_id = ${emp.id}`;
+      // T-402 S2: createEmployment also writes employment.created for the hire; the override row is still exactly one.
+      const all = await sql<Any[]>`select action, after, actor_person_id from audit_log where org_id = ${e.orgId} and entity_id = ${emp.id}`;
+      expect(all.map((r) => r.action).sort()).toEqual(['employment.created', 'set_staff_code']);
+      const au = all.filter((r) => r.action === 'set_staff_code');
       expect(au).toHaveLength(1);
       expect(JSON.stringify(au[0]!.after)).toContain('SE-014');
       expect(au[0]!.actor_person_id).toBe(e.superA.personId);
@@ -249,7 +261,8 @@ describe('S5 apply - the staffCode override (S9)', () => {
       const e = await env('NO');
       const emp = await hire(e, e.superA, await newPerson(e, 'Plain One'), 'LIPA');
       expect(emp.staffCode).toBe('SE-001');
-      expect(await sql<Any[]>`select 1 from audit_log where org_id = ${e.orgId} and entity_id = ${emp.id}`).toHaveLength(0);
+      // T-402 S2: the hire writes employment.created, and nothing else (no override row).
+      expect((await sql<Any[]>`select action from audit_log where org_id = ${e.orgId} and entity_id = ${emp.id}`).map((r) => r.action)).toEqual(['employment.created']);
     },
     60_000,
   );
@@ -297,6 +310,7 @@ describe('S5 apply - the staffCode override (S9)', () => {
       expect(await failure(hire(e, e.manager, p, 'MLVR', { staffCode: 'SE-009' }))).toBeInstanceOf(AuthorizationError);
       expect(await sql<Any[]>`select 1 from employments where person_id = ${p}`).toHaveLength(0);
       expect(await auditCount(e.orgId)).toBe(before);
+      expect(await denialCount(e.orgId), 'T-402 S2: each refused actor leaves one denial row').toBe(2);
       const ok = await hire(e, e.manager, p, 'LIPA', { staffCode: 'SE-009' }); // a manager at their own store may
       expect(ok.staffCode).toBe('SE-009');
     },
@@ -353,7 +367,8 @@ describe('S5 apply - persons, employments, positions, links, audit', () => {
       expect(staffAudit[0]!.after).toMatchObject({ snapshotSha: SHA, created: 4, held: 0 });
       expect(JSON.stringify(staffAudit[0]!.after.stores)).toMatch(/LIPA/);
       // the two kept codes (SE-014, SE-003) are audited by createEmployment itself
-      expect(await sql<Any[]>`select 1 from audit_log where org_id = ${e.orgId} and entity_id = ${ana.id}`).toHaveLength(1);
+      // T-402 S2: plus the employment.created row every hire now writes.
+      expect((await sql<Any[]>`select action from audit_log where org_id = ${e.orgId} and entity_id = ${ana.id}`).map((r) => r.action).sort()).toEqual(['employment.created', 'set_staff_code']);
     },
     90_000,
   );

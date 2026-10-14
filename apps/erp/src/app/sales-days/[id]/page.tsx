@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { authorize, AuthorizationError } from '@shareat/auth';
+import { authorize, can as canDo } from '@shareat/auth';
 import { salesDaysRepo, journalRepo, posV1Repo } from '@shareat/db';
 import { packageCapExcess } from '@shareat/domain';
 import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
@@ -66,15 +66,8 @@ export default async function SalesDayDetailPage({
   // day is edited under `submit_sales_day`, a submitted one under `verify_sales_day`; a void needs
   // `void_sales_day`.
   const can = await withOrgPrincipal(orgId, async (tx) => {
-    const probe = async (capability: 'submit_sales_day' | 'verify_sales_day' | 'void_sales_day' | 'verify_own_sales_day') => {
-      try {
-        await authorize(tx, actor, capability, { storeId: day.storeId });
-        return true;
-      } catch (err) {
-        if (err instanceof AuthorizationError) return false;
-        throw err;
-      }
-    };
+    const probe = (capability: 'submit_sales_day' | 'verify_sales_day' | 'void_sales_day' | 'verify_own_sales_day') =>
+      canDo(tx, actor, capability, { storeId: day.storeId });
     return {
       edit: await probe(day.status === 'submitted' ? 'verify_sales_day' : 'submit_sales_day'),
       void: await probe('void_sales_day'),

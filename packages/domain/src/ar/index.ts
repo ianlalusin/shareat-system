@@ -9,7 +9,7 @@
  * across two stores. `POSTING-PATTERNS.md`'s `ar_collection` is the authority for these legs.
  */
 import { arRepo, customersRepo, journalRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
-import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { authorize, AuthorizationError, type Actor, can } from '@shareat/auth';
 import { add, compare, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
@@ -80,13 +80,7 @@ export async function recordCharge(
       const after = add(controlBalance, totalAmount);
       if (compare(after, money(customer.creditLimit)) > 0) {
         const reason = input.creditOverrideReason?.trim() || '';
-        let mayOverride = true;
-        try {
-          await authorize(trx, actor, 'override_credit_limit', { storeId: input.storeId });
-        } catch (e) {
-          if (!(e instanceof AuthorizationError)) throw e;
-          mayOverride = false;
-        }
+        const mayOverride = await can(trx, actor, 'override_credit_limit', { storeId: input.storeId });
         if (!mayOverride || !reason) {
           throw new Error(
             `recordCharge: ${customer.name} owes ₱${controlBalance} and this charge is ` +

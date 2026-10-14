@@ -5,7 +5,7 @@
  * only decide what the screen OFFERS — a store the actor cannot pay at is not listed, so the form
  * never invites a refusal the domain would then have to make.
  */
-import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { authorize, type Actor, can } from '@shareat/auth';
 import { expensesRepo, moneyAccountsRepo, schema } from '@shareat/db';
 import { and, eq } from 'drizzle-orm';
 import { withOrgPrincipal, listStores } from '../lib';
@@ -29,13 +29,7 @@ export async function listPayableStores(actor: Actor): Promise<PayableStore[]> {
   return withOrgPrincipal(actor.orgId, async (tx) => {
     const ok: PayableStore[] = [];
     for (const s of stores) {
-      try {
-        await authorize(tx, actor, 'record_ap_payment', { storeId: s.id });
-        ok.push(s);
-      } catch (err) {
-        if (err instanceof AuthorizationError) continue;
-        throw err;
-      }
+      if (await can(tx, actor, 'record_ap_payment', { storeId: s.id })) ok.push(s);
     }
     return ok;
   });
@@ -77,13 +71,5 @@ export async function displayNameOf(orgId: string, personId: string): Promise<st
 /** Whether the viewer may post into a closed month - `override_period_lock`, which is org-wide. The
  *  control is only OFFERED to a holder; `postEntry` is what actually enforces it. */
 export async function canOverrideClosedMonth(actor: Actor): Promise<boolean> {
-  return withOrgPrincipal(actor.orgId, async (tx) => {
-    try {
-      await authorize(tx, actor, 'override_period_lock', { orgId: actor.orgId });
-      return true;
-    } catch (err) {
-      if (err instanceof AuthorizationError) return false;
-      throw err;
-    }
-  });
+  return withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'override_period_lock', { orgId: actor.orgId }));
 }

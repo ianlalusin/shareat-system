@@ -9,7 +9,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { eq } from 'drizzle-orm';
 import { moneyAccountsRepo, remittanceRepo, schema, storesRepo, type EndDayReport } from '@shareat/db';
 import { listCashCustodyFindings, remittanceStateOf } from '@shareat/domain';
-import { authorize, AuthorizationError, heldCapabilities, type Actor } from '@shareat/auth';
+import { heldCapabilities, type Actor, can } from '@shareat/auth';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
@@ -35,13 +35,7 @@ export async function defaultStoreFor(actor: Actor, candidateStoreIds: string[])
     const held = await heldCapabilities(tx, actor);
     if (held.has('accept_remittance')) {
       for (const storeId of candidateStoreIds) {
-        try {
-          await authorize(tx, actor, 'accept_remittance', { storeId });
-          return storeId;
-        } catch (err) {
-          if (err instanceof AuthorizationError) continue;
-          throw err;
-        }
+        if (await can(tx, actor, 'accept_remittance', { storeId })) return storeId;
       }
     }
     const scoped = await tx

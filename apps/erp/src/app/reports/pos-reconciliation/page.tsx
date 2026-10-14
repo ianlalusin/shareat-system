@@ -1,4 +1,4 @@
-import { authorize, AuthorizationError } from '@shareat/auth';
+import { can } from '@shareat/auth';
 import { getPosDayReconciliation } from '@shareat/domain';
 import { reportScope, runReport } from '../lib';
 import { recheckPosDayAction } from '../../sales-days/actions';
@@ -49,15 +49,7 @@ export default async function PosReconciliationPage({
   // The button is offered to someone who may use it (the domain re-checks on submit), and only for a POS-sourced day.
   const canRecheck =
     storeId && result?.salesDayId && result.ledger.exists && result.ledger.source === 'pos_v1_day_feed'
-      ? await runReport(orgId, async (tx) => {
-          try {
-            await authorize(tx, scope.actor, 'verify_sales_day', { storeId });
-            return true;
-          } catch (err) {
-            if (err instanceof AuthorizationError) return false;
-            throw err;
-          }
-        })
+      ? await runReport(orgId, (tx) => can(tx, scope.actor, 'verify_sales_day', { storeId }))
       : false;
 
   return (

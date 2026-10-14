@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
+import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { expensesRepo, apRepo } from '@shareat/db';
@@ -102,15 +102,7 @@ export default async function InvoiceDetailPage({
     if (postedPayments.length === 0) return ok;
     const held = await heldCapabilities(tx, actor);
     if (!held.has('record_ap_payment')) return ok;
-    const probe = async (capability: 'record_ap_payment' | 'transfer_funds', storeId: string) => {
-      try {
-        await authorize(tx, actor, capability, { storeId });
-        return true;
-      } catch (err) {
-        if (err instanceof AuthorizationError) return false;
-        throw err;
-      }
-    };
+    const probe = (capability: 'record_ap_payment' | 'transfer_funds', storeId: string) => can(tx, actor, capability, { storeId });
     for (const p of postedPayments) {
       if (!(await probe('record_ap_payment', p.storeId))) continue;
       if (p.moneyAccountStoreId !== p.storeId && !(await probe('transfer_funds', p.moneyAccountStoreId))) continue;

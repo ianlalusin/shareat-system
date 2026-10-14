@@ -81,6 +81,7 @@ function def(
 }
 
 const RES: Opts = { reserved: true };
+const ADMIN: Opts = { viewers: 'admin' };
 const ADMIN_RES: Opts = { reserved: true, viewers: 'admin' };
 const POS: Opts = { reserved: true, clientSources: ['pos'] };
 const LOYALTY: Opts = { reserved: true, clientSources: ['customer'] };
@@ -152,27 +153,28 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('menu.option_offer_set', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),
   def('menu.option_offer_withdraw', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),
 
-  // ---- S2 (security events): reserved until the slice flips them ----
-  def('auth.signin_succeeded', 'security', 'low', 'org', 'persons', 'T-402', RES),
-  def('auth.signin_refused', 'security', 'normal', 'org', 'persons', 'T-402', { ...RES, actor: 'either' }),
-  def('auth.pin_signin_succeeded', 'security', 'low', 'store', 'persons', 'T-402', RES),
-  def('auth.pin_paused', 'security', 'high', 'store', 'stores', 'T-402', { ...RES, actor: 'either' }),
-  def('auth.pin_stopped_for_day', 'security', 'critical', 'store', 'stores', 'T-402', { ...RES, actor: 'either' }),
-  def('session.ended', 'security', 'low', 'org', 'sessions', 'T-402', RES),
-  def('session.ended_all', 'security', 'high', 'org', 'sessions', 'T-402', RES),
-  def('credential.linked', 'security', 'high', 'org', 'persons', 'T-402', ADMIN_RES),
-  def('credential.unlinked', 'security', 'high', 'org', 'persons', 'T-402', ADMIN_RES),
-  def('credential.pin_set', 'security', 'high', 'org', 'persons', 'T-402', ADMIN_RES),
-  def('role.assigned', 'security', 'high', 'org', 'persons', 'T-402', ADMIN_RES),
-  def('capability.granted', 'security', 'high', 'org', 'persons', 'T-402', ADMIN_RES),
-  def('manager.elevated', 'security', 'critical', 'org', 'persons', 'T-402', ADMIN_RES),
-  def('security.authorize_denied', 'security', 'normal', 'org', 'persons', 'T-402', ADMIN_RES),
+  // ---- S2 (security events): live (T-402 S2 flipped them); the S3/S5 ones stay reserved ----
+  def('auth.signin_succeeded', 'security', 'low', 'org', 'persons', 'T-402'),
+  // Written reasons only: `terminal_credential` and `not_a_firebase_credential` (a KNOWN account that may not sign in). A bad token or an unknown identifier has no trustworthy org: one logger line, no row. A disabled / ended / revoked person is DEF-649's.
+  def('auth.signin_refused', 'security', 'normal', 'org', 'persons', 'T-402', { actor: 'either' }),
+  def('auth.pin_signin_succeeded', 'security', 'low', 'store', 'persons', 'T-402'),
+  def('auth.pin_paused', 'security', 'high', 'store', 'stores', 'T-402', { actor: 'either' }),
+  def('auth.pin_stopped_for_day', 'security', 'critical', 'store', 'stores', 'T-402', { actor: 'either' }),
+  def('session.ended', 'security', 'low', 'org', 'sessions', 'T-402'),
+  def('session.ended_all', 'security', 'high', 'org', 'sessions', 'T-402', { actor: 'either' }),
+  def('credential.linked', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),
+  def('credential.unlinked', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),
+  def('credential.pin_set', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),
+  def('role.assigned', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),
+  def('capability.granted', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),
+  def('manager.elevated', 'security', 'critical', 'org', 'persons', 'T-402', { ...ADMIN, actor: 'either' }),
+  def('security.authorize_denied', 'security', 'normal', 'org', 'persons', 'T-402', ADMIN),
   def('security.authorize_denied_summary', 'security', 'normal', 'org', 'persons', 'T-402', { ...ADMIN_RES, actor: 'system' }),
   def('security.event_replay_conflict', 'security', 'high', 'org', 'audit_log_event_keys', 'T-402', { ...RES, actor: 'either' }),
   def('security.event_store_mismatch', 'security', 'high', 'store', 'stores', 'T-402', { ...RES, actor: 'either' }),
-  def('employment.created', 'staff', 'normal', 'store', 'employments', 'T-402', RES),
-  def('employment.ended', 'staff', 'normal', 'store', 'employments', 'T-402', RES),
-  def('employment.positions_set', 'staff', 'normal', 'store', 'employments', 'T-402', RES),
+  def('employment.created', 'staff', 'normal', 'store', 'employments', 'T-402'),
+  def('employment.ended', 'staff', 'normal', 'store', 'employments', 'T-402'),
+  def('employment.positions_set', 'staff', 'normal', 'store', 'employments', 'T-402'),
 
   // ---- S3 (money / data steps before posting): reserved until the slice flips them ----
   def('expense.drafted', 'money', 'normal', 'store', 'expenses', 'T-402', RES),
