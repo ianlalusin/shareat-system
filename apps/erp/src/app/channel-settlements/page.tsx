@@ -1,6 +1,6 @@
 import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
-import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
+import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { auditLogRepo } from '@shareat/db';
 import { logger } from '@shareat/core/logger';
 import { add, compare, money, ZERO } from '@shareat/core/money';
@@ -82,13 +82,7 @@ export default async function ChannelSettlementsPage({
     if (!held.has('set_channel_payout')) return new Set<string>();
     const ok = new Set<string>();
     for (const storeId of distinctStoreIds) {
-      try {
-        await authorize(tx, actor, 'set_channel_payout', { storeId });
-        ok.add(storeId);
-      } catch (err) {
-        if (err instanceof AuthorizationError) continue;
-        throw err;
-      }
+      if (await can(tx, actor, 'set_channel_payout', { storeId })) ok.add(storeId);
     }
     return ok;
   });

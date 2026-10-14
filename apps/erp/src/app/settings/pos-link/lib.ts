@@ -7,7 +7,7 @@
  */
 import { moneyAccountsRepo, personsRepo, posV1Repo } from '@shareat/db';
 import { fetchPosV1PaymentMethods, fetchPosV1Stores, normalizePosV1Alias, type PosV1StoreOption } from '@shareat/domain';
-import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { authorize, type Actor, can } from '@shareat/auth';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { channelsForStore, type SalesChannelAdminRow } from '../sales-channels/lib';
 
@@ -37,15 +37,7 @@ export interface PosLinkStoreRow {
  * and `unlinkStoreFromPos` authorize again.
  */
 export async function canUnlink(actor: Actor): Promise<boolean> {
-  return withOrgPrincipal(actor.orgId, async (tx) => {
-    try {
-      await authorize(tx, actor, 'unlink_store_from_pos', {});
-      return true;
-    } catch (err) {
-      if (err instanceof AuthorizationError) return false;
-      throw err;
-    }
-  });
+  return withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'unlink_store_from_pos', {}));
 }
 
 export async function posLinkRows(actor: Actor, stores: readonly { id: string; name: string }[]): Promise<PosLinkStoreRow[]> {

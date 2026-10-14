@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, money, ZERO } from '@shareat/core/money';
-import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
+import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { canReadFiles } from '@shareat/domain';
 import { ACTION_LINK } from '@/components/action-link';
 import { requireSession } from '../../../lib/session';
@@ -128,13 +128,7 @@ export default async function CustomerDetailPage({
       if (!held.has(capability)) return new Set<string>();
       const ok = new Set<string>();
       for (const sid of postedChargeStoreIds) {
-        try {
-          await authorize(tx, actor, capability, { storeId: sid });
-          ok.add(sid);
-        } catch (err) {
-          if (err instanceof AuthorizationError) continue;
-          throw err;
-        }
+        if (await can(tx, actor, capability, { storeId: sid })) ok.add(sid);
       }
       return ok;
     };

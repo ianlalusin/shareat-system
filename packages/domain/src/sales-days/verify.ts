@@ -17,7 +17,7 @@
  *
  * T-385 (Ian 2026-10-09): verify requires `submitted`. The check sits before routing and posting.
  */
-import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { authorize, type Actor, can } from '@shareat/auth';
 import { posV1Repo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -101,13 +101,7 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
 
   // T-385 S3: the person who submitted a day may not verify it, unless they hold verify_own_sales_day (super-admin only).
   if (day.submittedBy && day.submittedBy === actor.personId) {
-    const exempt = await authorize(tx, actor, 'verify_own_sales_day').then(
-      () => true,
-      (err: unknown) => {
-        if (err instanceof AuthorizationError) return false;
-        throw err;
-      },
-    );
+    const exempt = await can(tx, actor, 'verify_own_sales_day');
     if (!exempt) {
       throw refuse(
         `verifySalesDay: sales day ${salesDayId} was submitted by the actor — a different person must verify`,

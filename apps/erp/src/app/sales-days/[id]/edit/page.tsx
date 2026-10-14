@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { authorize, AuthorizationError } from '@shareat/auth';
+import { can } from '@shareat/auth';
 import { isZero, money } from '@shareat/core/money';
 import { salesDaysRepo } from '@shareat/db';
 import { listStores, listChannels, listStoreMoneyAccounts, getStoreLink, withOrgPrincipal, type ChannelOption } from '../../lib';
@@ -51,15 +51,9 @@ export default async function EditSalesDayPage({
   // Only offered where it can be used: an open day is the submitter's, a submitted one the verifier's
   // (the domain applies exactly this split). The domain re-checks on save.
   const canEdit = unverified
-    ? await withOrgPrincipal(orgId, async (tx) => {
-        try {
-          await authorize(tx, actor, day.status === 'submitted' ? 'verify_sales_day' : 'submit_sales_day', { storeId: day.storeId });
-          return true;
-        } catch (err) {
-          if (err instanceof AuthorizationError) return false;
-          throw err;
-        }
-      })
+    ? await withOrgPrincipal(orgId, (tx) =>
+        can(tx, actor, day.status === 'submitted' ? 'verify_sales_day' : 'submit_sales_day', { storeId: day.storeId }),
+      )
     : false;
 
   const carry = new URLSearchParams();

@@ -17,7 +17,7 @@
  * **A rule you cannot get wrong beats a rule you have to get right.**
  */
 import { createHash } from 'node:crypto';
-import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { authorize, type Actor, can } from '@shareat/auth';
 import { filesRepo, goneSentence, RefusalError, transaction, withSystemOrgPrincipal, type FilePurpose, type Tx } from '@shareat/db';
 import { stripImageMetadata } from '@shareat/core/exif';
 import { logger } from '@shareat/core/logger';
@@ -232,13 +232,8 @@ export async function canReadFiles(tx: Tx, actor: Actor, fileIds: readonly strin
       const key = `${PURPOSE_CAPABILITY[file.purpose]}|${file.storeId ?? ''}`;
       let ok = verdicts.get(key);
       if (ok === undefined) {
-        try {
-          await assertCanRead(tx, actor, file);
-          ok = true;
-        } catch (err) {
-          if (!(err instanceof AuthorizationError)) throw err;
-          ok = false;
-        }
+        // T-402 S2 (A2): the non-logging check - the same capability and store `assertCanRead` gates on.
+        ok = await can(tx, actor, PURPOSE_CAPABILITY[file.purpose], { ...(file.storeId ? { storeId: file.storeId } : {}) });
         verdicts.set(key, ok);
       }
       if (ok) allowed.add(file.id);

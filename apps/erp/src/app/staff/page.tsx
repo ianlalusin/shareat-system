@@ -7,7 +7,7 @@ import { FilterRow } from '@/components/FilterRow';
 import { Button, FlashBanner, Input } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { authorize, AuthorizationError } from '@shareat/auth';
+import { can } from '@shareat/auth';
 import { employmentRepo, pinAttemptsRepo } from '@shareat/db';
 import { todayStateFor } from '@shareat/domain';
 import { toBusinessDate } from '@shareat/core/datetime';
@@ -53,12 +53,9 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   const [photoIds, states] = await Promise.all([
     withOrgPrincipal(actor.orgId, (tx) => employmentRepo.photoFileIds(tx, ids)),
     withOrgPrincipal(actor.orgId, async (tx): Promise<Record<string, LiveEntry> | null> => {
-      try {
-        return await todayStateFor(tx, actor, storeId);
-      } catch (err) {
-        if (err instanceof AuthorizationError) return null;
-        throw err;
-      }
+      // A2: the non-logging check first (todayStateFor's own gate is manage_attendance at this store).
+      if (!(await can(tx, actor, 'manage_attendance', { storeId }))) return null;
+      return todayStateFor(tx, actor, storeId);
     }),
   ]);
   const people: StaffPerson[] = await Promise.all(
@@ -82,12 +79,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
 
   // T-395 S2 - the PIN sign-in panel is for anyone holding enrol_staff at this store (R5).
   const pinStatus = await withOrgPrincipal(actor.orgId, async (tx) => {
-    try {
-      await authorize(tx, actor, 'enrol_staff', { storeId });
-    } catch (err) {
-      if (err instanceof AuthorizationError) return null;
-      throw err;
-    }
+    if (!(await can(tx, actor, 'enrol_staff', { storeId }))) return null;
     return pinAttemptsRepo.statusForStore(tx, storeId);
   });
 

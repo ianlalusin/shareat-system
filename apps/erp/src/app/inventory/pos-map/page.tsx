@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { authorize, AuthorizationError } from '@shareat/auth';
+import { can } from '@shareat/auth';
 import { requireSession } from '../../../lib/session';
 import { upsertPosItemMapAction, decideMapRequestAction } from './actions';
 import { listStores, posMapScreenData, withOrgPrincipal } from './lib';
@@ -38,15 +38,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
 
   const { maps, requests, items, recipes, locations } = await posMapScreenData(actor.orgId, storeId);
   // T-403: only admin edits a mapping. The server refusal is the real guard; this hides a form that would always fail.
-  const canEditMap = await withOrgPrincipal(actor.orgId, async (tx) => {
-    try {
-      await authorize(tx, actor, 'manage_pos_map', { storeId });
-      return true;
-    } catch (err) {
-      if (err instanceof AuthorizationError) return false;
-      throw err;
-    }
-  });
+  const canEditMap = await withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'manage_pos_map', { storeId }));
   const openRequests = requests.filter((r) => r.status === 'requested');
 
   return (

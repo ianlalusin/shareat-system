@@ -28,7 +28,7 @@ import {
   updateItem,
   type ItemCodeSuggestion,
 } from '@shareat/domain';
-import { AuthorizationError } from '@shareat/auth';
+import { AuthorizationError, can } from '@shareat/auth';
 import type { BaseUnit, ItemKind } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
@@ -311,14 +311,11 @@ export async function approveItemRequestAction(formData: FormData): Promise<void
  */
 export async function suggestItemCodeAction(name: string, forItemId?: string): Promise<ItemCodeSuggestion> {
   const actor = await requireActor();
-  try {
-    return await withOrgPrincipal(actor.orgId, (tx) =>
-      suggestItemCode(tx, actor, { name, ...(forItemId ? { forItemId } : {}) }),
-    );
-  } catch (err) {
-    if (err instanceof AuthorizationError) return { stem: null, code: null, full: false, sameStem: [] };
-    throw err;
-  }
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    // T-402 S2 (A2): the non-logging check, so typing a name is not a logged denial for someone without manage_items.
+    if (!(await can(tx, actor, 'manage_items', {}))) return { stem: null, code: null, full: false, sameStem: [] };
+    return suggestItemCode(tx, actor, { name, ...(forItemId ? { forItemId } : {}) });
+  });
 }
 
 export async function rejectItemRequestAction(formData: FormData): Promise<void> {
