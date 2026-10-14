@@ -103,7 +103,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             <dd className="tabular-nums">₱{summary.layerValue}</dd>
           </div>
           <div>
-            <dt className="text-neutral-500">1310 + 1320 + 1330</dt>
+            <dt className="text-neutral-500">Inventory on the books</dt>
             <dd className="tabular-nums">₱{summary.accountValue}</dd>
           </div>
           <div>
@@ -115,7 +115,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
               ⚠️ Shown APART, never netted in. Goods on a truck are in no FIFO layer, because a
               layer is a thing on a shelf — conflating the two is DEF-098.
             */}
-            <dt className="text-neutral-500">1340 in transit</dt>
+            <dt className="text-neutral-500">In transit (branch orders)</dt>
             <dd className="tabular-nums">₱{summary.inTransitValue}</dd>
           </div>
         </dl>

@@ -4,10 +4,10 @@ import { requireSession } from '../../../../lib/session';
 import { editSupplierAction, recordPaymentAction, autoAllocatePaymentAction } from '../../actions';
 import { getSupplier, getPosition, listOpenItems, listInvoices, moneyAccountsFor, storesWithOpenItems, today } from '../../lib';
 import { SUPPLIER_CLASSIFICATIONS, SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES } from '@shareat/db';
-import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL } from '../../lib';
+import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL, maskAccountNumber } from '../../lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { AutoAllocatePaymentForm } from './AutoAllocatePaymentForm';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -45,7 +45,8 @@ export default async function SupplierDetailPage({
   ]);
   // T-389: the typing (or the "too long to keep" notice) for THIS supplier's edit record, from the signed flash.
   const typed = typedFor(sp, SUPPLIER_EDIT, supplier.id, actor.personId);
-  const invoiceById = new Map(invoices.map((inv) => [inv.id, inv]));
+  // Ian 2026-10-14 (T-404): newest first — the manager reads a supplier's invoices here.
+  const invoicesNewestFirst = [...invoices].sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate));
 
   // ⭐ AP is store-scoped. The store is CHOSEN, never inferred from whichever open item happened
   // to sort first — that older behaviour silently booked every leg of a payment at one store even
@@ -68,12 +69,43 @@ export default async function SupplierDetailPage({
           <h1 className="mt-1 text-2xl font-semibold">{supplier.name}</h1>
         </div>
         <div className="text-right">
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">Owed (2110)</p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">Owed to this supplier</p>
           <p className="text-2xl font-semibold tabular-nums">{peso(balance)}</p>
         </div>
       </div>
 
       <FlashBanner flash={sp} />
+
+      {/* Ian 2026-10-14 (T-404): "the supplier details not shown". Every field lived only inside the
+          collapsed edit form below, so a supplier with nothing open read as a blank page. This is the
+          read-only view; editing stays in the disclosure. The bank number is masked, as on the register. */}
+      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="sr-only">Supplier details</h2>
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <Detail label="Status"><Badge status={supplier.status} /></Detail>
+          <Detail label="VAT status">{supplier.vatStatus ? (VAT_STATUS_LABEL[supplier.vatStatus] ?? supplier.vatStatus) : null}</Detail>
+          <Detail label="Receipt type">{supplier.issuesOfficialReceipt ? 'Official Receipt (BIR)' : 'Not an Official Receipt'}</Detail>
+          <Detail label="TIN">{supplier.tin}</Detail>
+          <Detail label="Terms">
+            {supplier.creditTermsDays === null ? 'Cash on delivery' : `On credit · ${supplier.creditTermsDays} days`}
+          </Detail>
+          <Detail label="Classification">
+            {supplier.classification ? CLASSIFICATION_LABEL[supplier.classification] : null}
+          </Detail>
+          <Detail label="Representative">{supplier.representativeName}</Detail>
+          <Detail label="Contact no.">{supplier.contactNo}</Detail>
+          <Detail label="Email">{supplier.email}</Detail>
+          <Detail label="Address">{supplier.address}</Detail>
+          <Detail label="Pays to">
+            {supplier.bankName || supplier.bankAccountNumber
+              ? [supplier.bankName, supplier.bankAccountName, maskAccountNumber(supplier.bankAccountNumber)]
+                  .filter(Boolean)
+                  .join(' · ')
+              : null}
+          </Detail>
+          <Detail label="Notes">{supplier.notes}</Detail>
+        </dl>
+      </section>
 
       {/* ---------------------------------------------------------------- T-188: the record itself.
           ⛔ Until 2026-08-30 a supplier could be CREATED and never EDITED — `updateSupplier`
@@ -273,7 +305,62 @@ export default async function SupplierDetailPage({
           />
         </section>
       )}
+      {/* Ian 2026-10-14 (T-404): "manager can see invoices by supplier on supplier page". The list was
+          already loaded here and never rendered. The whole row opens the invoice (T-258 technique). */}
+      <section className="space-y-2">
+        <h2 className="font-medium">Invoices</h2>
+        {invoicesNewestFirst.length > 0 ? (
+          <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
+                  <th className="px-3 py-2 font-medium">Invoice no.</th>
+                  <th className="px-3 py-2 font-medium">Date</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 text-right font-medium">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoicesNewestFirst.map((inv) => (
+                  <tr
+                    key={inv.id}
+                    className="relative border-b border-neutral-100 last:border-0 hover:bg-neutral-50 dark:border-neutral-900 dark:hover:bg-neutral-900"
+                  >
+                    <td className="px-3 py-2">
+                      <a
+                        href={`/ap/invoices/${inv.id}`}
+                        aria-label={`Open invoice ${inv.invoiceNo ?? 'with no number'} of ${inv.invoiceDate}`}
+                        className="inline-flex min-h-6 items-center underline hover:no-underline after:absolute after:inset-0 after:content-['']"
+                      >
+                        {inv.invoiceNo ?? 'No number'}
+                      </a>
+                    </td>
+                    <td className="px-3 py-2">{inv.invoiceDate}</td>
+                    <td className="px-3 py-2">
+                      <Badge status={inv.status} />
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(inv.totalAmount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">No invoices logged against this supplier yet.</p>
+        )}
+      </section>
     </Page>
+  );
+}
+
+/** One read-only fact. An empty value says so in words, never a blank cell. */
+function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+  const empty = children === null || children === undefined || children === '';
+  return (
+    <div>
+      <dt className="text-xs text-neutral-500 dark:text-neutral-400">{label}</dt>
+      <dd className={empty ? 'text-neutral-400 dark:text-neutral-500' : ''}>{empty ? 'Not recorded' : children}</dd>
+    </div>
   );
 }
 

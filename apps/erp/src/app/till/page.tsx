@@ -270,8 +270,7 @@ function ClosedShift({
           key={c.id}
           className="rounded border border-neutral-200 p-3 text-xs text-neutral-500 dark:border-neutral-800"
         >
-          {peso(Math.abs(varianceOf(c)))} charged to a named person against{' '}
-          <code>1230</code>. ⚠️ The office replenishment is a separate transfer.
+          {peso(Math.abs(varianceOf(c)))} charged to a named person as an advance to that employee. ⚠️ The office replenishment is a separate transfer.
         </p>
       ))}
 
@@ -301,7 +300,7 @@ function ClosedShift({
           </label>
           <Input name="note" placeholder="Note (optional)" className="w-full" />
           </FormGrid>
-          <Button type="submit">Charge to 1230</Button>
+          <Button type="submit">Charge to this person</Button>
         </form>
       ))}
     </div>

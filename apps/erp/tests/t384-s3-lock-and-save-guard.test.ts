@@ -64,7 +64,7 @@ const COMMANDS: Record<string, string> = {
   'Reopen PIN sign-in': 'lets PIN sign-in back in at a stopped store (T-395 S2, audited)',
   'Add directly (super-admin)': 'creates an item with no approval, bypassing the request flow (items page)',
   'Charge': 'books a charge',
-  'Charge to 1230': 'books a charge',
+  'Charge to this person': 'books a charge',
   'Reverse': 'reverses a posting',
   'Reverse — then resolve again with the correct disposition': 'reverses a posting',
   'Refund': 'books a refund',
