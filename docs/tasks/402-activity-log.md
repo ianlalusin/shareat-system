@@ -513,3 +513,13 @@ existing `applyPurge(` test call sites (C6).
   `sales_day.submitted`, `sales_day.verified`, `remittance.recorded`, `cash_request.approved`, `cash_request.rejected`,
   `ap_invoice.approved`, `ap_payment.recorded`, `security.event_replay_conflict`, `security.event_store_mismatch`,
   `cutover.purge`, `cutover.opening_entry`, `cutover.step_completed` (cutover three keep admin viewers, actor `either`).
+
+## S3 audit (2026-10-14, Sonnet auditor on ef9add7) — OPEN, fix before S3 merges
+S3 is built and green (125/125 on the purge/S3 files) but **not merged**: these findings are open.
+1. **MEDIUM (data loss):** purge.ts Step 0c counts audit_log against the dump with no lock; a row committed between the count and the TRUNCATE is erased unrecorded. Fix: `lock table audit_log in share row exclusive mode` before the count; test with a concurrent writer or a source assertion.
+2. LOW-MED: audit-log.ts appendClientEvent — an unparseable occurredAt is stored as server now() with clock_suspect=false; must set clock_suspect=true. Tester case.
+3. LOW: dumpAuditLog's `fail()` throws inside the try → mislabelled "pg_dump did not run"; move it out.
+4. LOW: dump file mode is set after pg_dump creates it; chmod of a pre-existing shared dir; Windows modes are no-ops → runbook must require an ACL'd dump dir (T-394 S3).
+5. LOW (docs): org-scoped POS-sendable actions are always refused by the store check — note in the P2 receipts spec.
+6. LOW: free-text reasons/notes kept in `after` (redaction is by key) — confirm with Ian or cap length.
+7. Tester: mode asserts fail on win32 (skip there); native-writer parity tests (quotes, unicode, nested, redaction, cap, before=null); script refuses --apply/--rehearse without --dump-dir; a pg_restore round-trip (event_keys FK may need --disable-triggers); rowCount equals rows in the dump.
