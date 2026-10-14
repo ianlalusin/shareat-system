@@ -112,6 +112,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('reimport_sales_day', 'money', 'high', 'store', 'sales_days', 'T-375'),
   def('set_platform_sales', 'money', 'normal', 'store', 'sales_days', 'T-375'),
   def('dual_run.compare', 'money', 'normal', 'org', 'dual_run', 'T-392', { viewers: 'admin' }),
+  def('dual_run.disposition', 'money', 'normal', 'store', 'dual_run_dispositions', 'T-392', { viewers: 'admin' }),
   // Legacy undotted action: old rows carry it (0197's list); reserved so nothing new writes it.
   def('master_data_load', 'data', 'high', 'org', 'organizations', 'T-391', { viewers: 'admin', reserved: true }),
   def('master_data.items_load', 'data', 'high', 'org', 'items', 'T-391', { viewers: 'admin' }),

@@ -55,12 +55,10 @@ getItemForProduction
 getRecipe
 hasFingerprint
 hasOtherActiveAdmin
-insertDisposition
 isConvertibleUnit
 isHeaderCode
 isStartDecisionMaterial
 jobResult
-linesOf
 linkInvoiceToReceipt
 linkOptionGroup
 listAdjustments
