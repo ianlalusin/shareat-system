@@ -228,6 +228,6 @@ describe('applyPurge (R15): the dump is required, checked, then the purge runs; 
     const staleErr = await rehearse(stale);
     expect(staleErr, 'count(audit_log) !== dump.rowCount is refused: the dump is stale').toBeInstanceOf(Error);
     expect(await count(), 'refusals changed nothing').toBe(before + 1);
-    expect((await sql`select 1 from audit_log where action = 'cutover.purge'`).length).toBe(0);
+    expect((await sql`select 1 from audit_log where action = 'cutover.purge' and org_id = ${orgId}`).length).toBe(0);
   }, 600_000);
 });
