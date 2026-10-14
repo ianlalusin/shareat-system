@@ -54,8 +54,8 @@ const MENU_NAMES = new RegExp(
     String.raw`['"][^'"]*schema/menu['"]`,
     String.raw`['"][^'"]*repo/menu['"]`,
     String.raw`\bmenuRepo\b`,
-    String.raw`\bmenu_(?:categories|items|item_variants|option_groups|option_values|option_group_links|package_refills|depletion_rules|offers|option_offers)\b`,
-    String.raw`\bmenu(?:Categories|Items|ItemVariants|OptionGroups|OptionValues|OptionGroupLinks|PackageRefills|DepletionRules|Offers|OptionOffers)\b`,
+    String.raw`\bmenu_(?:categories|items|item_variants|option_groups|option_values|option_group_links|package_refills|depletion_rules|offers|option_offers|pos_v1_links|usage_source_switches)\b`,
+    String.raw`\bmenu(?:Categories|Items|ItemVariants|OptionGroups|OptionValues|OptionGroupLinks|PackageRefills|DepletionRules|Offers|OptionOffers|PosV1Links|UsageSourceSwitches)\b`,
     String.raw`\b(?:setMenuOffer|setDepletionRule|projectStoreMenu|offersInForce|menuSnapshot)\b`,
   ].join('|'),
 );
@@ -90,6 +90,12 @@ function v1FeedWriteOrDdl(sqlText: string): string | undefined {
   return V1_WRITE_OR_DDL.exec(sqlText)?.[0];
 }
 
+/**
+ * T-401 S5 (Ian's Q3, I16): the ONE seam through which a switched store's usage pull reads menu depletion rules. It is the single
+ * file under the v1 feed directories that may name the menu. Nothing else is allowed; plan.ts and usage-pull.ts stay menu-free.
+ */
+const FEED_FILES_ALLOWED_TO_NAME_MENU: readonly string[] = ['packages/domain/src/pos/depletion-source.ts'];
+
 const feedFiles = [...V1_FEED_DIRS.flatMap((d) => files(join(root, d))), ...V1_FEED_FILES.map((f) => join(root, f)).filter(existsSync)];
 const menuFiles = [...files(join(root, 'packages/domain/src/menu')), ...['packages/db/src/repo/menu.ts'].map((f) => join(root, f)).filter(existsSync)];
 
@@ -101,8 +107,17 @@ describe('T-401 I16 -- the live v1 feed is untouched', () => {
   });
 
   it('(1) no v1 feed file imports or names the menu (mutant: plan.ts reads menu_depletion_rules)', () => {
-    const hits = feedFiles.filter((f) => MENU_NAMES.test(code(read(f)))).map(rel);
+    const hits = feedFiles.filter((f) => !FEED_FILES_ALLOWED_TO_NAME_MENU.includes(rel(f)) && MENU_NAMES.test(code(read(f)))).map(rel);
     expect(hits, 'v1 feed files that reach the menu').toEqual([]);
+  });
+
+  it('S5: the allow-list is exactly the one seam, the seam exists, and it is the only feed file that reaches the menu (red until S5 writes it)', () => {
+    expect(FEED_FILES_ALLOWED_TO_NAME_MENU).toEqual(['packages/domain/src/pos/depletion-source.ts']);
+    const seam = join(root, FEED_FILES_ALLOWED_TO_NAME_MENU[0]!);
+    expect(existsSync(seam), 'packages/domain/src/pos/depletion-source.ts exists').toBe(true);
+    expect(MENU_NAMES.test(code(read(seam))), 'the seam really reads the menu (an allow-list entry for a file that does not is a hole)').toBe(true);
+    const others = feedFiles.filter((f) => rel(f) !== FEED_FILES_ALLOWED_TO_NAME_MENU[0] && MENU_NAMES.test(code(read(f)))).map(rel);
+    expect(others, 'every other v1 feed file').toEqual([]);
   });
 
   it('vacuity: the menu side exists and is scanned (red until S2 writes packages/domain/src/menu and packages/db/src/repo/menu.ts)', () => {

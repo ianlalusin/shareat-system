@@ -1,0 +1,214 @@
+{
+  "planLines": [
+    {
+      "key": "direct:coke",
+      "section": "direct",
+      "posItemKey": "coke",
+      "posItemName": "Coke",
+      "itemId": "item:Coke",
+      "locationId": "room:Kitchen",
+      "quantity": "3.000",
+      "blocked": false,
+      "blockReason": null
+    },
+    {
+      "key": "direct:cheese-direct",
+      "section": "direct",
+      "posItemKey": "cheese-direct",
+      "posItemName": "Cheese Direct",
+      "itemId": "item:Cheese",
+      "locationId": "room:Display",
+      "quantity": "1.000",
+      "blocked": false,
+      "blockReason": null
+    },
+    {
+      "key": "recipe:box:0",
+      "section": "recipe",
+      "posItemKey": "box",
+      "posItemName": "Samgyup Box",
+      "itemId": "item:Cheese",
+      "locationId": "room:Kitchen",
+      "quantity": "0.400",
+      "blocked": false,
+      "blockReason": null
+    },
+    {
+      "key": "recipe:box:1",
+      "section": "recipe",
+      "posItemKey": "box",
+      "posItemName": "Samgyup Box",
+      "itemId": "item:Rice",
+      "locationId": "room:Kitchen",
+      "quantity": "0.200",
+      "blocked": false,
+      "blockReason": null
+    },
+    {
+      "key": "orphan:mystery",
+      "section": "orphan",
+      "posItemKey": "mystery",
+      "posItemName": "Mystery Dish",
+      "itemId": null,
+      "locationId": null,
+      "quantity": null,
+      "blocked": false,
+      "blockReason": null
+    }
+  ],
+  "finalizeOutcome": [
+    {
+      "section": "direct",
+      "ok": true,
+      "posted": 2,
+      "held": 0,
+      "finalized": true
+    },
+    {
+      "section": "recipe",
+      "ok": true,
+      "posted": 2,
+      "held": 0,
+      "finalized": true
+    },
+    {
+      "section": "orphan",
+      "ok": true,
+      "posted": 0,
+      "held": 0,
+      "finalized": true
+    }
+  ],
+  "pullFinalized": true,
+  "pull": [
+    {
+      "status": "finalized",
+      "direct_done": true,
+      "recipe_done": true,
+      "orphan_done": true,
+      "location_id": "room:Kitchen"
+    }
+  ],
+  "pullLines": [
+    {
+      "section": "direct",
+      "line_key": "direct:cheese-direct",
+      "pos_item_key": "cheese-direct",
+      "pos_item_name": "Cheese Direct",
+      "item_id": "item:Cheese",
+      "location_id": "room:Display",
+      "quantity": "1.000",
+      "blocked": null,
+      "posted": true
+    },
+    {
+      "section": "direct",
+      "line_key": "direct:coke",
+      "pos_item_key": "coke",
+      "pos_item_name": "Coke",
+      "item_id": "item:Coke",
+      "location_id": "room:Kitchen",
+      "quantity": "3.000",
+      "blocked": null,
+      "posted": true
+    },
+    {
+      "section": "orphan",
+      "line_key": "orphan:mystery",
+      "pos_item_key": "mystery",
+      "pos_item_name": "Mystery Dish",
+      "item_id": null,
+      "location_id": null,
+      "quantity": null,
+      "blocked": null,
+      "posted": false
+    },
+    {
+      "section": "recipe",
+      "line_key": "recipe:box:0",
+      "pos_item_key": "box",
+      "pos_item_name": "Samgyup Box",
+      "item_id": "item:Cheese",
+      "location_id": "room:Kitchen",
+      "quantity": "0.400",
+      "blocked": null,
+      "posted": true
+    },
+    {
+      "section": "recipe",
+      "line_key": "recipe:box:1",
+      "pos_item_key": "box",
+      "pos_item_name": "Samgyup Box",
+      "item_id": "item:Rice",
+      "location_id": "room:Kitchen",
+      "quantity": "0.200",
+      "blocked": null,
+      "posted": true
+    }
+  ],
+  "usageRecords": [
+    {
+      "kind": "usage",
+      "status": "posted",
+      "location_id": "room:Kitchen",
+      "used_on": "2026-08-20",
+      "lines": [
+        {
+          "item": "item:Coke",
+          "quantity": "3.000"
+        }
+      ]
+    },
+    {
+      "kind": "usage",
+      "status": "posted",
+      "location_id": "room:Kitchen",
+      "used_on": "2026-08-20",
+      "lines": [
+        {
+          "item": "item:Cheese",
+          "quantity": "0.400"
+        },
+        {
+          "item": "item:Rice",
+          "quantity": "0.200"
+        }
+      ]
+    },
+    {
+      "kind": "usage",
+      "status": "posted",
+      "location_id": "room:Display",
+      "used_on": "2026-08-20",
+      "lines": [
+        {
+          "item": "item:Cheese",
+          "quantity": "1.000"
+        }
+      ]
+    }
+  ],
+  "stockOut": [
+    {
+      "item_id": "item:Coke",
+      "location_id": "room:Kitchen",
+      "quantity": "-3.000"
+    },
+    {
+      "item_id": "item:Cheese",
+      "location_id": "room:Kitchen",
+      "quantity": "-0.400"
+    },
+    {
+      "item_id": "item:Cheese",
+      "location_id": "room:Display",
+      "quantity": "-1.000"
+    },
+    {
+      "item_id": "item:Rice",
+      "location_id": "room:Kitchen",
+      "quantity": "-0.200"
+    }
+  ],
+  "auditRows": []
+}
