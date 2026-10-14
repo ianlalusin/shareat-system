@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1667` 13. Decision log
-- `1668–1687` 14. Amendment protocol
-- `1688–1692` 15. Engineering standards — the industry practices this project follows
-  - `1693–1698` 15.1 Build order: walking skeleton first
-  - `1699–1710` 15.2 Golden-master testing — the most important practice here
-  - `1711–1719` 15.3 Strangler Fig, not big-bang cutover
-  - `1720–1724` 15.4 No dual-write
-  - `1725–1733` 15.5 Expand/contract migrations
-  - `1734–1742` 15.6 Observability from day zero, not later
-  - `1743–1747` 15.7 CI gates
-  - `1748–1752` 15.8 Backups and a tested restore
-  - `1753–1757` 15.9 Twelve-Factor config
-  - `1758–1765` 15.10 Append-only ledgers — but not event sourcing
-  - `1766–1770` 15.11 Defence in depth
-  - `1771–1799` 15.12 Skills are lenses, not assurance
-  - `1800–1806` 15.13 Reconciliation is a permanent feature
-- `1807–1811` 16. The accounting spine
-  - `1812–1843` 16.0 What we are actually fixing — the diagnosis
-  - `1844–1887` 16.1 The ten invariants — non-negotiable
-  - `1888–1902` 16.2 The oracle: how "correct" is tested
-  - `1903–1924` 16.3 The model — header + lines, not legs
-  - `1925–1944` 16.4 Deliberately simpler than ERPNext
-  - `1945–2011` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2012–2036` 16.6 What v1 already gets right — preserve the intent
-  - `2037–2058` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2059–2073` 16.8 What v1's accounting already gets right
-  - `2074–2117` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2118–2168` 16.10 Posting patterns — one canonical pattern per business event
-  - `2169–2201` 16.11 Inventory's accounting integration
+- `1329–1672` 13. Decision log
+- `1673–1692` 14. Amendment protocol
+- `1693–1697` 15. Engineering standards — the industry practices this project follows
+  - `1698–1703` 15.1 Build order: walking skeleton first
+  - `1704–1715` 15.2 Golden-master testing — the most important practice here
+  - `1716–1724` 15.3 Strangler Fig, not big-bang cutover
+  - `1725–1729` 15.4 No dual-write
+  - `1730–1738` 15.5 Expand/contract migrations
+  - `1739–1747` 15.6 Observability from day zero, not later
+  - `1748–1752` 15.7 CI gates
+  - `1753–1757` 15.8 Backups and a tested restore
+  - `1758–1762` 15.9 Twelve-Factor config
+  - `1763–1770` 15.10 Append-only ledgers — but not event sourcing
+  - `1771–1775` 15.11 Defence in depth
+  - `1776–1804` 15.12 Skills are lenses, not assurance
+  - `1805–1811` 15.13 Reconciliation is a permanent feature
+- `1812–1816` 16. The accounting spine
+  - `1817–1848` 16.0 What we are actually fixing — the diagnosis
+  - `1849–1892` 16.1 The ten invariants — non-negotiable
+  - `1893–1907` 16.2 The oracle: how "correct" is tested
+  - `1908–1929` 16.3 The model — header + lines, not legs
+  - `1930–1949` 16.4 Deliberately simpler than ERPNext
+  - `1950–2016` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2017–2041` 16.6 What v1 already gets right — preserve the intent
+  - `2042–2063` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2064–2078` 16.8 What v1's accounting already gets right
+  - `2079–2122` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2123–2173` 16.10 Posting patterns — one canonical pattern per business event
+  - `2174–2206` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1664,6 +1664,11 @@ just a patch.**
 | 329 | 2026-10-14 | **DESTRUCTIVE BUTTONS HAVE TWO TIERS: RETYPE THE NAME TO RETIRE OR DEACTIVATE; AN ADMIN PIN, CHECKED ON THE SERVER, TO VOID A POSTING, DELETE, RUN A CUTOVER OR SEPARATE A PERSON.** Ian (Q11): *"a"*. The server action re-verifies the PIN (T-302's verifier, attempts counted in `pin_attempts`); a client dialog alone is never the gate (§2 rule 7). Which of the ~45 danger buttons falls in which tier is the spec's census. In an org with no administrator, the row-196 adminless fallback decides whose PIN counts. | Ian's ruling | Yes |
 | 330 | 2026-10-14 | **OCR FIRST, AND LOCAL FIRST: A LIGHTWEIGHT OCR ENGINE RUNNING ON OUR OWN SERVER MAY READ RECEIPTS. OCR PROPOSES, A PERSON DISPOSES.** Ian (Q12): *"i lean on ocr first can, if we can employ local lightweight engine to make ocr engine more reliable we do that. local first consideration"*. **Narrows row 251:** row 251 barred sending receipt photos to an outside AI provider, and that still holds; an engine we host ourselves is allowed. A proposal fills fields and never posts (T-146's rule). **Research before build** (§3.6): which engine, its accuracy on real Shareat receipts, and its memory. The production host has 4 GB and must never be starved (DEF-238), so the engine may need its own machine or an off-hours queue. The seam (an after-upload event plus a `document_proposals` table, review item 17) can be built first. | Ian's ruling | Yes |
 | 331 | 2026-10-14 | **THE ERP CUSTOMER SCREEN ALSO SHOWS A DINER'S LOYALTY PROFILE.** Ian (Q13): *"yes"*. This needs a new link between an AR `customer` and a diner `person` (ADR-008 §11 keeps them apart; row 273: a diner is a person with a phone identity). The link is optional, made by a person, and audited; points stay a liability of the issuing org (row 273). Built at ADR-015 P3 with loyalty. Q14 (the "wastage pull") needs no row: nothing exists to retire. | Ian's ruling | Yes, before P3 |
+| 332 | 2026-10-14 | **DUAL RUN: THE V2 ENCODER ALSO ENTERS GRAB/FOODPANDA PAYOUTS.** During the T-392 dual run the v2 encoder records channel payouts (and so their fees), so channel bank, fee and receivable lines are expected to tie with v1. A missing payout is a real delta, not a policy class. | Ian's ruling (2026-10-13 evening / 14), recorded in `docs/tasks/392-dual-run-comparator.md` "## Ian rulings, 2026-10-13" | Yes, before T-392 S5 |
+| 333 | 2026-10-14 | **DUAL RUN: A DISPOSITION COUNTS ONLY AFTER A FRESH EXTRACT AND COMPARE.** The snapshot is still deleted after every `--apply` (R3 unchanged). The pack shows "re-run compare" and is not signable until that re-run exists. **Ian's laptop must be on for the 15 Nov sign-off run** (it does the extract). | Ian's ruling (option a), recorded in `docs/tasks/392-dual-run-comparator.md` "## Ian rulings, 2026-10-13" | Yes, before 15 Nov sign-off |
+| 334 | 2026-10-14 | **DUAL RUN: ONLY ADMIN / SUPER_ADMIN MAY RECORD A DISPOSITION.** Checked in the domain, not only the UI: `run_cutover` AND `view_financial_reports` at the line's store AND an actor whose role is `admin` or `super_admin`. Managers keep `run_cutover` (T-134 attestations untouched) and see the pages read-only. No new capability. | Ian's ruling (option b), recorded in `docs/tasks/392-dual-run-comparator.md` "## Ian rulings, 2026-10-13" | Yes, before T-392 S5 |
+| 335 | 2026-10-14 | **STOCK USAGE: MANAGER-POSTED STAFF DRAFTS MOVE STOCK; THE POS USAGE PULL BECOMES A CHECK ONLY.** Actual usage is what staff record and the manager posts. The POS pull compares expected (sold x rule) against posted actual and flags a gap beyond ±10%; once T-401 S6 lands it no longer takes stock out. **Narrows and extends row 318** (drafts queued by many staff, posted by the manager). Specced as T-401 S6, **not yet built**. | Ian's ruling 2026-10-14, recorded in `docs/tasks/401-erp-menu-catalog-master.md` (S5 rulings + the Ian ruling line after them) | Yes, before T-401 S6 |
+| 336 | 2026-10-14 | ⭐ **HAIKU WHEREVER HAIKU CAN DO THE JOB.** Subagents for discovery, greps, count bumps and mechanical sweeps pass `model: "haiku"`; Sonnet for money, auth and schema lanes; Opus for specs and rulings. **Extends rows 184 and 298.** | Ian, 2026-10-14 (orchestrator session); see also memory note "Discovery on Haiku/Sonnet" | No |
 
 ## 14. Amendment protocol
 
