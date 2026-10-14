@@ -18,11 +18,12 @@ import { refuse } from '../shared/refusal';
 import { quantity as toQuantity, toThousandths } from '../stock/quantity';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { closedStockPeriodSentence } from '../stock/period-guard';
+import { CONVERSION_DATE } from './conversion-date';
 
 const EQUITY = '3900';
 const SOURCE_TYPE = 'opening_balance';
-/** The conversion date (POSTING-PATTERNS `opening_balance.load`). Duplicated from tie-out.ts to keep this module free of a cycle. */
-const CONVERSION = '2027-01-01';
+/** The conversion date (POSTING-PATTERNS `opening_balance.load`), derived from the leaf module: one edit moves every copy (T-394 R7, DEF-642). */
+const CONVERSION = CONVERSION_DATE;
 const CONVERSION_INSTANT = new Date(`${CONVERSION}T00:00:00Z`);
 
 /** The idempotency key of a store's generated inventory draft. */

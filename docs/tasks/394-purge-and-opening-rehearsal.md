@@ -313,3 +313,9 @@ Firestore mirror reset after the purge (DEF-643, logged, owner to be named in th
 - **Tests may create local rehearsal databases** named `shareat_rehearsal_2099MMDD` on localhost:5435 (R3's real pattern; a far-future date so they can never collide with a real rehearsal), created and dropped by the tests themselves. The name pattern is NOT made injectable.
 - The function signatures pinned in the S1 test headers (guards, children, checks, app-env) are the contract.
 - The tester's readings stand: `--against` needs no typed name of its own; a closed period covering 2027-01 counts as missing; months before the conversion month are not required; `opening-stock.ts` must derive its conversion date (7.b required); both `--apply` and `--rehearse` need `--as-of`.
+
+## S2 orchestrator rulings (2026-10-14)
+- **Exit codes:** `verify` exits **1** when a check fails (bypass-RLS session, missing app role, non-tying opening, freeze breach, terminal activity, sequence not reset); **2** stays reserved for guard refusals (wrong target, typed name). Never 0 on a failed check.
+- **Opening fixture shape:** a tying posted opening is Dr asset / Cr **3300** per store, as `openingTieOut` requires; R9's "Cr 3900" wording is loose — 3900 must clear on its own.
+- `verify` (not only `--after-post`) checks fiscal coverage, sequences and terminal activity; the freeze check is `--after-post` only.
+- Run the S2 verify and report integration files one after the other (both clone from the lane DB).
