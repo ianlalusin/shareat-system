@@ -31,7 +31,7 @@ import postgres from 'postgres';
 config({ path: '.env.local' });
 
 import { CUTOVER_CLASSIFICATION, type CutoverEntry } from '../packages/db/src/cutover/classification';
-import { planPurge, applyPurge, type PurgePlan } from '../packages/db/src/cutover/purge';
+import { planPurge, applyPurge, dumpAuditLog, type AuditLogDump, type PurgePlan } from '../packages/db/src/cutover/purge';
 import { RefusalError } from '../packages/db/src/refusal';
 
 interface Args {
@@ -42,6 +42,8 @@ interface Args {
   asOf: string;
   /** T-390 R8 / DEF-640: person ids the purge records as having performed step C2, ONE PER ORGANIZATION. Required for --apply. */
   by: string[];
+  /** T-402 S3 (R15): where the audit-log dump is written. REQUIRED with --apply / --rehearse; no default (the runbook names it). */
+  dumpDir: string | null;
 }
 
 function parseArgs(argv: readonly string[]): Args {
@@ -52,6 +54,7 @@ function parseArgs(argv: readonly string[]): Args {
     allowNonLocal: false,
     asOf: new Date().toISOString().slice(0, 10),
     by: [],
+    dumpDir: null,
   };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--confirm-database') a.confirmDatabase = argv[++i] ?? null;
@@ -59,6 +62,7 @@ function parseArgs(argv: readonly string[]): Args {
     else if (argv[i] === '--rehearse') a.rehearse = true;
     else if (argv[i] === '--yes-really-not-local') a.allowNonLocal = true;
     else if (argv[i] === '--as-of') a.asOf = argv[++i] ?? a.asOf;
+    else if (argv[i] === '--dump-dir') a.dumpDir = argv[++i] ?? null;
     else if (argv[i] === '--by') {
       const v = argv[++i];
       if (v) a.by.push(...v.split(',').filter(Boolean));
@@ -66,13 +70,14 @@ function parseArgs(argv: readonly string[]): Args {
   }
   // Many organizations overflow a shell command line: the same comma-separated list may come from CUTOVER_PURGE_BY instead.
   if (a.by.length === 0 && process.env.CUTOVER_PURGE_BY) a.by.push(...process.env.CUTOVER_PURGE_BY.split(',').filter(Boolean));
+  if (a.dumpDir === null && process.env.CUTOVER_DUMP_DIR) a.dumpDir = process.env.CUTOVER_DUMP_DIR;
   return a;
 }
 
 function usage(): void {
   console.log(`
 Usage:
-  npm run cutover:purge -- --confirm-database <name> [--apply | --rehearse] [--as-of YYYY-MM-DD] [--by <personId>]...
+  npm run cutover:purge -- --confirm-database <name> [--apply | --rehearse] [--as-of YYYY-MM-DD] [--by <personId>]... [--dump-dir <dir>]
 
   Without --apply or --rehearse this is a DRY RUN: it reports what it would change and changes
   nothing.
@@ -84,6 +89,9 @@ Usage:
   --by <personId> is REQUIRED with --apply, once PER ORGANIZATION (repeat the flag, or comma-separate the ids; CUTOVER_PURGE_BY holds the same list): the purge records step C2 for each organization
   as performed by that organization's person (T-390 R8, DEF-640). Each must be a person that exists; its organization is read from
   persons.org_id, and two persons for one organization is an error. An organization with no --by refuses the apply before any write.
+  --dump-dir <dir> (or CUTOVER_DUMP_DIR) is REQUIRED with --apply and --rehearse, and has no default: the audit log is dumped there (every
+  partition, data only, plus a .sha256 file) BEFORE the purge, and the purge refuses unless the dump still matches the log (T-402 S3, R15).
+  Keep the dump with the other cutover evidence; the cutover.purge event records its file name and sha256.
   --rehearse records nothing (it rolls back), so --by is optional there: it picks one person per organization itself, and says so
   for an organization that has none (that organization's C2 row is skipped).
 
@@ -106,6 +114,12 @@ async function main(): Promise<void> {
   }
   if (args.apply && args.by.length === 0) {
     console.error('REFUSED. --apply needs --by <personId>, once per organization: the purge records who performed step C2.');
+    process.exitCode = 1;
+    return;
+  }
+
+  if ((args.apply || args.rehearse) && !args.dumpDir) {
+    console.error('REFUSED. --apply and --rehearse need --dump-dir <dir> (or CUTOVER_DUMP_DIR): the audit log is dumped there before it is purged.');
     process.exitCode = 1;
     return;
   }
@@ -201,11 +215,17 @@ async function main(): Promise<void> {
       return;
     }
 
+    // T-402 S3 (R15): dump the audit log BEFORE the purge transaction. The purge refuses if the log changed since.
+    // `args.dumpDir` is non-null here: --apply / --rehearse were refused above without it.
+    const auditDump: AuditLogDump = await dumpAuditLog({ databaseUrl: url, dir: args.dumpDir ?? '', asOf: args.asOf });
+    say('');
+    say(`Audit log dumped: \`${auditDump.path}\` · sha256 \`${auditDump.sha256}\` · ${auditDump.bytes} bytes · ${auditDump.rowCount} rows`);
+
     const REHEARSAL_ROLLBACK = Symbol('rehearsal rollback');
     try {
       await sql.begin(async (tx) => {
         const txPlan = await planPurge(tx, args.asOf);
-        await applyPurge(tx, txPlan, { performedBy, rehearsal: args.rehearse });
+        await applyPurge(tx, txPlan, { performedBy, rehearsal: args.rehearse, auditDump });
         if (args.rehearse) throw REHEARSAL_ROLLBACK;
       });
     } catch (err) {

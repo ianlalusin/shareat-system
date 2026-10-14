@@ -46,6 +46,7 @@ import {
 import { add, compare, formatMoney, isZero, money, negate, subtract, ZERO, type Money } from '@shareat/core/money';
 import { parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { createMoneyTransfer, voidMoneyTransfer } from '../money-transfers';
+import { recordRemittanceEvent } from './audit';
 import { parseDecimalInput } from '../shared/money-input';
 import { allocateFifo, type DayOwed } from './allocate';
 
@@ -416,6 +417,9 @@ async function runCreate(
     });
     varianceId = row.id;
   }
+
+  // T-402 S3 (C4): the step's event, same transaction, after its own writes. Posted on create: no separate confirm verb.
+  await recordRemittanceEvent(tx, actor, { id, storeId: input.storeId, amount: String(handedOver), remittedOn: input.remittedOn });
 
   return {
     id,

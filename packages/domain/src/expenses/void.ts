@@ -9,7 +9,7 @@
  * history.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, expensesRepo, journalRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, auditLogRepo, expensesRepo, journalRepo, transaction, type Tx } from '@shareat/db';
 import { compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -124,6 +124,16 @@ async function runVoidExpense(tx: Tx, actor: Actor, expenseId: string, reason: s
       expenseId,
       expenseBusinessDate: expense.businessDate,
       reason: trimmedReason,
+    });
+    // T-402 S3 (C4): the void step's event, same transaction, after its own writes.
+    await auditLogRepo.append(tx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'expense.voided',
+      storeId: expense.storeId,
+      entityId: expenseId,
+      before: { status: expense.status },
+      after: { status: 'voided', amount: expense.totalAmount, reason: trimmedReason },
+      source: 'web',
     });
   }
 

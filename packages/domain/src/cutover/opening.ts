@@ -18,7 +18,7 @@
  * triggers fire only on `posted`), figures can be entered over days, and C5's post is still the
  * single act that makes the whole set final.
  */
-import { cutoverRepo, journalRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, cutoverRepo, journalRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { compare, isZero, money, ZERO, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
@@ -305,6 +305,17 @@ export async function postOpeningBalances(
       completion: 'performed',
       note: `Posted ${entryIds.length} opening entr${entryIds.length === 1 ? 'y' : 'ies'}.`,
       completedBy: actor.personId,
+    });
+
+    // T-402 S3 (C4): the books-opening act, same transaction, after its own writes (critical, org-scoped).
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'cutover.opening_entry',
+      storeId: null,
+      entityId: actor.orgId,
+      before: null,
+      after: { entriesPosted: entryIds.length, entryIds },
+      source: 'web',
     });
 
     return { posted: entryIds.length, entryIds };

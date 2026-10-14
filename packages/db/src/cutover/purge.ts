@@ -48,8 +48,13 @@
  * before `status` ever changes — this is the other reason every shell table's clear is ONE
  * statement, not only `fixed_assets`'s.
  */
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { chmodSync, createReadStream, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import postgres from 'postgres';
 import { refuse } from '../refusal';
+import * as auditLogRepo from '../repo/audit-log';
 import {
   CUTOVER_CLASSIFICATION,
   tablesInClass,
@@ -300,7 +305,156 @@ export async function planPurge(sql: Executor, asOf: string): Promise<PurgePlan>
   };
 }
 
+/**
+ * T-402 S3 (R15, C6): the audit-log dump the purge is conditional on. `audit_log` is a `purge` table, so without this the
+ * cutover would erase every event the pre-cutover log holds. `rowCount` is what the log held when the dump was taken.
+ */
+export interface AuditLogDump {
+  /** The dump file (pg_dump custom format, data only). Only its basename is ever recorded in the log. */
+  path: string;
+  sha256: string;
+  bytes: number;
+  rowCount: number;
+}
+
+function runTool(bin: string, argv: string[], env: Record<string, string>): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, argv, { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const CAP = 8 * 1024 * 1024;
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (c: Buffer) => {
+      if (stdout.length < CAP) stdout += c.toString('utf8');
+    });
+    child.stderr.on('data', (c: Buffer) => {
+      if (stderr.length < CAP) stderr += c.toString('utf8');
+    });
+    child.on('error', (e) => reject(new Error(`could not start ${basename(bin)}: ${e.message}`)));
+    child.on('close', (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
+function sha256Of(file: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const h = createHash('sha256');
+    const s = createReadStream(file);
+    s.on('data', (c) => h.update(c));
+    s.on('error', reject);
+    s.on('end', () => resolve(h.digest('hex')));
+  });
+}
+
+/**
+ * T-402 S3 (R15, C6): dump `audit_log` (every partition, data only) and `audit_log_event_keys` into `dir`, hash the file,
+ * and prove from the dump's own table of contents that every partition is in it. Run BEFORE the purge transaction; the
+ * purge then refuses unless `count(audit_log)` still equals `rowCount`.
+ *
+ * The password travels in the child's `PGPASSWORD`, never argv or a file (T-393 R13). `dir` is created 0700, the dump and
+ * its `.sha256` sidecar 0600. A failed dump leaves no file behind. Reimplemented here on purpose: `packages/` never
+ * imports `scripts/`.
+ */
+export async function dumpAuditLog(opts: { databaseUrl: string; dir: string; asOf: string; pgBinDir?: string }): Promise<AuditLogDump> {
+  const bin = (name: 'pg_dump' | 'pg_restore'): string => {
+    const dir = opts.pgBinDir ?? process.env.PG_BIN_DIR;
+    const exe = process.platform === 'win32' ? `${name}.exe` : name;
+    return dir ? join(dir, exe) : exe;
+  };
+  const u = new URL(opts.databaseUrl);
+  const env: Record<string, string> = {};
+  const secret = decodeURIComponent(u.password);
+  if (secret !== '') env.PGPASSWORD = secret;
+  u.password = '';
+  const scrub = (s: string): string => (secret.length >= 4 ? s.split(secret).join('***') : s);
+  const fail = (what: string, detail: string): never => {
+    throw refuse(
+      `cutover purge: audit log dump failed - ${what}: ${scrub(detail).trim().slice(0, 600)}`,
+      `REFUSED. The audit log could not be dumped (${what}). Nothing was changed.`,
+    );
+  };
+
+  mkdirSync(opts.dir, { recursive: true, mode: 0o700 });
+  try {
+    chmodSync(opts.dir, 0o700);
+  } catch {
+    /* not supported on this platform */
+  }
+  const file = join(opts.dir, `audit-log-${opts.asOf}-${Date.now()}.dump`);
+  const sidecar = `${file}.sha256`;
+  const cleanup = (): void => {
+    rmSync(file, { force: true });
+    rmSync(sidecar, { force: true });
+  };
+
+  // 1. The count the purge will compare with (read before the dump; a row written in between makes the dump look stale, never the reverse).
+  const sql = postgres(opts.databaseUrl, { max: 1, onnotice: () => {} });
+  let rowCount: number;
+  let leaves: string[];
+  try {
+    const [c] = await sql<{ n: number }[]>`select count(*)::int as n from audit_log`;
+    rowCount = c?.n ?? 0;
+    // Every leaf partition of audit_log (any depth): each must appear in the dump's table of contents.
+    leaves = (
+      await sql<{ relname: string }[]>`
+        with recursive d(oid) as (
+          select inhrelid from pg_inherits where inhparent = 'public.audit_log'::regclass
+          union all
+          select i.inhrelid from pg_inherits i join d on i.inhparent = d.oid
+        )
+        select c.relname from d join pg_class c on c.oid = d.oid
+        where not exists (select 1 from pg_inherits x where x.inhparent = c.oid)`
+    ).map((r) => r.relname);
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+
+  // 2. The dump: every audit_log* table (parent, partitions, event keys), data only.
+  try {
+    const r = await runTool(
+      bin('pg_dump'),
+      [`--dbname=${u.toString()}`, '--data-only', '--format=custom', '--table=public.audit_log*', `--file=${file}`],
+      env,
+    );
+    if (r.code !== 0) {
+      cleanup();
+      return fail(`pg_dump exited ${String(r.code)}`, r.stderr);
+    }
+  } catch (e) {
+    cleanup();
+    return fail('pg_dump did not run', e instanceof Error ? e.message : String(e));
+  }
+
+  try {
+    chmodSync(file, 0o600);
+    // 3. The dump's own table of contents must hold TABLE DATA for every partition and for the event keys.
+    const list = await runTool(bin('pg_restore'), ['--list', file], env);
+    if (list.code !== 0) throw new Error(`pg_restore --list exited ${String(list.code)}: ${list.stderr}`);
+    const dataLines = list.stdout.split('\n').filter((l) => /TABLE DATA/.test(l));
+    const has = (rel: string): boolean => dataLines.some((l) => l.includes(` ${rel} `));
+    const missing = [...leaves, 'audit_log_event_keys'].filter((r) => !has(r));
+    if (missing.length > 0) throw new Error(`the dump holds no data entry for: ${missing.join(', ')}`);
+
+    const sha256 = await sha256Of(file);
+    writeFileSync(sidecar, `${sha256}  ${basename(file)}\n`, { mode: 0o600 });
+    try {
+      chmodSync(sidecar, 0o600);
+    } catch {
+      /* not supported on this platform */
+    }
+    return { path: file, sha256, bytes: statSync(file).size, rowCount };
+  } catch (e) {
+    cleanup();
+    return fail('the dump could not be verified', e instanceof Error ? e.message : String(e));
+  }
+}
+
 export interface ApplyPurgeOptions {
+  /**
+   * T-402 S3 (R15): the audit-log dump taken just before this run. REQUIRED. Refused before any write unless its sha256 is
+   * 64 hex and `count(audit_log)` still equals `rowCount` (a row written since the dump would be erased unrecorded). The
+   * purge then writes one `cutover.purge` event per C2-performer organization, after the purge, so it is the first row of
+   * the production log.
+   */
+  auditDump: AuditLogDump;
   /** ⚠️ TEST ONLY. Skips the RLS-bypass preflight (§3.4) so a test can reach and prove the
    *  `set local row_security = off` backstop's OWN failure mode (Amendment R1.4) instead of always
    *  stopping one layer earlier at the preflight. Never set outside a test. */
@@ -371,6 +525,22 @@ export async function applyPurge(tx: Tx, plan: PurgePlan, opts: ApplyPurgeOption
       (noPerformer.length > 0 ? `no performer for organization(s): ${noPerformer.join(', ')}. ` : '') +
       performerProblems.join('; ');
     throw refuse(`cutover purge: C2 performer refused - ${msg}`, `REFUSED. Nothing was changed. Step C2 needs one performer per organization: ${msg}`);
+  }
+
+  // Step 0c (T-402 S3, R15) - the dump this run depends on: refused BEFORE any write if it is absent, malformed, or stale.
+  const dump = opts.auditDump as AuditLogDump | undefined;
+  if (!dump || !/^[0-9a-f]{64}$/.test(String(dump.sha256))) {
+    throw refuse(
+      'cutover purge: auditDump is missing or its sha256 is not 64 hex characters',
+      'REFUSED. Nothing was changed. The purge needs a dump of the audit log first (it runs before the purge).',
+    );
+  }
+  const [logNow] = await tx<{ n: number }[]>`select count(*)::int as n from audit_log`;
+  if ((logNow?.n ?? 0) !== dump.rowCount) {
+    throw refuse(
+      `cutover purge: audit_log holds ${logNow?.n ?? 0} row(s) but the dump holds ${dump.rowCount} - rows were written since the dump`,
+      'REFUSED. Nothing was changed. The audit log changed after it was dumped; dump it again, then run the purge.',
+    );
   }
 
   // Step 1 — every kept-child → purged-parent FK must already be cleared, or refuse before writing.
@@ -508,5 +678,28 @@ export async function applyPurge(tx: Tx, plan: PurgePlan, opts: ApplyPurgeOption
       on conflict (org_id, step_code, coalesce(store_id, '00000000-0000-0000-0000-000000000000'::uuid))
       do update set completion = excluded.completion, note = excluded.note,
                     completed_by = excluded.completed_by, completed_at = now()`;
+  }
+
+  // T-402 S3 (R15, C6): the purge's own event, per C2-performer organization, AFTER the purge and the C2 rows (audit_log is
+  // truncated above, so this is the first row of the production log), in this transaction (a rehearsal rolls it back).
+  // Written by the audit writer's postgres.js variant: same catalogue rules, no drizzle wrap of a postgres.js tx.
+  for (const orgId of c2Orgs) {
+    await auditLogRepo.append(tx, orgId, {
+      actorPersonId: opts.performedBy[orgId] ?? '',
+      action: 'cutover.purge',
+      storeId: null,
+      entityId: orgId,
+      before: null,
+      after: {
+        dumpFile: basename(dump.path),
+        dumpSha256: dump.sha256,
+        dumpBytes: dump.bytes,
+        auditRowsDumped: dump.rowCount,
+        purgedRows,
+        tables,
+        asOf: plan.asOf,
+      },
+      source: 'web',
+    });
   }
 }

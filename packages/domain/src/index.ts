@@ -132,3 +132,6 @@ export * from './dual-run';
 // T-401 S2 - the ERP menu and catalog master: categories, items, variants, option groups, depletion rules, and the
 // append-only effective-dated offers (a store's price). Nothing reads it in production until the POS v2 carrier (P1).
 export * from './menu';
+
+// T-402 S3 - the R10 offline envelope: recordClientEvents (no caller until the POS v2 receipts spec, ADR-015 P2).
+export * from './activity/client-events';

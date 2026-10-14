@@ -18,7 +18,7 @@
  * T-385 (Ian 2026-10-09): verify requires `submitted`. The check sits before routing and posting.
  */
 import { authorize, type Actor, can } from '@shareat/auth';
-import { posV1Repo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, posV1Repo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { routeInputForDay } from './compose';
@@ -53,6 +53,16 @@ async function runSubmit(tx: Tx, actor: Actor, salesDayId: string): Promise<void
     );
   }
   await salesDaysRepo.markSubmitted(tx, actor.orgId, salesDayId, actor.personId);
+  // T-402 S3 (C4): the step's event, same transaction, after its own write.
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'sales_day.submitted',
+    storeId: day.storeId,
+    entityId: salesDayId,
+    before: { status: day.status },
+    after: { status: 'submitted' },
+    source: 'web',
+  });
 }
 
 // -------------------------------------------------------------------------------------
@@ -152,6 +162,16 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
     await salesDaysRepo.markVerified(tx, actor.orgId, salesDayId, {
       verifiedBy: actor.personId,
       journalEntryId: result.entryId,
+    });
+    // T-402 S3 (C4): the verification step's event, same transaction, after the posting and its own write.
+    await auditLogRepo.append(tx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'sales_day.verified',
+      storeId: day.storeId,
+      entityId: salesDayId,
+      before: { status: day.status },
+      after: { status: 'verified', journalEntryId: result.entryId },
+      source: 'web',
     });
   }
 

@@ -20,7 +20,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { cashRequestsRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, cashRequestsRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { parseMoneyInput } from '../shared/money-input';
@@ -106,6 +106,16 @@ export async function decideCashRequest(
         approvedBy: actor.personId,
         decidedOn: on,
       });
+      // T-402 S3 (C4): the decision's event, same transaction, after its own write.
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'cash_request.rejected',
+        storeId: req.storeId,
+        entityId: req.id,
+        before: { status: req.status },
+        after: { status: 'rejected', reason },
+        source: 'web',
+      });
       return;
     }
 
@@ -120,6 +130,15 @@ export async function decideCashRequest(
       approvedAmount,
       approvedBy: actor.personId,
       decidedOn: on,
+    });
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'cash_request.approved',
+      storeId: req.storeId,
+      entityId: req.id,
+      before: { status: req.status },
+      after: { status: 'approved', amount: String(approvedAmount) },
+      source: 'web',
     });
   };
   if (tx) return run(tx);

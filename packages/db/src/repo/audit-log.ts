@@ -14,6 +14,7 @@
  */
 import { createHash } from 'node:crypto';
 import { and, desc, eq, sql } from 'drizzle-orm';
+import type postgres from 'postgres';
 import type { Tx } from '../client';
 import { refuse } from '../refusal';
 import { auditLog, auditLogEventKeys } from '../../schema/audit-log';
@@ -78,6 +79,8 @@ export interface ClientEventAttested {
   readonly source: AuditLogSource;
   /** The live session that uploaded the batch, kept apart from the actor who did it. */
   readonly uploadedByPersonId?: string | null;
+  /** S3 (R10a): the device claimed another actor than the verified one. Merged into the STORED `after` only, after hashing. */
+  readonly actorClaimMismatch?: boolean;
 }
 
 const NOT_RECORDED = 'That change could not be recorded in the activity log. Please tell the developers.';
@@ -218,8 +221,9 @@ async function insertRow(tx: Tx, orgId: string, r: RowInput): Promise<{ id: stri
   return { id: row!.id, recordedAt: row!.recordedAt };
 }
 
-/** A person did it. */
-export async function append(tx: Tx, orgId: string, input: AppendAuditLogInput): Promise<{ id: string }> {
+/** A person did it. `tx` is a drizzle transaction, or (the cutover purge only) a raw postgres.js one: a postgres.js transaction is a function. */
+export async function append(tx: Tx | postgres.TransactionSql, orgId: string, input: AppendAuditLogInput): Promise<{ id: string }> {
+  if (typeof tx === 'function') return appendOnPostgresTx(tx, orgId, input);
   const entry = lookup(input.action);
   checkWritable(entry, 'person', input.storeId);
   const { id } = await insertRow(tx, orgId, {
@@ -234,6 +238,28 @@ export async function append(tx: Tx, orgId: string, input: AppendAuditLogInput):
     occurredAt: input.occurredAt,
   });
   return { id };
+}
+
+/**
+ * T-402 S3 (R15): `append` for a person, on a postgres.js TRANSACTION instead of a drizzle one - the cutover purge runs on a
+ * raw postgres.js tx, which `drizzle()` cannot wrap (no `tx.options`; a faked one double-encodes jsonb). The SAME lookup,
+ * checkWritable, redaction/cap (`prepare`) and severity as `append`; jsonb goes in as `<json text>::text::jsonb`, so it is right whether or not the caller's connection was ever wrapped by drizzle (which swaps the json serializers).
+ */
+async function appendOnPostgresTx(tx: postgres.TransactionSql, orgId: string, input: AppendAuditLogInput): Promise<{ id: string }> {
+  const entry = lookup(input.action);
+  checkWritable(entry, 'person', input.storeId);
+  const p = prepare(input.before, input.after);
+  const [row] = await tx<{ id: string }[]>`
+    insert into audit_log (org_id, store_id, actor_person_id, action, entity, entity_id, before, after, source, category,
+                           sensitivity, severity, retention_class, device_id, redacted_keys)
+    values (${orgId}, ${input.storeId}, ${input.actorPersonId}, ${entry.action}, ${entry.entity}, ${input.entityId},
+            ${p.before === undefined || p.before === null ? null : JSON.stringify(p.before)}::text::jsonb,
+            ${p.after === undefined || p.after === null ? null : JSON.stringify(p.after)}::text::jsonb,
+            ${input.source}, ${entry.category}, ${entry.sensitivity}, ${severityFor(entry.sensitivity)}, ${entry.retention},
+            ${input.deviceId ?? null}, ${tx.array(p.redactedKeys, 1009)})
+    returning id`;
+  // `!` is safe: a plain INSERT ... RETURNING yields exactly one row or throws.
+  return { id: row!.id };
 }
 
 /** Cron, ingestor or roll-up did it: `actor_person_id` is null. */
@@ -322,7 +348,12 @@ export async function appendClientEvent(
     storeId: envelope.storeId,
     entityId: envelope.entityId,
     before: envelope.before,
-    after: envelope.after,
+    // The mismatch flag is added AFTER the hash above, so the stored hash stays over the client's own fields.
+    after: attested.actorClaimMismatch
+      ? isPlainObject(envelope.after)
+        ? { ...envelope.after, __actorClaimMismatch: true }
+        : { value: envelope.after, __actorClaimMismatch: true }
+      : envelope.after,
     source: attested.source,
     deviceId: attested.deviceId,
     occurredAt: Number.isNaN(occurredAt.getTime()) ? undefined : occurredAt,

@@ -13,7 +13,7 @@
  * checked first" philosophy.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, expensesRepo, journalRepo, moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, auditLogRepo, expensesRepo, journalRepo, moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { add, money, ZERO, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
@@ -300,6 +300,19 @@ async function runApproveExpense(
   // not posted at all, because only one of those two states is obvious to anybody.
   const capitalised =
     category.group === 'CAPEX' ? await capitalizeApprovedExpense(tx, actor, expenseId) : null;
+
+  // T-402 S3 (C4): the approval step's event, same transaction, after the posting and its own writes.
+  if (result.created) {
+    await auditLogRepo.append(tx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'expense.approved',
+      storeId: expense.storeId,
+      entityId: expenseId,
+      before: { status: 'draft' },
+      after: { status: 'posted', amount: expense.totalAmount, journalEntryId: result.entryId },
+      source: 'web',
+    });
+  }
 
   return {
     journalEntryId: result.entryId,
