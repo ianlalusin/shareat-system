@@ -327,8 +327,7 @@ function CountTable({ counts }: { counts: TillCountRow[] }) {
               <tr key={c.id} className="border-t border-neutral-200 dark:border-neutral-800">
                 <td className="py-1.5 pr-3 text-xs text-neutral-500">{c.moment}</td>
                 <td className="py-1.5 pr-3">
-                  {c.moneyAccountName}{' '}
-                  <code className="text-xs text-neutral-500">{c.glAccountCode}</code>
+                  {c.moneyAccountName}
                 </td>
                 <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
                   {peso(Number(c.counted))}

@@ -13,7 +13,8 @@ import { CATEGORY_LABEL, STATUS_LABEL, getDetail, peso, thisPeriod } from '../li
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Banner, Button, FlashBanner, Input } from '@/components/ui';
+import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { MONEY_ACCOUNT_CODES, accountLabel } from '@/lib/account-label';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Prepaid item — Shareat System' };
@@ -41,6 +42,7 @@ export default async function PrepaidItemPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
+  const savedRefundCode = sp.refundAccountCode ?? '';
   const { actor, refusal } = await requirePageAccess(`/prepaid/${id}`);
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
@@ -259,14 +261,18 @@ export default async function PrepaidItemPage({
                   className="w-full"
                 />
               </Field>
-              <Field label="Refund landed in" hint="Account code, e.g. 1110 cash or 1140 e-wallet">
-                <Input
-                  name="refundAccountCode"
-                  maxLength={8}
-                  placeholder="1110"
-                  defaultValue={sp.refundAccountCode ?? ''}
-                  className="w-full"
-                />
+              <Field label="Refund landed in" hint="Pick the cash or e-wallet account the refund went into.">
+                <Select name="refundAccountCode" defaultValue={sp.refundAccountCode ?? ''} className="w-full">
+                  <option value="">Choose an account</option>
+                  {savedRefundCode !== '' && !(MONEY_ACCOUNT_CODES as readonly string[]).includes(savedRefundCode) && (
+                    <option value={savedRefundCode}>{accountLabel(savedRefundCode)}</option>
+                  )}
+                  {MONEY_ACCOUNT_CODES.map((code) => (
+                    <option key={code} value={code}>
+                      {accountLabel(code)}
+                    </option>
+                  ))}
+                </Select>
               </Field>
             </div>
             {/* ⚠️ The trap worth naming on the page: booking the whole remainder as expense AND

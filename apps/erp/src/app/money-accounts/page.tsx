@@ -1,3 +1,4 @@
+import { accountLabel } from '@/lib/account-label';
 import Link from 'next/link';
 import { CUSTODIANS, MONEY_INSTRUMENTS } from '@shareat/db';
 import { requirePageAccess } from '../../lib/page-access';
@@ -8,7 +9,6 @@ import {
 } from './actions';
 import {
   CUSTODIAN_LABEL,
-  GL_LABEL,
   INSTRUMENT_LABEL,
   listAll,
   listStores,
@@ -117,8 +117,7 @@ export default async function MoneyAccountsPage({
                     <CustodianBadge custodian={a.custodian} />
                   </td>
                   <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400">
-                    <span className="font-mono">{a.glAccountCode}</span>{' '}
-                    {GL_LABEL[a.glAccountCode] ?? ''}
+                    {accountLabel(a.glAccountCode)}
                   </td>
                   <td className="px-3 py-2 text-right">
                     {/*
@@ -234,8 +233,8 @@ export default async function MoneyAccountsPage({
               as cash. */}
           <p className="text-xs text-neutral-400 dark:text-neutral-600">
             The books account is chosen for you from the kind and the holder: cash lands in
-            1110/1120/1130 by who holds it, and every e-wallet or bank account shares 1140 —
-            the line names which one.
+            the cashier, staff or office cash account by who holds it, and every e-wallet or bank
+            account shares the e-wallet account — the line names which one.
           </p>
 
           <SubmitButton pendingLabel="Saving…">Save</SubmitButton>

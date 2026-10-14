@@ -43,12 +43,3 @@ export const INSTRUMENT_LABEL: Record<string, string> = {
   ewallet: 'E-wallet',
   bank: 'Bank account',
 };
-
-/** What each GL code means, for the register's own column. Read-only labelling — the code itself
- *  is derived by the domain from instrument + custodian and is never chosen on the form. */
-export const GL_LABEL: Record<string, string> = {
-  '1110': 'Cash on hand — cashier',
-  '1120': 'Cash on hand — staff custodian',
-  '1130': 'Cash on hand — office',
-  '1140': 'E-wallet / online channels',
-};

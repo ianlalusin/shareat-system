@@ -1,3 +1,4 @@
+import { accountCodeAndName } from '@/lib/account-label';
 import { formatMoney, type Money } from '@shareat/core/money';
 
 export interface ApAgingTableRow {
@@ -55,7 +56,7 @@ export function ApAgingReconciliationIndicator({
             : 'mt-1 text-base font-semibold text-danger'
         }
       >
-        Aging total {formatMoney(agingTotal)} {reconciles ? '=' : '≠'} control account (2110){' '}
+        Aging total {formatMoney(agingTotal)} {reconciles ? '=' : '≠'} control account ({accountCodeAndName('2110')}){' '}
         {formatMoney(controlBalance)}
       </p>
       {!reconciles ? (

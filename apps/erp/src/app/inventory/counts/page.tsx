@@ -60,7 +60,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
       </div>
       <PageDescription>
         Freeze a room, count it, and the difference between what was counted and what the ledger said
-        posts to <strong>5400</strong> at FIFO cost — the gap v1 never closed.
+        posts to <strong>stock count differences</strong> at FIFO cost — the gap v1 never closed.
       </PageDescription>
 
       <FlashBanner flash={sp} />

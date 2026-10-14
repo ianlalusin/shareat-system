@@ -1,3 +1,4 @@
+import { accountLabel } from '@/lib/account-label';
 import { notFound } from 'next/navigation';
 import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
@@ -313,7 +314,7 @@ return (
           <h2 className="font-medium">What verifying will post</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             The four checks below attest the DOCUMENT is genuine. Posting attests the CODING is
-            right — 5100 COGS vs. 6500 Supplies vs. 3200 owner&rsquo;s drawings drives the tax
+            right — cost of food vs. supplies vs. owner&rsquo;s drawings drives the tax
             treatment, and one click is about to make both assertions. These drafts post the
             instant you verify (T-196).
           </p>
@@ -338,7 +339,7 @@ return (
                       <tr key={e.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                         <td className="px-3 py-2">{cat?.category ?? e.categoryId}</td>
                         <td className="px-3 py-2 font-mono text-xs text-neutral-500 dark:text-neutral-400">
-                          {cat?.accountCode ?? <span className="text-danger">unmapped — will block</span>}
+                          {cat?.accountCode ? accountLabel(cat.accountCode) : <span className="text-danger">unmapped — will block</span>}
                         </td>
                         <td className="px-3 py-2">
                           <a href={`/expenses/${e.id}`} className="underline hover:no-underline">{e.particulars}</a>
