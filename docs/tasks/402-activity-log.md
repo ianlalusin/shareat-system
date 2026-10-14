@@ -454,3 +454,62 @@ changes the caller's outcome.** Failure-path and post-commit events go through o
   an unresolvable org throw and leave no grant / no ended session; (T9) `signInWithFirebase(null)` with the audit
   write forced to fail still returns the session; (T10) PIN caller-tx path rolled back -> no charge and no pause
   event; (T11) EXPLAIN of the first-of-day query touches one `audit_log` partition - mutant: bound removed.
+
+## S3 contract (Opus planner, 2026-10-14; binding)
+**Files, widened from the slice row:** `packages/domain/src/**` (not `people/**`, `activity/viewer.ts`), new
+`activity/client-events.ts`, `packages/db/src/cutover/purge.ts`, `scripts/cutover-purge.ts`, `audit/catalogue.ts`
+(flips), `repo/audit-log.ts` (one field, C2), `packages/auth/src/security-events.ts` (two enqueues, C3), and the
+existing `applyPurge(` test call sites (C6).
+- **C1 `recordClientEvents(tx: Tx, input: { terminal: TerminalIdentity; uploader: ResolvedSession; source: 'pos';
+  events: readonly ClientEventIn[]; verifiedActorByEventKey: ReadonlyMap<string, string> }): Promise<ClientEventResult[]>`**,
+  `ClientEventIn = ClientEventEnvelope & { actorClaim: string | null }`. `tx` REQUIRED (events ride the sale's tx).
+  `terminal` = `resolveTerminalIdentity`'s result, `uploader` = `resolveActor`'s; never from the body. No
+  `authorize()` (the sale's path is the gate), no HTTP route. **Throws (whole batch)** only for uploader org or
+  session store != terminal's, `source !== 'pos'` (customer = ADR-015 P3), and DB errors. **Per event, in input
+  order, returned:** `{ eventKey, status: 'accepted' | 'replayed', id } | { eventKey, status: 'refused', code }`.
+  Per event: (1) `eventKey` / `entityId` not a uuid -> `AUDIT_BAD_ENVELOPE` (a uuid column would abort the sale's tx);
+  (2) `storeId !== terminal.storeId` (null too) -> `AUDIT_STORE_MISMATCH` + C3 enqueue; (3) `appendClientEvent` with
+  an envelope built by **explicit pick** of the 7 R10 fields, never a spread (inv 21). Its `RefusalError` -> `refused`,
+  code = message prefix before `:` (`AUDIT_EVENT_KEY_CONFLICT` also enqueues C3); other errors rethrow. These refusals
+  happen before any SQL fails, so the tx stays usable.
+- **C2 Verified actor (R10a). No offline-session or shift field exists on any sale** (receipts = ADR-015 P2; offline
+  PIN verifier = P1 O5). S3 builds the seam only: actor = `verifiedActorByEventKey.get(eventKey)`, else the uploader's
+  person; `actorClaim` non-null and != stored actor -> `after.__actorClaimMismatch = true`; `uploaded_by_person_id` =
+  uploader always. `ClientEventAttested` gains `actorClaimMismatch?: boolean`; `appendClientEvent` merges the flag into
+  the STORED `after` **after** hashing (non-object `after` -> `{ value, __actorClaimMismatch: true }`), so the hash
+  stays over client fields. **Deferred** to the P2 receipts spec: filling the map from the receipt's verified offline
+  session. Nothing calls this outside tests until then; tests mock `catalogueEntry` to make one POS entry live (S1b's way).
+- **C3 Failure events use the S2 outbox** (not an awaited tx, not the caller's tx, which may roll back). Add
+  `enqueueEventStoreMismatch(orgId, { storeId: terminal.storeId, actorPersonId: uploader, deviceId, eventKey, action,
+  claimedStoreId })` (store = the TERMINAL's; `claimedStoreId` kept only if a uuid of a store in this org, else
+  `'unknown'`, A3) and `enqueueEventReplayConflict(orgId, { actorPersonId: uploader, deviceId, eventKey })` (org scope,
+  `entityId = eventKey`). Flush writes them via `auditLogRepo.append` with literal actions; tests flush first.
+- **C4 Money/cutover: `auditLogRepo.append` in the SAME tx, after the step's own write, before return** (a rollback
+  drops both). `before { status }`, `after { status }` + amount/reason where the verb has one; store = the document's.
+  `expense.drafted` createExpense (after insertExpense) · `expense.approved` approveExpense (after posting) ·
+  `expense.voided` voidExpense · `sales_day.submitted` submitSalesDay (after markSubmitted) · `sales_day.verified`
+  verifySalesDay · `remittance.recorded` createRemittance · `cash_request.approved`/`.rejected` decideCashRequest (one
+  ternary `action:`) · `ap_invoice.approved` verifyInvoice (its inner approveExpense calls also write
+  `expense.approved`: correct) · `ap_payment.recorded` recordPayment · `cutover.step_completed` attestStep (after
+  recordStep; org-scoped, a per-store step puts `storeId` in `after`) · `cutover.opening_entry` postOpeningBalances.
+  **Stay reserved, no verb, none invented:** `expense.submitted`, `expense.rejected` (draft -> posted only),
+  `sales_day.reopened` (no reopen; do not catalogue `voidSalesDay`), `remittance.confirmed` (posted on create).
+- **C5** `data.export_downloaded` **reserved** (the 8 CSV routes are in `apps/erp`, outside S3, no personal data;
+  orchestrator opens a follow-up). `data.bulk_import_applied` **reserved** (bulk loads already log as
+  `master_data.*_load` / `reimport_sales_day`). `data.activity_log_exported` is S4's.
+- **C6 R15.** `purge.ts` exports `dumpAuditLog(opts: { databaseUrl; dir; asOf; pgBinDir? }): Promise<AuditLogDump>`,
+  `AuditLogDump = { path; sha256; bytes; rowCount }`: count `audit_log`, then `pg_dump --data-only --format=custom
+  --table='public.audit_log*'` (all partitions + `audit_log_event_keys`), password via `PGPASSWORD` only (T-393 R13;
+  reimplement, do not import `scripts/`), dir 0o700, file + `<file>.sha256` 0o600 (T-393 / master-data convention);
+  then `pg_restore --list` must hold a TABLE DATA entry for every `pg_inherits` child of `audit_log`, else throw.
+  Script: `--dump-dir` (or `CUTOVER_DUMP_DIR`) REQUIRED for `--apply`/`--rehearse`, no default (the runbook names it);
+  `dumpAuditLog` runs **before** `sql.begin`; path + sha go in the report. `ApplyPurgeOptions.auditDump` is
+  **required**: refuse before any write if the sha is not 64 hex or `count(audit_log) !== rowCount` (written since the
+  dump). **`applyPurge` writes `cutover.purge`** per C2-performer org, in the purge tx, AFTER the C2 rows (so after
+  TRUNCATE and post-conditions), via `auditLogRepo.append(drizzle(tx), ...)`, `after { dumpFile (basename), dumpSha256,
+  dumpBytes, auditRowsDumped, purgedRows, tables, asOf }`. If the drizzle wrap of the postgres.js tx fails, stop and
+  report; no raw-SQL fallback.
+- **C7 `S3_LIVE`** (15; the rest of the S3 block stays reserved): `expense.drafted`, `expense.approved`, `expense.voided`,
+  `sales_day.submitted`, `sales_day.verified`, `remittance.recorded`, `cash_request.approved`, `cash_request.rejected`,
+  `ap_invoice.approved`, `ap_payment.recorded`, `security.event_replay_conflict`, `security.event_store_mismatch`,
+  `cutover.purge`, `cutover.opening_entry`, `cutover.step_completed` (cutover three keep admin viewers, actor `either`).
