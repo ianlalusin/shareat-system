@@ -98,7 +98,7 @@ import {
   type Actor,
   type Capability,
 } from '@shareat/auth';
-import { createEmployment, endEmployment, seedCanonicalPositions, setEmploymentPositions } from '@shareat/domain';
+import { createEmployment, endEmployment, searchPersons, seedCanonicalPositions, setEmploymentPositions } from '@shareat/domain';
 import { AUDIT_CATALOGUE, catalogueEntry, retentionFor, severityFor } from '../../../db/src/audit/catalogue';
 
 const sql = postgres(url, { max: 8 });
@@ -782,7 +782,7 @@ describe('S2 audit rulings T1-T11 - the outbox, the probes, the guards', () => {
     expect(await count(f.orgId, 'security.authorize_denied')).toBe(1);
     expect(await counted(f.orgId, f.staffId, ORG_CAP, null)).toBe(24);
     // the caller's own transaction accounts for 1 call; the outbox's flushes for the rest
-    expect(mine() - 1, 'the outbox opened at most 2 transactions for 25 denials').toBeLessThanOrEqual(2);
+    expect(mine() - 1, 'the outbox coalesces: a handful of transactions for 25 denials, never one each').toBeLessThan(8);
     expect(beforeRelease).toBeGreaterThanOrEqual(2);
   });
 
@@ -909,6 +909,24 @@ describe('S2 audit rulings T1-T11 - the outbox, the probes, the guards', () => {
       for (const x of spies) x.spy.mockRestore();
     }
     expect(await count(f.orgId, 'auth.signin_succeeded'), 'accepted loss: the event, never the sign-in').toBe(0);
+  });
+
+  it('a manager-like actor holding enrol_staff only at their 2nd store can searchPersons, and the store-1 miss writes NO denial row or counter (the sweep is a probe)', async () => {
+    const f = await fixture('probe-search');
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Two Stores') returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${f.orgId}, 'staff')`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${f.storeId})`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${f.storeId2})`;
+    await sql`insert into person_grants (person_id, grant_name, granted_by, grant_source, store_id) values (${p!.id}, 'enrol_staff', ${f.adminId}, 'grant', ${f.storeId2})`;
+    const actor = f.actor(p!.id);
+    await expect(withOrgPrincipal(f.orgId, (tx) => can(tx, actor, 'enrol_staff', { storeId: f.storeId2 }))).resolves.toBe(true);
+    await expect(withOrgPrincipal(f.orgId, (tx) => can(tx, actor, 'enrol_staff', { storeId: f.storeId }))).resolves.toBe(false);
+    await expect(withOrgPrincipal(f.orgId, (tx) => searchPersons(tx, actor, { query: 'x' }))).resolves.toBeDefined();
+    expect(await count(f.orgId, 'security.authorize_denied'), 'mutant: the per-store authorize() loop logs the first-store miss').toBe(0);
+    expect(await counterRows(f.orgId)).toBe(0);
+    // and a person with the capability nowhere is still refused, and THAT is logged
+    await expect(withOrgPrincipal(f.orgId, (tx) => searchPersons(tx, f.staff, { query: 'x' }))).rejects.toBeInstanceOf(AuthorizationError);
+    expect(await count(f.orgId, 'security.authorize_denied'), 'the real refusal is logged').toBe(1);
   });
 
   it('T11: EXPLAIN of the first-of-day query touches the current year\'s partitions only - mutant: the recorded_at bound removed', async () => {

@@ -46,7 +46,9 @@ function block(text: string, from: number): { body: string; start: number } | nu
 }
 
 /** Every probe-shaped site in one source text: `[line, why]`. */
-export function probeSites(text: string): Array<[number, string]> {
+export function probeSites(source: string): Array<[number, string]> {
+  // comments are blanked (same length, so line numbers hold): a doc line that says "authorize()" is not a call
+  const text = source.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' ')).replace(/(^|[^:])\/\/.*$/gm, (m0, pre) => pre + ' '.repeat(m0.length - pre.length));
   const out: Array<[number, string]> = [];
   const lineOf = (idx: number) => text.slice(0, idx).split('\n').length;
   const catches = [...text.matchAll(/\bcatch\s*(?:\([^)]*\))?\s*\{/g)];
@@ -60,7 +62,12 @@ export function probeSites(text: string): Array<[number, string]> {
     const tryAt = text.lastIndexOf('try', m.index!);
     const tryBlock = tryAt >= 0 ? (block(text, tryAt)?.body ?? '') : '';
     const triedAuthorize = /\bauthorize\s*\(/.test(tryBlock);
-    if (tests && (returnsBool || callsAuthorizeAgain)) out.push([lineOf(m.index!), 'catch tests AuthorizationError then returns a boolean / calls authorize() again']);
+    // a catch that neither throws nor returns anything (`lastError = err`, `continue`) swallows the refusal: a loop that tries
+    // authorize() per store and keeps going is a probe in disguise (people/index.ts searchPersons)
+    const swallows = !/\bthrow\b/.test(b.body) && !/\breturn\b/.test(b.body);
+    const inLoop = /\b(?:for|while)\s*\(|\bdo\s*\{/.test(text.slice(Math.max(0, tryAt - 160), tryAt)) || /\bcontinue\b/.test(b.body);
+    if (triedAuthorize && swallows && inLoop) out.push([lineOf(m.index!), 'catch swallows an authorize() refusal (loop / assign only)']);
+    else if (tests && (returnsBool || callsAuthorizeAgain)) out.push([lineOf(m.index!), 'catch tests AuthorizationError then returns a boolean / calls authorize() again']);
     else if (!tests && triedAuthorize && returnsBool) out.push([lineOf(m.index!), 'catch after authorize() returns a boolean']);
   }
   for (const m of text.matchAll(/\bauthorize\s*\([^;]*?\)\s*\.(?:then\s*\(\s*\(\s*\)\s*=>\s*true|catch\s*\(\s*(?:\([^)]*\)|\w*)\s*=>\s*(?:false|\{?\s*return\s+false))/g)) {
@@ -81,6 +88,10 @@ describe('T-402 S2 A2 - the scanner can see a probe (synthetic sources)', () => 
   it('flags the promise forms', () => {
     expect(probeSites(`const ok = await authorize(tx, a, 'x').then(() => true, () => false);`)).toHaveLength(1);
     expect(probeSites(`const ok = await authorize(tx, a, 'x').then(() => true).catch(() => false);`).length).toBeGreaterThan(0);
+  });
+  it('flags a loop that tries authorize() per store and only assigns in the catch (the searchPersons shape)', () => {
+    const src = `async function search(tx, actor, storeIds){ let lastError; let ok = false; for (const storeId of storeIds) { try { await authorize(tx, actor, 'enrol_staff', { storeId }); ok = true; break; } catch (err) { lastError = err; } } if (!ok) throw lastError; }`;
+    expect(probeSites(src)).toHaveLength(1);
   });
   it('does NOT flag an error mapping or a plain rethrow (a real gate)', () => {
     const src = `async function g(tx){ try { await authorize(tx, a, 'x'); return doIt(); } catch (e) { if (e instanceof AuthorizationError) { return { error: e.userReason }; } throw e; } }`;
