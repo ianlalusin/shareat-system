@@ -97,7 +97,7 @@ function scanFile(relPath: string): string[] {
     const bareChild = BARE_JSX_CHILD.test(line);
     if (bareCode || bareChild) {
       const why = bareCode ? `bare code ${bareCode.code}` : 'bare {…accountCode} JSX child';
-      hits.push(`apps/erp/src/${relPath}:${i + 1}  [${why}]  ${original[i].trim()}`);
+      hits.push(`apps/erp/src/${relPath}:${i + 1}  [${why}]  ${(original[i] ?? '').trim()}`);
     }
   });
   return hits;
