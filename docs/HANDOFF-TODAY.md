@@ -1,100 +1,65 @@
-# Handoff: 2026-10-13 (orchestrator, cold start)
+# Handoff — 2026-10-14 (orchestrator, cold start)
 
 ## Where things stand
-**Production (`159.223.46.224`, erp2.shareat.net) runs `c7cf55a`, migrations through 0197.** Deployed today, all green:
-- PR #20: same-org FKs (0194), DEF-640, T-391 S4-S6.
-- PR #21: T-392 S3+S4, the dual-run comparator (0195).
-- PR #22: T-401 S1+S2, the menu/price master (0196), plus T-403, admin-only recipes.
-- PRs #23 and #24: T-402 S1a+S1b, the activity log storage and writer (0197).
+**Production (`159.223.46.224`, erp2.shareat.net) still runs `c7cf55a`, migrations through 0197.** Nothing deployed today.
+Today's work sits on **`release/2026-10-14`**, pushed, with **one PR to `main`** (see "Pick up here"). Merging it deploys.
+No new migration today; the next free number is still **0198**.
 
-The first 0197 deploy refused safely on an unlabelled `recode_item`, rolled back, and was fixed in PR #24.
-
-⚠️ **Ian made the GitHub repo PUBLIC on 13 Oct.** Read "Do not decide these alone" before anything else.
-
-## Gates at `c7cf55a` (+ the count-sheet cleanup committed in this wrap-up)
+## Gates at the release head
 - **typecheck:** exit 0.
-- **unit:** 6,226 passed / 22 failed / 4 skipped across 6,252 in one local run. Every failing file passes when run on its own: these are load timeouts on this laptop.
-- **integration:** the full suite is green on CI main for `c7cf55a` (run 38384157014). Locally, t390 count-sheet + t390-s5 passed 52/52 on a fresh DB (`shareat_test_wrap1013`).
-- **build:** not run locally. CI built it, and Deploy 38388276602 shipped it.
+- **unit:** 6,497 passed / 7 failed / 4 skipped across 6,508 in one full run. All 7 failing files pass when run alone (34/34): load timeouts on this laptop.
+- **integration:** run per lane on each lane's own DB (T-392 149/150 incl. 1 skip; T-394 S1+S2 35+44; T-401 S3-S5 290+; T-402 S2 1,222). **The full suite runs in CI on the PR.**
+- **build:** passed (109 s) on the combined branch, port 9008 free.
 
-## What happened this session (decisions are recorded in bible §13 rows 313-318)
-- **Repo tidy.**
-  - Old handoffs moved to `docs/archive/`.
-  - The home backup tooling moved to `docs/ops/home-backup/`.
-  - 282 test DBs dropped.
-  - ⛔ A worktree removal deleted main's source through the node_modules junctions (3rd time). Everything was restored from git. Read memory `worktree-node-modules-junction` before ANY worktree removal.
-- **T-392 dual-run.** S4 went through two audit rounds: channel keys, `other`=none gives NOT_DOUBLE_ENTERED, staff-cash parties, warnings. S3+S4 are live.
-- **T-401 menu master.** Specced, then re-specced after Ian answered Q1-Q6 (row 316). S1 had 4 audit rounds and S2 had 2. Live.
-  - Ian's rulings: managers price their own store; only super admin adds items; recipes are Shareat standards, admin-only and never grantable; stores and the franchise only suggest; ±10% usage tolerance; Padre Garcia's recipes are controlled by Shareat (row 315). They are in the spec sections "Ian ruling …".
-- **T-403.** `manage_recipes` (new) and `manage_pos_map` are admin-only. Live.
-- **T-402 activity log.** Ian asked for it ("build now"); it went through research-evaluate-propose. The spec was Opus-reviewed. S1a+S1b are live (row 317).
-  - One real bug was caught before ship: client events would never save (ms vs µs FK).
-- **T-394 purge rehearsal.** Spec approved with changes. The production DB host is pinned (`shareat-system-db-do-user-39783702-0.m.db.ondigitalocean.com`).
-- **POS v2 / customer v2 plan.** Published at https://claude.ai/artifact/FjvbQ9xibxBFqeoEoMRHgX. Ian answered all 29 decisions and 120 features; read them with ArtifactData, collection `answers`. Rulings in rows 313, 314, 318:
-  - one tablet per store;
-  - sign-up SMS code only, manager-only password reset;
-  - store orders shown on the POS screen;
-  - usage drafts queued from many staff, posted by the manager.
-- **Research.**
-  - The running bill showed no measurable add-on lift (Lipa about flat, Malvar −12%; the control is weak).
-  - Customer logins are about 20-25 a month.
-- **Defects logged:** DEF-641..648. DEF-643 (Firestore mirror reset after purge) is unowned.
+## What happened this session (decisions are in bible §13 rows 319-336)
+- **T-392 dual run, build complete:** S1b (v1 channel receivables), S4b (document matching), S5 (screens `/reports/dual-run`, go/no-go pack, dispositions). Ian: v2 enters Grab/Foodpanda payouts; a disposition counts only after a fresh extract + compare (laptop on for 15 Nov); only admins record dispositions (rows 332-334).
+- **T-394 rehearsal:** S1 (guards, start/migrate/predump/purge/mark/app-env-check/rollback-check) and S2 (verify, verify --after-post, sanitised report). A rehearsal predump can no longer ping production's backup monitor.
+- **T-401 menu:** S3 (store-menu projection), S4 (menu screens), S5 (usage source switch, v1 maps → menu rules). Ian: manager-posted staff usage drafts move stock; the POS pull becomes a ±10% check only. That is **S6**, specced in the T-401 doc, needs a migration (row 335).
+- **T-402 activity log:** S2 done (security events). The first audit caught a pool-deadlock risk; it was redesigned (in-process outbox; `can()` for render probes). **S3 built on `lane/t402-s3` (pushed) but NOT merged**: open audit findings incl. one data-loss race in the purge, listed at the end of `docs/tasks/402-activity-log.md`.
+- **Cloud session (T-404) merged in:** supplier page, stores form, wording fixes. **Ian answered the 14 questions** (`docs/feedback/2026-10-14-ian-answers.md`, rows 319-331); work list `docs/plans/2026-10-14-ian-answers-worklist.md`.
+- **T-405** (names, never a raw person id) and **T-406 batch 1** (account names instead of codes on 20 screens) done, built mostly on Haiku. Ian: use Haiku where it can do the job (row 336).
+- **Defects:** DEF-649 (email sign-in ignores ended employment; ending employment leaves sessions — serious, unowned), DEF-650 (null-tx session ends, minor).
+- Roadmap, What's Left and task status lines updated.
 
 ## Pick up here
-1. **T-392 S1b, S4b, S5 before the 2 Nov dual run.** S1b reads v1 `channel_sales`; S4b is document matching (R9); S5 is the screens. Spec `docs/tasks/392-dual-run-comparator.md`, rulings at the end.
-2. **T-391 rollout with Ian:** extract, sheets, dry run, apply per store, Lipa first. Then T-390 S4.
-3. **T-394 S1 build (due 28 Oct)** and **T-401 S3 / S4 / S5**. S5 is the v1 usage switch with ±10% tolerance; the queue + manager-post ruling is row 318. **T-402 S2-S5** runs in parallel.
+1. **The PR:** watch CI. If green and Ian says go, merge (= deploy). If red, fix on `release/2026-10-14`.
+2. **T-402 S3:** fix the open audit findings on `lane/t402-s3` (the purge lock first), re-audit, merge into the next release.
+3. **DEF-649** (sign-in after employment ends) — spec and fix; then **T-401 S6** (migration 0198), **T-394 S3** runbook (due 7 Nov; include: close psql/Drizzle Studio before `verify`, and dump dir needs an ACL on Windows), **T-406 batch 2**, work-list items.
 
-Only one lane may add a migration at a time. The next free number is **0198**.
-
-## Lanes and worktrees (all idle; nothing in flight)
-| Worktree | Branch | State |
-|---|---|---|
-| `wt-t385` | lane/t392-s4 | merged (PR #21) |
-| `wt-t386` | lane/t398-s1 | merged (PR #20) |
-| `wt-t390` | lane/t392-s3 | merged via #21 |
-| `wt-t400` | lane/t400-parallel-integration | **PR #18 still open**: rebase + fill Outcome, or close |
-| `wt-t401` | lane/t401-s1 | merged (PR #22) |
-| `wt-t402` | fix/0197-recode-item | merged (PR #24) |
-| `wt-t403` | lane/t403 | merged (via #22) |
-
-Leftover folders `wt-t387-s3` and `wt-t384-s1a` remain.
-
-Remove merged worktrees ONLY by the reparse-point method in memory `worktree-node-modules-junction`: delete every junction first, verify none remain, then delete. **Never** use `git worktree remove --force` or `rm -rf`.
-
-Every lane DB belongs to merged work. They are safe to drop with `drop-test-db.mjs` from the main tree.
-
-## Do not decide these alone: they are Ian's
-- **Public repo (13 Oct).** No real secret was found in the files or history (scanned 13 Oct): `.env*` and `secrets/` were never committed, the test private key is a dummy, and DB URLs are placeholders. But anyone can now read:
-  - production hostnames and IPs (droplet `159.223.46.224`, the DO DB host);
-  - `docs/ops/` runbooks;
-  - `docs/DEFECTS-REGISTER.md`, which describes security weaknesses;
-  - business rules and money flows.
-
-  **Recommend making it private again** unless it must be public. If it stays public, no key needs rotating (nothing leaked), but tighten the DB trusted sources and droplet SSH. A public repo does get free GitHub Actions minutes.
-- **`FB_DEV_TERMINAL_PASSWORD` is a 10-digit number.** It is not leaked (the digits are common test data), but it is guessable. Recommend changing that Firebase dev terminal account's password.
-- **Recipe capabilities:** make them non-offerable to positions (Ian chose "lock") and build the suggestion queue. Follow-up task after T-401.
-- **Franchise recipes:** how Padre Garcia receives Shareat's standards read-only. A design is needed before it uses recipes (T-401 spec).
-- **T-393 backups:** switch them on before 1 Nov (the 13 Nov rehearsal needs them).
-- **T-396:** Ian supplies POS ids, keys and tenders for Malvar, Banay-Banay and Davao.
+## Do not decide these alone — they are Ian's
+- **Public GitHub repo** (made public 13 Oct): recommend private. Still unanswered.
+- **Merge tonight's PR** after CI is green.
+- **Grab/Foodpanda payout sample files** (zip/xls/pdf) — needed before the settlement parsers (row 320).
+- T-391 rollout, T-393 backups on before 1 Nov, T-396 POS ids/keys — unchanged from 13 Oct.
 
 ## Traps that have actually bitten
-- **Worktree removal follows node_modules junctions into main's source.** This happened 3 times; the memory file has the only safe method.
-- **A migration that labels or validates existing rows must be checked against production's real data.** 0197 refused on `recode_item`. Its regression test now scans git history.
-- **Lanes' full unit runs time out under load on this laptop.** Re-run failing files alone before believing them. CI is the full-suite gate.
-- **Watch scripts must survive network drops.** Poll `gh run view` in a loop; one `gh run watch` died mid-run today.
-- **Pushing main deploys.** Ship through a PR.
+- **Two agents on one test DB** produce random FK/deadlock failures — one lane, one DB, one runner at a time.
+- **Lanes pass alone and break each other's guards when combined** (28 tests today: `can()` mocks, counts, COMMANDS labels). Run the guard/census files on the combined branch before the PR.
+- **Tests that leave orgs behind** poison later files (T-394 fixed; watch for it in new purge/rehearsal tests).
+- Worktree removal follows node_modules junctions into main — never remove one except by the memory's method.
+- Pushing `main` deploys. Ship through the PR.
+
+## Lanes and worktrees (all idle)
+| Worktree | Branch | State |
+|---|---|---|
+| `wt-t385` | lane/account-label | merged into release |
+| `wt-t386` | lane/t394-s2 | merged into release |
+| `wt-t390` | lane/t392-s4b | merged into release |
+| `wt-t401` | lane/t392-s5 | merged into release |
+| `wt-t402` | lane/t401-s5 | merged into release |
+| `wt-t403` | lane/t402-s3 | **unmerged, pushed** — S3 findings open |
+Lane DBs (`shareat_test_*` from today) are throwaway; drop with `drop-test-db.mjs` when convenient.
 
 ## The paste-ready prompt
 ```
-You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global
-/orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all) and docs/RULES.md, then the spec
-of the lane you start (docs/tasks/392-*, 401-*, 402-*, 394-*). GREP the bible and register, never Read them whole.
-State: production runs c7cf55a (migrations through 0197). Next free migration 0198, one migration lane at a time.
-FIRST: give Ian the public-repo recommendation in the handoff and get his answer.
-Next work: T-392 S1b/S4b/S5 before the 2 Nov dual run; T-391 rollout with Ian; T-394 S1 (28 Oct); T-401 S3-S5;
-T-402 S2-S5. NEVER push main directly (it deploys); ship via PR and merge only when CI is green.
-STANDING: lanes are Sonnet subagents (tester/builder/auditor separate, own _test DB, worktree per lane, workers
-never run git, LF only); Opus for specs and their fresh reviews; never remove a worktree except by the
-junction-safe method in memory; talk to Ian in plain language (global CLAUDE.md). Messages are short.
+You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global /orchestrator
+skill. Start COLD: read docs/HANDOFF-TODAY.md (all) and docs/RULES.md, then the spec of the lane you start.
+GREP the bible and register, never Read them whole.
+State: production runs c7cf55a (migrations through 0197). Today's work is on release/2026-10-14 with one open PR —
+check its CI; merge only when green AND Ian says go (merging deploys). Next free migration 0198.
+FIRST: ask Ian the public-repo question (still open) and whether to merge the PR.
+Next: T-402 S3 audit fixes (lane/t402-s3), DEF-649, T-401 S6 (migration 0198), T-394 S3 runbook (7 Nov), T-406 batch 2.
+STANDING: lanes are subagents (tester/builder/auditor separate, own _test DB, worktree per lane, workers never run git,
+LF only); Haiku where it can do the job, Sonnet for money/auth/schema, Opus for specs and rulings; never remove a
+worktree except by the junction-safe method in memory; talk to Ian in plain language. Messages are short.
 ```

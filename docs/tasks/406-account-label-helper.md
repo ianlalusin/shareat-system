@@ -1,6 +1,6 @@
 # T-406 — `accountLabel` helper: account words, not account numbers (batch 1)
 
-**Status:** SPEC 2026-10-14, Opus. Work list item 3 (`docs/plans/2026-10-14-ian-answers-worklist.md`), review item 15
+**Status:** **BATCH 1 DONE 2026-10-14** (accountLabel on 20 screens); batch 2 (~10 more screens) open. | SPEC 2026-10-14, Opus. Work list item 3 (`docs/plans/2026-10-14-ian-answers-worklist.md`), review item 15
 (`docs/feedback/2026-10-14-ian-feedback-review.md`). Bible row 229: "never an id, a code or a key". No migration. Size S.
 
 ## Goal

@@ -1,6 +1,6 @@
 # T-405 — `personName` helper: never a raw person id on screen
 
-**Status:** SPEC 2026-10-14, Opus. Work list item 2 (`docs/plans/2026-10-14-ian-answers-worklist.md`),
+**Status:** **DONE 2026-10-14** (PersonName helper built, in the release PR). | SPEC 2026-10-14, Opus. Work list item 2 (`docs/plans/2026-10-14-ian-answers-worklist.md`),
 review item 14 (`docs/feedback/2026-10-14-ian-feedback-review.md`). No migration. Size S.
 
 ## Goal

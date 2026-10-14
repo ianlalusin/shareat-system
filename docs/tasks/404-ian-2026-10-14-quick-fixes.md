@@ -1,6 +1,6 @@
 # T-404 — Ian's 2026-10-14 quick fixes (UI only)
 
-**Status:** ✅ BUILT 2026-10-14 on `claude/pos-v2-feature-planning-1vey06`
+**Status:** **DONE 2026-10-14**, in the release PR. | ✅ BUILT 2026-10-14 on `claude/pos-v2-feature-planning-1vey06`
 **Source:** [`docs/feedback/2026-10-14-ian-raw.md`](../feedback/2026-10-14-ian-raw.md) items 13, 15, 24/25, 31;
 review [`docs/feedback/2026-10-14-ian-feedback-review.md`](../feedback/2026-10-14-ian-feedback-review.md).
 **Model:** written and built in one session; no schema, no domain, no posting change.

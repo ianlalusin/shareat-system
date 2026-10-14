@@ -142,10 +142,10 @@
       <div class="count money"><div class="n">0</div><div class="l">open money defects (push closed)</div></div>
       <div class="count struct"><div class="n">21</div><div class="l">roadmap items still to build</div></div>
       <div class="count"><div class="n">9</div><div class="l">roadmap items in progress or partly done</div></div>
-      <div class="count you"><div class="n">4</div><div class="l">things only you can do</div></div>
+      <div class="count you"><div class="n">7</div><div class="l">things only you can do</div></div>
       <div class="count done"><div class="n">243</div><div class="l">roadmap tasks done</div></div>
     </div>
-    <p class="src">production at migration 0190 (PR #8 <code>d1eaede</code>, merged 10 Oct: T-383 S2, T-386 S5, T-388, T-389 S1, T-395 S1) &middot; <b>on main, deploying with the next wrap-up PR (row 296):</b> T-395 S2 wrong-PIN findings and manager reopen &middot; in lanes: T-389 S3, T-390 S1 (migration 0191) &middot; next free migration 0192 &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, the Open Questions page</p>
+    <p class="src">production at migration 0197 &middot; <b>built, tested and audited on branch release/2026-10-14, going to one PR (not yet deployed):</b> T-392 S1b, S4b, S5 &middot; T-394 S1, S2 &middot; T-401 S3, S4, S5 &middot; T-402 S2 &middot; T-404, T-405, T-406 batch 1 &middot; not merged: T-402 S3 (open audit findings) &middot; sources: docs/ROADMAP.html, docs/DEFECTS-REGISTER.md, docs/tasks, docs/plans/2026-10-14-ian-answers-worklist.md</p>
   </header>
 
   <div class="dates">
@@ -162,23 +162,28 @@
     <div class="order">
       <div class="step now">
         <div class="k">Now</div>
-        <h3>Sales days from POS, and the bill override</h3>
+        <h3>Land tonight&rsquo;s PR, then the real-data run</h3>
         <ul>
-          <li>T-390 opening stock: S1 per room on PR #10 (0191 precheck done); S3 tie-out in its audit round; T-386 S6 item-code rule (0192) in its sweep</li><li>T-375: POS v1 day feed live; <b>Lipa linked on 8 Oct</b> &mdash; add its Cash and Collected tenders, then import each closed day (Submit, then a different person verifies)</li><li>Live since 10 Oct (PR #8): T-383 S2, T-386 S5, T-388, T-389 S1, T-395 S1. Item recode applied on production with you (CK15-001; post-check 0)</li>
+          <li>Release PR: CI green, then you approve and merge, then deploy</li>
+          <li>T-392: run Lipa&rsquo;s real week on production; the dual run starts 2 Nov</li>
+          <li>T-391 rollout with you; T-393 backups switched on before 1 Nov</li>
         </ul>
       </div>
       <div class="step">
         <div class="k">Next</div>
-        <h3>Smoke and screens</h3>
+        <h3>Rehearsal tooling, menu, activity log</h3>
         <ul>
-          <li>T-374 / T-367 screen smoke on 9008; link the next stores</li>
-          <li>Phase 7 screens, T-343</li>
+          <li>T-394 S3 runbook (7 Nov), S4 the 13 Nov rehearsal</li>
+          <li>T-401 S6 (&plusmn;10% check; staff usage drafts move stock; migration)</li>
+          <li>T-402 S3: fix the audit findings (one data-loss race in the purge), then S4 viewer, S5</li>
+          <li>DEF-649 fix (email sign-in ignores ended employment); T-406 batch 2; the rest of the 23-item work list</li>
         </ul>
       </div>
       <div class="step">
         <div class="k">Then</div>
         <h3>Payroll and the shared backend</h3>
         <ul>
+          <li>T-396 link 3 stores (needs your POS ids)</li>
           <li>T-190/T-193 when HR data lands</li>
           <li>POS &amp; CUSTOMER on the shared backend (ADR-015): copied POS after 1 Jan 2027</li>
         </ul>
@@ -204,6 +209,8 @@
     <h2>Other open follow-ups</h2>
     <p class="lede">Found while fixing money. None posts a wrong amount today; each is small.</p>
     <div class="items">
+      <div class="item y"><div class="id">DEF-649</div><div><b>Email sign-in ignores ended employment, and ending employment leaves sessions open.</b> Unowned, serious; fix is next.</div></div>
+      <div class="item"><div class="id">DEF-650</div><div>Some sessions end without a transaction (minor).</div></div>
       <div class="item y"><div class="id">DEF-585</div><div><b>Production has no fiscal period before October 2026</b>; cutover postings dated earlier would be refused. The timer is armed and seeded Oct 2026&ndash;Sep 2027.</div></div>
       <div class="item"><div class="id">DEF-608, 609</div><div>A supplier-return refusal says &ldquo;delivery line [hidden]&rdquo;; &ldquo;Check POS again&rdquo; still shows after a store is unlinked (it refuses safely).</div></div>
       <div class="item"><div class="id">DEF-373</div><div>The deploy gate checks that keys exist, not that they are the production keys.</div></div>
@@ -220,6 +227,13 @@
       <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
       <div class="item"><div class="id">POS pulls</div><div>Interim pulls rebuilt per your redesign (T-375 S5-lite, S6). At the shared backend (ADR-015 P2) the pull goes away: usage posts after verify, and refunded or voided items wait for a manager decision (your answers, bible row 282).</div></div>
       
+      <div class="item"><div class="id">T-392</div><div>Build complete. Left: Lipa&rsquo;s real week on production (Done-when).</div></div>
+      <div class="item"><div class="id">T-394</div><div>S3 runbook (7 Nov), S4 rehearsal (13 Nov).</div></div>
+      <div class="item"><div class="id">T-401 S6</div><div>&plusmn;10% tolerance check and staff usage drafts that move stock. Needs a migration.</div></div>
+      <div class="item"><div class="id">T-402</div><div>S3 built but not merged until its audit findings are fixed; then S4 viewer, S5 maintenance.</div></div>
+      <div class="item"><div class="id">T-406</div><div>Batch 2: plain words for account codes on about 10 more screens.</div></div>
+      <div class="item"><div class="id">T-396</div><div>Link 3 stores. Needs your POS ids.</div></div>
+      <div class="item"><div class="id">Work list</div><div>docs/plans/2026-10-14-ian-answers-worklist.md: 23 items from your 14 answers; item 2 and item 3 (batch 1) done. Settlement parsers need your sample payout files.</div></div>
       <div class="item"><div class="id">T-386 S6</div><div>The database shape check for item codes, after the production recode (S5, built) reads 0 unconverted.</div></div>
       <div class="item"><div class="id">Cutover plan</div><div><b>docs/plans/remaining-build-plan.md:</b> T-390 opening stock (spec reviewed; S2 waits on your cost-basis answer), T-391 master data, T-392 dual-run comparator, T-393 backups, T-394 rehearsal, T-395 PIN throttle (done), T-396 link 3 stores, T-397 payroll bridge.</div></div>
       <div class="item"><div class="id">T-315</div><div>Store access for staff hired before the fix, through an admin-reviewed list (your option 2). Spec next.</div></div>
@@ -239,6 +253,11 @@
     <h2>Waiting on you</h2>
     <p class="lede">Each holds work still.</p>
     <div class="items">
+      <div class="item y"><div class="id">GitHub repo</div><div><b>Decide: public or private?</b> Still unanswered.</div></div>
+      <div class="item y"><div class="id">Payout samples</div><div><b>Send sample Grab and Foodpanda payout files.</b> The settlement parsers wait on them.</div></div>
+      <div class="item y"><div class="id">Release PR</div><div><b>Approve and merge tonight&rsquo;s PR once CI is green.</b></div></div>
+      <div class="item y"><div class="id">T-391 / T-393</div><div>T-391 rollout with you; T-393 backups switched on before 1 Nov.</div></div>
+      <div class="item y"><div class="id">T-396</div><div>POS ids and keys for the 3 stores to link.</div></div>
       <div class="item y"><div class="id">Plan questions</div><div><b>13 cutover questions</b> (plan-q1&hellip;q13; Q1 decides what v2 runs on 1 Jan), plus t390-q1/q2, t395-q1 on the Open Questions page.</div></div>
       <div class="item y"><div class="id">0191 precheck</div><div>When T-390 S1 is ready: run the READ ONLY 0191 precheck as doadmin (docs/ops/README.md). It also lists each store's default room; a store with none cannot record its opening count. (0190 done 10 Oct, live.)</div></div>
       <div class="item y"><div class="id">Item recode</div><div><b>Be present for the T-386 S5 recode dry run</b> on production (existing items get CHWN-001 style codes; nothing is applied until you approve the dry run).</div></div>
