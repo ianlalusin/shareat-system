@@ -70,6 +70,11 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
           <Link href="/menu/requests" className="inline-flex min-h-6 items-center underline underline-offset-4">
             Request an item
           </Link>
+          {(held.has('switch_usage_source') || held.has('manage_pos_map')) && (
+            <Link href="/menu/usage-source" className="inline-flex min-h-6 items-center underline underline-offset-4">
+              Usage source
+            </Link>
+          )}
         </div>
       </div>
 

@@ -13,6 +13,7 @@ import { menuRepo, type Tx } from '@shareat/db';
 import { MENU_CHANNELS, MENU_DEPLETION_MODES, MENU_PRICING_MODES, type MenuChannel, type MenuDepletionMode, type MenuPricingMode } from '@shareat/db/schema';
 import type { Decimal } from '@shareat/core/money';
 import { gone, refuse } from '../shared/refusal';
+import { assertNoPlannedPullAtLinkedSwitchedStores } from '../pos/depletion-source';
 import { audit, inTx, parseMarkupPercent, requireHistorySlot, parseMenuAmount, parseMenuQuantity, requireNotBackdated, requireScheduled } from './shared';
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -58,6 +59,8 @@ export async function setDepletionRule(actor: Actor, input: SetDepletionRuleInpu
     if (!(await menuRepo.getVariant(trx, actor.orgId, input.variantId))) {
       throw gone(`setDepletionRule: variant ${input.variantId} does not exist.`, 'variant');
     }
+    // S5: a rule is org-wide; a store that reads the menu rules and links this variant must not have a pull in progress.
+    await assertNoPlannedPullAtLinkedSwitchedStores(trx, actor.orgId, input.variantId);
     await requireHistorySlot(trx, input.variantId, { kind: 'rule', variantId: input.variantId }, input.effectiveFrom, 'setDepletionRule');
     const row = await menuRepo.insertRule(trx, {
       orgId: actor.orgId,
@@ -80,6 +83,7 @@ export async function cancelScheduledDepletionRule(actor: Actor, input: { id: st
     await authorize(trx, actor, 'set_menu_depletion', {});
     const row = await menuRepo.getRule(trx, actor.orgId, input.id);
     if (!row) throw gone(`cancelScheduledDepletionRule: rule ${input.id} does not exist.`, 'depletion rule');
+    await assertNoPlannedPullAtLinkedSwitchedStores(trx, actor.orgId, row.variantId);
     await requireScheduled(trx, row.effectiveFrom, 'cancelScheduledDepletionRule', 'rule');
     await menuRepo.deleteRule(trx, row.id);
     await audit(trx, actor, 'menu_depletion_rule_cancel', null, row.id, row, null);

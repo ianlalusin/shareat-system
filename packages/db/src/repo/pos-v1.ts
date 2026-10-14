@@ -373,6 +373,17 @@ export async function latestForDay(
   return row as PosV1DayFeedRow | undefined;
 }
 
+/** T-401 S5 (read-only): the store's business dates that have a stored `sold_items` feed, newest first, at most `limit`. */
+export async function recentSoldItemsDates(tx: Tx, orgId: string, storeId: string, limit: number): Promise<string[]> {
+  const rows = await tx
+    .selectDistinct({ businessDate: posV1DayFeeds.businessDate })
+    .from(posV1DayFeeds)
+    .where(and(eq(posV1DayFeeds.orgId, orgId), eq(posV1DayFeeds.storeId, storeId), eq(posV1DayFeeds.kind, 'sold_items')))
+    .orderBy(desc(posV1DayFeeds.businessDate))
+    .limit(limit);
+  return rows.map((r) => r.businessDate);
+}
+
 /**
  * The BASIS feed of a feed-sourced day (R10): the `to_feed_id` of the day's latest correction, else the `sales` feed
  * the day was derived from (`pos_v1_day_feed_id`). A day with neither has no basis (a typed day).

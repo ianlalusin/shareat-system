@@ -61,6 +61,7 @@ import { addQuantity, compareQuantity, quantity, ZERO_QUANTITY } from '../stock/
 import { isFrozenBySessions } from '../stock/count-workflow';
 import { assertUsageSource } from '../stock-locations/rules';
 import { decideHolds, heldSentences, type HeldLine, type HoldInputLine } from './usage-holds';
+import { loadDepletionLookups } from './depletion-source';
 import { explodePosSales, type PlanLine, type PlanSection, type PosSoldItemInput } from './plan';
 import { sameItemsProjection, soldItemsFromFeed } from './v1-sold-items';
 
@@ -77,15 +78,11 @@ async function rebuildLines(
   defaultLocationId: string,
   posItems: readonly PosSoldItemInput[],
 ): Promise<PlanLine[]> {
-  const maps = await posMappingRepo.listActiveMaps(tx, storeId);
-  const recipeIds = [...new Set(maps.filter((m) => m.mode === 'recipe' && m.recipeId).map((m) => m.recipeId!))];
-  const recipeRows = await posMappingRepo.getRecipesForExplosion(tx, orgId, recipeIds);
-  const recipesById = new Map(
-    recipeRows.filter((r) => r.status === 'active').map((r) => [r.id, { outputQuantity: r.outputQuantity, lines: r.lines }]),
-  );
+  // T-401 S5: the one seam chooses the mapping (the store's POS item maps, or the menu rules for a switched store).
+  const { mapsByPosItemKey, recipesById } = await loadDepletionLookups(tx, orgId, storeId);
   return explodePosSales({
     posItems,
-    mapsByPosItemKey: new Map(maps.map((m) => [m.posItemKey, m])),
+    mapsByPosItemKey,
     recipesById,
     defaultLocationId,
   });
