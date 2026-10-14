@@ -54,9 +54,11 @@ const c2 = (orgId: string) =>
     select completion, completed_by from cutover_steps where org_id = ${orgId} and step_code = 'C2'`;
 
 async function purge(performedBy: Record<string, string>): Promise<void> {
+  const { auditDumpFor } = await import('./t402-s3-audit-dump');
+  const auditDump = await auditDumpFor(process.env.TEST_DATABASE_URL!, AS_OF); // T-402 S3 R15
   await sql.begin(async (tx) => {
     const plan = await planPurge(tx, AS_OF);
-    await applyPurge(tx, plan, { performedBy });
+    await applyPurge(tx, plan, { performedBy, auditDump });
   });
 }
 

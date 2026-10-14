@@ -265,11 +265,13 @@ describe('C - the real cutover purge on a database holding audit rows and event 
     try {
       const mod = (await import('../../src/cutover/purge')) as {
         planPurge: (sql: unknown, asOf: string) => Promise<unknown>;
-        applyPurge: (tx: unknown, plan: unknown, opts?: { performedBy?: Record<string, string> }) => Promise<unknown>;
+        applyPurge: (tx: unknown, plan: unknown, opts?: { performedBy?: Record<string, string>; auditDump?: unknown }) => Promise<unknown>;
       };
+      const { auditDumpFor } = await import('../../../../tests/integration/t402-s3-audit-dump');
+      const auditDump = await auditDumpFor(urlOf(dbName), '2026-12-31'); // T-402 S3 R15
       await s.begin(async (tx) => {
         const plan = await mod.planPurge(tx, '2026-12-31');
-        await mod.applyPurge(tx, plan, { performedBy: { [orgId]: personId } });
+        await mod.applyPurge(tx, plan, { performedBy: { [orgId]: personId }, auditDump });
       });
     } catch (e) {
       applyError = e;

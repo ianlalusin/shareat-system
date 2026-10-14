@@ -125,8 +125,9 @@ describe('dumpAuditLog (R15): a verified, hashed, data-only dump of every audit_
     const dataLines = list.stdout.split('\n').filter((l) => /TABLE DATA/.test(l));
     const leaves = await sql<{ relname: string }[]>`
       select c.relname from pg_inherits i join pg_class c on c.oid = i.inhrelid
-      where i.inhparent = 'public.audit_log'::regclass
-         or i.inhparent in (select inhrelid from pg_inherits where inhparent = 'public.audit_log'::regclass)`;
+      where c.relkind = 'r'
+        and (i.inhparent = 'public.audit_log'::regclass
+         or i.inhparent in (select inhrelid from pg_inherits where inhparent = 'public.audit_log'::regclass))`;
     expect(leaves.length, 'the lane DB has partitions to dump').toBeGreaterThanOrEqual(6);
     for (const l of leaves) {
       expect(dataLines.some((x) => x.includes(` ${l.relname} `)), `TABLE DATA entry for partition ${l.relname}`).toBe(true);

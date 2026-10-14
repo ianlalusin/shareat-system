@@ -46,11 +46,13 @@ export async function realPurge(
 ): Promise<void> {
   const { planPurge, applyPurge } = await import('../../packages/db/src/cutover/purge');
   const map = await performersForAllOrgs(sql, performedBy);
+  const { auditDumpFor } = await import('./t402-s3-audit-dump');
+  const auditDump = await auditDumpFor(process.env.TEST_DATABASE_URL!, PURGE_AS_OF); // T-402 S3 R15: the dump comes first
   const ROLLBACK = Symbol('rehearsal rollback');
   try {
     await sql.begin(async (tx) => {
       const plan = await planPurge(tx, PURGE_AS_OF);
-      await applyPurge(tx, plan, { performedBy: map });
+      await applyPurge(tx, plan, { performedBy: map, auditDump });
       if (opts.rollback) throw ROLLBACK;
     });
   } catch (e) {

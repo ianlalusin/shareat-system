@@ -1,4 +1,5 @@
 import { testItemCode } from '../../packages/domain/tests/integration/_fixtures/item-code';
+import { freshDumpDir } from './t402-s3-audit-dump';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
@@ -708,7 +709,7 @@ describe('R8 - scripts/cutover-purge.ts takes --by <personId> (test 9a, script h
   const dbName = decodeURIComponent(new URL(dbUrl).pathname.replace(/^\//, ''));
   const reportDir = mkdtempSync(join(tmpdir(), 't390-s2-purge-report-'));
   const run = (...extra: string[]) =>
-    spawnSync('npx', ['tsx', 'scripts/cutover-purge.ts', '--confirm-database', dbName, '--as-of', '2027-01-01', ...extra], {
+    spawnSync('npx', ['tsx', 'scripts/cutover-purge.ts', '--confirm-database', dbName, '--as-of', '2027-01-01', ...extra, '--dump-dir', freshDumpDir('t390')], {
       cwd: process.cwd(),
       env: { ...process.env, DATABASE_URL: dbUrl, CUTOVER_PURGE_REPORT_DIR: reportDir },
       encoding: 'utf8',
@@ -748,7 +749,7 @@ describe('R8 - scripts/cutover-purge.ts takes --by <personId> (test 9a, script h
     const { performersForAllOrgs } = await import('./t390-real-purge');
     const perOrg = await performersForAllOrgs(sql, f.adminId);
     // Hundreds of orgs overflow a Windows command line, so the list goes in via CUTOVER_PURGE_BY.
-    const r = spawnSync('npx', ['tsx', 'scripts/cutover-purge.ts', '--confirm-database', dbName, '--as-of', '2027-01-01', '--apply'], {
+    const r = spawnSync('npx', ['tsx', 'scripts/cutover-purge.ts', '--confirm-database', dbName, '--as-of', '2027-01-01', '--apply', '--dump-dir', freshDumpDir('t390')], {
       cwd: process.cwd(),
       env: { ...process.env, DATABASE_URL: dbUrl, CUTOVER_PURGE_REPORT_DIR: reportDir, CUTOVER_PURGE_BY: Object.values(perOrg).join(',') },
       encoding: 'utf8',

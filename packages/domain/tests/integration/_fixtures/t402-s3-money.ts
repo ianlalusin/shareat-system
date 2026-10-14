@@ -109,6 +109,7 @@ export interface AuditRow {
   recorded_at: Date;
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
+  redacted_keys: string[];
 }
 export const auditRows = (sql: postgres.Sql, orgId: string, action: string, entityId?: string) =>
   entityId
