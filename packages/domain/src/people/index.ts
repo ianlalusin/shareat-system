@@ -9,7 +9,7 @@
  * `resolveActor` (T-138), which is why `created_by` on an employment is worth anything at all —
  * v1's equivalent is a client-supplied parameter on ~24 server actions (landmine #17).
  */
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, can, type Actor } from '@shareat/auth';
 import {
   accessRepo,
   auditLogRepo,
@@ -262,19 +262,18 @@ export async function searchPersons(
     throw new EmploymentError('You have no store scope, so you may not search for staff to hire.');
   }
 
-  let lastError: unknown;
+  // T-402 S2 (A2): each store is asked with the non-logging `can()`; only when none passes is `authorize()` called ONCE
+  // on the first store, so a refused search logs one real denial and throws the usual refusal (like trade's authorizeEither).
   let authorized = false;
   for (const storeId of storeIds) {
-    try {
-      await authorize(tx, actor, 'enrol_staff', { storeId });
+    if (await can(tx, actor, 'enrol_staff', { storeId })) {
       authorized = true;
       break;
-    } catch (err) {
-      lastError = err;
     }
   }
   if (!authorized) {
-    throw lastError instanceof Error ? lastError : new EmploymentError('Not authorized to search staff.');
+    await authorize(tx, actor, 'enrol_staff', { storeId: storeIds[0]! });
+    throw new EmploymentError('Not authorized to search staff.');
   }
 
   return personsRepo.searchPersons(tx, { orgId: actor.orgId, query: input.query });

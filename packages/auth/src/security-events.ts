@@ -21,6 +21,7 @@ import { logger } from '@shareat/core/logger';
 
 const MAX_DENIAL_KEYS = 10_000;
 const MAX_LIST_EVENTS = 1_000;
+const DENIAL_CHUNK = 200;
 const HOUR_MS = 60 * 60 * 1000;
 const MANILA_OFFSET_MS = 8 * HOUR_MS; // Asia/Manila has no daylight saving
 
@@ -220,7 +221,6 @@ async function flushOnce(): Promise<void> {
   const orgs = new Set<string>([...takenDenials.map((d) => d.orgId), ...takenEvents.map((e) => e.orgId)]);
   for (const orgId of orgs) {
     try {
-      let seen: string[] = [];
       await withOrgPrincipal(orgId, async (tx) => {
         let failed = 0;
         for (const ev of takenEvents) {
@@ -231,12 +231,20 @@ async function flushOnce(): Promise<void> {
             failed++;
           }
         }
-        const r = await writeDenials(tx, orgId, takenDenials.filter((d) => d.orgId === orgId));
-        failed += r.failed;
-        seen = r.seen;
         if (failed > 0) logger.error({ orgId, failed }, 'security events could not be recorded');
       });
-      for (const k of seen) seenToday.add(k); // only once the transaction has committed
+      // Denials go in chunks of DENIAL_CHUNK keys, one transaction each: registerDenial's advisory locks last to the end
+      // of their transaction, so one big flush could otherwise exhaust the lock table.
+      const mine = takenDenials.filter((d) => d.orgId === orgId);
+      for (let i = 0; i < mine.length; i += DENIAL_CHUNK) {
+        const chunk = mine.slice(i, i + DENIAL_CHUNK);
+        let r: { failed: number; seen: string[] } = { failed: 0, seen: [] };
+        await withOrgPrincipal(orgId, async (tx) => {
+          r = await writeDenials(tx, orgId, chunk);
+        });
+        if (r.failed > 0) logger.error({ orgId, failed: r.failed }, 'security events could not be recorded');
+        for (const k of r.seen) seenToday.add(k); // only once the chunk's transaction has committed
+      }
     } catch (err) {
       logger.error({ err, orgId }, 'security events could not be recorded');
     }
