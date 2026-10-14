@@ -74,6 +74,8 @@ const switches = (w: World) => sql<{ source: string; reason: string | null; diff
 describe('capabilities: every action refuses a manager and staff, writes nothing, and says why in a sentence; an admin succeeds', () => {
   it('link / seed / unlink / switch', async () => {
     const { w, vFree, vCheese } = await scene('s5cap');
+    // a never-switched store is already on maps (switching to maps is a refused no-op), so put it on menu rules first
+    await rawSwitch(w, w.a.storeId, 'menu_rules', 'setup', 0);
     const cases: { name: string; form: FormData; rows: () => Promise<number>; ok: string; delta: number }[] = [
       { name: 'linkItemAction', form: fd({ storeId: w.a.storeId, posItemKey: 'water', variantId: vFree }), rows: () => n('menu_pos_v1_links', w), ok: 'Link saved.', delta: 1 },
       { name: 'seedLinkAction', form: fd({ storeId: w.a.storeId, posItemKey: 'cheese-plate', variantId: vCheese }), rows: () => n('menu_pos_v1_links', w), ok: 'Linked from the POS map.', delta: 1 },
