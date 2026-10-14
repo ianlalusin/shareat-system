@@ -70,7 +70,7 @@ const COMMANDS: Record<string, string> = {
   'Refund': 'books a refund',
   'Distribute': 'distributes money',
   'Write it off': 'writes an amount off',
-  'Write off to 6860': 'writes an amount off',
+  'Write off as bad debt': 'writes an amount off',
   'Recognise as other income (7350)': 'books income',
   'Book it': 'books a posting',
   'Transfer': 'moves stock',

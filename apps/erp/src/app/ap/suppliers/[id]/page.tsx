@@ -292,7 +292,7 @@ export default async function SupplierDetailPage({
             Name the open items this settles (bible §16.10) — check the ones this payment covers
             and how much of each, or press &ldquo;Auto-allocate&rdquo; to fill the empty boxes
             most-overdue-first (T-330) and edit from there. Paying more than allocated routes the
-            rest to 1240 (advance).
+            rest to advances to suppliers.
           </p>
           <AutoAllocatePaymentForm
             postAction={recordPaymentAction}

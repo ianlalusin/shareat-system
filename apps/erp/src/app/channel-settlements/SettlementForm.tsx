@@ -20,6 +20,7 @@
  * ⛔ **A deduction may be NEGATIVE and no input here has a `min`.** A promo-heavy day genuinely
  * returns money; v1 filtered to `amount > 0` and silently overstated fees by exactly the credit.
  */
+import { accountLabel } from '@/lib/account-label';
 import { useMemo, useState, useTransition } from 'react';
 import { Banner, Button, FormGrid, Input, Select } from '@/components/ui';
 import type { PreviewRequest, PreviewResponse } from './actions';
@@ -335,7 +336,7 @@ export function SettlementForm({
           {DEDUCTIONS.map((d) => (
             <label key={d.name} className={LABEL}>
               <span>
-                {d.label} <span className="font-mono text-neutral-400">{d.account}</span>
+                {d.label} <span className="font-mono text-neutral-400">{accountLabel(d.account)}</span>
               </span>
               <Input
                 name={d.name}
@@ -394,8 +395,8 @@ export function SettlementForm({
         {crossStoreLoan && (
           <Banner tone="warning">
             <strong>This loan belongs to another store.</strong> The paying store books{' '}
-            <span className="font-mono">1250 Due from related store</span> and the owning store{' '}
-            <span className="font-mono">2150 Due to related store</span>, so the pair nets to zero
+            <span>Due from related store</span> and the owning store{' '}
+            <span>Due to related store</span>, so the pair nets to zero
             across the group and neither store&apos;s books absorb the other&apos;s debt.
           </Banner>
         )}
@@ -539,10 +540,10 @@ export function SettlementPreviewFigures({ preview }: { preview: PreviewShape })
       {Number(preview.loanDeduction) !== 0 && <Row label="Loan docked" value={money(preview.loanDeduction)} />}
       <Row label="Banked" value={money(preview.netDeposited)} />
       {Number(preview.variance) !== 0 && (
-        <Row label="Shortfall → 6420 Channel settlement variance" value={money(preview.variance)} tone="warn" />
+        <Row label="Shortfall → Channel settlement variance" value={money(preview.variance)} tone="warn" />
       )}
       {Number(preview.settlementGain) !== 0 && (
-        <Row label="Excess → 7100 Platform settlement gain" value={money(preview.settlementGain)} tone="warn" />
+        <Row label="Excess → Platform settlement gain" value={money(preview.settlementGain)} tone="warn" />
       )}
       {reconciles && (
         <Row

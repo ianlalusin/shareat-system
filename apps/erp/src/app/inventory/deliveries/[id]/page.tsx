@@ -205,7 +205,7 @@ export default async function DeliveryPage({
               <h2 className="font-medium">Receive</h2>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
                 ⭐ This is the event: quantity moves, cost is layered FIFO, and the value posts to
-                the books — Dr 1310/1320/1330 · Cr 2120, one transaction. A line left short needs a
+                the books — the stock accounts (raw materials, supplies, prepared goods) go up and goods received, bill not yet in, goes up by the same amount, in one transaction. A line left short needs a
                 reason above; a line answered 0 is treated as not received.
               </p>
               <label className="mt-2 flex items-center gap-2 text-xs text-neutral-700 dark:text-neutral-300">
