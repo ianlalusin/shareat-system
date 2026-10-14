@@ -424,8 +424,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // links (kit-sized, resolved) and loses the old table's name link; FAIL 148 -> 147 (that link), UNRESOLVED 49 unmoved.
     // Verified by running the census (1154).
     // 1158 with S5 and S7 together (1149 + 4 + 5), T-387 S5-S7 combined 2026-10-11.
-    // 1158 (T-387 S5-S7 on main) + 12 (T-390 S5 cutover UI) = 1170; + 86 (T-401 S4 menu screens) = 1256.
-    expect(results.length).toBe(1256);
+    // 1158 (T-387 S5-S7 on main) + 12 (T-390 S5 cutover UI) = 1170; + 86 (T-401 S4 menu screens) = 1256; + 15 (T-401 S5 usage-source actions) = 1272.
+    expect(results.length).toBe(1272);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

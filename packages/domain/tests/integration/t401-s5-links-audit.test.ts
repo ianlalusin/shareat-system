@@ -17,7 +17,7 @@ afterAll(async () => {
 });
 
 const auditOf = (w: World, action: string) => sql<{ entity: string; store_id: string | null; after: Record<string, unknown> | null }[]>`
-  select entity, store_id, after from audit_log where org_id = ${w.orgId} and action = ${action} order by created_at`;
+  select entity, store_id, after from audit_log where org_id = ${w.orgId} and action = ${action} order by occurred_at`;
 
 describe('audit rows', () => {
   it('link and unlink each leave one row (menu.pos_v1_link / menu.pos_v1_unlink) naming the store and menu_pos_v1_links', async () => {

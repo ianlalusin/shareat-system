@@ -6,7 +6,7 @@
  * TESTER, not BUILDER. Real Postgres; rules, links and switches raw. Red today: the readout has no activeMenuRules and retire is allowed.
  *
  * Contract assumed: RetireReadout gains `activeMenuRules: number`; setItemStatus keeps its signature (tx, actor, {itemId, status}) and the
- * refusal is a RefusalError (a sentence) thrown from it; the actor is admin (approve_item). Nothing else in the readout changes.
+ * refusal is a RefusalError (a sentence) thrown from it; the actor is a super admin (approve_item is super-admin only), so a refusal here is the active-menu-rule one, never the capability (refusalOf rethrows an AuthorizationError). Nothing else in the readout changes.
  * Mutants: the readout counts pos_item_maps only; ignores the switch (counts at an unswitched store); ignores the link status; ignores
  * scheduled rules; ignores the recipe leg; retire still allowed while the count is > 0.
  */
@@ -21,7 +21,7 @@ afterAll(async () => {
 
 const DAYMS = 86_400_000;
 const readout = (w: World, itemId: string) => asOrg(w.orgId, (tx) => repoS5.itemsRepo.retireReadout(tx, w.orgId, itemId));
-const retire = (w: World, itemId: string) => refusalOf(() => asOrg(w.orgId, (tx) => s5.setItemStatus(tx, w.admin, { itemId, status: 'inactive' })));
+const retire = (w: World, itemId: string) => refusalOf(() => asOrg(w.orgId, (tx) => s5.setItemStatus(tx, w.superAdmin, { itemId, status: 'inactive' })));
 const statusOf = async (itemId: string) => (await sql<{ status: string }[]>`select status from items where id = ${itemId}`)[0]!.status;
 
 /** A variant with a direct rule on `itemId`, linked at store A. */

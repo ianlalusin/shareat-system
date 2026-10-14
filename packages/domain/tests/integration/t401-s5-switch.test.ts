@@ -15,7 +15,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { closeDb } from '@shareat/db';
 import { planOnly } from './t401-s5-golden-scenario';
-import { asOrg, count, makeDay, rawLink, rawMap, rawRule, rawVariant, refusalOf, repoS5, s5, sold, sql, world, type World } from './t401-s5-setup';
+import { asOrg, count, makeDay, rawLink, rawMap, rawRule, rawSwitch, rawVariant, refusalOf, repoS5, s5, sold, sql, world, type World } from './t401-s5-setup';
 
 afterAll(async () => {
   await closeDb();
@@ -111,6 +111,15 @@ describe('I24 -- no blind switch', () => {
     expect(cmp.differences.map((d) => d.posItemKey)).toContain('slow');
     const refusal = await refusalOf(() => run(w, (tx) => s5.switchUsageSource(w.admin, { storeId: w.a.storeId, source: 'menu_rules' }, tx)));
     expect(refusal, 'the switch is refused on a standing difference').not.toBeNull();
+  }, 180_000);
+
+  it('switching BACK to maps is allowed even while the store has a planned pull (ruling: the rollback is always one click)', async () => {
+    const { w, dayIds } = await sevenDays('i24f');
+    await rawSwitch(w, w.a.storeId, 'menu_rules', 'test', 0);
+    await planOnly(w, w.a.storeId, dayIds['2026-08-20']!, w.a.kitchen);
+    const back = await refusalOf(() => run(w, (tx) => s5.switchUsageSource(w.admin, { storeId: w.a.storeId, source: 'v1_pos_map' }, tx)));
+    expect(back).toBeNull();
+    expect(await sourceOf(w)).toBe('v1_pos_map');
   }, 180_000);
 
   it('capability: staff and manager are refused (switch_usage_source is admin and above), and nothing is written', async () => {

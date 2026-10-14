@@ -47,6 +47,7 @@ export interface World {
   a: StoreRooms;
   b: StoreRooms;
   admin: Actor;
+  superAdmin: Actor;
   manager: Actor;
   staff: Actor;
   coke: string; cheese: string; sauce: string; pork: string; rice: string;
@@ -73,6 +74,7 @@ export async function world(hint: string): Promise<World> {
     return p!.id;
   };
   const adminId = await person('Admin', 'admin');
+  const superId = await person('Super', 'super_admin');
   const managerId = await person('Manager', 'manager');
   const staffId = await person('Staffer', 'staff');
   const [t] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${orgId}, 'STK', 'Stockroom') returning id`;
@@ -120,6 +122,7 @@ export async function world(hint: string): Promise<World> {
     a: { storeId: storeA, kitchen: kitchenA, display: displayA, stockroom: stockroomA },
     b: { storeId: storeB, kitchen: kitchenB },
     admin: { personId: adminId, orgId },
+    superAdmin: { personId: superId, orgId },
     manager: { personId: managerId, orgId },
     staff: { personId: staffId, orgId },
     coke, cheese, sauce, pork, rice,
@@ -261,6 +264,10 @@ export const repoS5 = dbModule as unknown as {
 };
 
 export async function count(table: string, orgId: string): Promise<number> {
-  const [r] = await sql.unsafe<{ n: string }[]>(`select count(*)::text as n from ${table} where org_id = '${orgId}'`);
+  // pos_usage_pull_lines has no org_id: count through its pulls
+  const q = table === 'pos_usage_pull_lines'
+    ? `select count(*)::text as n from pos_usage_pull_lines l join pos_usage_pulls p on p.id = l.pull_id where p.org_id = '${orgId}'`
+    : `select count(*)::text as n from ${table} where org_id = '${orgId}'`;
+  const [r] = await sql.unsafe<{ n: string }[]>(q);
   return Number(r!.n);
 }
