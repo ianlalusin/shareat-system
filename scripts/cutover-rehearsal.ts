@@ -3,13 +3,13 @@
  * docs/tasks/394-purge-and-opening-rehearsal.md s5.1.
  *
  *   start | migrate | predump | purge --by <personId> | mark <step> start|end [--by] | app-env-check --env-file <path> |
- *   rollback-check --against <ENV_NAME>        (verify / report arrive with S2)
+ *   rollback-check --against <ENV_NAME> | verify [--after-post] | report [--out-dir <dir>]   (verify / report: T-394 S2)
  *
  * Every subcommand except app-env-check re-runs the target guards (R3) BEFORE the first write; `start` and `purge` also require that
  * no other session is connected. The tool has no purge SQL: `purge` runs the real scripts/cutover-purge.ts three times.
  * Exit codes: 0 pass, 1 a check failed (named), 2 refused by a guard. Nothing printed here carries a connection string.
  */
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { config } from 'dotenv';
 import postgres from 'postgres';
@@ -27,6 +27,7 @@ import {
   snapshotStart,
 } from './lib/rehearsal/checks';
 import { KEEP_FROM, realSpawn, runMigrateChild, runPredumpChild, runPurgeChildren, type ChildrenResult } from './lib/rehearsal/children';
+import { CUTOVER_CLASSIFICATION } from '../packages/db/src/cutover/classification';
 import { checkTargetGuards, databaseRefusals, resolveTargetUrl } from './lib/rehearsal/guards';
 import {
   durationOf,
@@ -35,10 +36,22 @@ import {
   newJournal,
   newestManifest,
   readJournal,
+  recordCheck,
   rehearsalDir,
   writeJournal,
+  writeSecret,
   type Journal,
 } from './lib/rehearsal/journal';
+import { buildReports, reportFileName } from './lib/rehearsal/report';
+import {
+  checkAppRole,
+  checkC2C5,
+  checkFreeze,
+  checkOpeningSet,
+  checkSequencesReset,
+  checkTerminalActivity,
+  checkTieOutAll,
+} from './lib/rehearsal/verify';
 
 const env = process.env;
 
@@ -127,8 +140,8 @@ async function main(argv: string[]): Promise<void> {
     say('app-env-check: pass (Firebase for sign-in only)');
     return;
   }
-  if (!['start', 'migrate', 'predump', 'purge', 'mark', 'rollback-check'].includes(sub ?? '')) {
-    return fail('usage: cutover-rehearsal <start|migrate|predump|purge --by <id>|mark <step> start|end|app-env-check --env-file <p>|rollback-check --against <ENV>> --confirm-database <db>');
+  if (!['start', 'migrate', 'predump', 'purge', 'mark', 'rollback-check', 'verify', 'report'].includes(sub ?? '')) {
+    return fail('usage: cutover-rehearsal <start|migrate|predump|purge --by <id>|mark <step> start|end|app-env-check --env-file <p>|rollback-check --against <ENV>|verify [--after-post]|report [--out-dir <d>]> --confirm-database <db>');
   }
 
   const { url, database } = targetOf(argv);
@@ -219,7 +232,9 @@ async function main(argv: string[]): Promise<void> {
         childVerdict(r, 'purge');
       });
       const j = readJournal(dir, database) ?? j0;
-      j.purgeCommittedAt = new Date().toISOString();
+      // the purge commit instant is the DATABASE's clock, read after the --apply child committed (not the tool's)
+      const [clk] = await sql<{ t: Date }[]>`select clock_timestamp() as t`;
+      j.purgeCommittedAt = (clk?.t ?? new Date()).toISOString();
       writeJournal(dir, j);
       const post = await checkPostPurge(sql, start, { conversionDate: KEEP_FROM });
       const noC2 = await sql<{ id: string }[]>`
@@ -239,6 +254,7 @@ async function main(argv: string[]): Promise<void> {
     const step = argv[1];
     const phase = argv[2];
     if (!step || step.startsWith('--') || (phase !== 'start' && phase !== 'end')) return fail('usage: mark <step> start|end [--by <personId>]');
+    if (!/^[A-Za-z0-9_.-]{1,32}$/.test(step)) return refuse('the step code must be 1-32 characters from A-Z a-z 0-9 _ . -');
     const by = flagValue(argv, '--by');
     const sql = await connect(url);
     try {
@@ -255,6 +271,123 @@ async function main(argv: string[]): Promise<void> {
     writeJournal(dir, j);
     const s = j.steps.find((x) => x.code === step);
     say(`mark ${step} ${phase}: ${s ? String(durationOf(s)) : ''}`);
+    return;
+  }
+
+  if (sub === 'verify') {
+    const afterPost = argv.includes('--after-post');
+    const j = requireJournal(dir, database);
+    const sql = await connect(url);
+    const results: { name: string; ok: boolean; lines: string[] }[] = [];
+    const add = (name: string, ok: boolean, lines: string[]): void => {
+      results.push({ name, ok, lines: lines.length > 0 ? lines : [ok ? 'ok' : 'failed'] });
+    };
+    try {
+      const startAt = (j.start as NonNullable<Journal['start']>).at;
+      if (!afterPost) {
+        const cov = await checkFiscalCoverage(sql, { runAt: new Date(), conversionDate: KEEP_FROM });
+        add('fiscal_coverage', cov.ok, cov.failures.map((f) => f.reason));
+        const seq = await checkSequencesReset(sql);
+        add('sequences_reset', seq.ok, seq.failures.map((f) => f.detail));
+        const role = await checkAppRole(sql);
+        add('app_role', role.ok, [role.message]);
+      } else {
+        const set = await checkOpeningSet(sql, KEEP_FROM);
+        add('opening_set', set.ok, set.failures.map((f) => f.detail));
+        const c25 = await checkC2C5(sql);
+        add('c2_c5_recorded', c25.ok, c25.missing.map((m) => `organisation ${m.orgId} has no ${m.step} row in cutover_steps`));
+        if (!j.purgeCommittedAt) {
+          add('freeze', false, ['no purge commit time is recorded in the journal: run "purge" first']);
+        } else {
+          const fr = await checkFreeze(sql, j.purgeCommittedAt);
+          add('freeze', fr.ok, fr.failures.map((f) => f.detail));
+        }
+      }
+      const tie = await checkTieOutAll(sql);
+      add('tie_out', tie.ok, tie.failures.flatMap((f) => f.sentences));
+      const term = await checkTerminalActivity(sql, startAt);
+      add('terminal_activity', term.ok, term.failures.map((f) => `${f.table}: ${f.detail}`));
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+    const j2 = readJournal(dir, database) ?? j;
+    const now = new Date();
+    for (const r of results) recordCheck(j2, r.name, r.ok, r.lines.join(' | '), now);
+    writeJournal(dir, j2);
+    // stdout carries names and counts only: sentences (stores, amounts) live in the journal and the full report
+    for (const r of results) say(`${r.ok ? 'PASS' : 'FAIL'} ${r.name}${r.ok ? '' : `: ${r.lines.length} finding(s)`}`);
+    if (results.some((r) => !r.ok)) return fail(`verify${afterPost ? ' --after-post' : ''}: ${results.filter((r) => !r.ok).map((r) => r.name).join(', ')}`);
+    say(`verify${afterPost ? ' --after-post' : ''}: pass`);
+    return;
+  }
+
+  if (sub === 'report') {
+    const j = requireJournal(dir, database);
+    const outDir = flagValue(argv, '--out-dir') ?? 'docs/reviews';
+    const sql = await connect(url);
+    let term: Awaited<ReturnType<typeof checkTerminalActivity>>;
+    let classCounts: { class: string; tables: number; rows: number }[] = [];
+    let accountTotals: { orgId: string; code: string; debit: string; credit: string }[] = [];
+    let migrations: string[] = [];
+    let people: { id: string; displayName: string }[] = [];
+    try {
+      term = await checkTerminalActivity(sql, (j.start as NonNullable<Journal['start']>).at);
+      const existing = new Set((await sql<{ t: string }[]>`select table_name::text as t from information_schema.tables where table_schema = 'public'`).map((r) => r.t));
+      const byClass = new Map<string, { tables: number; rows: number }>();
+      for (const [table, entry] of Object.entries(CUTOVER_CLASSIFICATION)) {
+        if (!existing.has(table)) continue;
+        const [c] = await sql.unsafe<{ n: number }[]>(`select count(*)::int as n from "${table.replace(/"/g, '""')}"`);
+        const k = byClass.get(entry.class) ?? { tables: 0, rows: 0 };
+        k.tables += 1;
+        k.rows += c?.n ?? 0;
+        byClass.set(entry.class, k);
+      }
+      classCounts = [...byClass.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([c, v]) => ({ class: c, ...v }));
+      accountTotals = (
+        await sql<{ org: string; code: string; d: string; c: string }[]>`
+          select org_id::text as org, account_code as code, sum(debit_total)::text as d, sum(credit_total)::text as c
+          from v_trial_balance group by org_id, account_code order by org_id, account_code`
+      ).map((r) => ({ orgId: r.org, code: r.code, debit: r.d, credit: r.c }));
+      const [m] = await sql<{ n: number }[]>`select count(*)::int as n from drizzle.__drizzle_migrations`;
+      const tags = (JSON.parse(readFileSync('packages/db/migrations/meta/_journal.json', 'utf8')) as { entries: { tag: string }[] }).entries.map((e) => e.tag);
+      migrations = tags.slice(0, m?.n ?? tags.length);
+      const ids = [...new Set(j.steps.map((s) => s.by).filter((x): x is string => !!x))];
+      if (ids.length > 0) {
+        people = (await sql<{ id: string; n: string }[]>`select id::text as id, display_name::text as n from persons where id::text = any(${ids})`).map((p) => ({ id: p.id, displayName: p.n }));
+      }
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+    const now = new Date();
+    const j2 = readJournal(dir, database) ?? j;
+    recordCheck(j2, 'terminal_activity', term.ok, term.failures.map((f) => `${f.table}: ${f.detail}`).join(' | ') || 'ok', now);
+    writeJournal(dir, j2);
+    const { sanitised, full } = buildReports({
+      database,
+      generatedAt: now.toISOString(),
+      steps: j2.steps,
+      checks: (j2.checks ?? []).map((c) => ({ name: c.name, ok: c.ok, detail: c.detail })),
+      classCounts,
+      accountTotals,
+      migrations,
+      people,
+    });
+    mkdirSync(outDir, { recursive: true });
+    const sanitisedPath = path.join(outDir, reportFileName(now.toISOString()));
+    writeFileSync(sanitisedPath, sanitised, 'utf8');
+    const fullPath = path.join(dir, `${database}.full-report.md`);
+    writeSecret(fullPath, full);
+    say(`report: sanitised ${sanitisedPath}; full ${fullPath}`);
+    for (const f of term.failures) say(`FAIL terminal_activity: ${f.table}: ${f.detail}`);
+    if (!term.ok) return fail('report: a terminal was touched after start (R11)');
+    const EXPECTED = ['tie_out', 'app_role', 'terminal_activity', 'fiscal_coverage', 'sequences_reset', 'opening_set', 'c2_c5_recorded', 'freeze'];
+    const have = new Map((j2.checks ?? []).map((c) => [c.name, c.ok]));
+    const failed = [...have].filter(([, ok]) => !ok).map(([n]) => n);
+    const absent = EXPECTED.filter((n) => !have.has(n));
+    if (failed.length > 0 || absent.length > 0) {
+      return fail(`report: ${failed.length > 0 ? `failed checks: ${failed.join(', ')}. ` : ''}${absent.length > 0 ? `checks not run: ${absent.join(', ')}` : ''}`);
+    }
+    say('report: written');
     return;
   }
 

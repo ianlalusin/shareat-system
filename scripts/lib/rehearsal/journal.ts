@@ -3,7 +3,7 @@
  * the copy for the purge to treat as data. A step with no end mark is reported NOT TIMED, never as zero.
  * docs/tasks/394-purge-and-opening-rehearsal.md s4 R9, s6 I12.
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { StartSnapshot } from './checks';
@@ -18,6 +18,14 @@ export interface JournalStep {
   result?: string;
 }
 
+/** S2: one verify/report check outcome. `detail` is FREE TEXT (may name a store or an amount): it goes to the full report only. */
+export interface JournalCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+  at: string;
+}
+
 export interface Journal {
   database: string;
   openedAt: string;
@@ -26,6 +34,8 @@ export interface Journal {
   predump?: { dir: string; manifestPath: string };
   /** The instant the --apply child exited (the purge commit), for the R13 freeze check in S2. */
   purgeCommittedAt?: string;
+  /** S2: the latest outcome of each named check (a re-run replaces the same name). */
+  checks?: JournalCheck[];
 }
 
 /** REHEARSAL_DIR, default the OS temp dir; never inside the repo. Throws when it is. */
@@ -45,9 +55,25 @@ export function readJournal(dir: string, database: string): Journal | null {
   return existsSync(p) ? (JSON.parse(readFileSync(p, 'utf8')) as Journal) : null;
 }
 
+/** Journal and full report may name people, stores and amounts: dir 0700, file 0600 (best effort where the OS has no modes). */
+export function writeSecret(file: string, text: string): void {
+  const d = path.dirname(file);
+  mkdirSync(d, { recursive: true, mode: 0o700 });
+  try {
+    chmodSync(d, 0o700);
+  } catch {
+    /* no modes on this OS */
+  }
+  writeFileSync(file, text, { encoding: 'utf8', mode: 0o600 });
+  try {
+    chmodSync(file, 0o600);
+  } catch {
+    /* no modes on this OS */
+  }
+}
+
 export function writeJournal(dir: string, j: Journal): void {
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(journalPath(dir, j.database), JSON.stringify(j, null, 2) + '\n', 'utf8');
+  writeSecret(journalPath(dir, j.database), JSON.stringify(j, null, 2) + '\n');
 }
 
 export function newJournal(database: string, now: Date): Journal {
@@ -69,10 +95,18 @@ export function markEnd(j: Journal, code: string, now: Date, result?: string, by
   return true;
 }
 
+/** Records a check outcome, replacing an earlier one of the same name. */
+export function recordCheck(j: Journal, name: string, ok: boolean, detail: string, now: Date): void {
+  j.checks = (j.checks ?? []).filter((c) => c.name !== name);
+  j.checks.push({ name, ok, detail, at: now.toISOString() });
+}
+
 /** Whole seconds from the marks, or 'NOT TIMED' when the end mark is missing (never zero). */
-export function durationOf(s: JournalStep): number | 'NOT TIMED' {
+export function durationOf(s: JournalStep): number | 'NOT TIMED' | 'NOT TIMED (end before start)' {
   if (!s.endedAt) return 'NOT TIMED';
-  return Math.max(0, Math.round((Date.parse(s.endedAt) - Date.parse(s.startedAt)) / 1000));
+  const ms = Date.parse(s.endedAt) - Date.parse(s.startedAt);
+  if (!(ms >= 0)) return 'NOT TIMED (end before start)';
+  return Math.round(ms / 1000);
 }
 
 /** The newest `*.manifest.json` anywhere under `dir`, or null. */
