@@ -23,9 +23,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  *   - checkFiscalCoverage(sql, { runAt: Date, conversionDate: string }): Promise<{ ok: boolean; failures: { orgId: string;
  *     firstMissingMonth: string /* YYYY-MM *\/; reason: string }[] }>. Required months: the conversion month through (Manila
  *     business month of runAt) + 11, each covered by an `open` period; months BEFORE the conversion month are not required (R6).
- *   - snapshotStart(sql): Promise<StartSnapshot> holding `keepCounts: Record<'persons'|'accounts'|'stores'|'opening_counts', number>`.
+ *   - snapshotStart(sql): Promise<StartSnapshot> holding `keepCounts: Record<'persons'|'accounts'|'stores'|'opening_counts', number>` and
+ *     `keepHashes: Record<string, string>` (md5 of the rows' text, per KEEP-class table, as purge.ts's tableMd5).
  *   - checkPostPurge(sql, start, { conversionDate }): Promise<{ ok: boolean; failures: { check: string; detail: string }[] }>
- *     with check ids 'purge_tables_empty' | 'keep_counts_unchanged' | 'trial_balance_zero' | 'no_pre_conversion_periods'.
+ *     with check ids 'purge_tables_empty' | 'keep_counts_unchanged' | 'trial_balance_zero' | 'no_pre_conversion_periods' | 'keep_content_unchanged'.
  */
 
 config({ path: '.env.local' });
@@ -36,6 +37,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { checkFiscalCoverage, checkLiveness, checkPostPurge, snapshotStart } from '../../scripts/lib/rehearsal/checks';
+import { CUTOVER_CLASSIFICATION } from '../../packages/db/src/cutover/classification';
 import { PURGE_AS_OF, performersForAllOrgs, realPurge } from './t390-real-purge';
 
 const sql = postgres(url, { max: 1, onnotice: () => {} });
@@ -153,6 +155,7 @@ describe('T-394 S1 I5 - after the real purge on the copy', () => {
   let start: Awaited<ReturnType<typeof snapshotStart>>;
   let cash: string;
   let income: string;
+  let preCutoverNonC2 = 0;
 
   beforeAll(async () => {
     ({ orgId, personId } = await mkOrg('purge'));
@@ -179,6 +182,7 @@ describe('T-394 S1 I5 - after the real purge on the copy', () => {
     });
     // every org needs a person BEFORE the snapshot, or the helper's own insert would change the persons count
     await performersForAllOrgs(sql, personId);
+    preCutoverNonC2 = (await sql<{ n: number }[]>`select count(*)::int as n from cutover_steps where step_code <> 'C2'`)[0]!.n;
     start = await snapshotStart(sql);
     await realPurge(sql, personId);
   }, 600_000);
@@ -190,6 +194,27 @@ describe('T-394 S1 I5 - after the real purge on the copy', () => {
     expect(start.keepCounts.persons).toBeGreaterThanOrEqual(1);
     expect(start.keepCounts.accounts).toBeGreaterThanOrEqual(2);
     expect(start.keepCounts.stores).toBeGreaterThanOrEqual(1);
+  });
+
+  it('5.a2 snapshotStart holds an md5 of every KEEP-class table, and a correct purge leaves each identical', async () => {
+    const keep = Object.entries(CUTOVER_CLASSIFICATION)
+      .filter(([, e]) => (e as { class: string }).class === 'keep')
+      .map(([t]) => t)
+      .filter((t) => t !== 'cutover_steps'); // the purge itself writes its C2 rows here, after its own byte-identical check
+    expect(keep.length).toBeGreaterThan(10);
+    for (const t of keep) expect(typeof start.keepHashes[t], `keepHashes.${t}`).toBe('string');
+    for (const t of keep) {
+      const [row] = await sql.unsafe<{ h: string }[]>(`select md5(coalesce(string_agg(x::text, '' order by x::text), '')) as h from "${t}" x`);
+      expect(row!.h, `${t} content changed through the purge`).toBe(start.keepHashes[t]);
+    }
+  });
+
+  it('5.a3 cutover_steps gained exactly the C2 rows, one per organization, and nothing else changed in it', async () => {
+    const orgs = (await sql<{ n: number }[]>`select count(*)::int as n from organizations`)[0]!.n;
+    const c2 = (await sql<{ n: number }[]>`select count(*)::int as n from cutover_steps where step_code = 'C2'`)[0]!.n;
+    const total = (await sql<{ n: number }[]>`select count(*)::int as n from cutover_steps`)[0]!.n;
+    expect(c2).toBe(orgs);
+    expect(total - c2, 'rows other than C2 must be the pre-purge ones').toBe(preCutoverNonC2);
   });
 
   it('5.b a correct purge passes every post-condition', async () => {
@@ -210,6 +235,18 @@ describe('T-394 S1 I5 - after the real purge on the copy', () => {
       expect(r2.failures.map((f) => f.check)).toContain('keep_counts_unchanged');
     } finally {
       await sql`delete from persons where id = ${extra!.id}`;
+    }
+  });
+
+  it('5.c2 KEEP table CONTENT is compared, not only counts: a renamed account fails keep_content_unchanged', async () => {
+    await sql`update accounts set name = name || ' (edited)' where id = ${cash}`;
+    try {
+      const r = await checkPostPurge(sql, start, { conversionDate: PURGE_AS_OF });
+      expect(r.ok).toBe(false);
+      expect(r.failures.map((f) => f.check)).toContain('keep_content_unchanged');
+      expect(r.failures.map((f) => f.check)).not.toContain('keep_counts_unchanged');
+    } finally {
+      await sql`update accounts set name = replace(name, ' (edited)', '') where id = ${cash}`;
     }
   });
 
@@ -286,13 +323,13 @@ describe('T-394 S1 I7a / R8 / DEF-641 - cutover-purge: --as-of is explicit for -
   it('7a.a --apply without --as-of is refused, naming --as-of', () => {
     const r = purgeCli(['--confirm-database', dbName, '--apply', '--by', NOBODY]);
     expect(r.status).not.toBe(0);
-    expect(r.stderr).toMatch(/--as-of/);
+    expect(r.stderr).toMatch(/^REFUSED\..*--as-of.*$/m);
   });
 
   it('7a.b --rehearse without --as-of is refused, naming --as-of', () => {
     const r = purgeCli(['--confirm-database', dbName, '--rehearse']);
     expect(r.status).not.toBe(0);
-    expect(r.stderr).toMatch(/--as-of/);
+    expect(r.stderr).toMatch(/^REFUSED\..*--as-of.*$/m);
   });
 
   it('7a.c a dry run at 2026-12-31T23:30Z (07:30 Manila, 1 Jan 2027) defaults to as-of 2027-01-01', () => {

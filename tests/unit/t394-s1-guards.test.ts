@@ -112,6 +112,23 @@ describe('T-394 S1 I1 - target guards refuse before any write', () => {
     expect(check({ confirmDatabase: TARGET_DB.toUpperCase() }).ok).toBe(false);
   });
 
+  it('1.h host tricks that reach a pinned host are refused: trailing dot, comma list, ?host= override, ?hostaddr=', () => {
+    const tricks: [string, string][] = [
+      ['trailing dot', `postgresql://tester:${PW}@${PINNED}.:25060/${TARGET_DB}`],
+      ['trailing dot, upper case', `postgresql://tester:${PW}@${PINNED.toUpperCase()}.:25060/${TARGET_DB}`],
+      ['comma host list (pinned second)', `postgresql://tester:${PW}@localhost,${PINNED}:25060/${TARGET_DB}`],
+      ['comma host list (pinned first)', `postgresql://tester:${PW}@${PINNED},localhost:25060/${TARGET_DB}`],
+      ['?host= override', `postgresql://tester:${PW}@localhost:5435/${TARGET_DB}?host=${PINNED}`],
+      ['?host= override, upper case', `postgresql://tester:${PW}@localhost:5435/${TARGET_DB}?sslmode=require&host=${PINNED.toUpperCase()}`],
+      ['?hostaddr= override', `postgresql://tester:${PW}@localhost:5435/${TARGET_DB}?hostaddr=10.0.0.5`],
+    ];
+    for (const [label, u] of tricks) {
+      const r = check({ url: u });
+      expect(r.ok, `${label} must be refused`).toBe(false);
+      expect(JSON.stringify(r)).not.toContain(PW);
+    }
+  });
+
   it('1.g a refusal never carries the connection string or its password', () => {
     const r = check({ url: url(PINNED, 'shareat_system', 25060), confirmDatabase: 'nope' });
     expect(r.ok).toBe(false);
@@ -168,6 +185,15 @@ describe('T-394 S1 I10c - app-env-check (R11: Firebase for sign-in only)', () =>
   it('10c.2 a whitespace-only or empty-quoted value is blank, not set; a comment line is not a setting', () => {
     const text = ['FIREBASE_PROJECT_ID=p', 'FIREBASE_STORAGE_BUCKET=   ', 'FIREBASE_SERVICE_ACCOUNT_KEY=""', "POS_API_KEY=''", '# FIREBASE_SERVICE_ACCOUNT_KEY_FILE=/x.json'].join('\n');
     expect(checkAppEnvText(text)).toEqual({ ok: true, offending: [] });
+  });
+
+  it('10c.4 an inline comment after an empty value leaves it UNSET; after a real value it is still SET', () => {
+    expect(checkAppEnvText('FIREBASE_STORAGE_BUCKET= #comment')).toEqual({ ok: true, offending: [] });
+    expect(checkAppEnvText('POS_API_URL=   # nothing here')).toEqual({ ok: true, offending: [] });
+    expect(checkAppEnvText('FIREBASE_SERVICE_ACCOUNT_KEY="" # none')).toEqual({ ok: true, offending: [] });
+    const r = checkAppEnvText('FIREBASE_STORAGE_BUCKET=real-bucket #comment');
+    expect(r.ok).toBe(false);
+    expect(r.offending).toEqual(['FIREBASE_STORAGE_BUCKET']);
   });
 
   it('10c.3 a quoted real value is set', () => {

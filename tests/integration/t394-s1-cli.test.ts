@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { config } from 'dotenv';
@@ -33,10 +33,17 @@ if (!['localhost', '127.0.0.1'].includes(new URL(laneUrl).hostname)) throw new E
 
 import { buildPgArgs, resolvePgBin, runTool } from '../../scripts/lib/backup/pg-tools';
 
-const TARGET_DB = 'shareat_rehearsal_20991113';
-const AGAINST_DB = 'shareat_rehearsal_20991115';
-const DECOY_DB = 'shareat_rehearsal_20991199';
+// Per-run random, distinct 2099MMDD names (month/day digits that need not be a real date): still ^shareat_rehearsal_[0-9]{8}$, far-future,
+// never a real rehearsal's, and this run drops only the ones IT created.
+const suffixes = new Set<string>();
+while (suffixes.size < 3) suffixes.add(String(1000 + Math.floor(Math.random() * 9000)));
+const [sfxA, sfxB, sfxC] = [...suffixes] as [string, string, string];
+const TARGET_DB = `shareat_rehearsal_2099${sfxA}`;
+const AGAINST_DB = `shareat_rehearsal_2099${sfxB}`;
+const DECOY_DB = `shareat_rehearsal_2099${sfxC}`;
 const OWN_DBS = [TARGET_DB, AGAINST_DB, DECOY_DB] as const;
+const created: string[] = [];
+const transcript: string[] = [];
 const urlFor = (db: string): string => {
   const u = new URL(laneUrl);
   u.pathname = `/${db}`;
@@ -65,7 +72,9 @@ function cli(sub: string[], envOver: Record<string, string | undefined> = {}) {
     timeout: 580_000,
     env: env as NodeJS.ProcessEnv,
   });
-  return { status: r.status, text: `${r.stdout ?? ''}\n${r.stderr ?? ''}` };
+  const text = `${r.stdout ?? ''}\n${r.stderr ?? ''}`;
+  transcript.push(text);
+  return { status: r.status, text };
 }
 const withDb = (sub: string, db = TARGET_DB, more: string[] = []) => [sub, '--confirm-database', db, ...more];
 
@@ -78,13 +87,16 @@ function walk(root: string): string[] {
 }
 
 async function dropOwn(): Promise<void> {
-  for (const db of OWN_DBS) await admin.unsafe(`drop database if exists "${db}" with (force)`);
+  for (const db of created.splice(0)) await admin.unsafe(`drop database if exists "${db}" with (force)`);
 }
 
 beforeAll(async () => {
   dir = mkdtempSync(path.join(tmpdir(), 't394-s1-cli-'));
-  await dropOwn();
-  for (const db of OWN_DBS) await admin.unsafe(`create database "${db}"`);
+  // plain CREATE: a name that already exists is a refusal to continue, never a drop of someone else's database
+  for (const db of OWN_DBS) {
+    await admin.unsafe(`create database "${db}"`);
+    created.push(db);
+  }
 }, 120_000);
 
 afterAll(async () => {
@@ -194,6 +206,38 @@ describe('T-394 S1 I3, I4, I5 - start / predump / purge on the migrated copy', (
     }
   }, 300_000);
 
+  it('3.cli2 when the DEF-585 coverage check fails, start exits 1 and a following purge is refused (exit 2) - no purge after a failed start', async () => {
+    const s = postgres(urlFor(TARGET_DB), { max: 1, onnotice: () => {} });
+    let orgId = '';
+    try {
+      const [o] = await s<{ id: string }[]>`insert into organizations (name, code) values ('No Periods Org', 't394noper') returning id`;
+      orgId = o!.id;
+    } finally {
+      await s.end({ timeout: 5 });
+    }
+    try {
+      const st = cli(withDb('start'));
+      expect(st.status, st.text.slice(-500)).toBe(1);
+      expect(st.text).toContain(orgId);
+      const p = cli(withDb('purge', TARGET_DB, ['--by', personId]));
+      expect(p.status, p.text.slice(-500)).toBe(2);
+      const c = postgres(urlFor(TARGET_DB), { max: 1, onnotice: () => {} });
+      try {
+        const n = (await c<{ n: number }[]>`select count(*)::int as n from cutover_steps where step_code = 'C2'`)[0]!.n;
+        expect(n, 'a refused purge writes nothing').toBe(0);
+      } finally {
+        await c.end({ timeout: 5 });
+      }
+    } finally {
+      const d = postgres(urlFor(TARGET_DB), { max: 1, onnotice: () => {} });
+      try {
+        await d`delete from organizations where id = ${orgId}`;
+      } finally {
+        await d.end({ timeout: 5 });
+      }
+    }
+  }, 300_000);
+
   it('4.cli start passes on the idle copy, opens the journal in REHEARSAL_DIR, exit 0', () => {
     const r = cli(withDb('start'));
     expect(r.status, r.text.slice(-600)).toBe(0);
@@ -260,5 +304,22 @@ describe('T-394 S1 I11 - rollback-check restores nothing itself; it compares the
     expect(cli(['rollback-check', '--confirm-database', TARGET_DB, '--against', 'T394_AGAINST_URL'], { T394_AGAINST_URL: urlFor(TARGET_DB) }).status).toBe(2);
     expect(cli(['rollback-check', '--confirm-database', TARGET_DB, '--against', 'T394_AGAINST_URL'], { T394_AGAINST_URL: urlFor(`${AGAINST_DB}_prod`) }).status).toBe(2);
     expect(cli(['rollback-check', '--confirm-database', TARGET_DB, '--against', 'T394_AGAINST_URL'], { T394_AGAINST_URL: `postgresql://u:p@${PINNED}:25060/${AGAINST_DB}` }).status).toBe(2);
+  });
+});
+
+describe('T-394 S1 audit - no secrets in any output or in the journal', () => {
+  it('no connection string and no password appears in any stdout/stderr this file produced, nor in the journal JSON', () => {
+    const urls = [urlFor(TARGET_DB), urlFor(AGAINST_DB), urlFor(DECOY_DB), laneUrl];
+    const password = decodeURIComponent(new URL(laneUrl).password);
+    const journal = walk(dir)
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => readFileSync(f, 'utf8'));
+    const haystack = [...transcript, ...journal];
+    expect(transcript.length).toBeGreaterThan(10);
+    for (const h of haystack) {
+      for (const u of urls) expect(h.includes(u), 'a full connection string leaked').toBe(false);
+      // a short or dictionary-word password would false-positive on ordinary text; the full-URL check above still holds
+      if (password.length >= 8) expect(h.includes(password), 'the database password leaked').toBe(false);
+    }
   });
 });

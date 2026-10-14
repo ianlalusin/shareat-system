@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { CUTOVER_CLASSIFICATION } from '../../packages/db/src/cutover/classification';
 import { runMigrateChild, runPredumpChild, runPurgeChildren, type SpawnCall } from '../../scripts/lib/rehearsal/children';
@@ -33,7 +35,11 @@ const PARENT = {
   DATABASE_URL: DECOY_APP,
   SYSTEM_DATABASE_URL: DECOY_SYS,
   TEST_DATABASE_URL: DECOY_TEST,
+  BACKUP_HEARTBEAT_URL: 'https://hc-ping.example/backup-uuid',
+  SPACES_KEY: 'spaces-key-123',
+  SPACES_SECRET: 'spaces-secret-456',
 };
+const PRODUCTION_MONITOR_KEYS = ['BACKUP_HEARTBEAT_URL', 'SPACES_KEY', 'SPACES_SECRET'] as const;
 const KEEP_FROM = (CUTOVER_CLASSIFICATION.fiscal_periods as unknown as { keepFrom: string }).keepFrom;
 const BY = '018f0000-0000-7000-8000-000000000001';
 
@@ -109,6 +115,23 @@ describe('T-394 S1 I4 - purge runs the real CLI three times, in order, on the gu
   });
 });
 
+describe('T-394 S1 audit - a rehearsal child never inherits production monitor or storage credentials', () => {
+  it('a1. BACKUP_HEARTBEAT_URL, SPACES_KEY and SPACES_SECRET are absent from the env of every purge, migrate and predump child', async () => {
+    const all: SpawnCall[] = [];
+    for (const run of [
+      async (spawn: (c: SpawnCall) => Promise<{ code: number }>) => runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, spawn, liveness: live }),
+      async (spawn: (c: SpawnCall) => Promise<{ code: number }>) => runMigrateChild({ env: PARENT, confirmDatabase: DB, spawn }),
+      async (spawn: (c: SpawnCall) => Promise<{ code: number }>) => runPredumpChild({ env: PARENT, confirmDatabase: DB, dir: 'C:/x', spawn }),
+    ]) {
+      const f = fake();
+      await run(f.spawn);
+      all.push(...f.calls);
+    }
+    expect(all).toHaveLength(5);
+    for (const c of all) for (const k of PRODUCTION_MONITOR_KEYS) expect(c.env[k] ?? '', `${k} must not reach a child (unset or blank; blank stops dotenv re-supplying it from .env.local)`).toBe('');
+  });
+});
+
 describe('T-394 S1 I3 - a live session on the target makes purge refuse', () => {
   it('3.a purge consults liveness before any child, once, and a refusal spawns nothing (exit 2), naming the session', async () => {
     const f = fake();
@@ -127,6 +150,38 @@ describe('T-394 S1 I3 - a live session on the target makes purge refuse', () => 
     expect(f.calls).toHaveLength(0);
     expect(r).toMatchObject({ ok: false, code: 2, ran: 0 });
     expect(JSON.stringify(r)).toContain('erp-9008-dev');
+  });
+
+  it('3.c liveness is re-checked before EVERY child: a session that connects after the dry run stops the run before --rehearse', async () => {
+    const f = fake();
+    let asked = 0;
+    const r = await runPurgeChildren({
+      env: PARENT,
+      confirmDatabase: DB,
+      by: BY,
+      spawn: f.spawn,
+      liveness: async () => {
+        asked++;
+        return asked >= 2 ? { ok: false, message: 'late session: application_name=late-app' } : { ok: true };
+      },
+    });
+    expect(f.calls).toHaveLength(1);
+    expect(r).toMatchObject({ ok: false, code: 2, ran: 1 });
+    expect(JSON.stringify(r)).toContain('late-app');
+  });
+
+  it('3.d a session that connects between --rehearse and --apply stops the apply (exit 2, ran 2)', async () => {
+    const f = fake();
+    let asked = 0;
+    const r = await runPurgeChildren({
+      env: PARENT,
+      confirmDatabase: DB,
+      by: BY,
+      spawn: f.spawn,
+      liveness: async () => (++asked >= 3 ? { ok: false, message: 'late' } : { ok: true }),
+    });
+    expect(f.calls.some((c) => c.args.includes('--apply'))).toBe(false);
+    expect(r).toMatchObject({ ok: false, code: 2, ran: 2 });
   });
 
   it('3.b with no live session the children run (liveness is a gate, not a replacement)', async () => {
@@ -179,8 +234,14 @@ describe('T-394 S1 I4a - migrate and predump aim their child at the target, expl
 });
 
 describe('T-394 S1 I4 - the tool has no purge SQL of its own', () => {
-  it('4.f children.ts contains no TRUNCATE and no DELETE (mutant: a local truncate loop)', () => {
-    const src = readFileSync(new URL('../../scripts/lib/rehearsal/children.ts', import.meta.url), 'utf8');
-    expect(src).not.toMatch(/truncate\s|delete\s+from/i);
+  it('4.f no file of the tool contains TRUNCATE or DELETE FROM in code (mutant: a local truncate loop)', () => {
+    const root = new URL('../../', import.meta.url);
+    const dirPath = fileURLToPath(new URL('scripts/lib/rehearsal/', root));
+    const files = [...readdirSync(dirPath).map((n) => path.join(dirPath, n)), fileURLToPath(new URL('scripts/cutover-rehearsal.ts', root))];
+    expect(files.length).toBeGreaterThan(3);
+    for (const f of files) {
+      const code = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+      expect(code, f).not.toMatch(/truncate\s|truncate\(|delete\s+from/i);
+    }
   });
 });
