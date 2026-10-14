@@ -157,8 +157,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
       const content = readFileSync(file, 'utf8');
       count += (content.match(/<PageDescription[\s>]/g) ?? []).length;
     }
-    // 105 -> 106, T-375 S1: the new /settings/pos-link page carries its <PageDescription> (SW1/SW2 stay green). T-401 S4: +4 (menu screens).
-    expect(count).toBe(110);
+    // 105 -> 106, T-375 S1: the new /settings/pos-link page carries its <PageDescription> (SW1/SW2 stay green). T-401 S4: +4 (menu screens). 110 -> 111, T-401 S5 / combined release: +1.
+    expect(count).toBe(111);
   });
 });
 

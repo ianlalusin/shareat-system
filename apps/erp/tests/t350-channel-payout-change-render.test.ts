@@ -47,6 +47,8 @@ vi.mock('@shareat/auth', async (importOriginal) => {
       if (currentHeld.has(capability)) return;
       throw new actual.AuthorizationError(`authorize: mocked refusal for '${capability}'`, capability as never);
     },
+    // T-402 S2: render probes use the non-logging can() - same held set, boolean answer.
+    can: async (_tx: unknown, _actor: unknown, capability: string, _ctx: unknown) => currentHeld.has(capability),
   };
 });
 

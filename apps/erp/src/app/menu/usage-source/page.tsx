@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { can, type Actor } from '@shareat/auth';
 import type { Tx } from '@shareat/db';
 import { formatBusinessDateTime, type BusinessDate } from '@shareat/core/datetime';
 import { humanDate } from '@shareat/domain/refusal-leaf';
@@ -25,13 +25,7 @@ const SOURCE_LABEL = { menu_rules: 'Menu rules', v1_pos_map: 'POS item maps' } a
 
 /** Presentation only: whether to draw a control. The domain's own gate is the control. */
 async function mayDo(tx: Tx, actor: Actor, capability: 'manage_pos_map' | 'switch_usage_source', storeId: string): Promise<boolean> {
-  try {
-    await authorize(tx, actor, capability, { storeId });
-    return true;
-  } catch (err) {
-    if (err instanceof AuthorizationError) return false;
-    throw err;
-  }
+  return can(tx, actor, capability, { storeId });
 }
 
 export default async function UsageSourcePage({ searchParams }: { searchParams: Promise<SearchParams> }) {

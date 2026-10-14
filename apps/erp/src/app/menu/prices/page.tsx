@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { can, type Actor } from '@shareat/auth';
 import type { Tx } from '@shareat/db';
 import { resolveOfferPrice } from '@shareat/domain';
 import type { OfferInForce } from '@shareat/db';
@@ -68,13 +68,7 @@ function resolvedText(row: OfferInForce): string | null {
 
 /** Presentation only: whether to draw the price forms at this store. The domain's own `set_menu_price` gate is the control. */
 async function mayPrice(tx: Tx, actor: Actor, storeId: string): Promise<boolean> {
-  try {
-    await authorize(tx, actor, 'set_menu_price', { storeId });
-    return true;
-  } catch (err) {
-    if (err instanceof AuthorizationError) return false;
-    throw err;
-  }
+  return can(tx, actor, 'set_menu_price', { storeId });
 }
 
 export default async function MenuPricesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {

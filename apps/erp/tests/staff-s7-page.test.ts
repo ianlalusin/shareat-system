@@ -89,6 +89,8 @@ vi.mock('@shareat/auth', async (orig) => {
     authorize: vi.fn(async (_tx: unknown, _actor: unknown, cap: string) => {
       if (!H.caps.has(cap)) throw new actual.AuthorizationError(`no ${cap}`, cap as never);
     }),
+    // T-402 S2: render probes use the non-logging can() - same capability set, boolean answer.
+    can: vi.fn(async (_tx: unknown, _actor: unknown, cap: string) => H.caps.has(cap)),
   };
 });
 vi.mock('@shareat/db', async (orig) => {
