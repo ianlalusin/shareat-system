@@ -84,6 +84,19 @@ describe('T-394 S2 I12 - every step is timed in whole seconds or named NOT TIMED
   });
 });
 
+describe('T-394 S2 I12 - an end mark that precedes its start is NOT TIMED', () => {
+  it('12.e endedAt earlier than startedAt reports NOT TIMED, never 0 and never a negative number', () => {
+    const input = base();
+    input.steps = [{ code: 'C4', startedAt: '2026-11-13T08:10:00.000Z', endedAt: '2026-11-13T08:05:00.000Z' }];
+    for (const t of Object.values(buildReports(input))) {
+      const l = line(t, 'C4');
+      expect(l).toContain('NOT TIMED');
+      expect(l).not.toMatch(/-\d/);
+      expect(l).not.toMatch(/(^|\D)0\s*(s|sec|seconds)\b/i);
+    }
+  });
+});
+
 describe('T-394 S2 I13 / R10 - the committed report is sanitised by construction', () => {
   it('13.a no person name, email, phone, hash, password URL, check detail or cost appears in the sanitised report', () => {
     const { sanitised } = buildReports(base());

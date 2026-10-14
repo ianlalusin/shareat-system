@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { openingTieOut } from '../../packages/domain/src/cutover/tie-out';
-import { asOrg } from './t390-s3-common';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import {
   APP_ROLE,
   BYPASS_ROLE,
@@ -9,9 +9,9 @@ import {
   appSession,
   cli,
   connect,
+  dir,
   dropScenarioCopies,
   entry,
-  laneUrl,
   minutesAgo,
   mkOrg,
   newRehearsalDb,
@@ -26,6 +26,9 @@ import {
   type OrgFx,
 } from './t394-s2-fixture';
 import postgres from 'postgres';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { journalPath } from '../../scripts/lib/rehearsal/journal';
 
 /**
  * T-394 S2 - `verify` and `verify --after-post` end to end on REAL local rehearsal copies (invariants 8, 9, 10, 10a, 10b, 10c;
@@ -57,6 +60,23 @@ import postgres from 'postgres';
 beforeAll(start, 180_000);
 afterEach(dropScenarioCopies, 120_000);
 afterAll(stop, 300_000);
+
+/** Everything verify records for a copy: the journal (its checks[] carry the evidence) and the full report if one was written. */
+const evidence = (db: string): string => {
+  const j = journalPath(dir, db);
+  const full = path.join(dir, `${db}.full-report.md`);
+  return (existsSync(j) ? readFileSync(j, 'utf8') : '') + ' ' + (existsSync(full) ? readFileSync(full, 'utf8') : '');
+};
+
+/**
+ * The evidence for a failure (an id, a store, a role, a table, a sequence, an organisation) is in the journal's checks[] / the full report,
+ * and is NOT in stdout, which carries only a check name, PASS/FAIL and a count (R10 spirit: nothing business-specific on a terminal).
+ * `keepOffStdout: false` for short step codes (C2/C5), which are harmless words.
+ */
+function sees(db: string, r: { text: string }, needle: string, keepOffStdout = true): void {
+  expect(evidence(db), `the journal/full report does not carry "${needle}"`).toContain(needle);
+  if (keepOffStdout) expect(r.text.includes(needle), `stdout leaks "${needle}"`).toBe(false);
+}
 
 const refused = (r: { status: number | null }): boolean => r.status === 1 || r.status === 2;
 
@@ -106,8 +126,9 @@ describe('T-394 S2 I8 - verify runs openingTieOut for EVERY org', () => {
     }
     const r = await verify(db);
     expect(r.status, r.text.slice(-800)).toBe(1);
-    expect(r.text, 'the first org\'s line is missing').toContain(fx.storeName);
-    expect(r.text, 'the second org\'s line is missing (first org only?)').toContain(other.storeName);
+    // stdout carries only the check name, PASS/FAIL and a count: one non-tying line per org = 2 (first org only would say 1)
+    expect(r.text, 'both orgs must be counted (first org only?)').toMatch(/FAIL tie_out[^\n]*\b2\b/);
+    for (const leak of [fx.storeName, other.storeName, '75.00', '₱']) expect(r.text.includes(leak), `stdout leaks "${leak}"`).toBe(false);
   }, 120_000);
 
   it('8.c the second org alone is bad: still exit 1 (whatever order the orgs come in)', async () => {
@@ -124,7 +145,8 @@ describe('T-394 S2 I8 - verify runs openingTieOut for EVERY org', () => {
     }
     const r = await verify(db);
     expect(r.status, r.text.slice(-800)).toBe(1);
-    expect(r.text).toContain(bad.storeName);
+    expect(r.text).toMatch(/FAIL tie_out[^\n]*\b1\b/);
+    expect(r.text.includes(bad.storeName), 'stdout leaks a store name').toBe(false);
   }, 120_000);
 });
 
@@ -141,7 +163,7 @@ describe('T-394 S2 DEF-585 again - verify re-runs the fiscal coverage check', ()
     writeJournalFile(db);
     const r = await verify(db);
     expect(r.status, r.text.slice(-800)).toBe(1);
-    expect(r.text).toContain(orgId);
+    sees(db, r, orgId);
   }, 120_000);
 });
 
@@ -150,14 +172,14 @@ describe('T-394 S2 I10b - the app role is read from pg_stat_activity.usename', (
     const { db } = await copy();
     const r = await verify(db, [], {}, BYPASS_ROLE);
     expect(refused(r), `${r.status}\n${r.text.slice(-600)}`).toBe(true);
-    expect(r.text).toContain(BYPASS_ROLE);
+    sees(db, r, BYPASS_ROLE);
   }, 120_000);
 
   it('10b.b no app session at all fails verify (nothing is proving the app\'s role)', async () => {
     const { db } = await copy();
     const r = await verify(db, [], {}, null);
     expect(refused(r), `${r.status}\n${r.text.slice(-600)}`).toBe(true);
-    expect(r.text, 'must say why, not print the usage').toMatch(/session/i);
+    expect(r.text + evidence(db), 'must say why, not print the usage').toMatch(/session/i);
   }, 120_000);
 
   it('10b.c the role is the session\'s, not the tool\'s: a DATABASE_URL naming the BYPASS role does not fail an app that runs as the plain role (mutant: parsed from DATABASE_URL)', async () => {
@@ -170,7 +192,7 @@ describe('T-394 S2 I10b - the app role is read from pg_stat_activity.usename', (
     const { db } = await copy();
     const r = await verify(db, [], { DATABASE_URL: urlFor('t394_s2_decoy', APP_ROLE, ROLE_PW), SYSTEM_DATABASE_URL: urlFor('t394_s2_decoy2', APP_ROLE, ROLE_PW) }, BYPASS_ROLE);
     expect(refused(r), `${r.status}\n${r.text.slice(-600)}`).toBe(true);
-    expect(r.text).toContain(BYPASS_ROLE);
+    sees(db, r, BYPASS_ROLE);
   }, 120_000);
 
   it('10b.e the tool\'s own session never counts as the app (mutant: current_user of the tool\'s connection): the tool is a bypass role and a plain app still passes', async () => {
@@ -196,7 +218,7 @@ describe('T-394 S2 I10c - verify fails when terminals were touched after start',
     });
     const r = await verify(db);
     expect(r.status, r.text.slice(-600)).toBe(1);
-    expect(r.text).toContain('clock_terminals');
+    sees(db, r, 'clock_terminals');
   }, 120_000);
 
   it('10c.b a terminal that existed before start but was UPDATED after it fails (created_at alone is not enough)', async () => {
@@ -206,7 +228,7 @@ describe('T-394 S2 I10c - verify fails when terminals were touched after start',
     });
     const r = await verify(db);
     expect(r.status, r.text.slice(-600)).toBe(1);
-    expect(r.text).toContain('clock_terminals');
+    sees(db, r, 'clock_terminals');
   }, 120_000);
 
   it('10c.c an attendance_punches row inserted after start fails, naming the table (mutant: clock_terminals only)', async () => {
@@ -218,7 +240,7 @@ describe('T-394 S2 I10c - verify fails when terminals were touched after start',
     });
     const r = await verify(db);
     expect(r.status, r.text.slice(-600)).toBe(1);
-    expect(r.text).toContain('attendance_punches');
+    sees(db, r, 'attendance_punches');
   }, 120_000);
 
   it('10c.d the control: a terminal and a punch that both predate start pass (the check is "after start", not "any")', async () => {
@@ -243,7 +265,7 @@ describe('T-394 S2 I10c - verify fails when terminals were touched after start',
     });
     const r = await verify(db, ['--after-post']);
     expect(r.status, r.text.slice(-600)).toBe(1);
-    expect(r.text).toContain('clock_terminals');
+    sees(db, r, 'clock_terminals');
   }, 120_000);
 });
 
@@ -254,7 +276,7 @@ describe('T-394 S2 I10a - the first document after the purge gets number 1 (sequ
     });
     const r = await verify(db);
     expect(r.status, r.text.slice(-600)).toBe(1);
-    expect(r.text).toContain('mirror_outbox_id_seq');
+    sees(db, r, 'mirror_outbox_id_seq');
   }, 120_000);
 
   it('10a.b verify twice on an untouched copy passes both times and leaves the sequence uncalled (mutant: nextval consumes a number and reports 2)', async () => {
@@ -296,7 +318,7 @@ describe('T-394 S2 I9 - verify --after-post: the opening is the SET of opening_b
       });
       const r = await after(db);
       expect(r.status, r.text.slice(-800)).toBe(1);
-      expect(r.text).toContain(ids[draftIndex]!);
+      sees(db, r, ids[draftIndex]!);
     }, 120_000);
   }
 
@@ -310,7 +332,7 @@ describe('T-394 S2 I9 - verify --after-post: the opening is the SET of opening_b
     });
     const r = await after(db);
     expect(r.status, r.text.slice(-800)).toBe(1);
-    expect(r.text).toContain(id);
+    sees(db, r, id);
   }, 120_000);
 
   it('9.d a balanced posted opening entry that openingTieOut refuses fails (mutant: Σdebit = Σcredit re-computed in the tool)', async () => {
@@ -322,7 +344,8 @@ describe('T-394 S2 I9 - verify --after-post: the opening is the SET of opening_b
     });
     const r = await after(db);
     expect(r.status, r.text.slice(-800)).toBe(1);
-    expect(r.text).toContain(fx.storeName);
+    expect(r.text).toMatch(/FAIL tie_out/);
+    expect(r.text.includes(fx.storeName), 'stdout leaks a store name').toBe(false);
   }, 120_000);
 
   it('9.e a SECOND org with a draft opening entry fails, naming it, though the first org is fine (mutant: first org only)', async () => {
@@ -338,7 +361,7 @@ describe('T-394 S2 I9 - verify --after-post: the opening is the SET of opening_b
     });
     const r = await after(db);
     expect(r.status, r.text.slice(-800)).toBe(1);
-    expect(r.text).toContain(badId);
+    sees(db, r, badId);
   }, 120_000);
 
   it('9.f no opening_balance entry at all fails (nothing was posted)', async () => {
@@ -348,7 +371,7 @@ describe('T-394 S2 I9 - verify --after-post: the opening is the SET of opening_b
     });
     const r = await after(db);
     expect(r.status, r.text.slice(-800)).toBe(1);
-    expect(r.text, 'must say why').toMatch(/opening/i);
+    expect(r.text + evidence(db), 'must say why').toMatch(/opening/i);
   }, 120_000);
 
   for (const missing of ['C2', 'C5'] as const) {
@@ -360,7 +383,7 @@ describe('T-394 S2 I9 - verify --after-post: the opening is the SET of opening_b
       });
       const r = await after(db);
       expect(r.status, r.text.slice(-800)).toBe(1);
-      expect(r.text).toContain(missing);
+      sees(db, r, missing, false);
     }, 120_000);
   }
 });
@@ -381,8 +404,8 @@ describe('T-394 S2 I10 - R13 freeze: judged by creation time against the purge c
     });
     const r = await after(db);
     expect(r.status, r.text.slice(-800)).toBe(1);
-    expect(r.text).toContain(id);
-    expect(r.text).toContain('manual_journal');
+    sees(db, r, id);
+    sees(db, r, 'manual_journal');
   }, 120_000);
 
   it('10.b ... and one dated after the conversion, created after the purge, fails too', async () => {
@@ -393,8 +416,8 @@ describe('T-394 S2 I10 - R13 freeze: judged by creation time against the purge c
     });
     const r = await after(db);
     expect(r.status, r.text.slice(-800)).toBe(1);
-    expect(r.text).toContain(id);
-    expect(r.text).toContain('sales_receipt');
+    sees(db, r, id);
+    sees(db, r, 'sales_receipt');
   }, 120_000);
 
   it('10.c the control: a non-opening entry created BEFORE the purge commit, dated 2027-01-05, passes (the test is creation time, not date)', async () => {
@@ -434,26 +457,75 @@ describe('T-394 S2 - verify records its checks in the journal for the report', (
 
 // ----------------------------------------------------------------------------------------------------- fixture sanity (GREEN now)
 
-describe('T-394 S2 fixture sanity (runs on the lane DB, no CLI): the passing fixtures tie and the failing one does not', () => {
+describe('T-394 S2 fixture sanity (on its OWN clone, never the lane DB): the passing fixtures tie and the failing one does not', () => {
   it('openingFigures (posted and draft) hold; a stock opening entry for a store with no counts does not', async () => {
-    const lane = postgres(laneUrl, { max: 1, onnotice: () => {} });
+    const db = await newRehearsalDb();
+    const raw = connect(db);
     try {
-      await sanity(lane);
+      const tie = (orgId: string) => drizzle(raw).transaction((tx) => openingTieOut(tx as never, orgId));
+      const good = await mkOrg(raw);
+      await openingFigures(raw, good);
+      const t1 = await tie(good.orgId);
+      expect(t1.holds, t1.lines.map((l) => l.sentence).join(' / ')).toBe(true);
+
+      const bad = await mkOrg(raw);
+      await nonTyingStock(raw, bad, 'posted');
+      const t2 = await tie(bad.orgId);
+      expect(t2.holds).toBe(false);
+      expect(t2.lines.length, 'the 8.b/8.c counts rely on ONE line per non-tying org').toBe(1);
+      expect(t2.lines.map((l) => l.sentence).join(' ')).toContain(bad.storeName);
     } finally {
-      await lane.end({ timeout: 5 });
+      await raw.end({ timeout: 5 });
     }
   }, 120_000);
+});
 
-  async function sanity(lane: postgres.Sql): Promise<void> {
-    const good = await mkOrg(lane);
-    await openingFigures(lane, good);
-    const t1 = await asOrg(good.orgId, (tx) => openingTieOut(tx, good.orgId));
-    expect(t1.holds, t1.lines.map((l) => l.sentence).join(' / ')).toBe(true);
+describe('T-394 S2 - nothing business-specific reaches the stdout of verify; zero organisations is a failure', () => {
+  it('stdout sentinel: a counted item name, a store name and a peso amount from the failing tie-out never appear; the check name, FAIL and a count do', async () => {
+    const SENT = 'SENTINELITEM' + uid('x');
+    const { db, fx } = await copy(async (s, f) => {
+      await nonTyingStock(s, f, 'draft');
+      await s`update stores set name = ${'SENTINELSTORE ' + SENT} where id = ${f.storeId}`;
+    });
+    void fx;
+    const r = await verify(db);
+    expect(r.status, r.text.slice(-500)).toBe(1);
+    for (const leak of ['SENTINELSTORE', SENT, '75.00', '₱']) expect(r.text.includes(leak), `stdout leaks "${leak}"`).toBe(false);
+    expect(r.text).toMatch(/FAIL tie_out[^\n]*\b1\b/);
+  }, 120_000);
 
-    const bad = await mkOrg(lane);
-    await nonTyingStock(lane, bad, 'posted');
-    const t2 = await asOrg(bad.orgId, (tx) => openingTieOut(tx, bad.orgId));
-    expect(t2.holds).toBe(false);
-    expect(t2.lines.map((l) => l.sentence).join(' ')).toContain(bad.storeName);
+  for (const args of [[], ['--after-post']]) {
+    it(`zero organisations: verify ${args.join(' ')} FAILS, it is not a vacuous pass`, async () => {
+      const { db } = await copy();
+      const s = connect(db);
+      try {
+        await s`truncate organizations cascade`;
+      } finally {
+        await s.end({ timeout: 5 });
+      }
+      writeJournalFile(db);
+      const r = await verify(db, args);
+      expect(r.status, r.text.slice(-500)).toBe(1);
+      expect(r.text + evidence(db)).toMatch(/organi[sz]ation/i);
+    }, 120_000);
   }
+});
+
+describe('T-394 S2 - mark refuses a step code that is not a step code', () => {
+  it('mark "call Maria" start is refused (exit 1 or 2) and writes nothing to the journal; mark C3 start still works', async () => {
+    const { db } = await copy();
+    const bad = cli(['mark', 'call Maria', 'start'], db);
+    expect([1, 2], `${bad.status}
+${bad.text.slice(-400)}`).toContain(bad.status);
+    expect(bad.text).not.toContain('usage: cutover-rehearsal <start');
+    const { readFileSync } = await import('node:fs');
+    const { journalPath } = await import('../../scripts/lib/rehearsal/journal');
+    const { dir } = await import('./t394-s2-fixture');
+    const before = JSON.parse(readFileSync(journalPath(dir, db), 'utf8')) as { steps: { code: string }[] };
+    expect(before.steps.map((x) => x.code)).not.toContain('call Maria');
+    const ok = cli(['mark', 'C3', 'start'], db);
+    expect(ok.status, ok.text.slice(-400)).toBe(0);
+    const after = JSON.parse(readFileSync(journalPath(dir, db), 'utf8')) as { steps: { code: string }[] };
+    expect(after.steps.map((x) => x.code)).toContain('C3');
+  }, 120_000);
 });

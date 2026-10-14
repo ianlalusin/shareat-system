@@ -1,9 +1,10 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import postgres from 'postgres';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
+import { journalPath } from '../../scripts/lib/rehearsal/journal';
 import {
   cli,
   connect,
@@ -54,7 +55,10 @@ afterAll(() => rmSync(outDir, { recursive: true, force: true }));
 
 const files = (d: string): string[] => (existsSync(d) ? readdirSync(d).map((n) => path.join(d, n)) : []);
 
-async function seeded(opts: { terminal?: boolean } = {}): Promise<{ db: string; fx: OrgFx }> {
+/** The checks a complete rehearsal has recorded by report time (names pinned in t394-s2-verify.test.ts). */
+const EXPECTED_CHECKS = ['tie_out', 'app_role', 'terminal_activity', 'fiscal_coverage', 'sequences_reset', 'opening_set', 'c2_c5_recorded', 'freeze'];
+
+async function seeded(opts: { terminal?: boolean; fail?: boolean; omit?: string } = {}): Promise<{ db: string; fx: OrgFx }> {
   const db = await newRehearsalDb();
   const s = connect(db);
   try {
@@ -69,10 +73,12 @@ async function seeded(opts: { terminal?: boolean } = {}): Promise<{ db: string; 
         { code: 'C3', startedAt: minutesAgo(40), by: fx.personId },
         { code: 'C5', startedAt: minutesAgo(20), endedAt: minutesAgo(19), by: fx.personId, result: 'done' },
       ],
-      checks: [
-        { name: 'tie_out', ok: false, detail: DETAIL, at: minutesAgo(10) },
-        { name: 'app_role', ok: true, detail: 'ok', at: minutesAgo(10) },
-      ],
+      checks: EXPECTED_CHECKS.filter((n) => n !== opts.omit).map((name) => ({
+        name,
+        ok: !(opts.fail && name === 'tie_out'),
+        detail: name === 'tie_out' ? DETAIL : 'ok',
+        at: minutesAgo(10),
+      })),
     });
     return { db, fx };
   } finally {
@@ -82,9 +88,10 @@ async function seeded(opts: { terminal?: boolean } = {}): Promise<{ db: string; 
 
 describe('T-394 S2 I13 - the committed report is sanitised by construction (CLI, real copy seeded with sentinels)', () => {
   it('13.cli the sanitised report has no person name, no free-text check detail, no connection string, no password; the --by person is an id', async () => {
-    const { db, fx } = await seeded();
+    const { db, fx } = await seeded({ fail: true });
     const r = cli(['report', '--out-dir', outDir], db);
-    expect(r.status, r.text.slice(-800)).toBe(0);
+    expect(r.status, 'a FAIL check in the journal makes report exit 1 (the evidence is still written)').toBe(1);
+    expect(r.text).not.toContain('usage: cutover-rehearsal <start');
 
     const committed = files(outDir).filter((f) => /cutover-rehearsal-\d{4}-\d{2}-\d{2}\.md$/.test(f));
     expect(committed, `no sanitised report in ${outDir}: ${files(outDir).join(', ')}`).toHaveLength(1);
@@ -121,6 +128,42 @@ describe('T-394 S2 I13 - the committed report is sanitised by construction (CLI,
     const r = cli(['report', '--out-dir', outDir], db);
     expect(r.status, r.text.slice(-800)).toBe(0);
     expect(files(outDir).length - before).toBeLessThanOrEqual(1);
+  }, 180_000);
+});
+
+describe('T-394 S2 - report exits 1 when the journal is not a clean, complete record', () => {
+  it('a journal check that is FAIL: exit 1, names the check', async () => {
+    const { db } = await seeded({ fail: true });
+    const r = cli(['report', '--out-dir', outDir], db);
+    expect(r.status, r.text.slice(-500)).toBe(1);
+    expect(r.text).toContain('tie_out');
+  }, 180_000);
+
+  it('a journal that is missing an expected check (freeze): exit 1, names it (a skipped verify is not a pass)', async () => {
+    const { db } = await seeded({ omit: 'freeze' });
+    const r = cli(['report', '--out-dir', outDir], db);
+    expect(r.status, r.text.slice(-500)).toBe(1);
+    expect(r.text).toContain('freeze');
+  }, 180_000);
+
+  it('the control: every expected check present and PASS: exit 0', async () => {
+    const { db } = await seeded();
+    const r = cli(['report', '--out-dir', outDir], db);
+    expect(r.status, r.text.slice(-500)).toBe(0);
+  }, 180_000);
+});
+
+describe('T-394 S2 - the full report, the journal and REHEARSAL_DIR are private (POSIX modes)', () => {
+  it.skipIf(process.platform === 'win32')('full report and journal are mode 600, REHEARSAL_DIR is 700 after report, even if they started wider', async () => {
+    const { db } = await seeded();
+    chmodSync(dir, 0o755);
+    chmodSync(journalPath(dir, db), 0o644);
+    const r = cli(['report', '--out-dir', outDir], db);
+    expect(r.status, r.text.slice(-500)).toBe(0);
+    const mode = (f: string): number => statSync(f).mode & 0o777;
+    expect(mode(path.join(dir, `${db}.full-report.md`)).toString(8), 'full report').toBe('600');
+    expect(mode(journalPath(dir, db)).toString(8), 'journal').toBe('600');
+    expect(mode(dir).toString(8), 'REHEARSAL_DIR').toBe('700');
   }, 180_000);
 });
 

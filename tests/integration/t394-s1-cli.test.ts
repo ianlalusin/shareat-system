@@ -49,7 +49,8 @@ const urlFor = (db: string): string => {
   u.pathname = `/${db}`;
   return u.toString();
 };
-const admin = postgres(laneUrl, { max: 1, onnotice: () => {} });
+// admin works from the `postgres` database so the lane DB has no session of ours (other files clone it as a template)
+const admin = postgres(urlFor('postgres'), { max: 1, onnotice: () => {} });
 const repoRoot = path.resolve(__dirname, '../..');
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 const PINNED = 'shareat-system-db-do-user-39783702-0.m.db.ondigitalocean.com';
@@ -128,7 +129,7 @@ describe('T-394 S1 I1 - the CLI refuses with exit 2 before touching anything', (
         expect(r.status, `${sub} / ${label}\n${r.text.slice(-400)}`).toBe(2);
         expect(r.text).not.toContain('p@'); // no connection string with its password
       }
-    });
+    }, 180_000);
   }
 });
 

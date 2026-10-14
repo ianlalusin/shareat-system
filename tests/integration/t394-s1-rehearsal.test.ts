@@ -40,8 +40,32 @@ import { checkFiscalCoverage, checkLiveness, checkPostPurge, snapshotStart } fro
 import { CUTOVER_CLASSIFICATION } from '../../packages/db/src/cutover/classification';
 import { PURGE_AS_OF, performersForAllOrgs, realPurge } from './t390-real-purge';
 
-const sql = postgres(url, { max: 1, onnotice: () => {} });
-const dbName = decodeURIComponent(new URL(url).pathname.slice(1));
+// The lane database is NEVER written: every test here (including the real purge, which truncates the whole database, and the C2
+// rows performersForAllOrgs adds to every org) runs on a private CLONE of it, created in beforeAll and dropped in afterAll.
+const laneName = decodeURIComponent(new URL(url).pathname.slice(1));
+const dbName = `shareat_test_t394s1clone_${String(Math.floor(Math.random() * 1e6)).padStart(6, '0')}`;
+const urlOf = (db: string): string => {
+  const u = new URL(url);
+  u.pathname = `/${db}`;
+  return u.toString();
+};
+const cloneUrl = urlOf(dbName);
+let sql: postgres.Sql = undefined as unknown as postgres.Sql;
+let admin: postgres.Sql = undefined as unknown as postgres.Sql;
+
+beforeAll(async () => {
+  admin = postgres(urlOf('postgres'), { max: 1, onnotice: () => {} });
+  for (let i = 0; ; i++) {
+    try {
+      await admin.unsafe(`create database "${dbName}" template "${laneName}"`);
+      break;
+    } catch (e) {
+      if (i >= 80 || !/being accessed by other users/.test(String((e as Error).message))) throw e;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+  sql = postgres(cloneUrl, { max: 1, onnotice: () => {} });
+}, 180_000);
 let seq = 0;
 const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 const repoRoot = path.resolve(__dirname, '../..');
@@ -68,12 +92,17 @@ const OCT_31_2300_MANILA = new Date('2026-10-30T15:00:00Z');
 const JAN_1_0800_MANILA = new Date('2027-01-01T00:00:00Z');
 
 afterAll(async () => {
-  await sql.end({ timeout: 5 });
-});
+  try {
+    await sql?.end({ timeout: 5 });
+    await admin.unsafe(`drop database if exists "${dbName}" with (force)`);
+  } finally {
+    await admin?.end({ timeout: 5 });
+  }
+}, 180_000);
 
 describe('T-394 S1 I3 - liveness: a second session on the target is found and named', () => {
   it('3.a another client session is reported with its application_name; the tool\'s own session is not', async () => {
-    const decoy = postgres(url, { max: 1, connection: { application_name: 't394-decoy-app' }, onnotice: () => {} });
+    const decoy = postgres(cloneUrl, { max: 1, connection: { application_name: 't394-decoy-app' }, onnotice: () => {} });
     try {
       await decoy`select 1`;
       const r = await checkLiveness(sql);
@@ -310,7 +339,7 @@ describe('T-394 S1 I7a / R8 / DEF-641 - cutover-purge: --as-of is explicit for -
       timeout: 120_000,
       env: {
         ...process.env,
-        DATABASE_URL: url,
+        DATABASE_URL: cloneUrl,
         CUTOVER_PURGE_REPORT_DIR: reportDir,
         CUTOVER_PURGE_BY: '',
         ...(fakeNow ? { T394_FAKE_NOW: fakeNow, NODE_OPTIONS: `--require ${clock}` } : {}),
