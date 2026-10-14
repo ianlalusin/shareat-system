@@ -42,7 +42,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { closeDb, withOrgPrincipal } from '@shareat/db';
-import { AuthorizationError, type Actor } from '@shareat/auth';
+import { flushSecurityEvents, AuthorizationError, type Actor } from '@shareat/auth';
 import { parseStoreMap } from '../../../etl/src/master-data/store-map';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -185,10 +185,14 @@ const audits = (orgId: string, action: string) =>
   sql<Any[]>`select action, entity, entity_id, before, after, source, actor_person_id from audit_log where org_id = ${orgId} and action = ${action} order by occurred_at, id`;
 // T-402 S2: a refused authorize() now leaves a first-of-day `security.authorize_denied` row (written outside the refused
 // transaction), so "nothing was written" counts every row except those; the denial rows are asserted explicitly where a test refuses.
-const auditCount = async (orgId: string) =>
-  Number((await sql<Any[]>`select count(*)::int as n from audit_log where org_id = ${orgId} and action <> 'security.authorize_denied'`)[0]!.n);
-const denialCount = async (orgId: string) =>
-  Number((await sql<Any[]>`select count(*)::int as n from audit_log where org_id = ${orgId} and action = 'security.authorize_denied'`)[0]!.n);
+const auditCount = async (orgId: string) => {
+  await flushSecurityEvents(); // denials are written by the outbox after the refusal (T-402 S2 A1)
+  return Number((await sql<Any[]>`select count(*)::int as n from audit_log where org_id = ${orgId} and action <> 'security.authorize_denied'`)[0]!.n);
+};
+const denialCount = async (orgId: string) => {
+  await flushSecurityEvents();
+  return Number((await sql<Any[]>`select count(*)::int as n from audit_log where org_id = ${orgId} and action = 'security.authorize_denied'`)[0]!.n);
+};
 const count = async (table: string, orgId: string) => Number((await sql.unsafe(`select count(*)::int as n from ${table} where org_id = $1`, [orgId]))[0]!.n);
 const state = async (orgId: string) => ({
   persons: await personsOf(orgId),

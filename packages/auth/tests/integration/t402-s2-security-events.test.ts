@@ -33,7 +33,41 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
 }
 
-import { closeDb, withOrgPrincipal, type Tx } from '@shareat/db';
+// T-402 S2 audit rulings (A1, T1-T10): the outbox opens its own connection through `withOrgPrincipal`; this wrapper lets a test
+// hold it (never resolve), fail it, and count the transactions a flush opens. `orgIdOfPerson` can be forced to "unresolvable" (A4).
+const ctl = vi.hoisted(() => ({
+  mode: 'real' as 'real' | 'hang' | 'fail',
+  held: [] as Array<() => void>,
+  calls: [] as string[],
+  orgOfPersonNull: false,
+}));
+vi.mock('@shareat/db', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@shareat/db')>();
+  return {
+    ...real,
+    withOrgPrincipal: ((orgId: string, fn: never) => {
+      ctl.calls.push(orgId);
+      if (ctl.mode === 'fail') return Promise.reject(new Error('forced audit write failure'));
+      if (ctl.mode === 'hang') {
+        return new Promise<unknown>((resolve, reject) => {
+          ctl.held.push(() => {
+            (real.withOrgPrincipal as (o: string, f: never) => Promise<unknown>)(orgId, fn).then(resolve, reject);
+          });
+        });
+      }
+      return real.withOrgPrincipal(orgId, fn);
+    }) as typeof real.withOrgPrincipal,
+    authzDenialCountsRepo: {
+      ...real.authzDenialCountsRepo,
+      orgIdOfPerson: (...a: Parameters<typeof real.authzDenialCountsRepo.orgIdOfPerson>) =>
+        ctl.orgOfPersonNull ? Promise.resolve(null) : real.authzDenialCountsRepo.orgIdOfPerson(...a),
+    },
+  };
+});
+
+import { closeDb, withOrgPrincipal, authzDenialCountsRepo, type Tx } from '@shareat/db';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import { enqueueAuthorizeDenied } from '../../src/security-events';
 import { logger } from '@shareat/core/logger';
 import {
   assignRole,
@@ -46,6 +80,8 @@ import {
   CAPABILITY_MATRIX,
   CAPABILITY_SCOPE,
   elevateManager,
+  flushSecurityEvents,
+  can,
   endAllForDevice,
   endShift,
   grantCapabilityAsActor,
@@ -126,16 +162,21 @@ interface Row {
   retention_class: string;
   text: string;
 }
-const rows = (orgId: string, action: string, entityId?: string) =>
-  sql<Row[]>`
+/** Failure-path and post-commit events are written by the outbox after the caller returns (A1): drain it before every read. */
+const rows = async (orgId: string, action: string, entityId?: string) => {
+  await flushSecurityEvents();
+  return sql<Row[]>`
     select id, action, store_id, actor_person_id, entity, entity_id, category, sensitivity, severity, retention_class,
            coalesce(before::text, '') || ' ' || coalesce(after::text, '') as text
       from audit_log
      where org_id = ${orgId} and action = ${action} ${entityId ? sql`and entity_id = ${entityId}` : sql``}
      order by recorded_at, id`;
+};
 const count = async (orgId: string, action: string, entityId?: string) => (await rows(orgId, action, entityId)).length;
-const countAll = async (orgId: string) =>
-  (await sql<{ n: number }[]>`select count(*)::int as n from audit_log where org_id = ${orgId}`)[0]!.n;
+const countAll = async (orgId: string) => {
+  await flushSecurityEvents();
+  return (await sql<{ n: number }[]>`select count(*)::int as n from audit_log where org_id = ${orgId}`)[0]!.n;
+};
 
 /** The labels come from the catalogue, never the call site; the store column follows the entry's scope. */
 function expectLabels(row: Row, action: string, storeId: string | null) {
@@ -282,15 +323,35 @@ describe('Invariant 15 / 17 - PIN sign-in: success, the tier-1 pause, the T-395 
     expect(await count(f.orgId, 'auth.pin_signin_succeeded')).toBe(1);
   });
 
-  it('pause: the 10th miss in a minute writes ONE auth.pin_paused (high, store-scoped, null actor) that survives the caller\'s rollback; a paused terminal writes no more', async () => {
-    const f = await fixture('pin-pause');
-    await sql`
-      insert into pin_attempt_throttle (org_id, store_id, fail_count, window_started_at)
-      values (${f.orgId}, ${f.storeId}, 9, now())`;
-    // the 10th miss, inside a caller transaction that rolls back (the wrong PIN throws)
-    await rejects(withOrgPrincipal(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: WRONG, deviceId: f.deviceId })));
+  const seedPause = (f: Fx) =>
+    sql`insert into pin_attempt_throttle (org_id, store_id, fail_count, window_started_at) values (${f.orgId}, ${f.storeId}, 9, now())`;
+  const seedStop = (f: Fx) => sql`
+    insert into sign_in_attempts (org_id, store_id, device_id, kind, occurred_at)
+    select ${f.orgId}::uuid, ${f.storeId}::uuid, ${f.deviceId}::uuid, 'miss', now() - interval '1 hour'
+    from generate_series(1, 50)`;
+  const inCallerTx = (f: Fx, pin: string, commit: boolean) =>
+    withOrgPrincipal(f.orgId, async (tx) => {
+      const p = signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin, deviceId: f.deviceId });
+      if (commit) await p.catch(() => undefined); // the caller swallows the refusal and COMMITS
+      else await p; // the refusal propagates: the caller rolls back
+    });
+
+  it('T10 / A6 pause, caller-tx path: a rolled-back sign-in leaves NO charge and NO pause event (the event lives where its charge lives)', async () => {
+    const f = await fixture('pin-pause-rb');
+    await seedPause(f);
+    await rejects(inCallerTx(f, WRONG, false));
+    expect(await count(f.orgId, 'auth.pin_paused'), 'mutant: the event escapes the caller rollback').toBe(0);
+    const t = await sql<{ fail_count: number }[]>`select fail_count from pin_attempt_throttle where store_id = ${f.storeId}`;
+    expect(t[0]!.fail_count, 'the rolled-back charge is gone').toBe(9);
+    expect((await sql<{ n: number }[]>`select count(*)::int as n from sign_in_attempts where store_id = ${f.storeId}`)[0]!.n).toBe(0);
+  });
+
+  it('pause, caller-tx path that COMMITS: the 10th miss writes ONE auth.pin_paused (high, store-scoped, null actor) in that transaction', async () => {
+    const f = await fixture('pin-pause-c');
+    await seedPause(f);
+    await inCallerTx(f, WRONG, true);
     const got = await rows(f.orgId, 'auth.pin_paused');
-    expect(got, 'mutant: written in the caller transaction (vanishes on rollback)').toHaveLength(1);
+    expect(got).toHaveLength(1);
     expect(got[0]!.actor_person_id).toBeNull();
     expect(got[0]!.entity_id).toBe(f.storeId);
     expectLabels(got[0]!, 'auth.pin_paused', f.storeId);
@@ -299,35 +360,32 @@ describe('Invariant 15 / 17 - PIN sign-in: success, the tier-1 pause, the T-395 
 
   it('pause, tx=null path: the event is written once at the moment the pause starts, not on every refused attempt while it lasts', async () => {
     const f = await fixture('pin-pause2');
-    await sql`
-      insert into pin_attempt_throttle (org_id, store_id, fail_count, window_started_at)
-      values (${f.orgId}, ${f.storeId}, 9, now())`;
+    await seedPause(f);
     await expect(attempt(f, WRONG)).rejects.toBeInstanceOf(AuthenticationError); // 10th miss: starts the pause
     expect(await count(f.orgId, 'auth.pin_paused')).toBe(1);
     for (let i = 0; i < 3; i++) await expect(attempt(f, WRONG)).rejects.toThrow(/paused until/);
     expect(await count(f.orgId, 'auth.pin_paused'), 'mutant: an event per refused attempt').toBe(1);
   });
 
-  it('stop: the attempt that trips the daily budget writes ONE auth.pin_stopped_for_day (critical) that survives the rollback; later refused attempts add none', async () => {
+  it('stop, caller-tx path: rolled back leaves no stop event; committed writes ONE auth.pin_stopped_for_day (critical); tx=null writes one; later refusals add none', async () => {
     const f = await fixture('pin-stop');
-    await sql`
-      insert into sign_in_attempts (org_id, store_id, device_id, kind, occurred_at)
-      select ${f.orgId}::uuid, ${f.storeId}::uuid, ${f.deviceId}::uuid, 'miss', now() - interval '1 hour'
-      from generate_series(1, 50)`;
-    await rejects(withOrgPrincipal(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: WRONG, deviceId: f.deviceId })));
+    await seedStop(f);
+    await rejects(inCallerTx(f, WRONG, false));
+    expect(await count(f.orgId, 'auth.pin_stopped_for_day'), 'mutant: the event escapes the caller rollback').toBe(0);
+    await inCallerTx(f, WRONG, true);
     const got = await rows(f.orgId, 'auth.pin_stopped_for_day');
-    expect(got, 'mutant: written in the caller transaction (vanishes on rollback)').toHaveLength(1);
+    expect(got).toHaveLength(1);
     expect(got[0]!.actor_person_id).toBeNull();
     expect(got[0]!.entity_id).toBe(f.storeId);
     expectLabels(got[0]!, 'auth.pin_stopped_for_day', f.storeId);
-
-    // the rollback also undid the stop itself, so trip it for real (tx=null commits), then hammer the stopped store
-    await expect(attempt(f, WRONG)).rejects.toThrow(/stopped at this store/);
-    const afterTrip = await count(f.orgId, 'auth.pin_stopped_for_day');
-    expect(afterTrip).toBe(2);
     for (let i = 0; i < 3; i++) await expect(attempt(f, PIN)).rejects.toThrow(/stopped at this store/);
-    expect(await count(f.orgId, 'auth.pin_stopped_for_day'), 'mutant: an event per refused attempt').toBe(afterTrip);
-    await expectNoSecrets(f.orgId);
+    expect(await count(f.orgId, 'auth.pin_stopped_for_day'), 'mutant: an event per refused attempt').toBe(1);
+
+    const g = await fixture('pin-stop-null');
+    await seedStop(g);
+    await expect(attempt(g, WRONG)).rejects.toThrow(/stopped at this store/);
+    expect(await count(g.orgId, 'auth.pin_stopped_for_day'), 'tx=null: the committed charge event is enqueued').toBe(1);
+    await expectNoSecrets(g.orgId);
   });
 });
 
@@ -476,7 +534,7 @@ describe('Invariant 15 - roles, grants, elevation', () => {
 
   it('elevateManager writes one manager.elevated (critical, admin-viewed); so does assignRole\'s automatic elevation of a manager into an adminless org', async () => {
     const f = await fixture('elev');
-    await withOrgPrincipal(f.orgId, (tx) => elevateManager(tx, { personId: f.workerId, grantedBy: f.adminId }));
+    await withOrgPrincipal(f.orgId, (tx) => elevateManager(tx, { personId: f.workerId, orgId: f.orgId, grantedBy: f.adminId }));
     const got = await rows(f.orgId, 'manager.elevated', f.workerId);
     expect(got, 'one row per elevation, not one per capability').toHaveLength(1);
     expect(got[0]!.actor_person_id).toBe(f.adminId);
@@ -566,13 +624,15 @@ describe('Invariant 17 - authorize() denials: first of the day is a row, the res
 
   const deny = (f: Fx, actor: Actor, cap: Capability, storeId?: string) =>
     withOrgPrincipal(f.orgId, (tx) => authorize(tx, actor, cap, storeId ? { storeId } : {}));
-  const counted = async (orgId: string, personId: string, cap: string, storeId: string | null) =>
-    (
+  const counted = async (orgId: string, personId: string, cap: string, storeId: string | null) => {
+    await flushSecurityEvents();
+    return (
       await sql<{ n: number }[]>`
         select coalesce(sum(count), 0)::int as n from authz_denial_counts
          where org_id = ${orgId} and actor_person_id = ${personId} and capability = ${cap}
            and store_id is not distinct from ${storeId}::uuid`
     )[0]!.n;
+  };
 
   it('fixture sanity: staff may not do the two capabilities used below (so a rotted matrix cannot make these tests vacuous)', () => {
     expect(CAPABILITY_MATRIX[ORG_CAP].staff).toBe(false);
@@ -641,6 +701,249 @@ describe('Invariant 17 - authorize() denials: first of the day is a row, the res
     expect(await countAll(f.orgId)).toBe(0);
     const counters = (await sql<{ n: number }[]>`select count(*)::int as n from authz_denial_counts where org_id = ${f.orgId}`)[0]!.n;
     expect(counters).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// S2 audit rulings (Opus planner, 2026-10-14): T1-T11. One rule: a security event never holds a second connection, never
+// blocks the caller and never changes the caller's outcome (A1 outbox).
+// ---------------------------------------------------------------------------------------------------------------
+describe('S2 audit rulings T1-T11 - the outbox, the probes, the guards', () => {
+  const ORG_CAP: Capability = 'manage_users';
+  const STORE_CAP: Capability = 'enrol_staff';
+  const sleep = (ms: number) => new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), ms));
+  const counted = async (orgId: string, personId: string, cap: string, storeId: string | null) => {
+    await flushSecurityEvents();
+    return (
+      await sql<{ n: number }[]>`
+        select coalesce(sum(count), 0)::int as n from authz_denial_counts
+         where org_id = ${orgId} and actor_person_id = ${personId} and capability = ${cap}
+           and store_id is not distinct from ${storeId}::uuid`
+    )[0]!.n;
+  };
+  const counterRows = async (orgId: string) => {
+    await flushSecurityEvents();
+    return (await sql<{ n: number }[]>`select count(*)::int as n from authz_denial_counts where org_id = ${orgId}`)[0]!.n;
+  };
+  /** Release every write the hung wrapper is holding, back to the real implementation, then drain. */
+  const release = async () => {
+    ctl.mode = 'real';
+    for (const r of ctl.held.splice(0)) r();
+    await flushSecurityEvents();
+  };
+  const spyLogger = () => (['info', 'warn', 'error'] as const).map((l) => ({ l, spy: vi.spyOn(logger, l) }));
+  const linesOf = (spies: ReturnType<typeof spyLogger>, level?: string) =>
+    spies.filter((x) => !level || x.l === level).flatMap((x) => x.spy.mock.calls.map((c) => JSON.stringify(c)));
+
+  it('T1: with withOrgPrincipal held (never resolves), a denied authorize() still rejects promptly with the same AuthorizationError - mutant: awaited write', async () => {
+    const f = await fixture('t1');
+    let outcome: unknown;
+    await withOrgPrincipal(f.orgId, async (tx) => {
+      ctl.mode = 'hang';
+      try {
+        outcome = await Promise.race([authorize(tx, f.staff, ORG_CAP).then(() => 'allowed', (e: unknown) => e), sleep(3000)]);
+      } finally {
+        ctl.mode = 'real';
+      }
+    });
+    try {
+      expect(outcome, 'the refusal arrived without waiting for the audit write').toBeInstanceOf(AuthorizationError);
+      expect((outcome as AuthorizationError).message).toMatch(/may not 'manage_users'/);
+    } finally {
+      await release();
+    }
+    expect(await count(f.orgId, 'security.authorize_denied'), 'the held write completed once released: nothing lost').toBe(1);
+  });
+
+  it('T2: 5 denied can() + flush leave zero audit_log rows and zero counter rows - mutant: can() calls authorize()', async () => {
+    const f = await fixture('t2');
+    await withOrgPrincipal(f.orgId, async (tx) => {
+      for (let i = 0; i < 5; i++) expect(await can(tx, f.staff, ORG_CAP)).toBe(false);
+      expect(await can(tx, f.admin, ORG_CAP)).toBe(true);
+    });
+    expect(await countAll(f.orgId)).toBe(0);
+    expect(await counterRows(f.orgId)).toBe(0);
+  });
+
+  it('T4: 25 denials in one rolled-back caller tx -> after the flush 1 row + 24 counted, and the flush wrote them in a handful of transactions for that org, not one per denial - mutant: per-denial write', async () => {
+    const f = await fixture('t4');
+    ctl.calls = [];
+    await rejects(
+      withOrgPrincipal(f.orgId, async (tx) => {
+        ctl.mode = 'hang'; // hold the first flush so the rest pile up in the buffer, as they do under load
+        for (let i = 0; i < 25; i++) await expect(authorize(tx, f.staff, ORG_CAP)).rejects.toBeInstanceOf(AuthorizationError);
+        ctl.mode = 'real';
+        throw new Error('rollback the caller');
+      }),
+    );
+    const mine = () => ctl.calls.filter((o) => o === f.orgId).length;
+    const beforeRelease = mine();
+    await release();
+    expect(await count(f.orgId, 'security.authorize_denied')).toBe(1);
+    expect(await counted(f.orgId, f.staffId, ORG_CAP, null)).toBe(24);
+    // the caller's own transaction accounts for 1 call; the outbox's flushes for the rest
+    expect(mine() - 1, 'the outbox opened at most 2 transactions for 25 denials').toBeLessThanOrEqual(2);
+    expect(beforeRelease).toBeGreaterThanOrEqual(2);
+  });
+
+  it('T5: a non-uuid and an other-org storeId are counted under a null store with deniedAtStore "unknown"; the raw value is nowhere, and nothing logs an error', async () => {
+    const f = await fixture('t5');
+    const other = await fixture('t5-other');
+    const spies = spyLogger();
+    try {
+      await expect(withOrgPrincipal(f.orgId, (tx) => authorize(tx, f.staff, STORE_CAP, { storeId: other.storeId }))).rejects.toBeInstanceOf(AuthorizationError);
+      const raw = "not-a-uuid'; drop table audit_log; --";
+      enqueueAuthorizeDenied({ orgId: f.orgId, actorPersonId: f.staffId, capability: STORE_CAP, storeId: raw }, Date.now);
+      const got = await rows(f.orgId, 'security.authorize_denied');
+      expect(got, 'both collapse onto one null-store key: one row').toHaveLength(1);
+      expect(got[0]!.store_id).toBeNull();
+      expect(got[0]!.text).toContain('unknown');
+      expect(await counted(f.orgId, f.staffId, STORE_CAP, null), 'the second is counted under the null store').toBe(1);
+      const stored = await sql<{ t: string }[]>`
+        select coalesce(before::text,'') || coalesce(after::text,'') as t from audit_log where org_id = ${f.orgId}
+        union all select capability || coalesce(store_id::text,'') from authz_denial_counts where org_id = ${f.orgId}`;
+      for (const { t } of stored) {
+        expect(t).not.toContain(other.storeId);
+        expect(t).not.toContain('drop table');
+      }
+      const allLogs = linesOf(spies).join('\n');
+      expect(allLogs).not.toContain('drop table');
+      expect(allLogs).not.toContain(other.storeId);
+      expect(linesOf(spies, 'error'), 'no logger.error').toHaveLength(0);
+    } finally {
+      for (const x of spies) x.spy.mockRestore();
+    }
+  });
+
+  it('T6: a forced flush DB error logs ONE logger.error and the caller\'s refusal is unchanged', async () => {
+    const f = await fixture('t6');
+    const spies = spyLogger();
+    try {
+      let refusal: unknown;
+      try {
+        await withOrgPrincipal(f.orgId, async (tx) => {
+          ctl.mode = 'real'; // the caller's own transaction is not the one under test
+          refusal = await authorize(tx, f.staff, ORG_CAP).then(() => 'allowed', (e: unknown) => e);
+          ctl.mode = 'fail';
+          // three more in the same tick: one flush, so one error - never one per request
+          for (let i = 0; i < 3; i++) enqueueAuthorizeDenied({ orgId: f.orgId, actorPersonId: f.staffId, capability: ORG_CAP, storeId: null }, Date.now);
+        });
+        await flushSecurityEvents();
+      } finally {
+        ctl.mode = 'real';
+      }
+      expect(refusal).toBeInstanceOf(AuthorizationError);
+      expect(linesOf(spies, 'error'), 'once per org per flush, never per request (A3)').toHaveLength(1);
+    } finally {
+      for (const x of spies) x.spy.mockRestore();
+    }
+    expect(await count(f.orgId, 'security.authorize_denied'), 'accepted loss: dropped, no retry').toBe(0);
+  });
+
+  it('T7: the key cap - 10,001 distinct denial keys give ONE drop warning and a bounded buffer', async () => {
+    const f = await fixture('t7');
+    await flushSecurityEvents();
+    const spies = spyLogger();
+    try {
+      for (let i = 0; i < 10_001; i++) {
+        enqueueAuthorizeDenied({ orgId: f.orgId, actorPersonId: crypto.randomUUID(), capability: ORG_CAP, storeId: null }, Date.now);
+      }
+      ctl.mode = 'fail'; // the flush drains the buffer, then its write fails fast: only the drop warning is under test
+      try {
+        await flushSecurityEvents();
+      } finally {
+        ctl.mode = 'real';
+      }
+      const warns = linesOf(spies, 'warn').filter((l) => /dropped/i.test(l));
+      expect(warns, 'one drop warning per flush').toHaveLength(1);
+      expect(warns[0]).toMatch(/"dropped":1\b/);
+      // bounded: a second flush has nothing left to drop or warn about
+      const again = linesOf(spies, 'warn').length;
+      await flushSecurityEvents();
+      expect(linesOf(spies, 'warn').length).toBe(again);
+    } finally {
+      for (const x of spies) x.spy.mockRestore();
+    }
+  }, 60_000);
+
+  it('T8: elevateManager with an unresolvable org, and endShift / endAllForDevice that cannot resolve the org, THROW and leave no grant and no ended session', async () => {
+    const f = await fixture('t8');
+    await expect(
+      withOrgPrincipal(f.orgId, (tx) => elevateManager(tx, { personId: f.workerId, orgId: crypto.randomUUID(), grantedBy: f.adminId })),
+    ).rejects.toThrow();
+    expect((await sql<{ n: number }[]>`select count(*)::int as n from person_grants where person_id = ${f.workerId}`)[0]!.n, 'no grant survives').toBe(0);
+    expect(await count(f.orgId, 'manager.elevated')).toBe(0);
+
+    const live = async (id: string) => (await sql<{ ended_at: Date | null }[]>`select ended_at from sessions where id = ${id}`)[0]!.ended_at;
+    const s1 = await signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: PIN, deviceId: f.deviceId });
+    ctl.orgOfPersonNull = true;
+    try {
+      await expect(withOrgPrincipal(f.orgId, (tx) => endShift(tx, { personId: f.cashierId, storeId: f.storeId }))).rejects.toThrow();
+      await expect(withOrgPrincipal(f.orgId, (tx) => endAllForDevice(tx, { deviceId: f.deviceId }))).rejects.toThrow();
+    } finally {
+      ctl.orgOfPersonNull = false;
+    }
+    expect(await live(s1.sessionId), 'mutant: a silent skip - the session was ended without its event').toBeNull();
+    expect(await count(f.orgId, 'session.ended')).toBe(0);
+    expect(await count(f.orgId, 'session.ended_all')).toBe(0);
+  });
+
+  it('T9: signInWithFirebase(null) and signOut(null) with the audit write forced to fail still succeed - the session is real, one logger.error', async () => {
+    const f = await fixture('t9');
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Fb') returning id`;
+    const externalId = uid('fbuid');
+    await sql`insert into person_credentials (person_id, kind, external_id) values (${p!.id}, 'firebase', ${externalId})`;
+    const spies = spyLogger();
+    ctl.mode = 'fail';
+    try {
+      const r = await signInWithFirebase(null, { verifiedUid: externalId });
+      expect(r.token.length).toBeGreaterThan(16);
+      await signOut(null, r.token);
+      await flushSecurityEvents();
+      expect(linesOf(spies, 'error').length, 'one error per failed flush (two events, at most two flushes), none per request').toBeGreaterThanOrEqual(1);
+      expect(linesOf(spies, 'error').length).toBeLessThanOrEqual(2);
+      const sess = await sql<{ ended_at: Date | null }[]>`select ended_at from sessions where id = ${r.sessionId}`;
+      expect(sess[0]!.ended_at, 'the sign-out itself took effect').not.toBeNull();
+    } finally {
+      ctl.mode = 'real';
+      for (const x of spies) x.spy.mockRestore();
+    }
+    expect(await count(f.orgId, 'auth.signin_succeeded'), 'accepted loss: the event, never the sign-in').toBe(0);
+  });
+
+  it('T11: EXPLAIN of the first-of-day query touches the current year\'s partitions only - mutant: the recorded_at bound removed', async () => {
+    const f = await fixture('t11');
+    const captured: unknown[] = [];
+    await withOrgPrincipal(f.orgId, async (tx) => {
+      const spy = new Proxy(tx as object, {
+        get(t, prop) {
+          const v = (t as Record<string | symbol, unknown>)[prop];
+          if (prop === 'execute') {
+            return (q: unknown) => {
+              captured.push(q);
+              return (v as (x: unknown) => unknown).call(t, q);
+            };
+          }
+          return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(t) : v;
+        },
+      }) as Tx;
+      await authzDenialCountsRepo.registerDenial(spy, { orgId: f.orgId, actorPersonId: f.staffId, capability: ORG_CAP, storeId: null, at: new Date(), count: 1 });
+    });
+    const dialect = new PgDialect();
+    const queries = captured.map((q) => dialect.sqlToQuery(q as never)).filter((q) => /from audit_log/i.test(q.sql));
+    expect(queries, 'the first-of-day scan was issued').toHaveLength(1);
+    const plan = (await sql.unsafe(`explain (analyze, format json) ${queries[0]!.sql}`, queries[0]!.params as never[])) as unknown as Array<Record<string, unknown>>;
+    const touched = new Set<string>();
+    const walk = (n: Record<string, unknown>) => {
+      const name = n['Relation Name'];
+      if (typeof name === 'string' && /^audit_log_/.test(name) && Number(n['Actual Loops'] ?? 0) > 0) touched.add(name);
+      for (const c of (n['Plans'] as Array<Record<string, unknown>> | undefined) ?? []) walk(c);
+    };
+    walk((plan[0]!['QUERY PLAN'] as Array<{ Plan: Record<string, unknown> }>)[0]!.Plan);
+    const years = new Set([...touched].map((n) => /(\d{4})$/.exec(n)?.[1] ?? n));
+    expect(touched.size, `partitions touched: ${[...touched].join(', ')}`).toBeGreaterThan(0);
+    expect(years.size, `one year of partitions only: ${[...touched].join(', ')}`).toBe(1);
+    expect(touched.size).toBeLessThanOrEqual(2);
   });
 });
 
