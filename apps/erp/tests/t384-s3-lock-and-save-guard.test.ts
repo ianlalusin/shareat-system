@@ -45,7 +45,6 @@ const EXEMPT: Record<string, string> = {};
 // `<button>` labels written in app/ - they are the `label=` prop of <ConfirmDestructive>, whose own submit button is the one
 // control (apps/erp/tests/t412-destructive-census.test.ts is the guard for those). Their entries left this list with them.
 const COMMANDS: Record<string, string> = {
-  'Retire recipe': 'moves a status (T-413: a retired recipe leaves the cook picker)',
   'Restore recipe': 'moves a status (T-413)',
   'Save recipe': 'T-413: label pinned by the T-413 screen tests; it saves a recipe (planner to rule: Save vs Save recipe)',
   'Record payment': 'books money out for good (Q2)',

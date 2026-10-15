@@ -1,6 +1,6 @@
 /**
  * T-258 / DEF-244 — `/customers/[customerId]`'s Charges and Collections rows are whole-row tap
- * targets via the stretched-link technique (a real `<Link>` with `after:absolute after:inset-0`,
+ * targets via the stretched-link technique (now the T-411 kit: <LinkRow>/<RowLink>/<RowAction>, a real `<Link>` with `after:absolute after:inset-0`,
  * positioned against a `relative` ancestor `<tr>` — not a `<div onClick>`, and not `<tr>` wrapped in
  * `<a>`, which is invalid HTML: `<tr>` only accepts `<td>/<th>` children).
  *
@@ -31,20 +31,19 @@ describe('whole-row tap target — T-258 / DEF-244', () => {
     expect(content).not.toMatch(/<tr[^>]*onClick/);
   });
 
-  it('both entry-link rows are `relative` (the containing block the stretched link needs)', () => {
-    const rowBlocks = content.split('<tr').slice(1).filter((b) => b.includes('journalEntryId &&'));
+  // T-411 (release 2026-10-16): the stretched-link technique is now the shared kit — <LinkRow> is the `relative` row,
+  // <RowLink> the stretched anchor, <RowAction> the `relative z-10` escape. The guards below pin that structure.
+  it('both entry-link rows are <LinkRow> (the `relative` containing block the stretched link needs)', () => {
+    const rowBlocks = content.split('<LinkRow').slice(1).filter((b) => b.slice(0, 900).includes('journalEntryId'));
     expect(rowBlocks.length).toBe(2); // Charges row, Collections row
-    for (const block of rowBlocks) {
-      expect(block.slice(0, 400)).toMatch(/\brelative\b/);
-    }
   });
 
-  it('both "entry" links use the stretched-link classes, not ACTION_LINK', () => {
-    const matches = [...content.matchAll(/>\s*entry\s*<\/Link>/g)];
+  it('both "entry" links are <RowLink> (stretched), not ACTION_LINK', () => {
+    const matches = [...content.matchAll(/>\s*entry\s*<\/RowLink>/g)];
     expect(matches.length).toBe(2);
-    expect(content).not.toMatch(/entry[\s\S]{0,5}<\/Link>[\s\S]{0,5}ACTION_LINK/);
-    const entryLinkAttrs = [...content.matchAll(/<Link[^>]*after:absolute after:inset-0[^>]*>/g)];
-    expect(entryLinkAttrs.length).toBe(2);
+    expect(content).not.toMatch(/entry[\s\S]{0,5}<\/RowLink>[\s\S]{0,5}ACTION_LINK/);
+    const entryLinks = [...content.matchAll(/<RowLink\s+href=\{`\/reports\/journal-lines\?entry=/g)];
+    expect(entryLinks.length).toBe(2);
   });
 
   it('every "entry" link has a distinguishing aria-label, not a page of identical names', () => {
@@ -55,10 +54,10 @@ describe('whole-row tap target — T-258 / DEF-244', () => {
   });
 
   it('the void form escapes the stretched link as a real sibling with its own stacking context', () => {
-    const formMatch = content.match(/<form\s+action=\{voidCollectionAction\}[^>]*>/);
-    expect(formMatch).not.toBeNull();
-    expect(formMatch![0]).toMatch(/\brelative\b/);
-    expect(formMatch![0]).toMatch(/\bz-10\b/);
+    // The form sits inside <RowAction> (`relative z-10`), a sibling of the stretched <RowLink>, never inside it.
+    const at = content.search(/<form\s+action=\{voidCollectionAction\}/);
+    expect(at).toBeGreaterThan(-1);
+    expect(content.slice(Math.max(0, at - 200), at)).toMatch(/<RowAction\b[^>]*>\s*$/);
   });
 
   it('the void button uses ACTION_LINK — found-in-passing DEF-239-shape fix, not left at bare underline', () => {

@@ -22,6 +22,7 @@ const ROW_LINK: readonly string[] = [
   'app/admin/users/page.tsx',
   'app/ap/invoices/[id]/page.tsx',
   'app/ap/page.tsx',
+  'app/ap/vat/page.tsx', // T-408, swept at the 2026-10-16 combined release
   'app/ap/suppliers/[id]/page.tsx',
   'app/ap/suppliers/page.tsx',
   'app/attendance/page.tsx',
@@ -37,6 +38,7 @@ const ROW_LINK: readonly string[] = [
   'app/inventory/deliveries/[id]/page.tsx',
   'app/inventory/deliveries/page.tsx',
   'app/inventory/production/page.tsx',
+  'app/inventory/production/recipes/page.tsx', // T-413, swept at the 2026-10-16 combined release
   'app/inventory/usage/[id]/page.tsx',
   'app/inventory/usage/page.tsx',
   'app/items/page.tsx',
@@ -63,6 +65,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'components/reports/StoreComparisonTable.tsx',
   'components/reports/TrialBalanceTable.tsx',
   // Editing grids / rows are forms (21)
+  'app/page.tsx', // T-401 S6: the usage check scorecard on the dashboard, one row per store, no row destination
   'app/admin/access-defaults/grid.tsx',
   'app/attendance/lane/page.tsx',
   'app/attendance/terminals/page.tsx',
@@ -94,6 +97,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/inventory/page.tsx',
   'app/inventory/pos-map/page.tsx',
   'app/inventory/production/[id]/page.tsx',
+  'app/inventory/production/recipes/[id]/page.tsx', // T-413: read-only ingredient lines, no row destination
   'app/items/[id]/page.tsx',
   'app/menu/items/[id]/page.tsx',
   'app/owners/[id]/page.tsx',

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { requireSession } from '../../../../lib/session';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, FlashBanner } from '@/components/ui';
+import { Badge, FlashBanner, LinkRow, RowLink } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { RECIPES_PATH, canManageRecipes, fmtQty, recipeList } from './lib';
 
@@ -38,7 +38,7 @@ export default async function RecipesPage({ searchParams }: { searchParams: Prom
         </div>
         <div className="flex flex-wrap items-center gap-4 text-sm">
           {canManage && (
-            <Link href={`${RECIPES_PATH}/new`} className="inline-flex min-h-11 items-center rounded-[12px] bg-brand px-4 py-2.5 font-semibold text-white">
+            <Link href="/inventory/production/recipes/new" className="inline-flex min-h-11 items-center rounded-[12px] bg-brand px-4 py-2.5 font-semibold text-white">
               New recipe
             </Link>
           )}
@@ -82,18 +82,18 @@ export default async function RecipesPage({ searchParams }: { searchParams: Prom
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                <LinkRow key={r.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-2">
-                    <Link href={`${RECIPES_PATH}/${r.id}`} className="inline-flex min-h-11 items-center underline underline-offset-4">
+                    <RowLink href={`${RECIPES_PATH}/${r.id}`}>
                       {r.name}
-                    </Link>
+                    </RowLink>
                   </td>
                   <td className="px-3 py-2">{`Makes ${fmtQty(r.outputQuantity)} ${r.outputUnit} of ${r.outputName}`}</td>
                   <td className="px-3 py-2">{`${r.ingredientCount} ingredient${r.ingredientCount === 1 ? '' : 's'}`}</td>
                   <td className="px-3 py-2">
                     <Badge status={r.status} />
                   </td>
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
           </table>

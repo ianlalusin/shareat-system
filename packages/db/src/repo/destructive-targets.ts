@@ -64,6 +64,7 @@ export const DESTRUCTIVE_TARGETS = {
   commissary_item_map: { table: 'commissary_item_map', store: sql`t.branch_store_id`, name: sql`(select i.name from items i where i.id = t.branch_item_id)` },
   item: { table: 'items', store: null, name: sql`t.name` },
   menu_category: { table: 'menu_categories', store: null, name: sql`t.name` },
+  production_recipe: { table: 'production_recipes', store: null, name: sql`t.name` },
   money_account: { table: 'money_accounts', store: null, name: sql`t.name` },
   store: { table: 'stores', store: null, name: sql`t.name` },
   person: { table: 'persons', store: null, name: sql`t.display_name` },

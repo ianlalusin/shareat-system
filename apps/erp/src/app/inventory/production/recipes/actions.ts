@@ -11,6 +11,8 @@ import type { Tx } from '@shareat/db';
 import { requireActor } from '../../../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage } from '@/lib/constraint-messages';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 import { RECIPES_PATH, isUuid, withOrgPrincipal } from './lib';
 
 function str(fd: FormData, key: string): string {
@@ -66,6 +68,13 @@ export async function editRecipeAction(fd: FormData): Promise<void> {
 export async function retireRecipeAction(fd: FormData): Promise<void> {
   const actor = await requireActor(RECIPES_PATH);
   const recipeId = str(fd, 'recipeId');
+  try {
+    // T-412 Tier R: the person retypes the recipe's name; the server compares it with the name IT loads.
+    const target = await loadDestructiveTarget(actor, 'production_recipe', recipeId, ['manage_recipes']);
+    if (!retypeMatches(str(fd, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
+  } catch (err) {
+    return await redirectWithFlash(detailPath(recipeId), {}, { error: errorMessage(err) });
+  }
   const r = await attempt(actor.orgId, (tx) => retireRecipe(tx, actor, { recipeId }));
   return await redirectWithFlash(detailPath(recipeId), {}, r.ok ? { ok: 'Recipe retired.' } : { error: r.error });
 }

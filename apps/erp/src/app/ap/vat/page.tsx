@@ -6,7 +6,7 @@ import { requireSession } from '../../../lib/session';
 import { listStores, peso, withOrgPrincipal } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Button, Input, Select } from '@/components/ui';
+import { Button, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Invoices by VAT type and OR — Shareat System' };
@@ -128,19 +128,19 @@ export default async function VatListPage({ searchParams }: { searchParams: Prom
                   </thead>
                   <tbody>
                     {data.invoices.map((i) => (
-                      <tr key={i.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                      <LinkRow key={i.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                         <td className="px-3 py-2">{i.invoiceDate}</td>
                         <td className="px-3 py-2">{i.supplierName}</td>
                         <td className="px-3 py-2">
-                          <Link href={`/ap/invoices/${i.id}`} className={ACTION_LINK}>
+                          <RowLink href={`/ap/invoices/${i.id}`}>
                             {i.invoiceNo ?? i.id.slice(0, 8)}
-                          </Link>
+                          </RowLink>
                         </td>
                         <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(i.totalAmount)}</td>
                         <td className="px-3 py-2 text-right font-mono tabular-nums">{i.vatAmount != null ? peso(i.vatAmount) : '—'}</td>
                         <td className="px-3 py-2">{TYPE_LABEL.get(i.vatType)}</td>
                         <td className="px-3 py-2">{i.isOfficialReceipt ? 'Yes' : 'No'}</td>
-                      </tr>
+                      </LinkRow>
                     ))}
                   </tbody>
                 </table>

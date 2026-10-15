@@ -226,7 +226,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 116 FAIL / 1259 total, T-411 2026-10-15: 30 tables' row links are full-height rows (h-11).
     // components/ui/Table.tsx UNRESOLVED (T-411): RowLink's tap target is its stretched ::after (absolute inset-0) over the
     // enclosing LinkRow, which is h-11 (44px); RowLink's own class carries no height by design.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 48 });
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 47 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -433,7 +433,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // release 2026-10-14: 1170 + 2 (T-404) + 18 (T-392 S5) + 86 (T-401 S4) + 16 (T-401 S5) = 1292.
     // 116 FAIL / 1259 total, T-411 2026-10-15: 30 tables' row links are full-height rows (h-11).
     // + T-408 (/ap VAT/OR controls, /ap/vat page). Total re-measured on release 2026-10-16.
-    expect(results.length).toBe(1259);
+    // 1259 -> 1245, release 2026-10-16 combined branch, re-measured (1249 before the three T-411 sweeps of vat, usage drafts and recipes, which each fold a link and its row into one RowLink): T-412 swapped confirm checkboxes and danger buttons for
+    // ConfirmDestructive across screens (not itemised; net -10 measured). FAIL 116 unmoved. UNRESOLVED 48 -> 47: settings/pos-link's
+    // "I understand" checkbox is gone (T-412 retype-the-name), so its touch-target-baseline.json entry is removed.
+    expect(results.length).toBe(1245);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

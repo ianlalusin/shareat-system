@@ -4,7 +4,7 @@ import { convertUnit, quantity } from '@shareat/domain';
 import { requireSession } from '../../../../../lib/session';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Banner, Button, FlashBanner } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, FlashBanner } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { editRecipeAction, restoreRecipeAction, retireRecipeAction } from '../actions';
 import { RECIPES_PATH, canManageRecipes, fmtQty, recipeDetail, recipeItemOptions, type RecipeItemOption } from '../lib';
@@ -93,12 +93,12 @@ export default async function RecipePage({
               Save recipe
             </Button>
           </form>
-          <StatusForm recipeId={recipe.id} retired={retired} />
+          <StatusForm recipeId={recipe.id} recipeName={recipe.name} retired={retired} />
         </>
       ) : null}
 
       {canManage && stuck.length > 0 ? (
-        <StatusForm recipeId={recipe.id} retired={retired} />
+        <StatusForm recipeId={recipe.id} recipeName={recipe.name} retired={retired} />
       ) : null}
 
       {!canManage ? (
@@ -129,7 +129,7 @@ export default async function RecipePage({
 }
 
 /** Retire a live recipe, or bring a retired one back. Two literal buttons, one shown. */
-function StatusForm({ recipeId, retired }: { recipeId: string; retired: boolean }) {
+function StatusForm({ recipeId, recipeName, retired }: { recipeId: string; recipeName: string; retired: boolean }) {
   return retired ? (
     <form action={restoreRecipeAction}>
       <input type="hidden" name="recipeId" value={recipeId} />
@@ -140,9 +140,7 @@ function StatusForm({ recipeId, retired }: { recipeId: string; retired: boolean 
   ) : (
     <form action={retireRecipeAction}>
       <input type="hidden" name="recipeId" value={recipeId} />
-      <Button type="submit" variant="danger">
-        Retire recipe
-      </Button>
+      <ConfirmDestructive tier="retype" label="Retire recipe" consequence="Retires this recipe. A cook can no longer start a batch from it." expectedName={recipeName} />
     </form>
   );
 }

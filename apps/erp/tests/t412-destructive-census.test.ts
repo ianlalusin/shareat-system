@@ -106,6 +106,8 @@ const rows: Row[] = [
   { file: 'app/money-accounts/page.tsx', tier: 'R', label: 'Retire money account', danger: true, visible: 'Retire money account', action: 'retireMoneyAccountAction', actionFile: 'app/money-accounts/actions.ts', mutation: 'retireMoneyAccount' },
   { file: 'app/settings/pos-link/page.tsx', tier: 'R', label: 'Unlink store from POS', danger: true, visible: 'Unlink store from POS', action: 'unlinkStoreFromPosAction', actionFile: 'app/settings/pos-link/actions.ts', mutation: 'unlinkStoreFromPos' },
   { file: 'app/settings/pos-link/page.tsx', tier: 'R', label: 'Retire tender', danger: true, visible: 'Retire tender', action: 'setTenderActiveAction', actionFile: 'app/settings/pos-link/actions.ts', mutation: 'setTenderActive' },
+  // T-413 (release 2026-10-16): the recipe screen's Retire - Tier R, the recipe's name is retyped and loaded by the action.
+  { file: 'app/inventory/production/recipes/[id]/page.tsx', tier: 'R', label: 'Retire recipe', danger: true, visible: 'Retire recipe', action: 'retireRecipeAction', actionFile: 'app/inventory/production/recipes/actions.ts', mutation: 'retireRecipe' },
   { file: 'app/staff/[employmentId]/credentials/page.tsx', tier: 'R', label: 'Revoke credential', danger: true, visible: 'Revoke credential', action: 'revokeCredentialAction', actionFile: 'app/staff/[employmentId]/credentials/actions.ts', mutation: 'revokeCredential' },
   { file: 'app/inventory/locations/page.tsx', tier: 'R', label: 'Deactivate room', danger: false, visible: 'Deactivate room', action: 'deactivateLocationAction', actionFile: 'app/inventory/locations/actions.ts', mutation: 'deactivateLocation' },
   // ---- AUDIT ROUND H1 / H2 (orchestrator ruling): the two CONDITIONAL danger buttons `variant={x ? 'danger' : ...}` ----
@@ -196,13 +198,13 @@ function topLevelArgs(argText: string): string[] {
 const FORM_READ = /formData|\bfd\b|str\(|opt\(|requireId\(|\.get\(/;
 
 describe('the census arithmetic (green today: the literal map matches the spec + the audit-round conditionals)', () => {
-  it('65 controls: P 35, R 16 (14 + the 2 conditional danger buttons), W 10, X 4; 62 are danger (2 conditional), in 48 files', () => {
+  it('66 controls: P 35, R 17 (14 + the 2 conditional danger buttons + T-413 Retire recipe), W 10, X 4; 63 are danger (2 conditional), in 49 files', () => {
     const by = (t: Tier) => rows.filter((r) => r.tier === t).length;
-    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([35, 16, 10, 4]);
-    expect(rows).toHaveLength(65);
-    expect(rows.filter((r) => r.danger)).toHaveLength(62);
+    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([35, 17, 10, 4]);
+    expect(rows).toHaveLength(66);
+    expect(rows.filter((r) => r.danger)).toHaveLength(63);
     expect(rows.filter((r) => r.conditional)).toHaveLength(2);
-    expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(48);
+    expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(49);
   });
   it('every P / R row names its visible label (audit L8), and no two rows in one file share an action AND a label by accident', () => {
     for (const r of rows.filter((x) => x.tier === 'P' || x.tier === 'R')) {
@@ -277,7 +279,7 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
     expect(bad).toEqual([]);
   });
 
-  it('the total of controls = bare danger + ConfirmDestructive across src is exactly 65', () => {
+  it('the total of controls = bare danger + ConfirmDestructive across src is exactly 66', () => {
     let total = 0;
     for (const abs of walk(SRC)) {
       const r = rel(abs);
@@ -285,7 +287,7 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
       const src = readFileSync(abs, 'utf8');
       total += count(src, DANGER) + confirmWindows(src).length;
     }
-    expect(total).toBe(65);
+    expect(total).toBe(66);
   });
 });
 

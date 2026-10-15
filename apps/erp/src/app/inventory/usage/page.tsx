@@ -146,11 +146,11 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
               </thead>
               <tbody>
                 {queue.drafts.map((d) => (
-                  <tr key={d.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={d.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
-                      <Link href={`/inventory/usage/${d.id}`} className={ACTION_LINK}>
+                      <RowLink href={`/inventory/usage/${d.id}`}>
                         {d.usedOn}
-                      </Link>
+                      </RowLink>
                     </td>
                     <td className="px-3 py-2">{d.locationName}</td>
                     <td className="px-3 py-2">{d.createdByName}</td>
@@ -163,7 +163,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
                         <span className="ml-2 text-xs text-amber-700 dark:text-amber-400">Pull voided - check this draft against what was really used.</span>
                       )}
                     </td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>

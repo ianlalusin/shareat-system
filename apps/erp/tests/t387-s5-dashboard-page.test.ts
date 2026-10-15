@@ -113,6 +113,8 @@ vi.mock('@shareat/domain', async (importOriginal) => {
     getBalanceSheet: async () => ({ assets: '8420000.00', liabilities: '3100000.00', equity: '5320000.00', ties: true }),
     getArAgingReport: async () => ({ totals: { total: '11111.11' } }),
     getApAgingReport: async () => ({ totals: { total: '22222.22' } }),
+    // T-401 S6 (release 2026-10-16): the dashboard also asks for the usage check scorecard; an empty one renders no rows.
+    usageCheckScorecard: async () => [],
   };
 });
 

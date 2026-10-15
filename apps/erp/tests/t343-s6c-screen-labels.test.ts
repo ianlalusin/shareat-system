@@ -394,6 +394,8 @@ vi.mock('../src/app/inventory/usage/lib', async (importOriginal) => {
   return {
     ...actual,
     usageScreenData: (...a: unknown[]) => usageScreenDataMock(...a),
+    // T-401 S6 (release 2026-10-16): the page also reads the usage queue; an empty one (no variances, no drafts).
+    usageQueueData: async (_orgId: string, _actor: unknown, _storeId: string, date: string) => ({ date, variances: [], drafts: [] }),
     usageRecordDetail: (...a: unknown[]) => usageRecordDetailMock(...a),
   };
 });
