@@ -478,9 +478,14 @@ describe('T-177 — 10. (T-401 S6) a frozen room no longer holds anything: RETIR
     expect(result.sections[0]!.heldSentences).toEqual([]);
     expect(await onHand(itemCoke, kitchen)).toBe('50.000');
     expect(await onHand(itemCheese, display)).toBe('10.000');
-    const [rec] = await usageRecordsOfDay(sql, storeA, '2026-08-20');
-    expect(rec!.status).toBe('draft');
-    expect(rec!.lines).toEqual({ [itemCoke]: '5.000', [itemCheese]: '2.000' });
+    // One draft per store + day + ROOM (Ian, 15 Oct): Coke is in the kitchen, Cheese Direct is mapped to the display.
+    const recs = await usageRecordsOfDay(sql, storeA, '2026-08-20');
+    expect(recs, 'one draft per room').toHaveLength(2);
+    expect(recs.every((r) => r.status === 'draft')).toBe(true);
+    expect(Object.fromEntries(recs.map((r) => [r.locationId, r.lines]))).toEqual({
+      [kitchen]: { [itemCoke]: '5.000' },
+      [display]: { [itemCheese]: '2.000' },
+    });
     const [row] = await sql<{ direct: Date | null }[]>`select direct_finalized_at as direct from pos_usage_pulls where id = ${plan.pullId}`;
     expect(row!.direct, 'stamped: nothing is held').not.toBeNull();
   });

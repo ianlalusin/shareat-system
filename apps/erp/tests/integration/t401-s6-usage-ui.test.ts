@@ -106,7 +106,7 @@ describe('B1 - the post action: an out-of-band draft needs a reason', () => {
     const id = await draft(w, w.staff, [{ itemId: w.cheese, quantity: '12' }]); // +20%
     const { postUsageAction } = await import('../../src/app/inventory/usage/actions');
 
-    for (const fields of [{ recordId: id }, { recordId: id, reason: '   ' }]) {
+    for (const fields of [{ recordId: id }, { recordId: id, reason: '   ' }] as Record<string, string>[]) {
       const r = await run(w.manager, postUsageAction, fields);
       expect(r.path, 'the refusal returns to the form').toBe(`/inventory/usage/${id}`);
       expect(r.q.get('ok')).toBeNull();

@@ -388,9 +388,12 @@ describe('the pull is a check only; drafts move stock (bible row 335)', () => {
     const f = await asOrg(w.orgId, (tx) => finalizeSections(tx, w.manager, { pullId, sections: ['direct'], confirmedKeys: keys }));
     expect(f.ok, f.ok ? '' : String((f as { reason?: string }).reason)).toBe(true);
     expect(await onHand(w), 'the pull moved stock').toBe(START);
-    const [pr] = await sql<{ n: string }[]>`select count(*)::text as n from pos_usage_pull_lines where pull_id = ${pullId} and usage_record_id is not null`;
-    expect(Number(pr!.n), 'the pull made a usage record').toBe(0);
-    const id = await draft(w, w.staff, '10');
+    // Round 2 (Ian, 15 Oct): the pull makes a DRAFT (one per store + day + room) and moves no stock. The manager posting that draft is the only stock out.
+    const made = await sql<{ id: string; status: string }[]>`
+      select distinct r.id, r.status from pos_usage_pull_lines l join stock_usage_records r on r.id = l.usage_record_id where l.pull_id = ${pullId}`;
+    expect(made.length, 'the pull made exactly one draft').toBe(1);
+    expect(made[0]!.status, 'a draft, not posted').toBe('draft');
+    const id = made[0]!.id;
     expect(await postRefusal(w, w.manager, id)).toBeNull();
     expect(await onHand(w)).toBe(START - 10);
     const [n] = await sql<{ n: string }[]>`
@@ -422,11 +425,13 @@ describe('the pull is a check only; drafts move stock (bible row 335)', () => {
     expect(f.ok, f.ok ? '' : String((f as { reason?: string }).reason)).toBe(true);
     expect(await onHand(w, w.rice)).toBe(START);
     expect(await onHand(w, w.cheese)).toBe(START);
-    const [pr] = await sql<{ n: string }[]>`select count(*)::text as n from pos_usage_pull_lines where pull_id = ${p.pullId} and usage_record_id is not null`;
-    expect(Number(pr!.n), 'the pull made a usage record').toBe(0);
-    // expected rice = 10 boxes * 0.1 kg = 1: a draft of 1 posts clean, a draft of 2 would be flagged
-    const rid = await draft(w, w.staff, '1', { itemId: w.rice });
-    expect(await postRefusal(w, w.manager, rid)).toBeNull();
+    // The pull made ONE draft (the kitchen) holding the recipe ingredients at their expected quantities; no stock moved yet.
+    const made = await sql<{ id: string; status: string }[]>`
+      select distinct r.id, r.status from pos_usage_pull_lines l join stock_usage_records r on r.id = l.usage_record_id where l.pull_id = ${p.pullId}`;
+    expect(made.length, 'the pull made exactly one draft').toBe(1);
+    expect(made[0]!.status).toBe('draft');
+    // expected rice = 10 boxes * 0.1 kg = 1: the manager posts the pull draft and rice falls by that 1 (no second draft needed)
+    expect(await postRefusal(w, w.manager, made[0]!.id)).toBeNull();
     expect(await onHand(w, w.rice)).toBe(START - 1);
   }, 180_000);
 });

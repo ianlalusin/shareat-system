@@ -36,7 +36,18 @@ const mod = domainModule as unknown as {
   autoPostDueUsageDrafts(tx: Tx, now: Date): Promise<{ posted: unknown[]; skipped: { recordId: string; reason: string }[] }>;
   usageCheckScorecard(tx: Tx, actor: { personId: string; orgId: string }, range: { from: string; to: string }): Promise<unknown>;
 };
-const runAuto = (now: Date) => systemTransaction((tx) => mod.autoPostDueUsageDrafts(tx, now));
+/** The sweep is system-wide and every test's drafts share the database: scope what it reports to THIS test's org. */
+async function runAuto(now: Date, w: World) {
+  const r = await systemTransaction((tx) => mod.autoPostDueUsageDrafts(tx, now));
+  const own = new Set((await sql<{ id: string }[]>`select id from stock_usage_records where org_id = ${w.orgId}`).map((x) => x.id));
+  return {
+    posted: (r.posted as { recordId: string }[]).filter((x) => own.has(x.recordId)),
+    skipped: r.skipped.filter((x) => own.has(x.recordId)),
+  };
+}
+/** Voids a usage record the way the void CHECK needs it (voided_at, voided_by, a reason). */
+const voidRecord = (w: World, id: string) =>
+  sql`update stock_usage_records set status = 'void', voided_at = now(), voided_by = ${w.admin.personId}, void_reason = 'test fixture' where id = ${id}`;
 
 interface Row { storeId: string; pullDrafts: number; postedByManager: number; autoPosted: number; autoPostedPct: number }
 async function scorecard(w: World, actor: { personId: string; orgId: string }, from: string, to: string): Promise<Row[]> {
@@ -84,6 +95,9 @@ async function closeEarlierMonths(w: World) {
 /** The stock-up deliveries of the fixture are drafts dated in August, which would block the close on their own: mark them received first. */
 const closeAug = async (w: World) => {
   await sql`update deliveries set status = 'received', received_at = now(), received_by = ${w.staff.personId} where org_id = ${w.orgId} and status = 'draft'`;
+  // The fixture's POS sales days (made for the pull) are old, open, POS-sourced days: they would trip salesDayUnposted on their own. Verify them.
+  await sql`update sales_days set status = 'submitted', submitted_at = now(), submitted_by = ${w.staff.personId} where org_id = ${w.orgId} and status = 'open'`;
+  await sql`update sales_days set status = 'verified', verified_at = now(), verified_by = ${w.manager.personId} where org_id = ${w.orgId} and status = 'submitted'`;
   return asOrg(w.orgId, (tx) => closePeriod(tx, w.admin, { period: '2026-08' }));
 };
 const periodStatus = async (w: World, month: string) =>
@@ -115,7 +129,7 @@ describe('month-close blocks on unposted or unexplained usage', () => {
     await stockUp(w, w.a.storeId, w.a.kitchen, w.coke, '100');
     const id = await manualDraft(w, '2026-08-31');
     await expect(closeAug(w), 'last day of the month counts').rejects.toThrow(/usage/i);
-    await sql`update stock_usage_records set status = 'void' where id = ${id}`;
+    await voidRecord(w, id);
     await closeAug(w);
     expect(await periodStatus(w, '2026-08')).toBe('closed');
   }, 180_000);
@@ -153,7 +167,7 @@ describe('month-close blocks on unposted or unexplained usage', () => {
     const id = await pullDraft(w, w.a.storeId, w.a.kitchen, '2026-08-10');
     const [line] = await sql<{ id: string }[]>`select id from stock_usage_lines where record_id = ${id}`;
     await sql`update stock_usage_lines set quantity = 15 where id = ${line!.id}`; // staff typed 15: out of band
-    const r = await runAuto(new Date('2026-08-11T06:01:00Z'));
+    const r = await runAuto(new Date('2026-08-11T06:01:00Z'), w);
     expect(r.posted).toHaveLength(1);
     const [rec] = await sql<{ status: string; a: boolean }[]>`select status, auto_posted as a from stock_usage_records where id = ${id}`;
     expect(rec).toMatchObject({ status: 'posted', a: true });
@@ -163,7 +177,7 @@ describe('month-close blocks on unposted or unexplained usage', () => {
     const w2 = await world('mc4b');
     await closeEarlierMonths(w2);
     await pullDraft(w2, w2.a.storeId, w2.a.kitchen, '2026-08-10');
-    await runAuto(new Date('2026-08-11T06:01:00Z'));
+    await runAuto(new Date('2026-08-11T06:01:00Z'), w2);
     await pullDraft(w2, w2.a.storeId, w2.a.kitchen, '2026-08-25'); // a later day, still a draft
     await expect(closeAug(w2)).rejects.toThrow(/usage/i);
   }, 300_000);
@@ -189,7 +203,7 @@ describe('usageCheckScorecard', () => {
     // Day 10: pull drafts at A and B, both auto-posted (due 11 Aug 14:00 Manila). Later days are created afterwards.
     const a10 = await pullDraft(w, w.a.storeId, w.a.kitchen, '2026-08-10');
     const b10 = await pullDraft(w, w.b.storeId, w.b.kitchen, '2026-08-10');
-    const auto = await runAuto(new Date('2026-08-11T06:01:00Z'));
+    const auto = await runAuto(new Date('2026-08-11T06:01:00Z'), w);
     expect(auto.posted).toHaveLength(2);
     const a11 = await pullDraft(w, w.a.storeId, w.a.kitchen, '2026-08-11');
     await mustPost(w, a11);
@@ -216,7 +230,7 @@ describe('usageCheckScorecard', () => {
     for (const r of none.filter((x) => x.storeId === w.a.storeId || x.storeId === w.b.storeId)) {
       expect(r).toMatchObject({ pullDrafts: 0, postedByManager: 0, autoPosted: 0, autoPostedPct: 0 });
     }
-    await sql`update stock_usage_records set status = 'void' where id = ${a12}`;
+    await voidRecord(w, a12);
     const rows = await scorecard(w, w.admin, '2026-08-01', '2026-08-20');
     expect(rowOf(rows, w.a.storeId)!.pullDrafts).toBe(3);
   }, 600_000);

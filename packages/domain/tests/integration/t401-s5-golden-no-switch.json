@@ -159,11 +159,23 @@
         },
         {
           "item": "item:Cheese",
-          "quantity": "1.400"
+          "quantity": "0.400"
         },
         {
           "item": "item:Rice",
           "quantity": "0.200"
+        }
+      ]
+    },
+    {
+      "kind": "usage",
+      "status": "draft",
+      "location_id": "room:Display",
+      "used_on": "2026-08-20",
+      "lines": [
+        {
+          "item": "item:Cheese",
+          "quantity": "1.000"
         }
       ]
     }

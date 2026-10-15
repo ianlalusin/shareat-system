@@ -736,12 +736,12 @@ describe('T10 - A voids the pull (uncommitted), B finalizes the same pull', () =
     expect(await onHand(f.cheese, f.kitchen)).toBe('50.000');
   });
 
-  it('control: with no void in flight the same finalize goes through (T-401 S6: it drafts ONE usage record for the day, one per store + day, and moves no stock)', async () => {
+  it('control: with no void in flight the same finalize goes through (T-401 S6: it drafts one usage record per store + day + room - kitchen and display = 2 - and moves no stock)', async () => {
     const f = await fixture('t10c');
     const p = await pulled(f, 'none');
     const out = await finalize(f, p.pullId, p.keys, ['direct']);
     expect(out.ok).toBe(true);
-    expect(await usageRecordCount(f)).toBe(1);
+    expect(await usageRecordCount(f)).toBe(2);
     expect(await onHand(f.cheese, f.kitchen)).toBe('50.000');
     expect(await onHand(f.rice, f.display)).toBe('50.000');
   });

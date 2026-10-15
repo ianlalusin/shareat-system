@@ -98,7 +98,15 @@ async function onHand(w: World, itemId: string): Promise<number> {
   const [r] = await sql<{ t: string }[]>`select coalesce(sum(quantity),0)::text as t from stock_movements where org_id = ${w.orgId} and item_id = ${itemId}`;
   return Number(r!.t);
 }
-const runAuto = (now: Date) => systemTransaction((tx) => auto.autoPostDueUsageDrafts(tx, now));
+/** The sweep is system-wide; every other test's drafts are in the same database. Scope what it reports to THIS test's org. */
+async function runAuto(now: Date, w: World) {
+  const r = await systemTransaction((tx) => auto.autoPostDueUsageDrafts(tx, now));
+  const own = new Set((await sql<{ id: string }[]>`select id from stock_usage_records where org_id = ${w.orgId}`).map((x) => x.id));
+  return {
+    posted: (r.posted as { recordId: string }[]).filter((x) => own.has(x.recordId)),
+    skipped: r.skipped.filter((x) => own.has(x.recordId)),
+  };
+}
 const autoAudit = (w: World) => sql<{ store_id: string | null; category: string; sensitivity: string; entity_id: string | null }[]>`
   select store_id, category, sensitivity, entity_id from audit_log where org_id = ${w.orgId} and action = 'stock.usage_auto_posted' order by occurred_at`;
 const flagOf = async (id: string) => (await sql<{ a: boolean }[]>`select auto_posted as a from stock_usage_records where id = ${id}`)[0]!.a;
@@ -216,14 +224,14 @@ describe('auto-post: an unposted pull draft posts at 14:00 Manila the next day',
     const s = await scenario('a1');
     await mustFinalize(s);
     const d = await theDraft(s);
-    const early = await runAuto(BEFORE_DUE);
+    const early = await runAuto(BEFORE_DUE, s.w);
     expect(early.posted, 'before the deadline: nothing').toHaveLength(0);
     expect(await statusOf(d.id)).toBe('draft');
     expect(await onHand(s.w, s.w.cheese)).toBe(START);
-    const same = await runAuto(SAME_DAY_EVENING);
+    const same = await runAuto(SAME_DAY_EVENING, s.w);
     expect(same.posted, 'the evening of the business date: nothing').toHaveLength(0);
 
-    const late = await runAuto(AFTER_DUE);
+    const late = await runAuto(AFTER_DUE, s.w);
     expect(late.posted).toHaveLength(1);
     expect(late.skipped).toEqual([]);
     expect(await statusOf(d.id)).toBe('posted');
@@ -238,8 +246,8 @@ describe('auto-post: an unposted pull draft posts at 14:00 Manila the next day',
     const s = await scenario('a2');
     await mustFinalize(s);
     await theDraft(s);
-    await runAuto(AFTER_DUE);
-    const again = await runAuto(AFTER_DUE);
+    await runAuto(AFTER_DUE, s.w);
+    const again = await runAuto(AFTER_DUE, s.w);
     expect(again.posted).toHaveLength(0);
     expect(again.skipped).toEqual([]);
     expect(await onHand(s.w, s.w.cheese)).toBe(START - 10);
@@ -252,7 +260,7 @@ describe('auto-post: an unposted pull draft posts at 14:00 Manila the next day',
     const d = await theDraft(s);
     await setActual(s.w, d.id, s.w.cheese, '10.5'); // +5%: stays
     await setActual(s.w, d.id, s.w.rice, '15'); //    +50%: back to expected 10
-    const r = await runAuto(AFTER_DUE);
+    const r = await runAuto(AFTER_DUE, s.w);
     expect(r.posted).toHaveLength(1);
     expect(await statusOf(d.id)).toBe('posted');
     expect(await onHand(s.w, s.w.cheese), 'in-band line posts as typed').toBe(START - 10.5);
@@ -266,7 +274,7 @@ describe('auto-post: an unposted pull draft posts at 14:00 Manila the next day',
     await mustFinalize(s);
     const d = await theDraft(s);
     expect((await asOrg(s.w.orgId, (tx) => postUsage(tx, s.w.manager, { recordId: d.id }))).ok).toBe(true);
-    const r = await runAuto(AFTER_DUE);
+    const r = await runAuto(AFTER_DUE, s.w);
     expect(r.posted).toHaveLength(0);
     expect(await flagOf(d.id)).toBe(false);
     expect(await onHand(s.w, s.w.cheese)).toBe(START - 10);
@@ -283,7 +291,7 @@ describe('auto-post: an unposted pull draft posts at 14:00 Manila the next day',
     );
     if (!manual.ok) throw new Error(manual.reason);
     await sql`update stock_usage_records set created_at = '2026-08-10T12:00:00Z' where id = ${manual.recordId}`;
-    const r = await runAuto(new Date('2026-09-30T06:01:00Z'));
+    const r = await runAuto(new Date('2026-09-30T06:01:00Z'), s.w);
     expect(await statusOf(manual.recordId), 'a manual draft waits for a manager however old').toBe('draft');
     expect(await onHand(s.w, s.w.coke)).toBe(START);
     expect(await statusOf(pullDraft.id)).toBe('posted');
@@ -297,7 +305,7 @@ describe('auto-post: an unposted pull draft posts at 14:00 Manila the next day',
     const [cs] = await sql<{ id: string }[]>`
       insert into count_sessions (org_id, store_id, status, counted_on, opened_by) values (${s.w.orgId}, ${s.w.a.storeId}, 'open', '2026-08-20', ${s.w.manager.personId}) returning id`;
     await sql`insert into count_session_locations (session_id, location_id) values (${cs!.id}, ${s.w.a.kitchen})`;
-    const r = await runAuto(AFTER_DUE);
+    const r = await runAuto(AFTER_DUE, s.w);
     expect(r.posted).toHaveLength(0);
     expect(r.skipped).toHaveLength(1);
     expect(r.skipped[0]!.recordId).toBe(d.id);
@@ -308,7 +316,7 @@ describe('auto-post: an unposted pull draft posts at 14:00 Manila the next day',
     expect(await autoAudit(s.w)).toHaveLength(0);
 
     await sql`update count_sessions set status = 'cancelled', closed_by = ${s.w.manager.personId}, closed_at = now() where id = ${cs!.id}`;
-    const ok = await runAuto(AFTER_DUE);
+    const ok = await runAuto(AFTER_DUE, s.w);
     expect(ok.posted).toHaveLength(1);
     expect(await statusOf(d.id)).toBe('posted');
   }, 180_000);
@@ -317,8 +325,12 @@ describe('auto-post: an unposted pull draft posts at 14:00 Manila the next day',
     const s = await scenario('a6b');
     await mustFinalize(s);
     const d = await theDraft(s);
-    await sql`update fiscal_periods set status = 'closed', closed_at = now(), closed_by = ${s.w.admin.personId} where org_id = ${s.w.orgId} and starts_on = '2026-08-01'`;
-    const r = await runAuto(AFTER_DUE);
+    // Months close in order: close every earlier month first, then August.
+    const months = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${s.w.orgId} and starts_on <= '2026-08-01' order by starts_on`;
+    for (const m of months) {
+      await sql`update fiscal_periods set status = 'closed', closed_at = now(), closed_by = ${s.w.admin.personId} where id = ${m.id}`;
+    }
+    const r = await runAuto(AFTER_DUE, s.w);
     expect(r.posted).toHaveLength(0);
     expect(r.skipped.map((x) => x.recordId)).toEqual([d.id]);
     expect(r.skipped[0]!.reason.length, 'the reason is words').toBeGreaterThan(5);
@@ -326,7 +338,7 @@ describe('auto-post: an unposted pull draft posts at 14:00 Manila the next day',
     expect(await onHand(s.w, s.w.cheese)).toBe(START);
     expect(await autoAudit(s.w)).toHaveLength(0);
     await sql`update fiscal_periods set status = 'open', closed_at = null, closed_by = null where org_id = ${s.w.orgId} and starts_on = '2026-08-01'`;
-    const ok = await runAuto(AFTER_DUE);
+    const ok = await runAuto(AFTER_DUE, s.w);
     expect(ok.posted).toHaveLength(1);
     expect(await statusOf(d.id)).toBe('posted');
   }, 180_000);
@@ -347,7 +359,7 @@ describe('auto-post: an unposted pull draft posts at 14:00 Manila the next day',
     const [cs] = await sql<{ id: string }[]>`
       insert into count_sessions (org_id, store_id, status, counted_on, opened_by) values (${s.w.orgId}, ${s.w.a.storeId}, 'open', '2026-08-20', ${s.w.manager.personId}) returning id`;
     await sql`insert into count_session_locations (session_id, location_id) values (${cs!.id}, ${s.w.a.kitchen})`;
-    const r = await runAuto(AFTER_DUE);
+    const r = await runAuto(AFTER_DUE, s.w);
     expect(r.posted).toHaveLength(1);
     expect(r.skipped.map((x) => x.recordId)).toEqual([dA.id]);
     expect(await statusOf(dB!.id)).toBe('posted');
@@ -368,7 +380,7 @@ describe('voiding a pull whose draft is still unposted', () => {
     expect(await usageRecordsOfDay(sql, s.w.a.storeId, DAY), 'no live (draft or posted) record is left for the day').toEqual([]);
     const [p] = await sql<{ status: string }[]>`select status from pos_usage_pulls where id = ${s.pullId}`;
     expect(p!.status).toBe('void');
-    const r = await runAuto(AFTER_DUE);
+    const r = await runAuto(AFTER_DUE, s.w);
     expect(r.posted, 'the voided pull draft is never auto-posted').toHaveLength(0);
   }, 180_000);
 
