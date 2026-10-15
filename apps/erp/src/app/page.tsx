@@ -267,13 +267,16 @@ export default async function DashboardPage({
 /** One summary figure: label, peso amount, a muted note, the whole card linking to its report. */
 function StatCard({ label, value, note, href, className = '' }: { label: string; value: string; note: string; href: string; className?: string }) {
   return (
-    <Link href={href} className={`dash-rise flex min-h-11 flex-col gap-2 border-surface-border px-6 py-6 ${className}`}>
-      <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{label}</span>
-      <span className="font-display text-[40px] font-bold leading-[0.95] tabular-nums">
-        <span className="mr-0.5 text-[0.5em] text-muted">₱</span>
-        {value}
-      </span>
-      <span className="text-[13px] text-muted">{note}</span>
-    </Link>
+    // The caller's borders sit on a wrapper so the Link's own className stays static for the T-262 control sweep.
+    <div className={`border-surface-border ${className}`}>
+      <Link href={href} className="dash-rise flex h-full min-h-11 flex-col gap-2 px-6 py-6">
+        <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{label}</span>
+        <span className="font-display text-[40px] font-bold leading-[0.95] tabular-nums">
+          <span className="mr-0.5 text-[0.5em] text-muted">₱</span>
+          {value}
+        </span>
+        <span className="text-[13px] text-muted">{note}</span>
+      </Link>
+    </div>
   );
 }
