@@ -340,3 +340,81 @@ describe('I11 approval misses and sign-in misses are ONE per-store budget', () =
     expect(await msg(signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: WRONG, deviceId: f.deviceId })), 'and so is the sign-in door').toMatch(PAUSED);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// AUDIT ROUND (M3 / M4, orchestrator ruling): the approving PIN's OWNER must pass `personMaySignInToOrg` (T-407: an open
+// employment, OR an admin / super_admin role, OR a never-employed manager) and must not be a terminal. It applies to the
+// admin path AND the adminless-org manager fallback (row 196).
+//   MA-1  drop the personMaySignInToOrg term from the fallback leg           -> A2 red
+//   MA-2  drop the terminal check                                            -> A3 red, A3b red
+//   MA-3  drop the personMaySignInToOrg term from the admin leg              -> A1 stays green (an admin role IS a T-407 leg);
+//         the admin-path guard is therefore a terminal / role-revoked guard and is held by A1 / A3 / I7.
+// ---------------------------------------------------------------------------------------------------------------------
+async function employ(f: Fixture, personId: string, endedOn: string | null) {
+  await sql`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, ended_on)
+    values (${f.orgId}, ${f.storeId}, ${personId}, ${uid('SE')}, ${endedOn ? 'resigned' : 'regular'}, '2025-01-01', ${endedOn})`;
+}
+
+describe('A1 an admin whose employment ended and who holds no admin role any more is refused (admin path)', () => {
+  it('A1: the ex-admin (role revoked, employment ended, live PIN) -> ADMIN_PIN_REFUSED, even while another admin keeps the org administered', async () => {
+    const f = await org('a1', { admin: true });
+    const [second] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Admin Two') returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${second!.id}, ${f.orgId}, 'admin')`;
+    await employ(f, f.admin!.personId, '2026-01-31');
+    await sql`update person_roles set revoked_at = now() where person_id = ${f.admin!.personId}`;
+    expect(await msg(approve(f, f.manager, f.admin!.pin))).toBe(ADMIN_PIN_REFUSED);
+  });
+
+  it('A1b (control, green): an admin whose EMPLOYMENT ended but who still holds the admin role keeps approving (an admin role is a T-407 leg)', async () => {
+    const f = await org('a1b', { admin: true });
+    await employ(f, f.admin!.personId, '2026-01-31');
+    expect(await approve(f, f.manager, f.admin!.pin)).toEqual({ approverPersonId: f.admin!.personId });
+  });
+});
+
+describe('A2 adminless org: an ex-employee manager with a live PIN is refused (row 196 fallback needs T-407 sign-in standing)', () => {
+  it('A2: manager with an ENDED employment, org has no administrator, holds the capability, PIN live -> refused (MA-1)', async () => {
+    const f = await org('a2');
+    await employ(f, f.manager.personId, '2026-01-31');
+    expect(await msg(approve(f, f.manager2, f.manager.pin, 'void_expense'))).toBe(ADMIN_PIN_REFUSED);
+  });
+
+  it('A2b (control, green): the same manager with an OPEN employment is the row-196 approver; a never-employed manager is too (I4b)', async () => {
+    const f = await org('a2b');
+    await employ(f, f.manager.personId, null);
+    expect(await approve(f, f.manager2, f.manager.pin, 'void_expense')).toEqual({ approverPersonId: f.manager.personId });
+  });
+
+  it('A2c: ended-employment manager is refused and the miss STAYS charged (a right PIN of an ineligible person is not refunded)', async () => {
+    const f = await org('a2c');
+    await employ(f, f.manager.personId, '2026-01-31');
+    expect(await msg(approve(f, f.manager2, f.manager.pin, 'void_expense'))).toBe(ADMIN_PIN_REFUSED);
+    expect(await countKind(f, 'miss')).toBe(1);
+  });
+});
+
+describe('A3 a terminal can never approve', () => {
+  async function terminalWith(f: Fixture, role: 'admin' | 'manager') {
+    const [t] = await sql<{ id: string }[]>`insert into persons (org_id, display_name, kind) values (${f.orgId}, 'Lane terminal', 'terminal') returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${t!.id}, ${f.orgId}, ${role})`;
+    await sql`insert into person_store_scope (person_id, store_id, source) values (${t!.id}, ${f.storeId}, 'manual')`;
+    const pin = nextPin();
+    await sql`
+      insert into person_credentials (person_id, kind, store_id, secret_hash, lookup_hash)
+      values (${t!.id}, 'pin', ${f.storeId}, ${await hashPin(pin)}, ${pinLookupHash(f.orgId, pin)})`;
+    return pin;
+  }
+
+  it('A3: a terminal holding the ADMIN role and a live PIN -> refused (MA-2)', async () => {
+    const f = await org('a3');
+    const pin = await terminalWith(f, 'admin');
+    expect(await msg(approve(f, f.manager, pin))).toBe(ADMIN_PIN_REFUSED);
+  });
+
+  it('A3b: in an adminless org a terminal holding the MANAGER role (and so the capability) -> refused (MA-2)', async () => {
+    const f = await org('a3b');
+    const pin = await terminalWith(f, 'manager');
+    expect(await msg(approve(f, f.manager, pin, 'void_expense'))).toBe(ADMIN_PIN_REFUSED);
+  });
+});

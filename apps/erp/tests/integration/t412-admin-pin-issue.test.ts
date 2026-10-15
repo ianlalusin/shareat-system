@@ -133,3 +133,59 @@ describe('issuePinAction on an employment whose person is an administrator', () 
     expect(await livePins(f.staff.personId)).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// AUDIT ROUND M5 (orchestrator ruling): ONLY a super_admin may issue a PIN to a super_admin, through BOTH doors
+// (issueAdminPinAction and issuePinAction). Otherwise an admin could choose a super_admin's PIN and approve in their place.
+//   MS-1  drop the super_admin check in issueAdminPinAction  -> S1 red
+//   MS-2  drop the super_admin check in issuePinAction       -> S2 red
+// ---------------------------------------------------------------------------------------------------------------------
+async function withSuper(hint: string) {
+  const f = await fixture(hint);
+  const mk = async (name: string, role: string) => {
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, ${name}) returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${f.orgId}, ${role})`;
+    await sql`insert into person_store_scope (person_id, store_id, source) values (${p!.id}, ${f.storeId}, 'manual')`;
+    return { personId: p!.id, orgId: f.orgId };
+  };
+  return { ...f, superA: await mk('Super A', 'super_admin'), superB: await mk('Super B', 'super_admin') };
+}
+
+describe('M5 issueAdminPinAction: a super_admin target needs a super_admin issuer', () => {
+  it('S1: an ADMIN issuing to a super_admin is refused and nothing is issued (MS-1)', async () => {
+    const f = await withSuper('s1');
+    const o = await act('issueAdminPinAction', f.admin, { personId: f.superA.personId, storeId: f.storeId, pin: '482913' });
+    expect(o.flash.error, 'refused').toBeTruthy();
+    expect(await livePins(f.superA.personId)).toBe(0);
+  });
+
+  it('S1b (control): a super_admin issues to a super_admin; an admin still issues to an ordinary admin', async () => {
+    const f = await withSuper('s1b');
+    const ok = await act('issueAdminPinAction', f.superA, { personId: f.superB.personId, storeId: f.storeId, pin: '482913' });
+    expect(ok.flash.error).toBeUndefined();
+    expect(await livePins(f.superB.personId)).toBe(1);
+    const ok2 = await act('issueAdminPinAction', f.admin, { personId: f.target.personId, storeId: f.storeId, pin: '571936' });
+    expect(ok2.flash.error).toBeUndefined();
+    expect(await livePins(f.target.personId)).toBe(1);
+  });
+});
+
+describe('M5 issuePinAction on an employment whose person is a super_admin', () => {
+  async function employed(f: Awaited<ReturnType<typeof withSuper>>, personId: string) {
+    const [e] = await sql<{ id: string }[]>`
+      insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+      values (${f.orgId}, ${f.storeId}, ${personId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    return e!.id;
+  }
+
+  it('S2: an ADMIN setting a super_admin’s PIN is refused; a super_admin can (MS-2)', async () => {
+    const f = await withSuper('s2');
+    const employmentId = await employed(f, f.superA.personId);
+    const refused = await act('issuePinAction', f.admin, { employmentId, pin: '684027' });
+    expect(refused.flash.error, 'the admin is refused').toBeTruthy();
+    expect(await livePins(f.superA.personId)).toBe(0);
+    const ok = await act('issuePinAction', f.superB, { employmentId, pin: '684027' });
+    expect(ok.flash.error).toBeUndefined();
+    expect(await livePins(f.superA.personId)).toBe(1);
+  });
+});

@@ -43,6 +43,12 @@ interface Row {
   label: string;
   /** false for the three controls that are not `variant="danger"` today. */
   danger: boolean;
+  /** P / R only: the VISIBLE button text - the exact `label="..."` of its ConfirmDestructive (audit L8: a renamed or unguarded label is caught). */
+  visible?: string;
+  /** The same, as a pattern, for a conditional row whose wording the spec does not fix. */
+  visibleRe?: RegExp;
+  /** The control is a CONDITIONAL danger button (`variant={x ? 'danger' : ...}`): audit H1 / H2. */
+  conditional?: boolean;
   /** P / R / guarded W only: the server action the form submits to. */
   action?: string;
   actionFile?: string;
@@ -52,56 +58,59 @@ interface Row {
 
 const rows: Row[] = [
   // ---- Tier P (35): an administrator's PIN ----
-  { file: 'app/ap/invoices/[id]/page.tsx', tier: 'P', label: 'Void payment', danger: true, action: 'voidPaymentAction', actionFile: 'app/ap/actions.ts', mutation: 'voidPayment' },
-  { file: 'app/ap/invoices/[id]/page.tsx', tier: 'P', label: 'Void invoice', danger: true, action: 'voidInvoiceAction', actionFile: 'app/ap/actions.ts', mutation: 'voidInvoice' },
-  { file: 'app/attendance/[dayId]/page.tsx', tier: 'P', label: 'Void day', danger: true, action: 'voidDayAction', actionFile: 'app/attendance/[dayId]/actions.ts', mutation: 'decide' },
-  { file: 'app/channel-settlements/page.tsx', tier: 'P', label: 'Void settlement', danger: true, action: 'voidSettlementAction', actionFile: 'app/channel-settlements/actions.ts', mutation: 'voidChannelSettlement' },
-  { file: 'app/commissary/orders/[id]/page.tsx', tier: 'P', label: 'Void dispatch', danger: true, action: 'withdrawOrderAction', actionFile: 'app/commissary/orders/[id]/actions.ts', mutation: 'voidTradeOrder' },
-  { file: 'app/customers/[customerId]/page.tsx', tier: 'P', label: 'Write off as bad debt', danger: true, action: 'writeOffChargeAction', actionFile: 'app/customers/actions.ts', mutation: 'writeOffCharge' },
-  { file: 'app/customers/[customerId]/page.tsx', tier: 'P', label: 'Void charge', danger: true, action: 'voidChargeAction', actionFile: 'app/customers/actions.ts', mutation: 'voidCharge' },
-  { file: 'app/cutover/opening/page.tsx', tier: 'P', label: 'Remove opening figure', danger: true, action: 'removeOpeningFigureAction', actionFile: 'app/cutover/actions.ts', mutation: 'removeOpeningFigure' },
-  { file: 'app/cutover/opening/page.tsx', tier: 'P', label: 'Post the opening balances', danger: false, action: 'postOpeningBalancesAction', actionFile: 'app/cutover/actions.ts', mutation: 'postOpeningBalances' },
-  { file: 'app/expenses/[id]/page.tsx', tier: 'P', label: 'Delete draft', danger: true, action: 'deleteDraftAction', actionFile: 'app/expenses/actions.ts', mutation: 'deleteExpenseDraft' },
-  { file: 'app/expenses/[id]/page.tsx', tier: 'P', label: 'Void expense', danger: true, action: 'voidExpenseAction', actionFile: 'app/expenses/actions.ts', mutation: 'voidExpense' },
-  { file: 'app/expenses/recurring/page.tsx', tier: 'P', label: 'Delete template', danger: true, action: 'deleteTemplateAction', actionFile: 'app/expenses/recurring/actions.ts', mutation: 'deleteRecurringTemplate' },
-  { file: 'app/fixed-assets/[id]/page.tsx', tier: 'P', label: 'Dispose', danger: true, action: 'disposeAssetAction', actionFile: 'app/fixed-assets/actions.ts', mutation: 'disposeAsset' },
-  { file: 'app/inventory/pos-usage/page.tsx', tier: 'P', label: 'Void this pull', danger: true, action: 'voidPullAction', actionFile: 'app/inventory/pos-usage/actions.ts', mutation: 'voidPosUsagePull' },
-  { file: 'app/inventory/production/[id]/page.tsx', tier: 'P', label: 'Void production', danger: true, action: 'voidProductionAction', actionFile: 'app/inventory/production/actions.ts', mutation: 'voidProduction' },
-  { file: 'app/inventory/returns/page.tsx', tier: 'P', label: 'Void supplier return', danger: true, action: 'voidReturnAction', actionFile: 'app/inventory/returns/actions.ts', mutation: 'voidReturn' },
-  { file: 'app/inventory/transfers/page.tsx', tier: 'P', label: 'Void transfer', danger: true, action: 'voidTransferAction', actionFile: 'app/inventory/transfers/actions.ts', mutation: 'voidTransfer' },
-  { file: 'app/inventory/usage/[id]/page.tsx', tier: 'P', label: 'Delete usage draft', danger: true, action: 'deleteUsageDraftAction', actionFile: 'app/inventory/usage/actions.ts', mutation: 'deleteUsageDraft' },
-  { file: 'app/inventory/usage/[id]/page.tsx', tier: 'P', label: 'Void usage', danger: true, action: 'voidUsageAction', actionFile: 'app/inventory/usage/actions.ts', mutation: 'voidUsage' },
-  { file: 'app/liabilities/[id]/page.tsx', tier: 'P', label: 'Reverse liability entry', danger: true, action: 'reverseAction', actionFile: 'app/liabilities/actions.ts', mutation: 'reverseLiabilityEntry' },
-  { file: 'app/loans/[id]/page.tsx', tier: 'P', label: 'Reverse loan entry', danger: true, action: 'reverseEntryAction', actionFile: 'app/loans/actions.ts', mutation: 'reverseLoanEntry' },
-  { file: 'app/money-transfers/page.tsx', tier: 'P', label: 'Reverse money transfer', danger: true, action: 'voidMoneyTransferAction', actionFile: 'app/money-transfers/actions.ts', mutation: 'voidMoneyTransfer' },
-  { file: 'app/payroll/page.tsx', tier: 'P', label: 'Void pay run', danger: true, action: 'voidPayRunAction', actionFile: 'app/payroll/actions.ts', mutation: 'voidPayRun' },
-  { file: 'app/payroll/separations/page.tsx', tier: 'P', label: 'Void separation', danger: true, action: 'voidSeparationAction', actionFile: 'app/payroll/separations/actions.ts', mutation: 'voidSeparation' },
-  { file: 'app/payroll/separations/page.tsx', tier: 'P', label: 'Post separation', danger: false, action: 'postSeparationAction', actionFile: 'app/payroll/separations/actions.ts', mutation: 'postSeparation' },
-  { file: 'app/payroll/thirteenth-month/page.tsx', tier: 'P', label: 'Void 13th-month run', danger: true, action: 'void13thMonthRunAction', actionFile: 'app/payroll/thirteenth-month/actions.ts', mutation: 'void13thMonthRun' },
-  { file: 'app/prepaid/[id]/page.tsx', tier: 'P', label: 'Reverse month', danger: true, action: 'reverseMonthAction', actionFile: 'app/prepaid/actions.ts', mutation: 'reverseAmortisation' },
-  { file: 'app/prepaid/[id]/page.tsx', tier: 'P', label: 'Write it off', danger: true, action: 'writeOffAction', actionFile: 'app/prepaid/actions.ts', mutation: 'writeOffPrepaidItem' },
-  { file: 'app/remittance/page.tsx', tier: 'P', label: 'Reverse remittance', danger: true, action: 'reverseRemittanceAction', actionFile: 'app/remittance/actions.ts', mutation: 'reverseRemittance' },
-  { file: 'app/sales-days/[id]/page.tsx', tier: 'P', label: 'Void sales day', danger: true, action: 'voidSalesDayAction', actionFile: 'app/sales-days/actions.ts', mutation: 'voidSalesDay' },
-  { file: 'app/staff/[employmentId]/page.tsx', tier: 'P', label: 'End employment', danger: true, action: 'endEmploymentAction', actionFile: 'app/staff/actions.ts', mutation: 'endEmployment' },
-  { file: 'app/statutory-discounts/page.tsx', tier: 'P', label: 'Void statutory discount', danger: true, action: 'voidStatutoryDiscountAction', actionFile: 'app/statutory-discounts/actions.ts', mutation: 'voidStatutoryDiscount' },
-  { file: 'app/trade/orders/[id]/page.tsx', tier: 'P', label: 'Void trade order', danger: true, action: 'voidOrderAction', actionFile: 'app/trade/orders/actions.ts', mutation: 'voidTradeOrder' },
-  { file: 'app/trade/returns/page.tsx', tier: 'P', label: 'Void customer return', danger: true, action: 'voidReturnAction', actionFile: 'app/trade/returns/actions.ts', mutation: 'voidCustomerReturn' },
-  { file: 'app/wastage/[id]/page.tsx', tier: 'P', label: 'Reverse auto charge', danger: true, action: 'reverseAutoChargeAction', actionFile: 'app/wastage/actions.ts', mutation: 'reverseAutoCharge' },
+  { file: 'app/ap/invoices/[id]/page.tsx', tier: 'P', label: 'Void payment', danger: true, visible: 'Void payment', action: 'voidPaymentAction', actionFile: 'app/ap/actions.ts', mutation: 'voidPayment' },
+  { file: 'app/ap/invoices/[id]/page.tsx', tier: 'P', label: 'Void invoice', danger: true, visible: 'Void invoice', action: 'voidInvoiceAction', actionFile: 'app/ap/actions.ts', mutation: 'voidInvoice' },
+  { file: 'app/attendance/[dayId]/page.tsx', tier: 'P', label: 'Void day', danger: true, visible: 'Void day', action: 'voidDayAction', actionFile: 'app/attendance/[dayId]/actions.ts', mutation: 'decide' },
+  { file: 'app/channel-settlements/page.tsx', tier: 'P', label: 'Void settlement', danger: true, visible: 'Void settlement', action: 'voidSettlementAction', actionFile: 'app/channel-settlements/actions.ts', mutation: 'voidChannelSettlement' },
+  { file: 'app/commissary/orders/[id]/page.tsx', tier: 'P', label: 'Void dispatch', danger: true, visible: 'Void dispatch', action: 'withdrawOrderAction', actionFile: 'app/commissary/orders/[id]/actions.ts', mutation: 'voidTradeOrder' },
+  { file: 'app/customers/[customerId]/page.tsx', tier: 'P', label: 'Write off as bad debt', danger: true, visible: 'Write off as bad debt', action: 'writeOffChargeAction', actionFile: 'app/customers/actions.ts', mutation: 'writeOffCharge' },
+  { file: 'app/customers/[customerId]/page.tsx', tier: 'P', label: 'Void charge', danger: true, visible: 'Void charge', action: 'voidChargeAction', actionFile: 'app/customers/actions.ts', mutation: 'voidCharge' },
+  { file: 'app/cutover/opening/page.tsx', tier: 'P', label: 'Remove opening figure', danger: true, visible: 'Remove opening figure', action: 'removeOpeningFigureAction', actionFile: 'app/cutover/actions.ts', mutation: 'removeOpeningFigure' },
+  { file: 'app/cutover/opening/page.tsx', tier: 'P', label: 'Post the opening balances', danger: false, visible: 'Post the opening balances', action: 'postOpeningBalancesAction', actionFile: 'app/cutover/actions.ts', mutation: 'postOpeningBalances' },
+  { file: 'app/expenses/[id]/page.tsx', tier: 'P', label: 'Delete draft', danger: true, visible: 'Delete draft', action: 'deleteDraftAction', actionFile: 'app/expenses/actions.ts', mutation: 'deleteExpenseDraft' },
+  { file: 'app/expenses/[id]/page.tsx', tier: 'P', label: 'Void expense', danger: true, visible: 'Void expense', action: 'voidExpenseAction', actionFile: 'app/expenses/actions.ts', mutation: 'voidExpense' },
+  { file: 'app/expenses/recurring/page.tsx', tier: 'P', label: 'Delete template', danger: true, visible: 'Delete template', action: 'deleteTemplateAction', actionFile: 'app/expenses/recurring/actions.ts', mutation: 'deleteRecurringTemplate' },
+  { file: 'app/fixed-assets/[id]/page.tsx', tier: 'P', label: 'Dispose', danger: true, visible: 'Dispose this asset', action: 'disposeAssetAction', actionFile: 'app/fixed-assets/actions.ts', mutation: 'disposeAsset' },
+  { file: 'app/inventory/pos-usage/page.tsx', tier: 'P', label: 'Void this pull', danger: true, visible: 'Void this pull', action: 'voidPullAction', actionFile: 'app/inventory/pos-usage/actions.ts', mutation: 'voidPosUsagePull' },
+  { file: 'app/inventory/production/[id]/page.tsx', tier: 'P', label: 'Void production', danger: true, visible: 'Void production', action: 'voidProductionAction', actionFile: 'app/inventory/production/actions.ts', mutation: 'voidProduction' },
+  { file: 'app/inventory/returns/page.tsx', tier: 'P', label: 'Void supplier return', danger: true, visible: 'Void supplier return', action: 'voidReturnAction', actionFile: 'app/inventory/returns/actions.ts', mutation: 'voidReturn' },
+  { file: 'app/inventory/transfers/page.tsx', tier: 'P', label: 'Void transfer', danger: true, visible: 'Void transfer', action: 'voidTransferAction', actionFile: 'app/inventory/transfers/actions.ts', mutation: 'voidTransfer' },
+  { file: 'app/inventory/usage/[id]/page.tsx', tier: 'P', label: 'Delete usage draft', danger: true, visible: 'Delete usage draft', action: 'deleteUsageDraftAction', actionFile: 'app/inventory/usage/actions.ts', mutation: 'deleteUsageDraft' },
+  { file: 'app/inventory/usage/[id]/page.tsx', tier: 'P', label: 'Void usage', danger: true, visible: 'Void usage', action: 'voidUsageAction', actionFile: 'app/inventory/usage/actions.ts', mutation: 'voidUsage' },
+  { file: 'app/liabilities/[id]/page.tsx', tier: 'P', label: 'Reverse liability entry', danger: true, visible: 'Reverse liability entry', action: 'reverseAction', actionFile: 'app/liabilities/actions.ts', mutation: 'reverseLiabilityEntry' },
+  { file: 'app/loans/[id]/page.tsx', tier: 'P', label: 'Reverse loan entry', danger: true, visible: 'Reverse loan entry', action: 'reverseEntryAction', actionFile: 'app/loans/actions.ts', mutation: 'reverseLoanEntry' },
+  { file: 'app/money-transfers/page.tsx', tier: 'P', label: 'Reverse money transfer', danger: true, visible: 'Reverse money transfer', action: 'voidMoneyTransferAction', actionFile: 'app/money-transfers/actions.ts', mutation: 'voidMoneyTransfer' },
+  { file: 'app/payroll/page.tsx', tier: 'P', label: 'Void pay run', danger: true, visible: 'Void pay run', action: 'voidPayRunAction', actionFile: 'app/payroll/actions.ts', mutation: 'voidPayRun' },
+  { file: 'app/payroll/separations/page.tsx', tier: 'P', label: 'Void separation', danger: true, visible: 'Void separation', action: 'voidSeparationAction', actionFile: 'app/payroll/separations/actions.ts', mutation: 'voidSeparation' },
+  { file: 'app/payroll/separations/page.tsx', tier: 'P', label: 'Post separation', danger: false, visible: 'Post separation', action: 'postSeparationAction', actionFile: 'app/payroll/separations/actions.ts', mutation: 'postSeparation' },
+  { file: 'app/payroll/thirteenth-month/page.tsx', tier: 'P', label: 'Void 13th-month run', danger: true, visible: 'Void 13th-month run', action: 'void13thMonthRunAction', actionFile: 'app/payroll/thirteenth-month/actions.ts', mutation: 'void13thMonthRun' },
+  { file: 'app/prepaid/[id]/page.tsx', tier: 'P', label: 'Reverse month', danger: true, visible: 'Reverse month', action: 'reverseMonthAction', actionFile: 'app/prepaid/actions.ts', mutation: 'reverseAmortisation' },
+  { file: 'app/prepaid/[id]/page.tsx', tier: 'P', label: 'Write it off', danger: true, visible: 'Write it off', action: 'writeOffAction', actionFile: 'app/prepaid/actions.ts', mutation: 'writeOffPrepaidItem' },
+  { file: 'app/remittance/page.tsx', tier: 'P', label: 'Reverse remittance', danger: true, visible: 'Reverse remittance', action: 'reverseRemittanceAction', actionFile: 'app/remittance/actions.ts', mutation: 'reverseRemittance' },
+  { file: 'app/sales-days/[id]/page.tsx', tier: 'P', label: 'Void sales day', danger: true, visible: 'Void sales day', action: 'voidSalesDayAction', actionFile: 'app/sales-days/actions.ts', mutation: 'voidSalesDay' },
+  { file: 'app/staff/[employmentId]/page.tsx', tier: 'P', label: 'End employment', danger: true, visible: 'End employment', action: 'endEmploymentAction', actionFile: 'app/staff/actions.ts', mutation: 'endEmployment' },
+  { file: 'app/statutory-discounts/page.tsx', tier: 'P', label: 'Void statutory discount', danger: true, visible: 'Void statutory discount', action: 'voidStatutoryDiscountAction', actionFile: 'app/statutory-discounts/actions.ts', mutation: 'voidStatutoryDiscount' },
+  { file: 'app/trade/orders/[id]/page.tsx', tier: 'P', label: 'Void trade order', danger: true, visible: 'Void trade order', action: 'voidOrderAction', actionFile: 'app/trade/orders/actions.ts', mutation: 'voidTradeOrder' },
+  { file: 'app/trade/returns/page.tsx', tier: 'P', label: 'Void customer return', danger: true, visible: 'Void customer return', action: 'voidReturnAction', actionFile: 'app/trade/returns/actions.ts', mutation: 'voidCustomerReturn' },
+  { file: 'app/wastage/[id]/page.tsx', tier: 'P', label: 'Reverse auto charge', danger: true, visible: 'Reverse auto charge', action: 'reverseAutoChargeAction', actionFile: 'app/wastage/actions.ts', mutation: 'reverseAutoCharge' },
   // ---- Tier R (14): retype the name ----
-  { file: 'app/admin/access-defaults/grid.tsx', tier: 'R', label: 'Retire position (row)', danger: true, action: 'retireStorePositionAction', actionFile: 'app/admin/access-defaults/actions.ts', mutation: 'retireStorePosition' },
-  { file: 'app/admin/access-defaults/grid.tsx', tier: 'R', label: 'Retire position (column)', danger: true, action: 'retireStorePositionAction', actionFile: 'app/admin/access-defaults/actions.ts', mutation: 'retireStorePosition' },
-  { file: 'app/admin/users/[personId]/page.tsx', tier: 'R', label: 'Revoke grant', danger: true, action: 'setCapabilityGrantAction', actionFile: 'app/admin/users/actions.ts', mutation: 'revokeGrantById' },
-  { file: 'app/admin/users/[personId]/page.tsx', tier: 'R', label: 'Unlink credential', danger: true, action: 'unlinkCredentialAction', actionFile: 'app/admin/users/actions.ts', mutation: 'unlinkCredential' },
-  { file: 'app/attendance/terminals/page.tsx', tier: 'R', label: 'Revoke terminal', danger: true, action: 'revokeTerminalAction', actionFile: 'app/attendance/terminals/actions.ts', mutation: 'revokeTerminal' },
-  { file: 'app/budgets/page.tsx', tier: 'R', label: 'Remove cap', danger: true, action: 'removeBudgetAction', actionFile: 'app/budgets/actions.ts', mutation: 'removeExpenseBudget' },
-  { file: 'app/commissary/catalogue/page.tsx', tier: 'R', label: 'Remove mapping', danger: true, action: 'removeMapAction', actionFile: 'app/commissary/catalogue/actions.ts', mutation: 'removeMap' },
-  { file: 'app/items/[id]/page.tsx', tier: 'R', label: 'Retire item', danger: true, action: 'setItemStatusAction', actionFile: 'app/items/actions.ts', mutation: 'setItemStatus' },
-  { file: 'app/menu/page.tsx', tier: 'R', label: 'Retire category', danger: true, action: 'retireCategoryAction', actionFile: 'app/menu/actions.ts', mutation: 'retireMenuCategory' },
-  { file: 'app/money-accounts/page.tsx', tier: 'R', label: 'Retire money account', danger: true, action: 'retireMoneyAccountAction', actionFile: 'app/money-accounts/actions.ts', mutation: 'retireMoneyAccount' },
-  { file: 'app/settings/pos-link/page.tsx', tier: 'R', label: 'Unlink store from POS', danger: true, action: 'unlinkStoreFromPosAction', actionFile: 'app/settings/pos-link/actions.ts', mutation: 'unlinkStoreFromPos' },
-  { file: 'app/settings/pos-link/page.tsx', tier: 'R', label: 'Retire tender', danger: true, action: 'setTenderActiveAction', actionFile: 'app/settings/pos-link/actions.ts', mutation: 'setTenderActive' },
-  { file: 'app/staff/[employmentId]/credentials/page.tsx', tier: 'R', label: 'Revoke credential', danger: true, action: 'revokeCredentialAction', actionFile: 'app/staff/[employmentId]/credentials/actions.ts', mutation: 'revokeCredential' },
-  { file: 'app/inventory/locations/page.tsx', tier: 'R', label: 'Deactivate room', danger: false, action: 'deactivateLocationAction', actionFile: 'app/inventory/locations/actions.ts', mutation: 'deactivateLocation' },
+  { file: 'app/admin/access-defaults/grid.tsx', tier: 'R', label: 'Retire position (row)', danger: true, visible: 'Retire position', action: 'retireStorePositionAction', actionFile: 'app/admin/access-defaults/actions.ts', mutation: 'retireStorePosition' },
+  { file: 'app/admin/access-defaults/grid.tsx', tier: 'R', label: 'Retire position (column)', danger: true, visible: 'Retire position', action: 'retireStorePositionAction', actionFile: 'app/admin/access-defaults/actions.ts', mutation: 'retireStorePosition' },
+  { file: 'app/admin/users/[personId]/page.tsx', tier: 'R', label: 'Revoke grant', danger: true, visible: 'Revoke grant', action: 'setCapabilityGrantAction', actionFile: 'app/admin/users/actions.ts', mutation: 'revokeGrantById' },
+  { file: 'app/admin/users/[personId]/page.tsx', tier: 'R', label: 'Unlink credential', danger: true, visible: 'Unlink sign-in', action: 'unlinkCredentialAction', actionFile: 'app/admin/users/actions.ts', mutation: 'unlinkCredential' },
+  { file: 'app/attendance/terminals/page.tsx', tier: 'R', label: 'Revoke terminal', danger: true, visible: 'Revoke terminal', action: 'revokeTerminalAction', actionFile: 'app/attendance/terminals/actions.ts', mutation: 'revokeTerminal' },
+  { file: 'app/budgets/page.tsx', tier: 'R', label: 'Remove cap', danger: true, visible: 'Remove cap', action: 'removeBudgetAction', actionFile: 'app/budgets/actions.ts', mutation: 'removeExpenseBudget' },
+  { file: 'app/commissary/catalogue/page.tsx', tier: 'R', label: 'Remove mapping', danger: true, visible: 'Remove mapping', action: 'removeMapAction', actionFile: 'app/commissary/catalogue/actions.ts', mutation: 'removeMap' },
+  { file: 'app/items/[id]/page.tsx', tier: 'R', label: 'Retire item', danger: true, visible: 'Retire item', action: 'setItemStatusAction', actionFile: 'app/items/actions.ts', mutation: 'setItemStatus' },
+  { file: 'app/menu/page.tsx', tier: 'R', label: 'Retire category', danger: true, visible: 'Retire category', action: 'retireCategoryAction', actionFile: 'app/menu/actions.ts', mutation: 'retireMenuCategory' },
+  { file: 'app/money-accounts/page.tsx', tier: 'R', label: 'Retire money account', danger: true, visible: 'Retire money account', action: 'retireMoneyAccountAction', actionFile: 'app/money-accounts/actions.ts', mutation: 'retireMoneyAccount' },
+  { file: 'app/settings/pos-link/page.tsx', tier: 'R', label: 'Unlink store from POS', danger: true, visible: 'Unlink store from POS', action: 'unlinkStoreFromPosAction', actionFile: 'app/settings/pos-link/actions.ts', mutation: 'unlinkStoreFromPos' },
+  { file: 'app/settings/pos-link/page.tsx', tier: 'R', label: 'Retire tender', danger: true, visible: 'Retire tender', action: 'setTenderActiveAction', actionFile: 'app/settings/pos-link/actions.ts', mutation: 'setTenderActive' },
+  { file: 'app/staff/[employmentId]/credentials/page.tsx', tier: 'R', label: 'Revoke credential', danger: true, visible: 'Revoke credential', action: 'revokeCredentialAction', actionFile: 'app/staff/[employmentId]/credentials/actions.ts', mutation: 'revokeCredential' },
+  { file: 'app/inventory/locations/page.tsx', tier: 'R', label: 'Deactivate room', danger: false, visible: 'Deactivate room', action: 'deactivateLocationAction', actionFile: 'app/inventory/locations/actions.ts', mutation: 'deactivateLocation' },
+  // ---- AUDIT ROUND H1 / H2 (orchestrator ruling): the two CONDITIONAL danger buttons `variant={x ? 'danger' : ...}` ----
+  { file: 'app/admin/stores/[id]/page.tsx', tier: 'R', label: 'Close this branch', danger: true, conditional: true, visibleRe: /Close this branch|Deactivate/, action: 'deactivateStoreAction', actionFile: 'app/admin/stores/actions.ts', mutation: 'deactivateStore' },
+  { file: 'app/admin/users/[personId]/page.tsx', tier: 'R', label: 'In scope - remove', danger: true, conditional: true, visibleRe: /remove/i, action: 'setStoreScopeAction', actionFile: 'app/admin/users/actions.ts', mutation: 'revokeStoreScope' },
   // ---- Tier W (10): workflow steps on unposted documents, unguarded (Ian Q2, recommended) ----
   { file: 'app/attendance/lane/page.tsx', tier: 'W', label: 'Discard event', danger: true, action: 'discardEventAction', actionFile: 'app/attendance/lane/actions.ts' },
   { file: 'app/cash-requests/[id]/page.tsx', tier: 'W', label: 'Withdraw cash request', danger: true, action: 'cancelAction', actionFile: 'app/cash-requests/actions.ts' },
@@ -134,7 +143,9 @@ function walk(dir: string, out: string[] = []): string[] {
 const rel = (abs: string) => abs.slice(SRC.length + 1).split(String.fromCharCode(92)).join('/');
 /** Comments removed, so a guard named only in a comment cannot satisfy a check. */
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-const DANGER = /variant=(?:"danger"|\{['"]danger['"]\})/g;
+// audit H1 / H2: the literal AND any `variant={ ... 'danger' ... }` expression (a conditional danger button is still one)
+const DANGER = /variant=(?:"danger"|\{[^}]*['"]danger['"][^}]*\})/g;
+const BS = String.fromCharCode(92); // a literal backslash, built (a typed  in this file would be a backspace)
 const count = (s: string, re: RegExp) => (s.match(re) ?? []).length;
 
 /** Every `<ConfirmDestructive ...` opening in the file, with the next 900 characters as its attribute window. */
@@ -184,13 +195,19 @@ function topLevelArgs(argText: string): string[] {
 }
 const FORM_READ = /formData|\bfd\b|str\(|opt\(|requireId\(|\.get\(/;
 
-describe('the census arithmetic (green today: the literal map matches the spec)', () => {
-  it('63 controls: P 35, R 14, W 10, X 4; 60 of them are variant="danger" today, in 47 files', () => {
+describe('the census arithmetic (green today: the literal map matches the spec + the audit-round conditionals)', () => {
+  it('65 controls: P 35, R 16 (14 + the 2 conditional danger buttons), W 10, X 4; 62 are danger (2 conditional), in 48 files', () => {
     const by = (t: Tier) => rows.filter((r) => r.tier === t).length;
-    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([35, 14, 10, 4]);
-    expect(rows).toHaveLength(63);
-    expect(rows.filter((r) => r.danger)).toHaveLength(60);
-    expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(47);
+    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([35, 16, 10, 4]);
+    expect(rows).toHaveLength(65);
+    expect(rows.filter((r) => r.danger)).toHaveLength(62);
+    expect(rows.filter((r) => r.conditional)).toHaveLength(2);
+    expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(48);
+  });
+  it('every P / R row names its visible label (audit L8), and no two rows in one file share an action AND a label by accident', () => {
+    for (const r of rows.filter((x) => x.tier === 'P' || x.tier === 'R')) {
+      expect(r.visible !== undefined || r.visibleRe !== undefined, `${r.file} ${r.label} has a visible label`).toBe(true);
+    }
   });
 });
 
@@ -209,6 +226,24 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
       expect(wins.filter((w) => tierOf(w) === undefined), 'a ConfirmDestructive with no recognisable tier').toHaveLength(0);
       // the bare danger buttons that remain outside ConfirmDestructive are exactly the W and X rows
       expect(count(src, DANGER), 'variant="danger" left in the file').toBe(bare);
+      // audit L8: each guarded row's VISIBLE label is asserted, so a renamed label (or a button that lost its guard) is caught
+      for (const r of mine.filter((x) => x.tier === 'P' || x.tier === 'R')) {
+        const hit = wins.filter((w) => tierOf(w) === (r.tier === 'P' ? 'admin-pin' : 'retype')).find((w) => {
+          const lab = /label=(?:"([^"]*)"|\{['"]([^'"]*)['"]\})/.exec(w);
+          const text = lab ? (lab[1] ?? lab[2] ?? '') : '';
+          return r.visible !== undefined ? text === r.visible : r.visibleRe!.test(text);
+        });
+        expect(hit, `a ${r.tier === 'P' ? 'admin-pin' : 'retype'} ConfirmDestructive labelled ${String(r.visible ?? r.visibleRe)}`).toBeDefined();
+        // ... and it sits inside the form that submits to THAT row's action (a label guarding the wrong action is no guard)
+        if (hit && r.action) {
+          const at = src.indexOf(hit);
+          const formAt = src.lastIndexOf('<form', at);
+          const between = formAt < 0 ? '' : src.slice(formAt, at);
+          expect(formAt, `${r.visible ?? r.label}: a <form precedes its ConfirmDestructive`).toBeGreaterThan(-1);
+          expect(between, `${r.visible ?? r.label}: no </form> between its <form and the button`).not.toMatch(/<\/form>/);
+          expect(between, `${r.visible ?? r.label}: its <form submits to ${r.action}`).toMatch(new RegExp('action=' + BS + '{[^}]*(?<![A-Za-z0-9_])' + r.action + '(?![A-Za-z0-9_])'));
+        }
+      }
       for (const w of wins) {
         expect(w, 'ConfirmDestructive names its button').toMatch(/label=/);
         expect(w, 'ConfirmDestructive says what happens').toMatch(/consequence=/);
@@ -229,7 +264,20 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
     expect(stray).toEqual([]);
   });
 
-  it('the total of controls = bare danger + ConfirmDestructive across src is exactly 63', () => {
+  it('audit H1 / H2: every danger string literal outside components/ui (and outside tone=) sits on a variant= line the census counts (no danger button hides behind a variable)', () => {
+    const bad: string[] = [];
+    for (const abs of walk(SRC)) {
+      const r = rel(abs);
+      if (r.startsWith('components/ui/')) continue;
+      const src = stripComments(readFileSync(abs, 'utf8'));
+      const literals = src.split(String.fromCharCode(10)).filter((ln) => /['"]danger['"]/.test(ln) && !/tone/i.test(ln)).length;
+      const counted = src.split(String.fromCharCode(10)).filter((ln) => /['"]danger['"]/.test(ln) && !/tone/i.test(ln) && /variant=/.test(ln)).length;
+      if (literals !== counted) bad.push(`${r}: ${literals} danger literals, ${counted} on a variant= line`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('the total of controls = bare danger + ConfirmDestructive across src is exactly 65', () => {
     let total = 0;
     for (const abs of walk(SRC)) {
       const r = rel(abs);
@@ -237,7 +285,7 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
       const src = readFileSync(abs, 'utf8');
       total += count(src, DANGER) + confirmWindows(src).length;
     }
-    expect(total).toBe(63);
+    expect(total).toBe(65);
   });
 });
 
@@ -332,6 +380,7 @@ describe('ConfirmDestructive.tsx and retype.ts have the shape the spec fixes (S2
     expect(s).toMatch(/autoComplete="off"/);
     expect(s).toMatch(/maxLength=\{6\}/);
     expect(s).toMatch(/variant="danger"/);
+    expect(s, 'the submit button shows the label prop (audit L8: the visible label IS the prop)').toMatch(/\{label\}/);
     expect(s, 'no browser confirm() dialog').not.toMatch(/window\.confirm|[^A-Za-z.]confirm\(/);
     expect(s, 'a client component must not pull the database into the browser bundle').not.toMatch(/@shareat\/db/);
     expect(s, 'the client never imports the server-only approval check').not.toMatch(/verifyAdminApproval/);
