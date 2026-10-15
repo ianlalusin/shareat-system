@@ -386,6 +386,21 @@ describe('clock suspect: an unparseable occurredAt (T-402 S3 audit finding 2)', 
   });
 });
 
+describe('clock suspect: a parseable occurredAt outside the timestamptz range (T-402 S3 audit)', () => {
+  it('year -271821, year -5000 and year +275760 are accepted, stored at the SERVER clock, clock_suspect = true (mutant: ::timestamptz throws, upload fails)', async () => {
+    const f = await fixture('clock-range');
+    for (const bad of ['-271821-04-20T00:00:00Z', '-005000-01-01T00:00:00Z', '+275760-09-13T00:00:00Z']) {
+      expect(Number.isNaN(new Date(bad).getTime()), `${bad} parses to a finite Date`).toBe(false);
+      const e = env(f, { occurredAt: bad });
+      const r = await send(f, [e]);
+      expect(r[0]!.status, `out-of-range occurredAt ${bad} is not refused`).toBe('accepted');
+      const [row] = await rowsFor(f.orgId, e.entityId);
+      expect(row!.clock_suspect).toBe(true);
+      expect(Math.abs(new Date(row!.occurred_at).getTime() - Date.now()), 'occurred_at falls back to the server clock').toBeLessThan(120_000);
+    }
+  });
+});
+
 describe('the events ride the sale\'s transaction (C1, R9)', () => {
   it('a rolled-back caller leaves no log row and no event key, but the store-mismatch security event survives (outbox, own transaction)', async () => {
     const f = await fixture('rollback');

@@ -9,5 +9,8 @@ export function capAuditText(text: string): string;
 export function capAuditText(text: string | null | undefined): string | null;
 export function capAuditText(text: string | null | undefined): string | null {
   if (text === null || text === undefined) return null;
-  return text.length > AUDIT_FREE_TEXT_MAX ? text.slice(0, AUDIT_FREE_TEXT_MAX) + AUDIT_TRUNCATED_MARK : text;
+  // Cap in code points (characters as a person counts them), never splitting a surrogate pair.
+  if (text.length <= AUDIT_FREE_TEXT_MAX) return text;
+  const points = Array.from(text);
+  return points.length > AUDIT_FREE_TEXT_MAX ? points.slice(0, AUDIT_FREE_TEXT_MAX).join('') + AUDIT_TRUNCATED_MARK : text;
 }

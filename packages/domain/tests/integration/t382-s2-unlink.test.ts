@@ -197,6 +197,19 @@ describe('U1 - a super admin unlinks a store with three verified imported days',
   // Mutants: the audit append skipped -> `audit` has 0 rows, red. `unlinked_at` not set -> the row/typed-day asserts, red.
 });
 
+describe('U1b - unlink reason in the audit log (T-402 S3 audit)', () => {
+  it('a 500-char reason (the longest allowed) is stored whole in the table and the log; a 2,000-char one is refused before anything is written', async () => {
+    const f = await fixture('u1b');
+    expect(await sentenceOf(unlink(f, f.superAdmin, { reason: 'x'.repeat(2000) }))).toBe(S.tooLong);
+    expect(await auditOf(f.orgId, 'unlink_store_from_pos')).toHaveLength(0);
+    const max = 'y'.repeat(500);
+    await unlink(f, f.superAdmin, { reason: max });
+    expect((await linkRow(f.storeId))!.unlink_reason).toBe(max);
+    const audit = await auditOf(f.orgId, 'unlink_store_from_pos');
+    expect((audit[0]!.after as Record<string, unknown>)['unlinkReason']).toBe(max);
+  });
+});
+
 describe('U0 - the function is exported', () => {
   it('unlinkStoreFromPos is a function on @shareat/domain', () => {
     expect(typeof (D as unknown as Record<string, unknown>)['unlinkStoreFromPos']).toBe('function');

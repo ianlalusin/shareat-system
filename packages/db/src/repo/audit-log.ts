@@ -328,6 +328,14 @@ export async function appendClientEvent(
   }
   checkScope(entry, envelope.storeId);
   const occurredAt = new Date(envelope.occurredAt);
+  // Unparseable, or a year whose ISO text Postgres cannot read back (toISOString gives +YYYYYY / -YYYYYY outside 0001..9999,
+  // which ::timestamptz rejects, and the range ends at 4713 BC / 294276 AD anyway): the clock is unreadable.
+  const clockBad = (() => {
+    const t = occurredAt.getTime();
+    if (Number.isNaN(t)) return true;
+    const y = occurredAt.getUTCFullYear();
+    return y < 1 || y > 9999;
+  })();
   const hash = createHash('sha256')
     .update(
       canonicalJson({
@@ -358,8 +366,8 @@ export async function appendClientEvent(
       : envelope.after,
     source: attested.source,
     deviceId: attested.deviceId,
-    occurredAt: Number.isNaN(occurredAt.getTime()) ? undefined : occurredAt,
-    ...(Number.isNaN(occurredAt.getTime()) ? { clockUnreadable: true } : {}),
+    occurredAt: clockBad ? undefined : occurredAt,
+    ...(clockBad ? { clockUnreadable: true } : {}),
     uploadedByPersonId: attested.uploadedByPersonId,
     eventKey: envelope.eventKey,
   });

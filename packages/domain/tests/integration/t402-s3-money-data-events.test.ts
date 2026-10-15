@@ -472,6 +472,24 @@ describe('free text in an S3 event payload is capped at 500 characters + "…[tr
     expect((rows[0]!.after as Record<string, unknown>).reason).toBe(capped);
   });
 
+  it('expense.voided: a reason whose 500th/501st UTF-16 units are an emoji is cut on a code point; the void succeeds and the stored reason is valid text', async () => {
+    const f = await moneyFixture(sql, 'cap-void-emoji');
+    const inv = await pendingInvoice(sql, f, '5000.00');
+    await asOrgOn(f.orgId, (tx) => D.verifyInvoice(tx, f.manager, inv, ATTEST));
+    const created = await draftExpense(f, inv, '400.00');
+    await asOrgOn(f.orgId, (tx) => D.approveExpense(tx, f.manager, created.id));
+    const tricky = 'a'.repeat(499) + '\u{1F600}' + 'b'.repeat(1000);
+    await asOrgOn(f.orgId, (tx) => D.voidExpense(tx, f.manager, created.id, tricky));
+    const rows = await auditRows(sql, f.orgId, 'expense.voided', created.id);
+    expect(rows).toHaveLength(1);
+    const reason = (rows[0]!.after as Record<string, unknown>).reason as string;
+    expect(reason.endsWith(MARK)).toBe(true);
+    const head = reason.slice(0, reason.length - MARK.length);
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(head), 'no lone surrogate').toBe(false);
+    expect(tricky.startsWith(head)).toBe(true);
+    expect(JSON.parse(JSON.stringify(reason))).toBe(reason);
+  });
+
   it('cash_request.rejected: a 2,000-char reason is capped the same way; a short reason is stored unchanged', async () => {
     const f = await moneyFixture(sql, 'cap-cr');
     const mk = () => asOrgOn(f.orgId, (tx) => D.createCashRequest(tx, f.staff, { storeId: f.storeId, requestedFor: f.staffId, purpose: 'Market run', amount: '900.00', on: '2026-01-05' }));
