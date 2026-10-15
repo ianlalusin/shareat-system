@@ -44,6 +44,29 @@ const SWEPT = [
   'app/commissary/discrepancies/page.tsx',
   'app/prepaid/[id]/page.tsx',
   'app/till/page.tsx',
+  // batch 2 (T-406b)
+  'app/sales-days/SalesDayForm.tsx',
+  'app/sales-days/[id]/page.tsx',
+  'app/expenses/[id]/page.tsx',
+  'app/settings/sales-channels/page.tsx',
+  'app/budgets/page.tsx',
+  'app/cash-requests/[id]/page.tsx',
+  'app/commissary/orders/[id]/page.tsx',
+  'app/commissary/orders/[id]/actions.ts',
+  'app/trade/orders/[id]/page.tsx',
+  'app/trade/orders/actions.ts',
+  'app/fixed-assets/new/page.tsx',
+  'app/fixed-assets/[id]/page.tsx',
+  'app/liabilities/[id]/page.tsx',
+  'app/remittance/page.tsx',
+  'app/remittance/actions.ts',
+  'app/service-charge/page.tsx',
+  'app/statutory-discounts/page.tsx',
+  'app/wastage/page.tsx',
+  'app/wastage/[id]/page.tsx',
+  'app/customers/actions.ts',
+  'app/inventory/counts/actions.ts',
+  'app/till/actions.ts',
 ];
 
 // Accountant pages: keep "code · name" on purpose. Never scanned. Globs relative to apps/erp/src.
@@ -51,6 +74,7 @@ const ACCOUNTANT_PAGES = [
   'components/reports/*Table.tsx',
   'app/reports/**',
   'app/cutover/opening/**',
+  'app/settings/expense-categories/**', // batch 2 ruling (b): admin picker maps a category to a code
 ];
 
 function globToRegex(glob: string): RegExp {
@@ -66,7 +90,7 @@ const CODE_PATTERNS = POSTABLE_CODES.map((code) => ({
   code,
   re: new RegExp(`(?<!\\w)${code}(?!\\w)`),
 }));
-const BARE_JSX_CHILD = /\{\s*(?:[\w$]+\??\.)*(?:glAccountCode|accountCode)\s*\}/;
+const BARE_JSX_CHILD = /\{\s*(?:[\w$]+\??\.)*\w*[aA]ccountCode\s*\}/;
 
 /** Blank comments but keep every newline, so line numbers still match the original file. */
 function stripForScan(src: string): string {
@@ -83,7 +107,7 @@ function stripForScan(src: string): string {
       `account: ${q}${' '.repeat(code.length)}${q}`,
     )
     // value= / name= attributes (a <select> option value is the code by design).
-    .replace(/\b(value|name)=(\{[^{}]*\}|"[^"]*"|'[^']*')/g, (_m, attr: string, val: string) =>
+    .replace(/\b(value|name|key)=(\{[^{}]*\}|"[^"]*"|'[^']*')/g, (_m, attr: string, val: string) =>
       `${attr}=${val.replace(/[^\n]/g, ' ')}`,
     );
 }
@@ -103,7 +127,7 @@ function scanFile(relPath: string): string[] {
   return hits;
 }
 
-describe('T-406 batch 1 — no bare account code in rendered text', () => {
+describe('T-406 batch 1 + 2 — no bare account code in rendered text', () => {
   it('finds no swept file that prints a GL number on screen', () => {
     const present = SWEPT.filter((p) => existsSync(join(SRC, p)));
     const hits = present.flatMap((p) => scanFile(p));
@@ -126,8 +150,8 @@ describe('T-406 — the SWEPT list is complete and honest', () => {
     expect(overlap).toEqual([]);
   });
 
-  it('the batch-1 list is the 19 files from the spec', () => {
-    expect(SWEPT).toHaveLength(19);
+  it('the batch 1 + 2 list is the 41 files from the spec', () => {
+    expect(SWEPT).toHaveLength(41);
   });
 });
 
@@ -144,6 +168,8 @@ describe('the scanner itself (self-check)', () => {
     '<span>posts to 5400</span>',
     '{a.glAccountCode}',
     '{cat?.accountCode}',
+    '`settled to ${c.receivableAccountCode}`',
+    '<Row label="Cash → 1110" />',
   ])('flags a bare code in rendered text: %s', (line) => {
     expect(scan(line)).toBe(true);
   });
@@ -155,6 +181,9 @@ describe('the scanner itself (self-check)', () => {
     '{/* posts to 5400 */}',
     '// Owed (2110) was removed',
     '{cat?.accountCode ? accountLabel(cat.accountCode) : "unmapped"}',
+    '{accountCodeAndName(l.accountCode)}',
+    '<option key={a.accountCode} value="1110">Till cash</option>',
+    '<tr key={a.accountCode}>',
     "{ name: 'commission', label: 'Commission', account: '6400', hint: 'The core transaction fee' },",
   ])('does not flag a sanctioned use: %s', (line) => {
     expect(scan(line)).toBe(false);

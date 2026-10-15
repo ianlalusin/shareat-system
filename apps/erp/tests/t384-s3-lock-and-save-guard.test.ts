@@ -71,7 +71,7 @@ const COMMANDS: Record<string, string> = {
   'Distribute': 'distributes money',
   'Write it off': 'writes an amount off',
   'Write off as bad debt': 'writes an amount off',
-  'Recognise as other income (7350)': 'books income',
+  'Recognise as other income': 'books income',
   'Book it': 'books a posting',
   'Transfer': 'moves stock',
   'Receive': 'receives stock',
