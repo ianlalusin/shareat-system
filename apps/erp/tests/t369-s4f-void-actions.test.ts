@@ -32,6 +32,9 @@ vi.mock('../src/lib/session', () => ({
   requireActor: vi.fn(async () => ({ orgId: 'org-1', personId: 'person-1' })),
 }));
 vi.mock('@/lib/constraint-messages', async () => await import('../src/lib/constraint-messages'));
+// T-412: these actions now read the record and verify an administrator's PIN first; this file is about how a refusal is CARRIED.
+vi.mock('@/lib/destructive', async () => (await import('./helpers/destructive-mocks')).destructiveLibMock());
+vi.mock('@shareat/auth', async (orig) => (await import('./helpers/destructive-mocks')).withApprovalStub(await orig<object>()));
 vi.mock('../src/app/expenses/lib', () => ({
   withOrgPrincipal: async (_orgId: string, fn: (tx: unknown) => unknown) => fn({}),
 }));

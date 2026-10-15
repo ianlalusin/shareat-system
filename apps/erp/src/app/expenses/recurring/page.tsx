@@ -22,7 +22,7 @@ import {
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { Banner, Button, FlashBanner, FormGrid, Input } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Input } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -244,9 +244,11 @@ export default async function RecurringExpensesPage({
                               <form action={deleteTemplateAction}>
                                 <input type="hidden" name="storeId" value={storeId} />
                                 <input type="hidden" name="templateId" value={t.id} />
-                                <Button type="submit" variant="danger">
-                                  Delete
-                                </Button>
+                                <ConfirmDestructive
+                                  tier="admin-pin"
+                                  label="Delete template"
+                                  consequence="Deletes this recurring template for good. An administrator must approve with their own PIN."
+                                />
                               </form>
                             )}
                           </div>

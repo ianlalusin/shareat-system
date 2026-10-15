@@ -10,7 +10,7 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, Checkbox, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Button, Checkbox, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Customer returns — Shareat System' };
@@ -250,9 +250,11 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
                       <input type="hidden" name="returnId" value={r.id} />
                       <input type="hidden" name="store" value={storeId} />
                       <Input name="reason" placeholder="void reason" required className="w-28 text-xs" />
-                      <Button type="submit" variant="danger">
-                        Void
-                      </Button>
+                      <ConfirmDestructive
+                        tier="admin-pin"
+                        label="Void customer return"
+                        consequence="Reverses this return and its posting. An administrator must approve with their own PIN."
+                      />
                     </form>
                   )}
                 </td>

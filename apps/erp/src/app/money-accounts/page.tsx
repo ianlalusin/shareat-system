@@ -19,7 +19,7 @@ import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { MONEY_ACCOUNT_RENAME } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
-import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Banner, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'Money accounts — Shareat System' };
@@ -164,9 +164,12 @@ export default async function MoneyAccountsPage({
                     {a.isActive && !a.isFoundation && (
                       <form action={retireMoneyAccountAction}>
                         <input type="hidden" name="moneyAccountId" value={a.id} />
-                        <Button type="submit" variant="danger" className="text-xs">
-                          Retire
-                        </Button>
+                        <ConfirmDestructive
+                          tier="retype"
+                          label="Retire money account"
+                          consequence="Retires this money account."
+                          expectedName={a.name}
+                        />
                       </form>
                     )}
                   </td>

@@ -89,11 +89,14 @@ async function fixture(hint: string) {
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
+/** T-412: retiring an item asks for its name; every item made here is remembered by id so a test can type it. */
+const ITEM_NAME_FOR: Record<string, string> = {};
 async function insertItem(f: Fixture, name: string, code: string): Promise<string> {
   const [row] = await sql<{ id: string }[]>`
     insert into items (org_id, code, name, kind, base_unit, created_by)
     values (${f.orgId}, ${code}, ${name}, 'raw_material', 'kg', ${f.superAdmin.personId})
     returning id`;
+  ITEM_NAME_FOR[row!.id] = name;
   return row!.id;
 }
 const rowOf = async (id: string) =>
@@ -357,7 +360,7 @@ describe('W4 - the Retire section', () => {
       expect(html).toContain(
         'Retiring keeps every record. It can no longer be ordered, received, priced, mapped to a POS item or put on a new recipe. Stock already on hand can still be used, wasted, moved and counted until it runs out. You can restore it.',
       );
-      expect(html).toMatch(/>Retire</);
+      expect(html).toMatch(/>Retire item</);
       expect(html).not.toMatch(/>Restore</);
       expect(inputTag(html, 'status')).toMatch(/type="hidden"/);
       expect(inputTag(html, 'status')).toMatch(/value="inactive"/);
@@ -371,7 +374,7 @@ describe('W4 - the Retire section', () => {
       const f = await fixture('w4c');
       const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
       const html = decode(await detailHtmlAs(f.superAdmin, id));
-      expect(html).toMatch(/>Retire</);
+      expect(html).toMatch(/>Retire item</);
       expect(html).not.toContain('Still holds stock at');
       expect(html).not.toMatch(/live POS maps? still use it/);
       expect(html).not.toMatch(/live recipes? still use it/);
@@ -391,7 +394,7 @@ describe('W4 - the Retire section', () => {
       expect(html).toMatch(/Still holds stock at: Store \(5(\.0+)? kg\)/);
       expect(html).toContain('It can still be used, wasted, moved and counted until it runs out.');
       expect(html).toMatch(/>Restore</);
-      expect(html).not.toMatch(/>Retire</);
+      expect(html).not.toMatch(/>Retire item</);
       expect(inputTag(html, 'status')).toMatch(/value="active"/);
     },
     60_000,
@@ -405,7 +408,7 @@ describe('W4 - the Retire section', () => {
       const id = await insertItem(f, 'Merged one', 'MRGX-001');
       await sql`update items set status = 'merged', merged_into_id = ${target} where id = ${id}`;
       const html = decode(await detailHtmlAs(f.superAdmin, id));
-      expect(html).not.toMatch(/>Retire</);
+      expect(html).not.toMatch(/>Retire item</);
       expect(html).not.toMatch(/>Restore</);
       expect(html).not.toContain('Retiring keeps every record');
     },
@@ -419,7 +422,7 @@ describe('W4 - the Retire section', () => {
         const f = await fixture(`w4${who}`);
         const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
         const html = decode(await detailHtmlAs(f[who], id));
-        expect(html).not.toMatch(/>Retire</);
+        expect(html).not.toMatch(/>Retire item</);
         expect(html).not.toMatch(/>Restore</);
         expect(inputTag(html, 'status')).toBeNull();
       },
@@ -435,10 +438,10 @@ describe('W5 - setItemStatusAction', () => {
       const f = await fixture('w5');
       const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
       ACTOR_HOLDER.actor = f.superAdmin;
-      const retired = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'inactive' })));
+      const retired = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'inactive', confirmName: ITEM_NAME_FOR[id] ?? '' })));
       expect(param(retired, 'ok')).toBe('Retired. Its records stay.');
       expect(await statusOf(id)).toBe('inactive');
-      const again = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'inactive' })));
+      const again = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'inactive', confirmName: ITEM_NAME_FOR[id] ?? '' })));
       expect(param(again, 'ok')).toBe('No change: it already is.');
       const restored = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'active' })));
       expect(param(restored, 'ok')).toBe('Restored.');
@@ -456,7 +459,7 @@ describe('W5 - setItemStatusAction', () => {
       const id = await insertItem(f, 'Merged one', 'MRGX-001');
       await sql`update items set status = 'merged', merged_into_id = ${target} where id = ${id}`;
       ACTOR_HOLDER.actor = f.superAdmin;
-      const to = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'inactive' })));
+      const to = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'inactive', confirmName: ITEM_NAME_FOR[id] ?? '' })));
       expect(param(to, 'error')).toBe(MERGED_SENTENCE);
       expect(await statusOf(id)).toBe('merged');
     },
@@ -471,7 +474,7 @@ describe('W5 - setItemStatusAction', () => {
         expect(await holdsApproveItem(f, f[who])).toBe(false);
         const id = await insertItem(f, 'Coke 1.5', 'CK15-001');
         ACTOR_HOLDER.actor = f[who];
-        const retire = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'inactive' })));
+        const retire = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'inactive', confirmName: ITEM_NAME_FOR[id] ?? '' })));
         expect(param(retire, 'error')).toBe(NOT_SUPER_ADMIN);
         await sql`update items set status = 'inactive' where id = ${id}`;
         const restore = await redirectOf(() => actions.setItemStatusAction(form({ itemId: id, status: 'active' })));

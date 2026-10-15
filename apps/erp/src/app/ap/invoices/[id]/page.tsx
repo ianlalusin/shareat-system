@@ -19,7 +19,7 @@ import { MoneyLines } from '@/components/money/MoneyLines';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
 import { ACTION_LINK } from '@/components/action-link';
-import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -469,9 +469,11 @@ return (
                           <Input name="voidOn" type="date" required defaultValue={today} className="w-full" />
                         </Field>
                       )}
-                      <Button type="submit" variant="danger">
-                        Void payment
-                      </Button>
+                      <ConfirmDestructive
+                        tier="admin-pin"
+                        label="Void payment"
+                        consequence="Reverses this payment, and the bills it paid are owed again. An administrator must approve with their own PIN."
+                      />
                     </form>
                   </details>
                 )}
@@ -551,9 +553,11 @@ return (
           <Field label="Void reason">
             <Input name="reason" required className="w-full" />
           </Field>
-          <Button type="submit" variant="danger">
-            Void — cascades through every linked expense
-          </Button>
+          <ConfirmDestructive
+            tier="admin-pin"
+            label="Void invoice"
+            consequence="Voids this invoice and reverses every linked expense. An administrator must approve with their own PIN."
+          />
         </form>
       )}
     </Page>

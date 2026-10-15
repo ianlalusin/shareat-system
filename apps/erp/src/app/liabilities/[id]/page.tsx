@@ -17,7 +17,7 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Liability — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -216,9 +216,11 @@ export default async function LiabilityPage({
                         <input type="hidden" name="liabilityId" value={liability.id} />
                         <input type="hidden" name="entryId" value={e.entryId} />
                         <Input name="reason" placeholder="Reason…" className="w-32" />
-                        <Button type="submit" variant="danger">
-                          Reverse
-                        </Button>
+                        <ConfirmDestructive
+                          tier="admin-pin"
+                          label="Reverse liability entry"
+                          consequence="Reverses this entry; both stay on the ledger. An administrator must approve with their own PIN."
+                        />
                       </form>
                     </td>
                   </tr>

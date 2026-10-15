@@ -7,7 +7,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Daily POS usage pull — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -328,9 +328,11 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
                   <span className="block text-neutral-600 dark:text-neutral-400">Why is it being voided?</span>
                   <Input name="reason" required className="w-full" />
                 </label>
-                <Button type="submit" variant="danger">
-                  Void this pull
-                </Button>
+                <ConfirmDestructive
+                  tier="admin-pin"
+                  label="Void this pull"
+                  consequence="Reverses every usage record this pull made. An administrator must approve with their own PIN."
+                />
               </form>
             </section>
           )}

@@ -10,6 +10,8 @@ import { salesDaysRepo } from '@shareat/db';
 import { buildPlanForDay, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -150,8 +152,12 @@ export async function voidPullAction(fd: FormData): Promise<void> {
   let count = 0;
   let dayVoided = false;
   try {
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the form's `storeId`).
+    const target = await loadDestructiveTarget(actor, 'pos_usage_pull', pullId, ['void_usage_record']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_usage_record' });
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
       const r = await voidPosUsagePull(tx, actor, { pullId, reason });
+      await recordApproval(tx, actor, approval, { capability: 'void_usage_record', entityType: 'pos_usage_pull', entityId: pullId, storeId: target.storeId });
       const day = await salesDaysRepo.getById(tx, actor.orgId, salesDayId);
       dayVoided = day?.status === 'voided';
       return r;

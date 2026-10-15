@@ -17,6 +17,8 @@ import { redirectWithFlash } from '../../../lib/flash';
 import { keepTyping } from '../../../lib/keep-typing';
 import { posStoreOptions, withOrgPrincipal } from './lib';
 import { POS_LINK_EDIT, TENDER_EDIT } from './typed-forms';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -169,6 +171,12 @@ export async function setTenderActiveAction(fd: FormData): Promise<void> {
     const version = str(fd, 'version');
     if (!version) throw new Error(STALE_SENTENCE);
     const tenderId = str(fd, 'tenderId');
+    // T-412 Tier R: RETIRING a tender needs its name retyped (the server compares it with the name IT loads); restoring is
+    // not destructive and needs nothing.
+    if (!isActive) {
+      const target = await loadDestructiveTarget(actor, 'tender', tenderId, ['manage_chart_of_accounts']);
+      if (!retypeMatches(str(fd, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
+    }
     await withOrgPrincipal(actor.orgId, (tx) => setTenderActive(tx, actor, { tenderId, isActive, expectedVersion: version }));
     name = await savedName(actor.orgId, tenderId);
   } catch (err) {
@@ -190,9 +198,12 @@ export async function unlinkStoreFromPosAction(fd: FormData): Promise<void> {
   try {
     // The reason is kept exactly as typed (the domain trims it); only the box is judged here, AFTER authorize (I1).
     const reason = typeof fd.get('reason') === 'string' ? (fd.get('reason') as string) : '';
+    // T-412 Tier R: the person retypes the store's name (this replaces the old tick box); the server compares it with the
+    // name IT loads.
+    const target = await loadDestructiveTarget(actor, 'store', storeId, ['unlink_store_from_pos']);
+    if (!retypeMatches(str(fd, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     storeName = await withOrgPrincipal(actor.orgId, async (tx) => {
       await authorize(tx, actor, 'unlink_store_from_pos', {});
-      if (fd.get('confirm') !== 'on') throw new Error('Tick the box to confirm.');
       await unlinkStoreFromPos(tx, actor, { storeId, reason });
       return (await storesRepo.getById(tx, actor.orgId, storeId))?.name ?? storeName;
     });

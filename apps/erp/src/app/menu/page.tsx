@@ -7,7 +7,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { EditableRecord } from '@/components/forms';
-import { Badge, Banner, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { createCategoryAction, createItemAction, editCategoryAction, retireCategoryAction } from './actions';
 import { listCategories, listOverviewItems, storesInScope, withOrgPrincipal } from './lib';
 import { MENU_CATEGORY } from './typed-forms';
@@ -132,9 +132,12 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
               {canManage && c.status === 'active' && (
                 <form action={retireCategoryAction}>
                   <input type="hidden" name="id" value={c.id} />
-                  <Button type="submit" variant="danger">
-                    Retire
-                  </Button>
+                  <ConfirmDestructive
+                    tier="retype"
+                    label="Retire category"
+                    consequence="Retires this category."
+                    expectedName={c.name}
+                  />
                 </form>
               )}
             </div>

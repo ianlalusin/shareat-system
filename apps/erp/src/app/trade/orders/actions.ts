@@ -16,6 +16,8 @@ import { peso, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -142,9 +144,14 @@ export async function voidOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   let message = '';
   try {
-    const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      voidTradeOrder(tx, actor, { orderId, reason: str(fd, 'reason') }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const target = await loadDestructiveTarget(actor, 'trade_order', orderId, ['approve_buyer', 'dispatch_branch_order']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'approve_buyer' });
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const voided = await voidTradeOrder(tx, actor, { orderId, reason: str(fd, 'reason') });
+      await recordApproval(tx, actor, approval, { capability: 'approve_buyer', entityType: 'trade_order', entityId: orderId, storeId: target.storeId });
+      return voided;
+    });
     message = result.reversedEntryId
       ? 'Voided. The posting is reversed — never deleted — and the stock it moved is given back.'
       : 'Voided. Nothing had posted yet, so nothing needed reversing.';

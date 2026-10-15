@@ -12,7 +12,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { EditableRecord } from '@/components/forms';
-import { Banner, Button, FlashBanner, FormGrid, Field, Input, Textarea } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Field, Input, Textarea } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { STORE_DETAILS, STORE_OPENING_DATE, STORE_STOCK_MODEL } from '../typed-forms';
@@ -322,21 +322,38 @@ export default async function StoreDetailPage({
             </EditableRecord>
           </section>
 
-          <form
-            action={store.isActive ? deactivateStoreAction : reactivateStoreAction}
-            className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
-          >
-            <h2 className="text-sm font-medium">{store.isActive ? 'Close this branch' : 'Reopen this branch'}</h2>
-            <input type="hidden" name="storeId" value={store.id} />
-            <p className="text-xs text-neutral-500">
-              {store.isActive
-                ? 'Deactivating never deletes. Its journal entries, attendance and stock stay queryable.'
-                : 'Reopening also re-grants store access to every admin — including any appointed while it was closed, who would otherwise not see it.'}
-            </p>
-            <Button type="submit" variant={store.isActive ? 'danger' : 'secondary'}>
-              {store.isActive ? 'Deactivate' : 'Reactivate'}
-            </Button>
-          </form>
+          {store.isActive ? (
+            <form
+              action={deactivateStoreAction}
+              className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+            >
+              <h2 className="text-sm font-medium">Close this branch</h2>
+              <input type="hidden" name="storeId" value={store.id} />
+              <p className="text-xs text-neutral-500">
+                Deactivating never deletes. Its journal entries, attendance and stock stay queryable.
+              </p>
+              <ConfirmDestructive
+                tier="retype"
+                label="Close this branch"
+                consequence="Closes this branch. Nothing is deleted, but it stops trading until someone reopens it."
+                expectedName={store.name}
+              />
+            </form>
+          ) : (
+            <form
+              action={reactivateStoreAction}
+              className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+            >
+              <h2 className="text-sm font-medium">Reopen this branch</h2>
+              <input type="hidden" name="storeId" value={store.id} />
+              <p className="text-xs text-neutral-500">
+                Reopening also re-grants store access to every admin — including any appointed while it was closed, who would otherwise not see it.
+              </p>
+              <Button type="submit" variant="secondary">
+                Reactivate
+              </Button>
+            </form>
+          )}
         </section>
       </div>
     </Page>

@@ -57,6 +57,7 @@ interface Ctx {
   variant2: string; // has a depletion rule
   variantNoRule: string;
   catEmpty: string;
+  catEmptyName: string;
   groupId: string;
   valueId: string;
   valueId2: string;
@@ -89,7 +90,8 @@ function ctx(): Promise<Ctx> {
     const second = await rawItem(c, 'a_la_carte', uid('Chicken'));
     await rawRule(c, second.variantId);
     const noRule = await rawItem(c, 'a_la_carte', uid('Tea'));
-    const [cat] = await sql<{ id: string }[]>`insert into menu_categories (org_id, name, status, created_by) values (${c.orgId}, ${uid('Empty')}, 'active', ${c.admin.personId}) returning id`;
+    const catEmptyName = uid('Empty');
+    const [cat] = await sql<{ id: string }[]>`insert into menu_categories (org_id, name, status, created_by) values (${c.orgId}, ${catEmptyName}, 'active', ${c.admin.personId}) returning id`;
     const opt = await rawOption(c);
     const [v2] = await sql<{ id: string }[]>`
       insert into menu_option_values (org_id, option_group_id, name, sort_order, status, created_by) values (${c.orgId}, ${opt.groupId}, ${uid('Val2')}, 1, 'active', ${c.admin.personId}) returning id`;
@@ -124,6 +126,7 @@ function ctx(): Promise<Ctx> {
       variant2: second.variantId,
       variantNoRule: noRule.variantId,
       catEmpty: cat!.id,
+      catEmptyName,
       groupId: opt.groupId,
       valueId: opt.valueId,
       valueId2: v2!.id,
@@ -167,7 +170,11 @@ const cases: Case[] = [
     load: MENU_ACTIONS, action: 'editCategoryAction', path: P_MENU,
     rows: async (x) => n(sql`select count(*)::int as n from menu_categories where org_id = ${x.c.orgId} and name like 'Renamed cat%'`),
     refused: (x) => [{ who: x.c.manager, label: 'manager', form: fd({ id: x.catEmpty, name: 'Renamed cat by manager' }) }],
-    allowed: (x) => [{ who: x.c.admin, label: 'admin', form: fd({ id: x.catEmpty, name: 'Renamed cat by admin' }) }],
+    // T-412: the world is shared, so the rename below changes the name retireCategoryAction later asks for; remember it.
+    allowed: (x) => {
+      x.catEmptyName = 'Renamed cat by admin';
+      return [{ who: x.c.admin, label: 'admin', form: fd({ id: x.catEmpty, name: 'Renamed cat by admin' }) }];
+    },
   },
   {
     name: 'retireCategoryAction (manage_menu)',
@@ -177,7 +184,8 @@ const cases: Case[] = [
       { who: x.c.manager, label: 'manager', form: fd({ id: x.catEmpty }) },
       { who: x.c.staff, label: 'staff', form: fd({ id: x.catEmpty }) },
     ],
-    allowed: (x) => [{ who: x.c.admin, label: 'admin', form: fd({ id: x.catEmpty }) }],
+    // T-412: retiring a category asks for its name; the server compares it with the name it loads.
+    allowed: (x) => [{ who: x.c.admin, label: 'admin', form: fd({ id: x.catEmpty, confirmName: x.catEmptyName }) }],
   },
   {
     name: 'editItemAction (manage_menu)',

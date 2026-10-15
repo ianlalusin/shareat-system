@@ -11,7 +11,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Supplier returns — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -243,9 +243,11 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
                       <input type="hidden" name="returnId" value={r.id} />
                       <input type="hidden" name="store" value={storeId} />
                       <Input name="reason" placeholder="void reason" required className="w-28" />
-                      <Button type="submit" variant="danger">
-                        Void
-                      </Button>
+                      <ConfirmDestructive
+                        tier="admin-pin"
+                        label="Void supplier return"
+                        consequence="Gives the stock back and reverses the credit. An administrator must approve with their own PIN."
+                      />
                     </form>
                   )}
                 </td>

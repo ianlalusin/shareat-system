@@ -24,6 +24,8 @@ import { activeDefaultsAtStore, bannerMessage, bulkBannerMessage, copyableDefaul
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../../lib/error-shape';
 import { redirectWithFlash } from '@/lib/flash';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -216,6 +218,9 @@ export async function retireStorePositionAction(formData: FormData): Promise<voi
   const positionId = str(formData, 'positionId');
 
   try {
+    // T-412 Tier R: the person retypes the position's name; the server compares it with the name IT loads.
+    const target = await loadDestructiveTarget(actor, 'store_position', positionId, ['grant_capability']);
+    if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     await withOrgPrincipal(actor.orgId, (tx: Tx) => retireStorePosition(tx, actor, { positionId }));
   } catch (err) {
     return await redirectWithFlash('/admin/access-defaults', { store: storeId }, { error: errorMessage(err) });

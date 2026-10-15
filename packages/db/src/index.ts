@@ -187,6 +187,9 @@ export * as arRepo from './repo/ar';
 export * as tradeRepo from './repo/trade';
 export * as channelSettlementsRepo from './repo/channel-settlements';
 export * as auditLogRepo from './repo/audit-log';
+// T-412: the record behind a destructive button (its store / name / status), loaded by the server action, never the form.
+export * as destructiveTargetsRepo from './repo/destructive-targets';
+export type { DestructiveEntity, DestructiveTarget } from './repo/destructive-targets';
 export type { AuditLogSource } from './repo/audit-log';
 export {
   AUDIT_CATALOGUE,

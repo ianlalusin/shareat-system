@@ -27,6 +27,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../../lib/error-shape';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -168,6 +170,9 @@ export async function deactivateLocationAction(fd: FormData): Promise<void> {
 
   let message = '';
   try {
+    // T-412 Tier R: the person retypes the room's name; the server compares it with the name IT loads.
+    const target = await loadDestructiveTarget(actor, 'stock_location', id, ['manage_locations']);
+    if (!retypeMatches(str(fd, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     await withOrgPrincipal(actor.orgId, (tx) => deactivateLocation(tx, actor, { id }));
     message = 'Room deactivated.';
   } catch (err) {

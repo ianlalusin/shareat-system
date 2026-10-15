@@ -12,7 +12,7 @@ import {
 } from './lib';
 import { selectDefaultCommissaryStoreId } from './default-store';
 import { Page } from '@/components/shell/Page';
-import { Button, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -307,9 +307,12 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                             <input type="hidden" name="id" value={m.id} />
                             <input type="hidden" name="commissaryStoreId" value={commissaryStoreId} />
                             <input type="hidden" name="branchStoreId" value={branchStoreId} />
-                            <Button type="submit" variant="danger">
-                              Remove
-                            </Button>
+                            <ConfirmDestructive
+                              tier="retype"
+                              label="Remove mapping"
+                              consequence="Removes this item mapping."
+                              expectedName={m.branchItemName}
+                            />
                           </form>
                         </td>
                       </tr>

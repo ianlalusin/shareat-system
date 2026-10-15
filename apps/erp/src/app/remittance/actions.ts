@@ -21,6 +21,8 @@ import { CASH_POLICY_EDIT } from './typed-forms';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { add, compare, isZero, money, ZERO } from '@shareat/core/money';
 import { parseMoneyInput } from '@shareat/domain/money-input';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -187,9 +189,14 @@ export async function reverseRemittanceAction(formData: FormData): Promise<void>
   try {
     const reason = str(formData, 'reason');
     if (!reason) throw new Error('Say why this remittance is being reversed.');
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      reverseRemittance(tx, actor, { remittanceId: str(formData, 'remittanceId'), reason }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the page's `storeId` field).
+    const remittanceId = str(formData, 'remittanceId');
+    const target = await loadDestructiveTarget(actor, 'remittance', remittanceId, ['accept_remittance']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'accept_remittance' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await reverseRemittance(tx, actor, { remittanceId, reason });
+      await recordApproval(tx, actor, approval, { capability: 'accept_remittance', entityType: 'remittance', entityId: remittanceId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash('/remittance', { store: storeId }, { error: errorMessage(err) });
   }

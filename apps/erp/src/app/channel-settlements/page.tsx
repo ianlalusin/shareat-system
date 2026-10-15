@@ -27,7 +27,7 @@ import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { PAYOUT_DESTINATION_EDIT } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
-import { Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Channel settlements — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -502,9 +502,11 @@ export default async function ChannelSettlementsPage({
                           {/* A void without a reason is a gap, so the reason is part of the same
                               control rather than a confirmation step that can be skipped. */}
                           <Input name="reason" required placeholder="Reason…" className="w-28" />
-                          <Button type="submit" variant="danger">
-                            Void
-                          </Button>
+                          <ConfirmDestructive
+                            tier="admin-pin"
+                            label="Void settlement"
+                            consequence="Reverses this settlement. An administrator must approve with their own PIN."
+                          />
                         </form>
                       )}
                     </td>

@@ -110,7 +110,12 @@ function domainOrAuthImportedNames(text: string): string[] {
       const item = raw.trim();
       if (!item || /^type\s/.test(item)) continue;
       const asMatch = /\bas\s+(\w+)/.exec(item);
-      names.push(asMatch ? asMatch[1]! : item.split(/\s+/)[0]!);
+      const name = asMatch ? asMatch[1]! : item.split(/\s+/)[0]!;
+      // T-412: `verifyAdminApproval(null, ...)` opens its OWN `withOrgPrincipal(actor.orgId, ...)` transactions (the attempt
+      // charge commits on its own, before the lookup), so its null reaches no bare transaction and there is nothing for the
+      // refusal counter to miss. Exempt by name: every Tier P action carries one.
+      if (name === 'verifyAdminApproval') continue;
+      names.push(name);
     }
   }
   return names;

@@ -17,7 +17,7 @@ import { accountLabel, accountCodeAndName } from '@/lib/account-label';
 import { typedFor } from '@/lib/keep-typing';
 import { PLATFORM_SALES_EDIT } from '../typed-forms';
 import { EditableRecord } from '@/components/forms';
-import { Badge, Banner, Button, FlashBanner, FormGrid, Input } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Input } from '@/components/ui';
 
 export const metadata = { title: 'Sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -511,9 +511,11 @@ export default async function SalesDayDetailPage({
           </p>
           <div className="flex gap-2">
             <Input name="reason" required placeholder="Why is this being voided?" className="flex-1" />
-            <Button type="submit" variant="danger">
-              Void
-            </Button>
+            <ConfirmDestructive
+              tier="admin-pin"
+              label="Void sales day"
+              consequence="Reverses this verified day's posting. An administrator must approve with their own PIN."
+            />
           </div>
         </form>
       )}

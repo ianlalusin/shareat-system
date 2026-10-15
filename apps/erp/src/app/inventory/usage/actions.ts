@@ -25,6 +25,8 @@ import { requireActor } from '../../../lib/session';
 import { peso } from '../../../lib/format';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../../lib/error-shape';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -154,7 +156,15 @@ export async function deleteUsageDraftAction(fd: FormData): Promise<void> {
 
   let result: Awaited<ReturnType<typeof deleteUsageDraft>> | undefined;
   try {
-    result = await withOrgPrincipal(actor.orgId, (tx) => deleteUsageDraft(tx, actor, { recordId }));
+    // T-412 Tier P: even an unposted draft's delete needs an administrator's PIN (Ian Q2, recommended). The store is the
+    // RECORD's (not the form's `storeId`, which only carries the page's navigation).
+    const target = await loadDestructiveTarget(actor, 'stock_usage_record', recordId, ['record_stock_movement', 'record_wastage']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'record_stock_movement' });
+    result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const deleted = await deleteUsageDraft(tx, actor, { recordId });
+      if (deleted.ok) await recordApproval(tx, actor, approval, { capability: 'record_stock_movement', entityType: 'stock_usage_record', entityId: recordId, storeId: target.storeId });
+      return deleted;
+    });
   } catch (err) {
     return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: errorMessage(err) });
   }
@@ -173,7 +183,14 @@ export async function voidUsageAction(fd: FormData): Promise<void> {
 
   let result: Awaited<ReturnType<typeof voidUsage>> | undefined;
   try {
-    result = await withOrgPrincipal(actor.orgId, (tx) => voidUsage(tx, actor, { recordId, reason }));
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const target = await loadDestructiveTarget(actor, 'stock_usage_record', recordId, ['void_usage_record']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_usage_record' });
+    result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const voided = await voidUsage(tx, actor, { recordId, reason });
+      if (voided.ok) await recordApproval(tx, actor, approval, { capability: 'void_usage_record', entityType: 'stock_usage_record', entityId: recordId, storeId: target.storeId });
+      return voided;
+    });
   } catch (err) {
     return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: errorMessage(err) });
   }

@@ -24,7 +24,8 @@ export interface CatalogueEntry {
   /** Derived from category + sensitivity (R7), never written by hand. */
   readonly retention: AuditRetention;
   /** `store`: store_id is required. `org`: store_id must be null (R14). */
-  readonly scope: 'store' | 'org';
+  /** 'either' (T-412): the record may or may not have a store (an organisation-level approval carries none). */
+  readonly scope: 'store' | 'org' | 'either';
   readonly actor: 'person' | 'system' | 'either';
   /** Who may read it (R8): `store` = view_activity_log, `admin` = view_activity_log_restricted. */
   readonly viewers: 'store' | 'admin';
@@ -60,7 +61,7 @@ function def(
   action: string,
   category: AuditCategory,
   sensitivity: AuditSensitivity,
-  scope: 'store' | 'org',
+  scope: 'store' | 'org' | 'either',
   entity: string,
   owner: string,
   o: Opts = {},
@@ -89,6 +90,8 @@ const LOYALTY: Opts = { reserved: true, clientSources: ['customer'] };
 export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // ---- LIVE: the 48 actions written today (labels identical to migration 0197's copy list) ----
   def('reopen_pin_sign_in', 'security', 'high', 'store', 'store', 'T-395'),
+  // T-412: an administrator's PIN approved a destructive action. Store-scoped when the record has a store, org-level when it has none.
+  def('destructive.approved', 'security', 'high', 'either', 'persons', 'T-412', { actor: 'either' }),
   def('set_supplier_credit_terms', 'money', 'normal', 'org', 'suppliers', 'T-362'),
   def('set_supplier_status', 'money', 'normal', 'org', 'suppliers', 'T-391'),
   def('set_supplier_bank_account', 'money', 'high', 'org', 'suppliers', 'T-365'),

@@ -151,9 +151,8 @@ describe('W1 - who sees the Unlink section', () => {
     expect(text).toContain('Unlink from POS');
     expect(text, 'the confirm sentence, word for word (REV-9 ending)').toContain(confirmSentence('Lipa', 'Test POS store', 2));
     expect(html, 'a reason box with the 500 limit').toMatch(/<textarea[^>]*maxLength="500"|<textarea[^>]*maxlength="500"/i);
-    expect(html, 'a confirmation checkbox').toMatch(/<input[^>]*type="checkbox"/);
-    expect(text).toContain("I understand: Lipa's sales will be typed from now on.");
-    expect(text, 'the button names the store').toContain('Unlink Lipa');
+    // T-412: the tick box became a retype-the-name confirmation (<ConfirmDestructive tier="retype">): one button first.
+    expect(text, 'the one danger button').toContain('Unlink store from POS');
   });
 
   it('an admin (manage_chart_of_accounts, not super admin) sees the page and the link form but NO Unlink section; passes on HEAD', async () => {
@@ -163,18 +162,17 @@ describe('W1 - who sees the Unlink section', () => {
     expect(text, 'control: the admin reaches the page and its link form').toContain('POS store');
     expect(html).toMatch(/aria-label="Edit Lipa"|aria-label="Edit [^"]*"/);
     expect(text).not.toContain('Unlink from POS');
-    expect(text).not.toContain('Unlink Lipa');
-    expect(html).not.toMatch(/<input[^>]*type="checkbox"/);
+    expect(text).not.toContain('Unlink store from POS');
   });
   // Mutant: the section ungated (shown to every viewer of the page) -> the admin leg is red.
 });
 
 describe('W2 - the confirmation box', () => {
-  it('unticked -> "Tick the box to confirm."; the link row is unchanged; no audit row', async () => {
+  it('no name typed -> "Type the name exactly"; the link row is unchanged; no audit row (T-412: was the tick box)', async () => {
     const f = await fixture('w2', { verified: 1 });
     const { outcome, signal, raw } = await run(f.superAdmin, form(f, { reason: REASON }));
     expect(signal.url.startsWith('/settings/pos-link')).toBe(true);
-    expect(outcome.flash.error).toBe('Tick the box to confirm.');
+    expect(outcome.flash.error).toBe("Type the name exactly — 'Lipa' — to confirm.");
     // Auditor (T-382): a REFUSAL goes back through the flash too; the typed reason never reaches the address (DEF-476).
     expect(decodeURIComponent(raw.replace(/\+/g, ' ')), 'the reason is not in the address on a refusal').not.toContain('wrong store');
     expect(raw).not.toMatch(/[?&](ok|error|reason)=/);
@@ -185,10 +183,10 @@ describe('W2 - the confirmation box', () => {
   // Mutant: the box check removed -> the unticked post unlinks, red.
 });
 
-describe('W3 - a ticked post unlinks, and neither the reason nor the banner travels in the address', () => {
+describe('W3 - a confirmed post unlinks, and neither the reason nor the banner travels in the address', () => {
   it('success banner from the flash; the redirect URL carries no reason and no banner text; the reason is stored', async () => {
     const f = await fixture('w3', { verified: 2 });
-    const { outcome, raw } = await run(f.superAdmin, form(f, { reason: REASON, confirm: 'on' }));
+    const { outcome, raw } = await run(f.superAdmin, form(f, { reason: REASON, confirmName: 'lipa' }));
     expect(outcome.flash.ok).toBe('Lipa is unlinked from POS. Its sales days are typed from now on.');
     expect(outcome.flash.error).toBeUndefined();
     expect(currentJar().has(FLASH_COOKIE), 'the banner is in the flash cookie').toBe(true);
@@ -209,11 +207,11 @@ describe('W4 - R3 on the screen: an open imported day blocks the unlink', () => 
     const f = await fixture('w4', { verified: 1, openDay: true });
     const { html, text } = await renderAs(f.superAdmin);
     expect(text, 'the sentence names the open day').toContain(r3Sentence('Lipa', [hd('2027-01-15')]));
-    expect(text, 'and no form: no button, no confirmation').not.toContain('Unlink Lipa');
+    expect(text, 'and no form: no button, no confirmation').not.toContain('Unlink store from POS');
     expect(text).not.toContain('I understand:');
     expect(html).not.toMatch(/<input[^>]*type="checkbox"/);
 
-    const { outcome, raw } = await run(f.superAdmin, form(f, { reason: REASON, confirm: 'on' }));
+    const { outcome, raw } = await run(f.superAdmin, form(f, { reason: REASON, confirmName: 'Lipa' }));
     expect(outcome.flash.error).toBe(r3Sentence('Lipa', [hd('2027-01-15')]));
     expect(decodeURIComponent(raw.replace(/\+/g, ' ')), 'auditor: the reason is not in the address on the R3 refusal').not.toContain('wrong store');
     expect(raw).not.toMatch(/[?&](ok|error|reason)=/);
@@ -238,7 +236,7 @@ describe('W5 - an unlinked store\'s card', () => {
     // 2026-10-09 (T-384 S1b A0 L4): an unlinked store's link form is an add form; its submit now reads 'Save', not 'Link store'.
     expect(html, 'the link form is there for a relink (R8)').toMatch(/<button[^>]*type="submit"[^>]*>\s*Save\s*<\/button>/);
     expect(html).toMatch(/name="posStoreId"/);
-    expect(text, 'no Unlink section on an unlinked store').not.toContain('Unlink Lipa');
+    expect(text, 'no Unlink section on an unlinked store').not.toContain('Unlink store from POS');
   });
   // Mutant: `listLinks` rows treated as live in the loader -> the card says "Linked to Test POS store", red.
 });

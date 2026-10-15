@@ -14,6 +14,8 @@ import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { BUDGET_CAP_EDIT } from './typed-forms';
 import { errorMessage } from '@/lib/constraint-messages';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -55,8 +57,12 @@ export async function removeBudgetAction(formData: FormData): Promise<void> {
   const storeId = str(formData, 'storeId');
   const periodKey = str(formData, 'periodKey');
   try {
+    // T-412 Tier R: the person retypes the category's name; the server compares it with the name IT loads.
+    const budgetId = str(formData, 'budgetId');
+    const target = await loadDestructiveTarget(actor, 'expense_budget', budgetId, ['manage_expense_budgets']);
+    if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     await withOrgPrincipal(actor.orgId, (tx) =>
-      removeExpenseBudget(tx, actor, { budgetId: str(formData, 'budgetId') }),
+      removeExpenseBudget(tx, actor, { budgetId }),
     );
   } catch (err) {
     return await redirectWithFlash('/budgets', { store: storeId, period: periodKey }, { error: errorMessage(err) });

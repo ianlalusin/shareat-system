@@ -26,7 +26,7 @@ import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Opening balances — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -368,9 +368,11 @@ export default async function OpeningPage({
                 {/* A draft was never final, so removing one is a delete rather than a reversal. */}
                 <form action={removeOpeningFigureAction}>
                   <input type="hidden" name="entryId" value={d.id} />
-                  <Button type="submit" variant="danger">
-                    Remove
-                  </Button>
+                  <ConfirmDestructive
+                    tier="admin-pin"
+                    label="Remove opening figure"
+                    consequence="Removes this opening figure. An administrator must approve with their own PIN."
+                  />
                 </form>
               </div>
             </div>
@@ -391,9 +393,11 @@ export default async function OpeningPage({
         */}
         {balanced && drafts.length > 0 ? (
           <form action={postOpeningBalancesAction} className="mt-3">
-            <Button type="submit" variant="primary" className="w-full sm:w-auto">
-              Post the opening balances
-            </Button>
+            <ConfirmDestructive
+              tier="admin-pin"
+              label="Post the opening balances"
+              consequence="Posts the opening balances to the books. An administrator must approve with their own PIN."
+            />
           </form>
         ) : (
           <Banner tone="warning" className="mt-3">

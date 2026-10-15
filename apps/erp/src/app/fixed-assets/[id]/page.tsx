@@ -10,7 +10,7 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, Button, FlashBanner, Input, Select, Textarea } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, Input, Select, Textarea } from '@/components/ui';
 import { typedFor } from '@/lib/keep-typing';
 import { ASSET_IN_SERVICE_EDIT, ASSET_TERMS_EDIT } from '../typed-forms';
 
@@ -371,9 +371,11 @@ export default async function AssetDetailPage({
                     <Input name="reason" required placeholder="Compressor failed" className="w-full" />
                   </Field>
                 </div>
-                <Button type="submit" variant="danger">
-                  Dispose this asset
-                </Button>
+                <ConfirmDestructive
+                  tier="admin-pin"
+                  label="Dispose this asset"
+                  consequence="Disposes of this asset and posts the disposal. An administrator must approve with their own PIN."
+                />
               </form>
             </section>
           )}

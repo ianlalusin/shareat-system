@@ -28,13 +28,14 @@ import {
   type ExpensePaymentMethod,
   type MoneyLine,
 } from '@shareat/domain';
-import { apRepo, expensesRepo, goneSentence } from '@shareat/db';
+import { apRepo, expensesRepo, goneSentence, refuse } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '../../lib/period-override';
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
-import { authorize, type Actor, type Capability } from '@shareat/auth';
+import { authorize, verifyAdminApproval, type Actor, type Capability } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 import { redirectWithFlash, splitReturnTo, type Nav } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { EXPENSE_DRAFT_EDIT } from './typed-forms';
@@ -361,7 +362,16 @@ export async function voidExpenseAction(formData: FormData): Promise<void> {
   const nav = carryNav(formData);
 
   try {
-    await withOrgPrincipal(actor.orgId, (tx) => voidExpense(tx, actor, expenseId, reason));
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const target = await loadDestructiveTarget(actor, 'expense', expenseId, ['void_expense']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'void_expense' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      const voided = await voidExpense(tx, actor, expenseId, reason);
+      // The domain treats a second void as a harmless no-op (`created: false`). Nothing was approved or changed, so no
+      // approval event is written, and the person is told rather than shown a second success banner.
+      if (!voided.created) throw refuse(`voidExpense: expense ${expenseId} was already voided`, 'This expense was already voided - nothing changed.');
+      await recordApproval(tx, actor, approval, { capability: 'void_expense', entityType: 'expense', entityId: expenseId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err) });
   }
@@ -404,7 +414,13 @@ export async function deleteDraftAction(formData: FormData): Promise<void> {
   const nav = carryNav(formData);
 
   try {
-    await withOrgPrincipal(actor.orgId, (tx) => deleteExpenseDraft(tx, actor, expenseId));
+    // T-412 Tier P: even an unposted draft's delete needs an administrator's PIN (Ian Q2, recommended). The store is the RECORD's.
+    const target = await loadDestructiveTarget(actor, 'expense', expenseId, ['edit_any_expense', 'edit_own_expense']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'edit_any_expense' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await deleteExpenseDraft(tx, actor, expenseId);
+      await recordApproval(tx, actor, approval, { capability: 'edit_any_expense', entityType: 'expense', entityId: expenseId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err) });
   }

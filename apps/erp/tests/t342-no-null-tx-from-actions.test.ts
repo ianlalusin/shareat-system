@@ -62,7 +62,7 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
   // Wrapping the action in `withOrgPrincipal` and passing that tx through switches this call into
   // atomic mode, which is a regression, not a fix — the null branch already opens its own
   // per-asset `withOrgPrincipal` transactions internally (DEF-287), so it was never RLS-unsafe.
-  'app/fixed-assets/actions.ts:205',
+  'app/fixed-assets/actions.ts:211', // T-412: was :205 - two imports were added above it
 ]);
 
 function isUseServerFile(content: string): boolean {
@@ -108,6 +108,10 @@ function scanForNullTx(root: string): Hit[] {
     let m: RegExpExecArray | null;
     while ((m = pattern.exec(content))) {
       const line = lineOf(content, m.index);
+      // T-412: `verifyAdminApproval(null, ...)` is the ONE deliberate null first argument that is not the DEF-417 shape: it opens
+      // its own `withOrgPrincipal(actor.orgId, ...)` transactions (the attempt charge commits on its own, before the lookup), so
+      // the null never reaches a bare transaction. Exempt by name, not by line, because every Tier P action carries one.
+      if (/^verifyAdminApproval\(/.test(m[0])) continue;
       if (ALLOWLIST.has(`${relFile}:${line}`)) continue;
       hits.push({ file: relFile, line });
     }

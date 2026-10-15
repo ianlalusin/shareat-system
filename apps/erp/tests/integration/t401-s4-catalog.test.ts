@@ -153,14 +153,15 @@ describe('inline category edits', () => {
   it('retireCategoryAction retires an empty category ("Category retired.")', async () => {
     const c = await cast('s4cat-retire');
     const id = await category(c, 'Seasonal');
-    const out = await run(MENU_ACTIONS, 'retireCategoryAction', c.admin, fd({ id }));
+    // T-412: retiring a category asks for its name (the server compares it with the name it loads).
+    const out = await run(MENU_ACTIONS, 'retireCategoryAction', c.admin, fd({ id, confirmName: 'Seasonal' }));
     expect(out.flash.ok).toBe('Category retired.');
     expect((await sql<{ status: string }[]>`select status from menu_categories where id = ${id}`)[0]!.status).toBe('retired');
   });
 
   it('retiring a category that still holds active items is refused in a sentence about the items, and it stays active (S3 ruling)', async () => {
     const w = await menuWorld('retire-held');
-    const out = await run(MENU_ACTIONS, 'retireCategoryAction', w.c.admin, fd({ id: w.meat }));
+    const out = await run(MENU_ACTIONS, 'retireCategoryAction', w.c.admin, fd({ id: w.meat, confirmName: 'Meat' }));
     expectSentenceError(out.flash.error, 'retire a category holding items');
     expect(out.flash.error).toMatch(/item/i);
     expect((await sql<{ status: string }[]>`select status from menu_categories where id = ${w.meat}`)[0]!.status).toBe('active');
@@ -172,7 +173,7 @@ describe('inline category edits', () => {
     await itemIn(c, cat, 'Gone Dish', 'a_la_carte', 'retired');
     const t = plain(await render(MENU_PAGE, c.admin, {}));
     expect(t.slice(t.indexOf('Old stuff'), t.indexOf('Old stuff') + 80)).not.toMatch(/Holds [1-9]/);
-    const out = await run(MENU_ACTIONS, 'retireCategoryAction', c.admin, fd({ id: cat }));
+    const out = await run(MENU_ACTIONS, 'retireCategoryAction', c.admin, fd({ id: cat, confirmName: 'Old stuff' }));
     expect(out.flash.ok).toBe('Category retired.');
   });
 });
