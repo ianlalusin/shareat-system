@@ -261,6 +261,9 @@ describe('who may sign in here — employment OR store scope, and both legs matt
     const neither = await mkPerson(o.orgId, 'Neither');
     await hireAt(o.orgId, employed, o.storeA);
     await scopeAt(scoped, o.storeA);
+    // T-407 S3: scope alone no longer admits (R2 = scope-or-employment HERE, AND the org-level rule R1). `scoped` is a
+    // never-employed manager (the franchise-owner shape, R1 leg c), so it still answers true, and for the stated reason.
+    await sql`insert into person_roles (person_id, org_id, role) values (${scoped}, ${o.orgId}, 'manager')`;
 
     await asOrg(o.orgId, async (tx) => {
       expect(await accessRepo.personMaySignInAtStore(tx, employed, o.storeA)).toBe(true);
