@@ -12,6 +12,9 @@ import {
   Button,
   FlashBanner,
   Input,
+  LinkRow,
+  RowAction,
+  RowLink,
   Select,
   StatusHero,
   exitStepFromTimestamps,
@@ -162,11 +165,11 @@ export default async function TradeOrderPage({
               {lines.map((l) => {
                 const packed = l.fulfilledQuantity ?? l.quantity;
                 return (
-                  <tr key={l.id} className="border-b border-neutral-100 align-top last:border-0 dark:border-neutral-900">
+                  <LinkRow key={l.id} className="border-b border-neutral-100 align-top last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
-                      <Link href={`/items/${l.itemId}`} className="underline underline-offset-4">
+                      <RowLink href={`/items/${l.itemId}`}>
                         {l.itemName}
-                      </Link>
+                      </RowLink>
                       <span className="ml-2 font-mono text-xs text-neutral-500">{l.itemCode}</span>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
@@ -182,29 +185,31 @@ export default async function TradeOrderPage({
                     {isInternal && (
                       <td className="px-3 py-2 text-right tabular-nums">
                         {canReceive ? (
-                          <div className="flex flex-col items-end gap-1">
-                            <input type="hidden" name="lineId" value={l.id} />
-                            <Input
-                              name="receivedQuantity"
-                              inputMode="decimal"
-                              defaultValue={packed}
-                              className="w-24 text-right tabular-nums"
-                            />
-                            <Select name="shortageReason" className="text-xs" defaultValue="">
-                              <option value="">If short: why?</option>
-                              {SHORTAGE_REASONS.map((r) => (
-                                <option key={r} value={r}>
-                                  {REASON_LABEL[r] ?? r}
-                                </option>
-                              ))}
-                            </Select>
-                          </div>
+                          <RowAction>
+                            <div className="flex flex-col items-end gap-1">
+                              <input type="hidden" name="lineId" value={l.id} />
+                              <Input
+                                name="receivedQuantity"
+                                inputMode="decimal"
+                                defaultValue={packed}
+                                className="w-24 text-right tabular-nums"
+                              />
+                              <Select name="shortageReason" className="text-xs" defaultValue="">
+                                <option value="">If short: why?</option>
+                                {SHORTAGE_REASONS.map((r) => (
+                                  <option key={r} value={r}>
+                                    {REASON_LABEL[r] ?? r}
+                                  </option>
+                                ))}
+                              </Select>
+                            </div>
+                          </RowAction>
                         ) : (
                           (l.receivedQuantity ?? '—')
                         )}
                       </td>
                     )}
-                  </tr>
+                  </LinkRow>
                 );
               })}
             </tbody>

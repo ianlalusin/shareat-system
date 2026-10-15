@@ -3,7 +3,7 @@ import { listUsers } from './lib';
 import { ROLE_LABEL } from '@shareat/auth';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Banner } from '@/components/ui';
+import { Banner, LinkRow, RowLink } from '@/components/ui';
 
 export const metadata = { title: 'Users and roles — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -67,7 +67,7 @@ export default async function UsersPage() {
               </tr>
             )}
             {users.map((u) => (
-              <tr key={u.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+              <LinkRow key={u.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                 <td className="px-4 py-2">
                   {u.displayName}
                   {!u.isActive && <span className="ml-2 text-xs text-neutral-400">(inactive)</span>}
@@ -86,11 +86,11 @@ export default async function UsersPage() {
                 <td className="px-4 py-2 text-neutral-600 dark:text-neutral-400">{u.storeScopeCount}</td>
                 <td className="px-4 py-2 text-neutral-600 dark:text-neutral-400">{u.activeGrantCount}</td>
                 <td className="px-4 py-2 text-right">
-                  <a href={`/admin/users/${u.id}`} className="underline underline-offset-4">
+                  <RowLink href={`/admin/users/${u.id}`}>
                     Manage →
-                  </a>
+                  </RowLink>
                 </td>
-              </tr>
+              </LinkRow>
             ))}
           </tbody>
         </table>

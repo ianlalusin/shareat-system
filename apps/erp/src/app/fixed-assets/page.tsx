@@ -15,7 +15,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, Button, FlashBanner, Select, Input } from '@/components/ui';
+import { Badge, Banner, Button, FlashBanner, LinkRow, RowLink, Select, Input } from '@/components/ui';
 
 export const metadata = { title: 'Fixed assets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -207,17 +207,14 @@ export default async function FixedAssetsPage({
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr
+                <LinkRow
                   key={r.id}
                   className="border-b border-neutral-100 last:border-0 dark:border-neutral-900"
                 >
                   <td className="px-3 py-2">
-                    <a
-                      href={`/fixed-assets/${r.id}?${carry.toString()}`}
-                      className="underline hover:no-underline"
-                    >
+                    <RowLink href={`/fixed-assets/${r.id}?${carry.toString()}`}>
                       {r.name}
-                    </a>
+                    </RowLink>
                     {r.needsReview && <Badge tone="warning" label="Needs review" className="ml-2" />}
                     {r.status === 'active' && r.inServiceOn === null && (
                       <Badge tone="warning" label="Not yet in service" className="ml-2" />
@@ -241,7 +238,7 @@ export default async function FixedAssetsPage({
                   <td className="px-3 py-2">
                     <Badge status={r.status} />
                   </td>
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
             <tfoot>

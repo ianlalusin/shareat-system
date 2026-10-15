@@ -11,6 +11,9 @@ import {
   Button,
   FlashBanner,
   Input,
+  LinkRow,
+  RowAction,
+  RowLink,
   Select,
   StatusHero,
   deliverySteps,
@@ -129,11 +132,11 @@ export default async function DeliveryPage({
             </thead>
             <tbody>
               {doc.lines.map((l) => (
-                <tr key={l.id} className="border-b border-neutral-100 align-top last:border-0 dark:border-neutral-900">
+                <LinkRow key={l.id} className="border-b border-neutral-100 align-top last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-2">
-                    <Link href={`/items/${l.itemId}`} className="underline underline-offset-4">
+                    <RowLink href={`/items/${l.itemId}`}>
                       {l.itemName}
-                    </Link>
+                    </RowLink>
                     <span className="ml-2 font-mono text-xs text-neutral-500">{l.itemCode}</span>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
@@ -143,33 +146,39 @@ export default async function DeliveryPage({
                   {canReceive ? (
                     <>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        <input type="hidden" name="lineId" value={l.id} />
-                        <Input
-                          name="receivedQuantity"
-                          inputMode="decimal"
-                          defaultValue={l.orderedQuantity}
-                          className="w-24 text-right tabular-nums"
-                        />
+                        <RowAction>
+                          <input type="hidden" name="lineId" value={l.id} />
+                          <Input
+                            name="receivedQuantity"
+                            inputMode="decimal"
+                            defaultValue={l.orderedQuantity}
+                            className="w-24 text-right tabular-nums"
+                          />
+                        </RowAction>
                       </td>
                       <td className="px-3 py-2">
-                        <Select name="shortageReason" defaultValue="" className="text-xs">
-                          <option value="">— only if short —</option>
-                          {PICKABLE_REASONS.map((r) => (
-                            <option key={r} value={r}>
-                              {REASON_LABEL[r] ?? r}
-                            </option>
-                          ))}
-                        </Select>
+                        <RowAction>
+                          <Select name="shortageReason" defaultValue="" className="text-xs">
+                            <option value="">— only if short —</option>
+                            {PICKABLE_REASONS.map((r) => (
+                              <option key={r} value={r}>
+                                {REASON_LABEL[r] ?? r}
+                              </option>
+                            ))}
+                          </Select>
+                        </RowAction>
                       </td>
                       <td className="px-3 py-2">
-                        <Select name="locationId" defaultValue="" className="text-xs">
-                          <option value="">— keep as drafted —</option>
-                          {locations.map((loc) => (
-                            <option key={loc.id} value={loc.id}>
-                              {loc.name}
-                            </option>
-                          ))}
-                        </Select>
+                        <RowAction>
+                          <Select name="locationId" defaultValue="" className="text-xs">
+                            <option value="">— keep as drafted —</option>
+                            {locations.map((loc) => (
+                              <option key={loc.id} value={loc.id}>
+                                {loc.name}
+                              </option>
+                            ))}
+                          </Select>
+                        </RowAction>
                       </td>
                     </>
                   ) : (
@@ -183,7 +192,7 @@ export default async function DeliveryPage({
                       </td>
                     </>
                   )}
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
             <tfoot>

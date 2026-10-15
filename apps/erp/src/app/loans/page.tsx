@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { INTEREST_METHODS, PAYMENT_FREQUENCIES, RATE_PERIODS } from '@shareat/db';
 import { requirePageAccess } from '../../lib/page-access';
 import { createLoanAction } from './actions';
@@ -6,7 +5,7 @@ import { METHOD_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Loans — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -68,16 +67,16 @@ export default async function LoansPage({
             </thead>
             <tbody>
               {loans.map((l) => (
-                <tr
+                <LinkRow
                   key={l.id}
                   className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
                     l.status === 'active' ? '' : 'opacity-60'
                   }`}
                 >
                   <td className="px-3 py-2">
-                    <Link href={`/loans/${l.id}`} className="underline underline-offset-2">
+                    <RowLink href={`/loans/${l.id}`}>
                       {l.name}
-                    </Link>
+                    </RowLink>
                     <div className="text-xs text-neutral-400 dark:text-neutral-600">
                       {l.lenderName}
                     </div>
@@ -99,7 +98,7 @@ export default async function LoansPage({
                     {peso(l.position.outstanding)}
                   </td>
                   <td className="px-3 py-2 text-xs"><Badge status={l.status} /></td>
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
           </table>

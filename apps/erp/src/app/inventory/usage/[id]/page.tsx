@@ -8,7 +8,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, statusLabel } from '@/components/ui';
+import { Button, FlashBanner, Input, LinkRow, RowLink, statusLabel } from '@/components/ui';
 
 export const metadata = { title: 'Usage record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -65,11 +65,11 @@ export default async function UsageRecordPage({
           </thead>
           <tbody>
             {lines.map((l) => (
-              <tr key={l.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+              <LinkRow key={l.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                 <td className="px-3 py-2">
-                  <Link href={`/items/${l.itemId}`} className="underline underline-offset-4">
+                  <RowLink href={`/items/${l.itemId}`}>
                     {l.itemName}
-                  </Link>
+                  </RowLink>
                   <span className="ml-2 font-mono text-xs text-neutral-500">{l.itemCode}</span>
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">
@@ -78,7 +78,7 @@ export default async function UsageRecordPage({
                 <td className="px-3 py-2 text-right tabular-nums text-neutral-500">
                   {l.onHand} {l.baseUnit}
                 </td>
-              </tr>
+              </LinkRow>
             ))}
           </tbody>
         </table>

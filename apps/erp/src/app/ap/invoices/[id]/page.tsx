@@ -19,7 +19,7 @@ import { MoneyLines } from '@/components/money/MoneyLines';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
 import { ACTION_LINK } from '@/components/action-link';
-import { Badge, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -282,9 +282,9 @@ return (
               </thead>
               <tbody>
                 {existingLines.map((l) => (
-                  <tr key={l.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={l.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
-                      <a href={`/items/${l.itemId}`} className="underline hover:no-underline">{l.itemName}</a>
+                      <RowLink href={`/items/${l.itemId}`}>{l.itemName}</RowLink>
                     </td>
                     <td className="px-3 py-2 text-neutral-500 dark:text-neutral-400">
                       {l.quantity} {l.purchaseUnit} @ {peso(l.unitPrice)}
@@ -293,7 +293,7 @@ return (
                       {peso(Number(l.basePrice).toFixed(2))}/{l.baseUnit}
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(l.lineTotal)}</td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>
@@ -328,17 +328,17 @@ return (
                     const cat = categoryById.get(e.categoryId);
                     running += Number(e.totalAmount);
                     return (
-                      <tr key={e.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                      <LinkRow key={e.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                         <td className="px-3 py-2">{cat?.category ?? e.categoryId}</td>
                         <td className="px-3 py-2 font-mono text-xs text-neutral-500 dark:text-neutral-400">
                           {cat?.accountCode ? accountLabel(cat.accountCode) : <span className="text-danger">unmapped — will block</span>}
                         </td>
                         <td className="px-3 py-2">
-                          <a href={`/expenses/${e.id}`} className="underline hover:no-underline">{e.particulars}</a>
+                          <RowLink href={`/expenses/${e.id}`}>{e.particulars}</RowLink>
                         </td>
                         <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(e.totalAmount)}</td>
                         <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(running.toFixed(2))}</td>
-                      </tr>
+                      </LinkRow>
                     );
                   });
                 })()}

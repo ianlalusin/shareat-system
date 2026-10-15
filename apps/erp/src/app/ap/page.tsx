@@ -6,7 +6,7 @@ import { listSuppliersWithPosition, listInvoices, listStores, peso, today } from
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -72,15 +72,15 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               </thead>
               <tbody>
                 {suppliers.map((s) => (
-                  <tr key={s.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={s.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
-                      <Link href={`/ap/suppliers/${s.id}`} className="underline underline-offset-2">
+                      <RowLink href={`/ap/suppliers/${s.id}`}>
                         {s.name}
-                      </Link>
+                      </RowLink>
                     </td>
                     <td className="px-3 py-2 text-xs">{s.status}</td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(s.controlBalance)}</td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>

@@ -8,7 +8,7 @@ import { requireSession } from '../../lib/session';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
 import { recordOrderWastageAction } from './actions';
 import { Page } from '@/components/shell/Page';
-import { Badge, Banner, Button, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -240,17 +240,17 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
             </thead>
             <tbody>
               {open.map((w) => (
-                <tr key={w.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                <LinkRow key={w.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-2 tabular-nums">
-                    <Link href={`/wastage/${w.id}`} className="underline underline-offset-4">
+                    <RowLink href={`/wastage/${w.id}`}>
                       {toBusinessDate(w.openedAt)}
-                    </Link>
+                    </RowLink>
                   </td>
                   <td className="px-3 py-2">{w.channel}</td>
                   <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{w.orderRef ?? '—'}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(w.amount)}</td>
                   <td className="px-3 py-2"><Badge status={w.status} /></td>
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
           </table>
@@ -272,11 +272,11 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
               </thead>
               <tbody>
                 {resolvedHistory.map((w) => (
-                  <tr key={w.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={w.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2 tabular-nums">
-                      <Link href={`/wastage/${w.id}`} className="underline underline-offset-4">
+                      <RowLink href={`/wastage/${w.id}`}>
                         {toBusinessDate(w.openedAt)}
-                      </Link>
+                      </RowLink>
                     </td>
                     <td className="px-3 py-2">{w.channel}</td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(w.amount)}</td>
@@ -284,7 +284,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                       {w.disposition ? orderWastageDispositionLabel(w.disposition) : ''}
                       {w.autoCharged ? ' (15-day backstop)' : ''}
                     </td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>

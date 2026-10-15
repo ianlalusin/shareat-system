@@ -4,7 +4,7 @@ import { requireSession } from '../../../lib/session';
 import { saveProductionDraftAction } from './actions';
 import { listStores, productionScreenData } from './lib';
 import { Page } from '@/components/shell/Page';
-import { Badge, Banner, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, Field, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -137,18 +137,18 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
               </thead>
               <tbody>
                 {records.map((r) => (
-                  <tr key={r.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={r.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
-                      <Link href={`/inventory/production/${r.id}`} className="underline underline-offset-4">
+                      <RowLink href={`/inventory/production/${r.id}`}>
                         {r.producedOn}
-                      </Link>
+                      </RowLink>
                     </td>
                     <td className="px-3 py-2">{KIND_LABEL[r.kind] ?? r.kind}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{r.revision}</td>
                     <td className="px-3 py-2">
                       <Badge status={r.status} />
                     </td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>

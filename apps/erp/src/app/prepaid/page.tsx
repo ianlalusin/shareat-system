@@ -15,7 +15,7 @@ import {
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Banner, FlashBanner, Input, Select, statusTone } from '@/components/ui';
+import { Badge, Banner, FlashBanner, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Prepaid expenses — Shareat System' };
@@ -130,16 +130,16 @@ export default async function PrepaidPage({
             </thead>
             <tbody>
               {items.map((i) => (
-                <tr
+                <LinkRow
                   key={i.id}
                   className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
                     i.status === 'active' ? '' : 'opacity-60'
                   }`}
                 >
                   <td className="px-3 py-2">
-                    <Link href={`/prepaid/${i.id}`} className="underline underline-offset-2">
+                    <RowLink href={`/prepaid/${i.id}`}>
                       {i.name}
-                    </Link>
+                    </RowLink>
                     {i.needsReview && i.status === 'active' && (
                       <Badge tone="warning" label="Term unconfirmed" className="ml-2" />
                     )}
@@ -157,7 +157,7 @@ export default async function PrepaidPage({
                   <td className="px-3 py-2 text-xs">
                     <Badge tone={statusTone(i.status)} label={STATUS_LABEL[i.status] ?? i.status} />
                   </td>
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
           </table>

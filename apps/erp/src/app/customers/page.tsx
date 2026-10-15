@@ -16,7 +16,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, FlashBanner, Input, LinkRow, RowAction, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Customers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -75,7 +75,7 @@ export default async function CustomersPage({
             </thead>
             <tbody>
               {customers.map((c) => (
-                <tr
+                <LinkRow
                   key={c.id}
                   className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
                     c.status === 'active' ? '' : 'opacity-60'
@@ -84,9 +84,9 @@ export default async function CustomersPage({
                   <td className="px-3 py-2">
                     {/* ⭐ T-226 — the register listed a balance and led nowhere, so `1210` could be
                         raised and never cleared (DEF-190). This link is the whole entry point. */}
-                    <Link href={`/customers/${c.id}`} className="underline underline-offset-2 hover:no-underline">
+                    <RowLink href={`/customers/${c.id}`} className="hover:no-underline">
                       {c.name}
-                    </Link>
+                    </RowLink>
                     <div className="text-xs text-neutral-400 dark:text-neutral-600">
                       {GROUP_LABEL[c.customerGroup] ?? c.customerGroup}
                       {c.contactNo && ` · ${c.contactNo}`}
@@ -114,19 +114,21 @@ export default async function CustomersPage({
                     {c.reconciledAsOf ? (
                       c.reconciledAsOf
                     ) : (
-                      <form action={reconcileCustomerAction} className="flex items-center gap-1">
-                        <input type="hidden" name="customerId" value={c.id} />
-                        <Input name="asOf" type="date" defaultValue={today()} />
-                        <button
-                          type="submit"
-                          className="rounded border border-neutral-300 px-2 py-0.5 text-xs dark:border-neutral-700"
-                        >
-                          Anchor
-                        </button>
-                      </form>
+                      <RowAction>
+                        <form action={reconcileCustomerAction} className="flex items-center gap-1">
+                          <input type="hidden" name="customerId" value={c.id} />
+                          <Input name="asOf" type="date" defaultValue={today()} />
+                          <button
+                            type="submit"
+                            className="rounded border border-neutral-300 px-2 py-0.5 text-xs dark:border-neutral-700"
+                          >
+                            Anchor
+                          </button>
+                        </form>
+                      </RowAction>
                     )}
                   </td>
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
           </table>
