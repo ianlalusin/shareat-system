@@ -149,31 +149,85 @@ interface RowSpan {
   readonly body: string;
 }
 
+interface RowScan {
+  readonly rows: RowSpan[];
+  /** Open tags with no matching close of the same name. Each one is a census failure. */
+  readonly unmatched: string[];
+}
+
 /**
  * Every `<tr>` / `<LinkRow>` in the source, with its matching close. Depth-counted on the same
  * tag name. A data row is one whose body has a `<td>` / `<Td>` / `<NumTd>`; header-only rows are
- * not data rows.
+ * not data rows. An open tag that never closes (e.g. `<LinkRow>` closed by `</tr>`) goes to
+ * `unmatched` instead of being silently dropped from `rows`.
  */
-function rowsIn(src: string): RowSpan[] {
+/** Same-length copy of `src` with JS/JSX comments blanked (newlines kept), so a `<tr>` in a comment is not a tag. */
+function maskComments(src: string): string {
+  const blank = (s: string) => s.replace(/[^\n]/g, ' ');
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, blank)
+    .replace(/(^|\s)\/\/[^\n]*/g, (whole) => whole.slice(0, whole.indexOf('//')) + blank(whole.slice(whole.indexOf('//'))));
+}
+
+/** Where the opening tag starting at `from` ends, and whether it is self-closing (`<tr ... />`). */
+function openingTagEnd(src: string, from: number): { end: number; selfClosing: boolean } {
+  let braces = 0;
+  let quote: string | null = null;
+  for (let i = from; i < src.length; i++) {
+    const ch = src[i];
+    if (quote !== null) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (braces === 0 && (ch === '"' || ch === "'")) quote = ch;
+    else if (ch === '{') braces++;
+    else if (ch === '}') braces--;
+    else if (ch === '>' && braces === 0) return { end: i + 1, selfClosing: src[i - 1] === '/' };
+  }
+  return { end: src.length, selfClosing: false };
+}
+
+/**
+ * Every `<tr>` / `<LinkRow>` in the source, with its matching close. Depth-counted on the same
+ * tag name. A data row is one whose body has a `<td>` / `<Td>` / `<NumTd>`; header-only rows are
+ * not data rows. Comments and self-closing tags (`<tr ... />`) are not rows. An open tag that never
+ * closes (e.g. `<LinkRow>` closed by `</tr>`) goes to `unmatched` instead of being silently dropped.
+ */
+function scanRows(raw: string): RowScan {
+  const src = maskComments(raw);
   const rows: RowSpan[] = [];
+  const unmatched: string[] = [];
   const open = /<(tr|LinkRow)(?=[\s>/])/g;
   let m: RegExpExecArray | null;
   while ((m = open.exec(src)) !== null) {
     const tag = m[1] as 'tr' | 'LinkRow';
+    if (openingTagEnd(src, m.index).selfClosing) continue;
     const tokenRe = new RegExp(`<${tag}(?=[\\s>/])|</${tag}\\s*>`, 'g');
     tokenRe.lastIndex = m.index + m[0].length;
     let depth = 1;
+    let closed = false;
     let t: RegExpExecArray | null;
     while ((t = tokenRe.exec(src)) !== null) {
-      depth += t[0].startsWith('</') ? -1 : 1;
+      if (t[0].startsWith('</')) {
+        depth -= 1;
+      } else {
+        if (openingTagEnd(src, t.index).selfClosing) continue;
+        depth += 1;
+      }
       if (depth === 0) {
         const end = t.index + t[0].length;
         rows.push({ tag, start: m.index, end, body: src.slice(m.index, end) });
+        closed = true;
         break;
       }
     }
+    if (!closed) unmatched.push(`line ${lineOf(src, m.index)}: <${tag}> has no matching </${tag}>`);
   }
-  return rows;
+  return { rows, unmatched };
+}
+
+function rowsIn(src: string): RowSpan[] {
+  return scanRows(src).rows;
 }
 
 const isDataRow = (body: string) => /<(td|Td|NumTd)[\s>]/.test(body);
@@ -274,5 +328,34 @@ describe('T-411 census — every table file is classified', () => {
   it('rule 4: the hand-rolled stretch string after:inset-0 appears only in components/ui/Table.tsx', () => {
     const hits = allTsx.filter((rel) => rel !== TABLE_RULE_FILE && read(rel).includes('after:inset-0'));
     expect(hits, 'files still hand-rolling the stretch (use RowLink)').toEqual([]);
+  });
+
+  it('rule 5: every <tr> / <LinkRow> open tag has a matching close (an unmatched open is a failure, not a skipped row)', () => {
+    const unmatched = allTsx.flatMap((rel) => scanRows(read(rel)).unmatched.map((u) => `${rel} :: ${u}`));
+    expect(unmatched, 'row open tags with no matching close').toEqual([]);
+  });
+});
+
+describe('T-411 census — self-check for the row scanner (rule 5)', () => {
+  it('a mismatched </tr> closing a <LinkRow> is reported as unmatched, not silently skipped', () => {
+    const bad = '<table><LinkRow className="x"><td>a</td></tr></table>';
+    const scan = scanRows(bad);
+    expect(scan.rows).toEqual([]);
+    expect(scan.unmatched).toEqual(['line 1: <LinkRow> has no matching </LinkRow>']);
+  });
+
+  it('a self-closing <tr ... /> and a <tr> inside a comment are neither rows nor unmatched', () => {
+    const src = '<table>{/* a <tr> in prose */}<tr className={x} {...rest} /></table>';
+    const scan = scanRows(src);
+    expect(scan.rows).toEqual([]);
+    expect(scan.unmatched).toEqual([]);
+  });
+
+  it('a well-formed <LinkRow> is one data row and reports nothing unmatched (control)', () => {
+    const good = '<table><LinkRow className="x"><td>a</td></LinkRow></table>';
+    const scan = scanRows(good);
+    expect(scan.unmatched).toEqual([]);
+    expect(scan.rows.map((r) => r.tag)).toEqual(['LinkRow']);
+    expect(isDataRow(scan.rows[0]!.body)).toBe(true);
   });
 });
