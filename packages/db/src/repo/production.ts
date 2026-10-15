@@ -25,6 +25,8 @@ import {
 export interface ProductionItemRow {
   readonly id: string;
   readonly orgId: string;
+  /** T-409: named in the slice-category refusal sentences. */
+  readonly name: string;
   readonly kind: string;
   readonly baseUnit: string;
   readonly status: string;
@@ -36,6 +38,7 @@ export async function getItemForProduction(tx: Tx, orgId: string, id: string): P
     .select({
       id: items.id,
       orgId: items.orgId,
+      name: items.name,
       kind: items.kind,
       baseUnit: items.baseUnit,
       status: items.status,
@@ -56,6 +59,7 @@ export async function getItemsForProduction(
     .select({
       id: items.id,
       orgId: items.orgId,
+      name: items.name,
       kind: items.kind,
       baseUnit: items.baseUnit,
       status: items.status,

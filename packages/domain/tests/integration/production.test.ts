@@ -575,7 +575,9 @@ describe('T-176 test 16 — the same product cannot be both input and output', (
     await stockUpSlab();
     const draft = await asOrg(orgA, (tx) =>
       createProductionDraft(tx, staffActor, {
-        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+        // T-409: a slice can no longer take a sliced item in, so the same-item-in-and-out check is exercised through a
+        // convert (it runs before the convert lineage check, in the shared validator).
+        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'convert', producedOn: '2026-08-10',
         inputs: [{ itemId: sliceA, quantity: '10', unit: 'kg' }],
         outputs: [{ itemId: sliceA, quantity: '5', unit: 'kg' }],
       }),

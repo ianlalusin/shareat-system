@@ -38,7 +38,6 @@ flushSecurityEvents
 formatConversionSummary
 formatCoverageReport
 getAllocationsForPayment
-getItemForProduction
 hasFingerprint
 hasOtherActiveAdmin
 isConvertibleUnit
@@ -53,7 +52,6 @@ listLiveForStore
 listOrderMessages
 listPayRates
 listPunchesForDay
-listRecipeLines
 listRoster
 listWriteOffsForCharge
 markReviewed
@@ -92,7 +90,6 @@ runAnalyze
 runCapture
 runLoad
 sampleCandidates
-scaleRecipeToTarget
 seedCanonicalPositions
 setCostBasisItem
 setItemPricing
