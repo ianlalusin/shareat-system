@@ -63,6 +63,25 @@ export async function start(): Promise<void> {
   await admin.unsafe(`create role "${APP_ROLE}" login password '${ROLE_PW}' nobypassrls nosuperuser`);
   await admin.unsafe(`create role "${BYPASS_ROLE}" login password '${ROLE_PW}' bypassrls nosuperuser`);
   await cloneInto(TPL, laneUrlDb());
+  // The lane DB is shared with every other integration file and verify runs per EVERY org in the database it is pointed at, so
+  // orgs those files left behind (full suite / CI: one DB) would pollute every copy with findings that are not this test's. Clear
+  // them from the template; each scenario then seeds only its own org(s).
+  const t = postgres(urlFor(TPL), { max: 1, onnotice: () => {} });
+  try {
+    await t.unsafe('truncate table organizations cascade');
+    // verify's sequences_reset check fails on any owned sequence that has been used while its table is empty; the truncate above
+    // empties the tables but leaves the sequences wherever the other files advanced them, so restart every owned sequence too.
+    await t.unsafe(`
+      do $$ declare r record; begin
+        for r in
+          select s.oid::regclass::text as seq from pg_class s
+          join pg_depend d on d.objid = s.oid and d.deptype = 'a'
+          where s.relkind = 'S' and s.relnamespace = 'public'::regnamespace
+        loop execute format('alter sequence %s restart', r.seq); end loop;
+      end $$`);
+  } finally {
+    await t.end({ timeout: 5 });
+  }
 }
 
 /** Drops every per-scenario copy (not the template): called after each test so the disk and the drop time stay small. */
@@ -101,9 +120,17 @@ async function cloneInto(name: string, template: string): Promise<void> {
 
 /** A fresh migrated copy named like a rehearsal. */
 export async function newRehearsalDb(): Promise<string> {
-  const name = uniq(() => `shareat_rehearsal_2099${rehearsalSuffix()}`);
-  await cloneInto(name, TPL);
-  return name;
+  // The cluster is shared (other test runs, leftovers of a killed run), and the 4-digit suffix is small: on "already exists" draw
+  // another name rather than fail the test for a collision that has nothing to do with verify.
+  for (let i = 0; ; i++) {
+    const name = uniq(() => `shareat_rehearsal_2099${rehearsalSuffix()}`);
+    try {
+      await cloneInto(name, TPL);
+      return name;
+    } catch (e) {
+      if (i >= 20 || !/already exists/.test(String((e as Error).message))) throw e;
+    }
+  }
 }
 
 export const connect = (db: string, user?: string): postgres.Sql =>

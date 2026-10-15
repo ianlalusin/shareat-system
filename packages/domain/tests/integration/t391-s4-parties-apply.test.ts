@@ -176,7 +176,8 @@ const links = (orgId: string, entity: string) =>
   sql<Any[]>`select entity, v1_store_id, v1_id, v2_id, v1_unit, factor_to_base, created_by from v1_master_links where org_id = ${orgId} and entity = ${entity} order by v1_id`;
 const audits = (orgId: string, action: string) =>
   sql<Any[]>`select action, entity, entity_id, before, after, source, actor_person_id from audit_log where org_id = ${orgId} and action = ${action} order by occurred_at, id`;
-const allAuditCount = async (orgId: string) => Number((await sql<Any[]>`select count(*)::int as n from audit_log where org_id = ${orgId}`)[0]!.n);
+// T-402 S2: a refused authorize() writes a `security.authorize_denied` security event (async outbox) -- the refusal itself, not a write by the refused call.
+const allAuditCount = async (orgId: string) => Number((await sql<Any[]>`select count(*)::int as n from audit_log where org_id = ${orgId} and action <> 'security.authorize_denied'`)[0]!.n);
 const docCount = async (orgId: string): Promise<number> => {
   const q = async (t: string) => Number((await sql.unsafe(`select count(*)::int as n from ${t} where org_id = $1`, [orgId]))[0]!.n);
   return (await q('supplier_invoices')) + (await q('ar_charges')) + (await q('ar_collections')) + (await q('journal_entries')) + (await q('expenses'));

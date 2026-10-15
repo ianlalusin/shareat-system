@@ -146,8 +146,13 @@ export async function attempt<T>(fn: () => Promise<T>): Promise<{ failed: boolea
   }
 }
 
+/**
+ * Domain audit rows only. T-402 S2: a refused authorize() now legitimately writes a `security.authorize_denied` security
+ * event (async, via the in-process outbox) -- that row is the refusal being logged, not a write by the refused call, so it
+ * is excluded here; these tests assert the call itself wrote nothing.
+ */
 export async function auditCount(orgId: string): Promise<number> {
-  const [r] = await sql<{ n: number }[]>`select count(*)::int as n from audit_log where org_id = ${orgId}`;
+  const [r] = await sql<{ n: number }[]>`select count(*)::int as n from audit_log where org_id = ${orgId} and action <> 'security.authorize_denied'`;
   return r!.n;
 }
 
@@ -162,6 +167,6 @@ export function expectSentence(r: { failed: boolean; message: string; error?: un
   expect(typeof e?.code === 'string' && /^[0-9A-Z]{5}$/.test(e.code as string), `${what}: a SQLSTATE leaked (${String(e?.code)}): ${r.message}`).toBe(false);
   expect(typeof e?.userMessage, `${what}: no userMessage - not a domain refusal (${r.message})`).toBe('string');
   const text = `${r.message} ${String(e?.userMessage ?? '')}`;
-  expect(text, `${what}: database wording in the sentence`).not.toMatch(/violates|duplicate key|unique constraint|check constraint|trigger|menu_[a-z_]+_key|relation "/i);
+  expect(text, `${what}: database wording in the sentence`).not.toMatch(/violates|duplicate key|unique constraint|check constraint|trigger|\bmenu_[a-z_]+_key\b|relation "/i);
   expect(String(e?.userMessage).trim().length, `${what}: empty sentence`).toBeGreaterThan(10);
 }

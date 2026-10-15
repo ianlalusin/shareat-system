@@ -38,6 +38,8 @@ if (!/shareat_test|_test(\?|$)/.test(baseUrl)) {
 const REAL_MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', 'migrations');
 const REPO_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', '..');
 const SCRIPT_PATH = join(REPO_ROOT, 'scripts', 'cutover-purge.ts');
+// T-394 R8 / DEF-641: --apply and --rehearse refuse without an explicit --as-of; the old default was today's Manila date.
+const AS_OF = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 const PURGE_MODULE_PATH = '../../src/cutover/purge';
 // Every subprocess spawn of the real script points its report write at a throwaway temp dir — the
 // script itself writes docs/reviews/cutover-purge-<date>.md by default (`CUTOVER_PURGE_REPORT_DIR`
@@ -374,7 +376,7 @@ describe('T-347 S1 — scripts/cutover-purge.ts --apply, as a real subprocess', 
   }, 120_000);
 
   it('exits 0, reports committed, mirror_version_seq unchanged — A1\'s posted depreciation entry is what makes the TRUNCATE-before-shell order observable (R2.6)', () => {
-    const result = spawnSync('npx', ['tsx', SCRIPT_PATH, '--confirm-database', dbName, '--apply', '--by', f.personId], {
+    const result = spawnSync('npx', ['tsx', SCRIPT_PATH, '--confirm-database', dbName, '--apply', '--as-of', AS_OF, '--by', f.personId], {
       cwd: REPO_ROOT,
       env: subprocessEnv(dbName),
       encoding: 'utf8',
@@ -502,7 +504,7 @@ describe('T-347 N3, P1 — dry run and --rehearse are read-only; the dry run\'s 
     const tablesBefore = await keepTablesMd5(sql, allTables);
     const result = spawnSync(
       'npx',
-      ['tsx', SCRIPT_PATH, '--confirm-database', dbName, '--rehearse', '--by', f.personId],
+      ['tsx', SCRIPT_PATH, '--confirm-database', dbName, '--rehearse', '--as-of', AS_OF, '--by', f.personId],
       { cwd: REPO_ROOT, env: subprocessEnv(dbName), encoding: 'utf8', shell: true },
     );
     expect(result.status).toBe(0);
@@ -719,7 +721,7 @@ describe('T-347 N5 — an un-classified FK into a purged table blocks --apply', 
     ).map((r) => r.t);
     const seqBefore = await sequenceValues(sql);
     const tablesBefore = await keepTablesMd5(sql, allTables);
-    const result = spawnSync('npx', ['tsx', SCRIPT_PATH, '--confirm-database', dbName, '--apply', '--by', PERFORMER.id], {
+    const result = spawnSync('npx', ['tsx', SCRIPT_PATH, '--confirm-database', dbName, '--apply', '--as-of', AS_OF, '--by', PERFORMER.id], {
       cwd: REPO_ROOT,
       env: subprocessEnv(dbName),
       encoding: 'utf8',

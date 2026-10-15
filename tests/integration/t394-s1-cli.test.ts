@@ -320,7 +320,9 @@ describe('T-394 S1 audit - no secrets in any output or in the journal', () => {
     for (const h of haystack) {
       for (const u of urls) expect(h.includes(u), 'a full connection string leaked').toBe(false);
       // a short or dictionary-word password would false-positive on ordinary text; the full-URL check above still holds
-      if (password.length >= 8) expect(h.includes(password), 'the database password leaked').toBe(false);
+      // CI's postgres service uses user=password='postgres': the role name legitimately appears in output, so that case is skipped.
+      const user = decodeURIComponent(new URL(laneUrl).username);
+      if (password.length >= 8 && password !== user) expect(h.includes(password), 'the database password leaked').toBe(false);
     }
   });
 });
