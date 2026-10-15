@@ -151,7 +151,6 @@ async function fixture(hint: string, opts: { legacy?: boolean } = {}) {
       lines: built.lines.filter((l) => l.section === 'direct' && !l.blocked && l.itemId).map((l) => ({ key: l.key, itemId: l.itemId!, locationId: l.locationId!, quantity: l.quantity! })),
     });
   }
-  return { orgId, storeId, dayId, pullId: built.pullId, manager, nobody: actor(orgId, nobodyId), managerId };
   // T-412: voiding a pull is Tier P: the manager acts, the org's administrator approves with their own PIN.
   const pin = await givePin(sql, { orgId, storeId, personId: adminId });
   return { orgId, storeId, dayId, pullId: built.pullId, manager, nobody: actor(orgId, nobodyId), managerId, pin };
