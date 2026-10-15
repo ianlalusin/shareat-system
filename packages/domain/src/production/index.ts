@@ -110,6 +110,9 @@ export interface CreateRecipeInput {
 
 export type RecipeOutcome = { readonly ok: true; readonly recipeId: string } | { readonly ok: false; readonly reason: string };
 
+/** T-409 R-A: the largest recipe output accepted, in thousandths of the output item's base unit (10,000). */
+const MAX_RECIPE_OUTPUT_THOUSANDTHS = 10_000_000n;
+
 export async function createRecipe(tx: Tx, actor: Actor, input: CreateRecipeInput): Promise<RecipeOutcome> {
   await authorize(tx, actor, 'manage_recipes', {}); // T-403: admin-only
   if (!input.name.trim()) return { ok: false, reason: 'a recipe needs a name' };
@@ -138,6 +141,10 @@ export async function createRecipe(tx: Tx, actor: Actor, input: CreateRecipeInpu
   const outputRow = recipeItems.get(input.outputItemId);
   if (outputRow && outputRow.status !== 'active') {
     return { ok: false, reason: notActiveItemSentence(outputRow.status, 'put on a new recipe', 'The output') };
+  }
+  // T-409 R-A: the output is in the output item's base unit, and an absurd figure is refused.
+  if (toThousandths(outputQuantity) > MAX_RECIPE_OUTPUT_THOUSANDTHS) {
+    return { ok: false, reason: `a recipe's output quantity is in the output item's base unit${outputRow ? ` (${outputRow.baseUnit})` : ''} and cannot be more than 10,000. Check the output quantity.` };
   }
   for (const [i, line] of lines.entries()) {
     const row = recipeItems.get(line.itemId);
@@ -199,6 +206,9 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
   let inputs = parseDraftLines(input.inputs, 'createProductionDraft.inputs', 'Input line');
   const outputs = parseDraftLines(input.outputs, 'createProductionDraft.outputs', 'Output line');
 
+  if (input.kind !== 'cook' && input.recipeId) {
+    return { ok: false, reason: 'Only a cook uses a recipe. Remove the recipe from this slice or convert.' };
+  }
   if (input.kind === 'slice') {
     // T-409 R1: refused at save, before any row, in a sentence naming the item.
     const refusal = await sliceCategoryRefusal(tx, input.orgId, inputs, outputs);
@@ -288,6 +298,11 @@ async function deriveCookInputs(
   }
   const scaled = scaleRecipeToTarget({ recipeLines: scaledLines, recipeOutputQuantity: recipe.outputQuantity, targetOutputQuantity: target });
   if (!scaled.ok) return { ok: false, reason: `${scaled.reason} (recipe '${recipe.name}')` };
+  for (const l of scaled.lines) {
+    if (!isPositiveQuantity(quantity(l.quantity))) {
+      return { ok: false, reason: `At this quantity, ${items.get(l.itemId)?.name ?? l.itemId} comes to less than 0.001 ${l.unit}. Make a larger batch.` };
+    }
+  }
   return { ok: true, inputs: scaled.lines.map((l) => ({ itemId: l.itemId, quantity: quantity(l.quantity), unit: l.unit })) };
 }
 

@@ -15,6 +15,7 @@ import {
   voidProduction,
 } from '@shareat/domain';
 import { productionRepo } from '@shareat/db';
+import { authorize } from '@shareat/auth';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
@@ -72,6 +73,8 @@ export async function saveProductionDraftAction(fd: FormData): Promise<void> {
         // T-409 R4: the cook form is a recipe and a quantity made. Ingredients are never read from the form; the output item
         // and unit come from the recipe unless sent (the domain refuses an item that is not the recipe's).
         inputs = [];
+        // T-409 R-B: authorize BEFORE the recipe and item lookups, so an unauthorized caller reads nothing.
+        await authorize(tx, actor, 'record_stock_movement', { storeId });
         const quantityMade = str(fd, 'outputQuantity');
         const recipe = recipeId ? await productionRepo.getRecipe(tx, actor.orgId, recipeId) : undefined;
         const outputItemId = str(fd, 'outputItemId') || recipe?.outputItemId || '';
