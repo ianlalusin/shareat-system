@@ -15,6 +15,7 @@ import {
   auditLogRepo,
   employmentRepo,
   personsRepo,
+  sessionsRepo,
   type EmploymentRow,
   type PersonRow,
   type PositionRow,
@@ -305,6 +306,9 @@ export async function endEmployment(
     );
   }
 
+  // T-407 Inv 21: serialise concurrent ends for the same person BEFORE writing (no lock-order deadlock).
+  await employmentRepo.lockPersonEmployments(tx, existing.personId, existing.orgId);
+
   const closed = await employmentRepo.closeEmployment(tx, input);
 
   // T-289 moment 5 — ending the employment leaves no open employment at this store, so
@@ -334,6 +338,32 @@ export async function endEmployment(
     after: { employmentStatus: input.employmentStatus, endedOn: input.endedOn, personId: existing.personId },
     source: 'web',
   });
+
+  // T-407 R4 (DEF-649): a person who can no longer sign in loses the sessions they already hold, in THIS transaction -
+  // the end and the revocation commit or roll back together (a failure here refuses the whole termination, visibly).
+  // The two checks take `for share` on the person's employment rows (R7), so a racing sign-in is either seen here or
+  // refused by the closed row.
+  let endedSessions = 0;
+  let endedAtStore: string | null = null;
+  if (!(await accessRepo.personMaySignInToOrg(tx, existing.personId, existing.orgId))) {
+    endedSessions = await sessionsRepo.endAllForPerson(tx, existing.personId, 'revoked');
+  } else if (!(await accessRepo.personMaySignInAtStore(tx, existing.personId, existing.storeId))) {
+    endedAtStore = existing.storeId;
+    endedSessions = await sessionsRepo.endAllForPerson(tx, existing.personId, 'revoked', existing.storeId);
+  }
+  if (endedSessions > 0) {
+    // Built outside the call: the T-402 S1b static guard reads any `storeId:` inside an append call as the row's store.
+    const after = { reason: 'employment_ended', employmentId: existing.id, storeId: endedAtStore, ended: endedSessions };
+    await auditLogRepo.append(tx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'session.ended_all',
+      storeId: null,
+      entityId: existing.personId,
+      before: null,
+      after,
+      source: 'web',
+    });
+  }
 
   return closed;
 }

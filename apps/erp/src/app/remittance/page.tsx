@@ -293,7 +293,7 @@ export default async function RemittancePage({
                   </label>
                   </FormGrid>
                   <Button type="submit" name="action" value="recognise_income" className="text-xs">
-                    Recognise as other income (7350)
+                    Recognise as other income
                   </Button>
                 </>
               )}

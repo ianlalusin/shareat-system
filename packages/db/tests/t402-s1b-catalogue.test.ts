@@ -225,12 +225,16 @@ const SPEC: ReadonlyArray<readonly [string, string, string, Partial<CatalogueEnt
   ['customer.password_reset_refused', 'security', 'high'],
 ];
 
-/** T-402 S2: the entries its slice makes live. Not here: authorize_denied_summary (S5), event_replay_conflict and event_store_mismatch (S3). */
+/** T-402 S2 + S3: the entries those slices make live. Not here: authorize_denied_summary (S5), expense.submitted/rejected, sales_day.reopened, remittance.confirmed, data.* (reserved, no verb: S3 C4/C5). */
 const S2_LIVE: ReadonlySet<string> = new Set([
   'auth.signin_succeeded', 'auth.signin_refused', 'auth.pin_signin_succeeded', 'auth.pin_paused', 'auth.pin_stopped_for_day',
   'session.ended', 'session.ended_all', 'credential.linked', 'credential.unlinked', 'credential.pin_set',
   'role.assigned', 'capability.granted', 'manager.elevated', 'security.authorize_denied',
   'employment.created', 'employment.ended', 'employment.positions_set',
+  // T-402 S3 (C7): the money steps before posting, the two envelope failure events and the cutover trio
+  'expense.drafted', 'expense.approved', 'expense.voided', 'sales_day.submitted', 'sales_day.verified', 'remittance.recorded',
+  'cash_request.approved', 'cash_request.rejected', 'ap_invoice.approved', 'ap_payment.recorded',
+  'security.event_replay_conflict', 'security.event_store_mismatch', 'cutover.purge', 'cutover.opening_entry', 'cutover.step_completed',
 ]);
 
 describe('T-402 S1b - the entries the spec names are in, graded as written (R3, R4, R13, seed table)', () => {
@@ -362,5 +366,24 @@ describe('T-402 S1b - the build guard (Invariant 9)', () => {
     }
     expect(calls, 'sanity: the scan found the callers').toBeGreaterThanOrEqual(20);
     expect(bad).toEqual([]);
+  });
+});
+
+describe('T-402 S3 (C7) - the cutover trio is live, admin-viewed, written by a person or the system', () => {
+  for (const a of ['cutover.purge', 'cutover.opening_entry', 'cutover.step_completed']) {
+    it(`${a}: live, admin viewers, actor either, data/org-scoped, server-only`, () => {
+      const e = catalogueEntry(a)!;
+      expect(e.reserved).toBe(false);
+      expect(e.viewers).toBe('admin');
+      expect(e.actor).toBe('either');
+      expect(e.category).toBe('data');
+      expect(e.scope).toBe('org');
+      expect(e.clientSources).toEqual([]);
+    });
+  }
+  it('S3 leaves the verb-less entries reserved: expense.submitted/rejected, sales_day.reopened, remittance.confirmed, data.export_downloaded, data.bulk_import_applied, data.activity_log_exported', () => {
+    for (const a of ['expense.submitted', 'expense.rejected', 'sales_day.reopened', 'remittance.confirmed', 'data.export_downloaded', 'data.bulk_import_applied', 'data.activity_log_exported']) {
+      expect(catalogueEntry(a)!.reserved, a).toBe(true);
+    }
   });
 });

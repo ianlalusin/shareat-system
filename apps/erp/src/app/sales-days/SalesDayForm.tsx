@@ -10,6 +10,7 @@
  * R1: the store and the date are never edited, so on an edit the date is plain text, not an input.
  */
 import { Button, Input } from '@/components/ui';
+import { accountLabel } from '@/lib/account-label';
 import type { ChannelOption } from './lib';
 
 const FIELD = 'w-full text-right tabular-nums';
@@ -72,8 +73,8 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
           <Money name="totalSales" label="Total sales" value={fig('totalSales')} />
-          <Money name="unliSales" label="Unlimited (→ 4100)" value={fig('unliSales')} />
-          <Money name="alaCarteSales" label="À la carte (→ 4150)" value={fig('alaCarteSales')} />
+          <Money name="unliSales" label="Unlimited" value={fig('unliSales')} />
+          <Money name="alaCarteSales" label="À la carte" value={fig('alaCarteSales')} />
         </div>
       </section>
 
@@ -81,14 +82,14 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
         <h2 className="font-medium">Discounts and comps</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Senior and PWD are separate because <strong>RR 5-2017 requires the breakout</strong>.
-          All three post to 4900; <strong>comps post to 4950</strong>, never 4900 and never a
-          marketing expense.
+          All three are booked as sales discounts; <strong>comps are booked separately</strong>,
+          never as a discount and never a marketing expense.
         </p>
         <div className="grid gap-3 sm:grid-cols-4">
           <Money name="seniorDiscount" label="Senior" value={fig('seniorDiscount')} />
           <Money name="pwdDiscount" label="PWD" value={fig('pwdDiscount')} />
           <Money name="otherDiscount" label="Other" value={fig('otherDiscount')} />
-          <Money name="comps" label="Comps (→ 4950)" value={fig('comps')} />
+          <Money name="comps" label="Comps" value={fig('comps')} />
         </div>
       </section>
 
@@ -96,14 +97,14 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
         <h2 className="font-medium">Charges</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           ⭐ <strong>Only one of these is yours.</strong> Leftover, packaging and other charges{' '}
-          <strong>are income (4500)</strong> — you keep them. A <strong>service charge</strong> is
+          <strong>are income</strong> — you keep them. A <strong>service charge</strong> is
           neither income nor a payable: RA 11360 sends 100% of it to staff, so it sits in a{' '}
-          <strong>float (2160)</strong> that fills here and empties through payroll.{' '}
+          <strong>float</strong> that fills here and empties through payroll.{' '}
           <strong>It never reaches the P&amp;L</strong>, so it cannot bloat revenue.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Money name="serviceCharge" label="Service charge (→ 2160 float, held for staff)" value={fig('serviceCharge')} />
-          <Money name="otherCharges" label="Other charges — leftover, packaging (→ 4500)" value={fig('otherCharges')} />
+          <Money name="serviceCharge" label="Service charge (held for staff)" value={fig('serviceCharge')} />
+          <Money name="otherCharges" label="Other charges — leftover, packaging" value={fig('otherCharges')} />
         </div>
       </section>
 
@@ -115,8 +116,8 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
           channels + discounts + comps = gross sales + charges. Card tenders go through online.
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Money name="cashCollected" label="Cash (→ 1110 cashier)" value={fig('cashCollected')} />
-          <Money name="onlineCollected" label="Online / e-wallet (→ 1140)" value={fig('onlineCollected')} />
+          <Money name="cashCollected" label="Cash (at the cashier)" value={fig('cashCollected')} />
+          <Money name="onlineCollected" label="Online / e-wallet" value={fig('onlineCollected')} />
           <Money name="creditSales" label="Credit / on account" value={fig('creditSales')} />
         </div>
       </section>
@@ -150,7 +151,7 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
                         <span className="text-xs text-neutral-500 dark:text-neutral-400">reaches the till</span>
                       ) : (
                         <span className="text-xs text-warning-ink">
-                          settles later → {c.receivableAccountCode}
+                          settles later → {accountLabel(c.receivableAccountCode)}
                         </span>
                       )}
                     </td>
@@ -181,7 +182,7 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
           <div>
             <h2 className="font-medium">Where the online money landed</h2>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Must add up to the online figure above. 1140 is one account for every wallet, so
+              Must add up to the online figure above. Online money is one account for every wallet, so
               each peso has to say which one it reached — otherwise &ldquo;how much is in the
               cashier&apos;s hands&rdquo; cannot be answered.
             </p>

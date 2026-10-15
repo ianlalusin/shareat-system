@@ -355,7 +355,7 @@ export default async function BranchOrderPage({
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               {stage === 'accepted'
                 ? 'Ready means the list is final — after it the order can only be dispatched or rejected.'
-                : 'Dispatch is the posting event: stock leaves into in-transit (1340) at real FIFO cost — manager or admin only. It is refused if the commissary holds less than a line says, or has never tracked the item at all.'}
+                : 'Dispatch is the posting event: stock leaves into in-transit at real FIFO cost — manager or admin only. It is refused if the commissary holds less than a line says, or has never tracked the item at all.'}
             </span>
             <RejectForm orderId={order.id} />
           </div>

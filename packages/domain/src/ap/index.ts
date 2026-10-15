@@ -822,6 +822,16 @@ export async function verifyInvoice(
         );
       }
     }
+    // T-402 S3 (C4): the verification step's event, same transaction, after the flip and the drafts it posted.
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'ap_invoice.approved',
+      storeId: invoice.storeId,
+      entityId: invoiceId,
+      before: { status: 'pending' },
+      after: { status: 'verified', draftsPosted: drafts.length },
+      source: 'web',
+    });
   };
   if (tx) return run(tx);
   return transaction(run);
@@ -1255,6 +1265,16 @@ export async function recordPayment(
     if (result.created) {
       await apRepo.markApPaymentPosted(trx, actor.orgId, paymentId, { journalEntryId: result.entryId });
       await apRepo.insertApPaymentAllocations(trx, paymentId, allocations);
+      // T-402 S3 (C4): the payment step's event, same transaction, after the posting and its own writes.
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'ap_payment.recorded',
+        storeId: input.storeId,
+        entityId: paymentId,
+        before: null,
+        after: { status: 'posted', amount: String(amount), supplierId: input.supplierId, allocated: String(allocated) },
+        source: 'web',
+      });
     }
 
     return {

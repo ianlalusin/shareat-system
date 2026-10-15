@@ -377,10 +377,18 @@ async function appendFirebaseSignIn(tx: Tx, orgId: string, result: SignInResult)
 }
 
 const NOT_LINKED = 'Sign-in failed: this account is not linked to a person in this system.';
+const NO_ACCESS = 'Sign-in failed: this account no longer has access. Ask an admin if this is wrong.';
 
 async function runFirebaseSignIn(tx: Tx, input: { verifiedUid: string }): Promise<{ result: SignInResult; orgId: string }> {
   const credential = await sessionsRepo.findActiveCredentialByExternalId(tx, input.verifiedUid);
   if (!credential) {
+    // T-407 R3: failure path only. A credential that WAS linked and has been revoked is a refusal worth recording under
+    // its person's org; a uid that never belonged to anyone has no org, so it stays one logger line.
+    const revoked = await sessionsRepo.findLatestRevokedCredentialByExternalId(tx, input.verifiedUid);
+    if (revoked) {
+      enqueueSigninRefused(revoked.personOrgId, revoked.personId, 'credential_revoked');
+      throw new AuthenticationError(NOT_LINKED);
+    }
     // T-402 R11 / Invariant 16: an identifier that belongs to no account has no org to file an event under (a row
     // with a null org would be an unauthenticated write amplifier), so it is one logger line and nothing in audit_log.
     logger.warn({ event: 'signin.unknown_identifier' }, 'signin.unknown_identifier');
@@ -401,6 +409,12 @@ async function runFirebaseSignIn(tx: Tx, input: { verifiedUid: string }): Promis
   if (credential.personKind === 'terminal') {
     enqueueSigninRefused(credential.personOrgId, credential.personId, 'terminal_credential');
     throw new AuthenticationError(NOT_LINKED);
+  }
+  // ⭐ T-407 R1/R3 (DEF-649): a person who no longer works for us does not get a session. The uid is Firebase-verified,
+  // so the caller is talking about themselves and the sentence is not an oracle.
+  if (!(await accessRepo.personMaySignInToOrg(tx, credential.personId, credential.personOrgId))) {
+    enqueueSigninRefused(credential.personOrgId, credential.personId, 'employment_ended');
+    throw new AuthenticationError(NO_ACCESS);
   }
   const result = await issue(tx, {
     personId: credential.personId,
@@ -612,7 +626,11 @@ export async function endShift(
     return { ended };
   };
   if (tx) return run(tx);
-  return transaction(run);
+  // T-407 S1 (DEF-650): no caller transaction -> resolve the org with one read at the auth door, then run under a real
+  // org principal so RLS shows the sessions and the audit row shares the UPDATE's transaction.
+  const orgId = await authTransaction((atx) => authzDenialCountsRepo.orgIdOfPerson(atx, input.personId));
+  if (!orgId) return { ended: 0 };
+  return withOrgPrincipal(orgId, run);
 }
 
 /**
@@ -661,7 +679,11 @@ export async function endAllForDevice(
     return { ended };
   };
   if (tx) return run(tx);
-  return transaction(run);
+  // T-407 S1 (DEF-650): no caller transaction -> resolve the org with one read at the auth door, then run under a real
+  // org principal so RLS shows the sessions and the audit row shares the UPDATE's transaction.
+  const orgId = await authTransaction((atx) => authzDenialCountsRepo.orgIdOfPerson(atx, input.deviceId));
+  if (!orgId) return { ended: 0 };
+  return withOrgPrincipal(orgId, run);
 }
 
 // -------------------------------------------------------------------------------------

@@ -155,7 +155,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
 
   // ---- S2 (security events): live (T-402 S2 flipped them); the S3/S5 ones stay reserved ----
   def('auth.signin_succeeded', 'security', 'low', 'org', 'persons', 'T-402'),
-  // Written reasons only: `terminal_credential` and `not_a_firebase_credential` (a KNOWN account that may not sign in). A bad token or an unknown identifier has no trustworthy org: one logger line, no row. A disabled / ended / revoked person is DEF-649's.
+  // Written reasons: `terminal_credential`, `not_a_firebase_credential`, `employment_ended`, `credential_revoked` (T-407: a KNOWN account that may not sign in). A bad token or an unknown identifier has no trustworthy org: one logger line, no row.
   def('auth.signin_refused', 'security', 'normal', 'org', 'persons', 'T-402', { actor: 'either' }),
   def('auth.pin_signin_succeeded', 'security', 'low', 'store', 'persons', 'T-402'),
   def('auth.pin_paused', 'security', 'high', 'store', 'stores', 'T-402', { actor: 'either' }),
@@ -170,33 +170,33 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('manager.elevated', 'security', 'critical', 'org', 'persons', 'T-402', { ...ADMIN, actor: 'either' }),
   def('security.authorize_denied', 'security', 'normal', 'org', 'persons', 'T-402', ADMIN),
   def('security.authorize_denied_summary', 'security', 'normal', 'org', 'persons', 'T-402', { ...ADMIN_RES, actor: 'system' }),
-  def('security.event_replay_conflict', 'security', 'high', 'org', 'audit_log_event_keys', 'T-402', { ...RES, actor: 'either' }),
-  def('security.event_store_mismatch', 'security', 'high', 'store', 'stores', 'T-402', { ...RES, actor: 'either' }),
+  def('security.event_replay_conflict', 'security', 'high', 'org', 'audit_log_event_keys', 'T-402', { actor: 'either' }),
+  def('security.event_store_mismatch', 'security', 'high', 'store', 'stores', 'T-402', { actor: 'either' }),
   def('employment.created', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('employment.ended', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('employment.positions_set', 'staff', 'normal', 'store', 'employments', 'T-402'),
 
-  // ---- S3 (money / data steps before posting): reserved until the slice flips them ----
-  def('expense.drafted', 'money', 'normal', 'store', 'expenses', 'T-402', RES),
+  // ---- S3 (money / data steps before posting): the 15 S3_LIVE entries are live; expense.submitted/rejected, sales_day.reopened, remittance.confirmed and data.* stay reserved (no verb, C4/C5) ----
+  def('expense.drafted', 'money', 'normal', 'store', 'expenses', 'T-402'),
   def('expense.submitted', 'money', 'normal', 'store', 'expenses', 'T-402', RES),
-  def('expense.approved', 'money', 'normal', 'store', 'expenses', 'T-402', RES),
+  def('expense.approved', 'money', 'normal', 'store', 'expenses', 'T-402'),
   def('expense.rejected', 'money', 'normal', 'store', 'expenses', 'T-402', RES),
-  def('expense.voided', 'money', 'normal', 'store', 'expenses', 'T-402', RES),
-  def('sales_day.submitted', 'money', 'normal', 'store', 'sales_days', 'T-402', RES),
-  def('sales_day.verified', 'money', 'normal', 'store', 'sales_days', 'T-402', RES),
+  def('expense.voided', 'money', 'normal', 'store', 'expenses', 'T-402'),
+  def('sales_day.submitted', 'money', 'normal', 'store', 'sales_days', 'T-402'),
+  def('sales_day.verified', 'money', 'normal', 'store', 'sales_days', 'T-402'),
   def('sales_day.reopened', 'money', 'normal', 'store', 'sales_days', 'T-402', RES),
-  def('remittance.recorded', 'money', 'normal', 'store', 'remittances', 'T-402', RES),
+  def('remittance.recorded', 'money', 'normal', 'store', 'remittances', 'T-402'),
   def('remittance.confirmed', 'money', 'normal', 'store', 'remittances', 'T-402', RES),
-  def('cash_request.approved', 'money', 'normal', 'store', 'cash_requests', 'T-402', RES),
-  def('cash_request.rejected', 'money', 'normal', 'store', 'cash_requests', 'T-402', RES),
-  def('ap_invoice.approved', 'money', 'normal', 'store', 'ap_invoices', 'T-402', RES),
-  def('ap_payment.recorded', 'money', 'normal', 'store', 'ap_payments', 'T-402', RES),
+  def('cash_request.approved', 'money', 'normal', 'store', 'cash_requests', 'T-402'),
+  def('cash_request.rejected', 'money', 'normal', 'store', 'cash_requests', 'T-402'),
+  def('ap_invoice.approved', 'money', 'normal', 'store', 'ap_invoices', 'T-402'),
+  def('ap_payment.recorded', 'money', 'normal', 'store', 'ap_payments', 'T-402'),
   def('data.export_downloaded', 'data', 'high', 'org', 'exports', 'T-402', ADMIN_RES),
   def('data.bulk_import_applied', 'data', 'high', 'org', 'imports', 'T-402', RES),
   def('data.activity_log_exported', 'data', 'high', 'org', 'audit_log', 'T-402', ADMIN_RES),
-  def('cutover.purge', 'data', 'critical', 'org', 'organizations', 'T-402', { ...ADMIN_RES, actor: 'either' }),
-  def('cutover.opening_entry', 'data', 'critical', 'org', 'organizations', 'T-402', { ...ADMIN_RES, actor: 'either' }),
-  def('cutover.step_completed', 'data', 'high', 'org', 'organizations', 'T-402', { ...ADMIN_RES, actor: 'either' }),
+  def('cutover.purge', 'data', 'critical', 'org', 'organizations', 'T-402', { ...ADMIN, actor: 'either' }),
+  def('cutover.opening_entry', 'data', 'critical', 'org', 'organizations', 'T-402', { ...ADMIN, actor: 'either' }),
+  def('cutover.step_completed', 'data', 'high', 'org', 'organizations', 'T-402', { ...ADMIN, actor: 'either' }),
 
   // ---- POS v2 (R3, v1 POS's 44 actions merged and graded; exceptions and control points only) ----
   def('pos.drawer_opened_no_sale', 'money', 'high', 'store', 'cash_drawers', 'T-402', POS),

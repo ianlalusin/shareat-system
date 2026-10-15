@@ -57,25 +57,26 @@ const live = async () => ({ ok: true });
 function urlsOf(env: Record<string, string | undefined>): Record<string, string> {
   return Object.fromEntries(Object.entries(env).filter(([, v]) => typeof v === 'string' && /^postgres(ql)?:\/\//.test(v)) as [string, string][]);
 }
+const DUMP = '/rehearsal/dir/auditdump';
 const tailFromConfirm = (c: SpawnCall): string[] => c.args.slice(c.args.indexOf('--confirm-database'));
 
 describe('T-394 S1 I4 - purge runs the real CLI three times, in order, on the guarded target', () => {
   it('4.a spawns scripts/cutover-purge.ts exactly 3 times: dry run, --rehearse, then --apply --as-of <keepFrom> --by', async () => {
     const f = fake();
-    const r = await runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, spawn: f.spawn, liveness: live });
+    const r = await runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, dumpDir: DUMP, spawn: f.spawn, liveness: live });
     expect(r).toMatchObject({ ok: true, code: 0, ran: 3 });
     expect(f.calls).toHaveLength(3);
     for (const c of f.calls) expect([c.command, ...c.args].join(' ')).toMatch(/scripts[\\/]cutover-purge\.ts|cutover:purge/);
     const base = ['--confirm-database', DB, '--yes-really-not-local'];
     expect(tailFromConfirm(f.calls[0]!)).toEqual(base);
-    expect(tailFromConfirm(f.calls[1]!)).toEqual([...base, '--rehearse', '--as-of', KEEP_FROM]);
-    expect(tailFromConfirm(f.calls[2]!)).toEqual([...base, '--apply', '--as-of', KEEP_FROM, '--by', BY]);
+    expect(tailFromConfirm(f.calls[1]!)).toEqual([...base, '--rehearse', '--as-of', KEEP_FROM, '--dump-dir', DUMP]);
+    expect(tailFromConfirm(f.calls[2]!)).toEqual([...base, '--apply', '--as-of', KEEP_FROM, '--by', BY, '--dump-dir', DUMP]);
     expect(KEEP_FROM).toBe('2027-01-01');
   });
 
   it('4.b each child env carries DATABASE_URL = the guarded target and no other database URL (the parent env is not inherited)', async () => {
     const f = fake();
-    await runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, spawn: f.spawn, liveness: live });
+    await runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, dumpDir: DUMP, spawn: f.spawn, liveness: live });
     expect(f.calls).toHaveLength(3);
     for (const c of f.calls) {
       expect(c.env.DATABASE_URL).toBe(TARGET);
@@ -85,7 +86,7 @@ describe('T-394 S1 I4 - purge runs the real CLI three times, in order, on the gu
 
   it('4.c stops at the first non-zero child: a failing --rehearse means no --apply (code 1, ran 2)', async () => {
     const f = fake([0, 3, 0]);
-    const r = await runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, spawn: f.spawn, liveness: live });
+    const r = await runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, dumpDir: DUMP, spawn: f.spawn, liveness: live });
     expect(f.calls).toHaveLength(2);
     expect(r).toMatchObject({ ok: false, code: 1, ran: 2 });
     expect(f.calls.some((c) => c.args.includes('--apply'))).toBe(false);
@@ -93,7 +94,7 @@ describe('T-394 S1 I4 - purge runs the real CLI three times, in order, on the gu
 
   it('4.d a failing dry run stops after one child', async () => {
     const f = fake([1]);
-    const r = await runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, spawn: f.spawn, liveness: live });
+    const r = await runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, dumpDir: DUMP, spawn: f.spawn, liveness: live });
     expect(f.calls).toHaveLength(1);
     expect(r).toMatchObject({ ok: false, code: 1, ran: 1 });
   });
@@ -108,7 +109,7 @@ describe('T-394 S1 I4 - purge runs the real CLI three times, in order, on the gu
     ];
     for (const [label, env, confirm] of cases) {
       const f = fake();
-      const r = await runPurgeChildren({ env, confirmDatabase: confirm, by: BY, spawn: f.spawn, liveness: live });
+      const r = await runPurgeChildren({ env, confirmDatabase: confirm, by: BY, dumpDir: DUMP, spawn: f.spawn, liveness: live });
       expect(f.calls, `${label}: nothing may be spawned`).toHaveLength(0);
       expect(r, label).toMatchObject({ ok: false, code: 2, ran: 0 });
     }
@@ -119,7 +120,7 @@ describe('T-394 S1 audit - a rehearsal child never inherits production monitor o
   it('a1. BACKUP_HEARTBEAT_URL, SPACES_KEY and SPACES_SECRET are absent from the env of every purge, migrate and predump child', async () => {
     const all: SpawnCall[] = [];
     for (const run of [
-      async (spawn: (c: SpawnCall) => Promise<{ code: number }>) => runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, spawn, liveness: live }),
+      async (spawn: (c: SpawnCall) => Promise<{ code: number }>) => runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, dumpDir: DUMP, spawn, liveness: live }),
       async (spawn: (c: SpawnCall) => Promise<{ code: number }>) => runMigrateChild({ env: PARENT, confirmDatabase: DB, spawn }),
       async (spawn: (c: SpawnCall) => Promise<{ code: number }>) => runPredumpChild({ env: PARENT, confirmDatabase: DB, dir: 'C:/x', spawn }),
     ]) {
@@ -139,7 +140,7 @@ describe('T-394 S1 I3 - a live session on the target makes purge refuse', () => 
     const r = await runPurgeChildren({
       env: PARENT,
       confirmDatabase: DB,
-      by: BY,
+      by: BY, dumpDir: DUMP,
       spawn: f.spawn,
       liveness: async () => {
         asked++;
@@ -158,7 +159,7 @@ describe('T-394 S1 I3 - a live session on the target makes purge refuse', () => 
     const r = await runPurgeChildren({
       env: PARENT,
       confirmDatabase: DB,
-      by: BY,
+      by: BY, dumpDir: DUMP,
       spawn: f.spawn,
       liveness: async () => {
         asked++;
@@ -176,7 +177,7 @@ describe('T-394 S1 I3 - a live session on the target makes purge refuse', () => 
     const r = await runPurgeChildren({
       env: PARENT,
       confirmDatabase: DB,
-      by: BY,
+      by: BY, dumpDir: DUMP,
       spawn: f.spawn,
       liveness: async () => (++asked >= 3 ? { ok: false, message: 'late' } : { ok: true }),
     });
@@ -186,7 +187,7 @@ describe('T-394 S1 I3 - a live session on the target makes purge refuse', () => 
 
   it('3.b with no live session the children run (liveness is a gate, not a replacement)', async () => {
     const f = fake();
-    const r = await runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, spawn: f.spawn, liveness: live });
+    const r = await runPurgeChildren({ env: PARENT, confirmDatabase: DB, by: BY, dumpDir: DUMP, spawn: f.spawn, liveness: live });
     expect(r.ran).toBe(3);
   });
 });

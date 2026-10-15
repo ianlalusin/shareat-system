@@ -38,7 +38,7 @@
  * is enforced HERE, for every caller, not only the web action's own copy.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, auditLogRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
 import { add } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { assertLivePaymentMethod, type ExpensePaymentMethod } from './routing';
@@ -231,6 +231,17 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
       cashRequestId: p.cashRequestId ?? null,
     })),
   );
+
+  // T-402 S3 (C4): the step's own event, in this transaction, after its own writes - a rollback drops both.
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'expense.drafted',
+    storeId: input.storeId,
+    entityId: id,
+    before: null,
+    after: { status: 'draft', amount: totalAmount, supplierInvoiceId: input.supplierInvoiceId },
+    source: 'web',
+  });
 
   return { id };
 }

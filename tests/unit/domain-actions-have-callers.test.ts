@@ -89,6 +89,9 @@ function actionShapedExports(): Map<string, string> {
  * off the same day** by T-226, and the stale-exemption rule below is what forced their rows out.
  */
 const EXEMPT: Record<string, string> = {
+  recordRemittanceEvent:
+    'INTERNAL — `createRemittance` calls it (`remittance/index.ts:422`) in the same transaction, after its own rows (T-402 S3 C4); ' +
+    'a separate file only so the action-coverage scan does not read the TYPE members in index.ts as audit actions.',
   runDualRun:
     'UNWIRED — T-392 S4: scripts/dual-run.ts `compare` is its caller (a job, run on the droplet); the on-screen report and disposition action are T-392 S5',
   setCustomerStatus:

@@ -317,6 +317,7 @@ export async function countActiveCredentials(tx: Tx, storeId: string): Promise<n
   const [row] = (await tx.execute(sql`
     select count(distinct c.person_id)::int as n
     from person_credentials c
+    join persons p on p.id = c.person_id
     where c.kind = 'pin'
       and c.revoked_at is null
       and (
@@ -327,6 +328,26 @@ export async function countActiveCredentials(tx: Tx, storeId: string): Promise<n
         or exists (
           select 1 from employments e
           where e.person_id = c.person_id and e.store_id = ${storeId} and e.ended_on is null
+        )
+      )
+      -- T-407 R2 lockstep: the same org-level rule R1 that personMaySignInAtStore applies (see personMaySignInToOrg).
+      and (
+        exists (
+          select 1 from employments e2
+          where e2.person_id = p.id and e2.org_id = p.org_id and e2.ended_on is null
+        )
+        or exists (
+          select 1 from person_roles r
+          where r.person_id = p.id and r.org_id = p.org_id and r.revoked_at is null and r.role in ('admin', 'super_admin')
+        )
+        or (
+          exists (
+            select 1 from person_roles r
+            where r.person_id = p.id and r.org_id = p.org_id and r.revoked_at is null and r.role = 'manager'
+          )
+          and not exists (
+            select 1 from employments e3 where e3.person_id = p.id and e3.org_id = p.org_id
+          )
         )
       )
   `)) as unknown as { n: number }[];

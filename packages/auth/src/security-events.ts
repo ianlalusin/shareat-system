@@ -16,7 +16,7 @@
  *
  * No PIN, hash, token, JWT or raw store string is ever placed in a payload or a log line from this file.
  */
-import { accessRepo, auditLogRepo, authzDenialCountsRepo, pinAttemptsRepo, UUID_SHAPE, withOrgPrincipal, type Tx } from '@shareat/db';
+import { accessRepo, auditLogRepo, authzDenialCountsRepo, catalogueEntry, pinAttemptsRepo, UUID_SHAPE, withOrgPrincipal, type Tx } from '@shareat/db';
 import { logger } from '@shareat/core/logger';
 
 const MAX_DENIAL_KEYS = 10_000;
@@ -105,7 +105,7 @@ export function enqueueAuthorizeDenied(
 }
 
 /** R11: a Firebase token that verified, for a KNOWN account that is not allowed in. The actor is null: nobody signed in. */
-export function enqueueSigninRefused(orgId: string, personId: string, reason: 'terminal_credential' | 'not_a_firebase_credential'): void {
+export function enqueueSigninRefused(orgId: string, personId: string, reason: 'terminal_credential' | 'not_a_firebase_credential' | 'employment_ended' | 'credential_revoked'): void {
   pushEvent(orgId, (tx) =>
     auditLogRepo.appendSystem(tx, orgId, {
       action: 'auth.signin_refused',
@@ -179,6 +179,55 @@ export function enqueueSessionEnded(orgId: string, live: { id: string; personId:
       before: null,
       after: { reason: 'signed_out', credentialKind: live.credentialKind },
       source: 'web',
+    }),
+  );
+}
+
+/**
+ * T-402 S3 (C3, R10b): a client event whose storeId is not the terminal's. Store = the TERMINAL's. The claimed store is
+ * resolved at flush: kept only if it is a uuid of a store in this org, else 'unknown' (A3); the raw value, and an action
+ * that is not in the catalogue, never reach a row.
+ */
+export function enqueueEventStoreMismatch(
+  orgId: string,
+  input: { storeId: string; actorPersonId: string; deviceId: string | null; eventKey: string; action: string; claimedStoreId: string | null },
+): void {
+  const raw = input.claimedStoreId === null ? null : String(input.claimedStoreId).slice(0, 64);
+  const action = catalogueEntry(input.action) ? input.action : 'unknown';
+  pushEvent(orgId, async (tx) => {
+    let claimed: string = 'unknown';
+    if (raw !== null && UUID_SHAPE.test(raw)) {
+      const ok = await tx.transaction((sp) => accessRepo.storeBelongsToOrg(sp, raw, orgId)).catch(() => false);
+      if (ok) claimed = raw;
+    }
+    await auditLogRepo.append(tx, orgId, {
+      actorPersonId: input.actorPersonId,
+      action: 'security.event_store_mismatch',
+      storeId: input.storeId,
+      entityId: input.storeId,
+      before: null,
+      after: { eventKey: input.eventKey, action, claimedStoreId: claimed },
+      source: 'pos',
+      deviceId: input.deviceId,
+    });
+  });
+}
+
+/** T-402 S3 (C3, R10): an event key re-sent with a different payload. Org-scoped, entity = the key. The payload is never copied. */
+export function enqueueEventReplayConflict(
+  orgId: string,
+  input: { actorPersonId: string; deviceId: string | null; eventKey: string },
+): void {
+  pushEvent(orgId, (tx) =>
+    auditLogRepo.append(tx, orgId, {
+      actorPersonId: input.actorPersonId,
+      action: 'security.event_replay_conflict',
+      storeId: null,
+      entityId: input.eventKey,
+      before: null,
+      after: { eventKey: input.eventKey },
+      source: 'pos',
+      deviceId: input.deviceId,
     }),
   );
 }

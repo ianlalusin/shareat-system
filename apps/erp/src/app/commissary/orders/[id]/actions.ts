@@ -304,7 +304,7 @@ export async function dispatchOrderAction(fd: FormData): Promise<void> {
   return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
     const result = await dispatchBranchOrder(tx, actor, { orderId });
     return (
-      `Dispatched. The goods are in transit at cost (1340) and the commissary's stock is relieved` +
+      `Dispatched. The goods are in transit at cost and the commissary's stock is relieved` +
       ` — entry ${result.entryId.slice(0, 8)}…. Both stores' books move when the branch confirms what actually arrived.`
     );
   }));
