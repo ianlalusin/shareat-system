@@ -148,6 +148,11 @@ export const items = pgTable(
      */
     purchaseUnit: text('purchase_unit', { enum: PURCHASE_UNITS }),
     purchaseFactor: numeric('purchase_factor', { precision: 14, scale: 6 }),
+    /**
+     * T-401 S6 (migration 0198). A per-item override of the org's usage tolerance band, a fraction (0.0500 = 5%); NULL = use
+     * `organizations.usage_tolerance`. Written by `setItemUsageTolerance` alone (admin).
+     */
+    usageTolerance: numeric('usage_tolerance', { precision: 5, scale: 4 }),
     notes: text('notes'),
     createdBy: uuid('created_by')
       .notNull()
@@ -172,6 +177,8 @@ export const items = pgTable(
       'items_purchase_unit_check',
       sql`${t.purchaseUnit} IS NULL OR (${t.purchaseUnit} in ('pcs','kg','g','ltr','ml','roll','box','pack','case','sack','tray','dozen') AND ${t.purchaseUnit} <> ${t.baseUnit})`,
     ),
+    check('items_usage_tolerance_check', sql`${t.usageTolerance} IS NULL OR (${t.usageTolerance} >= 0 AND ${t.usageTolerance} <= 1)`),
+    check('items_usage_tolerance_finite_check', sql`${t.usageTolerance} > '-Infinity'::numeric and ${t.usageTolerance} < 'Infinity'::numeric`),
     check('items_purchase_factor_finite_check', sql`${t.purchaseFactor} > '-Infinity'::numeric and ${t.purchaseFactor} < 'Infinity'::numeric`),
     check(
       'items_purchase_factor_check',

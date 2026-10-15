@@ -1,10 +1,11 @@
 /**
  * The daily POS usage pull — plan then finalize. T-177.
  *
- * ⭐ **Finalize writes T-168 usage records and posts through T-164** (invariant 5) by calling
- * `saveUsageDraft`/`postUsage` (`stock/usage-records.ts`) directly — the exact same document layer
- * a human uses, so there is one implementation of "how a usage record becomes stock movements and
- * a journal entry," never a second copy for POS-driven consumption.
+ * ⭐ **T-401 S6 (bible row 335, Ian 2026-10-14): the pull is a CHECK ONLY.** It used to write T-168 usage records and post stock out
+ * (T-177 invariant 5). It no longer does: manager-posted staff usage drafts (`stock/usage-records.ts` `postUsage`) are the actual usage
+ * that moves stock, and this plan is the expectation `stock/usage-tolerance.ts` compares them against (+-10% by default). Finalize
+ * reviews and stamps the sections and writes no usage record and no stock movement. The T-177/T-388 text below that speaks of posting,
+ * holds and frozen rooms is history; it applies to pulls finalized before S6 (their records are still voidable with the pull).
  *
  * ⭐ **The server rebuilds the plan at finalize time** (invariant 2) — it does not trust the STORED
  * `pos_usage_pull_lines` rows written at plan time as the source of truth for what to write. It
@@ -39,28 +40,20 @@ import { authorize, type Actor } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { formatMoney, isZero, money } from '@shareat/core/money';
 import {
-  countSessionsRepo,
-  itemsRepo,
   posMappingRepo,
   posV1Repo,
   salesDaysRepo,
-  stockLayersRepo,
-  stockLedgerRepo,
-  stockLocationsRepo,
   storesRepo,
   type Tx,
 } from '@shareat/db';
 import type { PosV1FeedPurpose } from '@shareat/db/schema';
-import { postUsage, saveUsageDraft } from '../stock/usage-records';
 import { voidPullUsageRecord } from '../stock/void-pull-usage-record';
 import { closedStockPeriodSentence } from '../stock/period-guard';
 import { lockLiveSalesDay } from '../sales-days/live-day';
 import { RefusalError, gone, humanDate, internalFault, refuse } from '../shared/refusal';
 import { toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
-import { addQuantity, compareQuantity, quantity, ZERO_QUANTITY } from '../stock/quantity';
-import { isFrozenBySessions } from '../stock/count-workflow';
-import { assertUsageSource } from '../stock-locations/rules';
-import { decideHolds, heldSentences, type HeldLine, type HoldInputLine } from './usage-holds';
+import { compareQuantity, quantity } from '../stock/quantity';
+import type { HeldLine } from './usage-holds';
 import { loadDepletionLookups, planInstant } from './depletion-source';
 import { explodePosSales, type PlanLine, type PlanSection, type PosSoldItemInput } from './plan';
 import { sameItemsProjection, soldItemsFromFeed } from './v1-sold-items';
@@ -315,127 +308,15 @@ export async function buildPlan(tx: Tx, actor: Actor, input: BuildPlanInput): Pr
 }
 
 // -----------------------------------------------------------------------------------------
-// T-388: holds - the facts a section is judged on, and the words
+// T-388 holds - RETIRED by T-401 S6
 // -----------------------------------------------------------------------------------------
-/** The confirmed, unposted, stock-affecting lines of one section, as the pure hold decision takes them. */
-function candidateLines(
-  freshLines: readonly PlanLine[],
-  section: 'direct' | 'recipe',
-  confirmed: ReadonlySet<string>,
-  postedKeys: ReadonlySet<string>,
-): HoldInputLine[] {
-  const out: HoldInputLine[] = [];
-  for (const l of freshLines) {
-    if (l.section !== section || l.blocked || !confirmed.has(l.key) || postedKeys.has(l.key)) continue;
-    if (!l.itemId || !l.quantity || !l.locationId) continue;
-    if (compareQuantity(quantity(l.quantity), ZERO_QUANTITY) <= 0) continue;
-    out.push({ key: l.key, section, itemId: l.itemId, locationId: l.locationId, quantity: l.quantity });
-  }
-  return out;
-}
-
-interface HoldFacts {
-  readonly onHand: Map<string, string>;
-  readonly layerRemaining: Map<string, string>;
-  readonly frozen: Set<string>;
-  readonly unusable: Set<string>;
-}
-
-const byText = (a: string, b: string): number => a.localeCompare(b);
-
 /**
- * R3/R4/R4a. With `lock`: the item's layers are locked first (the lock `consume()` takes), sorted by item id, then each
- * (item, room)'s movement rows (the lock transfers take) in (item, room) order. Without it (the page's `pullHolds`),
- * plain reads. A room's role, purpose, status and freeze are READ, never inferred from a thrown error.
+ * T-401 S6 (bible row 335): the pull takes nothing out of stock any more, so no line can be held for short stock, a room under
+ * count or a room that cannot take usage. The map stays (the page still asks) and is always empty. A manager-posted usage
+ * draft meets those checks when it posts (`postUsage`), not here.
  */
-async function readHoldFacts(tx: Tx, storeId: string, lines: readonly HoldInputLine[], lock: boolean): Promise<HoldFacts> {
-  const itemIds = [...new Set(lines.map((l) => l.itemId))].sort(byText);
-  const layerRemaining = new Map<string, string>();
-  if (lock) {
-    for (const itemId of itemIds) {
-      const open = await stockLayersRepo.openLayersForUpdate(tx, itemId, storeId);
-      layerRemaining.set(itemId, addQuantity(...open.map((layer) => quantity(layer.remainingQuantity))));
-    }
-  } else if (itemIds.length > 0) {
-    const wanted = new Set(itemIds);
-    for (const row of await stockLayersRepo.valuation(tx, storeId)) if (wanted.has(row.itemId)) layerRemaining.set(row.itemId, row.quantity);
-  }
-
-  const pairs = [...new Map(lines.map((l) => [`${l.itemId}|${l.locationId}`, l] as const)).values()].sort(
-    (a, b) => byText(a.itemId, b.itemId) || byText(a.locationId, b.locationId),
-  );
-  const onHand = new Map<string, string>();
-  for (const l of pairs) {
-    onHand.set(
-      `${l.itemId}|${l.locationId}`,
-      lock ? await stockLedgerRepo.onHandForUpdate(tx, l.itemId, l.locationId) : await stockLedgerRepo.onHand(tx, l.itemId, l.locationId),
-    );
-  }
-
-  const roomIds = [...new Set(lines.map((l) => l.locationId))].sort(byText);
-  const unusable = new Set<string>();
-  for (const roomId of roomIds) {
-    const room = await stockLocationsRepo.getLocation(tx, roomId);
-    if (!room || !assertUsageSource(room).ok) unusable.add(roomId);
-  }
-  const sessions = await countSessionsRepo.freezingSessionsFor(tx, roomIds);
-  const frozen = new Set(roomIds.filter((roomId) => isFrozenBySessions(sessions, roomId)));
-  return { onHand, layerRemaining, frozen, unusable };
-}
-
-/** Item and room names (and the item's base unit as stored) for the sentences. */
-async function namesFor(tx: Tx, orgId: string, held: readonly HeldLine[]) {
-  const items = new Map<string, { name: string; unit: string }>();
-  const rooms = new Map<string, string>();
-  for (const itemId of new Set(held.map((h) => h.itemId))) {
-    const item = await itemsRepo.getItemById(tx, orgId, itemId);
-    items.set(itemId, { name: item?.name ?? 'an item', unit: item?.baseUnit ?? '' });
-  }
-  for (const roomId of new Set(held.map((h) => h.locationId))) {
-    rooms.set(roomId, (await stockLocationsRepo.getLocation(tx, roomId))?.name ?? 'a room');
-  }
-  return {
-    item: (id: string): string => items.get(id)?.name ?? 'an item',
-    unit: (id: string): string => items.get(id)?.unit ?? '',
-    room: (id: string): string => rooms.get(id) ?? 'a room',
-  };
-}
-
-/**
- * T-388 (for the page, S2): per unposted line of each UNSTAMPED section, its hold sentence NOW, or none. Read-only, no
- * locks, from the stored plan. Each section is judged on its own (as one finalize press is); it does NOT subtract
- * another open section's unposted need, so with two open sections on one item it can under-warn. Documented, not fixed:
- * finalize re-decides under R3's locks, so the worst case is a hold the page did not predict.
- */
-export async function pullHolds(tx: Tx, orgId: string, pullId: string): Promise<ReadonlyMap<string, string>> {
-  const out = new Map<string, string>();
-  const pull = await posMappingRepo.getPull(tx, pullId);
-  if (!pull || pull.orgId !== orgId || pull.status === 'void') return out;
-  const stored = await posMappingRepo.listPullLines(tx, pullId);
-
-  for (const section of ['direct', 'recipe'] as const) {
-    if (section === 'direct' ? pull.directFinalizedAt : pull.recipeFinalizedAt) continue;
-    const inputs: HoldInputLine[] = [];
-    for (const l of stored) {
-      if (l.section !== section || l.usageRecordId !== null || l.blocked !== null) continue;
-      if (!l.itemId || !l.locationId || !l.quantity) continue;
-      if (compareQuantity(quantity(l.quantity), ZERO_QUANTITY) <= 0) continue;
-      inputs.push({ key: l.lineKey, section, itemId: l.itemId, locationId: l.locationId, quantity: l.quantity });
-    }
-    if (inputs.length === 0) continue;
-
-    const facts = await readHoldFacts(tx, pull.storeId, inputs, false);
-    const { held } = decideHolds(inputs, facts.onHand, facts.layerRemaining, facts.frozen, facts.unusable);
-    if (held.length === 0) continue;
-    const names = await namesFor(tx, orgId, held);
-    for (const h of held) {
-      // The sentence of this line's own group: the same (item, room), or the whole frozen room.
-      const group = held.filter((o) => o.cause === h.cause && o.locationId === h.locationId && (h.cause === 'frozen' || o.itemId === h.itemId));
-      const sentence = heldSentences(section, group, names)[0];
-      if (sentence !== undefined) out.set(h.key, sentence);
-    }
-  }
-  return out;
+export async function pullHolds(_tx: Tx, _orgId: string, _pullId: string): Promise<ReadonlyMap<string, string>> {
+  return new Map<string, string>();
 }
 
 // -----------------------------------------------------------------------------------------
@@ -532,7 +413,6 @@ export async function finalizeSections(tx: Tx, actor: Actor, input: FinalizeSect
   // `alreadyFinalized` is also updated as sections are processed BELOW (not only read once from the
   // DB up front), for the same reason.
   const requestedSections = [...new Set(input.sections)];
-  const postedKeys = new Set(postedStored.map((l) => l.lineKey));
   const freshByKey = new Map(freshLines.map((l) => [l.key, l]));
 
   // T-388 R8: a posted key's fresh rebuild must still be the same item, room and quantity, for every UNSTAMPED
@@ -555,15 +435,7 @@ export async function finalizeSections(tx: Tx, actor: Actor, input: FinalizeSect
     }
   }
 
-  // T-388 R6: a closed stock month refuses only when there is something to post. Checked before the section loop,
-  // so the refusal writes nothing. (A held section whose month closed can still be stamped by unticking its held lines.)
-  const somethingToPost = requestedSections.some(
-    (section) => section !== 'orphan' && !alreadyFinalized[section] && candidateLines(freshLines, section, confirmedSet, postedKeys).length > 0,
-  );
-  if (somethingToPost) {
-    const closed = await closedStockPeriodSentence(tx, pull.orgId, salesDay.businessDate, 'used');
-    if (closed) return fail(closed);
-  }
+  // T-401 S6: nothing is posted here, so a closed stock month is no reason to refuse (the draft's own post meets the period lock).
 
   // From here on, a refusal after a write THROWS (never `return { ok: false }`): the caller commits on `ok: false`.
   for (const section of requestedSections) {
@@ -581,69 +453,12 @@ export async function finalizeSections(tx: Tx, actor: Actor, input: FinalizeSect
       continue;
     }
 
-    // Invariant 2, direction 2 — a rebuilt line the caller never confirmed is simply excluded here,
-    // never written, even though the rebuild produced it. Lines that already carry a usage record are skipped (R8).
-    const inputs = candidateLines(freshLines, section, confirmedSet, postedKeys);
-
-    // R3/R4/R4a: read under the locks the writers take, per section (after earlier sections wrote), then decide.
-    const facts = await readHoldFacts(tx, pull.storeId, inputs, true);
-    const decision = decideHolds(inputs, facts.onHand, facts.layerRemaining, facts.frozen, facts.unusable);
-    const held: HeldLine[] = [...decision.held];
-
-    const byLocation = new Map<string, HoldInputLine[]>();
-    for (const line of decision.post) {
-      const group = byLocation.get(line.locationId) ?? [];
-      group.push(line);
-      byLocation.set(line.locationId, group);
-    }
-
-    let postedLineCount = 0;
-    for (const [locationId, group] of byLocation) {
-      let recordId: string;
-      try {
-        recordId = await tx.transaction(async (inner) => {
-          const draft = await saveUsageDraft(inner as Tx, actor, {
-            orgId: pull.orgId,
-            storeId: pull.storeId,
-            locationId,
-            kind: 'usage',
-            usedOn: salesDay.businessDate,
-            lines: group.map((l) => ({ itemId: l.itemId, quantity: quantity(l.quantity) })),
-          });
-          if (!draft.ok) throw refuse(`usage-pull: draft refused: ${draft.reason}`, draft.reason);
-          const posted = await postUsage(inner as Tx, actor, { recordId: draft.recordId });
-          if (!posted.ok) throw refuse(`usage-pull: post refused: ${posted.reason}`, posted.reason);
-          return draft.recordId;
-        });
-      } catch (err) {
-        // R5: the savepoint already unwound this room's partial write. A count started in the gap since the read is the
-        // one failure that waits; anything else is re-thrown so the whole call unwinds and nothing is stamped.
-        const sessions = await countSessionsRepo.freezingSessionsFor(tx, [locationId]);
-        if (!isFrozenBySessions(sessions, locationId)) throw err;
-        held.push(...decideHolds(group, facts.onHand, facts.layerRemaining, new Set([locationId]), new Set()).held);
-        continue;
-      }
-      // R10: the link is written OUTSIDE the catch above, so a failure here can never be mistaken for a freeze.
-      const linked = await posMappingRepo.setLineUsageRecord(
-        tx,
-        pull.id,
-        group.map((l) => ({ lineKey: l.key, itemId: l.itemId, locationId: l.locationId, quantity: quantity(l.quantity), usageRecordId: recordId })),
-      );
-      const unlinked = group.filter((_, i) => linked[i] !== 1);
-      if (unlinked.length > 0) {
-        throw internalFault(`finalizeSections: pull ${pull.id}: ${unlinked.length} posted line(s) matched other than one stored row (${unlinked.map((l) => l.key).join(', ')})`);
-      }
-      postedLineCount += group.length;
-    }
-
-    // R7: stamped only when nothing confirmed is left unposted.
-    const finalized = held.length === 0;
-    if (finalized) {
-      await posMappingRepo.markSectionFinalized(tx, pull.id, section);
-      alreadyFinalized[section] = new Date();
-    }
-    const names = await namesFor(tx, pull.orgId, held);
-    results.push({ section, ok: true, postedLineCount, held, heldSentences: heldSentences(section, held, names), finalized });
+    // T-401 S6 (bible row 335, Ian 2026-10-14): CHECK ONLY. The manager-posted staff usage drafts are what move stock (actual
+    // usage); this pull is the expectation they are compared against, so finalizing it writes no usage record and no stock
+    // movement, and nothing can be held. The section is reviewed and stamped, as an orphan section always was.
+    await posMappingRepo.markSectionFinalized(tx, pull.id, section);
+    alreadyFinalized[section] = new Date();
+    results.push({ section, ok: true, postedLineCount: 0, held: [], heldSentences: [], finalized: true });
   }
 
   // T-377 S2 (DEF-597, R2/R3): ALL OR NONE. When EVERY unstamped section is empty in BOTH the stored plan (read after

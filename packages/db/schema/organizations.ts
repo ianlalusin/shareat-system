@@ -6,7 +6,7 @@
  * assume there is exactly one organization.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, check, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 export const organizations = pgTable(
   'organizations',
@@ -39,10 +39,19 @@ export const organizations = pgTable(
      * registration. Same posture as `sales_channels.tax_treatment` (T-230).
      */
     taxType: text('tax_type', { enum: ['vat', 'non_vat'] as const }),
+    /**
+     * T-401 S6 (migration 0198). The usage tolerance band, a FRACTION: 0.1000 = 10%. A manager-posted usage draft whose
+     * (store, day, item) total is outside `tolerance x expected` of the POS-derived expectation needs a verification reason.
+     * An item's own `items.usage_tolerance` wins over this. Set by `setOrgUsageTolerance` alone (admin).
+     */
+    // NOTE: the range CHECK organizations_usage_tolerance_check (0 to 1) is hand-added in migration 0198 (below too).
+    usageTolerance: numeric('usage_tolerance', { precision: 5, scale: 4 }).notNull().default('0.1000'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
+    check('organizations_usage_tolerance_check', sql`${t.usageTolerance} >= 0 and ${t.usageTolerance} <= 1`),
+    check('organizations_usage_tolerance_finite_check', sql`${t.usageTolerance} > '-Infinity'::numeric and ${t.usageTolerance} < 'Infinity'::numeric`),
     check('organizations_tax_type_check', sql`${t.taxType} is null or ${t.taxType} in ('vat', 'non_vat')`),
     /**
      * ⭐ T-229 slice 4 R1. A wrong number that LOOKS set is worse than an empty field, and a TIN

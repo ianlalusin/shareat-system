@@ -11,8 +11,12 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { stockUsageLines, stockUsageRecords, type UsageKind, type UsageStatus } from '../../schema/stock-usage';
 import { departments, stockLocations } from '../../schema/stock-locations';
 import { items } from '../../schema/items';
+import { organizations } from '../../schema/organizations';
+import { persons } from '../../schema/persons';
+import { posUsagePullLines, posUsagePulls } from '../../schema/pos-mapping';
+import { salesDays } from '../../schema/sales-days';
 import type { Tx } from '../client';
-import type { Quantity } from '@shareat/core/money';
+import type { Decimal, Quantity } from '@shareat/core/money';
 
 export interface UsageRecordRow {
   readonly id: string;
@@ -282,4 +286,153 @@ export async function locationName(tx: Tx, locationId: string): Promise<string> 
     .from(stockLocations)
     .where(eq(stockLocations.id, locationId));
   return row?.name ?? 'Unknown room';
+}
+
+// -----------------------------------------------------------------------------------------
+// T-401 S6 - the usage tolerance band: what was expected, what was recorded, the band, and the store's draft queue
+// -----------------------------------------------------------------------------------------
+
+/**
+ * ACTUAL for one (store, day): per item, the sum of that day's `usage` records that are draft or posted (never void; wastage,
+ * adjustment and opening are not compared). The sum is `numeric` in SQL and comes back as text, so no float ever touches it.
+ */
+export async function usageActualsForDay(tx: Tx, storeId: string, usedOn: string): Promise<Map<string, string>> {
+  const rows = await tx
+    .select({ itemId: stockUsageLines.itemId, total: sql<string>`sum(${stockUsageLines.quantity})::text` })
+    .from(stockUsageLines)
+    .innerJoin(stockUsageRecords, eq(stockUsageRecords.id, stockUsageLines.recordId))
+    .where(
+      and(
+        eq(stockUsageRecords.storeId, storeId),
+        eq(stockUsageRecords.usedOn, usedOn),
+        eq(stockUsageRecords.kind, 'usage'),
+        inArray(stockUsageRecords.status, ['draft', 'posted']),
+      ),
+    )
+    .groupBy(stockUsageLines.itemId);
+  return new Map(rows.map((r) => [r.itemId, r.total]));
+}
+
+/**
+ * EXPECTED for one (store, business date) from the stored plan: per item, the sum of the live (non-void) pull's direct and
+ * recipe lines that are not blocked. It is the plan, not what a pull posted, so it survives the pull being finalized.
+ */
+export async function expectedFromPullForDay(tx: Tx, storeId: string, businessDate: string): Promise<Map<string, string>> {
+  const rows = await tx
+    .select({ itemId: posUsagePullLines.itemId, total: sql<string>`sum(${posUsagePullLines.quantity})::text` })
+    .from(posUsagePullLines)
+    .innerJoin(posUsagePulls, eq(posUsagePulls.id, posUsagePullLines.pullId))
+    .innerJoin(salesDays, eq(salesDays.id, posUsagePulls.salesDayId))
+    .where(
+      and(
+        eq(posUsagePulls.storeId, storeId),
+        eq(salesDays.businessDate, businessDate),
+        sql`${posUsagePulls.status} <> 'void'`,
+        inArray(posUsagePullLines.section, ['direct', 'recipe']),
+        sql`${posUsagePullLines.itemId} is not null`,
+        sql`${posUsagePullLines.quantity} is not null`,
+        sql`${posUsagePullLines.blocked} is null`,
+      ),
+    )
+    .groupBy(posUsagePullLines.itemId);
+  return new Map(rows.filter((r) => r.itemId !== null).map((r) => [r.itemId as string, r.total]));
+}
+
+/** The org's tolerance and each named item's override (`null` = none), as stored text (e.g. `0.1000`). */
+export async function usageTolerancesFor(
+  tx: Tx,
+  orgId: string,
+  itemIds: readonly string[],
+): Promise<{ org: string; byItem: Map<string, string | null> }> {
+  const [org] = await tx.select({ t: organizations.usageTolerance }).from(organizations).where(eq(organizations.id, orgId));
+  const rows =
+    itemIds.length === 0
+      ? []
+      : await tx
+          .select({ id: items.id, t: items.usageTolerance })
+          .from(items)
+          .where(and(eq(items.orgId, orgId), inArray(items.id, [...itemIds])));
+  return { org: org?.t ?? '0.1000', byItem: new Map(rows.map((r) => [r.id, r.t])) };
+}
+
+/** Sets the org tolerance (text, already validated by the domain) and returns the value it replaced. */
+export async function setOrgUsageTolerance(tx: Tx, orgId: string, tolerance: Decimal<'5,4'>): Promise<{ previous: string } | undefined> {
+  const [before] = await tx.select({ t: organizations.usageTolerance }).from(organizations).where(eq(organizations.id, orgId)).for('update');
+  if (!before) return undefined;
+  await tx.update(organizations).set({ usageTolerance: tolerance, updatedAt: new Date() }).where(eq(organizations.id, orgId));
+  return { previous: before.t };
+}
+
+/** Sets (text) or clears (`null`) one item's override; returns the value it replaced, or undefined when the item is not this org's. */
+export async function setItemUsageTolerance(
+  tx: Tx,
+  orgId: string,
+  itemId: string,
+  tolerance: Decimal<'5,4'> | null,
+): Promise<{ previous: string | null; name: string } | undefined> {
+  const [before] = await tx
+    .select({ t: items.usageTolerance, name: items.name })
+    .from(items)
+    .where(and(eq(items.orgId, orgId), eq(items.id, itemId)))
+    .for('update');
+  if (!before) return undefined;
+  await tx.update(items).set({ usageTolerance: tolerance, updatedAt: new Date() }).where(and(eq(items.orgId, orgId), eq(items.id, itemId)));
+  return { previous: before.t, name: before.name };
+}
+
+export interface StoreUsageQueueRow {
+  readonly id: string;
+  readonly kind: UsageKind;
+  readonly status: UsageStatus;
+  readonly usedOn: string;
+  readonly locationId: string;
+  readonly locationName: string;
+  readonly reasonCode: string | null;
+  readonly createdAt: Date;
+  readonly createdBy: string;
+  readonly createdByName: string;
+  readonly lines: readonly { readonly itemId: string; readonly itemName: string; readonly unit: string; readonly quantity: string }[];
+}
+
+/** The store's usage drafts waiting for a manager, oldest first, each with who recorded it and its lines. Not filtered to any one author. */
+export async function listStoreUsageQueue(tx: Tx, storeId: string): Promise<StoreUsageQueueRow[]> {
+  const rows = await tx
+    .select({
+      id: stockUsageRecords.id,
+      kind: stockUsageRecords.kind,
+      status: stockUsageRecords.status,
+      usedOn: stockUsageRecords.usedOn,
+      locationId: stockUsageRecords.locationId,
+      locationName: stockLocations.name,
+      reasonCode: stockUsageRecords.reasonCode,
+      createdAt: stockUsageRecords.createdAt,
+      createdBy: stockUsageRecords.createdBy,
+      createdByName: persons.displayName,
+    })
+    .from(stockUsageRecords)
+    .innerJoin(stockLocations, eq(stockLocations.id, stockUsageRecords.locationId))
+    .innerJoin(persons, eq(persons.id, stockUsageRecords.createdBy))
+    .where(and(eq(stockUsageRecords.storeId, storeId), eq(stockUsageRecords.status, 'draft')))
+    .orderBy(asc(stockUsageRecords.createdAt), asc(stockUsageRecords.id));
+  if (rows.length === 0) return [];
+  const lines = await tx
+    .select({
+      recordId: stockUsageLines.recordId,
+      lineNo: stockUsageLines.lineNo,
+      itemId: stockUsageLines.itemId,
+      itemName: items.name,
+      unit: items.baseUnit,
+      quantity: stockUsageLines.quantity,
+    })
+    .from(stockUsageLines)
+    .innerJoin(items, eq(items.id, stockUsageLines.itemId))
+    .where(inArray(stockUsageLines.recordId, rows.map((r) => r.id)))
+    .orderBy(asc(stockUsageLines.recordId), asc(stockUsageLines.lineNo));
+  const byRecord = new Map<string, StoreUsageQueueRow['lines'][number][]>();
+  for (const l of lines) {
+    const list = byRecord.get(l.recordId) ?? [];
+    list.push({ itemId: l.itemId, itemName: l.itemName, unit: l.unit, quantity: l.quantity });
+    byRecord.set(l.recordId, list);
+  }
+  return rows.map((r) => ({ ...r, lines: byRecord.get(r.id) ?? [] }));
 }

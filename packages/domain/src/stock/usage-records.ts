@@ -50,6 +50,7 @@ import {
   type VoidUsageInput,
 } from './usage';
 import { isReservedUsageCategory, isWastageReason, type WastageReason } from './wastage-reasons';
+import { checkUsageTolerance, writeToleranceVerified } from './usage-tolerance';
 
 /**
  * COA-ALIGNMENT §4.1's consumption category, derived from the item's own `kind` — see this file's
@@ -257,7 +258,18 @@ export async function deleteUsageDraft(
  * (T-168 §3). Builds `usage.ts`'s `PostUsageInput` from the draft's own lines: `inventoryAccount`
  * from `INVENTORY_ACCOUNT_BY_ITEM_KIND[item.kind]`, `cogsCategory` from `cogsCategoryForItemKind`.
  */
-export async function postUsage(tx: Tx, actor: Actor, input: { readonly recordId: string }): Promise<PostOutcome> {
+export async function postUsage(
+  tx: Tx,
+  actor: Actor,
+  input: {
+    readonly recordId: string;
+    /**
+     * T-401 S6 (I28). A usage whose (store, day, item) total is outside the tolerance band of what the POS plan expected is refused
+     * unless the manager passes a non-blank reason; the post then writes `stock.usage_tolerance_verified`, one row per such item.
+     */
+    readonly verifyOutOfTolerance?: { readonly reason: string };
+  },
+): Promise<PostOutcome> {
   const record = await stockUsageRepo.getUsageRecord(tx, input.recordId);
   if (!record) return { ok: false, reason: `usage record ${input.recordId} does not exist` };
   await authorize(tx, actor, 'post_usage', { storeId: record.storeId });
@@ -291,6 +303,15 @@ export async function postUsage(tx: Tx, actor: Actor, input: { readonly recordId
     });
   }
 
+  // T-401 S6: the tolerance band, on `usage` only (wastage is not compared). Before any write, so a refusal changes nothing.
+  const reason = input.verifyOutOfTolerance?.reason;
+  let verified: Awaited<ReturnType<typeof checkUsageTolerance>>['verified'] = [];
+  if (record.kind === 'usage') {
+    const gate = await checkUsageTolerance(tx, record, [...new Set(lines.map((l) => l.itemId))], reason);
+    if (gate.refusal !== null) return { ok: false, reason: gate.refusal };
+    verified = gate.verified;
+  }
+
   const postInput: PostUsageInput = {
     orgId: record.orgId,
     storeId: record.storeId,
@@ -317,6 +338,7 @@ export async function postUsage(tx: Tx, actor: Actor, input: { readonly recordId
     await stockUsageRepo.setUsageLineMovement(tx, lines[i]!.id, result.movementIds[i]!);
   }
   await stockUsageRepo.markUsagePosted(tx, record.id, actor.personId);
+  if (verified.length > 0) await writeToleranceVerified(tx, actor, record, verified, reason ?? '');
 
   return {
     ok: true,
