@@ -23,7 +23,7 @@
  * the codebase declares it as data — it is implicit in which job names `scheduler/index.ts` and
  * `recurring-expenses/job.ts` pass to `runJobForOrg` inside each script's own runner function.
  */
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SCHEDULER_JOBS, type SchedulerJob } from '@shareat/db';
@@ -53,6 +53,8 @@ const JOB_SCRIPT: Record<SchedulerJob, string> = {
   orphan_file_sweep: 'orphan-file-sweep',
   // T-276/DEF-305 — the monthly fiscal-period coverage top-up.
   fiscal_period_seed: 'fiscal-period-seed',
+  // T-401 S6 audit ruling A1: the next-afternoon auto-post of POS-pull usage drafts.
+  usage_auto_post: 'usage-auto-post',
 };
 
 /** The unique scripts `JOB_SCRIPT` names — `docs/ops/shareat-<name>.{service,timer}` basenames. */
@@ -201,5 +203,22 @@ describe('T-273 — every scheduler job is hosted by a docs/ops/ unit pair, or a
       .filter(([, reason]) => !/DEF-\d+|T-\d+/.test(reason) || reason.trim().length < 40)
       .map(([name]) => `${name} - the reason must cite a DEF-/T- number and say why`);
     expect(weak).toEqual([]);
+  });
+});
+
+describe('T-401 S6 A1 - the usage auto-post is a registered, hosted job (red until built)', () => {
+  it('usage_auto_post is in SCHEDULER_JOBS (so it writes a scheduler_runs row). Mutant: left out of the registry', () => {
+    expect(SCHEDULER_JOBS as readonly string[]).toContain('usage_auto_post');
+  });
+
+  it('shareat-usage-auto-post.service runs `npm run usage-auto-post`; the .timer fires daily at 14:05 Asia/Manila (after the 14:00 deadline), persistent', () => {
+    const service = path.join(OPS_DIR, 'shareat-usage-auto-post.service');
+    const timer = path.join(OPS_DIR, 'shareat-usage-auto-post.timer');
+    expect(existsSync(service), 'shareat-usage-auto-post.service exists').toBe(true);
+    expect(existsSync(timer), 'shareat-usage-auto-post.timer exists').toBe(true);
+    expect(readFileSync(service, 'utf8')).toMatch(/^ExecStart=.*npm run usage-auto-post\s*$/m);
+    const t = readFileSync(timer, 'utf8');
+    expect(t, 'daily at 14:05 Manila').toMatch(/^OnCalendar=\*-\*-\* 14:05:00 Asia\/Manila\s*$/m);
+    expect(t).toMatch(/^Persistent=true\s*$/m);
   });
 });

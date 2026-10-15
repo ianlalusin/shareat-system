@@ -74,12 +74,24 @@ async function mustFinalize(s: S, sections: ('direct' | 'recipe' | 'orphan')[] =
   if (!f.ok) throw new Error(`fixture: finalize refused: ${f.reason}`);
 }
 
+/**
+ * Moves "when the pull was finalized" to the evening of the business date, in EVERY place a builder could read it from (A10: due = the later
+ * of 14:00 Manila the next day and finalized_at + 4h): the record's created_at and the pull's section stamps.
+ */
+async function backdate(recordId: string, at = '2026-08-20T12:00:00Z') {
+  await sql`update stock_usage_records set created_at = ${at} where id = ${recordId}`;
+  await sql`update pos_usage_pulls set direct_finalized_at = case when direct_finalized_at is null then null else ${at}::timestamptz end,
+                                       recipe_finalized_at = case when recipe_finalized_at is null then null else ${at}::timestamptz end,
+                                       orphan_finalized_at = case when orphan_finalized_at is null then null else ${at}::timestamptz end
+             where id in (select pull_id from pos_usage_pull_lines where usage_record_id = ${recordId})`;
+}
+
 /** The day's one draft; moves its created_at to the evening of the business date (so "next day" is unambiguous). */
 async function theDraft(s: S) {
   const recs = await usageRecordsOfDay(sql, s.w.a.storeId, DAY);
   expect(recs, 'exactly one usage record for the store and day').toHaveLength(1);
   expect(recs[0]!.status).toBe('draft');
-  await sql`update stock_usage_records set created_at = '2026-08-20T12:00:00Z' where id = ${recs[0]!.id}`;
+  await backdate(recs[0]!.id);
   return recs[0]!;
 }
 
@@ -139,7 +151,7 @@ describe('finalizing the pull creates the usage draft (expected, system author, 
     expect(recs[0]!.lines).toEqual({ [s.w.cheese]: '10.000', [s.w.rice]: '10.000' });
   }, 180_000);
 
-  it('a draft the staff already started for that store + day: the pull fills the MISSING covered lines into it - no second record, the staff line is NOT overwritten', async () => {
+  it('A2 (supersedes "the pull fills a staff-started draft"): a draft staff already started for that store + day + room is NEVER touched; the pull writes its OWN system draft beside it. Mutant: the pull adds lines to the staff draft', async () => {
     const s = await scenario('d3', true);
     const started = await asOrg(s.w.orgId, (tx) =>
       saveUsageDraft(tx, s.w.staff, { orgId: s.w.orgId, storeId: s.w.a.storeId, locationId: s.w.a.kitchen, kind: 'usage', usedOn: DAY, lines: [{ itemId: s.w.cheese, quantity: '9' }] }),
@@ -147,10 +159,13 @@ describe('finalizing the pull creates the usage draft (expected, system author, 
     if (!started.ok) throw new Error(started.reason);
     await mustFinalize(s);
     const recs = await usageRecordsOfDay(sql, s.w.a.storeId, DAY);
-    expect(recs, 'still ONE record for the day').toHaveLength(1);
-    expect(recs[0]!.id).toBe(started.recordId);
-    expect(recs[0]!.lines[s.w.cheese], "the staff member's actual stays").toBe('9.000');
-    expect(recs[0]!.lines[s.w.rice], 'the missing covered item is filled at expected').toBe('10.000');
+    expect(recs, 'the staff draft and a separate pull draft').toHaveLength(2);
+    const staffRec = recs.find((r) => r.id === started.recordId)!;
+    expect(staffRec.lines, 'the staff draft is exactly what staff typed: no line added, none changed').toEqual({ [s.w.cheese]: '9.000' });
+    expect(staffRec.createdBy).toBe(s.w.staff.personId);
+    const pullRec = recs.find((r) => r.id !== started.recordId)!;
+    expect([s.w.staff.personId, s.w.manager.personId, s.w.admin.personId], 'the pull draft is system-authored').not.toContain(pullRec.createdBy);
+    expect(pullRec.lines[s.w.rice], 'the pull draft carries the covered item the staff draft lacks, at expected').toBe('10.000');
   }, 180_000);
 
   it('a wastage draft of the same day is NOT the usage draft: the pull still makes its own usage draft', async () => {

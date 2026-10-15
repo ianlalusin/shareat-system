@@ -41,7 +41,7 @@ vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/con
 import { closeDb } from '@shareat/db';
 import { buildPlan, finalizeSections, saveUsageDraft } from '@shareat/domain';
 import { submitSalesDay, verifySalesDay } from '../../../../packages/domain/src/sales-days/verify';
-import { toBusinessDate, addDays } from '@shareat/core/datetime';
+import { toBusinessDate, addDays, parseBusinessDate } from '@shareat/core/datetime';
 import { asOrg, makeDay, rawMap, sold, sql, stockUp, uid, world, type World } from '../../../../packages/domain/tests/integration/t401-s5-setup';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { paramsOf } from '../helpers/flash-jar';
@@ -211,6 +211,28 @@ describe('B2 - the queue page shows the band per covered item and who wrote each
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
+describe('A7 - the queue flags a draft left behind by a voided pull', () => {
+  it('the pull is voided after staff edited its draft: the draft stays and the queue says "pull voided" beside it; an untouched pull draft just disappears', async () => {
+    const { w, pullId, keys } = await scenario('ui7');
+    const f = await asOrg(w.orgId, (tx) => finalizeSections(tx, w.manager, { pullId, sections: ['direct'], confirmedKeys: keys }));
+    expect(f.ok).toBe(true);
+    const [rec] = await sql<{ id: string }[]>`select id from stock_usage_records where store_id = ${w.a.storeId} and used_on = ${DAY} and kind = 'usage' and status = 'draft'`;
+    const { addUsageLine, removeUsageLine, voidPosUsagePull } = await import('@shareat/domain');
+    const [line] = await sql<{ id: string }[]>`select id from stock_usage_lines where record_id = ${rec!.id} and item_id = ${w.cheese}`;
+    expect((await asOrg(w.orgId, (tx) => removeUsageLine(tx, w.staff, { recordId: rec!.id, lineId: line!.id }))).ok).toBe(true);
+    expect((await asOrg(w.orgId, (tx) => addUsageLine(tx, w.staff, { recordId: rec!.id, itemId: w.cheese, quantity: '10.5' }))).ok).toBe(true);
+    const v = await asOrg(w.orgId, (tx) => voidPosUsagePull(tx, w.manager, { pullId, reason: 'POS corrected' }));
+    expect(v.ok, 'the void goes through').toBe(true);
+
+    h.actor = w.manager;
+    const Page = (await import('../../src/app/inventory/usage/page')).default as (p: unknown) => Promise<unknown>;
+    const html = text(renderToStaticMarkup((await Page({ searchParams: Promise.resolve({ store: w.a.storeId, date: DAY }) })) as never));
+    expect(html, 'the edited draft is still in the queue').toContain('10.5');
+    expect(html, 'and says why it needs a look').toMatch(/pull voided/i);
+  }, 180_000);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
 describe('B3 - the tolerance settings form (admin only)', () => {
   it('admin sets the org tolerance and an item override; manager is refused on both; nothing stored for the refused call; clearing the override goes back to the org setting', async () => {
     const { w } = await scenario('ui3');
@@ -275,7 +297,9 @@ describe('B4 - the POS usage page says the pull is a check', () => {
 
 // ---------------------------------------------------------------------------------------------------------------------
 describe("B5 - day-close warning: yesterday's usage not posted (a warning, never a block)", () => {
-  const yesterday = (): string => addDays(toBusinessDate(), -1);
+  // A11 (orchestrator, 15 Oct): the warning is about the day BEFORE THE SALES DAY BEING VIEWED (DAY), not before today.
+  const yesterday = (): string => addDays(parseBusinessDate(DAY), -1);
+  const realYesterday = (): string => addDays(toBusinessDate(), -1);
   const WARN = /Yesterday's usage not posted/;
   const manualDraft = async (w: World, storeId: string, kitchen: string, date: string, itemId: string) => {
     const r = await asOrg(w.orgId, (tx) =>
@@ -315,8 +339,19 @@ describe("B5 - day-close warning: yesterday's usage not posted (a warning, never
     const r = await asOrg(w.orgId, (tx) => postUsage(tx, w.manager, { recordId: id }));
     expect(r.ok, r.ok ? '' : r.reason).toBe(true);
     expect(await dayPage(w, dayId), 'posted').not.toMatch(WARN);
-    await manualDraft(w, w.a.storeId, w.a.kitchen, addDays(toBusinessDate(), -5), w.coke);
+    await manualDraft(w, w.a.storeId, w.a.kitchen, addDays(parseBusinessDate(DAY), -5), w.coke);
     expect(await dayPage(w, dayId), 'the warning is about yesterday only').not.toMatch(WARN);
+  }, 180_000);
+
+  it('A11: the day counted is the one before the VIEWED sales day: a draft dated the real yesterday does not warn on a page for an older sales day. Mutant: counts before today', async () => {
+    const { w, dayId } = await scenario('ui5d');
+    await stockUp(w, w.a.storeId, w.a.kitchen, w.coke, '100');
+    await manualDraft(w, w.a.storeId, w.a.kitchen, realYesterday(), w.coke);
+    expect(await dayPage(w, dayId), 'the viewed day is 2026-08-20; only drafts of 2026-08-19 count').not.toMatch(WARN);
+    await manualDraft(w, w.a.storeId, w.a.kitchen, yesterday(), w.coke);
+    const html = await dayPage(w, dayId);
+    expect(html).toMatch(WARN);
+    expect(html.slice(html.search(WARN), html.search(WARN) + 500), 'one draft of the day before the viewed day').toMatch(/1/);
   }, 180_000);
 
   it('it is only a warning: submit and verify of the sales day still succeed while the usage is unposted', async () => {

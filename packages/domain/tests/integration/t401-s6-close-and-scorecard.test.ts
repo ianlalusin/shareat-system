@@ -72,6 +72,10 @@ async function pullDraft(w: World, storeId: string, kitchen: string, date: strin
   const [r] = await sql<{ id: string }[]>`select id from stock_usage_records where store_id = ${storeId} and used_on = ${date} and kind = 'usage' and status <> 'void'`;
   if (!r) throw new Error('fixture: finalize made no usage record');
   await sql`update stock_usage_records set created_at = ${date + 'T12:00:00Z'} where id = ${r.id}`;
+  await sql`update pos_usage_pulls set direct_finalized_at = case when direct_finalized_at is null then null else ${date + 'T12:00:00Z'}::timestamptz end,
+                                       recipe_finalized_at = case when recipe_finalized_at is null then null else ${date + 'T12:00:00Z'}::timestamptz end,
+                                       orphan_finalized_at = case when orphan_finalized_at is null then null else ${date + 'T12:00:00Z'}::timestamptz end
+             where id in (select pull_id from pos_usage_pull_lines where usage_record_id = ${r.id})`;
   return r.id;
 }
 const managerPost = (w: World, id: string, reason?: string) =>
@@ -193,6 +197,54 @@ describe('month-close blocks on unposted or unexplained usage', () => {
     await closeAug(w);
     expect(await periodStatus(w, '2026-08')).toBe('closed');
     expect(await periodStatus(other, '2026-08'), 'control: the other org is untouched').toBe('open');
+  }, 300_000);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+describe('A4 / A6 - the month-close check judges each line against its OWN snapshot, and only usage records block', () => {
+  it('A4: a posted in-band pull line stays in band when the live expectation moves later (menu map changed) or another room posts more of the item. Mutant: the close recomputes expected live', async () => {
+    const w = await world('a4c1');
+    await closeEarlierMonths(w);
+    const id = await pullDraft(w, w.a.storeId, w.a.kitchen, '2026-08-10');
+    await mustPost(w, id); // 10 against an expected of 10, no reason
+    await sql`update pos_item_maps set quantity_per_sale = '0.1' where store_id = ${w.a.storeId} and pos_item_key = 'a'`; // live expected would now be 1
+    await closeAug(w);
+    expect(await periodStatus(w, '2026-08'), 'the line was in band against the expected it was drafted with').toBe('closed');
+
+    const w2 = await world('a4c2');
+    await closeEarlierMonths(w2);
+    const id2 = await pullDraft(w2, w2.a.storeId, w2.a.kitchen, '2026-08-10');
+    await mustPost(w2, id2);
+    await stockUp(w2, w2.a.storeId, w2.a.display!, w2.cheese, '100');
+    const other = await asOrg(w2.orgId, (tx) =>
+      saveUsageDraft(tx, w2.staff, { orgId: w2.orgId, storeId: w2.a.storeId, locationId: w2.a.display!, kind: 'usage', usedOn: '2026-08-10', lines: [{ itemId: w2.cheese, quantity: '30' }] }),
+    );
+    if (!other.ok) throw new Error(other.reason);
+    await mustPost(w2, other.recordId, 'Display used thirty'); // out of band, explained at its own post
+    await closeAug(w2);
+    expect(await periodStatus(w2, '2026-08'), "another room's explained post does not turn the pull's own line out of band").toBe('closed');
+  }, 300_000);
+
+  it('A6: an open WASTAGE draft does not block the close; an open USAGE draft beside it does. Mutant: any draft kind blocks', async () => {
+    const w = await world('a6c1');
+    await closeEarlierMonths(w);
+    await stockUp(w, w.a.storeId, w.a.kitchen, w.coke, '100');
+    const wr = await asOrg(w.orgId, (tx) =>
+      saveUsageDraft(tx, w.staff, { orgId: w.orgId, storeId: w.a.storeId, locationId: w.a.kitchen, kind: 'wastage', reasonCode: 'spoilage', usedOn: '2026-08-12', lines: [{ itemId: w.coke, quantity: '2' }] }),
+    );
+    if (!wr.ok) throw new Error(wr.reason);
+    await closeAug(w);
+    expect(await periodStatus(w, '2026-08'), 'a wastage draft keeps its old behaviour: it does not block').toBe('closed');
+
+    const w2 = await world('a6c2');
+    await closeEarlierMonths(w2);
+    await stockUp(w2, w2.a.storeId, w2.a.kitchen, w2.coke, '100');
+    const wr2 = await asOrg(w2.orgId, (tx) =>
+      saveUsageDraft(tx, w2.staff, { orgId: w2.orgId, storeId: w2.a.storeId, locationId: w2.a.kitchen, kind: 'wastage', reasonCode: 'spoilage', usedOn: '2026-08-12', lines: [{ itemId: w2.coke, quantity: '2' }] }),
+    );
+    if (!wr2.ok) throw new Error(wr2.reason);
+    await manualDraft(w2, '2026-08-12');
+    await expect(closeAug(w2)).rejects.toThrow(/usage/i);
   }, 300_000);
 });
 
