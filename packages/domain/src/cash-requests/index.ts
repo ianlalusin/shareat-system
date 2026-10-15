@@ -25,6 +25,7 @@ import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
+import { capAuditText } from '../shared/audit-text';
 
 export const STAFF_FLOAT_CODE = '1120';
 /**
@@ -113,7 +114,7 @@ export async function decideCashRequest(
         storeId: req.storeId,
         entityId: req.id,
         before: { status: req.status },
-        after: { status: 'rejected', reason },
+        after: { status: 'rejected', reason: capAuditText(reason) },
         source: 'web',
       });
       return;

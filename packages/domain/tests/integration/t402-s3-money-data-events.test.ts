@@ -451,6 +451,49 @@ describe('cutover.step_completed (attestStep) and cutover.opening_entry (postOpe
   });
 });
 
+// ========================================================================================== free-text cap (audit 6)
+// ORCHESTRATOR RULING (T-402 S3 audit finding 6): free-text fields kept in `after` are capped at 500 characters, stored as
+// the first 500 chars + "…[truncated]". Free text recorded by S3 events: expense.voided `reason`, cash_request.rejected
+// `reason`, cutover.step_completed `note`. A short text is stored unchanged.
+describe('free text in an S3 event payload is capped at 500 characters + "…[truncated]" (audit finding 6)', () => {
+  const MARK = '…[truncated]';
+  const long = Array.from({ length: 2000 }, (_, i) => String.fromCharCode(97 + (i % 26))).join('');
+  const capped = long.slice(0, 500) + MARK;
+
+  it('expense.voided: a 2,000-char reason is stored as the first 500 chars + the marker (mutant: stored whole, or cut with no marker)', async () => {
+    const f = await moneyFixture(sql, 'cap-void');
+    const inv = await pendingInvoice(sql, f, '5000.00');
+    await asOrgOn(f.orgId, (tx) => D.verifyInvoice(tx, f.manager, inv, ATTEST));
+    const created = await draftExpense(f, inv, '400.00');
+    await asOrgOn(f.orgId, (tx) => D.approveExpense(tx, f.manager, created.id));
+    await asOrgOn(f.orgId, (tx) => D.voidExpense(tx, f.manager, created.id, long));
+    const rows = await auditRows(sql, f.orgId, 'expense.voided', created.id);
+    expect(rows).toHaveLength(1);
+    expect((rows[0]!.after as Record<string, unknown>).reason).toBe(capped);
+  });
+
+  it('cash_request.rejected: a 2,000-char reason is capped the same way; a short reason is stored unchanged', async () => {
+    const f = await moneyFixture(sql, 'cap-cr');
+    const mk = () => asOrgOn(f.orgId, (tx) => D.createCashRequest(tx, f.staff, { storeId: f.storeId, requestedFor: f.staffId, purpose: 'Market run', amount: '900.00', on: '2026-01-05' }));
+    const a = await mk();
+    await asOrgOn(f.orgId, (tx) => D.decideCashRequest(tx, f.manager, { requestId: a.id, decision: 'reject', reason: long, on: '2026-01-05' }));
+    const b = await mk();
+    await asOrgOn(f.orgId, (tx) => D.decideCashRequest(tx, f.manager, { requestId: b.id, decision: 'reject', reason: 'Not this week', on: '2026-01-05' }));
+    expect(((await auditRows(sql, f.orgId, 'cash_request.rejected', a.id))[0]!.after as Record<string, unknown>).reason).toBe(capped);
+    expect(((await auditRows(sql, f.orgId, 'cash_request.rejected', b.id))[0]!.after as Record<string, unknown>).reason).toBe('Not this week');
+  });
+
+  it('cutover.step_completed: a 2,000-char note is capped the same way; exactly 500 chars is stored unchanged (boundary)', async () => {
+    const f = await moneyFixture(sql, 'cap-cut');
+    await asOrgOn(f.orgId, (tx) => D.attestStep(tx, f.admin, { stepCode: 'A1', note: long }));
+    await asOrgOn(f.orgId, (tx) => D.attestStep(tx, f.admin, { stepCode: 'A2', note: long.slice(0, 500) }));
+    const rows = await auditRows(sql, f.orgId, 'cutover.step_completed');
+    const byStep = (c: string) => rows.find((r) => (r.after as Record<string, unknown>).stepCode === c);
+    expect((byStep('A1')!.after as Record<string, unknown>).note).toBe(capped);
+    expect((byStep('A2')!.after as Record<string, unknown>).note).toBe(long.slice(0, 500));
+  });
+});
+
 // ====================================================================================== no secrets in payloads
 describe("no secret reaches any S3 event payload (R5, Invariant 18 for S3's rows)", () => {
   it('after every step above, no S3 row holds a scrypt hash, a JWT or a 4-8 digit value under a pin key', async () => {

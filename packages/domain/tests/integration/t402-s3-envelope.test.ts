@@ -372,6 +372,20 @@ describe('clock suspect (R10; Invariant 22): accepted, flagged, never refused', 
   });
 });
 
+describe('clock suspect: an unparseable occurredAt (T-402 S3 audit finding 2)', () => {
+  it('an occurredAt the server cannot parse is accepted, stored at the SERVER clock, and flagged clock_suspect = true (mutant: flag false)', async () => {
+    const f = await fixture('clock-bad');
+    for (const bad of ['not-a-date', '']) {
+      const e = env(f, { occurredAt: bad });
+      const r = await send(f, [e]);
+      expect(r[0]!.status, `unparseable occurredAt ${JSON.stringify(bad)} is not refused`).toBe('accepted');
+      const [row] = await rowsFor(f.orgId, e.entityId);
+      expect(row!.clock_suspect, 'a device time the server could not read is by definition suspect').toBe(true);
+      expect(Math.abs(new Date(row!.occurred_at).getTime() - Date.now()), 'occurred_at falls back to the server clock').toBeLessThan(120_000);
+    }
+  });
+});
+
 describe('the events ride the sale\'s transaction (C1, R9)', () => {
   it('a rolled-back caller leaves no log row and no event key, but the store-mismatch security event survives (outbox, own transaction)', async () => {
     const f = await fixture('rollback');

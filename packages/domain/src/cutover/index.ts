@@ -28,6 +28,7 @@ import { parseQuantityInput } from '../shared/quantity-input';
 import { compareQuantity, ZERO_QUANTITY } from '../stock/quantity';
 import { isZero, money } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
+import { capAuditText } from '../shared/audit-text';
 import { openingTieOut, tieOutDetail } from './tie-out';
 
 export * from './steps';
@@ -227,7 +228,7 @@ export async function attestStep(
       storeId: null,
       entityId: actor.orgId,
       before: null,
-      after: { stepCode: def.code, completion: 'attested', ...(storeId ? { storeId } : {}), note: input.note?.trim() || null },
+      after: { stepCode: def.code, completion: 'attested', ...(storeId ? { storeId } : {}), note: capAuditText(input.note?.trim() || null) },
       source: 'web',
     });
   };

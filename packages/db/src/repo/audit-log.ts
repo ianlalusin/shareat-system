@@ -181,6 +181,8 @@ interface RowInput {
   readonly occurredAt?: Date;
   readonly uploadedByPersonId?: string | null;
   readonly eventKey?: string;
+  /** The device time could not be read: stored at the server clock, always flagged. */
+  readonly clockUnreadable?: boolean;
 }
 
 async function insertRow(tx: Tx, orgId: string, r: RowInput): Promise<{ id: string; recordedAt: Date }> {
@@ -188,7 +190,7 @@ async function insertRow(tx: Tx, orgId: string, r: RowInput): Promise<{ id: stri
   // One clock: the database's now() judges the device time (R10: > 5 min ahead or > 30 days behind is suspect).
   const clockSuspect =
     r.occurredAt === undefined
-      ? false
+      ? r.clockUnreadable === true
       : sql<boolean>`(${r.occurredAt.toISOString()}::timestamptz > now() + interval '5 minutes' or ${r.occurredAt.toISOString()}::timestamptz < now() - interval '30 days')`;
   const [row] = await tx
     .insert(auditLog)
@@ -357,6 +359,7 @@ export async function appendClientEvent(
     source: attested.source,
     deviceId: attested.deviceId,
     occurredAt: Number.isNaN(occurredAt.getTime()) ? undefined : occurredAt,
+    ...(Number.isNaN(occurredAt.getTime()) ? { clockUnreadable: true } : {}),
     uploadedByPersonId: attested.uploadedByPersonId,
     eventKey: envelope.eventKey,
   });

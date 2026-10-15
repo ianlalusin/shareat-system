@@ -15,6 +15,7 @@ import { parseBusinessDate } from '@shareat/core/datetime';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { retireAssetFromVoidedExpense } from '../fixed-assets/capitalize';
 import { refuse, gone, internalFault, humanDate } from '../shared/refusal';
+import { capAuditText } from '../shared/audit-text';
 import { authorizeOtherStores } from '../ledger/inter-store';
 
 export interface VoidExpenseResult {
@@ -132,7 +133,7 @@ async function runVoidExpense(tx: Tx, actor: Actor, expenseId: string, reason: s
       storeId: expense.storeId,
       entityId: expenseId,
       before: { status: expense.status },
-      after: { status: 'voided', amount: expense.totalAmount, reason: trimmedReason },
+      after: { status: 'voided', amount: expense.totalAmount, reason: capAuditText(trimmedReason) },
       source: 'web',
     });
   }

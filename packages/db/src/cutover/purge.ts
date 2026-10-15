@@ -408,19 +408,25 @@ export async function dumpAuditLog(opts: { databaseUrl: string; dir: string; asO
   }
 
   // 2. The dump: every audit_log* table (parent, partitions, event keys), data only.
+  let dumpResult: { code: number | null; stderr: string } | undefined;
+  let launchError: string | undefined;
   try {
-    const r = await runTool(
+    dumpResult = await runTool(
       bin('pg_dump'),
       [`--dbname=${u.toString()}`, '--data-only', '--format=custom', '--table=public.audit_log*', `--file=${file}`],
       env,
     );
-    if (r.code !== 0) {
-      cleanup();
-      return fail(`pg_dump exited ${String(r.code)}`, r.stderr);
-    }
   } catch (e) {
+    launchError = e instanceof Error ? e.message : String(e);
+  }
+  // fail() is called OUTSIDE the try: only a binary that could not start is "did not run".
+  if (launchError !== undefined) {
     cleanup();
-    return fail('pg_dump did not run', e instanceof Error ? e.message : String(e));
+    return fail('pg_dump did not run', launchError);
+  }
+  if (dumpResult && dumpResult.code !== 0) {
+    cleanup();
+    return fail(`pg_dump exited ${String(dumpResult.code)}`, dumpResult.stderr);
   }
 
   try {
@@ -535,6 +541,8 @@ export async function applyPurge(tx: Tx, plan: PurgePlan, opts: ApplyPurgeOption
       'REFUSED. Nothing was changed. The purge needs a dump of the audit log first (it runs before the purge).',
     );
   }
+  // Lock first: no audit row can commit between the count and the TRUNCATE (writers wait, then find the log gone).
+  await tx`lock table audit_log in share row exclusive mode`;
   const [logNow] = await tx<{ n: number }[]>`select count(*)::int as n from audit_log`;
   if ((logNow?.n ?? 0) !== dump.rowCount) {
     throw refuse(
