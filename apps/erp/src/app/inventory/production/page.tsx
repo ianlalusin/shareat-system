@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic';
 
 interface SearchParams {
   store?: string;
+  kind?: string;
   error?: string;
   ok?: string;
 }
@@ -21,6 +22,9 @@ interface SearchParams {
 const KIND_LABEL: Record<string, string> = { slice: 'Slice (slab -> pieces)', cook: 'Cook (recipe batch)', convert: 'Convert (re-cut, no GL impact)' };
 
 const LINE_ROWS = 5;
+
+type Kind = 'slice' | 'cook' | 'convert';
+const KINDS: readonly Kind[] = ['slice', 'cook', 'convert'];
 
 export default async function ProductionPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
@@ -37,7 +41,14 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
     );
   }
 
-  const { locations, items, inputItems, records } = await productionScreenData(actor.orgId, storeId);
+  const kind: Kind = KINDS.find((k) => k === sp.kind) ?? 'slice';
+  const { locations, items, inputItems, recipes, records } = await productionScreenData(actor.orgId, storeId);
+  // T-409 R4: the pickers offer only what the server will accept. A slice takes a slab and makes sliced meat; a convert
+  // re-cuts sliced meat into sliced meat. (The server refuses anything else too; this only saves the trip.)
+  const slabInputs = inputItems.filter((i) => i.kind === 'meat_slab');
+  const slicedInputs = inputItems.filter((i) => i.kind === 'meat_sliced');
+  const slicedOutputs = items.filter((i) => i.kind === 'meat_sliced');
+  const itemName = new Map(items.map((i) => [i.id, i]));
 
   return (
     <Page density="table" className="space-y-8">
@@ -49,9 +60,14 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
             cost carried across. A floor worker records the run; a manager posts it.
           </PageDescription>
         </div>
-        <Link href={`/inventory?store=${storeId}`} className="text-sm underline underline-offset-4">
-          ← Stock on hand
-        </Link>
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <Link href="/inventory/production/recipes" className="inline-flex min-h-11 items-center underline underline-offset-4">
+            Recipes
+          </Link>
+          <Link href={`/inventory?store=${storeId}`} className="text-sm underline underline-offset-4">
+            ← Stock on hand
+          </Link>
+        </div>
       </div>
 
       <FlashBanner flash={sp} />
@@ -81,18 +97,27 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
       ) : (
         <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="text-sm font-medium">New record</h2>
+          <nav className="mt-3 flex flex-wrap gap-2 text-sm" aria-label="Kind of record">
+            {KINDS.map((k) => (
+              <Link
+                key={k}
+                href={`/inventory/production?store=${storeId}&kind=${k}`}
+                aria-current={k === kind ? 'page' : undefined}
+                className={k === kind ? 'rounded-md border border-neutral-900 px-3 py-1 font-medium dark:border-neutral-100' : 'rounded-md border border-neutral-200 px-3 py-1 underline-offset-4 hover:underline dark:border-neutral-800'}
+              >
+                {KIND_LABEL[k]}
+              </Link>
+            ))}
+          </nav>
+          {kind === 'cook' && recipes.length === 0 ? (
+            <Banner tone="warning" className="mt-3">
+              A cook starts from a recipe, and there is no active recipe yet. Ask an admin to add one; recipes can only be added by an admin.
+            </Banner>
+          ) : (
           <form action={saveProductionDraftAction} className="mt-3 space-y-4">
             <input type="hidden" name="storeId" value={storeId} />
+            <input type="hidden" name="kind" value={kind} />
             <FormGrid>
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Kind</span>} className="text-sm">
-                <Select name="kind" defaultValue="slice" className="w-full">
-                  {Object.entries(KIND_LABEL).map(([k, label]) => (
-                    <option key={k} value={k}>
-                      {label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
               <Field label={<span className="text-neutral-600 dark:text-neutral-400">Room</span>} className="text-sm">
                 <Select name="locationId" defaultValue={locations[0]?.id} className="w-full">
                   {locations.map((l) => (
@@ -110,13 +135,39 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
               </Field>
             </FormGrid>
 
-            <LineRows label="Inputs (what goes out)" prefix="input" items={inputItems} />
-            <LineRows label="Outputs (what comes in)" prefix="output" items={items} />
+            {kind === 'cook' ? (
+              <FormGrid>
+                <Field label={<span className="text-neutral-600 dark:text-neutral-400">Recipe</span>} className="text-sm">
+                  <Select name="recipeId" defaultValue={recipes[0]?.id} className="w-full">
+                    {recipes.map((r) => {
+                      const out = itemName.get(r.outputItemId);
+                      return (
+                        <option key={r.id} value={r.id}>
+                          {r.name} — makes {r.outputQuantity} {out?.baseUnit ?? ''} of {out?.name ?? 'its output'}
+                        </option>
+                      );
+                    })}
+                  </Select>
+                </Field>
+                <Field label={<span className="text-neutral-600 dark:text-neutral-400">Quantity made (in the recipe&apos;s unit)</span>} className="text-sm">
+                  <Input name="outputQuantity" placeholder="e.g. 4" className="w-full" />
+                </Field>
+                <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                  The ingredients are worked out from the recipe for the quantity made. You do not type them.
+                </p>
+              </FormGrid>
+            ) : (
+              <>
+                <LineRows label="Inputs (what goes out)" prefix="input" items={kind === 'slice' ? slabInputs : slicedInputs} />
+                <LineRows label="Outputs (what comes in)" prefix="output" items={slicedOutputs} />
+              </>
+            )}
 
             <Button type="submit" variant="primary">
               Save draft
             </Button>
           </form>
+          )}
         </section>
       )}
 

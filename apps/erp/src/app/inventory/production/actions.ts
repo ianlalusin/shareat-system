@@ -14,6 +14,8 @@ import {
   postProduction,
   voidProduction,
 } from '@shareat/domain';
+import { productionRepo } from '@shareat/db';
+import { authorize } from '@shareat/auth';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
@@ -56,8 +58,9 @@ export async function saveProductionDraftAction(fd: FormData): Promise<void> {
   const producedOn = str(fd, 'producedOn');
   // T-371 R6: a blank labour cost is passed on blank; the domain applies the column's default. Never `|| '0'`.
   const labourCost = str(fd, 'labourCost');
-  const inputs = parseLines(fd, 'input');
-  const outputs = parseLines(fd, 'output');
+  const recipeId = str(fd, 'recipeId');
+  let inputs = parseLines(fd, 'input');
+  let outputs = parseLines(fd, 'output');
 
   if (kind !== 'slice' && kind !== 'cook' && kind !== 'convert') {
     return await redirectWithFlash('/inventory/production', { store: storeId }, { error: `unknown kind "${kind}"` });
@@ -65,11 +68,24 @@ export async function saveProductionDraftAction(fd: FormData): Promise<void> {
 
   let result: Awaited<ReturnType<typeof createProductionDraft>> | undefined;
   try {
-    result = await withOrgPrincipal(actor.orgId, (tx) =>
-      createProductionDraft(tx, actor, {
-        orgId: actor.orgId, storeId, locationId, kind, producedOn, labourCost, inputs, outputs,
-      }),
-    );
+    result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      if (kind === 'cook') {
+        // T-409 R4: the cook form is a recipe and a quantity made. Ingredients are never read from the form; the output item
+        // and unit come from the recipe unless sent (the domain refuses an item that is not the recipe's).
+        inputs = [];
+        // T-409 R-B: authorize BEFORE the recipe and item lookups, so an unauthorized caller reads nothing.
+        await authorize(tx, actor, 'record_stock_movement', { storeId });
+        const quantityMade = str(fd, 'outputQuantity');
+        const recipe = recipeId ? await productionRepo.getRecipe(tx, actor.orgId, recipeId) : undefined;
+        const outputItemId = str(fd, 'outputItemId') || recipe?.outputItemId || '';
+        const item = outputItemId ? await productionRepo.getItemForProduction(tx, actor.orgId, outputItemId) : undefined;
+        const outputUnit = str(fd, 'outputUnit') || item?.baseUnit || '';
+        outputs = outputItemId && quantityMade ? [{ itemId: outputItemId, quantity: quantityMade, unit: outputUnit }] : [];
+      }
+      return createProductionDraft(tx, actor, {
+        orgId: actor.orgId, storeId, locationId, kind, recipeId: recipeId || null, producedOn, labourCost, inputs, outputs,
+      });
+    });
   } catch (err) {
     return await redirectWithFlash('/inventory/production', { store: storeId }, { error: errorMessage(err) });
   }

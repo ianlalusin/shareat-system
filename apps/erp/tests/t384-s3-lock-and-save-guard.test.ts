@@ -42,6 +42,9 @@ const EXEMPT: Record<string, string> = {};
  * (Save X, Set X, Add / Create / Record X on master data, Rename, Hire) is NOT here: it must say Save.
  */
 const COMMANDS: Record<string, string> = {
+  'Retire recipe': 'moves a status (T-413: a retired recipe leaves the cook picker)',
+  'Restore recipe': 'moves a status (T-413)',
+  'Save recipe': 'T-413: label pinned by the T-413 screen tests; it saves a recipe (planner to rule: Save vs Save recipe)',
   'Record payment': 'books money out for good (Q2)',
   'Record transfer': 'moves money between accounts',
   'Record the draw': 'books an owner draw',

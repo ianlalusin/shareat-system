@@ -57,6 +57,7 @@ import {
   PRODUCTION_QTY_EPS,
   validateConvertLineage,
   validateProductionLines,
+  validateSliceCategories,
   type ProductionInputLine,
   type ProductionOutputLine,
 } from './validate';
@@ -89,71 +90,8 @@ export async function hasLiveSlicerPaymentCovering(_tx: Tx, _input: SlicerPaymen
   return false;
 }
 
-// -----------------------------------------------------------------------------------------
-// Recipes — configuration, manager+ (reuses `manage_items`: master-data curation, same bar as
-// the item master a recipe references).
-// -----------------------------------------------------------------------------------------
-export interface RecipeLineInput {
-  readonly itemId: string;
-  readonly quantity: string;
-  readonly unit: string;
-}
-
-export interface CreateRecipeInput {
-  readonly orgId: string;
-  readonly name: string;
-  readonly outputItemId: string;
-  readonly outputQuantity: string;
-  readonly lines: readonly RecipeLineInput[];
-}
-
-export type RecipeOutcome = { readonly ok: true; readonly recipeId: string } | { readonly ok: false; readonly reason: string };
-
-export async function createRecipe(tx: Tx, actor: Actor, input: CreateRecipeInput): Promise<RecipeOutcome> {
-  await authorize(tx, actor, 'manage_recipes', {}); // T-403: admin-only
-  if (!input.name.trim()) return { ok: false, reason: 'a recipe needs a name' };
-  if (input.lines.length === 0) return { ok: false, reason: 'a recipe needs at least one ingredient line' };
-  // T-371 R5/R6: parsed AFTER authorize(), into the column's (14,3) brand. Both columns are NOT NULL with no default, so a
-  // blank is refused in words, never a guessed zero. Every line is parsed before anything is written.
-  const outputQuantity = parseDecimalInput(input.outputQuantity, '14,3', 'createRecipe.outputQuantity', "The recipe's output quantity", { blank: 'refuse' });
-  const lines = input.lines.map((line, i) => ({
-    itemId: line.itemId,
-    quantity: parseDecimalInput(line.quantity, '14,3', `createRecipe.lines[${i}].quantity`, `Ingredient line ${i + 1} quantity`, { blank: 'refuse' }),
-    unit: line.unit,
-  }));
-  if (!isPositiveQuantity(outputQuantity)) {
-    return { ok: false, reason: 'a recipe\'s output quantity must be greater than zero' };
-  }
-  for (const line of lines) {
-    if (!isPositiveQuantity(line.quantity)) {
-      return { ok: false, reason: `ingredient ${line.itemId} must have a quantity greater than zero` };
-    }
-  }
-  // T-383 S2b (X10): a retired (or merged) item cannot go on a NEW recipe, as output or as an ingredient. An item that does
-  // not exist is left to the foreign key, as before. (Production OUTPUT on a run is left as it is: B2.2.)
-  const recipeItems = new Map(
-    (await productionRepo.getItemsForProduction(tx, input.orgId, [input.outputItemId, ...lines.map((l) => l.itemId)])).map((r) => [r.id, r]),
-  );
-  const outputRow = recipeItems.get(input.outputItemId);
-  if (outputRow && outputRow.status !== 'active') {
-    return { ok: false, reason: notActiveItemSentence(outputRow.status, 'put on a new recipe', 'The output') };
-  }
-  for (const [i, line] of lines.entries()) {
-    const row = recipeItems.get(line.itemId);
-    if (row && row.status !== 'active') {
-      return { ok: false, reason: notActiveItemSentence(row.status, 'put on a new recipe', `Ingredient line ${i + 1}`) };
-    }
-  }
-  const { id: recipeId } = await productionRepo.insertRecipe(tx, {
-    orgId: input.orgId,
-    name: input.name.trim(),
-    outputItemId: input.outputItemId,
-    outputQuantity,
-    createdBy: actor.personId,
-  });
-  await productionRepo.insertRecipeLines(tx, recipeId, lines);
-  return { ok: true, recipeId };
-}
+// Recipes (create / edit / retire / restore) live in `recipes.ts` (T-413), re-exported here.
+export * from './recipes';
 
 // -----------------------------------------------------------------------------------------
 // Drafting a production record — staff-open (`record_stock_movement`), same bar as usage's own
@@ -185,7 +123,9 @@ export type ProductionDraftOutcome = { readonly ok: true; readonly recordId: str
 export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateProductionDraftInput): Promise<ProductionDraftOutcome> {
   await authorize(tx, actor, 'record_stock_movement', { storeId: input.storeId });
 
-  if (input.inputs.length === 0) return { ok: false, reason: 'a production run needs at least one input' };
+  // T-409 R2: a cook starts from a recipe, so its input lines are never typed (checked below, once the recipe is known).
+  if (input.kind === 'cook' && !input.recipeId) return { ok: false, reason: 'A cook starts from a recipe. Pick the recipe and say how much was made.' };
+  if (input.kind !== 'cook' && input.inputs.length === 0) return { ok: false, reason: 'a production run needs at least one input' };
   if (input.outputs.length === 0) {
     return { ok: false, reason: 'a production run needs at least one output — record a wastage instead' };
   }
@@ -193,8 +133,28 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
   // T-371 R5/R6: every figure is parsed AFTER authorize() and BEFORE the first write, so a refused line can never leave an
   // orphan record behind. `labour_cost` is NOT NULL DEFAULT 0: a blank takes the column default.
   const parsedLabour = parseDecimalInput(input.labourCost, '14,2', 'createProductionDraft.labourCost', 'Labour cost', { blank: 'omit' });
-  const inputs = parseDraftLines(input.inputs, 'createProductionDraft.inputs', 'Input line');
+  let inputs = parseDraftLines(input.inputs, 'createProductionDraft.inputs', 'Input line');
   const outputs = parseDraftLines(input.outputs, 'createProductionDraft.outputs', 'Output line');
+
+  if (input.kind !== 'cook' && input.recipeId) {
+    return { ok: false, reason: 'Only a cook uses a recipe. Remove the recipe from this slice or convert.' };
+  }
+  if (input.kind === 'slice') {
+    // T-409 R1: refused at save, before any row, in a sentence naming the item.
+    const refusal = await sliceCategoryRefusal(tx, input.orgId, inputs, outputs);
+    if (refusal) return { ok: false, reason: refusal };
+  } else if (input.kind === 'cook') {
+    if (!input.recipeId) return { ok: false, reason: 'A cook starts from a recipe. Pick the recipe and say how much was made.' };
+    if (inputs.length > 0) {
+      return { ok: false, reason: "A cook's ingredients come from its recipe. Do not send ingredient lines; send the recipe and the quantity made." };
+    }
+    const recipe = await productionRepo.getRecipe(tx, input.orgId, input.recipeId);
+    if (!recipe) return { ok: false, reason: 'That recipe does not exist. Pick a recipe from the list.' };
+    if (recipe.status !== 'active') return { ok: false, reason: `The recipe '${recipe.name}' is not active. Pick an active recipe.` };
+    const derived = await deriveCookInputs(tx, input.orgId, recipe, outputs);
+    if (!derived.ok) return derived;
+    inputs = [...derived.inputs];
+  }
 
   const { id: recordId } = await productionRepo.insertProductionRecord(tx, {
     orgId: input.orgId,
@@ -214,6 +174,98 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
   ]);
 
   return { ok: true, recordId };
+}
+
+const COOK_INGREDIENTS_MISMATCH_PREFIX = 'The ingredients on this cook record do not match';
+const COOK_WITHOUT_RECIPE_SENTENCE = 'This cook record has no recipe. Void it and record it again from a recipe.';
+
+/** T-409 R1: resolves the lines' items once and runs the slice category rule; the refusal sentence, or null when fine. */
+async function sliceCategoryRefusal(
+  tx: Tx,
+  orgId: string,
+  inputs: readonly { itemId: string }[],
+  outputs: readonly { itemId: string }[],
+): Promise<string | null> {
+  const items = await resolveItems(tx, orgId, [...new Set([...inputs, ...outputs].map((l) => l.itemId))]);
+  const line = (l: { itemId: string }) => {
+    const item = items.get(l.itemId);
+    return { itemId: l.itemId, quantity: '1', unit: 'kg', resolved: item !== undefined, isActive: true, category: item?.kind ?? null, name: item?.name ?? null };
+  };
+  const checked = validateSliceCategories(inputs.map(line), outputs.map(line));
+  return checked.ok ? null : checked.reason;
+}
+
+/**
+ * T-409 R2/R3: a cook's inputs are the recipe scaled to the quantity made (T-176's `scaleRecipeToTarget`, the DEF-093
+ * fix, in each ingredient's own base unit). Exactly one output line, and it is the recipe's own item. Never reads typed
+ * input lines, so nothing can disagree with the recipe.
+ */
+async function deriveCookInputs(
+  tx: Tx,
+  orgId: string,
+  recipe: { readonly id: string; readonly name: string; readonly outputItemId: string; readonly outputQuantity: string },
+  outputs: readonly { itemId: string; quantity: Quantity; unit: string }[],
+): Promise<{ ok: true; inputs: { itemId: string; quantity: Quantity; unit: string }[] } | { ok: false; reason: string }> {
+  if (outputs.length !== 1) {
+    return { ok: false, reason: `A cook has exactly one output: what the recipe '${recipe.name}' makes.` };
+  }
+  const out = outputs[0]!;
+  if (out.itemId !== recipe.outputItemId) {
+    return { ok: false, reason: `This cook must make what the recipe '${recipe.name}' makes. Pick the recipe for the dish you cooked.` };
+  }
+  const recipeLines = await productionRepo.listRecipeLines(tx, recipe.id);
+  const items = await resolveItems(tx, orgId, [out.itemId, ...recipeLines.map((l) => l.itemId)]);
+  const outItem = items.get(out.itemId);
+  if (!outItem) return { ok: false, reason: `The output item of the recipe '${recipe.name}' does not exist.` };
+  const target = convertUnit(out.quantity, out.unit, outItem.baseUnit);
+  if (target === null) {
+    return { ok: false, reason: `"${out.unit}" cannot be converted to "${outItem.baseUnit}", the unit the recipe '${recipe.name}' makes. Enter the quantity in ${outItem.baseUnit}.` };
+  }
+  const scaledLines = [];
+  for (const l of recipeLines) {
+    const item = items.get(l.itemId);
+    if (!item) return { ok: false, reason: `Ingredient ${l.itemId} of the recipe '${recipe.name}' does not exist.` };
+    scaledLines.push({ itemId: l.itemId, quantity: l.quantity, unit: l.unit, itemBaseUnit: item.baseUnit });
+  }
+  const scaled = scaleRecipeToTarget({ recipeLines: scaledLines, recipeOutputQuantity: recipe.outputQuantity, targetOutputQuantity: target });
+  if (!scaled.ok) return { ok: false, reason: `${scaled.reason} (recipe '${recipe.name}')` };
+  for (const l of scaled.lines) {
+    if (!isPositiveQuantity(quantity(l.quantity))) {
+      return { ok: false, reason: `At this quantity, ${items.get(l.itemId)?.name ?? l.itemId} comes to less than 0.001 ${l.unit}. Make a larger batch.` };
+    }
+  }
+  return { ok: true, inputs: scaled.lines.map((l) => ({ itemId: l.itemId, quantity: quantity(l.quantity), unit: l.unit })) };
+}
+
+/** Loads a cook record's recipe (any status: a recipe retired after the draft must not strand it) or the R3 sentence. */
+async function cookRecipeOrRefusal(
+  tx: Tx,
+  record: { readonly orgId: string; readonly recipeId: string | null },
+): Promise<{ ok: true; recipe: NonNullable<Awaited<ReturnType<typeof productionRepo.getRecipe>>> } | { ok: false; reason: string }> {
+  if (!record.recipeId) return { ok: false, reason: COOK_WITHOUT_RECIPE_SENTENCE };
+  const recipe = await productionRepo.getRecipe(tx, record.orgId, record.recipeId);
+  if (!recipe) return { ok: false, reason: COOK_WITHOUT_RECIPE_SENTENCE };
+  return { ok: true, recipe };
+}
+
+/** T-409 R3 at post: the stored inputs must equal the recipe scaled to the stored output (item set AND quantity). */
+async function cookPostRefusal(
+  tx: Tx,
+  record: { readonly orgId: string; readonly recipeId: string | null },
+  inputs: readonly { itemId: string; quantity: Quantity; unit: string }[],
+  outputs: readonly { itemId: string; quantity: Quantity; unit: string }[],
+): Promise<string | null> {
+  const found = await cookRecipeOrRefusal(tx, record);
+  if (!found.ok) return found.reason;
+  const derived = await deriveCookInputs(tx, record.orgId, found.recipe, outputs);
+  if (!derived.ok) return derived.reason;
+  const key = (l: { itemId: string; quantity: Quantity; unit: string }) => `${l.itemId}|${l.quantity}|${l.unit.trim()}`;
+  const want = derived.inputs.map(key).sort();
+  const have = inputs.map(key).sort();
+  if (want.length !== have.length || want.some((k, i) => k !== have[i])) {
+    return `${COOK_INGREDIENTS_MISMATCH_PREFIX} the recipe '${found.recipe.name}' for the quantity made. Void it and record it again from the recipe.`;
+  }
+  return null;
 }
 
 /** T-371: one draft/edit line set, each `quantity` parsed into `production_record_lines.quantity`'s (14,3) brand. The column
@@ -299,6 +351,7 @@ function scaleQuantity(
 // -----------------------------------------------------------------------------------------
 interface ResolvedItem {
   readonly id: string;
+  readonly name: string;
   readonly kind: string;
   readonly baseUnit: string;
   readonly status: string;
@@ -360,6 +413,7 @@ async function runProductionPosting(
       isActive: item?.status === 'active',
       parentSlabItemId: item?.parentSlabItemId ?? null,
       category: item?.kind ?? null,
+      name: item?.name ?? null,
     };
   });
   const outputLines: ProductionOutputLine[] = input.outputs.map((l) => {
@@ -372,6 +426,7 @@ async function runProductionPosting(
       isActive: item?.status === 'active',
       parentSlabItemId: item?.parentSlabItemId ?? null,
       category: item?.kind ?? null,
+      name: item?.name ?? null,
     };
   });
 
@@ -668,6 +723,11 @@ export async function postProduction(tx: Tx, actor: Actor, input: { recordId: st
   const inputs = inputRows.map((r) => ({ lineRowId: r.id, itemId: r.itemId, quantity: quantity(r.quantity), unit: r.unit }));
   const outputs = outputRows.map((r) => ({ lineRowId: r.id, itemId: r.itemId, quantity: quantity(r.quantity), unit: r.unit }));
 
+  if (record.kind === 'cook') {
+    const refusal = await cookPostRefusal(tx, record, inputs, outputs);
+    if (refusal) return { ok: false, reason: refusal };
+  }
+
   const result = await runProductionPosting(tx, {
     orgId: record.orgId,
     storeId: record.storeId,
@@ -734,8 +794,41 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
   // unchanged (the column has a default); the stored value is re-minted, never cast (R4).
   const editLabour = parseDecimalInput(input.labourCost, '14,2', 'editPostedProduction.labourCost', 'Labour cost', { blank: 'omit' });
   const labourCost = editLabour ?? money(record.labourCost);
-  const editInputs = parseDraftLines(input.inputs, 'editPostedProduction.inputs', 'Input line');
+  let editInputs = parseDraftLines(input.inputs, 'editPostedProduction.inputs', 'Input line');
   const editOutputs = parseDraftLines(input.outputs, 'editPostedProduction.outputs', 'Output line');
+
+  // T-409: both rules refuse HERE, before a single leg is reversed - after that point a refusal could only throw.
+  if (record.kind === 'slice') {
+    const refusal = await sliceCategoryRefusal(tx, record.orgId, editInputs, editOutputs);
+    if (refusal) return { ok: false, reason: refusal };
+  } else if (record.kind === 'cook') {
+    const found = await cookRecipeOrRefusal(tx, record);
+    if (!found.ok) return found;
+    if (editInputs.length > 0) {
+      return { ok: false, reason: "A cook's ingredients come from its recipe. Send only the new quantity made; the ingredients are worked out for you." };
+    }
+    // T-413 E3: the stored (unreversed) lines must still be what the recipe makes today. A mismatch means the recipe was
+    // edited after this cook was posted; re-deriving from the new ratios would silently rewrite history.
+    const stored = await productionRepo.listProductionRecordLines(tx, record.id, { revision: record.revision, unreversedOnly: true });
+    const asLine = (l: { itemId: string; quantity: string; unit: string }) => ({ itemId: l.itemId, quantity: quantity(l.quantity), unit: l.unit });
+    const storedRefusal = await cookPostRefusal(
+      tx,
+      record,
+      stored.filter((l) => l.direction === 'out').map(asLine),
+      stored.filter((l) => l.direction === 'in').map(asLine),
+    );
+    if (storedRefusal !== null) {
+      return {
+        ok: false,
+        reason: storedRefusal.startsWith(COOK_INGREDIENTS_MISMATCH_PREFIX)
+          ? `The recipe '${found.recipe.name}' changed after this cook was posted. Void it and record it again.`
+          : storedRefusal,
+      };
+    }
+    const derived = await deriveCookInputs(tx, record.orgId, found.recipe, editOutputs);
+    if (!derived.ok) return derived;
+    editInputs = [...derived.inputs];
+  }
 
   const oldLines = await productionRepo.listProductionRecordLines(tx, record.id, { revision: record.revision, unreversedOnly: true });
 

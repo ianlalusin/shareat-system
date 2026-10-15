@@ -41,6 +41,8 @@ export interface ProductionInputLine {
   /** `true` when the item's `kind` is `meat_slab` — the convert-lineage "has a slab" checks need
    *  to tell a genuinely-slabless item apart from one whose slab id happens to be null. */
   readonly category?: string | null;
+  /** T-409: the item's name, so a refusal can name it. Falls back to the id. */
+  readonly name?: string | null;
 }
 
 export interface ProductionOutputLine {
@@ -53,6 +55,7 @@ export interface ProductionOutputLine {
    *  warning compares this against the input's. */
   readonly parentSlabItemId?: string | null;
   readonly category?: string | null;
+  readonly name?: string | null;
 }
 
 export interface ValidateLinesInput {
@@ -80,6 +83,32 @@ function parseQty(raw: string, label: string): Quantity | null {
 }
 
 /**
+ * T-409 R1 - a slice takes only a meat slab and makes only sliced meat (HARD). Pure, and exported so
+ * `createProductionDraft` and `editPostedProduction` can refuse before anything is written; the same rule runs inside
+ * `validateProductionLines`, so post refuses too. A line with no category is refused, never waved through as unknown.
+ * Only resolved lines are judged here (an unresolved id is refused by the caller's own check).
+ */
+export function validateSliceCategories(
+  inputs: readonly ProductionInputLine[],
+  outputs: readonly ProductionOutputLine[],
+): ValidateResult {
+  for (const line of inputs) {
+    if (!line.resolved || line.category === 'meat_slab') continue;
+    const name = line.name?.trim() || line.itemId;
+    if (line.category === 'meat_sliced') {
+      return { ok: false, reason: `Slicing takes a meat slab. '${name}' is sliced meat; use Convert to re-cut it.` };
+    }
+    return { ok: false, reason: `Slicing takes a meat slab. '${name}' is not a slab.` };
+  }
+  for (const line of outputs) {
+    if (!line.resolved || line.category === 'meat_sliced') continue;
+    const name = line.name?.trim() || line.itemId;
+    return { ok: false, reason: `Slicing makes sliced meat. '${name}' is not sliced meat.` };
+  }
+  return { ok: true, warnings: [] };
+}
+
+/**
  * The shared shape both `slice`/`cook` and `convert` run through — every HARD rule in §10.3 plus
  * the unit-conversion block, and every SOFT warning in §10.4. `convert`'s own extra five-check
  * lineage rule (§10.5) is `validateConvertLineage`, run separately by the caller because it needs
@@ -87,6 +116,11 @@ function parseQty(raw: string, label: string): Quantity | null {
  */
 export function validateProductionLines(input: ValidateLinesInput): ValidateResult {
   const warnings: string[] = [];
+
+  if (input.kind === 'slice') {
+    const categories = validateSliceCategories(input.inputs, input.outputs);
+    if (!categories.ok) return categories;
+  }
 
   if (input.outputs.length === 0) {
     // §10.3 / invariant 14: a run with no outputs writes off the whole input as loss — that is a
