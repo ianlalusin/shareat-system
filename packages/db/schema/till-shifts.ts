@@ -46,6 +46,7 @@ import {
   uniqueIndex,
   uuid,
   type AnyPgColumn,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { attendanceDays } from './attendance-days';
 import { moneyAccounts } from './money-accounts';
@@ -141,6 +142,25 @@ export const tillCustodyShifts = pgTable(
     ),
     /** ⛔ A shift cannot hand over to itself. Cheap, and it makes an infinite walk impossible. */
     check('till_custody_shifts_prev_not_self_check', sql`${t.prevShiftId} is distinct from ${t.id}`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.closedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'till_custody_shifts_closed_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.openedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'till_custody_shifts_opened_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'till_custody_shifts_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

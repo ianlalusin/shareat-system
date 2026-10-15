@@ -297,6 +297,7 @@ const EXEMPT: Record<string, string> = {
   'supplier_items.item_id': 'a declaration, no quantity or price (C2 ex)',
   'store_item_sellability.item_id': 'three booleans (C2 ex)',
   'item_requests.created_item_id': 'provenance only (C2 ex)',
+  'menu_depletion_rules.org_id': 'the org half of the T-401 composite same-org FK; not an item id (its item_id leg is NOT exempt)',
 };
 
 async function itemFks() {
@@ -401,9 +402,28 @@ describe('B5b - the P0186b-pre query in the migration header agrees with the fun
     return q;
   }
 
-  it("STRUCTURAL: the header query has exactly the function's legs (every non-exempt FK from B3's list + the REV-2 outgoing leg), none extra", async () => {
-    // Killing mutant: delete ANY one leg from the header query (the fixture comparison below reaches only some of them).
+  /** The function body AS DEFINED IN 0186 (its own CREATE FUNCTION text, not the live function: later migrations extend the live one). */
+  function functionIn0186(): string {
+    const text = readFileSync(file, 'utf8');
+    const m = /CREATE\s+FUNCTION\s+"?items_unit_history_exists"?\s*\([\s\S]*?\$\$([\s\S]*?)\$\$/i.exec(text);
+    expect(m, "could not find 0186's CREATE FUNCTION items_unit_history_exists body").not.toBeNull();
+    return m![1]!;
+  }
+
+  it("LIVE: the live function has a leg for every non-exempt FK, including menu_depletion_rules (checks later migrations that extend it)", async () => {
     const legs = (await itemFks()).filter((f) => !(`${f.tbl}.${f.col}` in EXEMPT));
+    expect(legs.map((l) => `${l.tbl}.${l.col}`)).toContain('menu_depletion_rules.item_id');
+    expect(missingLegs(await functionDef(), legs)).toEqual([]);
+  });
+
+  it("STRUCTURAL: the header query has exactly the legs of the function AS DEFINED IN 0186 (every non-exempt FK that function covers + the REV-2 outgoing leg), none extra", async () => {
+    // Killing mutant: delete ANY one leg from the header query (the fixture comparison below reaches only some of them).
+    // 0186 is an applied migration: its header is never edited, so the comparison is against 0186's own function text.
+    const body = functionIn0186();
+    const allLegs = (await itemFks()).filter((f) => !(`${f.tbl}.${f.col}` in EXEMPT));
+    const legs = allLegs.filter((l) => legRegex(l.tbl, l.col).test(stripComments(body)));
+    expect(legs.length, '0186 function covers a sane number of legs').toBeGreaterThanOrEqual(25);
+    expect(missingLegs(body, legs)).toEqual([]);
     const q = headerQuery();
     expect(missingLegs(q, legs, 'i.id')).toEqual([]);
     expect(stripComments(q).match(/EXISTS\s*\(/gi)?.length, 'one EXISTS per leg plus the outgoing one: no extras').toBe(legs.length + 1);

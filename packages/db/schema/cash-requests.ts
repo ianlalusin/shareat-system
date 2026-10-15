@@ -131,5 +131,34 @@ export const cashRequests = pgTable(
       foreignColumns: [moneyAccounts.orgId, moneyAccounts.id],
       name: 'cash_requests_released_from_money_account_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.approvedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'cash_requests_approved_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'cash_requests_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.releasedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'cash_requests_released_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.requestedFor],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'cash_requests_requested_for_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'cash_requests_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

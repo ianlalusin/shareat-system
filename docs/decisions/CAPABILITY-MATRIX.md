@@ -86,7 +86,8 @@ they need weekly, the boundary is wrong.
 | `edit_posted_production` | store | ✅ | ✅ | ✅ | ✗ | T-176. Reverses and re-applies a posted record's legs in place, incrementing its revision — supervisory, same bar as posting |
 | `void_production` | store | ✅ | ✅ | ✅ | ✗ | T-176. Voiding is supervisory — same asymmetry as `void_transfer`/`void_usage_record` |
 | `record_order_wastage` | store | ✅ | ✅ | ✅ | ✗ | T-178. A refunded or remade channel/dine-in order — staff-open, same bar as `record_wastage`: the person who hits it is the person who knows. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
-| `manage_pos_map` | store | ✅ | ✅ | ✅ | ✗ | T-177. A standing "this POS item means this stock item" decision — configuration, same bar as `manage_locations`/`manage_items` |
+| `manage_pos_map` | store | ✅ | ✅ | ✗ | ✗ | T-177, narrowed by T-403 (Ian, 2026-10-13): manager cell was ✅. A standing "this POS item means this stock item" decision decides how much stock a sale consumes, so admin-only. Staff still `request_pos_map`; managers still `decide_pos_map_request` |
+| `manage_recipes` | org | ✅ | ✅ | ✗ | ✗ | T-403 (Ian, 2026-10-13). Creating or changing a production recipe. `createRecipe` authorized `manage_items` (manager ✅) before; `manage_items` itself is unchanged |
 | `request_pos_map` | store | ✅ | ✅ | ✅ | ✗ | T-177 invariant 7. Staff-open, same bar as `record_stock_movement` — the person who hits an unmappable item mid-pull is the person who knows, and the request itself moves no stock. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `decide_pos_map_request` | store | ✅ | ✅ | ✅ | ✗ | T-177. Approving records a `no_stock` decision; rejecting returns the item to unmapped — both are judgement calls, not staff-level |
 | `finalize_pos_usage_pull` | store | ✅ | ✅ | ✅ | ✗ | T-177 invariant 5. Finalizing writes real usage records and posts through the ledger — same asymmetry as `post_usage`/`post_production` |
@@ -155,6 +156,13 @@ they need weekly, the boundary is wrong.
 | `set_cash_policy` | store | ✅ | ✅ | **✗** | ✗ | The remittance cadence and un-remitted ceiling (T-152). Ian, 2026-08-29: *"configurable by admin."* ⛔ **Manager is deliberately ✗ while `manage_store_settings` is ✅** — the ceiling is the number a store's cash custody is *measured against*, so whoever is measured must not move it. A manager running late could otherwise raise it and watch the finding vanish. A risk limit is not an operating setting |
 | `set_channel_payout` | store | ✅ | ✅ | **✗** | ✗ | T-350 / DEF-477. Ian, 2026-09-28: admin only. |
 | `manage_price_lists` | org | ✅ | ✅ | ✗ | ✗ | Pricing is a commercial decision, not an operational one |
+| `view_menu` | org | ✅ | ✅ | ✅ | ✗ | T-401 (area sales). Read the menu, offers and their history. Staff position-granted only (T-318) |
+| `add_menu_item` | org | ✅ | **✗** | ✗ | ✗ | T-401, Ian Q2 2026-10-13: items are centralised and only super admin adds them. `createMenuItem`, `addMenuVariant` and every request resolution (approve, duplicate, reject). ⛔ Admin is deliberately ✗ while `manage_menu` is ✅ |
+| `manage_menu` | org | ✅ | ✅ | ✗ | ✗ | T-401. Categories, item and variant edits and retirement, option groups, links, package refills. Row 307: one editor. Does not add items or resolve requests |
+| `request_menu_item` | store | ✅ | ✅ | ✅ | ✗ | T-401, Ian Q2. Ask for an item to be added; see the duplicate check; withdraw one's own open request |
+| `set_menu_price` | store | ✅ | ✅ | ✅ | ✗ | T-401, Ian Q1 2026-10-13: managers set prices for their own store (the store scope of `authorize()` is "their own"). Fixed or online-rule offers, option offers; schedule; cancel a future one. Grantable per store by position (T-318) |
+| `set_menu_depletion` | org | ✅ | ✅ | **✗** | ✗ | T-401, Ian 2026-10-13 "only admin can edit recipe": a depletion rule is a stock recipe of a menu variant |
+| `switch_usage_source` | store | ✅ | ✅ | ✗ | ✗ | T-401 S5. Switch a store's usage pull to menu rules or back. It changes what live stock posts, so it sits above the map editors |
 | `manage_commissary_offerings` | store | ✅ | ✅ | ✅ | ✗ | T-171 (DEF-129, 2026-09-03). What THIS commissary offers, the manual cost of last resort, and the link that says which branch may order here. **Store-scoped to the commissary**; a branch manager cannot edit another store's offerings (T-171 invariant 9). Manager+, same bar as `manage_items` — ⚠️ NOT admin-only like `manage_price_lists`: this is operational setup, not a commercial price |
 | `manage_commissary_map` | store | ✅ | ✅ | ✅ | ✗ | T-171. Which of the branch's OWN items a commissary line becomes on arrival, the explicit ledger-only decision, and the receiving expense category. **Store-scoped to the branch** — the correspondence is the branch's to own (invariant 9). ⚠️ `commissary_item_map` had no writer anywhere in the app until 2026-09-03 (DEF-129); every real internal receipt threw. ⛔ `import_commissary_catalogue` (T-171 §9) is deliberately NOT declared yet: the bulk import is unbuilt, and a capability with no caller is one nobody has proved refuses anyone |
 | `manage_fixed_assets` | org | ✅ | ✅ | ✗ | ✗ | |
@@ -162,6 +170,8 @@ they need weekly, the boundary is wrong.
 | `manage_prepaid_items` | org | ✅ | ✅ | ✗ | ✗ | T-125. Separate from `manage_fixed_assets` on purpose — the asset register and the insurance policies are not the same trust |
 | `run_amortisation` | org | ✅ | ✅ | ✗ | ✗ | **Scheduled, not clicked**, same as `run_depreciation`. v1's stopped scheduler is DEF-044 |
 | `manage_chart_of_accounts` | org | ✅ | ✅ | ✗ | ✗ | The technical residue. Exactly what Ian was right not to hand over |
+| `view_activity_log` | store | ✅ | ✅ | ✅ | ✗ | T-402 R8 (area admin). Read the activity log of the stores in your list, only the entries whose catalogue `viewers` is `store`. Reading it is not itself logged |
+| `view_activity_log_restricted` | org | ✅ | ✅ | ✗ | ✗ | T-402 R8. Also org-level rows and the admin-viewed entries (grants, credential changes, authorisation denials, data exports, cutover); the only one that may export the log. Anyone holding it also holds `view_activity_log` |
 
 ## Platform — super-admin only
 

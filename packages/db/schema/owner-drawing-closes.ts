@@ -40,6 +40,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { owners } from './owners';
@@ -113,5 +114,19 @@ export const owner_drawing_closes = pgTable(
     ),
     check('owner_drawing_closes_acknowledged_amount_finite_check', sql`${t.acknowledgedAmount} > '-Infinity'::numeric and ${t.acknowledgedAmount} < 'Infinity'::numeric`),
     check('owner_drawing_closes_adjustment_amount_finite_check', sql`${t.adjustmentAmount} > '-Infinity'::numeric and ${t.adjustmentAmount} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.closedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'owner_drawing_closes_closed_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'owner_drawing_closes_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

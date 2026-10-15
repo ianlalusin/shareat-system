@@ -11,7 +11,7 @@
  * concurrency lock-clobber bug, ported forward as the invariant rather than rediscovered.
  */
 import { sql } from 'drizzle-orm';
-import { integer, pgTable, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { integer, pgTable, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
@@ -40,5 +40,19 @@ export const pinAttemptThrottle = pgTable(
     // the org (checked by the `orgId = (select org_id from stores ...)` shape at the write site,
     // never trusted from the caller — invariant 8, "never a client-supplied value").
     uniqueIndex('pin_attempt_throttle_store_id_unique').on(t.storeId),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.reopenedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'pin_attempt_throttle_reopened_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'pin_attempt_throttle_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

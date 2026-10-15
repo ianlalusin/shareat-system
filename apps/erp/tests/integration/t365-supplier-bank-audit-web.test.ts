@@ -170,7 +170,8 @@ describe('W1 — full form, account number changed', () => {
     expect(okOf(to), `redirect URL was: ${to}`).toBe('Supplier updated.');
     const rows = await bankAuditRows(s.id);
     expect(rows.length).toBe(before.length + 1);
-    expect((rows.at(-1)!.after as BankValue).bankAccountNumber).toBe('2222');
+    expect((rows.at(-1)!.after as BankValue).bankAccountNumber).toBe('••••2222');
+    expect((rows.at(-1)!.after as unknown as { bankAccountNumberChanged: boolean }).bankAccountNumberChanged).toBe(true);
   });
 });
 

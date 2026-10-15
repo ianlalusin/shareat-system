@@ -22,7 +22,7 @@
  */
 import { toBusinessDate } from '@shareat/core/datetime';
 import { humanDate } from '../shared/refusal';
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, type Actor, can } from '@shareat/auth';
 import {
   clockTerminalsRepo,
   inboxQuarantineRepo,
@@ -343,12 +343,7 @@ export async function listQuarantine(
 }
 
 async function mayProvision(tx: Tx, actor: Actor, storeId: string): Promise<boolean> {
-  try {
-    await authorize(tx, actor, 'provision_clock_terminal', { storeId });
-    return true;
-  } catch {
-    return false;
-  }
+  return can(tx, actor, 'provision_clock_terminal', { storeId });
 }
 
 // ─── The two operator actions ─────────────────────────────────────────────────────────────

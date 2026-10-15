@@ -534,3 +534,28 @@ export async function livePullForUsageRecord(tx: Tx, recordId: string): Promise<
     .limit(1);
   return row;
 }
+
+/** T-401 S5: the business dates (oldest first) of this store's pulls still in status `planned`: a rule or a source must not move under them. */
+export async function listPlannedPullDates(tx: Tx, storeId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ businessDate: salesDays.businessDate })
+    .from(posUsagePulls)
+    .innerJoin(salesDays, eq(salesDays.id, posUsagePulls.salesDayId))
+    .where(and(eq(posUsagePulls.storeId, storeId), eq(posUsagePulls.status, 'planned')))
+    .orderBy(salesDays.businessDate);
+  return [...new Set(rows.map((r) => r.businessDate))];
+}
+
+/** T-401 S5 (read-only): the location a store's non-void pull of each business date used. A date with no live pull is absent. */
+export async function liveUsageLocationsByDate(tx: Tx, storeId: string, businessDates: readonly string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (businessDates.length === 0) return out;
+  const rows = await tx
+    .select({ businessDate: salesDays.businessDate, locationId: posUsagePulls.locationId })
+    .from(posUsagePulls)
+    .innerJoin(salesDays, eq(salesDays.id, posUsagePulls.salesDayId))
+    .where(and(eq(posUsagePulls.storeId, storeId), ne(posUsagePulls.status, 'void'), inArray(salesDays.businessDate, [...businessDates])))
+    .orderBy(posUsagePulls.id);
+  for (const r of rows) out.set(r.businessDate, r.locationId);
+  return out;
+}

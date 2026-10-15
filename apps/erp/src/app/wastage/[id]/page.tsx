@@ -17,6 +17,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { personName } from '@/lib/person-name';
 
 export const metadata = { title: 'Order wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -111,7 +112,7 @@ export default async function WastageDetailPage({
         {allocations.length > 0 && (
           <div className="mt-2">
             <span className="text-neutral-600 dark:text-neutral-400">Responsible party:</span>{' '}
-            {allocations.map((a) => `${nameById.get(a.personId) ?? a.personId} ${a.percent}%`).join(', ')}
+            {allocations.map((a) => `${personName(nameById, a.personId)} ${a.percent}%`).join(', ')}
           </div>
         )}
       </section>
@@ -144,8 +145,8 @@ export default async function WastageDetailPage({
               <span className="text-neutral-600 dark:text-neutral-400">Disposition</span>
               <select name="disposition" defaultValue="absorbed" className="min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink">
                 <option value="platform_paid">Platform paid — posts nothing</option>
-                <option value="absorbed">Store absorbs — Dr 5300 / Cr 1220</option>
-                <option value="charged">Charge staff — Dr 1230 / Cr 1220, split by allocation</option>
+                <option value="absorbed">Store absorbs — booked as wastage</option>
+                <option value="charged">Charge staff — split by allocation, as staff advances</option>
               </select>
             </label>
             <div>

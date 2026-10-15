@@ -312,7 +312,23 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'UPDATE/DELETE unconditionally as a second, independent lock. The INSERT policy also checks ' +
       'actor_person_id belongs to the org (DEF-183 pattern, S3 amendment M6). UPDATE and DELETE are ' +
       'also REVOKEd from the app role (0168, T-354), so an attempt is a loud 42501, not a silent ' +
-      '0-row success.',
+      '0-row success. T-402 (migration 0197) made it a PARTITIONED table (LIST retention_class, then RANGE ' +
+      'recorded_at per Manila year): the policies and the app grants live on the PARENT only; every partition ' +
+      'is REVOKEd from the app role, ENABLE + FORCE RLS with no policy, and carries the append-only trigger ' +
+      'ENABLE ALWAYS (R6).',
+  },
+  audit_log_event_keys: {
+    scope: 'org_column',
+    reason:
+      'T-402 R10 (migration 0197): offline-event idempotency keys, one per (org, key). SELECT, INSERT and ' +
+      'DELETE policies only, each on org_id = app_current_org(); the app role has no UPDATE (a key is never ' +
+      'rewritten). A key lives as long as its audit_log row.',
+  },
+  authz_denial_counts: {
+    scope: 'org_column',
+    reason:
+      'T-402 R9 (migration 0197): hourly counters of aggregated authorisation denials. A policy per granted ' +
+      'command (SELECT, INSERT, UPDATE, DELETE), each on org_id = app_current_org(). Not the log: not append-only.',
   },
 
   // T-122 — expenses: non-inventory spend (docs/tasks/122-expenses.md, bible rows 118-120).
@@ -942,6 +958,75 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
   sales_day_pos_corrections: {
     scope: 'org_column',
     reason: 'A correcting posting for an org’s own sales day; org-scoped like the journal entry it names.',
+  },
+
+  // ---- T-392 S3: the dual-run comparator (migration 0195) -------------------------------------
+  dual_run_reports: {
+    scope: 'org_column',
+    reason: 'One store-week comparison of v1 against v2 books: an org’s own evidence, never another franchisee’s.',
+  },
+  dual_run_lines: {
+    scope: 'org_column',
+    reason:
+      'A report’s lines. Carries org_id, copied from its report by the repo; the composite (org_id, report_id) FK keeps it equal.',
+  },
+  dual_run_dispositions: {
+    scope: 'org_column',
+    reason: 'What a person asserted about one delta (V1_DEFECT or V2_DEFECT with a DEF ref); org-scoped like its report.',
+  },
+
+  // ---- T-401 S1: the ERP menu and catalog master (migration 0196) -----------------------------
+  menu_categories: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_items: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_item_variants: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_option_groups: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_option_values: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_option_group_links: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_package_refills: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_depletion_rules: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_offers: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_option_offers: {
+    scope: 'org_column',
+    reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
+  },
+  menu_item_requests: {
+    scope: 'org_column',
+    reason: 'An item request: a store manager asking for a menu item; org-scoped like the menu.',
+  },
+  menu_pos_v1_links: {
+    scope: 'org_column',
+    reason: 'A store’s v1 POS item key linked to a menu variant; org-scoped, the store belongs to one org.',
+  },
+  menu_usage_source_switches: {
+    scope: 'org_column',
+    reason: 'Which stock-usage source a store reads; the store belongs to one org.',
   },
 };
 

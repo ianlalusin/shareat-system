@@ -7,7 +7,7 @@
  * indistinguishable from a real one. **The restored database cannot forget what it is.**
  */
 import { sql } from 'drizzle-orm';
-import { check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { items } from './items';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -51,6 +51,20 @@ export const cutoverSteps = pgTable(
       t.stepCode,
       sql`coalesce(${t.storeId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
     ),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.completedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'cutover_steps_completed_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'cutover_steps_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -101,5 +115,19 @@ export const openingCounts = pgTable(
     index('opening_counts_org_idx').on(t.orgId),
     check('opening_counts_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
     check('opening_counts_unit_cost_finite_check', sql`${t.unitCost} > '-Infinity'::numeric and ${t.unitCost} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.countedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'opening_counts_counted_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'opening_counts_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

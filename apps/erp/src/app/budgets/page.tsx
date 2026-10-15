@@ -21,6 +21,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
 import { BUDGET_CAP_EDIT } from './typed-forms';
+import { accountLabel } from '@/lib/account-label';
 import { EditableRecord } from '@/components/forms';
 import { Banner, Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
 
@@ -154,7 +155,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                           {b.categoryLabel}
                           <span className="ml-2 text-xs font-normal text-neutral-400">
                             {b.categoryGroup}
-                            {b.accountCode ? ` · ${b.accountCode}` : ' · unmapped'}
+                            {b.accountCode ? ` · ${accountLabel(b.accountCode)}` : ' · unmapped'}
                           </span>
                         </span>
                         <span className="tabular-nums">

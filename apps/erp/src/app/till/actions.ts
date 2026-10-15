@@ -141,7 +141,7 @@ export async function chargeShortageAction(formData: FormData): Promise<void> {
   }
   return await redirectWithFlash('/till', { store: storeId }, {
     ok: outcome.posted
-      ? 'Charged to the cashier against 1230. ⚠️ The office replenishment is a separate transfer.'
+      ? 'Charged to the cashier as an advance to them. ⚠️ The office replenishment is a separate transfer.'
       : (outcome.reason ?? 'Nothing to charge.'),
   });
 }

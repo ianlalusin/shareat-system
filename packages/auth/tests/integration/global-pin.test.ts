@@ -200,12 +200,14 @@ describe('who may sign in here — employment OR store scope, and both legs matt
     );
   });
 
-  it('a store-scope row is enough, with no employment anywhere — the founding admin’s shape', async () => {
+  it('a store-scope row is enough for the founding admin (admin role, no employment anywhere)', async () => {
     // `bootstrapOrganization`'s first admin holds scope (via `createStore`'s fan-out) and has no
     // employment at all, so an employment-only gate would lock the owner out of their own tills.
     const o = await mkOrg('scope-leg');
     const p = await mkPerson(o.orgId, 'Admin Only');
     await scopeAt(p, o.storeB);
+    // T-407: scope alone no longer admits; the founding admin's shape is scope + an active admin role (R1 leg b), no employment.
+    await sql`insert into person_roles (person_id, org_id, role) values (${p}, ${o.orgId}, 'admin')`;
     await asOrg(o.orgId, (tx) => setPin(tx, { orgId: o.orgId, personId: p, storeId: o.storeA, pin: '445566' }));
 
     expect(await sql`select 1 from employments where person_id = ${p}`).toHaveLength(0);
@@ -261,6 +263,9 @@ describe('who may sign in here — employment OR store scope, and both legs matt
     const neither = await mkPerson(o.orgId, 'Neither');
     await hireAt(o.orgId, employed, o.storeA);
     await scopeAt(scoped, o.storeA);
+    // T-407 S3: scope alone no longer admits (R2 = scope-or-employment HERE, AND the org-level rule R1). `scoped` is a
+    // never-employed manager (the franchise-owner shape, R1 leg c), so it still answers true, and for the stated reason.
+    await sql`insert into person_roles (person_id, org_id, role) values (${scoped}, ${o.orgId}, 'manager')`;
 
     await asOrg(o.orgId, async (tx) => {
       expect(await accessRepo.personMaySignInAtStore(tx, employed, o.storeA)).toBe(true);
@@ -318,12 +323,18 @@ describe('one organisation, not two — bible invariant 7', () => {
     const o2 = await mkOrg('leak-2');
     const p1 = await mkPerson(o1.orgId, 'Org A Staff');
     await hireAt(o1.orgId, p1, o1.storeA);
-    // Give them an employment in org B's store too — so the GATE cannot be what refuses this, and
-    // the assertion is really about the credential lookup.
-    await sql`
+    // Before migration 0194 (T-398 S1) this gave org A's person an employment in org B's store, so the GATE could not be what refused
+    // the sign-in. 0194 makes (org_id, person_id) a same-org composite FK, so that fixture is impossible by construction. The DB now
+    // refuses it (23503 naming the constraint) and the sign-in assertion below stands on the credential lookup alone.
+    const crossOrg = await sql`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
       values (${o2.orgId}, ${o2.storeA}, ${p1}, ${uid('SC')}, 'regular', '2026-01-01')
-    `;
+    `.then(
+      () => null,
+      (e: { code?: string; constraint_name?: string }) => e,
+    );
+    expect(crossOrg?.code, 'a cross-org employment is refused by the DB').toBe('23503');
+    expect(crossOrg?.constraint_name).toBe('employments_person_id_same_org_fk');
     await asOrg(o1.orgId, (tx) => setPin(tx, { orgId: o1.orgId, personId: p1, storeId: o1.storeA, pin: '446622' }));
 
     await expect(

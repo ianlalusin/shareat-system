@@ -1219,6 +1219,34 @@
       "when": 1802748707084,
       "tag": "0193_t391_purchase_unit_and_master_links",
       "breakpoints": true
+    },
+    {
+      "idx": 194,
+      "version": "7",
+      "when": 1802835107084,
+      "tag": "0194_t398_s1_persons_stores_same_org",
+      "breakpoints": true
+    },
+    {
+      "idx": 195,
+      "version": "7",
+      "when": 1802921507084,
+      "tag": "0195_t392_dual_run",
+      "breakpoints": true
+    },
+    {
+      "idx": 196,
+      "version": "7",
+      "when": 1803007907084,
+      "tag": "0196_t401_menu_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 197,
+      "version": "7",
+      "when": 1803094307084,
+      "tag": "0197_t402_activity_log_storage",
+      "breakpoints": true
     }
   ]
 }

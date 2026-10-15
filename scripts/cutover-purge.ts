@@ -31,8 +31,9 @@ import postgres from 'postgres';
 config({ path: '.env.local' });
 
 import { CUTOVER_CLASSIFICATION, type CutoverEntry } from '../packages/db/src/cutover/classification';
-import { planPurge, applyPurge, type PurgePlan } from '../packages/db/src/cutover/purge';
+import { planPurge, applyPurge, dumpAuditLog, type AuditLogDump, type PurgePlan } from '../packages/db/src/cutover/purge';
 import { RefusalError } from '../packages/db/src/refusal';
+import { toBusinessDate } from '../packages/core/src/datetime';
 
 interface Args {
   confirmDatabase: string | null;
@@ -40,8 +41,12 @@ interface Args {
   rehearse: boolean;
   allowNonLocal: boolean;
   asOf: string;
-  /** T-390 R8: the person id the purge records as having performed step C2. Required for --apply. */
-  by: string | null;
+  /** T-394 R8 / DEF-641: true only when --as-of was typed. --apply and --rehearse refuse without it; a dry run may default. */
+  asOfGiven: boolean;
+  /** T-390 R8 / DEF-640: person ids the purge records as having performed step C2, ONE PER ORGANIZATION. Required for --apply. */
+  by: string[];
+  /** T-402 S3 (R15): where the audit-log dump is written. REQUIRED with --apply / --rehearse; no default (the runbook names it). */
+  dumpDir: string | null;
 }
 
 function parseArgs(argv: readonly string[]): Args {
@@ -50,24 +55,42 @@ function parseArgs(argv: readonly string[]): Args {
     apply: false,
     rehearse: false,
     allowNonLocal: false,
-    asOf: new Date().toISOString().slice(0, 10),
-    by: null,
+    // DEF-641: the MANILA business date, not the UTC date (before 08:00 Manila the UTC date is yesterday).
+    asOf: toBusinessDate(new Date()),
+    asOfGiven: false,
+    by: [],
+    dumpDir: null,
   };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--confirm-database') a.confirmDatabase = argv[++i] ?? null;
     else if (argv[i] === '--apply') a.apply = true;
     else if (argv[i] === '--rehearse') a.rehearse = true;
     else if (argv[i] === '--yes-really-not-local') a.allowNonLocal = true;
-    else if (argv[i] === '--as-of') a.asOf = argv[++i] ?? a.asOf;
-    else if (argv[i] === '--by') a.by = argv[++i] ?? null;
+    else if (argv[i] === '--as-of') {
+      const v = argv[++i];
+      if (v) {
+        a.asOf = v;
+        a.asOfGiven = true;
+      }
+    }
+    else if (argv[i] === '--dump-dir') a.dumpDir = argv[++i] ?? null;
+    else if (argv[i] === '--by') {
+      const v = argv[++i];
+      if (v) a.by.push(...v.split(',').filter(Boolean));
+    }
   }
+  // Many organizations overflow a shell command line: the same comma-separated list may come from CUTOVER_PURGE_BY instead.
+  if (a.by.length === 0 && process.env.CUTOVER_PURGE_BY) a.by.push(...process.env.CUTOVER_PURGE_BY.split(',').filter(Boolean));
+  if (a.dumpDir === null && process.env.CUTOVER_DUMP_DIR) a.dumpDir = process.env.CUTOVER_DUMP_DIR;
   return a;
 }
 
 function usage(): void {
   console.log(`
 Usage:
-  npm run cutover:purge -- --confirm-database <name> [--apply | --rehearse] [--as-of YYYY-MM-DD] [--by <personId>]
+  npm run cutover:purge -- --confirm-database <name> [--apply | --rehearse] [--as-of YYYY-MM-DD] [--by <personId>]... [--dump-dir <dir>]
+
+  --as-of is REQUIRED with --apply and --rehearse (T-394 R8); a dry run defaults to today's Manila date.
 
   Without --apply or --rehearse this is a DRY RUN: it reports what it would change and changes
   nothing.
@@ -76,8 +99,14 @@ Usage:
   --rehearse runs the full purge in a transaction and ALWAYS rolls back, reporting pass or the
   exact error — meant for a restored copy of production (ADR-007 §5), never a live database.
   --rehearse and --apply cannot be combined.
-  --by <personId> is REQUIRED with --apply: the purge records step C2 as performed by that person (T-390 R8). It must be a person
-  that exists. --rehearse records nothing (it rolls back), so --by is optional there.
+  --by <personId> is REQUIRED with --apply, once PER ORGANIZATION (repeat the flag, or comma-separate the ids; CUTOVER_PURGE_BY holds the same list): the purge records step C2 for each organization
+  as performed by that organization's person (T-390 R8, DEF-640). Each must be a person that exists; its organization is read from
+  persons.org_id, and two persons for one organization is an error. An organization with no --by refuses the apply before any write.
+  --dump-dir <dir> (or CUTOVER_DUMP_DIR) is REQUIRED with --apply and --rehearse, and has no default: the audit log is dumped there (every
+  partition, data only, plus a .sha256 file) BEFORE the purge, and the purge refuses unless the dump still matches the log (T-402 S3, R15).
+  Keep the dump with the other cutover evidence; the cutover.purge event records its file name and sha256.
+  --rehearse records nothing (it rolls back), so --by is optional there: it picks one person per organization itself, and says so
+  for an organization that has none (that organization's C2 row is skipped).
 
   Reads its classification from packages/db/src/cutover/classification.ts. A table with no
   classification is a build failure, not a silent skip — see tests/unit/cutover-classification.test.ts.
@@ -96,8 +125,19 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  if (args.apply && !args.by) {
-    console.error('REFUSED. --apply needs --by <personId>: the purge records who performed step C2.');
+  if ((args.apply || args.rehearse) && !args.asOfGiven) {
+    console.error('REFUSED. --apply and --rehearse need an explicit --as-of YYYY-MM-DD (T-394 R8, DEF-641): the date decides which tables the purge may touch.');
+    process.exitCode = 1;
+    return;
+  }
+  if (args.apply && args.by.length === 0) {
+    console.error('REFUSED. --apply needs --by <personId>, once per organization: the purge records who performed step C2.');
+    process.exitCode = 1;
+    return;
+  }
+
+  if ((args.apply || args.rehearse) && !args.dumpDir) {
+    console.error('REFUSED. --apply and --rehearse need --dump-dir <dir> (or CUTOVER_DUMP_DIR): the audit log is dumped there before it is purged.');
     process.exitCode = 1;
     return;
   }
@@ -155,20 +195,36 @@ async function main(): Promise<void> {
     const plan = await planPurge(sql, args.asOf);
     printPlan(say, plan);
 
-    // T-390 R8: the person recorded against C2. Checked BEFORE anything is written. A rehearsal without --by borrows any person, since
-    // its row is rolled back with everything else.
-    let performedBy = args.by;
+    // T-390 R8 / DEF-640: one performer per organization, checked BEFORE anything is written. A rehearsal without --by borrows one person
+    // per organization, since its rows are rolled back with everything else.
+    const performedBy: Record<string, string> = {};
     if (args.apply || args.rehearse) {
-      if (performedBy) {
-        const [person] = await sql<{ id: string }[]>`select id from persons where id::text = ${performedBy}`;
+      for (const id of args.by) {
+        const [person] = await sql<{ id: string; org_id: string }[]>`select id, org_id from persons where id::text = ${id}`;
         if (!person) {
-          console.error(`REFUSED. --by ${performedBy} is not a person in this database.`);
+          console.error(`REFUSED. --by ${id} is not a person in this database.`);
           process.exitCode = 1;
           return;
         }
-      } else {
-        const [any] = await sql<{ id: string }[]>`select id from persons limit 1`;
-        performedBy = any?.id ?? '00000000-0000-0000-0000-000000000000';
+        const already = performedBy[person.org_id];
+        if (already) {
+          console.error(`REFUSED. --by ${already} and --by ${id} are both persons of organization ${person.org_id}; give one per organization.`);
+          process.exitCode = 1;
+          return;
+        }
+        performedBy[person.org_id] = person.id;
+      }
+      const orgs = await sql<{ id: string }[]>`select id from organizations order by id`;
+      const missing = orgs.map((o) => o.id).filter((id) => !performedBy[id]);
+      if (args.apply && missing.length > 0) {
+        console.error(`REFUSED. Nothing was changed. No --by person for organization(s): ${missing.join(', ')}.`);
+        process.exitCode = 1;
+        return;
+      }
+      for (const orgId of missing) {
+        const [any] = await sql<{ id: string }[]>`select id from persons where org_id = ${orgId} order by id limit 1`;
+        if (any) performedBy[orgId] = any.id;
+        else say(`Rehearsal: organization ${orgId} has no person at all, so its C2 row is skipped. An apply would refuse.`);
       }
     }
 
@@ -177,11 +233,17 @@ async function main(): Promise<void> {
       return;
     }
 
+    // T-402 S3 (R15): dump the audit log BEFORE the purge transaction. The purge refuses if the log changed since.
+    // `args.dumpDir` is non-null here: --apply / --rehearse were refused above without it.
+    const auditDump: AuditLogDump = await dumpAuditLog({ databaseUrl: url, dir: args.dumpDir ?? '', asOf: args.asOf });
+    say('');
+    say(`Audit log dumped: \`${auditDump.path}\` · sha256 \`${auditDump.sha256}\` · ${auditDump.bytes} bytes · ${auditDump.rowCount} rows`);
+
     const REHEARSAL_ROLLBACK = Symbol('rehearsal rollback');
     try {
       await sql.begin(async (tx) => {
         const txPlan = await planPurge(tx, args.asOf);
-        await applyPurge(tx, txPlan, { performedBy: performedBy! });
+        await applyPurge(tx, txPlan, { performedBy, rehearsal: args.rehearse, auditDump });
         if (args.rehearse) throw REHEARSAL_ROLLBACK;
       });
     } catch (err) {

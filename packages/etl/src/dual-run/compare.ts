@@ -219,6 +219,8 @@ export function compareStoreWeek(input: CompareInput): StoreWeekResult {
     reCheck.set(id, false);
     if (delta === 0) continue;
     if (a.unmapped) { list.push({ class: 'UNMAPPED_KEY', paired: false, amount: delta }); continue; }
+    // `other` ticked to `none` (S4 tender keys): v2 holds no home for it by design, so a v1 amount is NOT_DOUBLE_ENTERED on its face.
+    if (a.kind === 'sales_tender' && a.key === 'none' && a.v2 === 0 && a.v1 !== 0) { list.push({ class: 'NOT_DOUBLE_ENTERED', paired: false, amount: delta }); continue; }
     if (a.kind === 'inventory_basis') { list.push({ class: 'INVENTORY_BASIS', paired: false, amount: delta }); continue; }
     if (a.key.startsWith('1240:')) {
       list.push({ class: 'SUPPLIER_ADVANCE_1240', paired: false, amount: delta });
@@ -429,7 +431,7 @@ export function compareStoreWeek(input: CompareInput): StoreWeekResult {
   let verdict: Verdict;
   const empty =
     !anyFigure && input.v1.tradingDays.length === 0 && input.v2.tradingDays.length === 0 && flags.length === 0 &&
-    input.v1Docs.length === 0 && input.v2Docs.length === 0 && input.dispositions.length === 0 && scope.length === 0;
+    input.dispositions.length === 0 && scope.length === 0;
   if (empty) verdict = 'no_data';
   else if (flags.length > 0 || anyOpenDay || closed.some((c) => c.blocked)) verdict = 'open';
   else if (comparedDays.length === 0) verdict = 'open';

@@ -162,6 +162,15 @@ export async function linkFirebaseCredential(
     kind: 'firebase',
     externalId: uid,
   });
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'credential.linked',
+    storeId: null,
+    entityId: input.personId,
+    before: null,
+    after: { credentialId: id, kind: 'firebase' },
+    source: 'web',
+  });
   return { credentialId: id };
 }
 
@@ -230,6 +239,16 @@ export async function unlinkCredential(
 
   await sessionsRepo.revokeCredential(tx, { id: target.id, by: actor.personId, reason });
   const sessionsEnded = await sessionsRepo.endAllForPerson(tx, input.personId, 'revoked');
+
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'credential.unlinked',
+    storeId: null,
+    entityId: input.personId,
+    before: { credentialId: target.id, kind: target.kind },
+    after: { revoked: true, reason, sessionsEnded },
+    source: 'web',
+  });
 
   return { credentialId: target.id, kind: target.kind, sessionsEnded };
 }
@@ -300,7 +319,7 @@ export async function reopenPinSignIn(tx: Tx, actor: Actor, storeId: string): Pr
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'reopen_pin_sign_in',
-    entity: 'store',
+    storeId: storeId,
     entityId: storeId,
     before: { stoppedAt: result.stoppedAt ? result.stoppedAt.toISOString() : null },
     after: { reopenedAt: result.reopenedAt ? result.reopenedAt.toISOString() : null },

@@ -165,8 +165,8 @@ async function itemsBody(tx: Tx, input: ApplyItemsInput, actor: Actor): Promise<
   const stores = selectTargetStores(input.map, { orgCode: input.orgCode, storeCodes: input.storeCodes }).map((r) => r.storeCode);
   await auditLogRepo.append(tx, input.orgId, {
     actorPersonId: actor.personId,
-    action: 'master_data_load',
-    entity: 'items',
+    action: 'master_data.items_load',
+    storeId: null,
     entityId: input.orgId,
     before: null,
     after: { snapshotSha: input.snapshotSha, stores, created, linked, held: plan.held },
@@ -318,8 +318,8 @@ async function partiesBody(tx: Tx, entity: PartyEntity, input: ApplyPartiesInput
   const stores = selectTargetStores(input.map, { orgCode: input.orgCode, storeCodes: input.storeCodes }).map((r) => r.storeCode);
   await auditLogRepo.append(tx, input.orgId, {
     actorPersonId: actor.personId,
-    action: 'master_data_load',
-    entity: entity === 'supplier' ? 'suppliers' : 'customers',
+    action: entity === 'supplier' ? 'master_data.suppliers_load' : 'master_data.customers_load',
+    storeId: null,
     entityId: input.orgId,
     before: null,
     after: { snapshotSha: input.snapshotSha, stores, created, linked, held: plan.held },
@@ -430,8 +430,8 @@ async function positionsBody(tx: Tx, input: ApplyStaffInput, actor: Actor): Prom
   }
   await auditLogRepo.append(tx, input.orgId, {
     actorPersonId: actor.personId,
-    action: 'master_data_load',
-    entity: 'positions',
+    action: 'master_data.positions_load',
+    storeId: null,
     entityId: input.orgId,
     before: null,
     after: { snapshotSha: input.snapshotSha, stores: [...stores.keys()], created, linked: 0, held: plan.held },
@@ -513,8 +513,8 @@ async function staffBody(tx: Tx, input: ApplyStaffInput, actor: Actor): Promise<
 
   await auditLogRepo.append(tx, input.orgId, {
     actorPersonId: actor.personId,
-    action: 'master_data_load',
-    entity: 'staff',
+    action: 'master_data.staff_load',
+    storeId: null,
     entityId: input.orgId,
     before: null,
     after: { snapshotSha: input.snapshotSha, stores: [...stores.keys()], created, linked, held: plan.held },

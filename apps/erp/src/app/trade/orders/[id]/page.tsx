@@ -257,7 +257,7 @@ export default async function TradeOrderPage({
           <h2 className="font-medium">Dispatch</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             {isInternal
-              ? 'The goods leave the commissary: its stock is relieved into in-transit (1340) at real FIFO cost. No revenue, no receivable — a branch is not a customer of its own company.'
+              ? 'The goods leave the commissary: its stock is relieved into in-transit at real FIFO cost. No revenue, no receivable — a branch is not a customer of its own company.'
               : 'The billing event: the receivable is raised against the customer, wholesale revenue is recognised, and stock is relieved with cost of sales — one act, idempotent.'}
           </p>
         </div>

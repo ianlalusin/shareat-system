@@ -28,6 +28,8 @@ interface BaseEntry {
 
 export interface KeepEntry extends BaseEntry {
   readonly class: 'keep';
+  /** Only a `purge` entry carries `notBefore`; declared here so a reader of the union can ask any entry for it. */
+  readonly notBefore?: undefined;
 }
 
 export interface PurgeEntry extends BaseEntry {
@@ -39,6 +41,8 @@ export interface PurgeEntry extends BaseEntry {
 
 export interface KeepShellEntry extends BaseEntry {
   readonly class: 'keep_shell';
+  /** Only a `purge` entry carries `notBefore`; declared here so a reader of the union can ask any entry for it. */
+  readonly notBefore?: undefined;
   /** The row survives; these columns are set NULL and re-entered at cutover. */
   readonly clearColumns: readonly string[];
   /** T-347 (DEF-437) §3.2 — literal values the shell step writes instead of NULL, in the SAME
@@ -54,6 +58,8 @@ export interface KeepShellEntry extends BaseEntry {
 
 export interface DateScopedEntry extends BaseEntry {
   readonly class: 'date_scoped';
+  /** Only a `purge` entry carries `notBefore`; declared here so a reader of the union can ask any entry for it. */
+  readonly notBefore?: undefined;
   readonly dateColumn: string;
   /** Rows on or after this date survive; earlier rows are purged. */
   readonly keepFrom: string;
@@ -167,6 +173,19 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'entry that no longer exists after cutover is exactly audit_log’s own reasoning: pointing at ' +
       'a deleted id is worse than no record at all.',
   },
+  audit_log_event_keys: {
+    class: 'purge',
+    reason:
+      'T-402 R10 idempotency keys of offline events: each key lives exactly as long as its audit_log row, ' +
+      'so it is purged with audit_log (R15 dumps audit_log first). Truncated in the same statement as its ' +
+      'parent: the composite FK to audit_log is satisfied within one multi-table TRUNCATE.',
+  },
+  authz_denial_counts: {
+    class: 'purge',
+    reason:
+      'T-402 R9 hourly counters of un-rolled authorisation denials: rehearsal and pilot noise, not production ' +
+      'history. Dropped at cutover with the log they summarise.',
+  },
   audit_log: {
     class: 'purge',
     // T-350 S3 amendment M3 (planner ruling) — org-scoped since migration 0167, but classification
@@ -174,7 +193,9 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     // history, regardless of which org wrote it.
     reason:
       'Rows written before cutover record rehearsal and pilot actions, not production history; ' +
-      'they are dropped at cutover.',
+      'they are dropped at cutover. T-402 (migration 0197): audit_log is now PARTITIONED; TRUNCATE of the ' +
+      'parent truncates every partition, and a partition is its parent for this classification (R6). ' +
+      'R15 (S3) dumps the table before the purge.',
   },
 
   // ---- T-122: expenses ------------------------------------------------------------------
@@ -1191,6 +1212,79 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'A posting document: it names a journal entry (purge) and a sales day (purge). Append-only by trigger. Purged ' +
       'BEFORE sales_days (PURGE_ORDER_HINT).',
   },
+
+  // ---- T-392 S3: the dual-run comparator (migration 0195) -------------------------------------
+  dual_run_reports: {
+    class: 'purge',
+    notBefore: '2027-01-31',
+    reason:
+      'Pilot data per ADR-007, but it is the 15 Nov go/no-go evidence, so it is kept past cutover as etl_* is: not purged ' +
+      'before 2027-01-31. Append-only (the app role has no UPDATE or DELETE). Purged AFTER its lines (PURGE_ORDER_HINT).',
+  },
+  dual_run_lines: {
+    class: 'purge',
+    notBefore: '2027-01-31',
+    reason: 'As dual_run_reports: the lines of a kept comparison report. Purged BEFORE dual_run_reports (PURGE_ORDER_HINT).',
+  },
+  dual_run_dispositions: {
+    class: 'purge',
+    notBefore: '2027-01-31',
+    reason: 'As dual_run_reports: the defect refs a person recorded against a delta; part of the same evidence.',
+  },
+
+  // ---- T-401 S1: the ERP menu and catalog master (migration 0196) -----------------------------
+  menu_categories: {
+    class: 'keep',
+    reason: 'The menu’s categories: standing configuration, same class as pos_item_maps. Nobody re-keys a menu on 1 January.',
+  },
+  menu_items: {
+    class: 'keep',
+    reason: 'A menu item is standing configuration (T-401), the same class as pos_item_maps and tenders.',
+  },
+  menu_item_variants: {
+    class: 'keep',
+    reason: 'The sellable unit of a menu item: standing configuration, kept with its item.',
+  },
+  menu_option_groups: {
+    class: 'keep',
+    reason: 'Option groups (flavours, sizes, add-ons) are standing configuration, kept with the menu.',
+  },
+  menu_option_values: {
+    class: 'keep',
+    reason: 'The values of an option group: standing configuration, kept with their group.',
+  },
+  menu_option_group_links: {
+    class: 'keep',
+    reason: 'Which option groups an item or variant offers: standing configuration, kept with the menu.',
+  },
+  menu_package_refills: {
+    class: 'keep',
+    reason: 'Which refills a package entitles: standing configuration, kept with the menu.',
+  },
+  menu_depletion_rules: {
+    class: 'keep',
+    reason: 'What a sale consumes (the pos_item_maps shape, effective-dated): standing configuration, the depletion history is the record.',
+  },
+  menu_offers: {
+    class: 'keep',
+    reason: 'A store’s price history: an offer history is the price record, not pilot activity, so it is kept (T-401 spec section 3).',
+  },
+  menu_option_offers: {
+    class: 'keep',
+    reason: 'A store’s option-price history: the price record, kept like menu_offers.',
+  },
+  menu_item_requests: {
+    class: 'keep',
+    reason: 'The intake of the item master: kept with the menu it feeds.',
+  },
+  menu_pos_v1_links: {
+    class: 'keep',
+    reason: 'Standing configuration (which v1 POS item is which variant), the same class as pos_item_maps.',
+  },
+  menu_usage_source_switches: {
+    class: 'keep',
+    reason: 'Configuration history: which source each store reads, kept so the cut-over is traceable.',
+  },
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */
@@ -1233,6 +1327,10 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   'sales_day_channels',
   // T-375: corrections cite a sales day, two feeds and a journal entry; usage pulls cite a sales day and a feed.
   'sales_day_pos_corrections',
+  // T-392 S3: lines cite their report; dispositions cite nothing purged.
+  'dual_run_lines',
+  'dual_run_reports',
+  'dual_run_dispositions',
   'pos_usage_pulls',
   'sales_days',
   'pos_v1_day_feeds',
@@ -1250,7 +1348,9 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   'supplier_invoices',
   'journal_lines',
   'journal_entries',
+  'audit_log_event_keys',
   'audit_log',
+  'authz_denial_counts',
   'etl_reconciliation',
   'etl_quarantine',
   'etl_source_documents',

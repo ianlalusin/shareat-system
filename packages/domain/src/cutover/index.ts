@@ -20,7 +20,7 @@
  * imbalance found on the tenth supplier is a typo; the same imbalance found after the last one is
  * an investigation.*
  */
-import { cutoverRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, cutoverRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { CUTOVER_STEPS, gatesBefore, stepDef, type StepDef } from './steps';
 import { parseFourDecimalCost } from '../commissary/catalogue';
@@ -28,6 +28,7 @@ import { parseQuantityInput } from '../shared/quantity-input';
 import { compareQuantity, ZERO_QUANTITY } from '../stock/quantity';
 import { isZero, money } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
+import { capAuditText } from '../shared/audit-text';
 import { openingTieOut, tieOutDetail } from './tie-out';
 
 export * from './steps';
@@ -219,6 +220,16 @@ export async function attestStep(
       completion: 'attested',
       note: input.note?.trim() || null,
       completedBy: actor.personId,
+    });
+    // T-402 S3 (C4): org-scoped; a per-store step carries its store in `after`. Same transaction, after the step's own write.
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'cutover.step_completed',
+      storeId: null,
+      entityId: actor.orgId,
+      before: null,
+      after: { stepCode: def.code, completion: 'attested', ...(storeId ? { storeId } : {}), note: capAuditText(input.note?.trim() || null) },
+      source: 'web',
     });
   };
   if (tx) return run(tx);

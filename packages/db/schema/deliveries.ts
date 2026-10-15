@@ -45,6 +45,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { items } from './items';
 import { organizations } from './organizations';
@@ -138,6 +139,30 @@ export const deliveries = pgTable(
       .where(sql`${t.referenceNo} is not null and ${t.status} <> 'void'`),
     index('deliveries_store_status_idx').on(t.storeId, t.status, t.deliveredOn),
     index('deliveries_org_idx').on(t.orgId),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'deliveries_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.receivedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'deliveries_received_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'deliveries_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.voidedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'deliveries_voided_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

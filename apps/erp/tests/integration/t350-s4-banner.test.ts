@@ -105,12 +105,12 @@ async function auditRow(
       ? { moneyAccountId: null, moneyAccountName: null }
       : { moneyAccountId: uid('acct-before'), moneyAccountName: input.beforeAccountName };
   await sql`
-    insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source, occurred_at)
+    insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source, category, sensitivity, severity, retention_class, occurred_at)
     values (
       ${f.orgId}, ${input.actorPersonId}, 'set_channel_payout', 'sales_channels', ${f.channelId},
       ${sql.json(before)},
       ${sql.json({ moneyAccountId: uid('acct'), moneyAccountName: input.afterName })},
-      'web', ${input.occurredAt ?? new Date()}
+      'web', 'settings', 'normal', 5, 'r10y', ${input.occurredAt ?? new Date()}
     )
   `;
 }

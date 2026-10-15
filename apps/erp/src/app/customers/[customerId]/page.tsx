@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, money, ZERO } from '@shareat/core/money';
-import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
+import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { canReadFiles } from '@shareat/domain';
 import { ACTION_LINK } from '@/components/action-link';
 import { requireSession } from '../../../lib/session';
@@ -128,13 +128,7 @@ export default async function CustomerDetailPage({
       if (!held.has(capability)) return new Set<string>();
       const ok = new Set<string>();
       for (const sid of postedChargeStoreIds) {
-        try {
-          await authorize(tx, actor, capability, { storeId: sid });
-          ok.add(sid);
-        } catch (err) {
-          if (err instanceof AuthorizationError) continue;
-          throw err;
-        }
+        if (await can(tx, actor, capability, { storeId: sid })) ok.add(sid);
       }
       return ok;
     };
@@ -166,7 +160,7 @@ export default async function CustomerDetailPage({
           {/* ⚠️ Two positions, deliberately kept apart. The credit limit is judged ORG-WIDE — a
               limit is extended to a buyer, not to a buyer at one branch — while allocation happens
               per store. Conflating them is how a limit silently becomes per-branch. */}
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">Owed overall (1210)</p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">Owed overall</p>
           <p className="text-2xl font-semibold tabular-nums">{peso(owedOverall)}</p>
           {customer.creditLimit !== null && (
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -183,7 +177,7 @@ export default async function CustomerDetailPage({
           )}
           {compare(money(credit), ZERO) > 0 && (
             <p className="mt-1 text-xs text-success">
-              {peso(credit)} store credit held (2140)
+              {peso(credit)} store credit held
             </p>
           )}
         </div>
@@ -226,7 +220,7 @@ export default async function CustomerDetailPage({
             unallocated), or press &ldquo;Auto-allocate&rdquo; to fill the empty boxes
             most-overdue-first (T-330) and edit from there. <strong>Total received is GROSS</strong>:
             the receivable is relieved by it, and the account receives it minus the fee. Paying
-            more than allocated becomes real store credit at 2140, which the next payment can draw
+            more than allocated becomes real store credit, which the next payment can draw
             on.
           </p>
           <AutoAllocateCollectionForm
@@ -357,7 +351,7 @@ export default async function CustomerDetailPage({
                       <Input name="reason" required className="w-full" />
                     </Field>
                     <Button type="submit" variant="danger">
-                      Write off to 6860
+                      Write off as bad debt
                     </Button>
                   </form>
                 )}

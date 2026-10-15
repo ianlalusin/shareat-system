@@ -171,6 +171,7 @@ async function fixture(hint: string) {
   const managerId = await mkPerson('Manager', 'manager');
   const staffId = await mkPerson('Staffer', 'staff');
   const nobodyId = await mkPerson('Nobody', null);
+  const adminId = await mkPerson('Admin', 'admin'); // T-403: mapping is admin-only
   const [ch] = await sql<{ id: string }[]>`
     insert into sales_channels (org_id, store_id, name, is_remitted_daily, wastage_type_mode)
     values (${orgId}, ${storeId}, 'Walk-in', true, 'tracked') returning id`;
@@ -216,10 +217,11 @@ async function fixture(hint: string) {
   await stockUp(cheese, kitchen, '50', '10.0000');
   await stockUp(rice, display, '50', '8.0000');
 
+  const admin = actor(orgId, adminId);
   const manager = actor(orgId, managerId);
   await asOrg(orgId, async (tx) => {
-    await D.upsertPosItemMap(tx, manager, { orgId, storeId, posItemKey: 'cheese', posItemName: 'Cheese', mode: 'direct', itemId: cheese, quantityPerSale: '1' });
-    await D.upsertPosItemMap(tx, manager, { orgId, storeId, posItemKey: 'rice', posItemName: 'Rice', mode: 'direct', itemId: rice, quantityPerSale: '1', locationId: display });
+    await D.upsertPosItemMap(tx, admin, { orgId, storeId, posItemKey: 'cheese', posItemName: 'Cheese', mode: 'direct', itemId: cheese, quantityPerSale: '1' });
+    await D.upsertPosItemMap(tx, admin, { orgId, storeId, posItemKey: 'rice', posItemName: 'Rice', mode: 'direct', itemId: rice, quantityPerSale: '1', locationId: display });
   });
 const submitter = await mkSubmitter(sql, orgId, [storeId]);
   return {

@@ -51,9 +51,9 @@ export function RangeForm({
       <form
         method="GET"
         action="/"
-        className="flex flex-wrap items-end gap-4 rounded-[14px] border border-surface-border bg-surface p-4 text-sm"
+        className="flex flex-wrap items-end gap-4 rounded-[14px] border border-surface-border bg-surface p-4 text-sm xl:items-center xl:p-1 xl:pl-4"
       >
-        <label className="flex flex-col gap-1">
+        <label className="flex flex-col gap-1 xl:flex-row xl:items-center xl:gap-2">
           <span className="text-xs font-medium text-muted">Store</span>
           <Select name="store" defaultValue={currentStoreId ?? ''}>
             <option value="">All stores</option>
@@ -64,11 +64,11 @@ export function RangeForm({
             ))}
           </Select>
         </label>
-        <label className="flex flex-col gap-1">
+        <label className="flex flex-col gap-1 xl:flex-row xl:items-center xl:gap-2">
           <span className="text-xs font-medium text-muted">From</span>
           <Input type="date" name="from" defaultValue={fromDate} />
         </label>
-        <label className="flex flex-col gap-1">
+        <label className="flex flex-col gap-1 xl:flex-row xl:items-center xl:gap-2">
           <span className="text-xs font-medium text-muted">To</span>
           <Input type="date" name="to" defaultValue={toDate} />
         </label>

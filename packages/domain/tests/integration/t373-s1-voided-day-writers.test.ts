@@ -165,6 +165,7 @@ async function fixture(hint: string, opts: { instant?: boolean } = {}) {
   };
   const managerId = await mkPerson('Manager', 'manager');
   const nobodyId = await mkPerson('Nobody', null);
+  const adminId = await mkPerson('Admin', 'admin'); // T-403: mapping is admin-only
   const mkChannel = async (name: string, remitted: boolean, receivable: string | null, mode: string) =>
     (await sql<{ id: string }[]>`
       insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code, wastage_type_mode)
@@ -195,14 +196,15 @@ async function fixture(hint: string, opts: { instant?: boolean } = {}) {
     }),
   );
   const manager = actor(orgId, managerId);
+  const admin = actor(orgId, adminId);
   await asOrg(orgId, (tx) =>
-    D.upsertPosItemMap(tx, manager, { orgId, storeId, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }),
+    D.upsertPosItemMap(tx, admin, { orgId, storeId, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }),
   );
 
   // T-375 S5 (S5-lite): the USAGE legs run on a second store LINKED to POS, whose days are imported (usage reads the
   // stored sold items). The typed store above keeps the wastage, withdraw and race legs exactly as they were.
   const storeL = await mkStore(`${hint}-linked`);
-  for (const pid of [managerId, nobodyId]) await sql`insert into person_store_scope (person_id, store_id) values (${pid}, ${storeL})`;
+  for (const pid of [managerId, nobodyId, adminId]) await sql`insert into person_store_scope (person_id, store_id) values (${pid}, ${storeL})`;
   const [chL] = await sql<{ id: string }[]>`
     insert into sales_channels (org_id, store_id, name, is_remitted_daily, wastage_type_mode)
     values (${orgId}, ${storeL}, 'Walk-in', true, 'tracked') returning id`;
@@ -229,7 +231,7 @@ async function fixture(hint: string, opts: { instant?: boolean } = {}) {
     }),
   );
   await asOrg(orgId, (tx) =>
-    D.upsertPosItemMap(tx, manager, { orgId, storeId: storeL, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }),
+    D.upsertPosItemMap(tx, admin, { orgId, storeId: storeL, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }),
   );
   const submitter = await mkSubmitter(sql, orgId, [storeId, storeL, storeId2]);
   return { orgId, storeId, storeL, kitchenL, storeId2, walkIn, foodpanda, managerId, nobodyId, kitchen, itemCoke, manager, submitter, nobody: actor(orgId, nobodyId) };

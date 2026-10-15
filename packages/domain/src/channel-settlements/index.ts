@@ -791,7 +791,7 @@ export async function setChannelPayoutDestination(
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,
       action: 'set_channel_payout',
-      entity: 'sales_channels',
+      storeId: config.storeId,
       entityId: input.channelId,
       // T-350 S6 (G2) — the STORED id, never the lookup's: `oldAccount` is org-scoped
       // (`getById`'s `eq(id) AND eq(orgId)`) and genuinely misses when the stored destination

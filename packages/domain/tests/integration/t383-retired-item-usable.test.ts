@@ -380,7 +380,7 @@ describe('C5-C6 - POS usage pull still depletes a retired item (direct map, reci
     const item = await mkItem(w, 'C5 Coke');
     await stockIn(w, w.A, w.kitchenA, item, '50', '10.0000');
     const mapped = await asOrg(w.orgId, (tx) =>
-      upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '1' }),
+      upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '1' }),
     );
     expect(mapped.ok, mapped.ok ? '' : mapped.reason).toBe(true); // made while ACTIVE: X9 would refuse it once retired
     await retire(w, item);
@@ -404,7 +404,7 @@ describe('C5-C6 - POS usage pull still depletes a retired item (direct map, reci
       values (${w.orgId}, ${uid('Box')}, ${output}, 1, ${w.su.personId}) returning id`;
     await sql`insert into production_recipe_lines (recipe_id, item_id, quantity, unit) values (${recipe!.id}, ${ingredient}, 0.5, 'kg')`;
     const mapped = await asOrg(w.orgId, (tx) =>
-      upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'box', posItemName: 'Box', mode: 'recipe', recipeId: recipe!.id }),
+      upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'box', posItemName: 'Box', mode: 'recipe', recipeId: recipe!.id }),
     );
     expect(mapped.ok, mapped.ok ? '' : mapped.reason).toBe(true);
     await retire(w, ingredient);
@@ -705,14 +705,14 @@ describe('X1-X13 - ORDER / RECEIVE / PRICE / MAP / NEW RECIPE refuse a retired i
       await retire(w, item);
       const before = await count('pos_item_maps', w.orgId);
       const r = await asOrg(w.orgId, (tx) =>
-        upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '1' }),
+        upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '1' }),
       );
       expect(r.ok, RED_ACCEPTS).toBe(false);
       expect(r.ok ? null : r.reason).toBe(notActive('inactive', 'mapped to a POS item'));
       expect(await count('pos_item_maps', w.orgId)).toBe(before);
       const active = await mkItem(w, 'X9 Active');
       const okMap = await asOrg(w.orgId, (tx) =>
-        upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'tea', posItemName: 'Tea', mode: 'direct', itemId: active, quantityPerSale: '1' }),
+        upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'tea', posItemName: 'Tea', mode: 'direct', itemId: active, quantityPerSale: '1' }),
       );
       expect(okMap.ok, 'control: an active item maps').toBe(true);
     });
@@ -721,20 +721,20 @@ describe('X1-X13 - ORDER / RECEIVE / PRICE / MAP / NEW RECIPE refuse a retired i
       const w = await world('x9b');
       const item = await mkItem(w, 'X9 Existing');
       const made = await asOrg(w.orgId, (tx) =>
-        upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '1' }),
+        upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '1' }),
       );
       expect(made.ok).toBe(true);
       if (!made.ok) return;
       await retire(w, item);
 
       const byId = await asOrg(w.orgId, (tx) =>
-        upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '2', editMapId: made.mapId }),
+        upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '2', editMapId: made.mapId }),
       );
       expect(byId.ok, byId.ok ? '' : byId.reason).toBe(true);
       // By key (no editMapId) the existing sharing gate (`findOtherActiveDirectMapByItem`) sees the map as "another" map on this
       // item and asks for confirmShared; that is today's behaviour and is unrelated to retiring, so the leg confirms it.
       const byKey = await asOrg(w.orgId, (tx) =>
-        upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '3', confirmShared: true }),
+        upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '3', confirmShared: true }),
       );
       expect(byKey.ok, byKey.ok ? '' : byKey.reason).toBe(true);
       expect((await sql<{ q: string }[]>`select quantity_per_sale::text q from pos_item_maps where id = ${made.mapId}`)[0]!.q).toBe('3.000000');
@@ -744,13 +744,13 @@ describe('X1-X13 - ORDER / RECEIVE / PRICE / MAP / NEW RECIPE refuse a retired i
       const w = await world('x9d');
       const item = await mkItem(w, 'X9 Rekey');
       const made = await asOrg(w.orgId, (tx) =>
-        upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '1' }),
+        upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '1' }),
       );
       expect(made.ok).toBe(true);
       if (!made.ok) return;
       await retire(w, item);
       const r = await asOrg(w.orgId, (tx) =>
-        upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'pepsi', posItemName: 'Pepsi', mode: 'direct', itemId: item, quantityPerSale: '1', editMapId: made.mapId, confirmShared: true }),
+        upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'pepsi', posItemName: 'Pepsi', mode: 'direct', itemId: item, quantityPerSale: '1', editMapId: made.mapId, confirmShared: true }),
       );
       expect(r.ok, RED_ACCEPTS).toBe(false);
       expect(r.ok ? null : r.reason).toBe(notActive('inactive', 'mapped to a POS item'));
@@ -761,7 +761,7 @@ describe('X1-X13 - ORDER / RECEIVE / PRICE / MAP / NEW RECIPE refuse a retired i
       const w = await world('x9e');
       const item = await mkItem(w, 'X9 Ended');
       const made = await asOrg(w.orgId, (tx) =>
-        upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '1' }),
+        upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '1' }),
       );
       expect(made.ok).toBe(true);
       if (!made.ok) return;
@@ -769,7 +769,7 @@ describe('X1-X13 - ORDER / RECEIVE / PRICE / MAP / NEW RECIPE refuse a retired i
       expect((await sql<{ s: string }[]>`select status s from pos_item_maps where id = ${made.mapId}`)[0]!.s, 'fixture: the map is ended').toBe('inactive');
       await retire(w, item);
       const r = await asOrg(w.orgId, (tx) =>
-        upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '2', editMapId: made.mapId }),
+        upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: item, quantityPerSale: '2', editMapId: made.mapId }),
       );
       expect(r.ok, RED_ACCEPTS).toBe(false);
       expect(r.ok ? null : r.reason).toBe(notActive('inactive', 'mapped to a POS item'));
@@ -780,13 +780,13 @@ describe('X1-X13 - ORDER / RECEIVE / PRICE / MAP / NEW RECIPE refuse a retired i
       const current = await mkItem(w, 'X9 Current');
       const other = await mkItem(w, 'X9 Other');
       const made = await asOrg(w.orgId, (tx) =>
-        upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: current, quantityPerSale: '1' }),
+        upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: current, quantityPerSale: '1' }),
       );
       expect(made.ok).toBe(true);
       if (!made.ok) return;
       await retire(w, other);
       const r = await asOrg(w.orgId, (tx) =>
-        upsertPosItemMap(tx, w.mgr, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: other, quantityPerSale: '1', editMapId: made.mapId }),
+        upsertPosItemMap(tx, w.adm, { orgId: w.orgId, storeId: w.A, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: other, quantityPerSale: '1', editMapId: made.mapId }),
       );
       expect(r.ok, RED_ACCEPTS).toBe(false);
       expect(r.ok ? null : r.reason).toBe(notActive('inactive', 'mapped to a POS item'));
@@ -914,9 +914,19 @@ describe('L1 - listUsableItems: active, plus retired items with stock ABOVE zero
     const otherItem = await mkItem(other, 'L1 Other org retired');
     // An ACTIVE item of the other org needs no stock to be offered, so only the org filter keeps it out (the movement org filter cannot).
     const otherActive = await mkItem(other, 'L1 Other org active');
-    // The OTHER org's item holds +9 at THIS org's store (w.A), so the store filter cannot exclude it: only the org filter can.
+    // Migration 0194 (T-398 S1): the other org's item can no longer hold stock at THIS org's store (w.A), because
+    // stock_movements (org_id, store_id) is a same-org composite FK. That fixture is impossible by construction, so the leg now asserts
+    // the DB refuses it (23503 naming the constraint). The org filter is still proven by the ACTIVE other-org item above (it needs no
+    // stock, so only items.org_id can exclude it), and the other org's retired item holds +9 at its OWN store.
+    const crossOrg = await sql`insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
+      values (${other.orgId}, ${w.A}, ${w.kitchenA}, ${otherItem}, now(), 9, 'opening', 'test_seed', ${crypto.randomUUID()}, ${other.su.personId})`.then(
+      () => null,
+      (e: { code?: string; constraint_name?: string }) => e,
+    );
+    expect(crossOrg?.code, 'a cross-org stock movement is refused by the DB').toBe('23503');
+    expect(crossOrg?.constraint_name).toBe('stock_movements_store_id_same_org_fk');
     await sql`insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
-      values (${other.orgId}, ${w.A}, ${w.kitchenA}, ${otherItem}, now(), 9, 'opening', 'test_seed', ${crypto.randomUUID()}, ${other.su.personId})`;
+      values (${other.orgId}, ${other.A}, ${other.kitchenA}, ${otherItem}, now(), 9, 'opening', 'test_seed', ${crypto.randomUUID()}, ${other.su.personId})`;
     await retire(other, otherItem);
 
     const idsAt = async (storeId: string) => (await asOrg(w.orgId, (tx) => listUsableItems(tx, w.orgId, storeId))).map((r) => r.id);

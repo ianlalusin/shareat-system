@@ -196,7 +196,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // `bypass_count_freeze` and `can_adjust_inventory`: the first three are NOT added (no caller —
   // the same debt as `import_commissary_catalogue`), and the last two already exist as
   // `charge_staff_for_discrepancy` / `adjust_inventory`.
-  it('finds exactly 96 capability rows — NOT the "36" the task documents say in prose', () => {
+  it('finds exactly 111 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -233,7 +233,10 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // ⭐ 100 -> 101 (T-385 S3, A3): `verify_own_sales_day`. super_admin only (scope is the builder's call, store or org) — Ian,
     // 2026-10-09 (t385-q1 = a). ⛔ RED until the builder adds the row: today's document has 100.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(101);
+    // ⭐ 101 -> 108 (T-401 S2): seven menu capabilities (view_menu, add_menu_item, manage_menu, request_menu_item, set_menu_price, set_menu_depletion, switch_usage_source).
+    expect(rows.length).toBe(111);
+    // ⭐ 109 -> 111 (T-402 S1b): `view_activity_log` (store) and `view_activity_log_restricted` (org).
+    // ⭐ 108 -> 109 (T-403): `manage_recipes` (org, admin-only).
   });
 
   it('has no duplicate capability names', () => {
@@ -304,12 +307,14 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 101 capabilities', () => {
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 111 capabilities', () => {
     // ⭐ 99 -> 100 (T-382 S1, A3): `unlink_store_from_pos`. ⛔ RED until the builder adds it to capabilities.ts.
     // ⭐ 100 -> 101 (T-385 S3, A3): `verify_own_sales_day`. ⛔ RED until the builder adds it to capabilities.ts.
-    expect(CAPABILITIES.length).toBe(101);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(101);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(101);
+    // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities.
+    expect(CAPABILITIES.length).toBe(111);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(111);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(111);
+    // ⭐ 108 -> 109 (T-403): `manage_recipes`.
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -338,6 +343,8 @@ describe('role hierarchy sanity — authority strictly nests (CAPABILITY-MATRIX.
 describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', () => {
   it('is exactly the admin-minus-manager delta of the matrix', () => {
     const expected = CAPABILITIES.filter((c) => CAPABILITY_MATRIX[c].admin && !CAPABILITY_MATRIX[c].manager).sort();
+    // T-402 (Ian): with no admin the manager serves as admin, so the restricted activity log IS lent to them.
+    expect(ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER).toContain('view_activity_log_restricted' satisfies Capability);
     expect([...ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER].sort()).toEqual(expected);
   });
 
@@ -384,6 +391,12 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         // is the top of the tree and somebody must be able to. It is materialised as an auditable
         // row rather than inferred at check time.
         'manage_stores',
+        // ⭐ T-403: `manage_pos_map` LEFT manager (admin-only now) and `manage_recipes` is new admin-only; both are
+        // admin-yes / manager-no, so the derived set gains both. Deliberate: an org with no admin lends them to a manager.
+        'manage_pos_map',
+        'manage_recipes',
+        // ⭐ T-402 S1b: `view_activity_log_restricted` is admin-yes / manager-no (org), so the derived set gains it (Ian: with no admin the manager serves as admin).
+        'view_activity_log_restricted',
         'grant_capability',
         'manage_price_lists',
         'manage_fixed_assets',
@@ -438,6 +451,11 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         // the top of the tree, and somebody must still be able to point a channel's payout
         // somewhere; the grant is revoked the instant an administrator arrives (row 188).
         'set_channel_payout',
+        // T-401 S2: admin-yes, manager-no, so they JOIN by the derivation (no list edit): manage_menu, set_menu_depletion
+        // (Ian 2026-10-13: only admin edits recipes), switch_usage_source (changes what live stock posts).
+        'manage_menu',
+        'set_menu_depletion',
+        'switch_usage_source',
       ].sort(),
     );
   });

@@ -142,7 +142,7 @@ export async function linkStoreToPos(tx: Tx, actor: Actor, input: LinkStoreToPos
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'link_store_to_pos',
-    entity: 'pos_v1_store_links',
+    storeId: input.storeId,
     entityId: linkId,
     before: before
       ? {
@@ -223,7 +223,7 @@ export async function unlinkStoreFromPos(
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'unlink_store_from_pos',
-    entity: 'pos_v1_store_links',
+    storeId: input.storeId,
     entityId: link.id,
     before: {
       storeId: input.storeId,

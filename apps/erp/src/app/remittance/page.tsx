@@ -1,4 +1,4 @@
-import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
+import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../lib/session';
@@ -102,13 +102,7 @@ export default async function RemittancePage({
   const canResolveVariances = await withOrgPrincipal(actor.orgId, async (tx) => {
     const held = await heldCapabilities(tx, actor);
     if (!held.has('accept_remittance')) return false;
-    try {
-      await authorize(tx, actor, 'accept_remittance', { storeId });
-      return true;
-    } catch (err) {
-      if (err instanceof AuthorizationError) return false;
-      throw err;
-    }
+    return can(tx, actor, 'accept_remittance', { storeId });
   });
   // T-366 S3 audit round 3 finding 3 — cheap invariant backing the comment above: if any variance
   // shown disagrees with the page's own store, `listVariances`' scoping did not hold, and this
@@ -299,7 +293,7 @@ export default async function RemittancePage({
                   </label>
                   </FormGrid>
                   <Button type="submit" name="action" value="recognise_income" className="text-xs">
-                    Recognise as other income (7350)
+                    Recognise as other income
                   </Button>
                 </>
               )}

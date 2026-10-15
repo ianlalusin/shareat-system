@@ -26,6 +26,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { items } from './items';
 import { organizations } from './organizations';
@@ -62,6 +63,15 @@ export const priceLists = pgTable(
   (t) => [
     uniqueIndex('price_lists_org_name_key').on(t.orgId, t.name),
     check('price_lists_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'price_lists_created_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -203,5 +213,24 @@ export const customers = pgTable(
               and ${t.reconciledBy} is not null)`,
     ),
     check('customers_credit_limit_finite_check', sql`${t.creditLimit} > '-Infinity'::numeric and ${t.creditLimit} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.counterpartyStoreId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'customers_counterparty_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'customers_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.reconciledBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'customers_reconciled_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

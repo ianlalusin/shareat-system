@@ -140,7 +140,7 @@ export async function createTender(tx: Tx, actor: Actor, input: CreateTenderInpu
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'create_tender',
-    entity: 'tenders',
+    storeId: input.storeId,
     entityId: id,
     before: null,
     after: {
@@ -215,7 +215,7 @@ export async function updateTender(tx: Tx, actor: Actor, input: UpdateTenderInpu
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'update_tender',
-    entity: 'tenders',
+    storeId: before.storeId,
     entityId: before.id,
     before: { name: before.name, kind: before.kind, moneyAccountId: before.moneyAccountId, posV1Alias: before.posV1Alias },
     after: {
@@ -249,7 +249,7 @@ export async function setTenderActive(tx: Tx, actor: Actor, input: { tenderId: s
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: input.isActive ? 'reactivate_tender' : 'retire_tender',
-    entity: 'tenders',
+    storeId: before.storeId,
     entityId: before.id,
     before: { isActive: before.isActive },
     after: { isActive: input.isActive },

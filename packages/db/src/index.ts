@@ -181,12 +181,23 @@ export * as liabilitiesRepo from './repo/liabilities';
 export * as customersRepo from './repo/customers';
 export * as sessionsRepo from './repo/sessions';
 export * as pinAttemptsRepo from './repo/pin-attempts';
+export * as authzDenialCountsRepo from './repo/authz-denial-counts';
 export * as apRepo from './repo/ap';
 export * as arRepo from './repo/ar';
 export * as tradeRepo from './repo/trade';
 export * as channelSettlementsRepo from './repo/channel-settlements';
 export * as auditLogRepo from './repo/audit-log';
 export type { AuditLogSource } from './repo/audit-log';
+export {
+  AUDIT_CATALOGUE,
+  catalogueEntry,
+  catalogueProblems,
+  retentionFor,
+  severityFor,
+} from './audit/catalogue';
+export type { AuditCategory, AuditRetention, AuditSensitivity, CatalogueEntry as AuditCatalogueEntry } from './audit/catalogue';
+export { isSecretKey, keyTokens, redactPayload } from './audit/redact';
+export { canonicalJson } from './audit/canonical-json';
 export * as findingsRepo from './repo/findings';
 // T-245 — the prerequisite-refusal counter. docs/tasks/245-prerequisite-refusal-counter.md.
 export * as prerequisiteRefusalsRepo from './repo/prerequisite-refusals';
@@ -207,6 +218,9 @@ export type { ArDocStatus } from '../schema/ar';
 export * as itemsRepo from './repo/items';
 export * as itemCodesRepo from './repo/item-codes';
 export * as masterLinksRepo from './repo/master-links';
+export * as dualRunRepo from './repo/dual-run';
+export * as dualRunReadsRepo from './repo/dual-run-reads';
+export type { V2Line as DualRunV2Line, V2Figures as DualRunV2Figures } from './repo/dual-run';
 export * as stockLedgerRepo from './repo/stock-ledger';
 export * as stockLayersRepo from './repo/stock-layers';
 export * as stockTransfersRepo from './repo/stock-transfers';
@@ -298,6 +312,24 @@ export type {
 } from './repo/production';
 // T-177 — POS item mapping and the daily usage pull.
 export * as posMappingRepo from './repo/pos-mapping';
+// T-401 S2 - the ERP menu and catalog master (offers, depletion rules, categories, items, variants, option groups).
+export * as menuRepo from './repo/menu';
+export type {
+  MenuCategoryRow,
+  MenuItemRow,
+  MenuVariantRow,
+  MenuOptionGroupRow,
+  MenuOptionValueRow,
+  MenuOptionGroupLinkRow,
+  MenuDepletionRuleRow,
+  MenuOfferRow,
+  MenuOptionOfferRow,
+  MenuItemRequestRow,
+  SimilarMenuItem,
+  OfferPriceFields,
+  OfferInForce,
+  OptionOfferInForce,
+} from './repo/menu';
 // T-375 S1 - the POS v1 day feed: wire field names (R12), and the repo.
 export * from './pos-v1/wire';
 export * as posV1Repo from './repo/pos-v1';
@@ -342,6 +374,7 @@ export type { SeedCalendarMonthsInput, SeedCalendarMonthsResult } from './repo/f
 
 // T-289 — position access defaults: the spine.
 export * as positionDefaultsRepo from './repo/position-defaults';
+export * as storeReadinessRepo from './repo/store-readiness';
 
 // T-345 — the missed-month catch-up link.
 export * as missedMonthsRepo from './repo/missed-months';

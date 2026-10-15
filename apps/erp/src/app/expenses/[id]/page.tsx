@@ -11,9 +11,11 @@ import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { personName } from '@/lib/person-name';
 import { typedFor } from '@/lib/keep-typing';
 import { EXPENSE_DRAFT_EDIT } from '../typed-forms';
 import { EditableRecord } from '@/components/forms';
+import { accountCodeAndName } from '@/lib/account-label';
 import { Badge, Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
@@ -90,8 +92,6 @@ export default async function ExpenseDetailPage({
     const c = categories.find((x) => x.id === expense.categoryId);
     return c ? `${c.group} — ${c.category}` : expense.categoryId;
   })();
-  const personName = (personId: string | null): string =>
-    personId ? (persons.find((p) => p.id === personId)?.displayName ?? personId) : '—';
 
   const qs = new URLSearchParams();
   if (sp.store) qs.set('store', sp.store);
@@ -140,12 +140,12 @@ export default async function ExpenseDetailPage({
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
           <h2 className="mb-3 font-medium">Trail</h2>
           <dl className="space-y-1.5">
-            <Row label="Created by" value={personName(expense.createdBy)} />
-            <Row label="Approved by" value={personName(expense.approvedBy)} />
+            <Row label="Created by" value={personName(persons, expense.createdBy)} />
+            <Row label="Approved by" value={personName(persons, expense.approvedBy)} />
             <Row label="Posted at" value={expense.postedAt ? expense.postedAt.toISOString() : '—'} />
             {expense.status === 'voided' && (
               <>
-                <Row label="Voided by" value={personName(expense.voidedBy)} />
+                <Row label="Voided by" value={personName(persons, expense.voidedBy)} />
                 <Row label="Void reason" value={expense.voidReason ?? '—'} />
               </>
             )}
@@ -168,7 +168,7 @@ export default async function ExpenseDetailPage({
                 <tr key={p.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="py-1.5">{METHOD_LABEL[p.method] ?? p.method}</td>
                   <td className="py-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-                    {p.accountCode === 'office' ? 'office cash' : p.staffId ? personName(p.staffId) : ''}
+                    {p.accountCode === 'office' ? 'office cash' : p.staffId ? personName(persons, p.staffId) : ''}
                   </td>
                   <td className="py-1.5 text-right tabular-nums">{formatMoney(money(p.amount))}</td>
                 </tr>
@@ -335,7 +335,7 @@ function LedgerTable({ lines }: { lines: EntryLineWithAccountCode[] }) {
           {lines.map((l) => (
             <tr key={l.lineNo} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
               <td className="px-3 py-2 text-neutral-400">{l.lineNo}</td>
-              <td className="px-3 py-2 font-mono">{l.accountCode}</td>
+              <td className="px-3 py-2">{accountCodeAndName(l.accountCode)}</td>
               <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400">
                 {l.partyType ? `${l.partyType}:${l.partyId}` : '—'}
               </td>

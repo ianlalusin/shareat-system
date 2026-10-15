@@ -37,7 +37,7 @@
  * the first figure an auditor asks for.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, check, date, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, date, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { expenses } from './expenses';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -326,5 +326,24 @@ export const fixedAssets = pgTable(
       'fixed_assets_in_service_on_after_acquired_check',
       sql`${t.inServiceOn} is null or ${t.inServiceOn} >= ${t.acquiredOn}`,
     ),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'fixed_assets_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.disposedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'fixed_assets_disposed_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'fixed_assets_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

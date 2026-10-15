@@ -267,8 +267,8 @@ async function orgAndPerson(hint: string) {
 }
 async function seedAuditRow(orgId: string, personId: string) {
   const [row] = await sql<{ id: string }[]>`
-    insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source)
-    values (${orgId}, ${personId}, 't354_test', 'sales_channels', ${crypto.randomUUID()}, ${sql.json({ a: 1 })}, ${sql.json({ a: 2 })}, 'web')
+    insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source, category, sensitivity, severity, retention_class)
+    values (${orgId}, ${personId}, 't354_test', 'sales_channels', ${crypto.randomUUID()}, ${sql.json({ a: 1 })}, ${sql.json({ a: 2 })}, 'web', 'settings', 'normal', 5, 'r10y')
     returning id`;
   return row!.id;
 }
@@ -350,8 +350,8 @@ describe('A3 — app role INSERT (own org, own actor)', () => {
     const a = await orgAndPerson('a3');
     const err = await caught(
       asOrg(a.orgId, (tx) => tx`
-        insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source)
-        values (${a.orgId}, ${a.personId}, 't354_a3', 'sales_channels', ${crypto.randomUUID()}, null, null, 'web')`),
+        insert into audit_log (org_id, actor_person_id, action, entity, entity_id, before, after, source, category, sensitivity, severity, retention_class)
+        values (${a.orgId}, ${a.personId}, 't354_a3', 'sales_channels', ${crypto.randomUUID()}, null, null, 'web', 'settings', 'normal', 5, 'r10y')`),
     );
     expect(err, err?.message).toBeUndefined();
   });

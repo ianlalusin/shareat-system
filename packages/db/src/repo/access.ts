@@ -402,15 +402,83 @@ export async function personHasStoreScope(tx: Tx, personId: string, storeId: str
  * `person_store_scope_person_id_store_id_unique` and `employments_open_person_store_unique`.
  */
 export async function personMaySignInAtStore(tx: Tx, personId: string, storeId: string): Promise<boolean> {
+  // ⭐ T-407 R2 (DEF-649): (scope here OR an open employment here) AND the org-level rule R1 (see
+  // `personMaySignInToOrg`, whose three legs are repeated here so this stays ONE statement; org comes from `persons`).
+  // The open-employment legs read `for share` (R7) so a racing `endEmployment` waits for this transaction.
+  const [row] = (await tx.execute(sql`
+    select (
+      (
+        exists (
+          select 1 from person_store_scope
+          where person_id = ${personId} and store_id = ${storeId}
+        )
+        or exists (
+          select 1 from employments
+          where person_id = ${personId} and store_id = ${storeId} and ended_on is null
+          for share
+        )
+      )
+      and (
+        exists (
+          select 1 from employments e
+          where e.person_id = p.id and e.org_id = p.org_id and e.ended_on is null
+          for share
+        )
+        or exists (
+          select 1 from person_roles r
+          where r.person_id = p.id and r.org_id = p.org_id and r.revoked_at is null and r.role in ('admin', 'super_admin')
+        )
+        or (
+          exists (
+            select 1 from person_roles r
+            where r.person_id = p.id and r.org_id = p.org_id and r.revoked_at is null and r.role = 'manager'
+          )
+          and not exists (
+            select 1 from employments e where e.person_id = p.id and e.org_id = p.org_id
+          )
+        )
+      )
+    ) as ok
+    from persons p
+    where p.id = ${personId}
+  `)) as unknown as { ok: boolean }[];
+  return row?.ok === true;
+}
+
+/**
+ * ⭐ T-407 R1 (DEF-649) - who may sign in to an ORG at all, derived from the employment and role records themselves
+ * (never from a second flag). ONE statement, three `exists`, every leg index-backed, explicit `org_id` filters (the auth
+ * door has no RLS principal):
+ *  (a) an OPEN employment (`ended_on is null`) at any store of the org, or
+ *  (b) an active (`revoked_at is null`) `admin` / `super_admin` role in the org, or
+ *  (c) an active `manager` role AND no employment row, open or ended, EVER in the org (the franchise owner, Q1).
+ * Leg (c) is why an ended manager is refused: once employed, the employment record is the truth. Staff with no
+ * employment: refused.
+ *
+ * ⛔ R7 / Invariant 19: the open-employment leg reads `for share`. A sign-in that read "open" holds the lock, so
+ * `endEmployment`'s UPDATE waits for it to commit and its later session-ending statement then sees (and ends) the new
+ * session. The lock lives HERE, not in the callers, so no caller can forget it.
+ */
+export async function personMaySignInToOrg(tx: Tx, personId: string, orgId: string): Promise<boolean> {
   const [row] = (await tx.execute(sql`
     select (
       exists (
-        select 1 from person_store_scope
-        where person_id = ${personId} and store_id = ${storeId}
+        select 1 from employments
+        where person_id = ${personId} and org_id = ${orgId} and ended_on is null
+        for share
       )
       or exists (
-        select 1 from employments
-        where person_id = ${personId} and store_id = ${storeId} and ended_on is null
+        select 1 from person_roles
+        where person_id = ${personId} and org_id = ${orgId} and revoked_at is null and role in ('admin', 'super_admin')
+      )
+      or (
+        exists (
+          select 1 from person_roles
+          where person_id = ${personId} and org_id = ${orgId} and revoked_at is null and role = 'manager'
+        )
+        and not exists (
+          select 1 from employments where person_id = ${personId} and org_id = ${orgId}
+        )
       )
     ) as ok
   `)) as unknown as { ok: boolean }[];
@@ -424,6 +492,12 @@ export async function personMaySignInAtStore(tx: Tx, personId: string, storeId: 
 export async function storeBelongsToOrg(tx: Tx, storeId: string, orgId: string): Promise<boolean> {
   const [row] = await tx.select({ id: stores.id }).from(stores).where(and(eq(stores.id, storeId), eq(stores.orgId, orgId))).limit(1);
   return row !== undefined;
+}
+
+/** The org a store belongs to (under the caller's RLS a foreign store reads as absent), for `canAt`. */
+export async function orgIdOfStore(tx: Tx, storeId: string): Promise<string | null> {
+  const [row] = await tx.select({ orgId: stores.orgId }).from(stores).where(eq(stores.id, storeId)).limit(1);
+  return row?.orgId ?? null;
 }
 
 /** Every ACTIVE store in the org — the "every row" side of "all = every row". */

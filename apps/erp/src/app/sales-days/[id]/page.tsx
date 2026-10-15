@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { authorize, AuthorizationError } from '@shareat/auth';
+import { authorize, can as canDo } from '@shareat/auth';
 import { salesDaysRepo, journalRepo, posV1Repo } from '@shareat/db';
 import { packageCapExcess } from '@shareat/domain';
 import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
@@ -11,6 +11,9 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { personName } from '@/lib/person-name';
+import { accountLabel, accountCodeAndName } from '@/lib/account-label';
+
 import { typedFor } from '@/lib/keep-typing';
 import { PLATFORM_SALES_EDIT } from '../typed-forms';
 import { EditableRecord } from '@/components/forms';
@@ -66,15 +69,8 @@ export default async function SalesDayDetailPage({
   // day is edited under `submit_sales_day`, a submitted one under `verify_sales_day`; a void needs
   // `void_sales_day`.
   const can = await withOrgPrincipal(orgId, async (tx) => {
-    const probe = async (capability: 'submit_sales_day' | 'verify_sales_day' | 'void_sales_day' | 'verify_own_sales_day') => {
-      try {
-        await authorize(tx, actor, capability, { storeId: day.storeId });
-        return true;
-      } catch (err) {
-        if (err instanceof AuthorizationError) return false;
-        throw err;
-      }
-    };
+    const probe = (capability: 'submit_sales_day' | 'verify_sales_day' | 'void_sales_day' | 'verify_own_sales_day') =>
+      canDo(tx, actor, capability, { storeId: day.storeId });
     return {
       edit: await probe(day.status === 'submitted' ? 'verify_sales_day' : 'submit_sales_day'),
       void: await probe('void_sales_day'),
@@ -121,8 +117,6 @@ export default async function SalesDayDetailPage({
       ? (await withOrgPrincipal(orgId, (tx) => posV1Repo.feedDrift(tx, orgId, day.id)))[0]
       : undefined;
 
-  const personName = (pid: string | null) =>
-    pid ? (persons.find((p) => p.id === pid)?.displayName ?? pid) : '—';
   const storeName = stores.find((s) => s.id === day.storeId)?.name ?? day.storeId;
 
   const carry = new URLSearchParams();
@@ -186,30 +180,30 @@ export default async function SalesDayDetailPage({
 
       <section className="grid gap-4 md:grid-cols-2">
         <Panel title="Revenue">
-          <Row label="Unlimited → 4100" value={formatMoney(money(day.unliSales))} />
-          <Row label="À la carte → 4150" value={formatMoney(money(day.alaCarteSales))} />
+          <Row label="Unlimited" value={formatMoney(money(day.unliSales))} />
+          <Row label="À la carte" value={formatMoney(money(day.alaCarteSales))} />
           <Row label="Total" value={formatMoney(money(day.totalSales))} strong />
         </Panel>
 
         <Panel title="Tender">
-          <Row label="Cash → 1110" value={formatMoney(money(day.cashCollected))} />
-          <Row label="Online → 1140" value={formatMoney(money(day.onlineCollected))} />
+          <Row label="Cash" value={formatMoney(money(day.cashCollected))} />
+          <Row label="Online" value={formatMoney(money(day.onlineCollected))} />
           {isPositive(day.creditSales) && (
             <Row label="Credit / on account" value={formatMoney(money(day.creditSales))} />
           )}
           {compare(nonRemittedTotal, ZERO) > 0 && (
             <Row label="Non-remitted channels" value={formatMoney(nonRemittedTotal)} />
           )}
-          <Row label="Discounts → 4900" value={formatMoney(discountsTotal)} />
-          <Row label="Comps → 4950" value={formatMoney(money(day.comps))} />
-          {isPositive(day.refunds) && <Row label="Refunds (POS) → 4950" value={formatMoney(money(day.refunds))} />}
+          <Row label="Discounts" value={formatMoney(discountsTotal)} />
+          <Row label="Comps" value={formatMoney(money(day.comps))} />
+          {isPositive(day.refunds) && <Row label="Refunds (POS)" value={formatMoney(money(day.refunds))} />}
           {isPositive(day.otherCharges) && (
-            <Row label="Other charges → 4500" value={formatMoney(money(day.otherCharges))} />
+            <Row label="Other charges" value={formatMoney(money(day.otherCharges))} />
           )}
           {/* ⭐ A float — neither revenue nor AP. Fills here, empties through payroll, and never
               reaches the P&L (bible row 135). */}
           {isPositive(day.serviceCharge) && (
-            <Row label="Service charge → 2160 float (held for staff)" value={formatMoney(money(day.serviceCharge))} />
+            <Row label="Service charge (held for staff)" value={formatMoney(money(day.serviceCharge))} />
           )}
         </Panel>
 
@@ -221,12 +215,12 @@ export default async function SalesDayDetailPage({
         </Panel>
 
         <Panel title="Trail">
-          <Row label="Created by" value={personName(day.createdBy)} />
-          <Row label="Submitted by" value={personName(day.submittedBy)} />
-          <Row label="Verified by" value={personName(day.verifiedBy)} />
+          <Row label="Created by" value={personName(persons, day.createdBy)} />
+          <Row label="Submitted by" value={personName(persons, day.submittedBy)} />
+          <Row label="Verified by" value={personName(persons, day.verifiedBy)} />
           {day.status === 'voided' && (
             <>
-              <Row label="Voided by" value={personName(day.voidedBy)} />
+              <Row label="Voided by" value={personName(persons, day.voidedBy)} />
               <Row label="Void reason" value={day.voidReason ?? '—'} />
             </>
           )}
@@ -250,7 +244,7 @@ export default async function SalesDayDetailPage({
                   <tr key={c.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">{c.channelName}</td>
                     <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400">
-                      {c.isRemittedDaily ? 'reaches the till' : `settles later → ${c.receivableAccountCode}`}
+                      {c.isRemittedDaily ? 'reaches the till' : `settles later → ${accountLabel(c.receivableAccountCode)}`}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {/* ⭐ "confirmed no sales" is a different claim from a blank, and from a zero. */}
@@ -314,7 +308,7 @@ export default async function SalesDayDetailPage({
                     <tr key={c.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                       <td className="px-3 py-2">{c.entryDate}</td>
                       <td className="px-3 py-2">{c.reason}</td>
-                      <td className="px-3 py-2">{personName(c.postedBy)}</td>
+                      <td className="px-3 py-2">{personName(persons, c.postedBy)}</td>
                       <td className="px-3 py-2 font-mono text-xs text-neutral-500 dark:text-neutral-400">{c.journalEntryId}</td>
                     </tr>
                   ))}
@@ -546,7 +540,7 @@ function LedgerTable({ lines }: { lines: EntryLine[] }) {
           {lines.map((l) => (
             <tr key={l.lineNo} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
               <td className="px-3 py-2 text-neutral-400">{l.lineNo}</td>
-              <td className="px-3 py-2 font-mono">{l.accountCode}</td>
+              <td className="px-3 py-2">{accountCodeAndName(l.accountCode)}</td>
               <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400">
                 {l.partyType ? `${l.partyType}:${l.partyId}` : '—'}
               </td>

@@ -248,7 +248,7 @@ export function AutoAllocateCollectionForm({
         {surplus !== null && !pageStale && !raceDetected && !editedSinceCheck && (
           <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
             {compare(money(surplus), ZERO) > 0
-              ? `₱${surplus} would be surplus — booked as 2140 (customer store credit) unless you edit the boxes above.`
+              ? `₱${surplus} would be surplus — booked as customer store credit unless you edit the boxes above.`
               : 'Fully allocated across the boxes above.'}
           </p>
         )}
@@ -269,7 +269,7 @@ export function AutoAllocateCollectionForm({
             className="w-full"
           />
         </Field>
-        <Field label="Platform fee" hint="⛔ Booked here (6400) and NOWHERE else. Never also as an expense.">
+        <Field label="Platform fee" hint="⛔ Booked here (platform and channel fees) and NOWHERE else. Never also as an expense.">
           <Input name="platformFee" inputMode="decimal" placeholder="0.00" className="w-full" />
         </Field>
         <Field label="Date">
@@ -294,7 +294,7 @@ export function AutoAllocateCollectionForm({
       {compare(money(credit), ZERO) > 0 && (
         <Field
           label="Store credit to apply"
-          hint={`${peso(credit)} held at 2140. Spending it draws the liability down instead of taking cash.`}
+          hint={`${peso(credit)} held as customer store credit. Spending it draws the liability down instead of taking cash.`}
         >
           <Input name="creditApplied" inputMode="decimal" placeholder="0.00" className="w-full" />
         </Field>

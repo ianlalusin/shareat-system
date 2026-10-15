@@ -100,7 +100,31 @@ export const posV1StoreLinks = pgTable(
     // NOTE: from migration 0187 (T-382) "linked" means a LIVE row (unlinked_at is null); 0185's header says "has a row".
     // sales_day_store_is_linked was replaced there (hand-added: Drizzle cannot say a function).
     // NOTE: a BEFORE UPDATE trigger refusing a change of store_id (pos_v1_store_links_store_fixed) is
-    // hand-added in migration 0185 (T-375 S4), not here.
+    // hand-added in migration 0185 (T-375 S4), not here.,
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'pos_v1_store_links_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'pos_v1_store_links_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.unlinkedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'pos_v1_store_links_unlinked_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.updatedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'pos_v1_store_links_updated_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -140,6 +164,20 @@ export const posV1DayFeeds = pgTable(
     check('pos_v1_day_feeds_pos_store_id_not_blank_check', sql`btrim(${t.posStoreId}) <> ''`),
     // NOTE: the pos_v1_day_feeds_append_only trigger (refuses UPDATE and DELETE) is hand-added in migration 0183.
     index('pos_v1_day_feeds_store_day_kind_fetched_idx').on(t.orgId, t.storeId, t.businessDate, t.kind, sql`${t.fetchedAt} desc`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.fetchedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'pos_v1_day_feeds_fetched_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'pos_v1_day_feeds_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -184,7 +222,16 @@ export const tenders = pgTable(
     // `sales_channels` precedent (sales-days.ts) - is an expression index hand-added in migration 0183.
     // NOTE: tenders_store_alias_active_unique UNIQUE (store_id, regexp_replace(lower(pos_v1_alias), '[^a-z0-9]', '', 'g'))
     // WHERE is_active AND pos_v1_alias IS NOT NULL is hand-added in migration 0183 (R3: the normalized alias is the
-    // identity among a store's ACTIVE tenders). Do NOT restore a builder uniqueIndex here.
+    // identity among a store's ACTIVE tenders). Do NOT restore a builder uniqueIndex here.,
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'tenders_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -226,6 +273,20 @@ export const salesDayPosCorrections = pgTable(
       foreignColumns: [journalEntries.id],
       name: 'sales_day_pos_corrections_journal_entry_id_fk',
     }).onDelete('restrict'),
-    // NOTE: the sales_day_pos_corrections_append_only trigger (refuses UPDATE and DELETE) is hand-added in migration 0183.
+    // NOTE: the sales_day_pos_corrections_append_only trigger (refuses UPDATE and DELETE) is hand-added in migration 0183.,
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.postedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'sales_day_pos_corrections_posted_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'sales_day_pos_corrections_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

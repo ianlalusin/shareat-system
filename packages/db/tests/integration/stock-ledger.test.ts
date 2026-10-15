@@ -24,7 +24,7 @@ import { testItemCode } from '../../../domain/tests/integration/_fixtures/item-c
 const sql = postgres(url, { max: 5 });
 
 let orgA: string, orgB: string, storeA: string, storeB: string;
-let personA: string, roomA: string, roomB: string, roomA2: string;
+let personB: string, personA: string, roomA: string, roomB: string, roomA2: string;
 let itemA: string, itemB: string;
 
 async function asOrg<T>(org: string | null, fn: (tx: postgres.TransactionSql) => Promise<T>): Promise<T> {
@@ -51,7 +51,7 @@ async function move(
     values (${over.org ?? orgA}, ${over.store ?? storeA}, ${over.location ?? roomA}, ${over.item ?? itemA},
             ${over.movedAt ?? '2026-08-20T02:00:00Z'}, ${qty}, ${over.kind ?? 'receipt'},
             ${over.sourceType ?? 'delivery'}, ${over.sourceId ?? crypto.randomUUID()},
-            ${over.reversalOf ?? null}, ${personA})
+            ${over.reversalOf ?? null}, ${(over.org ?? orgA) === orgB ? personB : personA})
     returning id`;
   return r!.id;
 }
@@ -81,6 +81,7 @@ beforeEach(async () => {
   const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgA},'Alice') returning id`;
   personA = p!.id;
   const [pb] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgB},'Bob') returning id`;
+  personB = pb!.id;
 
   const [t] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${orgA},'STK','Stockroom') returning id`;
   const [tb] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${orgB},'STK','Stockroom') returning id`;

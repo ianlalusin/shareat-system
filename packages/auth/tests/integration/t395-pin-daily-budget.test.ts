@@ -86,6 +86,8 @@ async function setup(hint: string, pin = '123456'): Promise<Fixture> {
   const adminId = await mkPerson(`${hint} Admin`);
   const deviceId = await mkPerson(`${hint} Terminal`, 'terminal');
   await sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${storeId})`;
+  // T-407: the PIN door also needs the org-level rule, so the cashier is employed (open employment) as well as scoped.
+  await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeId}, ${personId}, ${`FX${++seq}`}, 'regular', '2020-01-01')`;
   await sql`
     insert into person_credentials (person_id, kind, store_id, secret_hash, lookup_hash)
     values (${personId}, 'pin', ${storeId}, ${await hashPin(pin)}, ${pinLookupHash(orgId, pin)})
@@ -268,6 +270,7 @@ describe('T-395 S1 — tier 2, the daily budget (tests 1-8)', () => {
     const [other] = await sql<{ id: string }[]>`
       insert into persons (org_id, display_name) values (${f.orgId}, 'Elsewhere') returning id`;
     await sql`insert into person_store_scope (person_id, store_id) values (${other!.id}, ${f.storeId2})`;
+    await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${f.orgId}, ${f.storeId2}, ${other!.id}, ${`FX${++seq}`}, 'regular', '2020-01-01')`;
     await sql`
       insert into person_credentials (person_id, kind, store_id, secret_hash, lookup_hash)
       values (${other!.id}, 'pin', ${f.storeId2}, ${await hashPin('654321')}, ${pinLookupHash(f.orgId, '654321')})`;
@@ -384,6 +387,8 @@ describe('T-395 S1 — option b, attribution, retention, email, RLS (tests 11-15
     const f = await setup('email-while-stopped');
     await stopStore(f);
     const externalId = uid('fbuid-t395');
+    // T-407: an email sign-in needs the org-level rule, so this person holds an admin role (R1 leg b).
+    await sql`insert into person_roles (person_id, org_id, role) values (${f.adminId}, ${f.orgId}, 'admin')`;
     await sql`insert into person_credentials (person_id, kind, external_id) values (${f.adminId}, 'firebase', ${externalId})`;
     const session = await signInWithFirebase(null, { verifiedUid: externalId });
     expect(session.personId).toBe(f.adminId);

@@ -47,6 +47,7 @@ import { accessRepo, organizationsRepo, storesRepo, type Tx } from '@shareat/db'
 import { logger } from '@shareat/core/logger';
 import { CAPABILITY_MATRIX, CAPABILITY_SCOPE, type Capability, type Role } from './capabilities';
 import { AuthorizationError } from './errors';
+import { enqueueAuthorizeDenied } from './security-events';
 import {
   closePeriodNeedsWholeOrg,
   jobIsElsewhere,
@@ -108,14 +109,65 @@ export async function authorize(
   actor: Actor,
   capability: Capability,
   ctx: AuthorizeContext = {},
+  deps: AuthorizeDeps = {},
 ): Promise<void> {
+  const refusal = await decide(tx, actor, capability, ctx);
+  if (!refusal) return;
+  const error = await refusal();
+  // T-402 S2 (R9, A1): the denial goes to the in-process outbox - SYNCHRONOUS, nothing awaited, no second connection -
+  // and is written after the fact (first of the Manila day as a row, the rest counted). The refusal is thrown unchanged.
+  enqueueAuthorizeDenied(
+    {
+      orgId: actor.orgId,
+      actorPersonId: actor.personId,
+      capability,
+      storeId: CAPABILITY_SCOPE[capability] === 'store' ? (ctx.storeId ?? null) : null,
+    },
+    deps.now ?? Date.now,
+  );
+  throw error;
+}
+
+/**
+ * T-402 S2 (A2): the NON-LOGGING yes/no for `actor` + `capability` (+ ctx) - the same `decide()` as `authorize()`, so it
+ * can never disagree, but it writes nothing. For render probes and "try A, else fall back to B" checks, where a denial is
+ * an ordinary answer, not an attempted act. A real mutation gate is `authorize()`, never this: a forgotten gate that
+ * uses `authorize()` still logs (the fail-safe direction).
+ */
+export async function can(tx: Tx, actor: Actor, capability: Capability, ctx: AuthorizeContext = {}): Promise<boolean> {
+  return (await decide(tx, actor, capability, ctx)) === null;
+}
+
+/** T-402 S2: the clock behind the denial's Manila business day, injectable so a test can cross Manila midnight. */
+interface AuthorizeDeps {
+  readonly now?: () => number;
+}
+
+/**
+ * T-391 S6 - a NON-THROWING yes/no that shares authorize()'s decision code (`decide`), so it can never disagree with it:
+ * "may `personId` do `capability` at `storeId`?" - org, role (matrix or grant) and store scope. The org is the store's own
+ * (RLS keeps a foreign store invisible, which answers false). For REPORTS and readiness checks only: a mutation is gated by
+ * `authorize()`, never by this.
+ */
+export async function canAt(tx: Tx, personId: string, capability: Capability, storeId: string): Promise<boolean> {
+  const orgId = await accessRepo.orgIdOfStore(tx, storeId);
+  if (!orgId) return false;
+  return (await decide(tx, { personId, orgId }, capability, { storeId })) === null;
+}
+
+/** A refusal is built lazily, so its savepointed message lookups only run when someone is actually refused. */
+type Refusal = () => Promise<AuthorizationError>;
+
+/** The ONE decision: null when allowed, else the refusal to throw. Shared by authorize() and canAt(). */
+async function decide(tx: Tx, actor: Actor, capability: Capability, ctx: AuthorizeContext): Promise<Refusal | null> {
   const scope = CAPABILITY_SCOPE[capability];
 
   // --- Axis 1: organization -------------------------------------------------------------
   if (scope !== 'platform') {
     const resourceOrgId = ctx.orgId ?? actor.orgId;
     if (resourceOrgId !== actor.orgId) {
-      throw new AuthorizationError(
+      return async () =>
+        new AuthorizationError(
         `authorize: actor's org (${actor.orgId}) does not match the resource's org (${resourceOrgId}) for '${capability}'`,
         capability,
         // Row 4 — no lookup, no org named at all (bible §7/§15.11: never disclose the resource's org).
@@ -138,12 +190,14 @@ export async function authorize(
     // aborted, which is exactly what breaks the probe callers (canBypassBlock and friends) that
     // keep writing in the same tx after a caught refusal. The savepoint rolls back on its own;
     // the outer `tx` is untouched either way.
-    const org = await savepointLookup(tx, (t) => organizationsRepo.identityOf(t, actor.orgId));
-    throw new AuthorizationError(
-      `authorize: person ${actor.personId} has no active role in org ${actor.orgId}`,
-      capability,
-      noActiveRole(org?.name),
-    );
+    return async () => {
+      const org = await savepointLookup(tx, (t) => organizationsRepo.identityOf(t, actor.orgId));
+      return new AuthorizationError(
+        `authorize: person ${actor.personId} has no active role in org ${actor.orgId}`,
+        capability,
+        noActiveRole(org?.name),
+      );
+    };
   }
   const role = activeRole.role as Role;
 
@@ -161,22 +215,24 @@ export async function authorize(
     // blaming the role. Org/platform-scoped capabilities and a missing storeId skip the lookup —
     // there is nowhere else to point to.
     const rowFiveStoreId = scope === 'store' ? ctx.storeId : undefined;
-    const found = rowFiveStoreId
-      ? await savepointLookup(tx, async (t) => {
-          const jobs = await accessRepo.positionGrantsElsewhere(t, {
-            personId: actor.personId,
-            orgId: actor.orgId,
-            capability,
-            excludingStoreId: rowFiveStoreId,
-          });
-          return jobs.length ? { jobs, here: await storesRepo.getById(t, actor.orgId, rowFiveStoreId) } : undefined;
-        })
-      : undefined;
-    throw new AuthorizationError(
-      `authorize: role '${role}' may not '${capability}'`,
-      capability,
-      found ? jobIsElsewhere(capability, found.here, found.jobs) : roleMayNot(role, capability),
-    );
+    return async () => {
+      const found = rowFiveStoreId
+        ? await savepointLookup(tx, async (t) => {
+            const jobs = await accessRepo.positionGrantsElsewhere(t, {
+              personId: actor.personId,
+              orgId: actor.orgId,
+              capability,
+              excludingStoreId: rowFiveStoreId,
+            });
+            return jobs.length ? { jobs, here: await storesRepo.getById(t, actor.orgId, rowFiveStoreId) } : undefined;
+          })
+        : undefined;
+      return new AuthorizationError(
+        `authorize: role '${role}' may not '${capability}'`,
+        capability,
+        found ? jobIsElsewhere(capability, found.here, found.jobs) : roleMayNot(role, capability),
+      );
+    };
   }
 
   // --- Axis 2: store scope, for 'store'-scoped capabilities only -------------------------
@@ -185,25 +241,30 @@ export async function authorize(
   if (scope === 'store') {
     if (!ctx.storeId) {
       // No lookup — there is no storeId to look up.
-      throw new AuthorizationError(`authorize: '${capability}' is store-scoped but no storeId was given`, capability, storeRequired(capability));
+      return async () =>
+        new AuthorizationError(`authorize: '${capability}' is store-scoped but no storeId was given`, capability, storeRequired(capability));
     }
     const storeId = ctx.storeId; // narrowed once, so the closures below don't need it re-narrowed
     const storeInOrg = await accessRepo.storeBelongsToOrg(tx, storeId, actor.orgId);
     if (!storeInOrg) {
       // Row 3 — names the ACTOR's own org, never the foreign one the given storeId actually
       // belongs to (bible §15.11: no cross-tenant disclosure). Amendment R2 — savepoint, see row 1.
-      const org = await savepointLookup(tx, (t) => organizationsRepo.identityOf(t, actor.orgId));
-      throw new AuthorizationError(`authorize: store ${storeId} does not belong to org ${actor.orgId}`, capability, storeNotInOrg(org?.name));
+      return async () => {
+        const org = await savepointLookup(tx, (t) => organizationsRepo.identityOf(t, actor.orgId));
+        return new AuthorizationError(`authorize: store ${storeId} does not belong to org ${actor.orgId}`, capability, storeNotInOrg(org?.name));
+      };
     }
     const inScope = await accessRepo.personHasStoreScope(tx, actor.personId, storeId);
     if (!inScope) {
       // Row 2 — reuses the same storeId Postgres already checked above. Amendment R2 — savepoint.
-      const store = await savepointLookup(tx, (t) => storesRepo.getById(t, actor.orgId, storeId));
-      throw new AuthorizationError(
-        `authorize: person ${actor.personId} (role '${role}') has no store scope for ${storeId}`,
-        capability,
-        notAssignedToStore(capability, store),
-      );
+      return async () => {
+        const store = await savepointLookup(tx, (t) => storesRepo.getById(t, actor.orgId, storeId));
+        return new AuthorizationError(
+          `authorize: person ${actor.personId} (role '${role}') has no store scope for ${storeId}`,
+          capability,
+          notAssignedToStore(capability, store),
+        );
+      };
     }
   }
 
@@ -219,15 +280,18 @@ export async function authorize(
     const coversWholeOrg = await accessRepo.personCoversWholeOrg(tx, actor.personId, actor.orgId);
     if (!coversWholeOrg) {
       // Amendment R2 — savepoint, see row 1.
-      const org = await savepointLookup(tx, (t) => organizationsRepo.identityOf(t, actor.orgId));
-      throw new AuthorizationError(
-        "authorize: 'close_period' requires a manager's store scope to cover the whole org " +
-          '(CAPABILITY-MATRIX.md §Open 2) — this manager does not cover every active store',
-        capability,
-        closePeriodNeedsWholeOrg(org?.name),
-      );
+      return async () => {
+        const org = await savepointLookup(tx, (t) => organizationsRepo.identityOf(t, actor.orgId));
+        return new AuthorizationError(
+          "authorize: 'close_period' requires a manager's store scope to cover the whole org " +
+            '(CAPABILITY-MATRIX.md §Open 2) — this manager does not cover every active store',
+          capability,
+          closePeriodNeedsWholeOrg(org?.name),
+        );
+      };
     }
   }
+  return null;
 }
 
 /**

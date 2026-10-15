@@ -116,7 +116,7 @@ export async function setCustomerStatus(
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,
       action: 'set_customer_status',
-      entity: 'customers',
+      storeId: null,
       entityId: customer.id,
       before: { status: customer.status },
       after: { status: input.status },

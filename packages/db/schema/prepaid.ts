@@ -42,6 +42,7 @@ import {
   text,
   timestamp,
   uuid,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { expenses } from './expenses';
 import { organizations } from './organizations';
@@ -147,5 +148,24 @@ export const prepaidItems = pgTable(
     ),
     check('prepaid_items_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
     check('prepaid_items_total_cost_finite_check', sql`${t.totalCost} > '-Infinity'::numeric and ${t.totalCost} < 'Infinity'::numeric`),
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'prepaid_items_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'prepaid_items_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.writtenOffBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'prepaid_items_written_off_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

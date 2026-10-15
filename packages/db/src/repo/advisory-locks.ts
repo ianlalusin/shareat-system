@@ -16,7 +16,7 @@
  *     Namespaces taken here: 366001 (cash custody), 366002 (service-charge float), 369001
  *     (reimbursement payee, keyed on the employee id rather than a store id), 369002 (supplier
  *     return credit, keyed on the supplier id), 369003 (inter-store pair settlement, keyed on the
- *     UNORDERED pair of store ids).
+ *     UNORDERED pair of store ids), 392001 (dual-run store-week, keyed on org:store:week).
  *   - A `hashtext(storeId)` collision only serialises two stores for a moment; it never gives a
  *     wrong answer (the same reasoning as `access.ts` `lockOrgAccess`).
  *
@@ -83,5 +83,16 @@ const INTER_STORE_PAIR_LOCK_NAMESPACE = 369003;
 export async function lockInterStorePair(tx: Tx, storeA: string, storeB: string): Promise<void> {
   await tx.execute(
     sql`select pg_advisory_xact_lock(${INTER_STORE_PAIR_LOCK_NAMESPACE}::int4, hashtext(least(${storeA}::text, ${storeB}::text) || ':' || greatest(${storeA}::text, ${storeB}::text)))`,
+  );
+}
+
+/** Namespace (first int4) for the dual-run store-week lock. T-392 S4. */
+const DUAL_RUN_WEEK_LOCK_NAMESPACE = 392001;
+
+/** Serialises every dual-run apply for one (org, store, week), so two identical runs racing for the same R8 identity
+ *  cannot both pass the identity check and then fight on the unique. The loser waits, then reads the winner's row. */
+export async function lockDualRunWeek(tx: Tx, orgId: string, storeId: string, weekStart: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${DUAL_RUN_WEEK_LOCK_NAMESPACE}::int4, hashtext(${orgId}::text || ':' || ${storeId}::text || ':' || ${weekStart}::text))`,
   );
 }

@@ -89,6 +89,9 @@ async function fixture(hint: string) {
   const managerId = p!.id;
   await sql`insert into person_roles (person_id, org_id, role) values (${managerId}, ${orgId}, 'manager')`;
   await sql`insert into person_store_scope (person_id, store_id) values (${managerId}, ${storeId})`;
+  const [ap] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`; // T-403: mapping is admin-only
+  await sql`insert into person_roles (person_id, org_id, role) values (${ap!.id}, ${orgId}, 'admin')`;
+  await sql`insert into person_store_scope (person_id, store_id) values (${ap!.id}, ${storeId})`;
   const [ch] = await sql<{ id: string }[]>`insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${orgId}, ${storeId}, 'Walk-in', true) returning id`;
   const [gcash] = await sql<{ id: string }[]>`
     insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
@@ -134,6 +137,7 @@ async function fixture(hint: string) {
   await linkTestStore(sql, { orgId, storeId, channelId: ch!.id, createdBy: managerId });
 
   const manager = actorOf(orgId, managerId);
+  const admin = actorOf(orgId, ap!.id);
   const submitter = await mkSubmitter(sql, orgId, [storeId]);
 const f = { orgId, storeId, kitchen, cheese, buns, recipe, deadRecipe, managerId, manager, submitter };
 
@@ -148,7 +152,7 @@ const f = { orgId, storeId, kitchen, cheese, buns, recipe, deadRecipe, managerId
     const out = await asOrg(orgId, (tx) =>
       D.upsertPosItemMap(
         tx,
-        manager,
+        admin,
         mode === 'direct'
           ? { ...base, mode, itemId: key === 'B' ? buns : cheese, quantityPerSale: '1', confirmShared: true }
           : mode === 'recipe'

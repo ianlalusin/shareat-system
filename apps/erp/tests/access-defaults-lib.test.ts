@@ -108,18 +108,23 @@ describe('L1 — gridCapabilityGroups: area order, exactly-91-once, and the 76/1
 
   // ⭐ 91 -> 92 (T-350/DEF-477): `set_channel_payout` is store-scoped, admin-yes/manager-no, same
   // shape as `set_cash_policy` — offerable to a position, none of the three excluded sets.
-  it('the 92 offerable capabilities each appear exactly once across every area of every scope', () => {
+  // ⭐ 92 -> 93 (T-403): `manage_recipes` (org, admin-only) is offerable to a position.
+  // ⭐ 93 -> 99 (T-401): seven menu capabilities join, SIX of them offerable: view_menu, manage_menu, set_menu_depletion (org),
+  // request_menu_item, set_menu_price, switch_usage_source (store). `add_menu_item` is super-admin-only, so it is in
+  // SUPER_ADMIN_ONLY_CAPABILITIES and never offerable (asserted below).
+  it('the 101 offerable capabilities each appear exactly once across every area of every scope', () => {
     const rendered = groups.flatMap((g) => g.areas.flatMap((a) => a.capabilities.map((c) => c.capability)));
-    expect(rendered.length).toBe(92);
-    expect(new Set(rendered).size, 'no capability appears twice').toBe(92);
+    expect(rendered.length).toBe(101);
+    expect(new Set(rendered).size, 'no capability appears twice').toBe(101);
+    expect(rendered).not.toContain('add_menu_item');
   });
 
   // ⭐ store 76 -> 77 (T-350/DEF-477): `set_channel_payout` joins store, same as `set_cash_policy`.
-  it('store holds 77, org holds 15 (§1\'s totals)', () => {
+  it('store holds 81, org holds 20 (§1\'s totals)', () => {
     const countFor = (scope: (typeof SCOPE_ORDER)[number]) =>
       groups.find((g) => g.scope === scope)!.areas.reduce((n, a) => n + a.capabilities.length, 0);
-    expect(countFor('store')).toBe(77);
-    expect(countFor('org')).toBe(15);
+    expect(countFor('store')).toBe(81); // T-402 S1b: +view_activity_log
+    expect(countFor('org')).toBe(20); // T-402 S1b: +view_activity_log_restricted
   });
 
   it('NEGATIVE: no area group is ever empty — gridCapabilityGroups filters them out', () => {
@@ -130,9 +135,11 @@ describe('L1 — gridCapabilityGroups: area order, exactly-91-once, and the 76/1
     }
   });
 
-  it('NEGATIVE: org has no sales area (§1: sales is 14/0 — store only)', () => {
+  it('org HAS a sales area since T-401, holding exactly the three org-scoped offerable menu capabilities (add_menu_item is super-admin-only, never offered)', () => {
     const org = groups.find((g) => g.scope === 'org')!;
-    expect(org.areas.map((a) => a.area)).not.toContain('sales');
+    const sales = org.areas.find((a) => a.area === 'sales');
+    expect(sales, 'org sales area').toBeDefined();
+    expect(sales!.capabilities.map((c) => c.capability).sort()).toEqual(['manage_menu', 'set_menu_depletion', 'view_menu']);
   });
 
   it('NEGATIVE: the excluded set (SUPER_ADMIN_ONLY + platform-scoped + close_period + create_missing_period + book_missed_month) is absent from every area', () => {

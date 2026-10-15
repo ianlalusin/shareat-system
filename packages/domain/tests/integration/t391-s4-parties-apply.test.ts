@@ -176,7 +176,8 @@ const links = (orgId: string, entity: string) =>
   sql<Any[]>`select entity, v1_store_id, v1_id, v2_id, v1_unit, factor_to_base, created_by from v1_master_links where org_id = ${orgId} and entity = ${entity} order by v1_id`;
 const audits = (orgId: string, action: string) =>
   sql<Any[]>`select action, entity, entity_id, before, after, source, actor_person_id from audit_log where org_id = ${orgId} and action = ${action} order by occurred_at, id`;
-const allAuditCount = async (orgId: string) => Number((await sql<Any[]>`select count(*)::int as n from audit_log where org_id = ${orgId}`)[0]!.n);
+// T-402 S2: a refused authorize() writes a `security.authorize_denied` security event (async outbox) -- the refusal itself, not a write by the refused call.
+const allAuditCount = async (orgId: string) => Number((await sql<Any[]>`select count(*)::int as n from audit_log where org_id = ${orgId} and action <> 'security.authorize_denied'`)[0]!.n);
 const docCount = async (orgId: string): Promise<number> => {
   const q = async (t: string) => Number((await sql.unsafe(`select count(*)::int as n from ${t} where org_id = $1`, [orgId]))[0]!.n);
   return (await q('supplier_invoices')) + (await q('ar_charges')) + (await q('ar_collections')) + (await q('journal_entries')) + (await q('expenses'));
@@ -226,9 +227,9 @@ describe('S4 apply - suppliers: create, link, audit', () => {
         expect(got.some((x) => x.id === l.v2_id)).toBe(true); // I4
       }
 
-      const a = await audits(e.orgId, 'master_data_load');
+      const a = await audits(e.orgId, 'master_data.suppliers_load');
       expect(a).toHaveLength(1);
-      expect(['supplier', 'suppliers']).toContain(a[0].entity);
+      expect(a[0].entity).toBe('suppliers');
       expect(a[0]).toMatchObject({ source: 'etl', actor_person_id: e.superA.personId });
       expect(a[0].after).toMatchObject({ snapshotSha: SHA, created: 2, linked: 3, held: 0 });
       expect(JSON.stringify(a[0].after.stores)).toMatch(/LIPA/);
@@ -259,7 +260,7 @@ describe('S4 apply - suppliers: create, link, audit', () => {
       expect(JSON.stringify(row)).not.toContain(FULL);
       expect(String(row!.bank_account_number ?? '').replace(/[^0-9]/g, '').length).toBeLessThanOrEqual(4);
       expect(row!.bank_account_number).toBe('************3456');
-      expect(JSON.stringify(await audits(e.orgId, 'master_data_load'))).not.toContain(FULL);
+      expect(JSON.stringify([...(await audits(e.orgId, 'master_data.suppliers_load')), ...(await audits(e.orgId, 'master_data.customers_load'))])).not.toContain(FULL);
     },
     60_000,
   );

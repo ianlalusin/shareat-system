@@ -425,7 +425,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // Verified by running the census (1154).
     // 1158 with S5 and S7 together (1149 + 4 + 5), T-387 S5-S7 combined 2026-10-11.
     // 1158 (T-387 S5-S7 on main) + 12 (T-390 S5 cutover UI) = 1170, measured after merging origin/main 12 Oct.
-    expect(results.length).toBe(1170);
+    // 1170 + 2 (T-404, 2026-10-14: /admin/stores "Open a branch" summary + /ap/suppliers/[id] invoice row link) = 1172.
+    // release 2026-10-14: 1170 + 2 (T-404) + 18 (T-392 S5) + 86 (T-401 S4) + 16 (T-401 S5) = 1292.
+    expect(results.length).toBe(1292);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

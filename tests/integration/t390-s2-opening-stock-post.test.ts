@@ -1,4 +1,5 @@
 import { testItemCode } from '../../packages/domain/tests/integration/_fixtures/item-code';
+import { freshDumpDir } from './t402-s3-audit-dump';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
@@ -250,12 +251,12 @@ describe('R8 / test 9a - C2 is written by the REAL purge and only `performed` sa
     expect(await c2Rows(a.orgId), 'a rehearsal left a C2 row (kills M9a: the row is written outside the purge transaction)').toHaveLength(0);
     expect(await c2Rows(b.orgId)).toHaveLength(0);
 
-    await realPurge(sql, a.adminId);
+    await realPurge(sql, { [a.orgId]: a.adminId, [b.orgId]: b.adminId });
     for (const f of [a, b]) {
       const rows = await c2Rows(f.orgId);
       expect(rows, `org ${f.orgId}: expected exactly one C2 row (kills M9a: the purge records nothing)`).toHaveLength(1);
       expect(rows[0]!.completion).toBe('performed');
-      expect(rows[0]!.completed_by).toBe(a.adminId);
+      expect(rows[0]!.completed_by).toBe(f.adminId); // DEF-640: each org's own performer
       expect(rows[0]!.note).toMatch(/^Purged \d+ rows? from \d+ tables? as of 2027-01-01/);
     }
     // And the gate is now open for the purged orgs.
@@ -708,7 +709,7 @@ describe('R8 - scripts/cutover-purge.ts takes --by <personId> (test 9a, script h
   const dbName = decodeURIComponent(new URL(dbUrl).pathname.replace(/^\//, ''));
   const reportDir = mkdtempSync(join(tmpdir(), 't390-s2-purge-report-'));
   const run = (...extra: string[]) =>
-    spawnSync('npx', ['tsx', 'scripts/cutover-purge.ts', '--confirm-database', dbName, '--as-of', '2027-01-01', ...extra], {
+    spawnSync('npx', ['tsx', 'scripts/cutover-purge.ts', '--confirm-database', dbName, '--as-of', '2027-01-01', ...extra, '--dump-dir', freshDumpDir('t390')], {
       cwd: process.cwd(),
       env: { ...process.env, DATABASE_URL: dbUrl, CUTOVER_PURGE_REPORT_DIR: reportDir },
       encoding: 'utf8',
@@ -744,7 +745,16 @@ describe('R8 - scripts/cutover-purge.ts takes --by <personId> (test 9a, script h
   }, 120_000);
 
   it('--apply --by <person> commits and records C2 as performed by that person', async () => {
-    const r = run('--apply', '--by', f.adminId);
+    // DEF-640: --by is repeated, one person per organization that exists.
+    const { performersForAllOrgs } = await import('./t390-real-purge');
+    const perOrg = await performersForAllOrgs(sql, f.adminId);
+    // Hundreds of orgs overflow a Windows command line, so the list goes in via CUTOVER_PURGE_BY.
+    const r = spawnSync('npx', ['tsx', 'scripts/cutover-purge.ts', '--confirm-database', dbName, '--as-of', '2027-01-01', '--apply', '--dump-dir', freshDumpDir('t390')], {
+      cwd: process.cwd(),
+      env: { ...process.env, DATABASE_URL: dbUrl, CUTOVER_PURGE_REPORT_DIR: reportDir, CUTOVER_PURGE_BY: Object.values(perOrg).join(',') },
+      encoding: 'utf8',
+      shell: true,
+    });
     expect(r.status, out(r)).toBe(0);
     expect(out(r)).toMatch(/Purge committed/);
     const rows = await c2Of(f.orgId);

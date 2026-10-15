@@ -196,6 +196,7 @@ async function fixture(hint: string, o: { link?: boolean } = {}) {
   const managerId = await mkPerson('Manager', 'manager', [storeId, store2Id]);
   const staffId = await mkPerson('Staffer', 'staff', [storeId]);
   const nobodyId = await mkPerson('Nobody', null, [storeId, store2Id]);
+  const adminId = await mkPerson('Admin', 'admin', [storeId, store2Id]); // T-403: mapping is admin-only
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
     values (${orgId}, ${storeId}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
@@ -242,11 +243,12 @@ async function fixture(hint: string, o: { link?: boolean } = {}) {
     values (${orgId}, 'R Box', ${cheese}, 1, ${managerId}) returning id`;
   await sql`insert into production_recipe_lines (recipe_id, item_id, quantity, unit) values (${recipe!.id}, ${cheese}, 0.2, 'g')`;
 
+  const admin = actorOf(orgId, adminId);
   const manager = actorOf(orgId, managerId);
   await asOrg(orgId, async (tx) => {
-    await D.upsertPosItemMap(tx, manager, { orgId, storeId, posItemKey: 'A', posItemName: 'A', mode: 'direct', itemId: cheese, quantityPerSale: '1' });
-    await D.upsertPosItemMap(tx, manager, { orgId, storeId, posItemKey: 'B', posItemName: 'B', mode: 'direct', itemId: buns, quantityPerSale: '0.5', confirmShared: true });
-    await D.upsertPosItemMap(tx, manager, { orgId, storeId, posItemKey: 'R', posItemName: 'R', mode: 'recipe', recipeId: recipe!.id });
+    await D.upsertPosItemMap(tx, admin, { orgId, storeId, posItemKey: 'A', posItemName: 'A', mode: 'direct', itemId: cheese, quantityPerSale: '1' });
+    await D.upsertPosItemMap(tx, admin, { orgId, storeId, posItemKey: 'B', posItemName: 'B', mode: 'direct', itemId: buns, quantityPerSale: '0.5', confirmShared: true });
+    await D.upsertPosItemMap(tx, admin, { orgId, storeId, posItemKey: 'R', posItemName: 'R', mode: 'recipe', recipeId: recipe!.id });
   });
 
   await seedTestTenders(sql, { orgId, storeId, walletAccountId: gcash!.id });

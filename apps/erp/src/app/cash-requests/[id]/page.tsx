@@ -84,7 +84,7 @@ export default async function CashRequestPage({
               <Figure label="Still out" value={peso(req.float.outstanding)} emphasis />
             </div>
             <p className="text-xs text-neutral-500 dark:text-neutral-500">
-              ⭐ <strong>Still out</strong> is the balance of <code>1120</code> for this request. The
+              ⭐ <strong>Still out</strong> is the cash the custodian of this request still holds. The
               other four are the same balance broken up by what happened to the money — which is why
               they cannot disagree with it.{' '}
               {req.isSettled && req.float.released !== '0.00' && (

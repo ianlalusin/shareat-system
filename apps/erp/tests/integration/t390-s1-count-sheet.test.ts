@@ -5,7 +5,7 @@ import { sql as dsql } from 'drizzle-orm';
 
 /**
  * T-390 S1 (audit round) - the count screen's read side with one item counted in two rooms.
- * `loadCountSheet` shows ONE line per item with the store total; `countsWithoutCost` lists an item ONCE.
+ * `loadMergedLines` shows ONE line per item with the store total; `countsWithoutCost` lists an item ONCE.
  */
 config({ path: '.env.local' });
 
@@ -17,7 +17,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { closeDb, transaction, APP_ROLE, cutoverRepo, type Tx } from '@shareat/db';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
-import { loadCountSheet } from '../../src/app/cutover/lib';
+import { loadMergedLines } from '../../src/app/cutover/lib';
 import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
@@ -70,14 +70,15 @@ afterAll(async () => {
 });
 
 describe('an item counted in two rooms', () => {
-  it('loadCountSheet shows ONE line for it, with the store total (5 + 7 = 12)', async () => {
+  it('loadMergedLines shows ONE line for it, with the store total (5 + 7 = 12)', async () => {
     const f = await fixture('sheet');
     await insertCount(f, f.kitchen, 5);
     await insertCount(f, f.freezer, 7);
-    const sheet = await loadCountSheet(f.orgId, f.storeId);
-    const lines = sheet.filter((r) => r.itemId === f.itemId);
+    const merged = await loadMergedLines(f.orgId, f.storeId);
+    const lines = merged.filter((r) => r.itemId === f.itemId);
     expect(lines).toHaveLength(1);
-    expect(Number(lines[0]!.quantity)).toBe(12);
+    expect(Number(lines[0]!.total)).toBe(12);
+    expect(lines[0]!.parts).toHaveLength(2);
   });
 
   it('countsWithoutCost lists the uncosted item ONCE, not once per room', async () => {

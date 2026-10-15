@@ -13,7 +13,7 @@
  * the server action cannot disagree. This only fetches.
  */
 import { asc, and, eq, inArray } from 'drizzle-orm';
-import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { authorize, type Actor, can } from '@shareat/auth';
 import {
   cashRequestsRepo,
   moneyAccountsRepo,
@@ -143,12 +143,7 @@ export async function loadMoneyLines(orgId: string, storeId: string, actor?: Act
       const stores = await tx.select({ id: schema.stores.id, name: schema.stores.name }).from(schema.stores).where(eq(schema.stores.orgId, orgId));
       for (const st of stores) {
         if (st.id === storeId) continue;
-        try {
-          await authorize(tx, actor, 'transfer_funds', { storeId: st.id });
-        } catch (err) {
-          if (err instanceof AuthorizationError) continue;
-          throw err;
-        }
+        if (!(await can(tx, actor, 'transfer_funds', { storeId: st.id }))) continue;
         const [theirs, theirBalances] = await Promise.all([
           moneyAccountsRepo.listMoneyAccounts(tx, orgId, { storeId: st.id }),
           moneyAccountsRepo.balancesFor(tx, orgId, st.id),

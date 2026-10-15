@@ -1,6 +1,7 @@
+import { accountLabel } from '@/lib/account-label';
 import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
-import { authorize, AuthorizationError, heldCapabilities } from '@shareat/auth';
+import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { auditLogRepo } from '@shareat/db';
 import { logger } from '@shareat/core/logger';
 import { add, compare, money, ZERO } from '@shareat/core/money';
@@ -82,13 +83,7 @@ export default async function ChannelSettlementsPage({
     if (!held.has('set_channel_payout')) return new Set<string>();
     const ok = new Set<string>();
     for (const storeId of distinctStoreIds) {
-      try {
-        await authorize(tx, actor, 'set_channel_payout', { storeId });
-        ok.add(storeId);
-      } catch (err) {
-        if (err instanceof AuthorizationError) continue;
-        throw err;
-      }
+      if (await can(tx, actor, 'set_channel_payout', { storeId })) ok.add(storeId);
     }
     return ok;
   });
@@ -150,7 +145,7 @@ export default async function ChannelSettlementsPage({
         <h1 className="text-2xl font-semibold">Channel settlements</h1>
         <PageDescription>
           Foodpanda and Grab sell today and pay days later, so every verified platform day raises a
-          receivable on <span className="font-mono">1220</span>. This is the screen that clears it —
+          receivable on <span>due from delivery platforms</span>. This is the screen that clears it —
           the platform&apos;s gross, every deduction it made as its own signed line, and what
           actually reached the bank.
         </PageDescription>
@@ -195,7 +190,7 @@ export default async function ChannelSettlementsPage({
                       .filter((a) => a.storeId === c.storeId)
                       .map((a) => (
                         <option key={a.id} value={a.id}>
-                          {a.name} ({a.custodian} · {a.glAccountCode})
+                          {a.name} ({a.custodian} · {accountLabel(a.glAccountCode)})
                         </option>
                       ))}
                   </Select>
@@ -291,7 +286,7 @@ export default async function ChannelSettlementsPage({
                                   )}
                                   {storeAccounts.map((a) => (
                                     <option key={a.id} value={a.id}>
-                                      {a.name} ({a.custodian} · {a.glAccountCode})
+                                      {a.name} ({a.custodian} · {accountLabel(a.glAccountCode)})
                                     </option>
                                   ))}
                                 </Select>
@@ -307,7 +302,7 @@ export default async function ChannelSettlementsPage({
             </div>
             <p className="text-xs text-neutral-400 dark:text-neutral-600">
               {peso(owed)} outstanding across every channel — summed from{' '}
-              <span className="font-mono">1220</span> by party on this request, never from a stored
+              <span>due from delivery platforms</span> by party on this request, never from a stored
               balance. A negative would mean more was settled than was ever owed.
             </p>
           </>

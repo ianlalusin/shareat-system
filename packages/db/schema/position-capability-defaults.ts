@@ -30,7 +30,7 @@
  * Do not backport `revoked_by` onto `person_grants` from this precedent.
  */
 import { sql } from 'drizzle-orm';
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, index, pgTable, text, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { positions } from './employment';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -85,6 +85,25 @@ export const positionCapabilityDefaults = pgTable(
     // Drizzle's builder cannot express and Postgres cannot either without a trigger, the same
     // limit `employment.ts:132-135` documents for its own cross-table rule. Enforced in the
     // DOMAIN (`setPositionDefault`, packages/domain/src/people/position-defaults.ts) and proven
-    // by integration test, not by a CHECK here.
+    // by integration test, not by a CHECK here.,
+    // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
+    // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
+    // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
+    // `stores_org_id_id_unique` (hand-added in migration 0194, see schema/persons.ts, schema/stores.ts).
+    foreignKey({
+      columns: [t.orgId, t.revokedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'position_capability_defaults_revoked_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.setBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'position_capability_defaults_set_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'position_capability_defaults_store_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

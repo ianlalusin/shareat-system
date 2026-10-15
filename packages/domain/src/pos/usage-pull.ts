@@ -61,6 +61,7 @@ import { addQuantity, compareQuantity, quantity, ZERO_QUANTITY } from '../stock/
 import { isFrozenBySessions } from '../stock/count-workflow';
 import { assertUsageSource } from '../stock-locations/rules';
 import { decideHolds, heldSentences, type HeldLine, type HoldInputLine } from './usage-holds';
+import { loadDepletionLookups, planInstant } from './depletion-source';
 import { explodePosSales, type PlanLine, type PlanSection, type PosSoldItemInput } from './plan';
 import { sameItemsProjection, soldItemsFromFeed } from './v1-sold-items';
 
@@ -76,16 +77,13 @@ async function rebuildLines(
   storeId: string,
   defaultLocationId: string,
   posItems: readonly PosSoldItemInput[],
+  asOf: Date,
 ): Promise<PlanLine[]> {
-  const maps = await posMappingRepo.listActiveMaps(tx, storeId);
-  const recipeIds = [...new Set(maps.filter((m) => m.mode === 'recipe' && m.recipeId).map((m) => m.recipeId!))];
-  const recipeRows = await posMappingRepo.getRecipesForExplosion(tx, orgId, recipeIds);
-  const recipesById = new Map(
-    recipeRows.filter((r) => r.status === 'active').map((r) => [r.id, { outputQuantity: r.outputQuantity, lines: r.lines }]),
-  );
+  // T-401 S5: the one seam chooses the mapping (the store's POS item maps, or the menu rules for a switched store, as of `asOf`).
+  const { mapsByPosItemKey, recipesById } = await loadDepletionLookups(tx, orgId, storeId, asOf);
   return explodePosSales({
     posItems,
-    mapsByPosItemKey: new Map(maps.map((m) => [m.posItemKey, m])),
+    mapsByPosItemKey,
     recipesById,
     defaultLocationId,
   });
@@ -277,8 +275,9 @@ export async function buildPlan(tx: Tx, actor: Actor, input: BuildPlanInput): Pr
     return fail(SENTENCES.noItems(when(salesDay.businessDate), formatMoney(money(lockedDay.day.totalSales))));
   }
 
-  const lines = await rebuildLines(tx, input.orgId, input.storeId, input.locationId, read.items);
-  const now = new Date();
+  // T-401 S5: the plan's own instant, taken once; it is stored as the snapshot time and finalize rebuilds as of it.
+  const now = await planInstant(tx);
+  const lines = await rebuildLines(tx, input.orgId, input.storeId, input.locationId, read.items, now);
 
   const pullId = existing
     ? await (async () => {
@@ -509,7 +508,7 @@ export async function finalizeSections(tx: Tx, actor: Actor, input: FinalizeSect
       return fail(finalizedSectionsOf(locked).length > 0 || postedStored.length > 0 ? SENTENCES.partlyChanged(d) : SENTENCES.changed(d));
     }
   }
-  const freshLines = await rebuildLines(tx, pull.orgId, pull.storeId, locked.locationId, pinRead.items);
+  const freshLines = await rebuildLines(tx, pull.orgId, pull.storeId, locked.locationId, pinRead.items, locked.snapshotTakenAt);
 
   const freshKeys = new Set(freshLines.map((l) => l.key));
   const confirmedSet = new Set(input.confirmedKeys);

@@ -296,7 +296,7 @@ async function runImport(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetch
   await auditLogRepo.append(tx, orgId, {
     actorPersonId: actor.personId,
     action: 'reimport_sales_day',
-    entity: 'sales_days',
+    storeId: liveDay.storeId,
     entityId: liveDay.id,
     before,
     after,

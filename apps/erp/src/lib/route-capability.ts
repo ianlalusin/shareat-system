@@ -80,6 +80,11 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, Capability>> = {
   // the same word; this is the read layer. The prefix covers /cutover/count/sheet.
   '/cutover/opening': 'run_cutover',
   '/cutover/count': 'run_cutover',
+
+  // --- T-401 S4: the menu and catalog master. The prefix covers /menu/items/[id] and /menu/prices; the longer /menu/requests wins
+  //     and needs the (store-scoped) request word instead, which a manager holds. The writes check their own words in the domain.
+  '/menu': 'view_menu',
+  '/menu/requests': 'request_menu_item',
 };
 
 /**

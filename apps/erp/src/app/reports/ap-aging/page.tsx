@@ -1,3 +1,4 @@
+import { accountCodeAndName } from '@/lib/account-label';
 import { getApAgingReport } from '@shareat/domain';
 import { apRepo } from '@shareat/db';
 import { reportScope, runReport } from '../lib';
@@ -62,7 +63,7 @@ export default async function ApAgingPage({
         <h1 className="text-2xl font-semibold">AP Aging</h1>
         <PageDescription>
           Every open payable, bucketed by due date. The total below is checked against the
-          2110 control account on every load — two independent queries that must agree to the
+          {accountCodeAndName('2110')} control account on every load — two independent queries that must agree to the
           centavo.
         </PageDescription>
       </div>

@@ -155,7 +155,7 @@ export async function commitCountAction(fd: FormData): Promise<void> {
       message =
         posted.length === 0
           ? 'Committed. Every counted line matched the ledger exactly — nothing posted.'
-          : `Committed. ${posted.length} line(s) posted a variance to 5400` +
+          : `Committed. ${posted.length} line(s) posted a stock count difference` +
             (result.shortEntryId ? ` (entry ${result.shortEntryId}${result.longEntryId ? `, and ${result.longEntryId}` : ''})` : result.longEntryId ? ` (entry ${result.longEntryId})` : '') +
             '.';
     }

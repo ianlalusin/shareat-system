@@ -123,3 +123,22 @@ if (process.env.INTEGRATION_RESTRICTED_ROLE !== '0') {
 } else {
   process.env.DATABASE_URL = url;
 }
+
+/**
+ * T-402 S2 (audit ruling A1): authorize() denials and other failure-path security events are written by an in-process outbox
+ * AFTER the caller returns. A test file's `beforeEach` truncate (or its next fixture) must never race that write, so every
+ * test starts and ends with the outbox drained. Dynamic import: `@shareat/auth` reads DATABASE_URL, set above; a test that
+ * mocks `@shareat/auth` away simply has nothing to drain.
+ */
+import { afterEach, beforeEach } from 'vitest';
+
+async function drainSecurityEvents(): Promise<void> {
+  try {
+    const auth = (await import('@shareat/auth')) as { flushSecurityEvents?: () => Promise<void> };
+    if (typeof auth.flushSecurityEvents === 'function') await auth.flushSecurityEvents();
+  } catch {
+    // a file that mocks the package or its db away has no outbox to drain
+  }
+}
+beforeEach(drainSecurityEvents);
+afterEach(drainSecurityEvents);
