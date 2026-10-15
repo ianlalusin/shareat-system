@@ -19,12 +19,9 @@
 | 4 | **The audit-log dump folder must be locked down, and the purge locks `audit_log`.** `--dump-dir` (or `CUTOVER_DUMP_DIR`) is **required** with `--apply` and `--rehearse` and has no default. The dump holds every audit event (names, actions, ids). Exact ACL commands are in §1.3. While the purge compares `audit_log` to the dump it holds `LOCK TABLE audit_log IN SHARE ROW EXCLUSIVE MODE`: **any writer (the app, `firestore-relay`, any timer) waits or errors**. So the purge runs inside the cutover window with writers off (§3) | A row written after the dump would be erased unrecorded; the purge refuses if the count changed (`dump again, then run the purge`) |
 | 5 | **Never run the purge against anything but the database named in the step.** Rehearsal: only `shareat_rehearsal_YYYYMMDD` on the temporary cluster. Production: the production database, typed back with `--confirm-database` | The purge cannot be undone except by restore |
 
-⚠️ **T-402 S3 status.** `--dump-dir`, the dump, and the `audit_log` lock exist today only on branch `lane/t402-s3`
-(`scripts/cutover-purge.ts:76,139`, `packages/db/src/cutover/purge.ts:356,555`). On `lane/t394-s3` / `main` as of
-this writing `cutover-purge` has **no** `--dump-dir` and takes no lock. **Everything in this runbook that mentions
-the dump or the lock applies only once T-402 S3 is merged; before then, omit `--dump-dir`.** Check at the start of
-every rehearsal: `npm run cutover:purge -- --help 2>&1 | grep dump-dir` (prints a line only when merged). The 1 Jan
-runbook must not be signed while this is unmerged.
+✅ **T-402 S3 status.** Merged in release 2026-10-15: `--dump-dir`, the audit-log dump and the `audit_log` lock are in
+`scripts/cutover-purge.ts` and `packages/db/src/cutover/purge.ts`, and `cutover:rehearse purge` passes `--dump-dir`
+(CUTOVER_DUMP_DIR, else `<REHEARSAL_DIR>/<db>-auditdump`).
 
 ### 0.2 Who, and the people rule
 
@@ -91,7 +88,7 @@ ls -ld /srv/shareat-shared/cutover-dump      # must read drwx------ shareat shar
 ```
 After the run: `ls -l /srv/shareat-shared/cutover-dump` shows the `.dump` and `.dump.sha256` as `-rw-------`. Copy the folder off the box to the evidence store; never leave the only copy on the box that is being cut over.
 
-Then, in the shell that runs the purge: `CUTOVER_DUMP_DIR=<that folder>` (the rehearsal tool's child processes inherit it; `childEnv` strips only database URLs, `scripts/lib/rehearsal/children.ts:40-49`).
+Then, in the shell that runs the purge: `CUTOVER_DUMP_DIR=<that folder>` (the rehearsal tool passes it to its purge children as `--dump-dir`; if unset it uses `<REHEARSAL_DIR>/<database>-auditdump`).
 
 ## 2. The rehearsal (13 Nov mock, 18 Dec dress; spec S4/S5)
 
@@ -296,7 +293,7 @@ Time the restore once (`mark rollback`) on 13 Nov; its duration is this runbook'
 ## Appendix B. Mismatches between the spec and the scripts (do not paper over)
 
 1. **`--dump-dir` / audit-log dump / `audit_log` lock are not in this branch.** Spec S3 text and the handoff assume them; they live on `lane/t402-s3` (unmerged, open audit findings). The runbook is written for after the merge (§0.1).
-2. **The rehearsal tool does not pass `--dump-dir`** to its `--rehearse` and `--apply` children (`children.ts:87`). After T-402 S3 merges those children refuse unless `CUTOVER_DUMP_DIR` is set in the shell (it is inherited, `children.ts:40-49`). §1.3 sets it; S1 should either pass a flag or document the env.
+2. **RESOLVED (2026-10-15).** The rehearsal tool now passes `--dump-dir` to its `--rehearse` and `--apply` children (`scripts/lib/rehearsal/children.ts`, `runPurgeChildren`'s `dumpDir`). `cutover:rehearse purge` uses `CUTOVER_DUMP_DIR` if set, else `<REHEARSAL_DIR>/<database>-auditdump`. Its post-purge check `purge_tables_empty` accepts the `cutover.*` events the purge writes into `audit_log` after truncating it (T-402 R15) and fails on any other row.
 3. **The rehearsal tool refuses production** (guards pin the production host); spec §5.2 lists "`cutover-purge` dry run, `--rehearse`, `--apply` on production" only for the plain CLI, which is what §3.2 uses. There is **no scripted `verify` for production**: the wizard's own checks stand in (the tool can only be pointed at a `shareat_rehearsal_*` database).
 4. `cutover:rehearse purge --by` takes **one** id (`flagValue`, `cutover-rehearsal.ts:211`); an organisation count above one on a rehearsal needs `CUTOVER_PURGE_BY`, which the child inherits.
 5. Spec §5.2 asks for the "journal-writing timers" list built from `SCHEDULER_JOBS` and the systemd units; **no T-396 morning-import timer exists in `docs/ops/` yet**, so it cannot be listed. §3.3 says to add it when it lands.

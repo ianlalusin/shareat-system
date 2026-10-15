@@ -256,6 +256,10 @@ describe('T-394 S1 I3, I4, I5 - start / predump / purge on the migrated copy', (
   it('4.cli / 5.cli purge runs the real CLI three times: the C2 row exists for EVERY org, purge tables are empty, KEEP rows remain', async () => {
     const r = cli(withDb('purge', TARGET_DB, ['--by', personId]));
     expect(r.status, r.text.slice(-800)).toBe(0);
+    // T-402 S3 (R15): the children were handed a dump dir (default: inside REHEARSAL_DIR) and left the audit-log dump + its sha256 there
+    const auditFiles = walk(path.join(dir, `${TARGET_DB}-auditdump`));
+    expect(auditFiles.some((f) => /audit-log-.*\.dump$/.test(f))).toBe(true);
+    expect(auditFiles.some((f) => f.endsWith('.dump.sha256'))).toBe(true);
     const t = postgres(urlFor(TARGET_DB), { max: 1, onnotice: () => {} });
     try {
       const orgs = await t<{ id: string }[]>`select id from organizations`;
@@ -276,7 +280,8 @@ describe('T-394 S1 I3, I4, I5 - start / predump / purge on the migrated copy', (
 
 describe('T-394 S1 I11 - rollback-check restores nothing itself; it compares the restored predump with the dump\'s own manifest', () => {
   async function restorePredump(): Promise<void> {
-    const dump = walk(dir).find((f) => f.endsWith('.dump'));
+    // the predump folder only: since T-402 S3 the purge children also leave the audit-log dump (`<db>-auditdump`) under REHEARSAL_DIR
+    const dump = walk(path.join(dir, `${TARGET_DB}-predump`)).find((f) => f.endsWith('.dump'));
     expect(dump, 'predump must have left a dump').toBeTruthy();
     const { argv, env } = buildPgArgs(urlFor(AGAINST_DB), ['--no-owner', '--no-acl', '--exit-on-error', '--single-transaction', dump!]);
     const r = await runTool(resolvePgBin('pg_restore'), argv, env);

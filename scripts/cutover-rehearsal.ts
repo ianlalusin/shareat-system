@@ -223,6 +223,9 @@ async function main(argv: string[]): Promise<void> {
           confirmDatabase: database,
           by,
           reportDir: dir,
+          // T-402 S3 (R15): an operator-chosen CUTOVER_DUMP_DIR wins; otherwise a private folder inside this rehearsal's own dir
+          // (already outside the repo and the sensitive-material folder of the runbook), one per database.
+          dumpDir: env.CUTOVER_DUMP_DIR && env.CUTOVER_DUMP_DIR.trim() !== '' ? path.resolve(env.CUTOVER_DUMP_DIR) : path.join(dir, `${database}-auditdump`),
           spawn: realSpawn,
           liveness: async () => {
             const l = await checkLiveness(sql);

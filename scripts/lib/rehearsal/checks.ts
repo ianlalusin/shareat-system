@@ -124,7 +124,12 @@ export async function checkPostPurge(
   for (const t of tablesInClass('purge')) {
     const nb = (CUTOVER_CLASSIFICATION[t] as { notBefore?: string } | undefined)?.notBefore;
     if (nb && o.conversionDate < nb) continue;
-    const n = await count(sql, t);
+    // T-402 R15 (C6): the purge writes its own `cutover.purge` event AFTER truncating audit_log, so the go-live record is the first row
+    // of the production log. "Empty" therefore means: no row that is not a cutover.* event (the dump holds everything older).
+    const n =
+      t === 'audit_log'
+        ? ((await sql<{ n: number }[]>`select count(*)::int as n from audit_log where action not like 'cutover.%'`)[0]?.n ?? 0)
+        : await count(sql, t);
     if (n > 0) nonEmpty.push(`${t}=${n}`);
   }
   if (nonEmpty.length > 0) failures.push({ check: 'purge_tables_empty', detail: nonEmpty.join(', ') });

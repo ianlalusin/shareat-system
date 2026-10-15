@@ -75,6 +75,11 @@ export async function runPurgeChildren(o: {
   liveness: LivenessFn;
   /** Where the purge child writes its report: the rehearsal dir, never the repo's docs/reviews (R10). */
   reportDir?: string;
+  /**
+   * T-402 S3 (R15): where --rehearse and --apply dump the audit log before the purge empties it. Both refuse without it. Passed as
+   * `--dump-dir` (explicit, so it does not depend on an inherited CUTOVER_DUMP_DIR). The dry run takes no dump and gets no flag.
+   */
+  dumpDir: string;
 }): Promise<ChildrenResult> {
   const g = guard(o.env, o.confirmDatabase);
   if (refused(g)) return g;
@@ -84,7 +89,7 @@ export async function runPurgeChildren(o: {
   const mk = (extra: string[]): SpawnCall => ({ command: process.execPath, args: [tsxCli, 'scripts/cutover-purge.ts', ...base, ...extra], env });
   // Liveness (R3 e) is re-checked before EACH child: a session that connects between the dry run and the apply must stop the apply.
   let ran = 0;
-  for (const call of [mk([]), mk(['--rehearse', '--as-of', KEEP_FROM]), mk(['--apply', '--as-of', KEEP_FROM, '--by', o.by])]) {
+  for (const call of [mk([]), mk(['--rehearse', '--as-of', KEEP_FROM, '--dump-dir', o.dumpDir]), mk(['--apply', '--as-of', KEEP_FROM, '--by', o.by, '--dump-dir', o.dumpDir])]) {
     const live = await o.liveness();
     if (!live.ok) return { ok: false, code: 2, ran, message: `REFUSED: ${live.message ?? 'another session is connected to the target'}` };
     const { code } = await o.spawn(call);
