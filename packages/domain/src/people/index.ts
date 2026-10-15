@@ -306,6 +306,9 @@ export async function endEmployment(
     );
   }
 
+  // T-407 Inv 21: serialise concurrent ends for the same person BEFORE writing (no lock-order deadlock).
+  await employmentRepo.lockPersonEmployments(tx, existing.personId, existing.orgId);
+
   const closed = await employmentRepo.closeEmployment(tx, input);
 
   // T-289 moment 5 — ending the employment leaves no open employment at this store, so
