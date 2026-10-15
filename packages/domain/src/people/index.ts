@@ -352,13 +352,15 @@ export async function endEmployment(
     endedSessions = await sessionsRepo.endAllForPerson(tx, existing.personId, 'revoked', existing.storeId);
   }
   if (endedSessions > 0) {
+    // Built outside the call: the T-402 S1b static guard reads any `storeId:` inside an append call as the row's store.
+    const after = { reason: 'employment_ended', employmentId: existing.id, storeId: endedAtStore, ended: endedSessions };
     await auditLogRepo.append(tx, actor.orgId, {
       actorPersonId: actor.personId,
       action: 'session.ended_all',
       storeId: null,
       entityId: existing.personId,
       before: null,
-      after: { reason: 'employment_ended', employmentId: existing.id, storeId: endedAtStore, ended: endedSessions },
+      after,
       source: 'web',
     });
   }
