@@ -351,7 +351,7 @@ describe("B5 - day-close warning: yesterday's usage not posted (a warning, never
     await manualDraft(w, w.a.storeId, w.a.kitchen, yesterday(), w.coke);
     const html = await dayPage(w, dayId);
     expect(html).toMatch(WARN);
-    expect(html.slice(html.search(WARN), html.search(WARN) + 500), 'one draft of the day before the viewed day').toMatch(/1/);
+    expect(html.slice(html.search(WARN), html.search(WARN) + 500), 'one draft of the day before the viewed day').toMatch(/\b1\b/);
   }, 180_000);
 
   it('it is only a warning: submit and verify of the sales day still succeed while the usage is unposted', async () => {

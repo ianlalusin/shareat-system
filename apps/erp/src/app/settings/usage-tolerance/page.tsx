@@ -47,7 +47,7 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
         <form action={setOrgUsageToleranceAction} className="mt-3 flex flex-wrap items-end gap-3">
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Tolerance, as a fraction (0.10 is 10%)</span>
-            <Input name="tolerance" defaultValue={view.org} inputMode="decimal" className="w-40" />
+            <Input name="tolerance" defaultValue={view.org} inputMode="decimal" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
           </label>
           <Button type="submit" variant="primary">
             Save
@@ -73,7 +73,7 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
           </label>
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Tolerance, as a fraction</span>
-            <Input name="tolerance" inputMode="decimal" placeholder="0.05" className="w-32" />
+            <Input name="tolerance" inputMode="decimal" placeholder="0.05" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
           </label>
           <Button type="submit" variant="primary">
             Save

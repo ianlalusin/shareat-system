@@ -1,4 +1,4 @@
-import { getApAgingReport, getArAgingReport, getBalanceSheet, getIncomeStatement, getSalesRollup } from '@shareat/domain';
+import { getApAgingReport, getArAgingReport, getBalanceSheet, getIncomeStatement, getSalesRollup, usageCheckScorecard } from '@shareat/domain';
 import { attendanceDaysRepo, cashRequestsRepo, commissaryKpisRepo, lowStockRepo } from '@shareat/db';
 import { add, compare, isZero, money, negate, subtract, ZERO } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
@@ -57,13 +57,13 @@ export default async function DashboardPage({
   const period = lastCompletedPeriod();
 
   const [
-    { incomeStatement, balanceSheet, arAging, apAging, salesNow, salesPrev, salesByStore, lowStock, openFloats, onShift, inFlight, disputes, received },
+    { incomeStatement, balanceSheet, arAging, apAging, salesNow, salesPrev, salesByStore, lowStock, openFloats, onShift, inFlight, disputes, received, usageScorecard },
     { feed },
   ] = await Promise.all([
     runReport(orgId, async (tx) => {
       const [
         incomeStatement, balanceSheet, arAging, apAging, salesNow, salesPrev, salesByStore, lowStockRows, floats,
-        onShift, inFlight, disputes, received,
+        onShift, inFlight, disputes, received, usageScorecard,
       ] = await Promise.all([
         getIncomeStatement(tx, { orgId, storeId, fromDate, toDate }),
         getBalanceSheet(tx, { orgId, storeId, asOfDate: today }),
@@ -80,6 +80,8 @@ export default async function DashboardPage({
         commissaryKpisRepo.inFlightOrders(tx, { orgId, storeId }),
         commissaryKpisRepo.openDisputes(tx, { orgId, storeId }),
         commissaryKpisRepo.receivedInRange(tx, { orgId, storeId, fromDate, toDate }),
+        // T-401 S6: how many of the POS usage drafts a manager posted versus how many the system auto-posted.
+        usageCheckScorecard(tx, scope.actor, { from: fromDate, to: toDate }),
       ]);
       const inScope = new Set(storeIdList);
       return {
@@ -96,6 +98,7 @@ export default async function DashboardPage({
         inFlight,
         disputes,
         received,
+        usageScorecard: usageScorecard.filter((r) => inScope.has(r.storeId)),
       };
     }),
     findingsFor(orgId, period),
@@ -251,6 +254,39 @@ export default async function DashboardPage({
             <OutlineCount href="/cash-requests" count={openFloats} label="Open floats" hint="cash requests awaiting liquidation" />
           </div>
         </section>
+
+        {usageScorecard.length > 0 ? (
+          <section className="flex flex-col gap-2">
+            <div className="flex items-center gap-4 border-t-2 border-ink pt-3">
+              <h2 className="m-0 font-display text-[28px] font-bold leading-none">Usage check</h2>
+              <span className="text-[13px] text-muted">POS usage drafts · {rangeText}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted">
+                    <th className="py-1 pr-4 font-medium">Store</th>
+                    <th className="py-1 pr-4 text-right font-medium">Pull drafts</th>
+                    <th className="py-1 pr-4 text-right font-medium">Posted by a manager</th>
+                    <th className="py-1 pr-4 text-right font-medium">Auto-posted</th>
+                    <th className="py-1 text-right font-medium">Auto-posted %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usageScorecard.map((r) => (
+                    <tr key={r.storeId} className="border-t border-surface-border">
+                      <td className="py-1 pr-4">{r.storeName}</td>
+                      <td className="py-1 pr-4 text-right tabular-nums">{r.pullDrafts}</td>
+                      <td className="py-1 pr-4 text-right tabular-nums">{r.postedByManager}</td>
+                      <td className="py-1 pr-4 text-right tabular-nums">{r.autoPosted}</td>
+                      <td className="py-1 text-right tabular-nums">{r.autoPostedPct.toFixed(0)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
 
         <RightNowBand
           onShift={onShift}

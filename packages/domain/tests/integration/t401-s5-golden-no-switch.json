@@ -181,5 +181,16 @@
     }
   ],
   "stockOut": [],
-  "auditRows": []
+  "auditRows": [
+    {
+      "action": "stock.usage_system_author_created",
+      "entity": "persons",
+      "before": null,
+      "after": {
+        "kind": "terminal",
+        "displayName": "POS usage pull (system)"
+      },
+      "store_id": null
+    }
+  ]
 }

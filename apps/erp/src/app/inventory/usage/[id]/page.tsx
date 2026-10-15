@@ -24,7 +24,7 @@ function ReasonField({ kept }: { kept: string }) {
   return (
     <label className="flex min-w-0 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
       Reason, only if a line is outside the tolerance
-      <Input name="reason" defaultValue={kept} placeholder="e.g. counted twice" className="w-64" />
+      <Input name="reason" defaultValue={kept} placeholder="e.g. counted twice" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
     </label>
   );
 }

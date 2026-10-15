@@ -113,7 +113,6 @@ updateMoneyAccount
 updateOwner
 upsertCategoryLife
 upsertPolicy
-usageCheckScorecard
 validateFingerprintTemplates
 voidShift
 withPrincipal

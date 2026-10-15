@@ -33,7 +33,7 @@ function writtenActions(): { actions: Map<string, string[]>; dynamic: string[] }
   const add = (a: string, f: string) => actions.set(a, [...(actions.get(a) ?? []), relative(ROOT, f)]);
   for (const f of files) {
     const text = readFileSync(f, 'utf8');
-    if (/auditLogRepo\.append\(/.test(text)) {
+    if (/auditLogRepo\.append(?:System)?\(/.test(text)) {
       for (const m of text.matchAll(/^\s*action:\s*([^\n]*)$/gm)) {
         const expr = m[1]!.includes('?') ? m[1]!.slice(m[1]!.indexOf('?')) : m[1]!;
         const quoted = [...expr.matchAll(/'([a-z][a-z0-9_.]*)'/g)].map((q) => q[1]!);
