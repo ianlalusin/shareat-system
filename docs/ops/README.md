@@ -13,6 +13,8 @@
 
 ---
 
+> **Cutover (31 Dec - 2 Jan) and its rehearsals:** the step-by-step runbook, go/no-go list and rollback rule are in [`cutover-runbook.md`](./cutover-runbook.md) (T-394 S3).
+
 ## CI and deploy can run on Ian's PC (added 2026-10-11)
 
 Setting the repository variable `CI_RUNNER=shareat-local` moves every CI and deploy job onto a self-hosted runner on Ian's PC, which saves GitHub-hosted minutes; deleting the variable moves them back. Setup, caveats (the PC must be on; port 5435) and rollback: [`self-hosted-runner.md`](./self-hosted-runner.md).
