@@ -16,13 +16,15 @@
  */
 import { cutoverRepo, type Tx } from '@shareat/db';
 import { fromCentavos, money, toCentavos } from '@shareat/core/money';
+// conversion-date is a leaf and is imported FIRST: opening-stock imports this module back (a cycle) and reads the date at load time.
+import { CONVERSION_DATE } from './conversion-date';
 import { itemKindsOf, planOpeningStock } from './opening-stock';
 
 /**
  * The conversion date every opening figure, inventory draft and movement carries (POSTING-PATTERNS `opening_balance.load`).
  * ⚠️ R14 moves the app's copy (`apps/erp/src/app/cutover/lib.ts`) here; S5 makes the app re-export this one.
  */
-export const CONVERSION_DATE = '2027-01-01';
+export { CONVERSION_DATE };
 
 const EQUITY = '3900';
 const MONEY_ACCOUNT_CODES = ['1110', '1120', '1130', '1140'] as const;

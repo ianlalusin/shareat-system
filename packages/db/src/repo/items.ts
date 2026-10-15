@@ -1106,6 +1106,8 @@ export interface RetireReadout {
   onHand: { storeName: string; quantity: string }[];
   activePosMaps: number;
   activeRecipes: number;
+  /** T-401 S5 (I27): menu depletion rules, in force or scheduled, that name this item (directly or through a recipe) on a variant with an active link at a store that now reads the menu rules. */
+  activeMenuRules: number;
 }
 
 export async function retireReadout(tx: Tx, orgId: string, itemId: string): Promise<RetireReadout> {
@@ -1128,9 +1130,25 @@ export async function retireReadout(tx: Tx, orgId: string, itemId: string): Prom
       and (r.output_item_id = ${itemId}
            or exists (select 1 from production_recipe_lines l where l.recipe_id = r.id and l.item_id = ${itemId}))
   `)) as unknown as { n: number }[];
+  // A rule counts when it is the one in force now (the newest at or before now()) or is still scheduled; a replaced one does not.
+  const menuRules = (await tx.execute(sql`
+    select count(distinct r.id)::int as n
+    from menu_depletion_rules r
+    join menu_pos_v1_links l on l.org_id = r.org_id and l.variant_id = r.variant_id and l.status = 'active'
+    where r.org_id = ${orgId}
+      and (r.item_id = ${itemId}
+           or exists (select 1 from production_recipe_lines pl where pl.recipe_id = r.recipe_id and pl.item_id = ${itemId}))
+      and (r.effective_from > now()
+           or r.id = (select r2.id from menu_depletion_rules r2
+                      where r2.variant_id = r.variant_id and r2.effective_from <= now()
+                      order by r2.effective_from desc, r2.created_at desc, r2.id desc limit 1))
+      and coalesce((select s.source from menu_usage_source_switches s where s.store_id = l.store_id
+                    order by s.created_at desc, s.id desc limit 1), 'v1_pos_map') = 'menu_rules'
+  `)) as unknown as { n: number }[];
   return {
     onHand: stock.map((r) => ({ storeName: r.store_name, quantity: r.quantity })),
     activePosMaps: Number(maps[0]?.n ?? 0),
     activeRecipes: Number(recipes[0]?.n ?? 0),
+    activeMenuRules: Number(menuRules[0]?.n ?? 0),
   };
 }

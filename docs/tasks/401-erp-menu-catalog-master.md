@@ -1,6 +1,6 @@
 # T-401: the ERP menu and catalog master (POS v2 P1 prerequisite)
 
-**Status:** **S1+S2 DONE 2026-10-13, live** (PR #22, migration 0196; four S1 audit rounds and two S2). Next: S3 store-menu projection, S4 screens, S5 v1 usage switch + ±10% tolerance. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-13 (revised after Ian's answers; fresh Opus review applied). S1 built on lane, to be amended in place.
+**Status:** **S3+S4+S5 DONE 2026-10-14** (store-menu projection; menu screens; usage source switch), in the release PR. Next: S6 (±10% tolerance + staff usage drafts move stock; needs a migration). | **S1+S2 DONE 2026-10-13, live** (PR #22, migration 0196; four S1 audit rounds and two S2). Next: S3 store-menu projection, S4 screens, S5 v1 usage switch + ±10% tolerance. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-13 (revised after Ian's answers; fresh Opus review applied). S1 built on lane, to be amended in place.
 (S1 = migration 0196 on `lane/t401-s1`, commit 16ab42a, worktree `wt-t401`; not merged, not deployed, so 0196 is edited
 in place, never followed by a 0197 fix-up. S2 is half-built and paused; §6a lists the tests that Ian's answers make wrong.)
 Earlier status: SPEC APPROVED WITH CHANGES 2026-10-13 (fresh Opus review applied). Written at HEAD a9e299b.
@@ -548,3 +548,94 @@ _(filled by the lanes: commits, test counts.)_
   not with cost. Built as (a) unless Ian says otherwise; (b) later is a new `pricing_basis` column, not a redesign.
 
 Earlier wording of the questions and the planner's recommendations are in git history (commit 68a77f0).
+
+## S3 projection types (planner, 2026-10-14; binding)
+All types live in `packages/domain/src/menu/project.ts` and are **structural** (it may not import `@shareat/db`, I14); repo rows
+and `OfferInForce` / `OptionOfferInForce` must be assignable to them. **`menuRepo.menuSnapshot` is NOT built in S3**: S3 is
+pure, takes a plain object, and the tester builds snapshots by hand. The loader is built by the first slice that projects live
+data (the P1 carrier spec), with its return type checked against `MenuSnapshot`. S3 builder scope is unchanged (`project.ts`).
+```ts
+type Status = 'active' | 'retired'; type Channel = 'store' | 'online';
+export interface MenuSnapshot {                       // org catalog + per-store offers; rows in any order
+  readonly categories: readonly { id: string; name: string; parentId: string | null; sortOrder: number; status: Status }[];
+  readonly items: readonly { id: string; categoryId: string; name: string; description: string | null; itemType: 'a_la_carte' | 'package' | 'refill';
+    soldALaCarte: boolean; soldInPackageSession: boolean; dinerOrderable: boolean; sortOrder: number; status: Status }[];
+  readonly variants: readonly { id: string; menuItemId: string; label: string | null; isDefault: boolean; sortOrder: number; status: Status }[];
+  readonly optionGroups: readonly { id: string; name: string; selectionMode: 'single' | 'multi'; minSelections: number; maxSelections: number; status: Status }[];
+  readonly optionValues: readonly { id: string; optionGroupId: string; name: string; sortOrder: number; status: Status }[];
+  readonly optionGroupLinks: readonly { id: string; optionGroupId: string; menuItemId: string | null; variantId: string | null; sortOrder: number; status: Status }[];
+  readonly packageRefills: readonly { packageVariantId: string; refillItemId: string; status: Status }[];
+  readonly stores: readonly StoreOffersAt[];
+}
+export interface StoreOffersAt {
+  readonly storeId: string;
+  readonly at: Date;                                  // the instant offersInForce / optionOffersInForce were read at
+  readonly offers: readonly (ResolvableOffer & { variantId: string; channel: Channel; effectiveFrom: Date })[]; // = offersInForce(storeId, at), raw, with basis
+  readonly optionOffers: readonly { optionValueId: string; channel: Channel; priceDelta: string }[];           // = optionOffersInForce(storeId, at)
+  readonly upcoming: readonly Date[];                 // effective_from of every menu_offers AND menu_option_offers row of this store > at, both channels
+}
+export type NotOfferedReason = 'no_offer' | 'withdrawn' | 'no_basis' | 'rule_below_zero';  // 'no_offer' = no row in force
+export type ChannelOffer = { orderable: true; amount: string | null; bundleHeads: number | null; extraHeadAmount: string | null }
+                         | { orderable: false; notOffered: NotOfferedReason };
+export type ChannelDelta = { orderable: true; priceDelta: string } | { orderable: false; notOffered: 'no_offer' };
+export interface StoreMenuV1 { schemaVersion: 1; storeId: string; categories: ProjectedCategory[]; items: ProjectedItem[] }
+export interface ProjectedCategory { id: string; name: string; parentId: string | null; sortOrder: number }
+export interface ProjectedItem { id: string; categoryId: string; name: string; description: string | null; itemType: 'a_la_carte' | 'package' | 'refill';
+  soldALaCarte: boolean; soldInPackageSession: boolean; dinerOrderable: boolean; sortOrder: number; variants: ProjectedVariant[] }
+export interface ProjectedVariant { id: string; label: string | null; isDefault: boolean; sortOrder: number;
+  channels: { store: ChannelOffer; online: ChannelOffer }; optionGroups: ProjectedOptionGroup[]; refillItemIds: string[] }
+export interface ProjectedOptionGroup { id: string; name: string; selectionMode: 'single' | 'multi'; minSelections: number; maxSelections: number;
+  values: { id: string; name: string; sortOrder: number; channels: { store: ChannelDelta; online: ChannelDelta } }[] }
+export interface ProjectedStoreMenu { menu: StoreMenuV1; contentHash: string; nextChangeAt: string | null }
+export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Date): ProjectedStoreMenu;
+```
+1. **Offers (Q4): raw `OfferInForce` with `basis`**, and the projection calls `resolveOfferPrice` (from `./resolve-price`) on each.
+   That is §3's "resolved by `resolveOfferPrice`": `project.ts` still does no money arithmetic, and the one decision of what a
+   row means stays in one function. No row in force for a (variant, channel) → `{ orderable: false, notOffered: 'no_offer' }`;
+   a `notOffered` result → `orderable: false` with that reason (I19). `orderable` comes from offers only, never 86 (R12);
+   `dinerOrderable` is the item flag passed through, not combined into `orderable`.
+2. **Guards (throw, a caller bug):** `storeId` absent from `snapshot.stores`; `entry.at.getTime() !== at.getTime()` (rows in
+   force at another instant would be silently wrong; K2 forbids re-deriving "in force" in TypeScript).
+3. **What appears:** a variant iff it and its item are `active` and it is orderable on at least one channel; an item iff at
+   least one variant appears; a category iff it holds an appearing item or is the parent of an appearing category. A
+   not-orderable channel of an appearing variant carries its reason. An option value appears iff active and orderable on a
+   channel; option channels are independent of the variant's.
+4. **I9:** a variant's groups = its own active links if it has any, else its item's active links; never the union. Inactive
+   groups are skipped. A group whose values all drop still appears with `values: []`.
+5. **I10:** `refillItemIds` = active `packageRefills` rows of that package variant whose refill item appears in this projection,
+   sorted by id; `[]` on every non-package variant and on a package with no rows. Empty never means all.
+6. **I15 / K10:** `nextChangeAt` = the minimum of `upcoming` that is `> at`, as `toISOString()`, else `null`. A future option
+   offer counts. Store-channel rows count (an online rule follows them, K10). R12's "offer or rule" means online pricing
+   **rules** (they are `menu_offers` rows); **depletion rules do not count** (they never appear in the menu, so they cannot change it).
+   Catalog edits are not dated: the carrier sees them as a new `contentHash`.
+7. **Order:** the projection sorts every list itself, so input row order never changes the output: categories, items, values by
+   (`sortOrder`, `name`, `id`); variants by (`isDefault` first, `sortOrder`, `label ?? ''`, `id`); groups by (link `sortOrder`,
+   `name`, `id`). Strings compare by UTF-16 code unit (`<`), never `localeCompare`.
+8. **`contentHash` (I14):** lowercase hex sha256 (`node:crypto`) of the UTF-8 bytes of `canonicalJson(menu)`: object keys sorted
+   by code unit at every depth, arrays kept in the order above, no whitespace, `JSON.stringify` for strings and numbers, `null`
+   kept, `undefined` never emitted (the builder writes a local ~10-line `canonicalJson`; the `@shareat/db` one is off limits).
+   Hashed: `menu` only. **Not hashed:** `nextChangeAt`, `at`; there is no generated-at stamp anywhere in the output. So the same
+   menu at two instants gives the same hash. Money stays 2-decimal text exactly as the repo or `resolveOfferPrice` gives it.
+
+## S3 orchestrator rulings (2026-10-14)
+- **Category order is a tree order:** parents before their children; siblings sorted by (sortOrder, name, id). Supersedes the flat (sortOrder, name, id) in rule 7 for categories.
+- **Type name clash:** project.ts's not-offered reason type is named `MenuNotOfferedReason` (resolve-price keeps `NotOfferedReason`).
+- **No production caller in S3** (by design: the first slice that projects live data builds `menuSnapshot` and calls `projectStoreMenu`). callers.mjs's test-only flag on `projectStoreMenu` is accepted for S3 only, and that later slice must add the caller.
+- *(orchestrator, after the S3 audit)* **An item whose category is retired or absent is not projected** (no dangling `categoryId` in the carrier). Retiring a category hides its items from every store menu; the S4 screen should warn before retiring a category that still holds offered items.
+- *(orchestrator, after the S3 audit)* **The snapshot's caller guarantees uniqueness** of offers per (variant, channel) and of package refill rows (the DB unique constraints already do). The projection does not guard against duplicates.
+
+## S5 rulings (Opus planner, 2026-10-14; binding)
+1. **No pull audit row; the `depletionSource` leg is DROPPED** (supersedes R7.3's last sentence and I16's "`depletionSource` appears in the audit payload only for a switched store"). Today the pull writes no `audit_log` row, and the source of every pull is already derivable exactly: a switch is refused while the store has a `planned` pull, so a pull's source is the latest switch row with `created_at` before the pull's `created_at` (no row = `v1_pos_map`). `usage-pull.ts` changes in `rebuildLines` only: `listActiveMaps` → `loadDepletionLookups`; no audit write, switched or not. What IS audited (the S5 builder adds these to `packages/db/src/audit/catalogue.ts`, owner T-401, not reserved): `menu.pos_v1_link` and `menu.pos_v1_unlink` (stock, normal, store, `menu_pos_v1_links`); `menu.usage_source_switch` (stock, high, store, `menu_usage_source_switches`; after = `{ source, differenceCount, reason }`). A seed writes `menu.pos_v1_link` plus the existing `menu_depletion_rule_set` when it creates the rule.
+2. **One seam, both directions: every S5 command that reads the v1 feed lives in `packages/domain/src/pos/depletion-source.ts`.** It holds `loadDepletionLookups`, the two-way builder, `compareDepletionSources`, `switchUsageSource`, `seedLinkFromMap`, `linkPosV1Item`, `unlinkPosV1Item` and `assertNoPlannedPullAtLinkedSwitchedStores(tx, orgId, variantId)`. **`menu/links.ts` and `menu/compare.ts` are not created.** The seam writes only menu tables (links, switches, rules); it never writes a v1 table. `menu/pricing.ts` (added to S5 builder scope: `setDepletionRule` / `cancelScheduledDepletionRule` only) calls the guard through exactly one import, `from '../pos/depletion-source'`. Guard (2) gains exactly that one allowed import specifier (no second file allow-list); every other `../pos/*` import from `menu/**` still fails. The seam builds the seeded rule through `menuRepo` with the S1/S2 pre-checks (variant locked `FOR UPDATE`; a rule is created only when the variant has **no rule row at all**, else the existing rule is kept, I25), so there is no `pricing.ts` ↔ seam import cycle.
+3. **New hole closed: links move plans too.** `linkPosV1Item`, `unlinkPosV1Item` and `seedLinkFromMap` at a **switched** store with a `planned` pull are refused, naming the store and date (same sentence as the rule refusal). At an unswitched store they are always allowed (a link there changes nothing until a switch).
+4. **I24 `difference_count` = the number of distinct `posItemKey`s with at least one difference.** `differences` lists the detail: one entry per (day, key) where that day's plans differ, plus one standing entry (`businessDate: null`) for a key whose active link's rule differs from its active map **only when that key has no day entry in the window**. So a key that differs on 3 sold days and also has a standing difference gives 3 entries and counts 1. The refusal names the earliest differing day and its key.
+5. **MENU_NAMES with `menu_pos_v1_links` / `menu_usage_source_switches` (and `menuPosV1Links` / `menuUsageSourceSwitches`): correct.** Only the seam may name them; `plan.ts` and `usage-pull.ts` reach them only through `loadDepletionLookups`, whose name is deliberately not a menu name.
+6. **Errata, source value:** wherever R7.2, R7.3, R7.5 and the §3 `menu_usage_source_switches` row say source `pos_item_maps`, read **`v1_pos_map`** (the schema enum `MENU_USAGE_SOURCES`, menu.ts:60). The table name `pos_item_maps` is unchanged where the spec means the table.
+7. **The ±10% tolerance and the staff-draft queue are NOT built in S5; they are a new slice S6** (after S5, own migration, ≈1.5 lane-days). Reason: S5 has no migration and runs alone because it is the one production-risk change; the tolerance needs an org setting and an item override column (a migration), and a decision S5 cannot make (8). S6 contract, binding now so its tester can start:
+   - **Compared:** per (store, business date, stock item), in the item's base unit, decimal arithmetic only. **Expected** = the sum of that day's usage-plan lines for the item from the source in force (menu rules if switched, else maps). **Actual** = the sum of that day's `stock_usage_records` of kind `usage` (draft + posted, not void) at that store for the item; `wastage`, `adjustment` and `opening` are not compared.
+   - **Band:** inside iff `|actual − expected| ≤ tolerance × expected`, inclusive (exactly 10% is inside). Tolerance = item override if set, else the org setting, default `0.10`. Expected 0 with actual > 0, or expected > 0 with actual 0, is always outside; both 0 is no line.
+   - **Inside:** the manager posts as today. **Outside:** posting a draft that contributes to that (item, day) is refused unless the manager passes `verifyOutOfTolerance: { reason }` (non-blank); the post then writes `stock.usage_tolerance_verified` (stock, high, store; after = `{ itemId, businessDate, expected, actual, tolerance, reason }`). Setting the org tolerance or an item override is admin only (`set_menu_depletion`), audited.
+   - **I28 (S6):** out-of-band post refused without a reason, accepted with one, audit row written; boundary 10% exactly is inside; expected 0 / actual > 0 flagged. Mutants: the band divides by **actual** instead of expected; `<` instead of `≤`; a manager can set the item override.
+   - Batch production output tolerance: a T-176 follow-up reusing the S6 band function, not S6.
+8. **Conflict flagged to the orchestrator (for Ian, before S6):** today the v1 usage pull **posts expected usage as stock out**, and T-168 usage drafts post **actual** usage. If both post for the same item and day, stock is taken twice. S6 needs Ian to choose: (a) for items the pull covers, the pull's expected becomes the check only and the manager-posted drafts are what moves stock; or (b) the pull keeps posting and the drafts only record counts for the check. Planner recommends (a), it is Ian's own model ("recipe is the basis, staff record actuals, the manager posts"). Row 318's queue (many staff draft at once, all store staff see who recorded what, manager posts) already exists in T-168 except the store-wide visibility; it goes in S6 with (a).
+- **Ian ruling 2026-10-14 (S6, answers the planner's point 8):** the **manager-posted staff usage drafts move stock** (actual usage). The POS usage pull becomes a **check only**: it compares expected (sold × rule) against posted actual and flags a gap beyond ±10%. It no longer takes stock out once S6 lands. Needs a bible row (Opus, at wrap-up).

@@ -1,3 +1,4 @@
+import { accountLabel } from '@/lib/account-label';
 import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { compare, money, ZERO } from '@shareat/core/money';
@@ -155,7 +156,7 @@ export default async function MoneyTransfersPage({
                 <div className="text-xs text-neutral-500 dark:text-neutral-400">
                   {storeById.get(a.storeId)?.code ?? '—'} ·{' '}
                   {CUSTODIAN_LABEL[a.custodian] ?? a.custodian} ·{' '}
-                  <span className="font-mono">{a.glAccountCode}</span>
+                  <span>{accountLabel(a.glAccountCode)}</span>
                 </div>
               </div>
             ))}

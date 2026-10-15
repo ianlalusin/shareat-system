@@ -181,14 +181,33 @@ export default async function DashboardPage({
           />
         </div>
 
-        <section className="grid items-end gap-10 lg:grid-cols-2">
-          <HeroNumber
-            kicker={`Sales · ${rangeText} · ${storeLabel.toLowerCase()}`}
-            value={Number(totalNow)}
-            text={fmtNum(totalNow)}
-            delta={{ same: isZero(diff), pct, abs: fmtNum(Number(up ? diff : negate(diff))), up, against }}
-            lede={lede}
-          />
+        <section className="grid items-start gap-10 lg:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-8">
+            <HeroNumber
+              kicker={`Sales · ${rangeText} · ${storeLabel.toLowerCase()}`}
+              value={Number(totalNow)}
+              text={fmtNum(totalNow)}
+              delta={{ same: isZero(diff), pct, abs: fmtNum(Number(up ? diff : negate(diff))), up, against }}
+              lede={lede}
+            />
+            <div className="grid grid-cols-1 border-t border-surface-border sm:grid-cols-2">
+              {[
+                { label: 'Average a day', value: fmtNum(Number(totalNow) / days), note: `over ${days} ${days === 1 ? 'day' : 'days'}`, href: '/reports/sales-rollup' },
+                {
+                  label: 'Gross profit',
+                  value: fmtNum(incomeStatement.grossProfit),
+                  note: isZero(incomeStatement.revenue)
+                    ? rangeText
+                    : `${((Number(incomeStatement.grossProfit) / Number(incomeStatement.revenue)) * 100).toFixed(1)}% of revenue`,
+                  href: '/reports/income-statement',
+                },
+                { label: 'Expenses', value: fmtNum(totalExpenses), note: rangeText, href: '/reports/income-statement' },
+                { label: 'Net income', value: fmtNum(incomeStatement.netIncome), note: rangeText, href: '/reports/income-statement' },
+              ].map((s) => (
+                <StatCard key={s.label} {...s} className="border-b sm:border-r sm:even:border-r-0" />
+              ))}
+            </div>
+          </div>
           <SalesLine
             points={points}
             chartLabel={`Sales per day, ${rangeText}, against ${against}`}
@@ -199,25 +218,12 @@ export default async function DashboardPage({
           />
         </section>
 
-        <section className="grid grid-cols-1 border-y border-surface-border sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid grid-cols-1 border-y border-surface-border sm:grid-cols-2">
           {[
-            { label: 'Expenses', value: totalExpenses, note: rangeText, href: '/reports/income-statement' },
-            { label: 'Net income', value: incomeStatement.netIncome, note: rangeText, href: '/reports/income-statement' },
-            { label: 'AR outstanding', value: arAging.totals.total, note: `as of ${shortDay(today)}`, href: '/reports/ar-aging' },
-            { label: 'AP outstanding', value: apAging.totals.total, note: `as of ${shortDay(today)}`, href: '/reports/ap-aging' },
+            { label: 'AR outstanding', value: fmtNum(arAging.totals.total), note: `as of ${shortDay(today)}`, href: '/reports/ar-aging' },
+            { label: 'AP outstanding', value: fmtNum(apAging.totals.total), note: `as of ${shortDay(today)}`, href: '/reports/ap-aging' },
           ].map((s) => (
-            <Link
-              key={s.label}
-              href={s.href}
-              className="dash-rise flex min-h-11 flex-col gap-2 border-surface-border py-6 px-6 sm:border-r"
-            >
-              <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{s.label}</span>
-              <span className="font-display text-[40px] font-bold leading-[0.95] tabular-nums">
-                <span className="mr-0.5 text-[0.5em] text-muted">₱</span>
-                {fmtNum(s.value)}
-              </span>
-              <span className="text-[13px] text-muted">{s.note}</span>
-            </Link>
+            <StatCard key={s.label} {...s} className="sm:border-r sm:last:border-r-0" />
           ))}
         </section>
 
@@ -255,5 +261,22 @@ export default async function DashboardPage({
         />
       </div>
     </Page>
+  );
+}
+
+/** One summary figure: label, peso amount, a muted note, the whole card linking to its report. */
+function StatCard({ label, value, note, href, className = '' }: { label: string; value: string; note: string; href: string; className?: string }) {
+  return (
+    // The caller's borders sit on a wrapper so the Link's own className stays static for the T-262 control sweep.
+    <div className={`border-surface-border ${className}`}>
+      <Link href={href} className="dash-rise flex h-full min-h-11 flex-col gap-2 px-6 py-6">
+        <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{label}</span>
+        <span className="font-display text-[40px] font-bold leading-[0.95] tabular-nums">
+          <span className="mr-0.5 text-[0.5em] text-muted">₱</span>
+          {value}
+        </span>
+        <span className="text-[13px] text-muted">{note}</span>
+      </Link>
+    </div>
   );
 }

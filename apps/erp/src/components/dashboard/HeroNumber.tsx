@@ -18,9 +18,9 @@ export function HeroNumber({
   lede?: string;
 }) {
   return (
-    <div className="dash-rise flex min-w-0 flex-col gap-4">
+    <div className="dash-rise flex [container-type:inline-size] min-w-0 flex-col gap-4">
       <p className="m-0 text-xs font-bold uppercase tracking-[0.14em] text-muted">{kicker}</p>
-      <div className="whitespace-nowrap font-display text-[clamp(56px,8.6vw,120px)] font-extrabold leading-[0.85] tracking-tight tabular-nums">
+      <div className="whitespace-nowrap font-display text-[clamp(40px,14cqi,120px)] font-extrabold leading-[0.85] tracking-tight tabular-nums">
         <span className="mr-1 align-top text-[0.42em] text-warning-ink">₱</span>
         <CountUp value={value} text={text} />
       </div>

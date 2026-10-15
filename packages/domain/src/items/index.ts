@@ -303,6 +303,16 @@ export async function setItemStatus(
       throw refuse(S, S);
     }
     if (item.status === input.status) return { changed: false };
+    if (input.status === 'inactive') {
+      // T-401 S5 (I27): a store that reads the menu rules still depletes this item; retiring it would break that store's usage.
+      const { activeMenuRules } = await itemsRepo.retireReadout(trx, actor.orgId, input.itemId);
+      if (activeMenuRules > 0) {
+        throw refuse(
+          `setItemStatus: item ${input.itemId} is named by ${activeMenuRules} menu depletion rule(s) at a store whose usage reads the menu rules.`,
+          'A store that reads its stock usage from the menu still uses this item. Switch that store back to the POS item maps, or change the menu rule, before retiring it.',
+        );
+      }
+    }
     await itemsRepo.updateItem(trx, actor.orgId, input.itemId, { status: input.status });
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,

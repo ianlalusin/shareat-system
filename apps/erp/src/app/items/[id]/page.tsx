@@ -355,6 +355,11 @@ export default async function ItemDetailPage({
               {`${readout.activePosMaps} live POS ${readout.activePosMaps === 1 ? 'map' : 'maps'} still use it. Point them at the replacement; sales keep using up this item until its stock runs out.`}
             </p>
           )}
+          {readout.activeMenuRules > 0 && (
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              {`${readout.activeMenuRules} menu stock ${readout.activeMenuRules === 1 ? 'rule' : 'rules'} at a store that reads its usage from the menu still use it. Switch that store back to the POS item maps before retiring.`}
+            </p>
+          )}
           {readout.activeRecipes > 0 && (
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               {`${readout.activeRecipes} live ${readout.activeRecipes === 1 ? 'recipe' : 'recipes'} still use it.`}

@@ -17,6 +17,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { personName } from '@/lib/person-name';
 
 export const metadata = { title: 'Order wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -111,7 +112,7 @@ export default async function WastageDetailPage({
         {allocations.length > 0 && (
           <div className="mt-2">
             <span className="text-neutral-600 dark:text-neutral-400">Responsible party:</span>{' '}
-            {allocations.map((a) => `${nameById.get(a.personId) ?? a.personId} ${a.percent}%`).join(', ')}
+            {allocations.map((a) => `${personName(nameById, a.personId)} ${a.percent}%`).join(', ')}
           </div>
         )}
       </section>

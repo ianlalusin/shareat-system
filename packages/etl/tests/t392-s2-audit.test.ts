@@ -92,13 +92,11 @@ describe('T-392 S2 audit - offsetting days, zero compared days, no_data [legs 1-
   });
 
   // Leg 3. Mutant: no_data judged from figures alone (a week holding only a v1 flag disappears).
-  it('[leg 3] no_data only when lines, docs, flags, dispositions and scope are ALL empty', () => {
+  it('[leg 3] no_data only when lines, flags, dispositions and scope are ALL empty (docs no longer count, S4b inv 43)', () => {
     expect(res().verdict).toBe('no_data');
     const flagOnly = res({ v1: { lines: [], tradingDays: [], cashResidual: {}, flags: [{ code: 'V1_REMITTED_FIELD_ZERO', date: D(20) }] } });
     expect(flagOnly.verdict).toBe('open');
     const cases: Record<string, Any> = {
-      v1Docs: { v1Docs: [doc('a', 'expense_category', 'e1', D(20), 100)] },
-      v2Docs: { v2Docs: [doc('b', 'expense_category', 'cat-1', D(20), 100)] },
       scope: { v1: { lines: [], tradingDays: [], cashResidual: {}, scope: [{ class: 'PAYROLL_ON_V1', sourceType: 'payroll_payout', legs: 1, in: 0, out: 100 }] } },
       disposition: { dispositions: [{ orgId: 'org-1', storeId: 'LIPA', weekStart: WEEK, kind: 'expense_category', lineKey: 'c', deltaAt: 1, class: 'V2_DEFECT', ref: 'DEF-1', createdAt: '2026-10-27T00:00:00Z' }] },
     };

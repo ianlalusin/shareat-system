@@ -96,6 +96,7 @@ export * from './production/unit-conversion';
 export * from './pos/plan';
 export * from './pos/item-map';
 export * from './pos/usage-pull';
+export * from './pos/depletion-source';
 // T-210 — the daily sales pull, for the POS-day reconciliation report.
 export * from './pos/v1-recheck';
 // T-375 S1 - the POS v1 day feed: the bridge fetchers and the store link.
@@ -128,6 +129,10 @@ export * from './organizations';
 // (admin-only), this one is `manage_store_settings` (manager ✅).
 export * from './sales-channels';
 export * from './dual-run';
+// T-392 S5 - the disposition writer is exported HERE and never from dual-run/index.ts (the CLI has no classify subcommand, R10).
+export { recordDualRunDisposition, isDispositionableLine, mayRecordDualRunDisposition } from './dual-run/dispositions';
+export type { RecordDualRunDispositionInput } from './dual-run/dispositions';
+export * from './dual-run/pack';
 
 // T-401 S2 - the ERP menu and catalog master: categories, items, variants, option groups, depletion rules, and the
 // append-only effective-dated offers (a store's price). Nothing reads it in production until the POS v2 carrier (P1).

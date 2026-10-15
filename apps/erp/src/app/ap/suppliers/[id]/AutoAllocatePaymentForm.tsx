@@ -296,7 +296,7 @@ export function AutoAllocatePaymentForm({
         {unallocated !== null && !pageStale && !raceDetected && !editedSinceCheck && (
           <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
             {compare(money(unallocated), ZERO) > 0
-              ? `₱${unallocated} would be unallocated — routed to 1240 (supplier advance) as an overpayment unless you edit the boxes above.`
+              ? `₱${unallocated} would be unallocated — routed to advances to suppliers as an overpayment unless you edit the boxes above.`
               : 'Fully allocated across the boxes above.'}
           </p>
         )}

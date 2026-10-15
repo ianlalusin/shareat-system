@@ -11,7 +11,7 @@ import { listStores, withOrgPrincipal } from '../expenses/lib';
 export { peso } from '../../lib/format';
 export { listStores, withOrgPrincipal } from '../expenses/lib';
 export type { StoreOption } from '../expenses/lib';
-export { CUSTODIAN_LABEL, GL_LABEL, INSTRUMENT_LABEL } from '../money-accounts/lib';
+export { CUSTODIAN_LABEL, INSTRUMENT_LABEL } from '../money-accounts/lib';
 
 export interface AccountOption {
   id: string;

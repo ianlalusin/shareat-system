@@ -113,6 +113,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('reimport_sales_day', 'money', 'high', 'store', 'sales_days', 'T-375'),
   def('set_platform_sales', 'money', 'normal', 'store', 'sales_days', 'T-375'),
   def('dual_run.compare', 'money', 'normal', 'org', 'dual_run', 'T-392', { viewers: 'admin' }),
+  def('dual_run.disposition', 'money', 'normal', 'store', 'dual_run_dispositions', 'T-392', { viewers: 'admin' }),
   // Legacy undotted action: old rows carry it (0197's list); reserved so nothing new writes it.
   def('master_data_load', 'data', 'high', 'org', 'organizations', 'T-391', { viewers: 'admin', reserved: true }),
   def('master_data.items_load', 'data', 'high', 'org', 'items', 'T-391', { viewers: 'admin' }),
@@ -144,6 +145,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('menu_option_value_create', 'menu_price', 'normal', 'org', 'menu_option_values', 'T-401'),
   def('menu_option_value_edit', 'menu_price', 'normal', 'org', 'menu_option_values', 'T-401'),
   def('menu_package_refills_set', 'menu_price', 'normal', 'org', 'menu_package_refills', 'T-401'),
+  // S5 (Q3): the v1 usage seam. A link, an unlink, and a store's switch of usage source. Dotted: new, never in 0197's copy list.
+  def('menu.pos_v1_link', 'stock', 'normal', 'store', 'menu_pos_v1_links', 'T-401'),
+  def('menu.pos_v1_unlink', 'stock', 'normal', 'store', 'menu_pos_v1_links', 'T-401'),
+  def('menu.usage_source_switch', 'stock', 'high', 'store', 'menu_usage_source_switches', 'T-401'),
   // Written by T-401's setOptionOffer (price / withdraw) but absent from 0197's copy list (a ternary the S1a scan missed). Dotted on purpose: never in 0197's list, so no row can carry the underscore form.
   def('menu.option_offer_set', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),
   def('menu.option_offer_withdraw', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),

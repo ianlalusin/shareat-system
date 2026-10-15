@@ -68,7 +68,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
     <Page density="table" className="">
       <h1 className="text-2xl font-semibold">Transit discrepancies</h1>
       <PageDescription className="mt-1">
-        Goods that left this store and did not arrive sit in <strong>1340</strong> at cost — a real
+        Goods that left this store and did not arrive sit in <strong>stock in transit</strong> at cost — a real
         asset — until somebody says what happened to them. A branch that counted <em>more</em> than was
         sent is listed here too: the extra is on nobody&apos;s books until you decide. If you are the branch
         that counted over, the section below lists it for you to recount and return.
@@ -182,8 +182,8 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                             defaultValue="loss"
                             className="min-h-11 rounded-[10px] border border-field-border bg-field px-2 py-1 text-ink"
                           >
-                            <option value="loss">Loss — Dr 5300</option>
-                            <option value="charge">Charge a person — Dr 1230</option>
+                            <option value="loss">Loss (wastage)</option>
+                            <option value="charge">Charge a person (advance)</option>
                             <option value="audit">Audit only — posts nothing</option>
                             <option value="late_receipt">Late receipt — the rest turned up</option>
                           </select>

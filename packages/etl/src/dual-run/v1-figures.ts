@@ -138,6 +138,7 @@ function figuresForStore(snapshot: V1Snapshot, storeId: string, name: string, in
   const posted = { legs: 0, in: 0, out: 0 };
   const cashBank = new Map<string, Acc>();
   const ap = new Map<string, Acc & { account: string; supplierId: string }>();
+  const channelAr = new Map<string, Acc>();
   const scope = new Map<string, ScopeEntry>();
   const saleLegCash: Record<string, number> = {};
   const saleLegTotal: Record<string, number> = {};
@@ -149,6 +150,19 @@ function figuresForStore(snapshot: V1Snapshot, storeId: string, name: string, in
     if (isIn) posted.in += amt;
     else posted.out += amt;
 
+    // S1b: a channel receivable CHARGE leg is sourceType 'sale' on ar__channel_<C> with legKey 'ar:channel_<C>'. The legKey is
+    // the discriminator: settlement (ar_clear) and manual credit (ar:<customerId>) legs on the same prefix stay in scope.
+    const chMatch = leg.sourceType === 'sale' ? /^ar__channel_(.+)$/.exec(leg.accountId) : null;
+    if (chMatch && leg.legKey === `ar:channel_${chMatch[1]}`) {
+      const key = `channel__${chMatch[1]}`;
+      const acc = channelAr.get(key) ?? { in: 0, out: 0, legs: 0, days: {} };
+      acc.legs += 1;
+      if (isIn) acc.in += amt;
+      else acc.out += amt;
+      addDay(acc.days, date, isIn ? amt : -amt);
+      channelAr.set(key, acc);
+      continue;
+    }
     if (leg.sourceType === 'sale') saleLegTotal[date] = (saleLegTotal[date] ?? 0) + amt;
 
     const acct = leg.accountId;
@@ -246,6 +260,9 @@ function figuresForStore(snapshot: V1Snapshot, storeId: string, name: string, in
   }
   for (const [key, days] of tenders) {
     lines.push({ kind: 'sales_tender', key, amount: Object.values(days).reduce((a, b) => a + b, 0), days });
+  }
+  for (const [key, acc] of channelAr) {
+    lines.push({ kind: 'sales_tender', key, amount: acc.in - acc.out, days: acc.days, in: acc.in, out: acc.out, legs: acc.legs });
   }
 
   // ---- expenses ----------------------------------------------------------------------------------------------

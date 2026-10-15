@@ -246,7 +246,7 @@ vi.mock('../src/app/items/lib', async (importOriginal) => {
 
 vi.mock('@shareat/auth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@shareat/auth')>();
-  return { ...actual, authorize: vi.fn(async () => undefined) };
+  return { ...actual, authorize: vi.fn(async () => undefined), can: vi.fn(async () => true) };
 });
 
 vi.mock('../src/app/items/actions', () => ({
@@ -372,8 +372,8 @@ describe('G5 — item detail: a non-authorization error from the unit gate rejec
     whoSellsMock.mockResolvedValueOnce([]);
     sellabilityByStoreMock.mockResolvedValueOnce([]);
     unitHistoryExistsMock.mockResolvedValueOnce(false);
-    const { authorize } = await import('@shareat/auth');
-    vi.mocked(authorize).mockRejectedValueOnce(new Error('boom'));
+    const { can } = await import('@shareat/auth');
+    vi.mocked(can).mockRejectedValueOnce(new Error('boom'));
 
     const { default: ItemDetailPage } = await import('../src/app/items/[id]/page');
     await expect(

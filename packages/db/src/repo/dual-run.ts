@@ -15,7 +15,7 @@
  *    source also holds a DRAFT, is listed in `datedLater`.
  * The week is `weekStart..through` (Manila business dates: entry_date is already one, nothing here reads the clock).
  */
-import { and, asc, between, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, between, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import {
@@ -327,7 +327,7 @@ function datedEntries(orgId: string, storeId: string) {
     ),
     root as (select entry_id, cur as root_id from chain where nxt is null),
     dated as (
-      select e.id, e.entry_date, e.source_type, e.source_id, r.source_type as root_src,
+      select e.id, e.entry_date, e.source_type, e.source_id, r.source_type as root_src, r.source_id as root_sid,
         coalesce(pb.d, pc.d, r.entry_date) as eff_date,
         (r.id = e.id and pb.d is null and pc.d is null and exists (
            select 1 from journal_entries dr
@@ -352,6 +352,101 @@ function datedEntries(orgId: string, storeId: string) {
     )`;
 }
 
+/**
+ * The posted-ledger CTEs shared by `v2Figures` and `v2Documents`: one filter and dating rule, two groupings. Yields `l`, `staff`,
+ * `catc` and `u` (one row per line: kind, gl, party, category, day, and the reversal-chain root's source). `lo`..`hi` is the date range.
+ * Must follow `datedEntries` in the same `with recursive`.
+ */
+function postedCtes(orgId: string, storeId: string, lo: string | SQL, hi: string | SQL) {
+  const inv = invList();
+  return sql`
+      l as (
+        select jl.store_id, a.code, jl.party_type, jl.party_id, jl.debit, jl.credit,
+               d.entry_date as own_date, d.eff_date, d.source_type, d.source_id, d.root_src, d.root_sid
+        from journal_lines jl
+        join dated d on d.id = jl.entry_id
+        join accounts a on a.id = jl.account_id
+        where jl.store_id = ${storeId}::uuid or jl.store_id is null
+      ),
+      staff as (
+        select distinct gl_account_code as code from money_accounts
+        where org_id = ${orgId}::uuid and store_id = ${storeId}::uuid and custodian = 'staff'
+      ),
+      catc as (
+        select distinct account_code as code from expense_categories
+        where org_id = ${orgId}::uuid and account_code is not null and account_code not in (${inv})
+      ),
+      u as (
+        -- cash and bank: money (11xx) codes of this store except the staff custodian's, the entry's own date.
+        select 'cash_bank'::text as kind, l.store_id, l.code as gl,
+               case when l.party_type = 'money_account' then l.party_type end as ptype,
+               case when l.party_type = 'money_account' then l.party_id end as pid,
+               null::uuid as cat, l.own_date as day, l.debit, l.credit, l.root_src as rsrc, l.root_sid as rid
+        from l
+        where l.store_id = ${storeId}::uuid and l.code ~ '^11[0-9]{2}$' and l.code not in (select code from staff)
+          and l.own_date between ${lo}::date and ${hi}::date
+        union all
+        -- staff cash: the staff custodian's code; employee lines are summed per store, any other party stays under itself.
+        select 'staff_cash', l.store_id, l.code, l.party_type,
+               case when l.party_type = 'employee' then null else l.party_id end,
+               null::uuid, l.own_date, l.debit, l.credit, l.root_src, l.root_sid
+        from l
+        where l.store_id = ${storeId}::uuid and l.code in (select code from staff)
+          and l.own_date between ${lo}::date and ${hi}::date
+        union all
+        -- sales tender: the tender side of a sale entry, a correction placed on the day it corrects.
+        select 'sales_tender', l.store_id, l.code,
+               case when l.party_type in ('money_account', 'channel') then l.party_type end,
+               case when l.party_type in ('money_account', 'channel') then l.party_id end,
+               null::uuid, l.eff_date, l.debit, l.credit, l.root_src, l.root_sid
+        from l
+        where l.store_id = ${storeId}::uuid and l.source_type = 'sale'
+          and ((l.code ~ '^11[0-9]{2}$' and l.code not in (select code from staff)) or l.code in ('1220', '1221', '1222'))
+          and l.eff_date between ${lo}::date and ${hi}::date
+        union all
+        -- credit sales (S4 tender keys): DEBITS to 1210 from entries whose reversal-chain root is an ar_charge, by entry date;
+        -- 1210 credits (collections, and a charge's reversal) are excluded.
+        select 'sales_tender', l.store_id, l.code, null::text, null::text, null::uuid, l.own_date,
+               l.debit, l.credit, l.root_src, l.root_sid
+        from l
+        where l.store_id = ${storeId}::uuid and l.code = '1210' and l.root_src = 'ar_charge'
+          and l.debit > 0
+          and l.own_date between ${lo}::date and ${hi}::date
+        union all
+        -- expense category: lines on a category account; the category is known only from an expense source (ruling 5).
+        select 'expense_category', l.store_id, l.code, null::text, null::text,
+               (select ec.id from expenses x
+                  join expense_categories ec on ec.id = x.category_id and ec.org_id = x.org_id
+                 where x.org_id = ${orgId}::uuid and l.source_type = 'expense_payment' and x.id::text = l.source_id
+                   and ec.account_code = l.code),
+               l.eff_date, l.debit, l.credit, l.root_src, l.root_sid
+        from l
+        where l.store_id = ${storeId}::uuid and l.code in (select code from catc) and l.root_src = 'expense_payment'
+          and l.eff_date between ${lo}::date and ${hi}::date
+        union all
+        select 'ap_supplier', l.store_id, l.code, l.party_type, l.party_id, null::uuid, l.own_date, l.debit, l.credit, l.root_src, l.root_sid
+        from l
+        where l.store_id = ${storeId}::uuid and l.code in ('2110', '1240')
+          and l.own_date between ${lo}::date and ${hi}::date
+        union all
+        select 'inventory_basis', l.store_id, l.code, null::text, null::text, null::uuid, l.own_date, l.debit, l.credit, l.root_src, l.root_sid
+        from l
+        where l.store_id = ${storeId}::uuid and l.code in (${inv})
+          and l.own_date between ${lo}::date and ${hi}::date
+        union all
+        -- the org's lines with no store, on any tie-set account: one line per account (and online / supplier party).
+        select 'unassigned_store', null::uuid, l.code,
+               case when l.party_type in ('money_account', 'supplier') then l.party_type end,
+               case when l.party_type in ('money_account', 'supplier') then l.party_id end,
+               null::uuid, l.own_date, l.debit, l.credit, l.root_src, l.root_sid
+        from l
+        where l.store_id is null
+          and (l.code ~ '^11[0-9]{2}$' or l.code in ('1210', '1220', '1221', '1222', '2110', '1240', ${inv})
+               or (l.code in (select code from catc) and l.root_src = 'expense_payment'))
+          and l.own_date between ${lo}::date and ${hi}::date
+      )`;
+}
+
 export async function v2Figures(
   tx: Tx,
   orgId: string,
@@ -374,91 +469,7 @@ export async function v2Figures(
     await tx.execute(sql`
       with recursive
       ${datedEntries(orgId, storeId)},
-      l as (
-        select jl.store_id, a.code, jl.party_type, jl.party_id, jl.debit, jl.credit,
-               d.entry_date as own_date, d.eff_date, d.source_type, d.source_id, d.root_src
-        from journal_lines jl
-        join dated d on d.id = jl.entry_id
-        join accounts a on a.id = jl.account_id
-        where jl.store_id = ${storeId}::uuid or jl.store_id is null
-      ),
-      staff as (
-        select distinct gl_account_code as code from money_accounts
-        where org_id = ${orgId}::uuid and store_id = ${storeId}::uuid and custodian = 'staff'
-      ),
-      catc as (
-        select distinct account_code as code from expense_categories
-        where org_id = ${orgId}::uuid and account_code is not null and account_code not in (${inv})
-      ),
-      u as (
-        -- cash and bank: money (11xx) codes of this store except the staff custodian's, the entry's own date.
-        select 'cash_bank'::text as kind, l.store_id, l.code as gl,
-               case when l.party_type = 'money_account' then l.party_type end as ptype,
-               case when l.party_type = 'money_account' then l.party_id end as pid,
-               null::uuid as cat, l.own_date as day, l.debit, l.credit
-        from l
-        where l.store_id = ${storeId}::uuid and l.code ~ '^11[0-9]{2}$' and l.code not in (select code from staff)
-          and l.own_date between ${weekStart}::date and ${through}::date
-        union all
-        -- staff cash: the staff custodian's code; employee lines are summed per store, any other party stays under itself.
-        select 'staff_cash', l.store_id, l.code, l.party_type,
-               case when l.party_type = 'employee' then null else l.party_id end,
-               null::uuid, l.own_date, l.debit, l.credit
-        from l
-        where l.store_id = ${storeId}::uuid and l.code in (select code from staff)
-          and l.own_date between ${weekStart}::date and ${through}::date
-        union all
-        -- sales tender: the tender side of a sale entry, a correction placed on the day it corrects.
-        select 'sales_tender', l.store_id, l.code,
-               case when l.party_type in ('money_account', 'channel') then l.party_type end,
-               case when l.party_type in ('money_account', 'channel') then l.party_id end,
-               null::uuid, l.eff_date, l.debit, l.credit
-        from l
-        where l.store_id = ${storeId}::uuid and l.source_type = 'sale'
-          and ((l.code ~ '^11[0-9]{2}$' and l.code not in (select code from staff)) or l.code in ('1220', '1221', '1222'))
-          and l.eff_date between ${weekStart}::date and ${through}::date
-        union all
-        -- credit sales (S4 tender keys): DEBITS to 1210 from entries whose reversal-chain root is an ar_charge, by entry date;
-        -- 1210 credits (collections, and a charge's reversal) are excluded.
-        select 'sales_tender', l.store_id, l.code, null::text, null::text, null::uuid, l.own_date,
-               l.debit, l.credit
-        from l
-        where l.store_id = ${storeId}::uuid and l.code = '1210' and l.root_src = 'ar_charge'
-          and l.debit > 0
-          and l.own_date between ${weekStart}::date and ${through}::date
-        union all
-        -- expense category: lines on a category account; the category is known only from an expense source (ruling 5).
-        select 'expense_category', l.store_id, l.code, null::text, null::text,
-               (select ec.id from expenses x
-                  join expense_categories ec on ec.id = x.category_id and ec.org_id = x.org_id
-                 where x.org_id = ${orgId}::uuid and l.source_type = 'expense_payment' and x.id::text = l.source_id
-                   and ec.account_code = l.code),
-               l.eff_date, l.debit, l.credit
-        from l
-        where l.store_id = ${storeId}::uuid and l.code in (select code from catc) and l.root_src = 'expense_payment'
-          and l.eff_date between ${weekStart}::date and ${through}::date
-        union all
-        select 'ap_supplier', l.store_id, l.code, l.party_type, l.party_id, null::uuid, l.own_date, l.debit, l.credit
-        from l
-        where l.store_id = ${storeId}::uuid and l.code in ('2110', '1240')
-          and l.own_date between ${weekStart}::date and ${through}::date
-        union all
-        select 'inventory_basis', l.store_id, l.code, null::text, null::text, null::uuid, l.own_date, l.debit, l.credit
-        from l
-        where l.store_id = ${storeId}::uuid and l.code in (${inv})
-          and l.own_date between ${weekStart}::date and ${through}::date
-        union all
-        -- the org's lines with no store, on any tie-set account: one line per account (and online / supplier party).
-        select 'unassigned_store', null::uuid, l.code,
-               case when l.party_type in ('money_account', 'supplier') then l.party_type end,
-               case when l.party_type in ('money_account', 'supplier') then l.party_id end,
-               null::uuid, l.own_date, l.debit, l.credit
-        from l
-        where l.store_id is null
-          and (l.code ~ '^11[0-9]{2}$' or l.code in ('1210', '1220', '1221', '1222', '2110', '1240', ${inv})
-               or (l.code in (select code from catc) and l.root_src = 'expense_payment'))
-          and l.own_date between ${weekStart}::date and ${through}::date
-      ),
+      ${postedCtes(orgId, storeId, weekStart, through)},
       daily as (
         select kind, store_id, gl, ptype, pid, cat, day, sum(debit) as d, sum(credit) as c
         from u group by kind, store_id, gl, ptype, pid, cat, day
@@ -503,4 +514,176 @@ export async function v2Figures(
     })),
     datedLater: lateRows.map((r) => ({ entryId: r.id })),
   };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// v2 documents (T-392 S4b, R9)
+// ---------------------------------------------------------------------------------------------------------------------
+
+export interface V2Doc {
+  id: string;
+  kind: V2Kind;
+  glCode: string;
+  partyType: string | null;
+  partyId: string | null;
+  categoryId?: string;
+  /** 'YYYY-MM-DD'. */
+  date: string;
+  /** 2dp string, v2Figures' sign rule (debit - credit; 2110 credit - debit). */
+  amount: string;
+  state: 'posted' | 'unposted';
+  /** The supplier invoice number behind the document, when it has one. */
+  receiptNo: string | null;
+}
+
+/**
+ * The documents behind v2Figures' lines, for document-level matching (R9), over the window [weekStart - 7, through + 7]:
+ *  - POSTED: the same per-kind filters and dating as `v2Figures` (shared `postedCtes`), grouped by (kind, gl, party, category,
+ *    reversal-chain root source, day). `unassigned_store` is never emitted.
+ *  - UNPOSTED: drafts and pendings that will become ledger lines: draft expenses (category doc, `credit` rows as 2110, `cash` /
+ *    `online` rows as the negative funding side on the money account's GL), pending supplier invoices, draft AP payments, and open /
+ *    submitted sales days (cash, wallet tenders, non-remitted channels). A voided document is never emitted.
+ * A document whose amount nets to zero is not emitted. Store- and org-scoped.
+ */
+export async function v2Documents(
+  tx: Tx,
+  orgId: string,
+  input: { storeId: string; weekStart: string; through: string },
+): Promise<V2Doc[]> {
+  const { storeId, weekStart, through } = input;
+  const inv = invList();
+  const lo = sql`(${weekStart}::date - 7)`;
+  const hi = sql`(${through}::date + 7)`;
+  const rows = rowsOf<{
+    id: string;
+    kind: V2Kind;
+    gl_code: string;
+    party_type: string | null;
+    party_id: string | null;
+    category_id: string | null;
+    day: string;
+    amount: string;
+    state: 'posted' | 'unposted';
+    receipt_no: string | null;
+  }>(
+    await tx.execute(sql`
+      with recursive
+      ${datedEntries(orgId, storeId)},
+      ${postedCtes(orgId, storeId, lo, hi)},
+      pd as (
+        select kind, gl, ptype, pid, cat, rsrc, rid, day,
+               sum(case when gl = '2110' then credit - debit else debit - credit end) as amount
+        from (select kind, store_id, gl, ptype, pid, cat, rsrc, rid, day, debit, credit from u) x
+        where kind <> 'unassigned_store' and store_id is not null
+        group by kind, gl, ptype, pid, cat, rsrc, rid, day
+      ),
+      un as (
+        -- a draft expense on a non-inventory category: the category document
+        select 'v2:unposted:expense:' || x.id::text as id, 'expense_category'::text as kind, ec.account_code as gl,
+               null::text as ptype, null::text as pid, ec.id as cat, x.business_date as day, x.total_amount as amount, null::text as receipt_no
+        from expenses x
+        join expense_categories ec on ec.id = x.category_id and ec.org_id = x.org_id
+        where x.org_id = ${orgId}::uuid and x.store_id = ${storeId}::uuid and x.status = 'draft'
+          and ec.account_code is not null and ec.account_code not in (${inv})
+        union all
+        -- its credit rows: owed to the supplier
+        select 'v2:unposted:expense_credit:' || p.id::text, 'ap_supplier', '2110', 'supplier', x.supplier_id::text, null::uuid,
+               x.business_date, p.amount, null::text
+        from expenses x
+        join expense_payments p on p.expense_id = x.id and p.method = 'credit'
+        where x.org_id = ${orgId}::uuid and x.store_id = ${storeId}::uuid and x.status = 'draft'
+        union all
+        -- its cash / online rows: the funding side, negative, on the money account's GL (staff float = staff cash)
+        select 'v2:unposted:expense_funding:' || p.id::text,
+               case when ma.gl_account_code in (select code from staff) then 'staff_cash' else 'cash_bank' end,
+               ma.gl_account_code,
+               case when ma.gl_account_code = '1140' then 'money_account' end,
+               case when ma.gl_account_code = '1140' then ma.id::text end,
+               null::uuid, x.business_date, -p.amount, null::text
+        from expenses x
+        join expense_payments p on p.expense_id = x.id and p.method in ('cash', 'online')
+        join money_accounts ma on ma.id = p.money_account_id and ma.org_id = x.org_id
+        where x.org_id = ${orgId}::uuid and ma.store_id = ${storeId}::uuid and x.status = 'draft'
+        union all
+        -- a pending supplier invoice
+        select 'v2:unposted:invoice:' || s.id::text, 'ap_supplier', '2110', 'supplier', s.supplier_id::text, null::uuid,
+               s.invoice_date, s.total_amount, s.invoice_no
+        from supplier_invoices s
+        where s.org_id = ${orgId}::uuid and s.store_id = ${storeId}::uuid and s.status = 'pending'
+          and not exists (select 1 from expenses dx where dx.supplier_invoice_id = s.id and dx.status = 'draft')
+        union all
+        -- a draft AP payment
+        select 'v2:unposted:ap_payment:' || a.id::text, 'ap_supplier', '2110', 'supplier', a.supplier_id::text, null::uuid,
+               a.business_date, -a.amount, null::text
+        from ap_payments a
+        where a.org_id = ${orgId}::uuid and a.store_id = ${storeId}::uuid and a.status = 'draft'
+        union all
+        -- ... and its money-account side, negative, keyed like the posted line
+        select 'v2:unposted:ap_payment_funding:' || a.id::text,
+               case when ma.gl_account_code in (select code from staff) then 'staff_cash' else 'cash_bank' end,
+               ma.gl_account_code,
+               case when ma.gl_account_code = '1140' then 'money_account' end,
+               case when ma.gl_account_code = '1140' then ma.id::text end,
+               null::uuid, a.business_date, -a.amount, null::text
+        from ap_payments a
+        join money_accounts ma on ma.id = a.money_account_id and ma.org_id = a.org_id
+        where a.org_id = ${orgId}::uuid and ma.store_id = ${storeId}::uuid and a.status = 'draft'
+        union all
+        -- an open / submitted sales day: cash collected
+        select 'v2:unposted:sales_day_cash:' || d.id::text, 'sales_tender', '1110', null::text, null::text, null::uuid,
+               d.business_date, d.cash_collected, null::text
+        from sales_days d
+        where d.org_id = ${orgId}::uuid and d.store_id = ${storeId}::uuid and d.status in ('open', 'submitted')
+        union all
+        -- ... and the pending cash side of it
+        select 'v2:unposted:sales_day_cash_side:' || d.id::text, 'cash_bank', '1110', null::text, null::text, null::uuid,
+               d.business_date, d.cash_collected, null::text
+        from sales_days d
+        where d.org_id = ${orgId}::uuid and d.store_id = ${storeId}::uuid and d.status in ('open', 'submitted')
+        union all
+        -- ... each wallet tender
+        select 'v2:unposted:sales_day_tender:' || d.id::text || ':' || t.money_account_id::text, 'sales_tender', '1140', 'money_account',
+               t.money_account_id::text, null::uuid, d.business_date, t.amount, null::text
+        from sales_days d
+        join sales_day_tenders t on t.sales_day_id = d.id
+        where d.org_id = ${orgId}::uuid and d.store_id = ${storeId}::uuid and d.status in ('open', 'submitted')
+        union all
+        -- ... each non-remitted channel with a positive amount
+        select 'v2:unposted:sales_day_channel:' || d.id::text || ':' || c.channel_id::text, 'sales_tender', sc.receivable_account_code, 'channel',
+               c.channel_id::text, null::uuid, d.business_date, c.amount, null::text
+        from sales_days d
+        join sales_day_channels c on c.sales_day_id = d.id and c.amount > 0
+        join sales_channels sc on sc.id = c.channel_id
+        where d.org_id = ${orgId}::uuid and d.store_id = ${storeId}::uuid and d.status in ('open', 'submitted')
+          and sc.is_remitted_daily = false and sc.receivable_account_code is not null
+      )
+      select 'v2:' || pd.rsrc || ':' || pd.rid || ':' || pd.kind || ':' || pd.gl || ':' || coalesce(pd.pid, '') || ':' || to_char(pd.day, 'YYYY-MM-DD') as id,
+             pd.kind, pd.gl as gl_code, pd.ptype as party_type, pd.pid as party_id, pd.cat as category_id,
+             to_char(pd.day, 'YYYY-MM-DD') as day, pd.amount::text as amount, 'posted'::text as state,
+             case pd.rsrc
+               when 'stock_receipt_invoice' then (select si.invoice_no from supplier_invoices si where si.org_id = ${orgId}::uuid and si.id::text = pd.rid)
+               when 'expense_payment' then (select si.invoice_no from expenses x join supplier_invoices si on si.id = x.supplier_invoice_id
+                                            where x.org_id = ${orgId}::uuid and x.id::text = pd.rid)
+             end as receipt_no
+      from pd
+      where pd.day between ${lo} and ${hi} and pd.amount <> 0
+      union all
+      select un.id, un.kind, un.gl, un.ptype, un.pid, un.cat, to_char(un.day, 'YYYY-MM-DD'), un.amount::text, 'unposted', un.receipt_no
+      from un
+      where un.day between ${lo} and ${hi} and un.amount <> 0
+      order by day, id
+    `),
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    glCode: r.gl_code,
+    partyType: r.party_type,
+    partyId: r.party_id,
+    ...(r.category_id ? { categoryId: r.category_id } : {}),
+    date: r.day,
+    amount: r.amount,
+    state: r.state,
+    receiptNo: r.receipt_no,
+  }));
 }

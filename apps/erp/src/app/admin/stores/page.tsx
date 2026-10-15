@@ -59,9 +59,17 @@ export default async function StoresPage({
           </thead>
           <tbody>
             {stores.map((s) => (
-              <tr key={s.id} className="border-t border-neutral-200 dark:border-neutral-800">
+              <tr
+                key={s.id}
+                // Ian 2026-10-14 (T-404): the WHOLE row opens the store — the T-258 stretched-link technique.
+                className="relative border-t border-neutral-200 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
+              >
                 <td className="p-3 font-medium">
-                  <Link href={`/admin/stores/${s.id}`} className="underline underline-offset-2">
+                  <Link
+                    href={`/admin/stores/${s.id}`}
+                    aria-label={`Open store ${s.code} — ${s.name}`}
+                    className="underline underline-offset-2 after:absolute after:inset-0 after:content-['']"
+                  >
                     {s.code}
                   </Link>
                 </td>
@@ -98,9 +106,17 @@ export default async function StoresPage({
         </table>
       </section>
 
-      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="text-sm font-medium">Open a branch</h2>
-        <form action={createStoreAction} className="space-y-3 text-sm">
+      {/* Ian 2026-10-14 (T-404): the create form is hidden until asked for — only the button shows. */}
+      {/* The summary is styled `secondary` so the form's own "Open branch" stays the one primary (row 311). */}
+      {/* A refused create reopens it, so the person sees the form the error is about. */}
+      <details className="space-y-3" open={Boolean(sp.error)}>
+        <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-[12px] border border-surface-border bg-surface px-4 py-2.5 text-sm font-semibold text-ink hover:bg-canvas">
+          Open a branch
+        </summary>
+        <form
+          action={createStoreAction}
+          className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
+        >
           <FormGrid>
             <Field
               label={<span className="text-neutral-600 dark:text-neutral-400">Code</span>}
@@ -151,7 +167,7 @@ export default async function StoresPage({
             </Button>
           </div>
         </form>
-      </section>
+      </details>
     </Page>
   );
 }

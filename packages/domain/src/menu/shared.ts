@@ -6,10 +6,11 @@
  * cast: `numeric(14,2)` silently rounds `'10.005'`, so more than two decimals is refused here, never rounded (I13b).
  */
 import type { Actor } from '@shareat/auth';
-import { auditLogRepo, menuRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, itemsRepo, menuRepo, productionRepo, transaction, type Tx } from '@shareat/db';
 import { compareDecimal, decimal, type Decimal } from '@shareat/core/money';
 import { parseDecimalInput } from '../shared/money-input';
-import { refuse } from '../shared/refusal';
+import { gone, refuse } from '../shared/refusal';
+import { notActiveItemSentence } from '../items/not-active';
 
 /** Runs `run` on the caller's transaction, or opens one. Every menu function ends here, so the write and its audit row share it. */
 export async function inTx<T>(tx: Tx | undefined, run: (trx: Tx) => Promise<T>): Promise<T> {
@@ -156,5 +157,26 @@ export async function requireHistorySlot(tx: Tx, lockId: string, key: menuRepo.H
       `${what}: a later row is already scheduled for this key, so this one would never take effect.`,
       `A later change is already scheduled, so this one would never apply. Cancel the scheduled change first, or pick a time after it.`,
     );
+  }
+}
+
+/** A depletion rule may name only a stock item or recipe that exists and is active: a sentence here, never a raw database error. */
+export async function requireUsableRuleTarget(
+  tx: Tx,
+  orgId: string,
+  target: { itemId: string | null; recipeId: string | null },
+  rawLabel: string,
+): Promise<void> {
+  if (target.itemId) {
+    const item = await itemsRepo.getItemById(tx, orgId, target.itemId);
+    if (!item) throw gone(`${rawLabel}: stock item ${target.itemId} does not exist.`, 'stock item');
+    if (item.status !== 'active') throw refuse(`${rawLabel}: stock item ${target.itemId} is ${item.status}.`, notActiveItemSentence(item.status, 'used in a menu rule'));
+  }
+  if (target.recipeId) {
+    const recipe = await productionRepo.getRecipe(tx, orgId, target.recipeId);
+    if (!recipe) throw gone(`${rawLabel}: recipe ${target.recipeId} does not exist.`, 'recipe');
+    if (recipe.status !== 'active') {
+      throw refuse(`${rawLabel}: recipe ${target.recipeId} is ${recipe.status}.`, 'That recipe is no longer active, so it cannot be used in a menu rule. Pick an active recipe.');
+    }
   }
 }

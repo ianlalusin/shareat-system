@@ -20,11 +20,14 @@ export interface SnapshotExpensePayment { method: string; amount: number; accoun
 export interface SnapshotExpense {
   id: string; storeId: string; dayKey: string; totalAmount: number; status: string; supplierId: string;
   expenseEntryId: string; expenseEntryGroup: string; category: string; createdAt?: number; payments: SnapshotExpensePayment[];
+  receiptId?: string;
 }
 export interface SnapshotSalesDay {
   id: string; storeId: string; status: string; dineInSales: number; onlineBreakdown: Record<string, number>;
   creditSales: number; otherPaymentSales: number;
 }
+export interface SnapshotChannel { storeId: string; channelId: string; name: string; isRemittedDaily: boolean }
+export interface SnapshotReceipt { id: string; storeId: string; receiptNo: string }
 export interface SnapshotSupplier { id: string; name: string }
 export interface SnapshotPaymentAccount { id: string; storeId: string; name: string }
 
@@ -41,6 +44,10 @@ export interface V1Snapshot {
   journal: SnapshotLeg[];
   expenses: SnapshotExpense[];
   salesDays: SnapshotSalesDay[];
+  /** S1b (optional; absent = empty): each store's sales channels, whitelisted. */
+  channels?: SnapshotChannel[];
+  /** S1b (optional; absent = empty): receipts an in-window expense points at. */
+  receipts?: SnapshotReceipt[];
 }
 
 /** The four operating v1 stores. Anything not here or in EXCLUDED is refused, never skipped. */
@@ -117,6 +124,7 @@ export function buildSnapshot(raw: Raw, opts: { from: string; through: string; e
       }),
     };
     if (typeof e.createdAt === 'number') ex.createdAt = e.createdAt;
+    if (e.receiptId) ex.receiptId = str(e.receiptId);
     expenses.push(ex);
   }
 
@@ -159,6 +167,24 @@ export function buildSnapshot(raw: Raw, opts: { from: string; through: string; e
   const suppliers = suppliersAll.filter((x) => supplierRefs.has(x.id));
   const paymentAccounts = paymentAccountsAll.filter((a) => accountRefs.has(`${a.storeId}|${a.id}`));
 
+  const channels: SnapshotChannel[] = [];
+  for (const s of (raw.stores ?? []) as Raw[]) {
+    const storeId = str(s.id);
+    if (!rosterNames.has(storeId) || !Array.isArray(s.salesChannels)) continue;
+    for (const c of s.salesChannels as Raw[]) {
+      if (!c || !c.channelId) continue;
+      channels.push({ storeId, channelId: str(c.channelId), name: str(c.name), isRemittedDaily: c.isRemittedDaily !== false });
+    }
+  }
+  const receiptRefs = new Set<string>();
+  for (const e of expenses) if (e.receiptId) receiptRefs.add(`${e.storeId}|${e.receiptId}`);
+  const receipts: SnapshotReceipt[] = [];
+  for (const r of (raw.receipts ?? []) as Raw[]) {
+    if (classify(r.storeId, r.id) === 'drop') continue;
+    if (!receiptRefs.has(`${str(r.storeId)}|${str(r.id)}`)) continue;
+    receipts.push({ id: str(r.id), storeId: str(r.storeId), receiptNo: str(r.receiptNo) });
+  }
+
   const snapshot: V1Snapshot = {
     version: 1,
     from,
@@ -172,6 +198,8 @@ export function buildSnapshot(raw: Raw, opts: { from: string; through: string; e
     journal: journal.sort((a, b) => cmp(a.id, b.id)),
     expenses: expenses.sort((a, b) => cmp(a.id, b.id)),
     salesDays: salesDays.sort((a, b) => cmp(a.storeId + '|' + a.id, b.storeId + '|' + b.id)),
+    channels: channels.sort((a, b) => cmp(a.storeId + '|' + a.channelId, b.storeId + '|' + b.channelId)),
+    receipts: receipts.sort((a, b) => cmp(a.storeId + '|' + a.id, b.storeId + '|' + b.id)),
   };
   return redactStaff(snapshot, (raw.journal ?? []) as Raw[]);
 }
