@@ -144,11 +144,11 @@ const lineUpdate: FormCase<OrdCtx> = {
   sel: (ctx) => ({ action: 'updateLineAction', hidden: { lineId: ctx.lineA } }),
   has: (ctx) => [`name="lineId" value="${ctx.lineA}"`, 'name="quantity"'],
   hiddenNames: ['orderId', 'lineId'],
-  refused: (ctx, over = {}) => fdOf({ orderId: ctx.orderId, lineId: ctx.lineA, quantity: '0', rate: '333' }, over),
+  refused: (ctx, over = {}) => fdOf({ orderId: ctx.orderId, lineId: ctx.lineA, quantity: '0', rate: '333.77' }, over),
   refusal: /more than zero/i,
-  fields: () => ({ quantity: '0', rate: '333' }),
+  fields: () => ({ quantity: '0', rate: '333.77' }),
   changed: { list: 'quantity', fields: () => ({ quantity: '0' }) },
-  notDrawn: ['333'],
+  notDrawn: ['333.77'],
   stored: (_ctx, seg, m) => {
     expect(m.inputValue(seg, 'quantity'), 'the stored ask is drawn').toBe('20.000');
     expect(m.inputValue(seg, 'rate'), 'the stored rate is drawn').toBe('310.00');
@@ -170,11 +170,11 @@ const lineFulfil: FormCase<OrdCtx> = {
   sel: (ctx) => ({ action: 'fulfilLineAction', hidden: { lineId: ctx.lineA } }),
   has: (ctx) => [`name="lineId" value="${ctx.lineA}"`, 'name="sourceLocationId"'],
   hiddenNames: ['orderId', 'lineId'],
-  refused: (ctx, over = {}) => fdOf({ orderId: ctx.orderId, lineId: ctx.lineA, quantity: '-2', rate: '333', sourceLocationId: ctx.comDry }, over),
+  refused: (ctx, over = {}) => fdOf({ orderId: ctx.orderId, lineId: ctx.lineA, quantity: '-2', rate: '333.77', sourceLocationId: ctx.comDry }, over),
   refusal: /negative/i,
-  fields: (ctx) => ({ quantity: '-2', rate: '333', sourceLocationId: ctx.comDry }),
+  fields: (ctx) => ({ quantity: '-2', rate: '333.77', sourceLocationId: ctx.comDry }),
   changed: { list: 'quantity,sourceLocationId', fields: (ctx) => ({ quantity: '-2', sourceLocationId: ctx.comDry }) },
-  notDrawn: ['333'],
+  notDrawn: ['333.77'],
   stored: (_ctx, seg, m) => {
     expect(m.inputValue(seg, 'quantity'), 'the stored packed quantity is drawn').toBe('5.000');
     expect(m.inputValue(seg, 'rate'), 'the stored rate is drawn').toBe('310.00');
