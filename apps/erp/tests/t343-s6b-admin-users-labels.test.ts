@@ -82,6 +82,8 @@ vi.mock('@shareat/db', async (importOriginal) => {
       // to 'admin', so this is the only DB lookup authorize()'s success path needs here.
       activeRoleForPerson: vi.fn(async () => ({ role: 'admin' })),
     },
+    // T-412: revoking a grant asks for its title to be retyped; the server loads the grant's name (stubbed here: 'void_expense').
+    destructiveTargetsRepo: { targetOf: vi.fn(async () => ({ storeId: null, name: 'void_expense', status: null })) },
   };
 });
 
@@ -579,6 +581,7 @@ function revokeFormData(overrides: { personId?: string; grantId?: string; reason
   fd.set('granted', 'false');
   fd.set('grantId', overrides.grantId ?? 'grant-1');
   fd.set('reason', overrides.reason ?? 'no longer needed');
+  fd.set('confirmName', capabilityTitle('void_expense'));
   return fd;
 }
 

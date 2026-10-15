@@ -383,7 +383,8 @@ describe('W4 - every ok sentence names the tender (R7)', () => {
     expect(saved.outcome.flash.ok, 'the name is read back from the saved row, not trusted from the form').toBe('Bank Xfer saved.');
 
     const v1 = await repoVersion(f.bankTender);
-    const ret = await act('setTenderActiveAction', f.superAdmin, { storeId: f.storeId, tenderId: f.bankTender, version: v1, isActive: 'false' });
+    // T-412: retiring a tender asks for its name (the saved name 'Bank Xfer'); restoring below needs none.
+    const ret = await act('setTenderActiveAction', f.superAdmin, { storeId: f.storeId, tenderId: f.bankTender, version: v1, isActive: 'false', confirmName: 'Bank Xfer' });
     expect(ret.outcome.flash.ok).toBe('Bank Xfer retired.');
     const v2 = await repoVersion(f.bankTender);
     const res = await act('setTenderActiveAction', f.superAdmin, { storeId: f.storeId, tenderId: f.bankTender, version: v2, isActive: 'true' });

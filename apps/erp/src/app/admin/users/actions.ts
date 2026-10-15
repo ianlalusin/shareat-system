@@ -31,6 +31,9 @@ import { clearSessionCookie, requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../../lib/error-shape';
 import { redirectWithFlash } from '@/lib/flash';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
+import { destructiveTargetsRepo, goneSentence, refuse } from '@shareat/db';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -227,6 +230,13 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
         // `unlinkCredentialAction`'s form one section up), so the real reason is captured
         // instead of a fixed, fabricated sentence.
         const reason = requireRevokeReason(str(formData, 'reason'));
+        // T-412 Tier R (revoke only; granting is not destructive): the person retypes the grant's title and the server
+        // compares it with the grant IT loads. Decided by the operation performed here, not by a form flag.
+        const grant = await destructiveTargetsRepo.targetOf(tx, actor.orgId, 'person_grant', grantId);
+        if (!grant) throw refuse(`person_grant ${grantId} does not exist`, goneSentence('grant'));
+        if (!retypeMatches(str(formData, 'confirmName'), capabilityTitle((grant.name ?? '') as Capability))) {
+          throw retypeRefusalError(capabilityTitle((grant.name ?? '') as Capability));
+        }
         await accessRepo.revokeGrantById(tx, grantId, reason);
         ok = 'Grant revoked.';
       }
@@ -276,6 +286,9 @@ export async function unlinkCredentialAction(formData: FormData): Promise<void> 
 
   let ended = 0;
   try {
+    // T-412 Tier R: the person retypes the account holder's name; the server compares it with the name IT loads.
+    const target = await loadDestructiveTarget(actor, 'person_credential', credentialId, ['manage_users']);
+    if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       unlinkCredential(tx, actor, { personId, credentialId, reason }),
     );

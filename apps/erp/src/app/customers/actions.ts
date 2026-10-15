@@ -26,6 +26,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage } from '@/lib/constraint-messages';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -262,9 +264,14 @@ export async function voidChargeAction(formData: FormData): Promise<void> {
   try {
     const reason = str(formData, 'reason');
     if (!reason) throw new Error('Say why this charge is being voided.');
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      voidCharge(tx, actor, { chargeId: str(formData, 'chargeId'), reason }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const chargeId = str(formData, 'chargeId');
+    const target = await loadDestructiveTarget(actor, 'ar_charge', chargeId, ['approve_buyer']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'approve_buyer' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await voidCharge(tx, actor, { chargeId, reason });
+      await recordApproval(tx, actor, approval, { capability: 'approve_buyer', entityType: 'ar_charge', entityId: chargeId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { error: errorMessage(err) });
   }
@@ -280,9 +287,19 @@ export async function writeOffChargeAction(formData: FormData): Promise<void> {
     const amount = str(formData, 'amount');
     const reason = str(formData, 'reason');
     if (!reason) throw new Error('Say why this debt is uncollectible — a write-off without a reason is a hole.');
-    const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      writeOffCharge(tx, actor, { chargeId: str(formData, 'chargeId'), amount, reason }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the `storeId` field above,
+    // which only carries the page's navigation).
+    const chargeId = str(formData, 'chargeId');
+    const target = await loadDestructiveTarget(actor, 'ar_charge', chargeId, ['write_off_receivable']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'write_off_receivable' });
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const written = await writeOffCharge(tx, actor, { chargeId, amount, reason });
+      // A resubmit that resolves to the earlier write-off changed nothing, so it is not approved a second time.
+      if (!written.alreadyRecorded) {
+        await recordApproval(tx, actor, approval, { capability: 'write_off_receivable', entityType: 'ar_charge', entityId: chargeId, storeId: target.storeId });
+      }
+      return written;
+    });
     // ⭐ T-367 / DEF-201 — a double-click (or a resubmit) resolves harmlessly; say so rather than
     // implying a second write-off just posted.
     message = result.alreadyRecorded

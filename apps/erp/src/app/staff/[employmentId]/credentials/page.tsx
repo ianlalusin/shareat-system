@@ -8,7 +8,7 @@ import { listStores, withOrgPrincipal } from '../../../expenses/lib';
 import { enrolCardAction, enrolFingerprintAction, revokeCredentialAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
-import { Button, FlashBanner, Input, Textarea } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, Input, Textarea } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -108,9 +108,12 @@ export default async function CredentialsPage({
                   <input type="hidden" name="credentialId" value={c.id} />
                   <input type="hidden" name="employmentId" value={employmentId} />
                   <Input name="reason" required placeholder="Reason to revoke" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
-                  <Button type="submit" variant="danger">
-                    Revoke
-                  </Button>
+                  <ConfirmDestructive
+                    tier="retype"
+                    label="Revoke credential"
+                    consequence="Revokes this credential."
+                    expectedName={personName ?? ''}
+                  />
                 </form>
               </li>
             ))}

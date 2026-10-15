@@ -18,6 +18,10 @@ import {
 } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
+import { redirectWithFlash } from '@/lib/flash';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -72,7 +76,19 @@ export async function voidTransferAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/transfers');
   const transferId = str(fd, 'transferId');
   const reason = str(fd, 'reason');
-  const result = await withOrgPrincipal(actor.orgId, (tx) => voidTransfer(tx, actor, transferId, reason));
-  if (!result.ok) throw new Error(result.reason);
+  try {
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const target = await loadDestructiveTarget(actor, 'stock_transfer', transferId, ['void_transfer']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_transfer' });
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const voided = await voidTransfer(tx, actor, transferId, reason);
+      if (voided.ok) await recordApproval(tx, actor, approval, { capability: 'void_transfer', entityType: 'stock_transfer', entityId: transferId, storeId: target.storeId });
+      return voided;
+    });
+    if (!result.ok) throw new Error(result.reason);
+  } catch (err) {
+    return await redirectWithFlash('/inventory/transfers', {}, { error: errorMessage(err) });
+  }
   revalidatePath('/inventory/transfers');
+  return await redirectWithFlash('/inventory/transfers', {}, { ok: 'Transfer voided.' });
 }

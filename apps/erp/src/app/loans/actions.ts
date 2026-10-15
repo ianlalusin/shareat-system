@@ -16,6 +16,9 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
+import { refuse } from '@shareat/db';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -106,9 +109,17 @@ export async function reverseEntryAction(formData: FormData): Promise<void> {
   try {
     const reason = str(formData, 'reason');
     if (!reason) throw new Error('Say why this is being reversed.');
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      reverseLoanEntry(tx, actor, { loanId: id, entryId: str(formData, 'entryId'), reason }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const target = await loadDestructiveTarget(actor, 'loan', id, ['record_ap_payment']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'record_ap_payment' });
+    const entryId = str(formData, 'entryId');
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      const reversed = await reverseLoanEntry(tx, actor, { loanId: id, entryId, reason });
+      // A second reversal of the same entry is a harmless no-op in the domain: nothing was approved or changed, so no
+      // approval event is written and the person is told.
+      if (!reversed.created) throw refuse(`reverseLoanEntry: entry ${entryId} was already reversed`, 'That entry was already reversed - nothing changed.');
+      await recordApproval(tx, actor, approval, { capability: 'record_ap_payment', entityType: 'loan_entry', entityId: entryId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash(`/loans/${id}`, {}, { error: errorMessage(err) });
   }

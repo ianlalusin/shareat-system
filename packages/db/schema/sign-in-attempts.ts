@@ -20,9 +20,8 @@ export const signInAttempts = pgTable(
     orgId: uuid('org_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict' }),
-    storeId: uuid('store_id')
-      .notNull()
-      .references(() => stores.id, { onDelete: 'restrict' }),
+    // T-412 (migration 0198): NULL = the organisation's approval-PIN bucket.
+    storeId: uuid('store_id').references(() => stores.id, { onDelete: 'restrict' }),
     deviceId: uuid('device_id').references(() => persons.id, { onDelete: 'restrict' }),
     kind: text('kind').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),

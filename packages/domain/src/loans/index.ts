@@ -342,7 +342,7 @@ export async function reverseLoanEntry(
   tx: Tx | null,
   actor: Actor,
   input: { loanId: string; entryId: string; reason: string },
-): Promise<{ reversalEntryId: string }> {
+): Promise<{ reversalEntryId: string; /** false: the entry was already reversed, nothing new was written (T-412). */ created: boolean }> {
   const run = async (trx: Tx) => {
     const loan = await loansRepo.getById(trx, actor.orgId, input.loanId);
     if (!loan) throw new Error(`reverseLoanEntry: loan ${input.loanId} does not exist.`);
@@ -381,7 +381,7 @@ export async function reverseLoanEntry(
       // money — the exact state a stored total gets stuck in.
       await loansRepo.setStatus(trx, actor.orgId, loan.id, { status: 'active' });
     }
-    return { reversalEntryId: reversal.reversalEntryId };
+    return { reversalEntryId: reversal.reversalEntryId, created: reversal.created };
   };
   if (tx) return run(tx);
   return transaction(run);

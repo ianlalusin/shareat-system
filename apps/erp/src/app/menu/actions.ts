@@ -13,6 +13,8 @@ import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { menuErrorMessage, opt, requireId, str, wholeNumber, withOrgPrincipal } from './lib';
 import { MENU_CATEGORY } from './typed-forms';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 
 const PATH = '/menu';
 
@@ -51,6 +53,9 @@ export async function retireCategoryAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PATH);
   try {
     const id = requireId(fd, 'id', 'Choose a category.');
+    // T-412 Tier R: the person retypes the category's name; the server compares it with the name IT loads.
+    const target = await loadDestructiveTarget(actor, 'menu_category', id, ['manage_menu']);
+    if (!retypeMatches(str(fd, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     await withOrgPrincipal(actor.orgId, (tx) => retireMenuCategory(actor, { id }, tx));
   } catch (err) {
     return await redirectWithFlash(PATH, {}, { error: menuErrorMessage(err) });

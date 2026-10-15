@@ -20,6 +20,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -104,9 +106,13 @@ export async function reverseMonthAction(formData: FormData): Promise<void> {
   try {
     const reason = str(formData, 'reason');
     if (!reason) throw new Error('Say why this month is being reversed.');
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      reverseAmortisation(tx, actor, { prepaidItemId: id, period, reason }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const target = await loadDestructiveTarget(actor, 'prepaid_item', id, ['run_amortisation']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'run_amortisation' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await reverseAmortisation(tx, actor, { prepaidItemId: id, period, reason });
+      await recordApproval(tx, actor, approval, { capability: 'run_amortisation', entityType: 'prepaid_item', entityId: id, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash(`/prepaid/${id}`, {}, { error: errorMessage(err) });
   }
@@ -126,8 +132,11 @@ export async function writeOffAction(formData: FormData): Promise<void> {
   const refundAccountCode = str(formData, 'refundAccountCode');
   const writtenOffOn = str(formData, 'writtenOffOn');
   try {
-    const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      writeOffPrepaidItem(tx, actor, {
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const target = await loadDestructiveTarget(actor, 'prepaid_item', id, ['manage_prepaid_items']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'manage_prepaid_items' });
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const writtenOff = await writeOffPrepaidItem(tx, actor, {
         prepaidItemId: id,
         writtenOffOn,
         reason,
@@ -144,8 +153,10 @@ export async function writeOffAction(formData: FormData): Promise<void> {
         // The domain now refuses that combination by name instead of silently discarding it.
         ...(refundAmount ? { refundAmount } : {}),
         ...(refundAccountCode ? { refundAccountCode } : {}),
-      }),
-    );
+      });
+      await recordApproval(tx, actor, approval, { capability: 'manage_prepaid_items', entityType: 'prepaid_item', entityId: id, storeId: target.storeId });
+      return writtenOff;
+    });
     summary =
       `Written off. ₱${result.expensed} recognised as expense` +
       (compare(result.refunded, ZERO) > 0 ? `, ₱${result.refunded} refunded to the books.` : '.');

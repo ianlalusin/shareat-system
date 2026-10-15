@@ -6,7 +6,7 @@ import { productionRecordDetail } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, Input, statusLabel } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, Input, statusLabel } from '@/components/ui';
 
 export const metadata = { title: 'Production record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -90,9 +90,11 @@ export default async function ProductionRecordPage({
               <span className="block text-neutral-600 dark:text-neutral-400">Void reason</span>
               <Input name="reason" required />
             </label>
-            <Button type="submit" variant="danger">
-              Void
-            </Button>
+            <ConfirmDestructive
+              tier="admin-pin"
+              label="Void production"
+              consequence="Reverses this production record and restores the stock. An administrator must approve with their own PIN."
+            />
           </form>
         )}
       </section>

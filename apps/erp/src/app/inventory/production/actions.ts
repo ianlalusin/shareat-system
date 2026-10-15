@@ -18,6 +18,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../../lib/error-shape';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -126,7 +128,15 @@ export async function voidProductionAction(fd: FormData): Promise<void> {
 
   let result: Awaited<ReturnType<typeof voidProduction>> | undefined;
   try {
-    result = await withOrgPrincipal(actor.orgId, (tx) => voidProduction(tx, actor, { recordId, reason }));
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const target = await loadDestructiveTarget(actor, 'production_record', recordId, ['void_production']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_production' });
+    result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const voided = await voidProduction(tx, actor, { recordId, reason });
+      // `{ ok: false }` is a refusal the domain reports without throwing: nothing changed, so nothing is approved.
+      if (voided.ok) await recordApproval(tx, actor, approval, { capability: 'void_production', entityType: 'production_record', entityId: recordId, storeId: target.storeId });
+      return voided;
+    });
   } catch (err) {
     return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: errorMessage(err) });
   }

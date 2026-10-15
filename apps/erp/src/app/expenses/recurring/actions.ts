@@ -19,6 +19,8 @@ import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { RECURRING_TEMPLATE_EDIT } from './typed-forms';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -101,9 +103,14 @@ export async function deleteTemplateAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const storeId = str(formData, 'storeId');
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      deleteRecurringTemplate(tx, actor, { templateId: str(formData, 'templateId') }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the page's `storeId` field).
+    const templateId = str(formData, 'templateId');
+    const target = await loadDestructiveTarget(actor, 'recurring_expense', templateId, ['manage_recurring_expenses']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'manage_recurring_expenses' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await deleteRecurringTemplate(tx, actor, { templateId });
+      await recordApproval(tx, actor, approval, { capability: 'manage_recurring_expenses', entityType: 'recurring_expense', entityId: templateId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash('/expenses/recurring', { store: storeId }, { error: errorMessage(err) });
   }

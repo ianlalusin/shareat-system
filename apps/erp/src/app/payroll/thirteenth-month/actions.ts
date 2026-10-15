@@ -11,6 +11,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -47,9 +49,15 @@ export async function void13thMonthRunAction(formData: FormData): Promise<void> 
   const year = str(formData, 'year');
   let out = { reversed: 0 };
   try {
-    out = await withOrgPrincipal(actor.orgId, (tx) =>
-      void13thMonthRun(tx, actor, { runId: str(formData, 'runId'), reason: str(formData, 'reason') }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the page's `storeId` field).
+    const runId = str(formData, 'runId');
+    const target = await loadDestructiveTarget(actor, 'thirteenth_month_run', runId, ['run_payroll']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'run_payroll' });
+    out = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const voided = await void13thMonthRun(tx, actor, { runId, reason: str(formData, 'reason') });
+      await recordApproval(tx, actor, approval, { capability: 'run_payroll', entityType: 'thirteenth_month_run', entityId: runId, storeId: target.storeId });
+      return voided;
+    });
   } catch (err) {
     return await redirectWithFlash('/payroll/thirteenth-month', { store, year }, { error: errorMessage(err) });
   }

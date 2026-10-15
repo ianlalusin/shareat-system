@@ -110,6 +110,7 @@ async function receiptFile(orgId: string, storeId: string, uploadedBy: string): 
   return row!.id;
 }
 
+let APPROVAL_PIN = '';
 /** Lipa (the bill's store), Malvar (another store); manager (Lipa), otherManager (Malvar only), staff (Lipa). */
 async function fixture(hint: string) {
   const code = uid(`t369s0w-${hint}`);
@@ -142,6 +143,9 @@ async function fixture(hint: string) {
   await fund(orgId, storeId, '1110', '500000.00');
   const [category] = await sql<{ id: string }[]>`select id from expense_categories where org_id = ${orgId} and category = 'Cost of Goods Sold — General'`;
   const manager = actor(orgId, managerId);
+  // T-412: voiding a payment is Tier P. This org has no administrator, so the manager who holds the capability approves with their
+  // own PIN (row 196); `voidForm` below posts the latest fixture's.
+  APPROVAL_PIN = await givePin(sql, { orgId, storeId, personId: managerId });
   const supplier = await asOrg(orgId, (tx) => createSupplier(tx, manager, { name: `${hint} Supplier`, creditTermsDays: 30 }));
   return {
     orgId, storeId, malvarId, supplierId: supplier.id, drawerId: drawer!.id, categoryId: category!.id,
@@ -307,6 +311,7 @@ function voidForm(o: { paymentId: string; supplierId: string; invoiceId?: string
   fd.set('supplierId', o.supplierId);
   if (o.invoiceId !== undefined) fd.set('invoiceId', o.invoiceId);
   fd.set('reason', o.reason ?? 'Bounced cheque');
+  fd.set('adminPin', APPROVAL_PIN);
   if (o.voidOn) fd.set('voidOn', o.voidOn);
   return fd;
 }
@@ -422,6 +427,7 @@ describe('T10 — voidPaymentAction', () => {
 
 import { ACTION_LINK } from '../../src/components/action-link';
 import { paramsOf, seedSearch } from '../helpers/flash-jar';
+import { givePin } from '../helpers/approval-pin';
 
 /** Adds an admin (both stores) and Malvar's funded office safe to a fixture, for a payment drawn on ANOTHER store's money. */
 async function withMalvarSafe(f: Fixture) {

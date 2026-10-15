@@ -19,7 +19,7 @@ import { typedFor } from '@/lib/keep-typing';
 import { ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT } from '../typed-forms';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { Banner, Button, Checkbox, FlashBanner, Input, Select, FormGrid, Field } from '@/components/ui';
+import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -369,7 +369,12 @@ export default async function ItemDetailPage({
             <form action={setItemStatusAction} className="space-y-2">
               <input type="hidden" name="itemId" value={item.id} />
               <input type="hidden" name="status" value="inactive" />
-              <Button type="submit" variant="danger">Retire</Button>
+              <ConfirmDestructive
+                tier="retype"
+                label="Retire item"
+                consequence="Retires this item. Every record stays, and it can be restored."
+                expectedName={item.name}
+              />
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
                 Retiring keeps every record. It can no longer be ordered, received, priced, mapped to a POS item or put on a new recipe. Stock already on hand can still be used, wasted, moved and counted until it runs out. You can restore it.
               </p>

@@ -22,21 +22,7 @@ import {
 import { actorStoreIds, orderView, peso, today, type OrderView } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import {
-  Button,
-  FlashBanner,
-  FormGrid,
-  Input,
-  Select,
-  StatusHero,
-  branchOrderSteps,
-  exitStepFromTimestamps,
-  isExitStage,
-  nextLineFor,
-  stepIndexFor,
-  type StatusIconKind,
-  type Tone,
-} from '@/components/ui';
+import { branchOrderSteps, Button, ConfirmDestructive, exitStepFromTimestamps, FlashBanner, FormGrid, Input, isExitStage, nextLineFor, Select, StatusHero, type StatusIconKind, stepIndexFor, type Tone } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -383,9 +369,11 @@ export default async function BranchOrderPage({
             Void the dispatch — say why
             <Input name="reason" required placeholder="truck never left" className="w-full" />
           </label>
-          <Button type="submit" variant="danger">
-            Void dispatch
-          </Button>
+          <ConfirmDestructive
+            tier="admin-pin"
+            label="Void dispatch"
+            consequence="Reverses the dispatch posting and puts the stock back. An administrator must approve with their own PIN."
+          />
           <span className="text-xs text-neutral-500 dark:text-neutral-400">
             The in-transit posting is <strong>reversed</strong>, never deleted, and the stock returns to its layers.
           </span>

@@ -22,11 +22,13 @@ import {
 } from '@shareat/domain';
 import type { EmploymentStatus } from '@shareat/db/schema';
 import { authorize, reopenPinSignIn, setPin } from '@shareat/auth';
-import { employmentRepo } from '@shareat/db';
+import { accessRepo, employmentRepo, refuse, storesRepo } from '@shareat/db';
 import { listStores, withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../lib/error-shape';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -167,9 +169,13 @@ export async function endEmploymentAction(formData: FormData): Promise<void> {
   const employmentStatus = str(formData, 'employmentStatus') as EmploymentStatus;
 
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      endEmployment(tx, actor, { employmentId, endedOn, employmentStatus }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const target = await loadDestructiveTarget(actor, 'employment', employmentId, ['enrol_staff']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'enrol_staff' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await endEmployment(tx, actor, { employmentId, endedOn, employmentStatus });
+      await recordApproval(tx, actor, approval, { capability: 'enrol_staff', entityType: 'employment', entityId: employmentId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
@@ -195,6 +201,9 @@ export async function issuePinAction(formData: FormData): Promise<void> {
         throw new Error('That employment does not exist.');
       }
       await authorize(tx, actor, 'enrol_staff', { storeId: employment.storeId });
+      // T-412: an administrator's PIN approves destructive actions, so setting it is administrator work: a manager who may
+      // issue ordinary staff PINs must not be able to choose one for an administrator and then use it.
+      if (await accessRepo.personIsActiveAdmin(tx, actor.orgId, employment.personId)) await authorize(tx, actor, 'manage_users', {});
       // ⭐ T-302 — `orgId` from the ACTOR, never from the form (T-231). It is also already known
       // to equal the employment's org: the guard three lines up refused `employment.orgId !==
       // actor.orgId`, so the two cannot disagree here.
@@ -210,6 +219,36 @@ export async function issuePinAction(formData: FormData): Promise<void> {
     return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Sign-in PIN issued.' });
+}
+
+/**
+ * T-412 (Ian Q1 "a", recommended): Staff issues a PIN to ANY administrator, including one who signs in by email only and has
+ * no employment page. That PIN is how an administrator approves a destructive action (Tier P). Gated on `manage_users`
+ * (admin work: whoever can set an administrator's PIN could otherwise approve in their place). The target must be an active
+ * administrator of THIS organisation and `storeId` a store of it - `setPin` records the store the PIN was issued at; it
+ * grants no access there. Same one-PIN-per-person rule as `issuePinAction`.
+ */
+export async function issueAdminPinAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const personId = str(formData, 'personId');
+  const storeId = str(formData, 'storeId');
+  const pin = str(formData, 'pin');
+
+  try {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await authorize(tx, actor, 'manage_users', {});
+      if (!UUID_SHAPE.test(personId) || !(await accessRepo.personIsActiveAdmin(tx, actor.orgId, personId))) {
+        throw refuse(`issueAdminPin: ${personId} is not an active administrator of org ${actor.orgId}`, 'That person is not an active administrator.');
+      }
+      if (!UUID_SHAPE.test(storeId) || !(await storesRepo.getById(tx, actor.orgId, storeId))) {
+        throw refuse(`issueAdminPin: store ${storeId} is not a store of org ${actor.orgId}`, 'Pick a store.');
+      }
+      await setPin(tx, { orgId: actor.orgId, personId, storeId, pin, actorPersonId: actor.personId });
+    });
+  } catch (err) {
+    return await redirectWithFlash('/staff', storeId ? { store: storeId } : {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash('/staff', { store: storeId }, { ok: 'Administrator PIN issued.' });
 }
 
 export async function upsertStorePositionAction(formData: FormData): Promise<void> {

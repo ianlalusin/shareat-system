@@ -244,7 +244,7 @@ export async function reverseLiabilityEntry(
   tx: Tx | null,
   actor: Actor,
   input: { liabilityId: string; entryId: string; reason: string },
-): Promise<{ entryId: string }> {
+): Promise<{ entryId: string; /** false: the entry was already reversed, nothing new was written (T-412). */ created: boolean }> {
   const run = async (trx: Tx) => {
     const liability = await liabilitiesRepo.getById(trx, actor.orgId, input.liabilityId);
     if (!liability) {
@@ -283,7 +283,7 @@ export async function reverseLiabilityEntry(
       reason,
       reversedBy: actor.personId,
     });
-    return { entryId: result.reversalEntryId };
+    return { entryId: result.reversalEntryId, created: result.created };
   };
   if (tx) return run(tx);
   return transaction(run);

@@ -15,7 +15,7 @@ import {
 } from '../actions';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { personName } from '@/lib/person-name';
 
@@ -187,9 +187,11 @@ export default async function WastageDetailPage({
               <input type="hidden" name="id" value={row.id} />
               <input type="hidden" name="storeId" value={row.storeId} />
               <Input name="reason" required placeholder="Why is this being reversed?" className="w-full" />
-              <Button type="submit" variant="danger">
-                Reverse — then resolve again with the correct disposition
-              </Button>
+              <ConfirmDestructive
+                tier="admin-pin"
+                label="Reverse auto charge"
+                consequence="Reverses this auto-charge so it can be resolved again. An administrator must approve with their own PIN."
+              />
             </form>
           ) : (
             <p className="mt-1 text-sm text-neutral-500">More than 30 days since the backstop resolved this — no longer reversible here.</p>

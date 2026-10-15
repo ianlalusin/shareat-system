@@ -28,6 +28,8 @@ import { redirectWithFlash, type Nav } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { ASSET_IN_SERVICE_EDIT, ASSET_TERMS_EDIT } from './typed-forms';
 import { recordingRefusalsFor } from '../expenses/lib';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -170,13 +172,17 @@ export async function disposeAssetAction(formData: FormData): Promise<void> {
   const nav = carryNav(formData);
 
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      disposeAsset(tx, actor, {
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const target = await loadDestructiveTarget(actor, 'fixed_asset', assetId, ['manage_fixed_assets']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'manage_fixed_assets' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await disposeAsset(tx, actor, {
         assetId,
         disposedOn: str(formData, 'disposedOn'),
         reason: str(formData, 'reason'),
-      }),
-    );
+      });
+      await recordApproval(tx, actor, approval, { capability: 'manage_fixed_assets', entityType: 'fixed_asset', entityId: assetId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash(`/fixed-assets/${assetId}`, nav, { error: errorMessage(err) });
   }

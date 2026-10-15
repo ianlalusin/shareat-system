@@ -15,7 +15,7 @@ import { isBlockingAnomaly } from '@shareat/domain';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
 
 /**
  * Plain-language names for the engine's anomaly codes.
@@ -391,9 +391,17 @@ function VerifyVoid({ day, locked }: { day: Day; locked: boolean }) {
             Reason (required)
             <Input name="reason" className="w-full" placeholder="Duplicate tap, etc." />
           </label>
-          <Button type="submit" variant="danger" disabled={locked || day.status === 'voided'}>
-            {day.status === 'voided' ? 'Voided' : 'Void'}
-          </Button>
+          {locked || day.status === 'voided' ? (
+            <Button type="button" variant="secondary" disabled>
+              {day.status === 'voided' ? 'Voided' : 'Void'}
+            </Button>
+          ) : (
+            <ConfirmDestructive
+              tier="admin-pin"
+              label="Void day"
+              consequence="Voids this day so it pays nothing in payroll. The punches stay. An administrator must approve with their own PIN."
+            />
+          )}
         </div>
       </form>
     </div>

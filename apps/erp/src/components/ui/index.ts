@@ -31,3 +31,6 @@ export type { Tone } from './status-tone';
 export { StatusHero } from './StatusHero';
 export type { StatusHeroProps } from './StatusHero';
 export * from './status-steps';
+// T-412: the one danger button, two tiers (retype the name / an administrator's PIN).
+export { ConfirmDestructive } from './ConfirmDestructive';
+export type { ConfirmDestructiveProps } from './ConfirmDestructive';

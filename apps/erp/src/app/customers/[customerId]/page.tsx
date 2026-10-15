@@ -30,7 +30,7 @@ import {
 } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, FlashBanner, Input } from '@/components/ui';
+import { Badge, ConfirmDestructive, FlashBanner, Input } from '@/components/ui';
 
 export const metadata = { title: 'Customer — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -350,9 +350,11 @@ export default async function CustomerDetailPage({
                     <Field label="Why is it uncollectible?" className="min-w-[14rem] flex-[2]">
                       <Input name="reason" required className="w-full" />
                     </Field>
-                    <Button type="submit" variant="danger">
-                      Write off as bad debt
-                    </Button>
+                    <ConfirmDestructive
+                      tier="admin-pin"
+                      label="Write off as bad debt"
+                      consequence="Writes this charge off to bad debt. An administrator must approve with their own PIN."
+                    />
                   </form>
                 )}
                 {canVoidAt(c.storeId) && (
@@ -363,9 +365,11 @@ export default async function CustomerDetailPage({
                     <Field label="Void this charge — why?" className="min-w-[14rem] flex-[2]">
                       <Input name="reason" required className="w-full" />
                     </Field>
-                    <Button type="submit" variant="danger">
-                      Void charge
-                    </Button>
+                    <ConfirmDestructive
+                      tier="admin-pin"
+                      label="Void charge"
+                      consequence="Voids this charge and reverses its entry. An administrator must approve with their own PIN."
+                    />
                   </form>
                 )}
               </div>

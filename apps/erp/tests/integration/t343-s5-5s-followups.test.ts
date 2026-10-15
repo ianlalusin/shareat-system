@@ -49,6 +49,7 @@ import { closeDrawingMonth, createCashRequest, createOwner, decideCashRequest, r
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { paramsOf } from '../helpers/flash-jar';
+import { givePin } from '../helpers/approval-pin';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -76,7 +77,9 @@ async function orgFixture(hint: string) {
   const adminId = admin!.id;
   await sql`insert into person_roles (person_id, org_id, role) values (${adminId}, ${orgId}, 'admin')`;
   await sql`insert into person_store_scope (person_id, store_id) values (${adminId}, ${storeId})`;
-  return { orgId, storeId, admin: actor(orgId, adminId) };
+  // T-412: posting a separation is Tier P; the administrator approves with their own PIN.
+  const pin = await givePin(sql, { orgId, storeId, personId: adminId });
+  return { orgId, storeId, admin: actor(orgId, adminId), pin };
 }
 
 afterAll(async () => {
@@ -786,6 +789,7 @@ function separationFormData(f: Awaited<ReturnType<typeof separationFixture>>, se
   fd.set('separationPayAmount', separationPayAmount);
   fd.set('moneyAccountId', f.officeAccountId);
   fd.set('clearanceConfirmed', 'on');
+  fd.set('adminPin', f.pin);
   return fd;
 }
 

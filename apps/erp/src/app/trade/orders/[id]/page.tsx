@@ -8,19 +8,7 @@ import { orderDetail, peso, today } from '../lib';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import {
-  Button,
-  FlashBanner,
-  Input,
-  Select,
-  StatusHero,
-  exitStepFromTimestamps,
-  simpleStepIndexFor,
-  statusLabel,
-  tradeOrderSteps,
-  type StatusIconKind,
-  type Tone,
-} from '@/components/ui';
+import { Button, ConfirmDestructive, exitStepFromTimestamps, FlashBanner, Input, Select, simpleStepIndexFor, StatusHero, type StatusIconKind, statusLabel, type Tone, tradeOrderSteps } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Trade order — Shareat System' };
@@ -305,9 +293,11 @@ export default async function TradeOrderPage({
             Void — say why
             <Input name="reason" required placeholder="reason" className="w-full" />
           </label>
-          <Button type="submit" variant="danger">
-            Void order
-          </Button>
+          <ConfirmDestructive
+            tier="admin-pin"
+            label="Void trade order"
+            consequence="Voids this order and reverses any posting. An administrator must approve with their own PIN."
+          />
           {order.status !== 'draft' && order.status !== 'confirmed' && (
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               The posting is <strong>reversed</strong>, never deleted; the ledger keeps both halves.

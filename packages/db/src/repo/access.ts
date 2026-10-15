@@ -94,6 +94,44 @@ export async function hasActiveAdmin(tx: Tx, orgId: string): Promise<boolean> {
   return row !== undefined;
 }
 
+/** T-412: whether THIS person holds an unrevoked `admin` or `super_admin` role in this org (the approval PIN's owner test).
+ * Asks about one person; `hasActiveAdmin` asks about the org. */
+export async function personIsActiveAdmin(tx: Tx, orgId: string, personId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: personRoles.id })
+    .from(personRoles)
+    .where(
+      and(
+        eq(personRoles.orgId, orgId),
+        eq(personRoles.personId, personId),
+        inArray(personRoles.role, ['admin', 'super_admin']),
+        isNull(personRoles.revokedAt),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/** T-412: the organisation's active administrators and whether each holds a live sign-in PIN - the Staff page's "Administrator
+ * PINs" list (an administrator who signs in by email only has no PIN until Staff issues one). One row per person. */
+export async function listActiveAdminsWithPinState(
+  tx: Tx,
+  orgId: string,
+): Promise<Array<{ personId: string; displayName: string; role: 'admin' | 'super_admin'; hasPin: boolean }>> {
+  const rows = (await tx.execute(sql`
+    select p.id::text as person_id, p.display_name as display_name,
+           case when bool_or(r.role = 'super_admin') then 'super_admin' else 'admin' end as role,
+           exists (select 1 from person_credentials c
+                    where c.person_id = p.id and c.kind = 'pin' and c.revoked_at is null) as has_pin
+      from person_roles r
+      join persons p on p.id = r.person_id
+     where r.org_id = ${orgId} and r.revoked_at is null and r.role in ('admin', 'super_admin') and p.is_active
+     group by p.id, p.display_name
+     order by p.display_name
+  `)) as unknown as { person_id: string; display_name: string; role: 'admin' | 'super_admin'; has_pin: boolean }[];
+  return rows.map((r) => ({ personId: r.person_id, displayName: r.display_name, role: r.role, hasPin: r.has_pin }));
+}
+
 /**
  * Whether an org has an active admin OTHER than `excludePersonId` — the "is this the last
  * one?" question `hasActiveAdmin` cannot answer, because the person being demoted still

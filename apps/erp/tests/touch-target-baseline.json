@@ -424,9 +424,6 @@
     ],
     "components/ui/Checkbox.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
-    "app/settings/pos-link/page.tsx": [
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ]
   }
 }

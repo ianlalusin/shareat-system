@@ -40,6 +40,10 @@ vi.mock('../src/app/expenses/lib', () => ({
   withOrgPrincipal: async (_orgId: string, fn: (tx: unknown) => unknown) => fn({}),
 }));
 
+// T-412: voidReturnAction now reads the record and verifies an administrator's PIN first; this file is about how banners are CARRIED.
+vi.mock('@/lib/destructive', async () => (await import('./helpers/destructive-mocks')).destructiveLibMock());
+vi.mock('@shareat/auth', async (orig) => (await import('./helpers/destructive-mocks')).withApprovalStub(await orig<object>()));
+
 const mocks = vi.hoisted(() => ({
   recordReturn: vi.fn(),
   refundSupplierCredit: vi.fn(),

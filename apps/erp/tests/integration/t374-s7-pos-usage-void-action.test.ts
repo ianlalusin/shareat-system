@@ -56,6 +56,7 @@ import { quantity } from '../../../../packages/domain/src/stock/quantity';
 import { importTestDay, linkTestStore, seedTestTenders } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
 import { urlOf } from '../helpers/flash-jar';
 import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
+import { givePin } from '../helpers/approval-pin';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -140,13 +141,15 @@ async function fixture(hint: string) {
     finalizeSections(tx, manager, { pullId: built.pullId, sections: ['direct', 'recipe', 'orphan'], confirmedKeys: built.lines.map((l) => l.key) }),
   );
   if (!fin.ok) throw new Error(`fixture: ${fin.reason}`);
-  return { orgId, storeId, dayId, pullId: built.pullId, manager, nobody: actor(orgId, nobodyId), managerId };
+  // T-412: voiding a pull is Tier P: the manager acts, the org's administrator approves with their own PIN.
+  const pin = await givePin(sql, { orgId, storeId, personId: adminId });
+  return { orgId, storeId, dayId, pullId: built.pullId, manager, nobody: actor(orgId, nobodyId), managerId, pin };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
 function form(f: Fixture, over: Record<string, string | undefined> = {}): FormData {
   const fd = new FormData();
-  const fields: Record<string, string | undefined> = { storeId: f.storeId, salesDayId: f.dayId, pullId: f.pullId, reason: 'POS corrected two receipts', ...over };
+  const fields: Record<string, string | undefined> = { storeId: f.storeId, salesDayId: f.dayId, pullId: f.pullId, reason: 'POS corrected two receipts', adminPin: f.pin, ...over };
   for (const [k, v] of Object.entries(fields)) if (v !== undefined) fd.set(k, v);
   return fd;
 }

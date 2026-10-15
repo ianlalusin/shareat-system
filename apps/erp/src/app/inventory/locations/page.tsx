@@ -12,7 +12,7 @@ import {
 import { listStores, locationsPageData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
+import { Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -192,9 +192,12 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                             <form action={deactivateLocationAction}>
                               <input type="hidden" name="storeId" value={storeId} />
                               <input type="hidden" name="id" value={loc.id} />
-                              <Button type="submit" variant="secondary" className="text-xs">
-                                Deactivate
-                              </Button>
+                              <ConfirmDestructive
+                                tier="retype"
+                                label="Deactivate room"
+                                consequence="Deactivates this room."
+                                expectedName={loc.name}
+                              />
                             </form>
                           ) : (
                             <form action={reactivateLocationAction}>

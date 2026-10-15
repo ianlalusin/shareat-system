@@ -204,7 +204,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 147 FAIL / 48 UNRESOLVED', () => {
+  it('accepted-baseline totals: 147 FAIL / 47 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -222,7 +222,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 49 -> 48 UNRESOLVED, T-387 S5 2026-10-11: components/dashboard/Tile.tsx retired (its baseline entry removed). FAIL unmoved at 148.
     // 148 -> 147 FAIL, T-387 S7 2026-10-11: app/staff/page.tsx's 20px name link in the old table is gone (the page is now the
     // ID-card wall plus the live roster, every control min-h-11); its touch-target-baseline.json entry is removed.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 147, unresolved: 48 });
+    // 48 -> 47 UNRESOLVED, T-412 2026-10-15: settings/pos-link's "I understand" tick box is gone (the unlink now asks for the store's
+    // name, a <ConfirmDestructive>); its touch-target-baseline.json entry is removed. FAIL unmoved at 147.
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 147, unresolved: 47 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -427,7 +429,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1158 (T-387 S5-S7 on main) + 12 (T-390 S5 cutover UI) = 1170, measured after merging origin/main 12 Oct.
     // 1170 + 2 (T-404, 2026-10-14: /admin/stores "Open a branch" summary + /ap/suppliers/[id] invoice row link) = 1172.
     // release 2026-10-14: 1170 + 2 (T-404) + 18 (T-392 S5) + 86 (T-401 S4) + 16 (T-401 S5) = 1292.
-    expect(results.length).toBe(1292);
+    // 1292 -> 1245, T-412 2026-10-15 (measured): 49 danger/commit <Button>s in the P/R pages became <ConfirmDestructive> (its own
+    // buttons live in components/ui, outside the page census), the pos-link tick box left, and the Staff page gained the
+    // administrator-PIN form. FAIL 147 unmoved.
+    expect(results.length).toBe(1245);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

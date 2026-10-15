@@ -9,7 +9,7 @@ import {
   type OverlapCountsByPosition,
 } from './lib';
 import { capabilityTitle, type Capability } from '@shareat/auth';
-import { Button } from '@/components/ui';
+import { ConfirmDestructive } from '@/components/ui';
 
 // -------------------------------------------------------------------------------------------
 // One immediate toggle per cell. Safe to render twice (desktop + mobile) — see actions.ts.
@@ -154,9 +154,12 @@ export function DesktopGrid({
                     {/* T-262 / DEF-269 — a header control still has to clear the 24px touch floor;
                         the first draft was a 10px underlined word and the sweep caught it. Fixed
                         the control, never the baseline (T-290 §C10). */}
-                    <Button type="submit" variant="danger" className="font-normal">
-                      Retire
-                    </Button>
+                    <ConfirmDestructive
+                      tier="retype"
+                      label="Retire position"
+                      consequence="Retires this position. Its defaults are revoked and every holder is reconciled."
+                      expectedName={p.name}
+                    />
                   </form>
                 )}
               </th>
@@ -347,9 +350,12 @@ export function MobileSections({
               <form action={retireStorePositionAction} className="pt-2">
                 <input type="hidden" name="storeId" value={storeId} />
                 <input type="hidden" name="positionId" value={p.id} />
-                <Button type="submit" variant="danger">
-                  Retire {p.name}
-                </Button>
+                <ConfirmDestructive
+                  tier="retype"
+                  label="Retire position"
+                  consequence="Retires this position. Its defaults are revoked and every holder is reconciled."
+                  expectedName={p.name}
+                />
               </form>
             )}
           </div>

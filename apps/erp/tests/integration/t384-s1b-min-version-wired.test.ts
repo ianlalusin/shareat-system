@@ -133,6 +133,8 @@ function retire(f: F, version: string, isActive: boolean): FormData {
   fd.set('tenderId', f.tenderId);
   fd.set('isActive', String(isActive));
   fd.set('version', version);
+  // T-412: retiring a tender asks for its name (this fixture's tender is 'Cash drawer'); restoring needs none.
+  fd.set('confirmName', 'Cash drawer');
   return fd;
 }
 

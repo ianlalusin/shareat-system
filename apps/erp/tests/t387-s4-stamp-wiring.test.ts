@@ -128,7 +128,10 @@ describe('S4 L9: transfers are NOT wired', () => {
   it('inventory/transfers/actions.ts carries no stamp at all (they throw; the detail page does not exist yet)', () => {
     const src = readFileSync(resolve(APP, 'inventory/transfers/actions.ts'), 'utf8');
     expect(src).not.toMatch(/stamp:/);
-    expect(src).not.toMatch(/redirectWithFlash/);
+    // T-412: voidTransferAction (only) now redirects with a plain error/ok banner - a wrong administrator PIN has to be SHOWN, and a
+    // thrown server-action error reaches the person as a digest. Still no stamp. dispatch/receive keep throwing.
+    expect(body('inventory/transfers/actions.ts', 'dispatchTransferAction')).not.toMatch(/redirectWithFlash/);
+    expect(body('inventory/transfers/actions.ts', 'receiveTransferAction')).not.toMatch(/redirectWithFlash/);
     for (const fn of ['dispatchTransferAction', 'receiveTransferAction', 'voidTransferAction']) {
       expect(body('inventory/transfers/actions.ts', fn)).not.toMatch(/stamp/);
     }

@@ -8,7 +8,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, statusLabel } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, Input, statusLabel } from '@/components/ui';
 
 export const metadata = { title: 'Usage record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -107,9 +107,11 @@ export default async function UsageRecordPage({
         <form action={deleteUsageDraftAction} className="flex items-center gap-3">
           <input type="hidden" name="recordId" value={record.id} />
           <input type="hidden" name="storeId" value={record.storeId} />
-          <Button type="submit" variant="danger">
-            Delete draft
-          </Button>
+          <ConfirmDestructive
+            tier="admin-pin"
+            label="Delete usage draft"
+            consequence="Deletes this draft for good. An administrator must approve with their own PIN."
+          />
         </form>
       )}
 
@@ -144,9 +146,11 @@ export default async function UsageRecordPage({
             Void — say why
             <Input name="reason" required placeholder="reason" className="w-full" />
           </label>
-          <Button type="submit" variant="danger">
-            Void
-          </Button>
+          <ConfirmDestructive
+            tier="admin-pin"
+            label="Void usage"
+            consequence="Reverses this usage record and restores the stock. An administrator must approve with their own PIN."
+          />
           <span className="max-w-xs text-xs text-neutral-500 dark:text-neutral-400">
             Stock, the FIFO layers and the original journal entry are all reversed together.
           </span>

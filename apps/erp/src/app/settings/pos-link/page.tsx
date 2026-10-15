@@ -10,7 +10,7 @@ import { POS_LINK_EDIT, TENDER_EDIT } from './typed-forms';
 import { canUnlink, posLinkRows, posStoreOptions, storeTenders, tenderMapping, type PosLinkStoreRow, type StoreTenders, type TenderAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { Banner, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select, Textarea } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 
@@ -254,13 +254,12 @@ function UnlinkSection({ row, posStoreName }: { row: PosLinkStoreRow; posStoreNa
               <Textarea name="reason" required maxLength={500} rows={3} className="mt-1 w-full" />
             </Field>
           </FormGrid>
-          <label className="flex items-start gap-2">
-            <input type="checkbox" name="confirm" required className="mt-1" />
-            <span>I understand: {store}&apos;s sales will be typed from now on.</span>
-          </label>
-          <Button type="submit" variant="danger">
-            Unlink {store}
-          </Button>
+          <ConfirmDestructive
+            tier="retype"
+            label="Unlink store from POS"
+            consequence="Unlinks this store from POS. Its sales days are typed from now on."
+            expectedName={store}
+          />
         </form>
       )}
     </div>
@@ -428,9 +427,12 @@ function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdmi
           <input type="hidden" name="tenderId" value={x.id} />
           <input type="hidden" name="version" value={x.version} />
           <input type="hidden" name="isActive" value="false" />
-          <Button type="submit" variant="danger">
-            Retire
-          </Button>
+          <ConfirmDestructive
+            tier="retype"
+            label="Retire tender"
+            consequence="Retires this tender."
+            expectedName={x.name}
+          />
         </form>
       }
     >

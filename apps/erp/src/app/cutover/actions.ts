@@ -24,6 +24,8 @@ import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { CUTOVER_COUNT } from './count/typed-forms';
 import { recordingRefusalsFor, withOrgPrincipal } from '../expenses/lib';
+import { verifyAdminApproval } from '@shareat/auth';
+import { authorizeOrgLevel, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -110,8 +112,15 @@ export async function addOpeningFigureAction(formData: FormData): Promise<void> 
 export async function removeOpeningFigureAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   try {
+    // T-412 Tier P, organisation-level (the cutover has no store): a wrong PIN charges the ORGANISATION's own bucket.
+    await authorizeOrgLevel(actor, 'run_cutover');
+    const entryId = str(formData, 'entryId');
+    const approval = await verifyAdminApproval(null, { actor, storeId: null, pin: str(formData, 'adminPin'), capability: 'run_cutover' });
     await recordingRefusalsFor(actor.orgId, () =>
-      withOrgPrincipal(actor.orgId, (tx: Tx) => removeOpeningFigure(tx, actor, { entryId: str(formData, 'entryId') })),
+      withOrgPrincipal(actor.orgId, async (tx: Tx) => {
+        await removeOpeningFigure(tx, actor, { entryId });
+        await recordApproval(tx, actor, approval, { capability: 'run_cutover', entityType: 'opening_figure', entityId: entryId, storeId: null });
+      }),
     );
   } catch (err) {
     return await redirectWithFlash('/cutover/opening', {}, { error: errorMessage(err) });
@@ -125,10 +134,18 @@ export async function removeOpeningFigureAction(formData: FormData): Promise<voi
  * It refuses on a residual, and the residual has been on screen the whole time the figures were
  * being entered — so this is never the moment anybody first learns the books do not balance.
  */
-export async function postOpeningBalancesAction(): Promise<void> {
+export async function postOpeningBalancesAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   try {
-    await recordingRefusalsFor(actor.orgId, () => withOrgPrincipal(actor.orgId, (tx: Tx) => postOpeningBalances(tx, actor)));
+    // T-412 Tier P, organisation-level (the cutover has no store): a wrong PIN charges the ORGANISATION's own bucket.
+    await authorizeOrgLevel(actor, 'run_cutover');
+    const approval = await verifyAdminApproval(null, { actor, storeId: null, pin: str(formData, 'adminPin'), capability: 'run_cutover' });
+    await recordingRefusalsFor(actor.orgId, () =>
+      withOrgPrincipal(actor.orgId, async (tx: Tx) => {
+        await postOpeningBalances(tx, actor);
+        await recordApproval(tx, actor, approval, { capability: 'run_cutover', entityType: 'organization', entityId: actor.orgId, storeId: null });
+      }),
+    );
   } catch (err) {
     return await redirectWithFlash('/cutover/opening', {}, { error: errorMessage(err) });
   }
