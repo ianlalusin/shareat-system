@@ -139,6 +139,8 @@ async function fixture(hint: string) {
   await sql`insert into person_store_scope (person_id, store_id) values (${staffId}, ${storeId})`;
   const cashierId = await mkPerson('Cashier');
   await sql`insert into person_store_scope (person_id, store_id) values (${cashierId}, ${storeId})`;
+  // T-407: the PIN door also needs the org-level rule, so the cashier is employed (open employment) as well as scoped.
+  await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeId}, ${cashierId}, ${`FX${++seq}`}, 'regular', '2020-01-01')`;
   await sql`
     insert into person_credentials (person_id, kind, store_id, secret_hash, lookup_hash)
     values (${cashierId}, 'pin', ${storeId}, ${await hashPin(PIN)}, ${pinLookupHash(orgId, PIN)})`;
@@ -240,6 +242,8 @@ describe('Invariant 15 / 16 - Firebase sign-in (accepted, refused, unknown)', ()
     const p = kind === 'terminal' ? await sql<{ id: string }[]>`insert into persons (org_id, display_name, kind) values (${f.orgId}, 'Term', 'terminal') returning id`
       : await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Fb Person') returning id`;
     const externalId = uid('fbuid');
+    // T-407: an email sign-in needs the org-level rule; an ordinary Firebase person here is an admin (R1 leg b).
+    if (kind === 'person') await sql`insert into person_roles (person_id, org_id, role) values (${p[0]!.id}, ${f.orgId}, 'admin')`;
     await sql`insert into person_credentials (person_id, kind, store_id, external_id) values (${p[0]!.id}, 'firebase', ${storeId}, ${externalId})`;
     return { personId: p[0]!.id, externalId };
   };
@@ -892,6 +896,8 @@ describe('S2 audit rulings T1-T11 - the outbox, the probes, the guards', () => {
     const f = await fixture('t9');
     const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Fb') returning id`;
     const externalId = uid('fbuid');
+    // T-407: an email sign-in needs the org-level rule (admin role, R1 leg b).
+    await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${f.orgId}, 'admin')`;
     await sql`insert into person_credentials (person_id, kind, external_id) values (${p!.id}, 'firebase', ${externalId})`;
     const spies = spyLogger();
     ctl.mode = 'fail';

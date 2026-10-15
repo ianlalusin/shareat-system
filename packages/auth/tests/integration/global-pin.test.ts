@@ -200,12 +200,14 @@ describe('who may sign in here — employment OR store scope, and both legs matt
     );
   });
 
-  it('a store-scope row is enough, with no employment anywhere — the founding admin’s shape', async () => {
+  it('a store-scope row is enough for the founding admin (admin role, no employment anywhere)', async () => {
     // `bootstrapOrganization`'s first admin holds scope (via `createStore`'s fan-out) and has no
     // employment at all, so an employment-only gate would lock the owner out of their own tills.
     const o = await mkOrg('scope-leg');
     const p = await mkPerson(o.orgId, 'Admin Only');
     await scopeAt(p, o.storeB);
+    // T-407: scope alone no longer admits; the founding admin's shape is scope + an active admin role (R1 leg b), no employment.
+    await sql`insert into person_roles (person_id, org_id, role) values (${p}, ${o.orgId}, 'admin')`;
     await asOrg(o.orgId, (tx) => setPin(tx, { orgId: o.orgId, personId: p, storeId: o.storeA, pin: '445566' }));
 
     expect(await sql`select 1 from employments where person_id = ${p}`).toHaveLength(0);
