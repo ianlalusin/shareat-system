@@ -39,17 +39,12 @@ import { toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { humanDate } from '../shared/refusal-leaf';
 import { voidPullUsageRecord } from './void-pull-usage-record';
 import type { Money } from '@shareat/core/money';
-import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from './receipt-posting';
-import { compareQuantity, quantity, ZERO_QUANTITY } from './quantity';
+import { compareQuantity, ZERO_QUANTITY } from './quantity';
 import { parseRequiredQuantity } from './quantity-field';
-import {
-  postUsageRecord,
-  voidUsageRecord,
-  type PostUsageInput,
-  type UsageLineInput,
-  type VoidUsageInput,
-} from './usage';
-import { isReservedUsageCategory, isWastageReason, type WastageReason } from './wastage-reasons';
+import { voidUsageRecord, type VoidUsageInput } from './usage';
+import { postLoadedUsageRecord } from './usage-post-core';
+import { isReservedUsageCategory, isWastageReason } from './wastage-reasons';
+import { checkUsageTolerance, writeToleranceVerified } from './usage-tolerance';
 
 /**
  * COA-ALIGNMENT §4.1's consumption category, derived from the item's own `kind` — see this file's
@@ -224,8 +219,10 @@ export async function addUsageLine(
     return { ok: false, reason: 'a line must have a quantity greater than zero' };
   }
   const existing = await stockUsageRepo.listUsageLines(tx, input.recordId);
+  // Max + 1, not count + 1: after a line is removed the count is smaller than the highest number in use, and (record, line_no) is unique.
+  const nextNo = existing.reduce((m, l) => Math.max(m, Number(l.lineNo) || 0), existing.length) + 1;
   const [line] = await stockUsageRepo.insertUsageLines(tx, input.recordId, [
-    { lineNo: String(existing.length + 1), itemId: input.itemId, quantity: qty },
+    { lineNo: String(nextNo), itemId: input.itemId, quantity: qty },
   ]);
   return { ok: true, lineId: line!.id };
 }
@@ -257,7 +254,18 @@ export async function deleteUsageDraft(
  * (T-168 §3). Builds `usage.ts`'s `PostUsageInput` from the draft's own lines: `inventoryAccount`
  * from `INVENTORY_ACCOUNT_BY_ITEM_KIND[item.kind]`, `cogsCategory` from `cogsCategoryForItemKind`.
  */
-export async function postUsage(tx: Tx, actor: Actor, input: { readonly recordId: string }): Promise<PostOutcome> {
+export async function postUsage(
+  tx: Tx,
+  actor: Actor,
+  input: {
+    readonly recordId: string;
+    /**
+     * T-401 S6 (I28). A usage whose (store, day, item) total is outside the tolerance band of what the POS plan expected is refused
+     * unless the manager passes a non-blank reason; the post then writes `stock.usage_tolerance_verified`, one row per such item.
+     */
+    readonly verifyOutOfTolerance?: { readonly reason: string };
+  },
+): Promise<PostOutcome> {
   const record = await stockUsageRepo.getUsageRecord(tx, input.recordId);
   if (!record) return { ok: false, reason: `usage record ${input.recordId} does not exist` };
   await authorize(tx, actor, 'post_usage', { storeId: record.storeId });
@@ -276,55 +284,19 @@ export async function postUsage(tx: Tx, actor: Actor, input: { readonly recordId
     return { ok: false, reason: 'a usage record with no lines posts nothing' };
   }
 
-  const usageLines: UsageLineInput[] = [];
-  for (const line of lines) {
-    const inventoryAccount = INVENTORY_ACCOUNT_BY_ITEM_KIND[line.itemKind];
-    if (!inventoryAccount) {
-      return { ok: false, reason: `item kind "${line.itemKind}" has no inventory account in COA-ALIGNMENT §4.1` };
-    }
-    usageLines.push({
-      lineId: line.id,
-      itemId: line.itemId,
-      cogsCategory: cogsCategoryForItemKind(line.itemKind),
-      inventoryAccount,
-      quantity: quantity(line.quantity),
-    });
+  // T-401 S6: the tolerance band, on `usage` only (wastage is not compared). Before any write, so a refusal changes nothing.
+  const reason = input.verifyOutOfTolerance?.reason;
+  let verified: Awaited<ReturnType<typeof checkUsageTolerance>>['verified'] = [];
+  if (record.kind === 'usage') {
+    const gate = await checkUsageTolerance(tx, record, [...new Set(lines.map((l) => l.itemId))], reason);
+    if (gate.refusal !== null) return { ok: false, reason: gate.refusal };
+    verified = gate.verified;
   }
 
-  const postInput: PostUsageInput = {
-    orgId: record.orgId,
-    storeId: record.storeId,
-    locationId: record.locationId,
-    recordId: record.id,
-    kind: record.kind,
-    usedOn: record.usedOn,
-    postedBy: actor.personId,
-    reason: record.kind === 'wastage' && record.reasonCode ? (record.reasonCode as WastageReason) : undefined,
-    lines: usageLines,
-  };
-
-  const result = await postUsageRecord(tx, postInput);
+  const result = await postLoadedUsageRecord(tx, record, lines, actor.personId, false);
   if (!result.ok) return result;
-
-  // ⭐ `movementIds` is in line order — `usage.ts`'s own contract — asserted, not assumed: a
-  // mismatch here would silently attach the wrong movement to the wrong line.
-  if (result.movementIds.length !== lines.length) {
-    throw new Error(
-      `postUsage: postUsageRecord returned ${result.movementIds.length} movement(s) for ${lines.length} line(s)`,
-    );
-  }
-  for (let i = 0; i < lines.length; i++) {
-    await stockUsageRepo.setUsageLineMovement(tx, lines[i]!.id, result.movementIds[i]!);
-  }
-  await stockUsageRepo.markUsagePosted(tx, record.id, actor.personId);
-
-  return {
-    ok: true,
-    totalCost: result.totalCost,
-    entryIds: result.entryIds,
-    storeId: record.storeId,
-    itemIds: lines.map((l) => l.itemId),
-  };
+  if (verified.length > 0) await writeToleranceVerified(tx, actor, record, verified, reason ?? '');
+  return result;
 }
 
 /**

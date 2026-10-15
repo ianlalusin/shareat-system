@@ -1,9 +1,9 @@
 import { notFound } from 'next/navigation';
 import { authorize, can as canDo } from '@shareat/auth';
 import { salesDaysRepo, journalRepo, posV1Repo } from '@shareat/db';
-import { packageCapExcess } from '@shareat/domain';
+import { packageCapExcess, unpostedUsageDraftCount } from '@shareat/domain';
 import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
-import { formatBusinessDateTime, toBusinessDate } from '@shareat/core/datetime';
+import { addDays, formatBusinessDateTime, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listActingPersons, getStoreLink } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { postPosCorrectionAction, recheckPosDayAction, reimportSalesDayAction, setPlatformSalesAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
@@ -17,6 +17,7 @@ import { accountLabel, accountCodeAndName } from '@/lib/account-label';
 import { typedFor } from '@/lib/keep-typing';
 import { PLATFORM_SALES_EDIT } from '../typed-forms';
 import { EditableRecord } from '@/components/forms';
+import { ACTION_LINK } from '@/components/action-link';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Input } from '@/components/ui';
 
 export const metadata = { title: 'Sales day — Shareat System' };
@@ -82,6 +83,14 @@ export default async function SalesDayDetailPage({
     };
   });
   const unverified = day.status === 'open' || day.status === 'submitted';
+
+  // T-401 S6 (Ian 15 Oct; A11): a WARNING, never a block - how many of this store's usage drafts dated the day BEFORE THE SALES DAY BEING VIEWED still wait for a manager.
+  // Shown only to someone who can post them; the count is the domain's own read.
+  const unpostedUsage = await withOrgPrincipal(orgId, async (tx) =>
+    (await canDo(tx, actor, 'post_usage', { storeId: day.storeId }))
+      ? unpostedUsageDraftCount(tx, actor, { storeId: day.storeId, businessDate: addDays(parseBusinessDate(day.businessDate), -1) })
+      : 0,
+  );
 
   // T-375 S3: where the figures came from. A feed day is imported (and re-imported while unverified); a typed day
   // belongs to a store that was not linked to POS when it was typed, and is the only kind that is edited by hand.
@@ -168,6 +177,17 @@ export default async function SalesDayDetailPage({
         <Banner tone="warning">
           ⚠️ <strong>This day recognises no revenue yet.</strong> Nothing is posted to the ledger
           until it is verified, and no newer day can be created for this store meanwhile.
+        </Banner>
+      )}
+
+      {unpostedUsage > 0 && (
+        <Banner tone="warning">
+          <strong>Yesterday&apos;s usage not posted.</strong> {unpostedUsage} usage {unpostedUsage === 1 ? 'draft is' : 'drafts are'} still waiting for
+          a manager. Check each line against what POS says was sold, then post it; a draft made from POS sales that is still
+          unposted is posted at the expected quantity at 14:00 the next day. This does not stop the day from being submitted or verified.{' '}
+          <a href={`/inventory/usage?store=${day.storeId}`} className={ACTION_LINK}>
+            Open the usage queue →
+          </a>
         </Banner>
       )}
 

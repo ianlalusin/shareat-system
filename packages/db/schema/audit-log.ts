@@ -72,6 +72,8 @@ export const auditLog = pgTable(
         'cron',
         'ingestor',
         'etl',
+        // T-401 S6 A1 (migration 0198): a person ran a scheduled job's script by hand (`--manual`).
+        'manual',
       ],
     }).notNull(),
     category: text('category', {
@@ -108,7 +110,7 @@ export const auditLog = pgTable(
     index('audit_log_org_clock_suspect_idx').on(t.orgId, t.occurredAt).where(sql`${t.clockSuspect}`),
     check(
       'audit_log_source_check',
-      sql`${t.source} in ('web', 'pos', 'customer', 'website', 'apk', 'kiosk', 'cron', 'ingestor', 'etl')`,
+      sql`${t.source} in ('web', 'pos', 'customer', 'website', 'apk', 'kiosk', 'cron', 'ingestor', 'etl', 'manual')`,
     ),
     check(
       'audit_log_category_check',

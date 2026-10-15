@@ -19,6 +19,7 @@ import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
 import type { PosV1SoldItemInput } from '../../../db/src/pos-v1/fixtures';
 import { testItemCode } from './_fixtures/item-code';
+import { usageRecordsOfDay } from './_fixtures/pull-draft';
 
 /**
  * T-177 — buildPlan/finalizeSections, plus the item-map/request workflow they depend on.
@@ -208,7 +209,7 @@ afterAll(async () => {
 });
 
 describe('T-177 — 1. physical quantity: POS already nets sold+comped-voided, never recomputed', () => {
-  it('⭐ physicalQty 11 (from 10 sold, 2 comped, 1 voided) → 11 consumed, not 10 and not 12', async () => {
+  it('⭐ physicalQty 11 (from 10 sold, 2 comped, 1 voided) → 11 drafted as expected (no stock moves), not 10 and not 12', async () => {
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
     const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]));
     await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, {
@@ -225,8 +226,12 @@ describe('T-177 — 1. physical quantity: POS already nets sold+comped-voided, n
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.sections[0]).toMatchObject({ ok: true, postedLineCount: 1, held: [], finalized: true });
-    expect(await onHand(itemCoke)).toBe('39.000');
+    // T-401 S6 (Ian 15 Oct): the pull DRAFTS the expected quantity and moves no stock.
+    expect(result.sections[0]).toMatchObject({ ok: true, postedLineCount: 0, held: [], finalized: true });
+    expect(await onHand(itemCoke)).toBe('50.000');
+    const [draftRec] = await usageRecordsOfDay(sql, storeA, '2026-08-20');
+    expect(draftRec!.status).toBe('draft');
+    expect(draftRec!.lines).toEqual({ [itemCoke]: '11.000' });
   });
 });
 
@@ -253,9 +258,11 @@ describe('T-177 — 2. a recipe map explodes; an unconvertible unit blocks that 
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.sections[0]).toMatchObject({ ok: true, postedLineCount: 1 });
-    // 0.2g * 5 / 1 = 1g -> converts to 0.001kg consumed; on-hand = 10 - 0.001
-    expect(await onHand(itemCheese)).toBe('9.999');
+    expect(result.sections[0]).toMatchObject({ ok: true, postedLineCount: 0 });
+    // 0.2g * 5 / 1 = 1g -> converts to 0.001kg EXPECTED; the pull drafts it and moves nothing (T-401 S6)
+    expect(await onHand(itemCheese)).toBe('10.000');
+    const [recipeDraft] = await usageRecordsOfDay(sql, storeA, '2026-08-20');
+    expect(recipeDraft!.lines, 'the blocked sauce line is never drafted').toEqual({ [itemCheese]: '0.001' });
   });
 });
 
@@ -411,13 +418,16 @@ describe('T-177 — 8. finalizing one section leaves the others open; a second f
     expect(second.ok).toBe(true);
     if (!second.ok) return;
     expect(second.sections[0]).toMatchObject({ ok: false, reason: expect.stringMatching(/already finalized/) });
-    // Not re-posted — still 39, not 28.
-    expect(await onHand(itemCoke)).toBe('39.000');
+    // Not re-drafted and nothing posted: still 50, and still ONE draft with Coke 11 (not 22).
+    expect(await onHand(itemCoke)).toBe('50.000');
+    const recs8 = await usageRecordsOfDay(sql, storeA, '2026-08-20');
+    expect(recs8).toHaveLength(1);
+    expect(recs8[0]!.lines[itemCoke]).toBe('11.000');
   });
 });
 
-describe('T-177 — 9. finalizing posts through T-164 — cost asserted', () => {
-  it('raw_material -> food -> 5100, FIFO cost = 11 @ 10.00', async () => {
+describe('T-177 — 9. (T-401 S6) finalizing posts NOTHING: no stock, no journal; RETIRED: the FIFO cost 11 @ 10.00 and 5100 routing assertion (it moves to posting the draft, covered by t401-s6-pull-draft)', () => {
+  it('the pull writes no journal line and no stock movement; the day gets one linked draft', async () => {
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
     const dayId = await makeSalesDay('2026-08-20', sold([{ posItemKey: 'coke', posItemName: 'Coke', physicalQty: '11' }]));
     await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, { orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }));
@@ -425,68 +435,59 @@ describe('T-177 — 9. finalizing posts through T-164 — cost asserted', () => 
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
 
+    const balancesBefore = await balances();
+    const movesBefore = await sql<{ n: string }[]>`select count(*)::text as n from stock_movements where org_id = ${orgA}`;
     const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [plan.lines[0]!.key] }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
     const b = await balances();
+    expect(b, 'no journal line was written').toEqual(balancesBefore);
+    const movesAfter = await sql<{ n: string }[]>`select count(*)::text as n from stock_movements where org_id = ${orgA}`;
+    expect(movesAfter[0]!.n).toBe(movesBefore[0]!.n);
     // itemCoke is 'retail' kind -> cogsCategoryForItemKind('retail') = 'retail'. Retail's inventory
     // account per COA-ALIGNMENT is 1320; its COGS account is asserted here, whichever the shared
     // routing table names, so this test breaks the moment that routing table drifts.
-    const posted = await sql<{ n: string }[]>`select count(*)::text as n from pos_usage_pull_lines where usage_record_id is not null`;
-    expect(posted[0]!.n).toBe('1');
-    expect(Object.values(b).some((v) => v !== '0.00' && v !== undefined)).toBe(true);
+    const linked = await sql<{ n: string }[]>`select count(*)::text as n from pos_usage_pull_lines where usage_record_id is not null`;
+    expect(linked[0]!.n, 'the pull line is linked to the day draft').toBe('1');
   });
 });
 
-describe('T-177 — 10. (T-388 I4) a frozen room waits: its lines are held, the rest post, and finalize again posts them', () => {
-  it('kitchen frozen, display not — display posts, kitchen is held as frozen and the section is NOT stamped; after the count is cancelled finalize again posts it and stamps. Mutant: stamp regardless -> red', async () => {
+describe('T-177 — 10. (T-401 S6) a frozen room no longer holds anything: RETIRED T-388 I4 (held lines, held sentence, stamp-regardless mutant, finalize-again posts)', () => {
+  it('kitchen frozen: finalize is ok, drafts every confirmed line, holds none, stamps the section, moves no stock. (The freeze meets the draft when it is POSTED.)', async () => {
     await stockUp(itemCoke, kitchen, '50', '10.0000', '2026-08-01');
     await stockUp(itemCheese, display, '10', '50.0000', '2026-08-01');
     const dayId = await makeSalesDay('2026-08-20', sold([
       { posItemKey: 'coke', posItemName: 'Coke', physicalQty: '5' },
       { posItemKey: 'cheese-direct', posItemName: 'Cheese Direct', physicalQty: '2' },
     ]));
-    // Coke resolves to kitchen (no override); cheese-as-direct resolves to display (its own override).
     await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, { orgId: orgA, storeId: storeA, posItemKey: 'coke', posItemName: 'Coke', mode: 'direct', itemId: itemCoke, quantityPerSale: '1' }));
     await asOrg(orgA, (tx) => upsertPosItemMap(tx, adminActor, { orgId: orgA, storeId: storeA, posItemKey: 'cheese-direct', posItemName: 'Cheese Direct', mode: 'direct', itemId: itemCheese, quantityPerSale: '1', locationId: display }));
 
-    const sessionId = await freezeKitchen();
+    await freezeKitchen();
 
     const plan = await asOrg(orgA, (tx) => buildPlan(tx, staffActor, { orgId: orgA, storeId: storeA, salesDayId: dayId, locationId: kitchen }));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
     const keys = plan.lines.map((l) => l.key);
-    const cokeKey = plan.lines.find((l) => l.posItemKey === 'coke')!.key;
-    // sanity: the fixture really has stock in both rooms, so a hold can only be the freeze
-    expect(await onHand(itemCoke, kitchen)).toBe('50.000');
-    expect(await onHand(itemCheese, display)).toBe('10.000');
 
     const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: keys }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.sections[0]).toMatchObject({ ok: true, postedLineCount: 1, finalized: false });
-    expect(result.sections[0]!.held).toHaveLength(1);
-    expect(result.sections[0]!.held[0]).toMatchObject({ key: cokeKey, cause: 'frozen' });
-    expect(result.sections[0]!.heldSentences).toContain(
-      'Kitchen is being counted, so 1 line(s) there wait. Finish or cancel the count, then finalize again.',
-    );
-    // Display's cheese posted (10 - 2 consumed = 8); kitchen's coke did not (still 50).
-    expect(await onHand(itemCheese, display)).toBe('8.000');
+    expect(result.sections[0]).toMatchObject({ ok: true, postedLineCount: 0, held: [], finalized: true });
+    expect(result.sections[0]!.heldSentences).toEqual([]);
     expect(await onHand(itemCoke, kitchen)).toBe('50.000');
-    const [mid] = await sql<{ direct: Date | null; status: string }[]>`select direct_finalized_at as direct, status from pos_usage_pulls where id = ${plan.pullId}`;
-    expect(mid!.direct, 'a section with a held line is not stamped').toBeNull();
-    expect(mid!.status).toBe('planned');
-
-    await sql`update count_sessions set status = 'cancelled', closed_by = ${managerId}, closed_at = now() where id = ${sessionId}`;
-    const again = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: keys }));
-    expect(again.ok).toBe(true);
-    if (!again.ok) return;
-    expect(again.sections[0]).toMatchObject({ ok: true, postedLineCount: 1, held: [], finalized: true });
-    expect(await onHand(itemCoke, kitchen)).toBe('45.000');
-    expect(await onHand(itemCheese, display), 'display is not posted a second time').toBe('8.000');
-    const [end] = await sql<{ direct: Date | null }[]>`select direct_finalized_at as direct from pos_usage_pulls where id = ${plan.pullId}`;
-    expect(end!.direct).not.toBeNull();
+    expect(await onHand(itemCheese, display)).toBe('10.000');
+    // One draft per store + day + ROOM (Ian, 15 Oct): Coke is in the kitchen, Cheese Direct is mapped to the display.
+    const recs = await usageRecordsOfDay(sql, storeA, '2026-08-20');
+    expect(recs, 'one draft per room').toHaveLength(2);
+    expect(recs.every((r) => r.status === 'draft')).toBe(true);
+    expect(Object.fromEntries(recs.map((r) => [r.locationId, r.lines]))).toEqual({
+      [kitchen]: { [itemCoke]: '5.000' },
+      [display]: { [itemCheese]: '2.000' },
+    });
+    const [row] = await sql<{ direct: Date | null }[]>`select direct_finalized_at as direct from pos_usage_pulls where id = ${plan.pullId}`;
+    expect(row!.direct, 'stamped: nothing is held').not.toBeNull();
   });
 });
 
@@ -507,8 +508,9 @@ describe('T-177 — 11. ⭐ meat maps and pulls normally — the carve-out is go
     const result = await asOrg(orgA, (tx) => finalizeSections(tx, managerActor, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: [plan.lines[0]!.key] }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.sections[0]).toMatchObject({ ok: true, postedLineCount: 1 });
-    expect(await onHand(itemMeat)).toBe('15.000');
+    expect(result.sections[0]).toMatchObject({ ok: true, postedLineCount: 0 });
+    expect(await onHand(itemMeat), 'the pull drafts the expected 5, no stock moves').toBe('20.000');
+    expect((await usageRecordsOfDay(sql, storeA, '2026-08-20'))[0]!.lines).toEqual({ [itemMeat]: '5.000' });
   });
 });
 

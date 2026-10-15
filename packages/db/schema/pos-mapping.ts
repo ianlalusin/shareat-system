@@ -292,6 +292,12 @@ export const posUsagePullLines = pgTable(
     /** Null for orphan (nothing to consume) and for a blocked recipe line. */
     quantity: numeric('quantity', { precision: 14, scale: 3 }),
     usageRecordId: uuid('usage_record_id').references(() => stockUsageRecords.id, { onDelete: 'restrict' }),
+    /**
+     * T-401 S6 audit rulings A3/A4 (migration 0198). The expectation the usage DRAFT was written with for this line's item (the plan
+     * quantity less what other records already held, floor 0), kept here so it survives staff removing and re-typing the draft's line. The
+     * draft's expectation for an item is the SUM of this over the linked lines. Null before S6 or while unlinked.
+     */
+    draftExpectedQty: numeric('draft_expected_qty', { precision: 14, scale: 3 }),
     blocked: jsonb('blocked'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -299,6 +305,8 @@ export const posUsagePullLines = pgTable(
     uniqueIndex('pos_usage_pull_lines_pull_key_key').on(t.pullId, t.lineKey),
     index('pos_usage_pull_lines_pull_section_idx').on(t.pullId, t.section),
     index('pos_usage_pull_lines_item_idx').on(t.itemId),
+    check('pos_usage_pull_lines_draft_expected_qty_check', sql`${t.draftExpectedQty} is null or ${t.draftExpectedQty} >= 0`),
+    check('pos_usage_pull_lines_draft_expected_qty_finite_check', sql`${t.draftExpectedQty} > '-Infinity'::numeric and ${t.draftExpectedQty} < 'Infinity'::numeric`),
     check(
       'pos_usage_pull_lines_quantity_positive_check',
       sql`${t.quantity} is null or ${t.quantity} > 0`,

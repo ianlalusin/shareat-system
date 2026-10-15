@@ -7,6 +7,8 @@
  * there.
  */
 import { itemsRepo, posMappingRepo, stockLedgerRepo, stockUsageRepo } from '@shareat/db';
+import { listStoreUsageQueue, listUsageVariances, type UsageVariance } from '@shareat/domain';
+import type { Actor } from '@shareat/auth';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
 export { listStores, withOrgPrincipal };
@@ -92,5 +94,28 @@ export async function usageRecordDetail(orgId: string, id: string): Promise<Usag
 
     const fromLivePull = !!(await posMappingRepo.livePullForUsageRecord(tx, id));
     return { record, locationName: roomName, lines: lineViews, fromLivePull };
+  });
+}
+
+export interface UsageQueueView {
+  /** The business date the band table is for. */
+  readonly date: string;
+  /** Every covered item of that day: expected (from the POS plan), recorded so far, and the verdict. */
+  readonly variances: UsageVariance[];
+  /** Every usage draft of the store, from every author, oldest first. */
+  readonly drafts: Awaited<ReturnType<typeof listStoreUsageQueue>>;
+}
+
+/**
+ * T-401 S6: the store's draft queue and the tolerance band per covered item for one day. Both reads are the domain's own, so the
+ * screen and the post gate cannot disagree about "inside" and "outside".
+ */
+export async function usageQueueData(orgId: string, actor: Actor, storeId: string, date: string): Promise<UsageQueueView> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const [variances, drafts] = await Promise.all([
+      listUsageVariances(tx, actor, { storeId, date }),
+      listStoreUsageQueue(tx, actor, storeId),
+    ]);
+    return { date, variances, drafts };
   });
 }

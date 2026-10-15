@@ -1,10 +1,10 @@
 /**
  * The only place SQL is written for POS item mapping and the daily usage pull. T-177.
  */
-import { and, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql } from 'drizzle-orm';
 import { salesDays } from '../../schema/sales-days';
 import { stockUsageRecords } from '../../schema/stock-usage';
-import type { Decimal, Quantity } from '@shareat/core/money';
+import { decimal, type Decimal, type Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert } from './numeric-input';
 import { items } from '../../schema/items';
@@ -413,7 +413,7 @@ export async function replacePullLines(
   const keptKeys = new Set(kept.map((k) => k.lineKey));
   const lines = allLines.filter((l) => !keptKeys.has(l.lineKey) && !keep.includes(l.section));
   if (lines.length === 0) return;
-  const rows: (SafeInsert<typeof posUsagePullLines> & { quantity: Quantity | null })[] = lines.map(
+  const rows: (SafeInsert<typeof posUsagePullLines> & { quantity: Quantity | null; draftExpectedQty?: Quantity | null })[] = lines.map(
     (l) => ({
       pullId,
       section: l.section,
@@ -521,6 +521,130 @@ export async function postedUsageRecordIdsForPull(tx: Tx, pullId: string): Promi
     .where(and(eq(posUsagePullLines.pullId, pullId), eq(stockUsageRecords.status, 'posted')))
     .orderBy(stockUsageRecords.id);
   return rows.map((r) => r.id);
+}
+
+/** T-401 S6: the distinct usage records this pull linked that are still `draft`, in id order. */
+export async function draftUsageRecordIdsForPull(tx: Tx, pullId: string): Promise<string[]> {
+  const rows = await tx
+    .selectDistinct({ id: stockUsageRecords.id })
+    .from(posUsagePullLines)
+    .innerJoin(stockUsageRecords, eq(stockUsageRecords.id, posUsagePullLines.usageRecordId))
+    .where(and(eq(posUsagePullLines.pullId, pullId), eq(stockUsageRecords.status, 'draft')))
+    .orderBy(stockUsageRecords.id);
+  return rows.map((r) => r.id);
+}
+
+/** T-401 S6: unlink every line of this pull from one usage record (the draft is being dropped). */
+export async function clearLineUsageRecord(tx: Tx, pullId: string, recordId: string): Promise<void> {
+  await tx
+    .update(posUsagePullLines)
+    .set({ usageRecordId: null, draftExpectedQty: NO_DRAFT_EXPECTATION })
+    .where(and(eq(posUsagePullLines.pullId, pullId), eq(posUsagePullLines.usageRecordId, recordId)));
+}
+
+/** T-401 S6: does a line of a non-void pull other than this one's still point at the record? */
+export async function recordHasOtherPullLines(tx: Tx, recordId: string, exceptPullId: string): Promise<boolean> {
+  const rows = await tx
+    .select({ id: posUsagePullLines.id })
+    .from(posUsagePullLines)
+    .innerJoin(posUsagePulls, eq(posUsagePulls.id, posUsagePullLines.pullId))
+    .where(and(eq(posUsagePullLines.usageRecordId, recordId), ne(posUsagePulls.id, exceptPullId), ne(posUsagePulls.status, 'void')))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Typed nulls and zeros for `draft_expected_qty` (T-371 G1: a constrained numeric is written only a branded value of its own shape). */
+const NO_DRAFT_EXPECTATION: Quantity | null = null;
+const NO_QUANTITY: Quantity = decimal('0', '14,3');
+
+/** T-401 S6 A2: one pull line linked to a usage draft, with its draft expectation. */
+export interface DraftLinkedLineRow {
+  readonly id: string;
+  readonly lineKey: string;
+  readonly itemId: string;
+  readonly quantity: string | null;
+  readonly draftExpectedQty: string | null;
+}
+
+/**
+ * T-401 S6 A2: the draft THIS pull made for one room (a `usage` draft that one of this pull's lines points at, in that room), under
+ * `FOR UPDATE`. A staff draft is never returned: nothing of the pull's points at it.
+ */
+export async function pullDraftForRoomForUpdate(tx: Tx, pullId: string, locationId: string): Promise<{ id: string } | undefined> {
+  const [row] = await tx
+    .select({ id: stockUsageRecords.id })
+    .from(stockUsageRecords)
+    .where(
+      and(
+        eq(stockUsageRecords.locationId, locationId),
+        eq(stockUsageRecords.kind, 'usage'),
+        eq(stockUsageRecords.status, 'draft'),
+        sql`exists (select 1 from pos_usage_pull_lines pl where pl.pull_id = ${pullId} and pl.usage_record_id = ${stockUsageRecords.id})`,
+      ),
+    )
+    .orderBy(asc(stockUsageRecords.createdAt), asc(stockUsageRecords.id))
+    .limit(1)
+    .for('update');
+  return row;
+}
+
+/** T-401 S6: this pull's lines that point at one record (itemId is always set once linked). */
+export async function linkedLinesOfRecord(tx: Tx, pullId: string, recordId: string): Promise<DraftLinkedLineRow[]> {
+  const rows = await tx
+    .select({
+      id: posUsagePullLines.id,
+      lineKey: posUsagePullLines.lineKey,
+      itemId: posUsagePullLines.itemId,
+      quantity: posUsagePullLines.quantity,
+      draftExpectedQty: posUsagePullLines.draftExpectedQty,
+    })
+    .from(posUsagePullLines)
+    .where(and(eq(posUsagePullLines.pullId, pullId), eq(posUsagePullLines.usageRecordId, recordId)))
+    .orderBy(asc(posUsagePullLines.lineKey));
+  return rows.filter((r) => r.itemId !== null) as DraftLinkedLineRow[];
+}
+
+/** T-401 S6 A4: record the draft's expectation for one item across this pull's lines that point at the record (all zero but the first). */
+export async function setDraftExpected(tx: Tx, pullId: string, recordId: string, itemId: string, expected: Quantity): Promise<void> {
+  const rows = await tx
+    .select({ id: posUsagePullLines.id })
+    .from(posUsagePullLines)
+    .where(and(eq(posUsagePullLines.pullId, pullId), eq(posUsagePullLines.usageRecordId, recordId), eq(posUsagePullLines.itemId, itemId)))
+    .orderBy(asc(posUsagePullLines.lineKey));
+  for (const [i, r] of rows.entries()) {
+    await tx
+      .update(posUsagePullLines)
+      .set({ draftExpectedQty: i === 0 ? expected : NO_QUANTITY })
+      .where(eq(posUsagePullLines.id, r.id));
+  }
+}
+
+/**
+ * T-401 S6 A3/A4: what the pull expected of each item in one usage record, summed over the record's linked lines of NON-void pulls
+ * (only lines that carry a snapshot). Empty for a record no pull made, and for one made before S6.
+ */
+export async function draftExpectedByItem(tx: Tx, recordId: string): Promise<Map<string, string>> {
+  const rows = await tx
+    .select({ itemId: posUsagePullLines.itemId, total: sql<string>`sum(${posUsagePullLines.draftExpectedQty})::text` })
+    .from(posUsagePullLines)
+    .innerJoin(posUsagePulls, eq(posUsagePulls.id, posUsagePullLines.pullId))
+    .where(and(eq(posUsagePullLines.usageRecordId, recordId), ne(posUsagePulls.status, 'void'), isNotNull(posUsagePullLines.draftExpectedQty)))
+    .groupBy(posUsagePullLines.itemId);
+  return new Map(rows.filter((r) => r.itemId !== null).map((r) => [r.itemId!, r.total]));
+}
+
+/** T-401 S6: ids of the usage records any non-void pull line points at, for one pull (the "not others" set of the pre-fill). */
+export async function recordIdsOfPull(tx: Tx, pullId: string): Promise<string[]> {
+  const rows = await tx
+    .selectDistinct({ id: posUsagePullLines.usageRecordId })
+    .from(posUsagePullLines)
+    .where(and(eq(posUsagePullLines.pullId, pullId), isNotNull(posUsagePullLines.usageRecordId)));
+  return rows.map((r) => r.id!);
+}
+
+/** T-401 S6 A7: every pull line (of any pull) stops pointing at this record, and its draft snapshot goes with it. */
+export async function unlinkRecordFromPulls(tx: Tx, recordId: string): Promise<void> {
+  await tx.update(posUsagePullLines).set({ usageRecordId: null, draftExpectedQty: NO_DRAFT_EXPECTATION }).where(eq(posUsagePullLines.usageRecordId, recordId));
 }
 
 /** R10: the non-void pull, with its sales day's business date, that links this usage record; none when no live pull does. */

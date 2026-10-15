@@ -69,6 +69,7 @@ positionsBySupplier
 previewDrawingClose
 projectStoreMenu
 proxy
+pullHolds
 purgeComplete
 rateFor
 realSourceTypesForSpecName

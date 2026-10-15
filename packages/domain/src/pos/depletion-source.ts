@@ -91,6 +91,30 @@ export async function loadDepletionLookups(tx: Tx, orgId: string, storeId: strin
   return { mapsByPosItemKey, recipesById: await loadRecipes(tx, orgId, [mapsByPosItemKey]) };
 }
 
+/**
+ * T-401 S6: the stock items a store's MENU RULES cover right now, for the usage tolerance check. Only a store whose usage source is
+ * `menu_rules` has any; a store on the POS item maps is covered only by what its pull plans. A direct rule covers its item, a recipe
+ * rule the items of the recipe's active lines, `no_stock` nothing. A plain read: no lock, nothing written.
+ */
+export async function menuRuleCoveredItemIds(tx: Tx, orgId: string, storeId: string): Promise<Set<string>> {
+  const covered = new Set<string>();
+  if ((await menuRepo.usageSourceInForce(tx, storeId)) !== 'menu_rules') return covered;
+  const links = await menuRepo.listActiveLinks(tx, storeId);
+  if (links.length === 0) return covered;
+  const rules = await menuRepo.rulesInForce(tx, orgId, links.map((l) => l.variantId), await planInstant(tx));
+  const recipeIds = new Set<string>();
+  for (const rule of rules.values()) {
+    if (rule.mode === 'direct' && rule.itemId) covered.add(rule.itemId);
+    else if (rule.mode === 'recipe' && rule.recipeId) recipeIds.add(rule.recipeId);
+  }
+  if (recipeIds.size > 0) {
+    for (const r of await posMappingRepo.getRecipesForExplosion(tx, orgId, [...recipeIds])) {
+      if (r.status === 'active') for (const l of r.lines) covered.add(l.itemId);
+    }
+  }
+  return covered;
+}
+
 // -------------------------------------------------------------------------------------------------------------------
 // The guard: a recipe, a link or a source must not move under a pull the manager has not finished
 // -------------------------------------------------------------------------------------------------------------------

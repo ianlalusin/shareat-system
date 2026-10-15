@@ -156,6 +156,14 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('menu.pos_v1_link', 'stock', 'normal', 'store', 'menu_pos_v1_links', 'T-401'),
   def('menu.pos_v1_unlink', 'stock', 'normal', 'store', 'menu_pos_v1_links', 'T-401'),
   def('menu.usage_source_switch', 'stock', 'high', 'store', 'menu_usage_source_switches', 'T-401'),
+  // S6: the usage tolerance band. The org setting and an item's override are admin-set; an out-of-band post a manager verified with a reason.
+  def('menu.usage_tolerance_set', 'stock', 'normal', 'org', 'organizations', 'T-401'),
+  def('menu.item_usage_tolerance_set', 'stock', 'normal', 'org', 'items', 'T-401'),
+  def('stock.usage_tolerance_verified', 'stock', 'high', 'store', 'stock_usage_records', 'T-401'),
+  // The system posted a pull-made usage draft itself (14:00 Manila the day after its business date); written by the usage auto-post job, never by a person.
+  // The org's usage system person (the author of every POS-pull usage draft) was created, once, on first use (audit ruling A9).
+  def('stock.usage_system_author_created', 'stock', 'normal', 'org', 'persons', 'T-401', { actor: 'system' }),
+  def('stock.usage_auto_posted', 'stock', 'normal', 'store', 'stock_usage_records', 'T-401', { actor: 'system' }),
   // Written by T-401's setOptionOffer (price / withdraw) but absent from 0197's copy list (a ternary the S1a scan missed). Dotted on purpose: never in 0197's list, so no row can carry the underscore form.
   def('menu.option_offer_set', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),
   def('menu.option_offer_withdraw', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),

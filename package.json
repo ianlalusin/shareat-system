@@ -44,6 +44,7 @@
     "orphan-file-sweep": "tsx scripts/orphan-file-sweep.ts",
     "budget-reissue": "tsx scripts/budget-reissue.ts",
     "recurring-expense-draft": "tsx scripts/recurring-expense-draft.ts",
+    "usage-auto-post": "tsx scripts/usage-auto-post.ts",
     "fiscal-period-seed": "tsx scripts/fiscal-period-seed.ts",
     "bootstrap-org": "tsx scripts/bootstrap-org.ts",
     "provision-terminal": "tsx scripts/provision-terminal.ts",

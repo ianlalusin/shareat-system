@@ -411,16 +411,18 @@ describe('T5 - finalizeSections after the day is voided', () => {
     expect([p!.d, p!.r, p!.o]).toEqual([null, null, null]);
   });
 
-  it('control: the same pull on a live day finalizes and posts usage', async () => {
+  it('control: the same pull on a live day finalizes and DRAFTS usage (one draft record, no stock movement; T-401 S6)', async () => {
     const f = await fixture('t5c');
     const id = await mkUsageDay(f, D1, { verify: true });
     const built = await plan(f, id);
     expect(built.ok).toBe(true);
     if (!built.ok) return;
     const usage = await usageRows(f);
+    const moves = await moveRows(f);
     const out = await finalize(f, built.pullId, built.lines.map((l) => l.key));
     expect(out.ok).toBe(true);
     expect(await usageRows(f)).toBe(usage + 1);
+    expect(await moveRows(f), 'the pull drafts, it moves no stock').toBe(moves);
   });
 });
 

@@ -294,6 +294,14 @@ const pullCount = (f: F) => num(sql`select count(*)::text as n from pos_usage_pu
 const usageCount = (f: F) => num(sql`select count(*)::text as n from stock_usage_records where org_id = ${f.orgId}`);
 const onHand = async (itemId: string): Promise<string> =>
   (await sql<{ t: string }[]>`select coalesce(sum(quantity),0)::text as t from stock_movements where item_id = ${itemId}`)[0]!.t;
+/** The expected quantity the day's usage draft carries for an item ('cheese' | 'buns'); null when it has no line. */
+const draftOf = async (f: F, which: 'cheese' | 'buns', date = DAY): Promise<string | null> => {
+  const itemId = which === 'cheese' ? f.cheese : f.buns;
+  const rows = await sql<{ q: string | null }[]>`
+    select sum(l.quantity)::text as q from stock_usage_records r join stock_usage_lines l on l.record_id = r.id
+     where r.store_id = ${f.storeId} and r.used_on = ${date} and r.kind = 'usage' and r.status = 'draft' and l.item_id = ${itemId}`;
+  return rows[0]?.q ?? null;
+};
 const soldItemsFeeds = (f: F, date: string) =>
   sql<{ id: string; purpose: string; fetched_at: Date }[]>`
     select id, purpose, fetched_at from pos_v1_day_feeds
@@ -321,7 +329,7 @@ const S = {
 
 // =====================================================================================================
 describe('U1 - plan and finalize read the stored feed; POS is never called', () => {
-  it('plan: lines direct:A 3.000 and direct:B 1.000, pinned to F1, soldItemsFeed = F1 import; finalize posts Cheese 3 and Buns 1 at the pull location dated D; 0 fetch calls', async () => {
+  it('plan: lines direct:A 3.000 and direct:B 1.000, pinned to F1, soldItemsFeed = F1 import; finalize DRAFTS Cheese 3 and Buns 1 (expected) at the pull location dated D and moves no stock (T-401 S6); 0 fetch calls', async () => {
     const f = await fixture('u1');
     const dayId = await imp(f, DAY);
     const [f1] = await soldItemsFeeds(f, DAY);
@@ -346,12 +354,13 @@ describe('U1 - plan and finalize read the stored feed; POS is never called', () 
     const records = await sql<{ id: string; location_id: string; used_on: string }[]>`
       select id, location_id, to_char(used_on, 'YYYY-MM-DD') as used_on from stock_usage_records where org_id = ${f.orgId}`;
     expect(records, 'one usage record').toHaveLength(1);
+    expect((await sql<{ status: string }[]>`select status from stock_usage_records where id = ${records[0]!.id}`)[0]!.status, 'a draft, never posted by the pull').toBe('draft');
     expect(records[0]!.location_id).toBe(f.kitchen);
     expect(records[0]!.used_on).toBe(DAY);
     const lines = await sql<{ item_id: string; quantity: string }[]>`select item_id, quantity from stock_usage_lines where record_id = ${records[0]!.id}`;
     expect(Object.fromEntries(lines.map((l) => [l.item_id, l.quantity]))).toEqual({ [f.cheese]: '3.000', [f.buns]: '1.000' });
-    expect(await onHand(f.cheese)).toBe('97.000');
-    expect(await onHand(f.buns)).toBe('99.000');
+    expect(await onHand(f.cheese), 'no stock moved').toBe('100.000');
+    expect(await onHand(f.buns), 'no stock moved').toBe('100.000');
   });
 });
 
@@ -391,7 +400,7 @@ describe('U3 - finalize refuses a newer DIFFERENT feed, and only that', () => {
     expect(await onHand(f.cheese)).toBe('100.000');
   });
 
-  it('control 1: a re-import with IDENTICAL items {B 2, A 3} (F3\') posts Cheese 3', async () => {
+  it('control 1: a re-import with IDENTICAL items {B 2, A 3} (F3\') drafts Cheese 3, no stock', async () => {
     const f = await fixture('u3c1');
     const dayId = await imp(f, DAY);
     const p = await mustPlan(f, dayId);
@@ -399,10 +408,11 @@ describe('U3 - finalize refuses a newer DIFFERENT feed, and only that', () => {
     expect((await soldItemsFeeds(f, DAY)).length, 'control: the re-import stored a newer feed').toBe(2);
     const out = await fin(f, p.pullId, directKeys(p));
     expect(out.ok, out.ok ? '' : out.reason).toBe(true);
-    expect(await onHand(f.cheese)).toBe('97.000');
+    expect(await onHand(f.cheese)).toBe('100.000');
+    expect(await draftOf(f, 'cheese')).toBe('3.000');
   });
 
-  it('control 2: after F3, building again re-pins to F3 and finalize posts Cheese 4', async () => {
+  it('control 2: after F3, building again re-pins to F3 and finalize drafts Cheese 4 (no stock)', async () => {
     const f = await fixture('u3c2');
     const dayId = await imp(f, DAY);
     const p = await mustPlan(f, dayId);
@@ -414,23 +424,25 @@ describe('U3 - finalize refuses a newer DIFFERENT feed, and only that', () => {
     expect((await pullRow(p.pullId)).pos_v1_day_feed_id, 'the refresh rewrites the pin').toBe(f3.id);
     const out = await fin(f, again.pullId, directKeys(again));
     expect(out.ok, out.ok ? '' : out.reason).toBe(true);
-    expect(await onHand(f.cheese)).toBe('96.000');
+    expect(await onHand(f.cheese)).toBe('100.000');
+    expect(await draftOf(f, 'cheese')).toBe('4.000');
   });
 });
 
 describe('U4 - a voided pull frees the day; the next plan reads the latest feed', () => {
-  it('finalize, void (a manager, a reason) -> every record reversed; a recheck F2 {A 5, B 2} and buildPlan -> a NEW pull pinned to F2, A 5.000; the voided pull keeps F1; 0 fetch calls', async () => {
+  it('finalize (a draft), void (a manager, a reason) -> the unposted draft is gone and stock never moved; a recheck F2 {A 5, B 2} and buildPlan -> a NEW pull pinned to F2, A 5.000; the voided pull keeps F1; 0 fetch calls', async () => {
     const f = await fixture('u4');
     const dayId = await imp(f, DAY);
     const [f1] = await soldItemsFeeds(f, DAY);
     const p = await mustPlan(f, dayId);
     expect((await fin(f, p.pullId, directKeys(p))).ok).toBe(true);
-    const records = await usageCount(f);
-    expect(records, 'control: the finalize made a record').toBeGreaterThan(0);
+    expect(await usageCount(f), 'control: the finalize made ONE draft').toBe(1);
+    expect(await onHand(f.cheese), 'the pull moved no stock').toBe('100.000');
 
     const out = await asOrg(f.orgId, (tx) => D.voidPosUsagePull(tx, f.manager, { pullId: p.pullId, reason: 'POS corrected' }));
-    expect(out).toMatchObject({ ok: true, reversedRecordCount: records });
+    expect(out.ok).toBe(true);
     expect(await onHand(f.cheese)).toBe('100.000');
+    expect(await draftOf(f, 'cheese'), 'the unposted draft is removed with the pull').toBeNull();
     expect((await pullRow(p.pullId)).status).toBe('void');
 
     const f2 = (await recheck(f, DAY, { soldItems: [{ key: 'A', name: 'A', physicalQty: 5 }, { key: 'B', name: 'B', physicalQty: 2 }] })).ids.sold_items!;
@@ -490,7 +502,7 @@ describe('U6 - an unlinked store refuses usage in a sentence (R9)', () => {
 });
 
 describe('U7 - a pull built before S5-lite (no pin) is refused at finalize and fixed by building again', () => {
-  it('pre-S5 pull by raw SQL -> the pre-S5-lite sentence; nothing posted; control: build again pins F1 and finalize posts', async () => {
+  it('pre-S5 pull by raw SQL -> the pre-S5-lite sentence; nothing drafted; control: build again pins F1 and finalize drafts (no stock)', async () => {
     const f = await fixture('u7');
     const dayId = await imp(f, DAY);
     const [f1] = await soldItemsFeeds(f, DAY);
@@ -509,7 +521,8 @@ describe('U7 - a pull built before S5-lite (no pin) is refused at finalize and f
     expect((await pullRow(raw!.id)).pos_v1_day_feed_id).toBe(f1!.id);
     const ok = await fin(f, again.pullId, directKeys(again));
     expect(ok.ok, ok.ok ? '' : ok.reason).toBe(true);
-    expect(await onHand(f.cheese)).toBe('97.000');
+    expect(await onHand(f.cheese)).toBe('100.000');
+    expect(await draftOf(f, 'cheese')).toBe('3.000');
   });
 });
 
@@ -532,7 +545,7 @@ describe('U8 - the newer-feed check runs under the day lock', () => {
     expect(await usageCount(f)).toBe(0);
   });
 
-  it('control: with no re-import in flight the same finalize posts', async () => {
+  it('control: with no re-import in flight the same finalize drafts (one usage record)', async () => {
     const f = await fixture('u8c');
     const p = await mustPlan(f, await imp(f, DAY));
     expect((await fin(f, p.pullId, directKeys(p))).ok).toBe(true);
@@ -625,7 +638,8 @@ describe('U12 (stock hole) - a partly finalized pull never moves its pin', () =>
     expect(recipeKeys(p), 'control: the fixture has a recipe line to finalize later').toHaveLength(1);
     const direct = await fin(f, p.pullId, directKeys(p));
     expect(direct.ok, direct.ok ? '' : direct.reason).toBe(true);
-    expect(await onHand(f.cheese), 'control: Direct posted Cheese 3').toBe('97.000');
+    expect(await onHand(f.cheese), 'control: Direct drafted Cheese 3 (stock untouched)').toBe('100.000');
+    expect(await draftOf(f, 'cheese'), 'control: the draft carries Cheese 3').toBe('3.000');
     return { f, dayId, f1: f1!, p };
   }
 
@@ -662,7 +676,8 @@ describe('U12 (stock hole) - a partly finalized pull never moves its pin', () =>
 
     const recipe = await fin(f, p.pullId, recipeKeys(again), ['recipe']);
     expect(recipe.ok, recipe.ok ? '' : recipe.reason).toBe(true);
-    expect(recipe.ok && recipe.sections[0]).toMatchObject({ ok: true, postedLineCount: 1 });
+    expect(recipe.ok && recipe.sections[0]).toMatchObject({ ok: true, postedLineCount: 0, held: [], finalized: true });
+    expect(await usageCount(f), 'still ONE record for the day (the recipe line is filled into it)').toBe(1);
   });
 
   it('leg b: a partly finalized pull with a NULL pin (raw SQL fixture) -> the no-pin partly-posted sentence', async () => {
@@ -683,7 +698,7 @@ describe('U13 - an unreadable newer feed at finalize refuses (never "no change")
     expect((await pullRow(p.pullId)).direct_finalized_at, 'no section stamped').toBeNull();
   });
 
-  it('control: a readable IDENTICAL recheck lets the same finalize post', async () => {
+  it('control: a readable IDENTICAL recheck lets the same finalize draft', async () => {
     const f = await fixture('u13c');
     const p = await mustPlan(f, await imp(f, DAY));
     await recheck(f, DAY, { soldItems: AB });

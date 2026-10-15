@@ -19,12 +19,22 @@ function when(d: Date | null): string {
   return d ? new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '—';
 }
 
+/** The post form's optional reason. A refusal sends back what was typed (the signed flash), so the box comes back filled. */
+function ReasonField({ kept }: { kept: string }) {
+  return (
+    <label className="flex min-w-0 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+      Reason, only if a line is outside the tolerance
+      <Input name="reason" defaultValue={kept} placeholder="e.g. counted twice" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
+    </label>
+  );
+}
+
 export default async function UsageRecordPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; ok?: string }>;
+  searchParams: Promise<{ error?: string; ok?: string; reason?: string }>;
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
@@ -97,6 +107,7 @@ export default async function UsageRecordPage({
               entry — nothing has moved until this.
             </p>
           </div>
+          <ReasonField kept={sp.reason ?? ''} />
           <Button type="submit" variant="primary">
             Post
           </Button>

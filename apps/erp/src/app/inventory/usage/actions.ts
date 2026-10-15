@@ -103,15 +103,17 @@ export async function saveUsageDraftAction(fd: FormData): Promise<void> {
 export async function postUsageAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/usage');
   const recordId = str(fd, 'recordId');
+  // T-401 S6: a line outside the tolerance band posts only with a reason. Blank = none given. A refusal keeps what was typed.
+  const reason = str(fd, 'reason');
 
   let result: Awaited<ReturnType<typeof postUsage>> | undefined;
   try {
-    result = await withOrgPrincipal(actor.orgId, (tx) => postUsage(tx, actor, { recordId }));
+    result = await withOrgPrincipal(actor.orgId, (tx) => postUsage(tx, actor, { recordId, ...(reason ? { verifyOutOfTolerance: { reason } } : {}) }));
   } catch (err) {
-    return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: errorMessage(err), keep: { reason } });
   }
   if (!result.ok) {
-    return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: result.reason });
+    return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: result.reason, keep: { reason } });
   }
 
   // ⭐ T-223 / DEF-186 — THE low-stock auto-order's only caller, and the reason it must be here.
