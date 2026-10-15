@@ -27,7 +27,7 @@
  *    author's person id or display name appears in the row); the spec names no function or field.
  */
 import { afterAll, describe, expect, it } from 'vitest';
-import { closeDb, stockUsageRepo, type Tx } from '@shareat/db';
+import { closeDb, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import * as domainModule from '@shareat/domain';
 import { buildPlan, finalizeSections, saveUsageDraft, voidUsage } from '@shareat/domain';
@@ -44,6 +44,8 @@ const s6 = domainModule as unknown as {
   setOrgUsageTolerance(tx: Tx, actor: Actor, input: { tolerance: string }): Promise<unknown>;
   setItemUsageTolerance(tx: Tx, actor: Actor, input: { itemId: string; tolerance: string | null }): Promise<unknown>;
   isWithinUsageTolerance(expected: string, actual: string, tolerance: string): boolean;
+  listUsageVariances(tx: Tx, actor: Actor, input: { storeId: string; date: string }): Promise<{ itemId: string; itemName: string; expected: string; actual: string; withinBand: boolean }[]>;
+  listStoreUsageQueue(tx: Tx, actor: Actor, storeId: string): Promise<Record<string, unknown>[]>;
 };
 
 const DAY = '2026-08-20';
@@ -88,13 +90,21 @@ const statusOf = async (id: string) => (await sql<{ status: string }[]>`select s
 const verifiedAudit = (w: World) => sql<{ store_id: string | null; category: string; sensitivity: string; after: Record<string, unknown> | null }[]>`
   select store_id, category, sensitivity, after from audit_log where org_id = ${w.orgId} and action = 'stock.usage_tolerance_verified' order by occurred_at`;
 const toleranceAudit = (w: World) => sql<{ action: string; after: unknown }[]>`
-  select action, after from audit_log where org_id = ${w.orgId} and action ilike '%tolerance%' and action <> 'stock.usage_tolerance_verified' order by occurred_at`;
+  select action, after from audit_log where org_id = ${w.orgId} and action in ('menu.usage_tolerance_set', 'menu.item_usage_tolerance_set') order by occurred_at`;
 
 /** A refused post changed nothing: still draft, stock untouched, no verification row. Returns nothing; asserts. */
 async function expectUntouched(w: World, recordId: string) {
   expect(await statusOf(recordId)).toBe('draft');
   expect(await onHand(w)).toBe(START);
   expect(await verifiedAudit(w)).toEqual([]);
+}
+
+/** A staff member scoped to store B only: no standing at store A. */
+async function outsiderOf(w: World): Promise<Actor> {
+  const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${w.orgId}, 'Outsider Ollie') returning id`;
+  await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${w.orgId}, 'staff')`;
+  await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${w.b.storeId})`;
+  return { personId: p!.id, orgId: w.orgId };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -186,8 +196,27 @@ describe('I28 - an out-of-band post', () => {
     expect(await verifiedAudit(w)).toEqual([]);
   }, 180_000);
 
-  it('expected 0 (item sold nothing today) with actual > 0 is flagged: refused without a reason, accepted with one. Mutant: an empty expected skips the check', async () => {
-    const { w } = await scenario('z1', 10); // cheese expected 10; RICE expected 0 (not in any plan line)
+  it('an UNCOVERED item (no pull line, no menu rule, no map) is never checked: any actual posts with no reason and no verification row. Mutant: uncovered treated as expected 0', async () => {
+    const { w } = await scenario('u1', 10);
+    await stockUp(w, w.a.storeId, w.a.kitchen, w.rice, '100');
+    const id = await draft(w, w.staff, '37', { itemId: w.rice });
+    expect(await postRefusal(w, w.manager, id)).toBeNull();
+    expect(await statusOf(id)).toBe('posted');
+    expect(await onHand(w, w.rice)).toBe(63);
+    expect(await verifiedAudit(w)).toEqual([]);
+  }, 180_000);
+
+  it('a COVERED item with expected 0 (a menu rule for it, none sold today) and actual > 0 is flagged: refused without a reason, accepted with one. Mutant: an empty expected skips the check', async () => {
+    const { w, dayId } = await scenario('z1', 10);
+    const vc = await rawVariant(w, 'Cheese dish');
+    await rawRule(w, vc, { mode: 'direct', itemId: w.cheese, quantityPerSale: '1' });
+    await rawLink(w, w.a.storeId, 'a', vc);
+    const vr = await rawVariant(w, 'Rice dish');
+    await rawRule(w, vr, { mode: 'direct', itemId: w.rice, quantityPerSale: '1' });
+    await rawLink(w, w.a.storeId, 'r', vr); // rice dish: covered by a rule, sold 0 today
+    await rawSwitch(w, w.a.storeId, 'menu_rules');
+    const p = await asOrg(w.orgId, (tx) => buildPlan(tx, w.staff, { orgId: w.orgId, storeId: w.a.storeId, salesDayId: dayId, locationId: w.a.kitchen }));
+    expect(p.ok, p.ok ? '' : String((p as { reason?: string }).reason)).toBe(true);
     const id = await draft(w, w.staff, '1', { itemId: w.rice });
     await stockUp(w, w.a.storeId, w.a.kitchen, w.rice, '100');
     expect(await postRefusal(w, w.manager, id)).not.toBeNull();
@@ -279,6 +308,7 @@ describe('I28 - the tolerance setting and the item override', () => {
     await asOrg(w.orgId, (tx) => s6.setOrgUsageTolerance(tx, w.admin, { tolerance: '0.05' }));
     const rows = await toleranceAudit(w);
     expect(rows.length).toBe(before.length + 1);
+    expect(rows[rows.length - 1]!.action).toBe('menu.usage_tolerance_set');
     expect(JSON.stringify(rows[rows.length - 1]!.after)).toContain('0.05');
     const bad = await draft(w, w.staff, '10.6');
     expect(await postRefusal(w, w.manager, bad)).not.toBeNull();
@@ -302,6 +332,7 @@ describe('I28 - the tolerance setting and the item override', () => {
     const before = (await toleranceAudit(w)).length;
     await asOrg(w.orgId, (tx) => s6.setItemUsageTolerance(tx, w.admin, { itemId: w.cheese, tolerance: '0.50' }));
     expect((await toleranceAudit(w)).length).toBe(before + 1);
+    expect((await toleranceAudit(w)).at(-1)!.action).toBe('menu.item_usage_tolerance_set');
     const wide = await draft(w, w.staff, '14'); // +40%: inside the override, outside the org 5%
     expect(await postRefusal(w, w.manager, wide), 'override 50% beats org 5%').toBeNull();
 
@@ -357,6 +388,8 @@ describe('the pull is a check only; drafts move stock (bible row 335)', () => {
     const f = await asOrg(w.orgId, (tx) => finalizeSections(tx, w.manager, { pullId, sections: ['direct'], confirmedKeys: keys }));
     expect(f.ok, f.ok ? '' : String((f as { reason?: string }).reason)).toBe(true);
     expect(await onHand(w), 'the pull moved stock').toBe(START);
+    const [pr] = await sql<{ n: string }[]>`select count(*)::text as n from pos_usage_pull_lines where pull_id = ${pullId} and usage_record_id is not null`;
+    expect(Number(pr!.n), 'the pull made a usage record').toBe(0);
     const id = await draft(w, w.staff, '10');
     expect(await postRefusal(w, w.manager, id)).toBeNull();
     expect(await onHand(w)).toBe(START - 10);
@@ -389,6 +422,8 @@ describe('the pull is a check only; drafts move stock (bible row 335)', () => {
     expect(f.ok, f.ok ? '' : String((f as { reason?: string }).reason)).toBe(true);
     expect(await onHand(w, w.rice)).toBe(START);
     expect(await onHand(w, w.cheese)).toBe(START);
+    const [pr] = await sql<{ n: string }[]>`select count(*)::text as n from pos_usage_pull_lines where pull_id = ${p.pullId} and usage_record_id is not null`;
+    expect(Number(pr!.n), 'the pull made a usage record').toBe(0);
     // expected rice = 10 boxes * 0.1 kg = 1: a draft of 1 posts clean, a draft of 2 would be flagged
     const rid = await draft(w, w.staff, '1', { itemId: w.rice });
     expect(await postRefusal(w, w.manager, rid)).toBeNull();
@@ -422,18 +457,30 @@ describe('the queue: many staff draft at once; all store staff see who recorded 
     const cora = await secondStaff(w);
     const mine = await draft(w, w.staff, '5');
     const hers = await draft(w, cora, '5');
-    const list = await asOrg(w.orgId, (tx) => stockUsageRepo.listUsageRecords(tx, w.a.storeId));
-    const byId = new Map(list.map((r) => [r.id, JSON.stringify(r)]));
+    const list = await asOrg(w.orgId, (tx) => s6.listStoreUsageQueue(tx, w.staff, w.a.storeId));
+    const byId = new Map(list.map((r) => [String(r.id), JSON.stringify(r)]));
     expect(byId.has(mine) && byId.has(hers), 'both drafts are in the store queue').toBe(true);
     expect(byId.get(hers)!.includes(cora.personId) || byId.get(hers)!.includes('Cashier Cora'), 'her row names her').toBe(true);
     expect(byId.get(mine)!.includes(w.staff.personId) || byId.get(mine)!.includes('Staffer'), 'my row names me').toBe(true);
+    expect(byId.get(hers)!, 'row carries the item').toMatch(/Cheese/);
+    expect(byId.get(hers)!, 'row carries the quantity').toMatch(/\b5(\.0+)?\b/);
+    const asCora = await asOrg(w.orgId, (tx) => s6.listStoreUsageQueue(tx, cora, w.a.storeId));
+    expect(asCora.map((r) => String(r.id))).toEqual(expect.arrayContaining([mine, hers]));
   }, 180_000);
 
   it('the queue is per store: store B\'s draft is not in store A\'s queue', async () => {
     const { w } = await scenario('q3', 10);
     const inB = await draft(w, w.manager, '5', { storeId: w.b.storeId, locationId: w.b.kitchen });
-    const list = await asOrg(w.orgId, (tx) => stockUsageRepo.listUsageRecords(tx, w.a.storeId));
-    expect(list.map((r) => r.id)).not.toContain(inB);
+    const list = await asOrg(w.orgId, (tx) => s6.listStoreUsageQueue(tx, w.staff, w.a.storeId));
+    expect(list.map((r) => String(r.id))).not.toContain(inB);
+  }, 180_000);
+
+  it('the queue is store-scoped: a person with no scope at store A is refused; a staff member of A reads it (control)', async () => {
+    const { w } = await scenario('q7', 10);
+    const outsider = await outsiderOf(w);
+    await draft(w, w.staff, '5');
+    await expect(asOrg(w.orgId, (tx) => s6.listStoreUsageQueue(tx, outsider, w.a.storeId))).rejects.toThrow(/may not/);
+    expect((await asOrg(w.orgId, (tx) => s6.listStoreUsageQueue(tx, w.staff, w.a.storeId))).length).toBeGreaterThan(0);
   }, 180_000);
 
   it('only a manager posts: staff posting is refused (post_usage), even with a verification reason on an out-of-band draft; nothing moves. Manager is the control', async () => {
@@ -459,5 +506,50 @@ describe('the queue: many staff draft at once; all store staff see who recorded 
     const [row] = await sql<{ actor_id: string | null }[]>`
       select actor_person_id as actor_id from audit_log where org_id = ${w.orgId} and action = 'stock.usage_tolerance_verified'`;
     expect(row?.actor_id).toBe(w.manager.personId);
+  }, 180_000);
+});
+
+describe('listUsageVariances (read for the day, per covered item)', () => {
+  it('one row per covered item with itemName, expected, actual, withinBand: outside, inside, and expected > 0 / actual 0', async () => {
+    const { w } = await scenario('r1', 10);
+    await draft(w, w.staff, '12');
+    let rows = await asOrg(w.orgId, (tx) => s6.listUsageVariances(tx, w.staff, { storeId: w.a.storeId, date: DAY }));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ itemId: w.cheese, itemName: 'Cheese', withinBand: false });
+    expect(Number(rows[0]!.expected)).toBe(10);
+    expect(Number(rows[0]!.actual)).toBe(12);
+
+    const ins = await scenario('r2', 10);
+    await draft(ins.w, ins.w.staff, '11');
+    rows = await asOrg(ins.w.orgId, (tx) => s6.listUsageVariances(tx, ins.w.staff, { storeId: ins.w.a.storeId, date: DAY }));
+    expect(rows[0]).toMatchObject({ itemId: ins.w.cheese, withinBand: true });
+
+    const none = await scenario('r3', 10);
+    rows = await asOrg(none.w.orgId, (tx) => s6.listUsageVariances(tx, none.w.staff, { storeId: none.w.a.storeId, date: DAY }));
+    expect(rows).toHaveLength(1);
+    expect(Number(rows[0]!.actual)).toBe(0);
+    expect(rows[0]!.withinBand).toBe(false);
+  }, 180_000);
+
+  it('an uncovered item does not appear; another day is empty; the item override changes withinBand. Mutant: every used item listed', async () => {
+    const { w } = await scenario('r4', 10);
+    await stockUp(w, w.a.storeId, w.a.kitchen, w.rice, '100');
+    await draft(w, w.staff, '5', { itemId: w.rice });
+    await draft(w, w.staff, '14');
+    let rows = await asOrg(w.orgId, (tx) => s6.listUsageVariances(tx, w.staff, { storeId: w.a.storeId, date: DAY }));
+    expect(rows.map((r) => r.itemId)).toEqual([w.cheese]);
+    expect(rows[0]!.withinBand).toBe(false);
+    await asOrg(w.orgId, (tx) => s6.setItemUsageTolerance(tx, w.admin, { itemId: w.cheese, tolerance: '0.50' }));
+    rows = await asOrg(w.orgId, (tx) => s6.listUsageVariances(tx, w.staff, { storeId: w.a.storeId, date: DAY }));
+    expect(rows[0]!.withinBand).toBe(true);
+    rows = await asOrg(w.orgId, (tx) => s6.listUsageVariances(tx, w.staff, { storeId: w.a.storeId, date: '2026-08-19' }));
+    expect(rows).toEqual([]);
+  }, 180_000);
+
+  it('store-scoped: a person with no scope at the store is refused; reading changes nothing', async () => {
+    const { w } = await scenario('r5', 10);
+    const outsider = await outsiderOf(w);
+    await expect(asOrg(w.orgId, (tx) => s6.listUsageVariances(tx, outsider, { storeId: w.a.storeId, date: DAY }))).rejects.toThrow(/may not/);
+    expect(await onHand(w)).toBe(START);
   }, 180_000);
 });
