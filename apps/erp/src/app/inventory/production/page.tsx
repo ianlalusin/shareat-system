@@ -60,9 +60,14 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
             cost carried across. A floor worker records the run; a manager posts it.
           </PageDescription>
         </div>
-        <Link href={`/inventory?store=${storeId}`} className="text-sm underline underline-offset-4">
-          ← Stock on hand
-        </Link>
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <Link href="/inventory/production/recipes" className="inline-flex min-h-11 items-center underline underline-offset-4">
+            Recipes
+          </Link>
+          <Link href={`/inventory?store=${storeId}`} className="text-sm underline underline-offset-4">
+            ← Stock on hand
+          </Link>
+        </div>
       </div>
 
       <FlashBanner flash={sp} />

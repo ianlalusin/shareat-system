@@ -21,7 +21,6 @@ closeYear
 confirmTradeOrder
 convertSpecimen
 countedVariances
-createRecipe
 customerReturnableQuantity
 datesInWeek
 declareSupplierItem

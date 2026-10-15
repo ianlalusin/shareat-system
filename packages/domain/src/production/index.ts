@@ -90,78 +90,8 @@ export async function hasLiveSlicerPaymentCovering(_tx: Tx, _input: SlicerPaymen
   return false;
 }
 
-// -----------------------------------------------------------------------------------------
-// Recipes — configuration, manager+ (reuses `manage_items`: master-data curation, same bar as
-// the item master a recipe references).
-// -----------------------------------------------------------------------------------------
-export interface RecipeLineInput {
-  readonly itemId: string;
-  readonly quantity: string;
-  readonly unit: string;
-}
-
-export interface CreateRecipeInput {
-  readonly orgId: string;
-  readonly name: string;
-  readonly outputItemId: string;
-  readonly outputQuantity: string;
-  readonly lines: readonly RecipeLineInput[];
-}
-
-export type RecipeOutcome = { readonly ok: true; readonly recipeId: string } | { readonly ok: false; readonly reason: string };
-
-/** T-409 R-A: the largest recipe output accepted, in thousandths of the output item's base unit (10,000). */
-const MAX_RECIPE_OUTPUT_THOUSANDTHS = 10_000_000n;
-
-export async function createRecipe(tx: Tx, actor: Actor, input: CreateRecipeInput): Promise<RecipeOutcome> {
-  await authorize(tx, actor, 'manage_recipes', {}); // T-403: admin-only
-  if (!input.name.trim()) return { ok: false, reason: 'a recipe needs a name' };
-  if (input.lines.length === 0) return { ok: false, reason: 'a recipe needs at least one ingredient line' };
-  // T-371 R5/R6: parsed AFTER authorize(), into the column's (14,3) brand. Both columns are NOT NULL with no default, so a
-  // blank is refused in words, never a guessed zero. Every line is parsed before anything is written.
-  const outputQuantity = parseDecimalInput(input.outputQuantity, '14,3', 'createRecipe.outputQuantity', "The recipe's output quantity", { blank: 'refuse' });
-  const lines = input.lines.map((line, i) => ({
-    itemId: line.itemId,
-    quantity: parseDecimalInput(line.quantity, '14,3', `createRecipe.lines[${i}].quantity`, `Ingredient line ${i + 1} quantity`, { blank: 'refuse' }),
-    unit: line.unit,
-  }));
-  if (!isPositiveQuantity(outputQuantity)) {
-    return { ok: false, reason: 'a recipe\'s output quantity must be greater than zero' };
-  }
-  for (const line of lines) {
-    if (!isPositiveQuantity(line.quantity)) {
-      return { ok: false, reason: `ingredient ${line.itemId} must have a quantity greater than zero` };
-    }
-  }
-  // T-383 S2b (X10): a retired (or merged) item cannot go on a NEW recipe, as output or as an ingredient. An item that does
-  // not exist is left to the foreign key, as before. (Production OUTPUT on a run is left as it is: B2.2.)
-  const recipeItems = new Map(
-    (await productionRepo.getItemsForProduction(tx, input.orgId, [input.outputItemId, ...lines.map((l) => l.itemId)])).map((r) => [r.id, r]),
-  );
-  const outputRow = recipeItems.get(input.outputItemId);
-  if (outputRow && outputRow.status !== 'active') {
-    return { ok: false, reason: notActiveItemSentence(outputRow.status, 'put on a new recipe', 'The output') };
-  }
-  // T-409 R-A: the output is in the output item's base unit, and an absurd figure is refused.
-  if (toThousandths(outputQuantity) > MAX_RECIPE_OUTPUT_THOUSANDTHS) {
-    return { ok: false, reason: `a recipe's output quantity is in the output item's base unit${outputRow ? ` (${outputRow.baseUnit})` : ''} and cannot be more than 10,000. Check the output quantity.` };
-  }
-  for (const [i, line] of lines.entries()) {
-    const row = recipeItems.get(line.itemId);
-    if (row && row.status !== 'active') {
-      return { ok: false, reason: notActiveItemSentence(row.status, 'put on a new recipe', `Ingredient line ${i + 1}`) };
-    }
-  }
-  const { id: recipeId } = await productionRepo.insertRecipe(tx, {
-    orgId: input.orgId,
-    name: input.name.trim(),
-    outputItemId: input.outputItemId,
-    outputQuantity,
-    createdBy: actor.personId,
-  });
-  await productionRepo.insertRecipeLines(tx, recipeId, lines);
-  return { ok: true, recipeId };
-}
+// Recipes (create / edit / retire / restore) live in `recipes.ts` (T-413), re-exported here.
+export * from './recipes';
 
 // -----------------------------------------------------------------------------------------
 // Drafting a production record — staff-open (`record_stock_movement`), same bar as usage's own
@@ -246,6 +176,7 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
   return { ok: true, recordId };
 }
 
+const COOK_INGREDIENTS_MISMATCH_PREFIX = 'The ingredients on this cook record do not match';
 const COOK_WITHOUT_RECIPE_SENTENCE = 'This cook record has no recipe. Void it and record it again from a recipe.';
 
 /** T-409 R1: resolves the lines' items once and runs the slice category rule; the refusal sentence, or null when fine. */
@@ -332,7 +263,7 @@ async function cookPostRefusal(
   const want = derived.inputs.map(key).sort();
   const have = inputs.map(key).sort();
   if (want.length !== have.length || want.some((k, i) => k !== have[i])) {
-    return `The ingredients on this cook record do not match the recipe '${found.recipe.name}' for the quantity made. Void it and record it again from the recipe.`;
+    return `${COOK_INGREDIENTS_MISMATCH_PREFIX} the recipe '${found.recipe.name}' for the quantity made. Void it and record it again from the recipe.`;
   }
   return null;
 }
@@ -875,6 +806,24 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
     if (!found.ok) return found;
     if (editInputs.length > 0) {
       return { ok: false, reason: "A cook's ingredients come from its recipe. Send only the new quantity made; the ingredients are worked out for you." };
+    }
+    // T-413 E3: the stored (unreversed) lines must still be what the recipe makes today. A mismatch means the recipe was
+    // edited after this cook was posted; re-deriving from the new ratios would silently rewrite history.
+    const stored = await productionRepo.listProductionRecordLines(tx, record.id, { revision: record.revision, unreversedOnly: true });
+    const asLine = (l: { itemId: string; quantity: string; unit: string }) => ({ itemId: l.itemId, quantity: quantity(l.quantity), unit: l.unit });
+    const storedRefusal = await cookPostRefusal(
+      tx,
+      record,
+      stored.filter((l) => l.direction === 'out').map(asLine),
+      stored.filter((l) => l.direction === 'in').map(asLine),
+    );
+    if (storedRefusal !== null) {
+      return {
+        ok: false,
+        reason: storedRefusal.startsWith(COOK_INGREDIENTS_MISMATCH_PREFIX)
+          ? `The recipe '${found.recipe.name}' changed after this cook was posted. Void it and record it again.`
+          : storedRefusal,
+      };
     }
     const derived = await deriveCookInputs(tx, record.orgId, found.recipe, editOutputs);
     if (!derived.ok) return derived;

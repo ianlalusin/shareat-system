@@ -428,7 +428,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1170 + 2 (T-404, 2026-10-14: /admin/stores "Open a branch" summary + /ap/suppliers/[id] invoice row link) = 1172.
     // release 2026-10-14: 1170 + 2 (T-404) + 18 (T-392 S5) + 86 (T-401 S4) + 16 (T-401 S5) = 1292.
     // + 2 (T-409, 2026-10-15: /inventory/production kind-tab links on the form; measured 1294).
-    expect(results.length).toBe(1294);
+    // + 16 (T-413 S2, 2026-10-15: /inventory/production "Recipes" link + the three recipe screens; measured 1310).
+    expect(results.length).toBe(1310);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

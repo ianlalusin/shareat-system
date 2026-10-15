@@ -348,7 +348,9 @@ describe('invariant 5 - E1: an edit is refused while a DRAFT cook on the recipe 
     await mustRefuse(() => edit(f, f.admin, id, { outputQuantity: '2' }), 'edit with a draft');
     // the domain has no "discard a draft" door (spec gap); the row is voided by SQL, which is what voiding a draft means.
     await sql`update production_records set status = 'void', voided_at = now(), voided_by = ${f.admin.personId}, void_reason = 'test' where id = ${d.recordId}`;
-    expect((await edit(f, f.admin, id, { outputQuantity: '2' })).ok, 'a voided draft still blocked').toBe(true);
+    // 2.5 kg in for 2 kg out: a cook may not output more than its inputs (production rule), so the later post can succeed.
+    const enough: Line[] = [{ itemId: f.rice, quantity: '1.5' }, { itemId: f.pork, quantity: '1' }];
+    expect((await edit(f, f.admin, id, { outputQuantity: '2', lines: fill(f, enough) })).ok, 'a voided draft still blocked').toBe(true);
 
     await stockUp(f, f.a.storeId, f.a.kitchen, f.rice, '20');
     await stockUp(f, f.a.storeId, f.a.kitchen, f.pork, '20');
@@ -357,7 +359,7 @@ describe('invariant 5 - E1: an edit is refused while a DRAFT cook on the recipe 
     await mustRefuse(() => edit(f, f.admin, id, { outputQuantity: '2' }), 'edit with a fresh draft');
     const p = await asOrg(f.orgId, (tx) => postProduction(tx, f.manager, { recordId: d2.recordId }));
     expect(p.ok, JSON.stringify(p)).toBe(true);
-    expect((await edit(f, f.admin, id, { outputQuantity: '2' })).ok, 'a posted cook blocked the edit').toBe(true);
+    expect((await edit(f, f.admin, id, { outputQuantity: '2', lines: fill(f, enough) })).ok, 'a posted cook blocked the edit').toBe(true);
   });
 });
 

@@ -191,9 +191,6 @@ const EXEMPT: Record<string, string> = {
   undoWriteOff:
     'UNWIRED — DEF-198. `/prepaid` wires `writeOffPrepaidItem` and not its undo, so a mistaken ' +
     'write-off is final.',
-  createRecipe:
-    'UNWIRED — DEF-198. `/inventory/production` LISTS recipes (`productionRepo.listRecipes`) and ' +
-    'nothing creates one, so a cook run has no recipe to run unless one is inserted by hand.',
   addUsageLine:
     'UNWIRED — DEF-198. `/inventory/usage` saves a whole draft through `saveUsageDraft`; the ' +
     'per-line editors have no caller.',

@@ -173,7 +173,134 @@ export async function listRecipeLines(tx: Tx, recipeId: string): Promise<RecipeL
       unit: productionRecipeLines.unit,
     })
     .from(productionRecipeLines)
-    .where(eq(productionRecipeLines.recipeId, recipeId));
+    .where(eq(productionRecipeLines.recipeId, recipeId))
+    .orderBy(productionRecipeLines.id);
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-413 - recipe admin. Every statement is filtered by org (the repo layer; RLS backstops it).
+// ---------------------------------------------------------------------------------------------
+/** Header change. `updated_at` is stamped; the status is a separate door (`setRecipeStatus`). */
+export async function updateRecipe(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  patch: { name: string; outputItemId: string; outputQuantity: Quantity },
+): Promise<void> {
+  await tx
+    .update(productionRecipes)
+    .set({ name: patch.name, outputItemId: patch.outputItemId, outputQuantity: patch.outputQuantity, updatedAt: sql`now()` })
+    .where(and(eq(productionRecipes.id, id), eq(productionRecipes.orgId, orgId)));
+}
+
+/** Replaces every line of a recipe (delete + insert; the caller's transaction makes it one step). The recipe must be the caller's org's. */
+export async function replaceRecipeLines(
+  tx: Tx,
+  orgId: string,
+  recipeId: string,
+  lines: readonly InsertRecipeLineInput[],
+): Promise<void> {
+  const own = await getRecipe(tx, orgId, recipeId);
+  if (!own) return;
+  await tx.delete(productionRecipeLines).where(eq(productionRecipeLines.recipeId, recipeId));
+  await insertRecipeLines(tx, recipeId, lines);
+}
+
+export async function setRecipeStatus(tx: Tx, orgId: string, id: string, status: ProductionRecipeStatus): Promise<void> {
+  await tx
+    .update(productionRecipes)
+    .set({ status, updatedAt: sql`now()` })
+    .where(and(eq(productionRecipes.id, id), eq(productionRecipes.orgId, orgId)));
+}
+
+/** The recipe that holds this name in the org (case ignored, retired recipes included), if any. */
+export async function findRecipeByName(tx: Tx, orgId: string, name: string): Promise<{ id: string; status: ProductionRecipeStatus } | undefined> {
+  const [row] = await tx
+    .select({ id: productionRecipes.id, status: productionRecipes.status })
+    .from(productionRecipes)
+    .where(and(eq(productionRecipes.orgId, orgId), sql`lower(${productionRecipes.name}) = lower(${name})`));
+  return row;
+}
+
+export interface RecipeDraftUse {
+  readonly storeName: string;
+  readonly producedOn: string;
+}
+
+/** E1: every unfinished (draft) cook on the recipe, any store, oldest day first. */
+export async function listDraftRecordsUsingRecipe(tx: Tx, orgId: string, recipeId: string): Promise<RecipeDraftUse[]> {
+  const rows = (await tx.execute(sql`
+    select s.name as store_name, r.produced_on::text as produced_on
+    from production_records r
+    join stores s on s.id = r.store_id
+    where r.org_id = ${orgId} and r.recipe_id = ${recipeId} and r.status = 'draft'
+    order by r.produced_on, r.id
+  `)) as unknown as { store_name: string; produced_on: string }[];
+  return rows.map((r) => ({ storeName: r.store_name, producedOn: r.produced_on }));
+}
+
+export interface RecipeDependent {
+  /** `map`: an active v1 POS item map; `rule`: a menu depletion rule in force or scheduled. */
+  readonly kind: 'map' | 'rule';
+  /** The POS item's name, or the menu item (and variant) name. */
+  readonly name: string;
+}
+
+/** R4: the active v1 POS maps and the in-force or scheduled menu rules that name the recipe (maps first, then rules, by name). */
+export async function listRecipeDependents(tx: Tx, orgId: string, recipeId: string): Promise<RecipeDependent[]> {
+  const maps = (await tx.execute(sql`
+    select m.pos_item_name as name
+    from pos_item_maps m
+    where m.org_id = ${orgId} and m.recipe_id = ${recipeId} and m.status = 'active'
+    order by m.pos_item_name, m.id
+  `)) as unknown as { name: string }[];
+  const rules = (await tx.execute(sql`
+    select case when v.label is null then mi.name else mi.name || ' (' || v.label || ')' end as name
+    from menu_depletion_rules r
+    join menu_item_variants v on v.id = r.variant_id
+    join menu_items mi on mi.id = v.menu_item_id
+    where r.org_id = ${orgId} and r.recipe_id = ${recipeId}
+      and (r.effective_from > now()
+           or (r.effective_from <= now()
+               and not exists (select 1 from menu_depletion_rules r2
+                               where r2.variant_id = r.variant_id and r2.effective_from <= now() and r2.effective_from > r.effective_from)))
+    order by 1, r.id
+  `)) as unknown as { name: string }[];
+  return [...maps.map((m) => ({ kind: 'map' as const, name: m.name })), ...rules.map((m) => ({ kind: 'rule' as const, name: m.name }))];
+}
+
+export interface RecipePlannedPull {
+  readonly storeName: string;
+  readonly businessDate: string;
+}
+
+/**
+ * E2: the planned usage pulls at stores that use the recipe - an active v1 map names it, or the store reads the menu rules and links
+ * a variant whose rule in force names it. A planned pull at a store that does not use the recipe is not listed.
+ */
+export async function listPlannedPullsUsingRecipe(tx: Tx, orgId: string, recipeId: string): Promise<RecipePlannedPull[]> {
+  const rows = (await tx.execute(sql`
+    select distinct s.name as store_name, d.business_date::text as business_date, d.business_date as sort_date
+    from pos_usage_pulls p
+    join sales_days d on d.id = p.sales_day_id
+    join stores s on s.id = p.store_id
+    where p.org_id = ${orgId} and p.status = 'planned'
+      and (
+        exists (select 1 from pos_item_maps m
+                where m.store_id = p.store_id and m.recipe_id = ${recipeId} and m.status = 'active')
+        or exists (select 1
+                   from menu_pos_v1_links l
+                   join menu_depletion_rules r on r.variant_id = l.variant_id and r.recipe_id = ${recipeId}
+                   where l.store_id = p.store_id and l.status = 'active'
+                     and coalesce((select sw.source from menu_usage_source_switches sw where sw.store_id = l.store_id
+                                   order by sw.created_at desc, sw.id desc limit 1), 'v1_pos_map') = 'menu_rules'
+                     and r.effective_from <= now()
+                     and not exists (select 1 from menu_depletion_rules r2
+                                     where r2.variant_id = r.variant_id and r2.effective_from <= now() and r2.effective_from > r.effective_from))
+      )
+    order by sort_date, store_name
+  `)) as unknown as { store_name: string; business_date: string }[];
+  return rows.map((r) => ({ storeName: r.store_name, businessDate: r.business_date }));
 }
 
 // ---------------------------------------------------------------------------------------------
