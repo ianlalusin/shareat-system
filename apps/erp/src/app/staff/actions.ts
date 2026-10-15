@@ -22,7 +22,7 @@ import {
 } from '@shareat/domain';
 import type { EmploymentStatus } from '@shareat/db/schema';
 import { authorize, reopenPinSignIn, setPin } from '@shareat/auth';
-import { accessRepo, employmentRepo, refuse, storesRepo } from '@shareat/db';
+import { accessRepo, employmentRepo, refuse, storesRepo, type Tx } from '@shareat/db';
 import { listStores, withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
@@ -189,6 +189,16 @@ export async function endEmploymentAction(formData: FormData): Promise<void> {
  * access" action, so this gates on `enrol_staff` (the same capability hiring already uses) rather
  * than shipping it ungated.
  */
+const SUPER_ONLY = 'Only a super administrator can set a super administrator’s PIN.';
+
+/** T-412 audit M5: a super_admin target's PIN may only be set by a super_admin (else an admin could choose it and approve in their place). */
+async function requireSuperForSuperTarget(tx: Tx, actor: { personId: string; orgId: string }, targetPersonId: string): Promise<void> {
+  const target = await accessRepo.activeRoleForPerson(tx, targetPersonId, actor.orgId);
+  if (target?.role !== 'super_admin') return;
+  const mine = await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId);
+  if (mine?.role !== 'super_admin') throw refuse(`issuePin: actor ${actor.personId} is not a super_admin and the target ${targetPersonId} is`, SUPER_ONLY);
+}
+
 export async function issuePinAction(formData: FormData): Promise<void> {
   const actor = await requireActor('/staff');
   const employmentId = str(formData, 'employmentId');
@@ -204,6 +214,7 @@ export async function issuePinAction(formData: FormData): Promise<void> {
       // T-412: an administrator's PIN approves destructive actions, so setting it is administrator work: a manager who may
       // issue ordinary staff PINs must not be able to choose one for an administrator and then use it.
       if (await accessRepo.personIsActiveAdmin(tx, actor.orgId, employment.personId)) await authorize(tx, actor, 'manage_users', {});
+      await requireSuperForSuperTarget(tx, actor, employment.personId);
       // ⭐ T-302 — `orgId` from the ACTOR, never from the form (T-231). It is also already known
       // to equal the employment's org: the guard three lines up refused `employment.orgId !==
       // actor.orgId`, so the two cannot disagree here.
@@ -243,6 +254,7 @@ export async function issueAdminPinAction(formData: FormData): Promise<void> {
       if (!UUID_SHAPE.test(storeId) || !(await storesRepo.getById(tx, actor.orgId, storeId))) {
         throw refuse(`issueAdminPin: store ${storeId} is not a store of org ${actor.orgId}`, 'Pick a store.');
       }
+      await requireSuperForSuperTarget(tx, actor, personId);
       await setPin(tx, { orgId: actor.orgId, personId, storeId, pin, actorPersonId: actor.personId });
     });
   } catch (err) {

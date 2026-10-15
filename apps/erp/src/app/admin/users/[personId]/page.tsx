@@ -149,9 +149,18 @@ export default async function UserAccessPage({
                   <input type="hidden" name="personId" value={personId} />
                   <input type="hidden" name="storeId" value={s.id} />
                   <input type="hidden" name="granted" value={s.inScope ? 'false' : 'true'} />
-                  <Button type="submit" variant={s.inScope ? 'danger' : 'secondary'}>
-                    {s.inScope ? 'In scope — remove' : 'Add'}
-                  </Button>
+                  {s.inScope ? (
+                    <ConfirmDestructive
+                      tier="retype"
+                      label="In scope — remove"
+                      consequence={`Takes ${s.name} out of this person's store scope. They stop seeing that store's records.`}
+                      expectedName={person.displayName}
+                    />
+                  ) : (
+                    <Button type="submit" variant="secondary">
+                      Add
+                    </Button>
+                  )}
                 </form>
               </li>
             ))}

@@ -66,6 +66,7 @@ export const DESTRUCTIVE_TARGETS = {
   menu_category: { table: 'menu_categories', store: null, name: sql`t.name` },
   money_account: { table: 'money_accounts', store: null, name: sql`t.name` },
   store: { table: 'stores', store: null, name: sql`t.name` },
+  person: { table: 'persons', store: null, name: sql`t.display_name` },
   tender: { table: 'tenders', store: sql`t.store_id`, name: sql`t.name` },
   attendance_credential: {
     table: 'attendance_credentials',

@@ -11,7 +11,8 @@
  *   adminless = the org has no active administrator at all;
  *   fallback  = adminless AND the owner holds the action's capability (row 196: an org with no administrator is run by its
  *               elevated manager, whose PIN then counts).
- * Allowed iff the PIN is right AND (isAdmin OR fallback). EVERY failure reads ADMIN_PIN_REFUSED, one sentence, so the message
+ * Allowed iff the PIN is right AND the owner may sign in to the org (`personMaySignInToOrg`) AND is not a terminal AND
+ * (isAdmin OR fallback). EVERY failure reads ADMIN_PIN_REFUSED, one sentence, so the message
  * is not an oracle for "right PIN, wrong person".
  */
 import type { Tx } from '@shareat/db';
@@ -53,7 +54,10 @@ export async function verifyAdminApproval(tx: Tx | null, input: AdminApprovalInp
       const isAdmin = await accessRepo.personIsActiveAdmin(lookupTx, actor.orgId, credential.personId);
       const adminless = !(await accessRepo.hasActiveAdmin(lookupTx, actor.orgId));
       const fallback = adminless && (await can(lookupTx, owner, capability, storeId ? { storeId } : {}));
-      if (!(verified && (isAdmin || fallback))) throw new AuthenticationError(ADMIN_PIN_REFUSED);
+      // Audit M3 / M4: the PIN's owner must still be allowed to sign in to the org (T-407) and must not be a terminal.
+      const maySignIn = await accessRepo.personMaySignInToOrg(lookupTx, credential.personId, actor.orgId);
+      const isTerminal = await accessRepo.personIsTerminal(lookupTx, actor.orgId, credential.personId);
+      if (!(verified && maySignIn && !isTerminal && (isAdmin || fallback))) throw new AuthenticationError(ADMIN_PIN_REFUSED);
       return { approverPersonId: credential.personId };
     },
   );

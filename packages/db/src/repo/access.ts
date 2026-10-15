@@ -112,6 +112,16 @@ export async function personIsActiveAdmin(tx: Tx, orgId: string, personId: strin
   return row !== undefined;
 }
 
+/** T-412 audit M4: whether `personId` is a terminal's own row (`persons.kind = 'terminal'`) - a terminal can never approve. */
+export async function personIsTerminal(tx: Tx, orgId: string, personId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: persons.id })
+    .from(persons)
+    .where(and(eq(persons.id, personId), eq(persons.orgId, orgId), eq(persons.kind, 'terminal')))
+    .limit(1);
+  return row !== undefined;
+}
+
 /** T-412: the organisation's active administrators and whether each holds a live sign-in PIN - the Staff page's "Administrator
  * PINs" list (an administrator who signs in by email only has no PIN until Staff issues one). One row per person. */
 export async function listActiveAdminsWithPinState(

@@ -113,6 +113,10 @@ export async function setStoreScopeAction(formData: FormData): Promise<void> {
         // 'employment' row: a human explicitly ticking this box must survive that hire ending.
         await accessRepo.grantStoreScope(tx, { personId, storeId, grantedBy: actor.personId, source: 'manual' });
       } else {
+        // T-412 Tier R: removing scope needs the PERSON's name retyped; adding scope is the safe direction and needs none.
+        const target = await destructiveTargetsRepo.targetOf(tx, actor.orgId, 'person', personId);
+        if (!target) throw refuse(`person ${personId} does not exist in org ${actor.orgId}`, goneSentence('person'));
+        if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
         await accessRepo.revokeStoreScope(tx, personId, storeId);
       }
     });
