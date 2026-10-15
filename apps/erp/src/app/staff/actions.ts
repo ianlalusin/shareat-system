@@ -203,6 +203,7 @@ export async function issuePinAction(formData: FormData): Promise<void> {
         personId: employment.personId,
         storeId: employment.storeId,
         pin,
+        actorPersonId: actor.personId,
       });
     });
   } catch (err) {

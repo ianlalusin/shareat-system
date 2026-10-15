@@ -243,7 +243,7 @@ export default async function CountSessionPage({
           )}
           {canCommit && (
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
-              Manager only. The variance posts to <strong>5400</strong> at FIFO cost and the room unfreezes.
+              Manager only. The variance posts to <strong>stock count differences</strong> at FIFO cost and the room unfreezes.
             </span>
           )}
           {canCancel && (

@@ -47,6 +47,7 @@ import { accessRepo, organizationsRepo, storesRepo, type Tx } from '@shareat/db'
 import { logger } from '@shareat/core/logger';
 import { CAPABILITY_MATRIX, CAPABILITY_SCOPE, type Capability, type Role } from './capabilities';
 import { AuthorizationError } from './errors';
+import { enqueueAuthorizeDenied } from './security-events';
 import {
   closePeriodNeedsWholeOrg,
   jobIsElsewhere,
@@ -108,9 +109,38 @@ export async function authorize(
   actor: Actor,
   capability: Capability,
   ctx: AuthorizeContext = {},
+  deps: AuthorizeDeps = {},
 ): Promise<void> {
   const refusal = await decide(tx, actor, capability, ctx);
-  if (refusal) throw await refusal();
+  if (!refusal) return;
+  const error = await refusal();
+  // T-402 S2 (R9, A1): the denial goes to the in-process outbox - SYNCHRONOUS, nothing awaited, no second connection -
+  // and is written after the fact (first of the Manila day as a row, the rest counted). The refusal is thrown unchanged.
+  enqueueAuthorizeDenied(
+    {
+      orgId: actor.orgId,
+      actorPersonId: actor.personId,
+      capability,
+      storeId: CAPABILITY_SCOPE[capability] === 'store' ? (ctx.storeId ?? null) : null,
+    },
+    deps.now ?? Date.now,
+  );
+  throw error;
+}
+
+/**
+ * T-402 S2 (A2): the NON-LOGGING yes/no for `actor` + `capability` (+ ctx) - the same `decide()` as `authorize()`, so it
+ * can never disagree, but it writes nothing. For render probes and "try A, else fall back to B" checks, where a denial is
+ * an ordinary answer, not an attempted act. A real mutation gate is `authorize()`, never this: a forgotten gate that
+ * uses `authorize()` still logs (the fail-safe direction).
+ */
+export async function can(tx: Tx, actor: Actor, capability: Capability, ctx: AuthorizeContext = {}): Promise<boolean> {
+  return (await decide(tx, actor, capability, ctx)) === null;
+}
+
+/** T-402 S2: the clock behind the denial's Manila business day, injectable so a test can cross Manila midnight. */
+interface AuthorizeDeps {
+  readonly now?: () => number;
 }
 
 /**

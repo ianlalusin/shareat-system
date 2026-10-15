@@ -42,10 +42,12 @@ const tokens = (key: string): string[] =>
     .split(/[\s_-]+/)
     .filter(Boolean)
     .map((t) => t.toLowerCase());
-const SECRET_TOKENS = new Set(['password', 'passcode', 'secret', 'token', 'otp', 'hash', 'salt', 'scrypt', 'cookie', 'authorization', 'jwt', 'pwd', 'passwd', 'apikey', 'session', 'cvv']);
+const SECRET_TOKENS = new Set(['password', 'passcode', 'secret', 'token', 'otp', 'hash', 'salt', 'scrypt', 'cookie', 'authorization', 'jwt', 'pwd', 'passwd', 'apikey', 'cvv']);
 const isSecretKey = (k: string) => {
   const t = tokens(k);
   if (t.some((x) => SECRET_TOKENS.has(x))) return true;
+  // a BARE `session` is a token; a key that merely contains the word (soldInPackageSession, sessionStart) is not -- same rule as the writer (redact.ts).
+  if (t.length === 1 && t[0] === 'session') return true;
   for (let i = 0; i + 1 < t.length; i++) {
     const pair = `${t[i]}+${t[i + 1]}`;
     if (['api+key', 'private+key', 'session+id', 'refresh+token', 'access+key', 'card+number'].includes(pair)) return true;

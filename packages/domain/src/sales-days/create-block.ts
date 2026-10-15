@@ -13,7 +13,7 @@
  * with a sentence; the store row is taken `FOR KEY SHARE` first, so a typed write and a link of the same store
  * serialize (`linkStoreToPos` holds it `FOR UPDATE`).
  */
-import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { authorize, AuthorizationError, type Actor, can } from '@shareat/auth';
 import { posV1Repo, salesDaysRepo, tradeDiscrepanciesRepo, type Tx } from '@shareat/db';
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { gone, humanDate, refuse, RefusalError } from '../shared/refusal';
@@ -76,13 +76,7 @@ export class SalesDayBlockedError extends RefusalError {
  * competing authority (bible row 120).
  */
 export async function canBypassBlock(tx: Tx, actor: Actor, storeId: string): Promise<boolean> {
-  try {
-    await authorize(tx, actor, 'close_period', { storeId });
-    return true;
-  } catch (err) {
-    if (err instanceof AuthorizationError) return false;
-    throw err;
-  }
+  return can(tx, actor, 'close_period', { storeId });
 }
 
 /**

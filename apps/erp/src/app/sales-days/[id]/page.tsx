@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { authorize, AuthorizationError } from '@shareat/auth';
+import { authorize, can as canDo } from '@shareat/auth';
 import { salesDaysRepo, journalRepo, posV1Repo } from '@shareat/db';
 import { packageCapExcess } from '@shareat/domain';
 import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
@@ -11,6 +11,7 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { personName } from '@/lib/person-name';
 import { typedFor } from '@/lib/keep-typing';
 import { PLATFORM_SALES_EDIT } from '../typed-forms';
 import { EditableRecord } from '@/components/forms';
@@ -66,15 +67,8 @@ export default async function SalesDayDetailPage({
   // day is edited under `submit_sales_day`, a submitted one under `verify_sales_day`; a void needs
   // `void_sales_day`.
   const can = await withOrgPrincipal(orgId, async (tx) => {
-    const probe = async (capability: 'submit_sales_day' | 'verify_sales_day' | 'void_sales_day' | 'verify_own_sales_day') => {
-      try {
-        await authorize(tx, actor, capability, { storeId: day.storeId });
-        return true;
-      } catch (err) {
-        if (err instanceof AuthorizationError) return false;
-        throw err;
-      }
-    };
+    const probe = (capability: 'submit_sales_day' | 'verify_sales_day' | 'void_sales_day' | 'verify_own_sales_day') =>
+      canDo(tx, actor, capability, { storeId: day.storeId });
     return {
       edit: await probe(day.status === 'submitted' ? 'verify_sales_day' : 'submit_sales_day'),
       void: await probe('void_sales_day'),
@@ -121,8 +115,6 @@ export default async function SalesDayDetailPage({
       ? (await withOrgPrincipal(orgId, (tx) => posV1Repo.feedDrift(tx, orgId, day.id)))[0]
       : undefined;
 
-  const personName = (pid: string | null) =>
-    pid ? (persons.find((p) => p.id === pid)?.displayName ?? pid) : '—';
   const storeName = stores.find((s) => s.id === day.storeId)?.name ?? day.storeId;
 
   const carry = new URLSearchParams();
@@ -221,12 +213,12 @@ export default async function SalesDayDetailPage({
         </Panel>
 
         <Panel title="Trail">
-          <Row label="Created by" value={personName(day.createdBy)} />
-          <Row label="Submitted by" value={personName(day.submittedBy)} />
-          <Row label="Verified by" value={personName(day.verifiedBy)} />
+          <Row label="Created by" value={personName(persons, day.createdBy)} />
+          <Row label="Submitted by" value={personName(persons, day.submittedBy)} />
+          <Row label="Verified by" value={personName(persons, day.verifiedBy)} />
           {day.status === 'voided' && (
             <>
-              <Row label="Voided by" value={personName(day.voidedBy)} />
+              <Row label="Voided by" value={personName(persons, day.voidedBy)} />
               <Row label="Void reason" value={day.voidReason ?? '—'} />
             </>
           )}
@@ -314,7 +306,7 @@ export default async function SalesDayDetailPage({
                     <tr key={c.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                       <td className="px-3 py-2">{c.entryDate}</td>
                       <td className="px-3 py-2">{c.reason}</td>
-                      <td className="px-3 py-2">{personName(c.postedBy)}</td>
+                      <td className="px-3 py-2">{personName(persons, c.postedBy)}</td>
                       <td className="px-3 py-2 font-mono text-xs text-neutral-500 dark:text-neutral-400">{c.journalEntryId}</td>
                     </tr>
                   ))}

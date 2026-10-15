@@ -252,7 +252,9 @@ describe('M2 (R8) - a refused write-off writes nothing and the form comes back b
       const html = await renderItem(f.itemId, signal.url);
       expect(tagOf(html, 'refundAmount')).toMatch(/value="1,000\.50"/);
       expect(tagOf(html, 'reason')).toContain(`value="${reason}"`);
-      expect(tagOf(html, 'refundAccountCode')).toMatch(/value="1110"/);
+      // The refund account is a <select> (a pick list of cash/e-wallet accounts), not a text <input>: the refill shows as the
+      // <option> carrying `selected`.
+      expect(html).toMatch(/<select[^>]*name="refundAccountCode"[^>]*>[\s\S]*?<option[^>]*value="1110"[^>]*selected=""|<select[^>]*name="refundAccountCode"[^>]*>[\s\S]*?<option[^>]*selected=""[^>]*value="1110"/);
       expect(tagOf(html, 'writtenOffOn')).toMatch(/value="2026-04-10"/);
 
       // The page must read through withFlash: hand it ONLY the nav keys and the `f` token (no banner or refill

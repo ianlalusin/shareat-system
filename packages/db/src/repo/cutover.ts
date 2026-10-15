@@ -691,20 +691,6 @@ export async function countsForRoom(
   );
 }
 
-/** Per item across every room of the store: summed quantity (as text) and the cost. */
-export async function countTotalsByItem(
-  tx: Tx,
-  orgId: string,
-  storeId: string,
-): Promise<Map<string, { quantity: string; unitCost: string | null }>> {
-  const rows = (await tx.execute(sql`
-    select item_id, sum(quantity)::text as quantity, max(unit_cost)::text as unit_cost
-    from opening_counts where org_id = ${orgId} and store_id = ${storeId}
-    group by item_id
-  `)) as unknown as Row[];
-  return new Map(rows.map((r) => [String(r.item_id), { quantity: String(r.quantity), unitCost: r.unit_cost ?? null }]));
-}
-
 export interface SheetItemRow {
   code: string;
   name: string;

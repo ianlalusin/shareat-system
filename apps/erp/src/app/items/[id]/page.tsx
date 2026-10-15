@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
-import { authorize, AuthorizationError } from '@shareat/auth';
+import { can } from '@shareat/auth';
 import { getItem, itemPrices, peso, retireReadout, sellabilityByStore, soldAsLabel, unitHistoryExists, withOrgPrincipal } from '../lib';
 import { whoSells } from '../../ap/lib';
 import {
@@ -64,15 +64,7 @@ export default async function ItemDetailPage({
   ]);
   // T-378 S4 (DEF-600). Presentation aid only: the same gate the action uses, asked here so the form is drawn only for
   // who may use it. `changeItemBaseUnit` stays the enforcement. Pattern: channel-settlements/page.tsx.
-  const mayApproveItem = await withOrgPrincipal(actor.orgId, async (tx) => {
-    try {
-      await authorize(tx, actor, 'approve_item', {});
-      return true;
-    } catch (err) {
-      if (err instanceof AuthorizationError) return false;
-      throw err;
-    }
-  });
+  const mayApproveItem = await withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'approve_item', {}));
   // T-383 R5/B2.4. Advisory readout for the Retire section: active or retired, never merged, and only for who may use it.
   const readout =
     mayApproveItem && (item.status === 'active' || item.status === 'inactive')
@@ -361,6 +353,11 @@ export default async function ItemDetailPage({
           {readout.activePosMaps > 0 && (
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               {`${readout.activePosMaps} live POS ${readout.activePosMaps === 1 ? 'map' : 'maps'} still use it. Point them at the replacement; sales keep using up this item until its stock runs out.`}
+            </p>
+          )}
+          {readout.activeMenuRules > 0 && (
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              {`${readout.activeMenuRules} menu stock ${readout.activeMenuRules === 1 ? 'rule' : 'rules'} at a store that reads its usage from the menu still use it. Switch that store back to the POS item maps before retiring.`}
             </p>
           )}
           {readout.activeRecipes > 0 && (

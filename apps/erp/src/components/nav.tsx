@@ -95,6 +95,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/commissary/catalogue', label: 'Commissary catalogue' },
       { href: '/commissary/discrepancies', label: 'Transit discrepancies' },
       { href: '/items', label: 'Items' },
+      // T-401 S4 — what the stores sell: categories, items, variants, prices and item requests (one nav entry; /menu links the rest).
+      { href: '/menu', label: 'Menu' },
     ],
   },
   {
@@ -152,6 +154,7 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/reports/store-comparison', label: 'Store comparison' },
       { href: '/reports/sales-rollup', label: 'Sales rollup' },
       { href: '/reports/pos-reconciliation', label: 'POS reconciliation' },
+      { href: '/reports/dual-run', label: 'Dual run' },
       // ⭐ DEF-139 — the screen worked and was tested but had no nav entry, so it was reachable
       // only by typing the URL. Same failure shape as this file's own header comment.
       { href: '/statutory-discounts', label: 'SC/PWD register' },

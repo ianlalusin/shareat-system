@@ -87,8 +87,8 @@ export default async function PayrollPage({
         <div>
           <h1 className="text-2xl font-semibold">Payroll</h1>
           <PageDescription>
-            Pay computed from attendance, with what each person already drew netted off{' '}
-            <code>1230</code>. ⭐ Posting <strong>freezes</strong> the days it paid — after that a
+            Pay computed from attendance, with what each person already drew netted against{' '}
+            advances to employees. ⭐ Posting <strong>freezes</strong> the days it paid — after that a
             correction goes through payroll, not by restating the day.
           </PageDescription>
         </div>

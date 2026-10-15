@@ -33,6 +33,7 @@ config({ path: '.env.local' });
 import { CUTOVER_CLASSIFICATION, type CutoverEntry } from '../packages/db/src/cutover/classification';
 import { planPurge, applyPurge, type PurgePlan } from '../packages/db/src/cutover/purge';
 import { RefusalError } from '../packages/db/src/refusal';
+import { toBusinessDate } from '../packages/core/src/datetime';
 
 interface Args {
   confirmDatabase: string | null;
@@ -40,6 +41,8 @@ interface Args {
   rehearse: boolean;
   allowNonLocal: boolean;
   asOf: string;
+  /** T-394 R8 / DEF-641: true only when --as-of was typed. --apply and --rehearse refuse without it; a dry run may default. */
+  asOfGiven: boolean;
   /** T-390 R8 / DEF-640: person ids the purge records as having performed step C2, ONE PER ORGANIZATION. Required for --apply. */
   by: string[];
 }
@@ -50,7 +53,9 @@ function parseArgs(argv: readonly string[]): Args {
     apply: false,
     rehearse: false,
     allowNonLocal: false,
-    asOf: new Date().toISOString().slice(0, 10),
+    // DEF-641: the MANILA business date, not the UTC date (before 08:00 Manila the UTC date is yesterday).
+    asOf: toBusinessDate(new Date()),
+    asOfGiven: false,
     by: [],
   };
   for (let i = 0; i < argv.length; i++) {
@@ -58,7 +63,13 @@ function parseArgs(argv: readonly string[]): Args {
     else if (argv[i] === '--apply') a.apply = true;
     else if (argv[i] === '--rehearse') a.rehearse = true;
     else if (argv[i] === '--yes-really-not-local') a.allowNonLocal = true;
-    else if (argv[i] === '--as-of') a.asOf = argv[++i] ?? a.asOf;
+    else if (argv[i] === '--as-of') {
+      const v = argv[++i];
+      if (v) {
+        a.asOf = v;
+        a.asOfGiven = true;
+      }
+    }
     else if (argv[i] === '--by') {
       const v = argv[++i];
       if (v) a.by.push(...v.split(',').filter(Boolean));
@@ -73,6 +84,8 @@ function usage(): void {
   console.log(`
 Usage:
   npm run cutover:purge -- --confirm-database <name> [--apply | --rehearse] [--as-of YYYY-MM-DD] [--by <personId>]...
+
+  --as-of is REQUIRED with --apply and --rehearse (T-394 R8); a dry run defaults to today's Manila date.
 
   Without --apply or --rehearse this is a DRY RUN: it reports what it would change and changes
   nothing.
@@ -101,6 +114,11 @@ async function main(): Promise<void> {
   }
   if (args.rehearse && args.apply) {
     console.error('REFUSED. --rehearse always rolls back; it cannot be combined with --apply.');
+    process.exitCode = 1;
+    return;
+  }
+  if ((args.apply || args.rehearse) && !args.asOfGiven) {
+    console.error('REFUSED. --apply and --rehearse need an explicit --as-of YYYY-MM-DD (T-394 R8, DEF-641): the date decides which tables the purge may touch.');
     process.exitCode = 1;
     return;
   }

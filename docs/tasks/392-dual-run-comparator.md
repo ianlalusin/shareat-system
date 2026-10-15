@@ -1,6 +1,6 @@
 # T-392: Dual-run comparator, v1 vs v2, per store per week (absorbs T-114b)
 
-**Status:** S1, S2 DONE (on main). **S3 BUILT** 2026-10-12 on `lane/t392-s3` (`5eb5c7b`, pushed; migration **0195**; integration 102/102 on a fresh DB). It sits on lane/t398-s1 (0194) and **merges after PR #20**. Two Opus rulings rounds and the money audit applied (see the S3 rulings sections at the end). Repo functions insertReport/insertDisposition/linesOf/v2Figures have test callers only until S4/S5. Next: S4 (CLI + domain run), S5 (screens). | Earlier: SPEC APPROVED WITH CHANGES 2026-10-11 (fresh Opus review applied). Drafted 2026-10-11 by the Opus planner.
+**Status:** **S1b+S4b+S5 DONE 2026-10-14**, combined in the release PR (not yet deployed). Next: run Lipa's real week on production (Done-when); dual run starts 2 Nov. | **S1b+S4b+S5 BUILT 2026-10-14** on `release/t392-s1b-s4b-s5` (tested, audited, smoketested at 375 px; awaiting PR + CI). Next: run Lipa's real week (Done-when). | **S3+S4 DONE 2026-10-13, live** (PR #21, migration 0195). Next: S1b, S4b, S5 before the 2 Nov dual run. | Earlier: S1, S2 DONE (on main). **S3 BUILT** 2026-10-12 on `lane/t392-s3` (`5eb5c7b`, pushed; migration **0195**; integration 102/102 on a fresh DB). It sits on lane/t398-s1 (0194) and **merges after PR #20**. Two Opus rulings rounds and the money audit applied (see the S3 rulings sections at the end). Repo functions insertReport/insertDisposition/linesOf/v2Figures have test callers only until S4/S5. Next: S4 (CLI + domain run), S5 (screens). | Earlier: SPEC APPROVED WITH CHANGES 2026-10-11 (fresh Opus review applied). Drafted 2026-10-11 by the Opus planner.
 (≈5.5 lane-days, five slices; the plan says M-L 4.5, see §Research "Where this spec disagrees".) Migration **0NNN,
 the next free number at merge** (0194 is reserved for T-398 S1). Five questions for Ian below; the recommended option
 is what gets built.
@@ -399,3 +399,202 @@ The tester's pins stand:
   - S1b must land before the 2 Nov dual run.
 - **Staff cash** is a stated mapping with no sheet row: v1 `cash__staff` (re-kinded) ↔ v2 `staff_cash`, line key `cash__staff`. Pre-fill skips it, and a sheet row for it is refused.
 - **inventory_basis** is one line per store-week, key `COGS`. v2 = Σ(debit − credit) over the S3 inventory_basis codes, with byDay summed per date. Store-less lines stay on `unassigned_store`.
+
+## S1b spec
+*(Opus planner, 2026-10-13; binding. Invariants 32-37. No migration. Size 0.5.)*
+
+**Finding that changes the premise.** v1's channel receivable is already in the snapshot's **journal**. `autoCreateChannelArAction`
+(`ERP-rebuild/src/lib/actions/ar-channel.actions.ts:96-194`) writes `stores/{s}/arTransactions/ch_{channelId}_{salesDate}[__rN]`
+**and**, in the same Firestore transaction, one leg from `ar-charge.builder.ts:28-44`: `sourceType 'sale'`, `sourceId` = that arTx
+id, `legKey 'ar:channel_{channelId}'`, `accountId 'ar__channel_{channelId}'`, `direction 'in'`, `businessDate` = the sales-date
+string. A void (`voidCreditSaleAction`, `ar-credit-sale.actions.ts:102-123`) flips that leg to `status 'voided'`; an edit
+(`reconcileChannelArForAdjustment`) voids it and posts a new slot `__rN`; the settlement re-issue posts it again. Today these legs
+fall to `scope` as `NOT_IN_DUAL_RUN_SCOPE / sale`. **Ruling: the v1 figure comes from those LEGS (R4), not from `arTransactions`,
+which are not read** (they add nothing the leg lacks; a second source is a second truth). ⚠️ Settlement legs are also
+`sourceType 'sale'` on the same account (`legKey 'ar_clear'`, OUT; `channel-settlement.actions.ts:243-255`), so the discriminator
+is the **legKey**, never the account prefix alone.
+
+**Rules**
+- **Channel charge leg** = posted, `sourceType 'sale'`, `accountId` matches `^ar__channel_(.+)$` (capture `C`), and
+  `legKey === 'ar:channel_' + C`. It becomes `sales_tender` line key **`channel__C`**, amount Σ(in − out) in centavos, `days` by
+  `businessDate`, and is **not** in `scope`. Every other `ar__` leg (settlement `ar_clear`, manual credit `ar:{customerId}`) is unchanged.
+  *(review fix)* The channel line also carries `in`, `out` and `legs` (as `cash_bank` lines do), so the inv 9 conservation
+  sums `cash_bank`, `ap_supplier` **and** the `channel__*` `sales_tender` lines plus `scope`. An `updateCreditSaleAction` edit
+  re-posts the same leg id at the new amount (edited in place), which the snapshot already reflects.
+- *(review fix)* **No double count with `credit`:** v1 `creditSales` is the **manual** credit sales only
+  (`SalesReportForm.tsx:240-257` queries `sourceType == 'manual'`), and v2 `credit` is `ar_charge` 1210 only, so the channel
+  receivable is in neither. Do not subtract it from `credit` or from the residual.
+- **Mapping** = a keys-sheet **`money` row** per store, `v1_key = channel__C`, `v2_key = channel:<sales_channels.id>` (what `v2KeyOf`
+  already gives a 1220-1222 sale line with a channel party; `keyMapFor` already maps money rows onto `sales_tender`, so no domain
+  change). **No row, or unticked → `UNMAPPED_KEY`** on `v1:channel__C` (compare, existing); the v2 `channel:<id>` line stands alone
+  as `UNEXPLAINED` until mapped. A ticked `channel__*` row whose `v2_key` is not `^channel:[0-9a-f-]{36}$` is refused by
+  `parseKeysCsv` (exit 1): `none`, a bare UUID or `1220` would silently mis-key a receivable.
+- **Dating:** the leg's `businessDate` (the sales date). v2 posts the receivable inside the sales day on the same date, so same-day
+  ties are expected; `CHANNEL_AR_FLOW` stays for S4b's channel documents only.
+- **Snapshot whitelist additions** (optional fields; `version` stays 1; a snapshot without them loads as `[]`):
+  `channels?: { storeId; channelId; name; isRemittedDaily }[]` from each roster store doc's `salesChannels[]` (no other field);
+  `receipts?: { id; storeId; receiptNo }[]` from `stores/{s}/receipts`, kept only when an in-window expense points at it (S4b's
+  receipt link); `SnapshotExpense.receiptId?`. Never `customerName`, `notes`, `referenceNo`, `createdByUid`, `localActor*`,
+  `proofUrl`, `submittedByUid` (invariant 8).
+- **Pre-fill:** one unticked `money` row per (store, `channel__C`) for each `channels[]` entry with `isRemittedDaily === false` and
+  each `C` seen on a charge leg; label = the channel `name`, else `C`.
+- **Extract:** the roster read passes `salesChannels` through to `buildSnapshot` (which whitelists); `COLLECTIONS` gains `receipts`.
+
+**Paths.** TESTER: `packages/etl/tests/t392-s1b-channel-ar.test.ts` (pure; raw objects inline; its own minimal Firestore fake for
+the extract case). BUILDER: `packages/etl/src/dual-run/{snapshot,v1-figures,keys}.ts`, `scripts/lib/dual-run-extract.ts`. Not
+`compare.ts`, `classes.ts` or the domain. Existing S1/S2/S4 tests stay green unchanged.
+
+**Fixture (inline).** Store L; channel `grab1` (non-remitted, "Grab Lipa"), channel `walkin` (remitted). Legs: charge
+`ch_grab1_2026-10-21` 1,250.00 posted; `ch_grab1_2026-10-22` 900.00 **voided** + `ch_grab1_2026-10-22__r1` 950.00 posted;
+settlement `ar_clear` OUT 2,000.00 on `ar__channel_grab1` dated 2026-10-23; manual credit `ar:cust9` 300.00. The raw channel object
+carries extra `commissionRate`, `contactPerson`, `notes`; a receipt carries `notes`, `proofUrl`, `submittedByUid`.
+
+**Invariants**
+32. The 21 Oct charge gives `sales_tender/channel__grab1` 125000 on 2026-10-21 and is absent from `scope`. *Mutants: left in scope; keyed by `accountId`.*
+33. The 22 Oct pair gives 95000 (voided slot out, `__r1` in). *Mutants: no status filter; both slots summed.*
+34. `ar_clear` and `ar:cust9` stay in `scope`; Σ legs/in/out over `cash_bank` + `ap_supplier` + `channel__*` lines + scope = `posted` (inv 9 holds; review fix: which lines are summed). *Mutant: account-prefix discriminator (pulls `ar_clear` −200000 into the line).*
+35. The snapshot holds exactly the whitelisted channel/receipt fields; an expense's `receiptId` survives; a snapshot with no `channels`/`receipts` loads. *Mutants: whole object kept; missing field throws.*
+36. Pre-fill adds an unticked `money` row `channel__grab1` labelled "Grab Lipa" and none for `walkin`; a ticked `channel__grab1` row with `v2_key` `none`, a bare UUID or `1220` is refused. *Mutants: remitted channel pre-filled; bad row accepted.*
+37. Through `compareStoreWeek` (keyMap from a ticked row to `channel:<uuid>`): v1 125000 vs v2 125000 same day is `TIES`; with no row the v1 line is `UNMAPPED_KEY` and the v2 line `UNEXPLAINED`, never merged. *Mutant: unmapped key merged into the v2 line.*
+
+## S4b spec
+*(Opus planner, 2026-10-13; binding. Invariants 38-44. **No migration** (reads existing tables). Size 1.0. After S1b.)*
+
+**What.** R9 needs documents on both sides: v1's are derived purely from the snapshot, v2's from one new repo read, and `runDualRun`
+stops passing `[]`. The matching passes in `compare.ts` are unchanged except the `empty` test (inv 43).
+
+**v1: `packages/etl/src/dual-run/docs.ts` (new, pure).** `v1Documents(snapshot: V1Snapshot, opts: { storeId: string; weekStart: string; through: string }): CompareDoc[]`
+and `normaliseReceiptNo(s: string): string` (uppercase, drop every char outside `[A-Z0-9]`; empty = no link). Window
+`[weekStart − 7, through + 7]`; posted only; **raw v1 keys** (compare maps them); `state` always `'posted'` (the snapshot holds no
+unposted v1 tender split, so `PENDING_V1` cannot come from v1 docs: stated, not a gap).
+- `cash_bank`: per (sourceType, sourceId, accountId, businessDate) over in-scope legs on `cash__`/`online__`, amount Σ(in − out), id
+  `v1:leg:<sourceType>:<sourceId>:<accountId>:<date>`; `cash__staff` is emitted as kind **`staff_cash`** (the `runDualRun` re-kind).
+- `ap_supplier`: same grouping on `ap__`/`supplier_advance__`, amount as the line's; `receiptId = 'rn:' + normaliseReceiptNo(receiptNo)`
+  when `sourceType 'expense_payment'` and the expense (id = sourceId) links a receipt with a number.
+- `expense_category`: one doc per posted non-COGS expense, key exactly as `v1-figures` (entryId, or `GROUP:entryId` on a conflict),
+  date `dayKey`, id `v1:exp:<id>`, same `receiptId` rule.
+- `sales_tender`: one doc per (key, date) from `computeV1Figures(snapshot, { weekStart: ws − 7, through: through + 7 })` sales_tender
+  `days` for the store, id `v1:sd:<key>:<date>`, `channel: true` when the key starts `channel__`.
+
+**v2: `dualRunRepo.v2Documents` in `packages/db/src/repo/dual-run.ts`.** `v2Documents(tx, orgId, { storeId, weekStart, through }): Promise<V2Doc[]>`,
+`V2Doc = { id; kind; glCode; partyType; partyId; categoryId?; date; amount /* 2dp string, v2Figures' sign rule */; state: 'posted' | 'unposted'; receiptNo: string | null }`.
+Window `[weekStart − 7, through + 7]`; store- and org-scoped; voided never emitted; `unassigned_store` never emitted.
+- **Posted:** the **same per-kind filters and dating as `v2Figures`**: refactor its `u` union into one SQL builder taking the date
+  range and carrying the root `source_type`/`source_id` (S3/S4 tests stay green unchanged); group by (kind, gl, party, category, root
+  source, day); id `v2:<root type>:<root id>:<kind>:<gl>:<party id or ''>:<day>`. `receiptNo` = `supplier_invoices.invoice_no` for
+  root `'stock_receipt_invoice'` (`id = source_id`) or root `'expense_payment'` (`expenses.id = source_id` → `supplier_invoice_id`).
+- **Unposted:** `expenses` `draft` on a non-inventory category → `expense_category` (`total_amount`, `business_date`), plus each
+  `expense_payments` `credit` row → `ap_supplier` gl 2110 supplier party; `supplier_invoices` `pending` → `ap_supplier` 2110,
+  `total_amount`, `invoice_date`, `invoice_no`; `ap_payments` `draft` → `ap_supplier` 2110, **−amount**, `business_date`;
+  `sales_days` `open|submitted` → `sales_tender`: `cash_collected` on 1110 (no party), each `sales_day_tenders` row on 1140 with its
+  `money_account` party, each non-remitted `sales_day_channels` row (amount > 0) on the channel's `receivable_account_code` with
+  `channel` party.
+- *(review fix)* **Unposted funding side of a draft expense:** each `expense_payments` row of method `cash`/`online` → **−amount**,
+  `business_date`, GL = its money account's `gl_account_code` (as `expenses/routing.ts` `fundingLine` posts it), party
+  `money_account` = `money_account_id` when that GL is 1140, else none; kind `staff_cash` when that GL is one of the store's
+  `custodian = 'staff'` codes, else `cash_bank`. Without it a draft cash expense reads `PENDING_V2` on its category and
+  `NOT_DOUBLE_ENTERED` (encoder, week `open`) on its cash line.
+- *(review fix)* A doc whose amount nets to 0 (e.g. an entry and its same-day reversal under one root) is **not emitted**, on either side.
+
+**Wiring: `packages/domain/src/dual-run/index.ts`.** `v1Docs = v1Documents(snapshot, { storeId: t.v1StoreId, weekStart, through })`;
+`v2Docs` = rows mapped to `{ id, kind, key: v2KeyOf(row), date, amount: cents(amount), state, channel: partyType === 'channel', receiptId: receiptNo ? 'rn:' + normaliseReceiptNo(receiptNo) : undefined }`.
+*(review fix)* On both sides `receiptId` is `undefined` when `normaliseReceiptNo` returns `''` (a receipt no. of `--` or `N/A`
+must not become `rn:` and link every such document to every other).
+Delete the "not wired" comment. **`compare.ts`: `empty` stops reading `v1Docs`/`v2Docs`**: no data is decided by figures, trading
+days, flags, scope and dispositions (posted in-week docs always come with figures, inv 38).
+
+**Paths.** TESTER: `packages/etl/tests/t392-s4b-docs.test.ts` (pure), `packages/domain/tests/integration/t392-s4b-v2-docs.test.ts`
+(real Postgres, own fixtures). BUILDER: `packages/etl/src/dual-run/docs.ts`, `packages/etl/src/dual-run/index.ts` (one line),
+`packages/etl/src/dual-run/compare.ts` (the `empty` test only), `packages/db/src/repo/dual-run.ts`, `packages/domain/src/dual-run/index.ts`.
+Not `packages/db/src/index.ts` (type via `Awaited<ReturnType<typeof dualRunRepo.v2Documents>>`). The C4 import-graph test stays green.
+*(review fix)* **One existing test changes on purpose:** `packages/domain/tests/integration/t392-s4-run.test.ts` R4 (title and
+line 267) pins `UNEXPLAINED` *because* R9 is not wired; once wired, that v1-only supplier debt is `NOT_DOUBLE_ENTERED`. The S4b
+TESTER owns that one expectation and flips it (title included) **in the RED commit**; every other S1-S4 test stays unchanged.
+*(review fix)* **Fixtures for a non-`open` verdict (inv 39-41) need ≥ 1 compared day**: a verified v2 sales day and a counted v1
+salesDay on the same date with tied figures. A week with 0 compared days is `open` (S4 ruling), whatever its classes.
+
+**Invariants**
+38. **Doc-sum identity:** per (kind, key), Σ posted docs dated in the week = that side's line amount, both sides, over a fixture with a reversal pair, a re-dated POS correction (S3 ruling 1) and docs at week − 3 and through + 3. *Mutants: v2Documents status filter differs from v2Figures; correction dated by entry date.*
+39. A v1 posted expense ₱500.00 with nothing in v2 → `NOT_DOUBLE_ENTERED`; with a v2 **draft** expense, same category/date/amount → `PENDING_V2`, the week `explained` when dated 1 day before `through`, `open` at 3 days. The v1 expense is cash-paid (its `cash__cashier` leg is in the snapshot) and the draft has a matching cash `expense_payments` row, so the `cash_bank` line is `PENDING_V2` too (review fix). *Mutants: drafts emitted as posted; drafts not emitted; draft funding side not emitted.*
+40. v1 expense `dayKey` 2026-10-25 (Sun) and v2 posted expense, same category and centavos, on 2026-10-26: both weeks' lines are `DATE_SHIFT` paired and `explained`. The v1 expense links no receipt, or the same normalised number as the v2 invoice (review fix: two different numbers never pair). *Mutant: doc window = the week only.*
+41. v1 credit expense on `ap__S` 8,000.00 on 21 Oct, receipt "SI-00123"; v2 posted `stock_receipt_invoice` entry (source = invoice `si00123`, S's linked supplier, 2110 credit 8,000.00) dated **27 Oct** → the 19 Oct week's `ap__S` line is `AP_AT_INVOICE` paired; invoice "SI-00124" → not `AP_AT_INVOICE`. (Review fix: both dates in one week net the line to Δ 0, which never reaches matching.) *Mutants: receiptId ignored; no normalisation.*
+42. Another store's draft, another org's pending invoice (principal B sees nothing) and a voided invoice never appear. *Mutant: no store filter.*
+43. A week with no figures on either side whose only docs fall outside it (week − 2, through + 2) stays `no_data`. *Mutant: docs counted in `empty`.*
+44. Shuffled `v2Documents` order gives identical fingerprints; the first `--apply` after S4b on an already-reported week inserts a new version (docs are in the R8 identity), the old intact; a second identical apply is "unchanged". *Mutant: insertion-order docs.*
+
+## S5 spec (refinements)
+*(Opus planner, 2026-10-13; binding; supersedes §Contract 4 and the S5 slice row where they differ. Invariants 45-52. **No
+migration.** Size 1.5, not 1.25: the read layer and the pack rules were unspecified. Needs S3 + S4; S4b first for R9 classes.)*
+
+**Routes** (`params`/`searchParams` are **Promises** in this Next: read `node_modules/next/dist/docs/01-app` first; every page
+`dynamic = 'force-dynamic'`; reuse `Page`, `PageDescription`, `EmptyState`, `Button`, `Input` and `reportScope`/`runReport` from
+`reports/lib.ts`, as `store-comparison/page.tsx` does):
+- `apps/erp/src/app/reports/dual-run/page.tsx`: current version per store-week (`?store=<id>` via `reportScope(…, 'view_financial_reports', store)`): store, week, through, verdict chip, compared days, Δ-line count by family, link to the week page and to the pack.
+- `apps/erp/src/app/reports/dual-run/pack/page.tsx`: the go/no-go pack (`?from=&to=` Mondays; default 2026-10-19 to the latest reported week). Needs `scope.coversWholeOrg`, else an `EmptyState` saying the pack needs every store. Printable (`print:` utilities, nav hidden).
+- `apps/erp/src/app/reports/dual-run/[store]/[week]/page.tsx`: `store` = `stores.code`, `week` = a Monday `YYYY-MM-DD`; anything else, or a store outside `scope.stores`, is `notFound()`. `?version=<reportId>` shows an older version read-only.
+- `apps/erp/src/app/reports/dual-run/actions.ts`: `'use server'`; `recordDualRunDispositionAction(formData)` = `requireActor()` → `withOrgPrincipal` → `recordDualRunDisposition` → `redirectWithFlash` to the week page with ok / `errorMessage(err)` (the `findings/actions.ts` pattern). The gate is in the domain, not the action.
+- Nav: **`apps/erp/src/components/nav.tsx`** (reports nav lives there, not in `reports/lib.ts`): `{ href: '/reports/dual-run', label: 'Dual run' }` after `POS reconciliation`.
+
+**Reads: `packages/db/src/repo/dual-run-reads.ts` (new; `export * as dualRunReadsRepo` in `packages/db/src/index.ts`).**
+`currentReports(tx, orgId, { storeIds, fromWeek, toWeek })` = `distinct on (store_id, week_start)` newest `(created_at, id)` plus
+`versionCount`; `reportVersions(tx, orgId, storeId, weekStart)` = every version newest first, fingerprints, `keys_sha`,
+`v1_snapshot_sha`, `v1_extracted_at`, `created_at`; `dispositionHistory(tx, orgId, storeId, weekStart)` = id, kind, lineKey,
+deltaAt, class, ref, note, createdBy, createdAt; `keyLabels(tx, orgId, keys)` = names for supplier / money-account / category /
+sales-channel UUIDs (also inside `channel:<uuid>`, `1240:<uuid>`), unknown → the raw key. Lines: existing `linesOf`.
+
+**Domain**
+- `packages/domain/src/dual-run/dispositions.ts`: `recordDualRunDisposition(tx: Tx, actor: Actor, input: { storeId; weekStart; kind: DualRunKind; lineKey; class: 'V1_DEFECT' | 'V2_DEFECT'; ref; note }): Promise<{ id: string; deltaAt: string }>`.
+  Order: (1) `authorize(tx, actor, 'run_cutover', {})` **and** `authorize(tx, actor, 'view_financial_reports', { storeId })`
+  (review fix: `run_cutover` is org-scoped and **managers hold it by default** (`capabilities.ts:912`), so without the store check a
+  manager scoped to Lipa could class Malvar's lines; nobody may disposition a line they may not see); (2) class one of the two, `ref` matches `^DEF-[0-9]+$` exactly, `note` trimmed
+  1-500 chars; (3) read the **current** version of (org, store, week) and its (kind, lineKey) line; refuse no report, no line, Δ = 0,
+  or class `TIES | INVENTORY_BASIS | SUPPLIER_ADVANCE_1240 | UNMAPPED_KEY`, or a `sales_tender` line keyed `none` (review fix:
+  `compare.ts:223` settles it as `NOT_DOUBLE_ENTERED` before dispositions too) (compare settles those before dispositions, so the row
+  would be dead); (4) `delta_at` = **that line's delta, read from the database** (no delta input exists); (5)
+  `dualRunRepo.insertDisposition`; (6) `auditLogRepo.append`, action `dual_run.disposition`. Exported from
+  **`packages/domain/src/index.ts`** directly, **never** via `dual-run/index.ts` (the C4 import-graph test).
+- `packages/domain/src/dual-run/pack.ts` (reads; `authorize('view_financial_reports', { storeId })` per store read):
+  `dualRunOverview`; `dualRunWeekView` (lines in kind order `cash_bank, staff_cash, sales_tender, expense_category, ap_supplier,
+  inventory_basis, unassigned_store`, labels, family from `CLASS_CATALOGUE`, **re-check** when the line's latest disposition has
+  `delta_at ≠ delta`, version history marking **"v1 changed" / "v2 changed" / "keys changed"** against the next older version);
+  `dualRunPack(tx, actor, { fromWeek, toWeek })`:
+  - current version per store-week in range only; superseded versions never count;
+  - `no_data` weeks listed apart, never counted; **counted** = the rest;
+  - stores = every store with ≥ 1 version in range; `MIN_TOTAL_DAYS = 15` over counted weeks, `MIN_STORE_DAYS = 10` per store (Q4 a);
+  - **stale** = a disposition created after its store-week's current version: shown as "re-run compare", blocks signable;
+  - class totals over counted weeks' Δ ≠ 0 lines: per class, line count and Σ|Δ| (Money), grouped by family;
+  - defect list: every `V1_DEFECT` / `V2_DEFECT` line with the ref of its latest disposition **created at or before the version's
+    `created_at`** (review fix: exactly the one `compareStoreWeek` read, `compare.ts:229-234`; "latest whose `delta_at = delta`" could
+    name an older ref the comparator never used). The week view's **re-check** uses the same cut-off;
+  - `signable` = every counted week `ties|explained` ∧ total ≥ 15 ∧ every store ≥ 10 ∧ nothing stale; each failed criterion named.
+  - *(review fix)* `dualRunPack` itself authorizes `view_financial_reports` for **every active store of the org** (not only the stores
+    with versions), so a partly-scoped actor is refused in the domain, not only by the page's `coversWholeOrg` check: a pack over a
+    subset of stores must never read `signable`.
+
+**The form** (week page, current version only; rendered when `heldCapabilities` holds `run_cutover` and the line passes step 3; a
+hint, the domain is the gate): `<select name="class">` with exactly `V1_DEFECT`, `V2_DEFECT`; `<input name="ref"
+pattern="DEF-[0-9]+" required>`; `<textarea name="note" required maxlength="500">`; hidden `storeId`, `weekStart`, `kind`,
+`lineKey`. **No amount field.** A disposition newer than the shown version is listed under its line as "applies from the next
+compare run". 375 px first: below `sm` the line table becomes one card per line; per-day rows sit in a `<details>` (no client JS).
+
+**Paths.** TESTER: `packages/domain/tests/integration/t392-s5-disposition-authz.test.ts`, `packages/domain/tests/integration/t392-s5-pack.test.ts`,
+**`apps/erp/tests/integration/t392-s5-dual-run-page.test.ts`** (`renderToStaticMarkup`, real Postgres, `requireSession` mocked, the
+`t350-s2-render` pattern; the slice row's `.test.tsx` matches no vitest include glob and would never run). Fixtures: reports and
+lines seeded through `dualRunRepo.insertReport`/`insertLines` (no snapshot). BUILDER: `apps/erp/src/app/reports/dual-run/**`,
+`apps/erp/src/components/nav.tsx` (one line), `packages/domain/src/dual-run/{dispositions,pack}.ts`, `packages/domain/src/index.ts`
+(two lines), `packages/db/src/repo/dual-run-reads.ts`, `packages/db/src/index.ts` (one line).
+
+**Invariants**
+45. An actor without `run_cutover` gets `AuthorizationError`; no disposition row, no audit row. *(Review fix:)* a default manager **holds** `run_cutover`, so the fixture builds this actor with `view_financial_reports` and `run_cutover` explicitly not granted. A `run_cutover` holder scoped to store A recording on store B is refused too. *Mutants: no authorize; authorize after the insert; no store check.*
+46. `delta_at` = the **current** version's line delta: version 1 (Δ −500.00) superseded by version 2 (Δ −450.00) stores −450.00. *Mutant: delta from the oldest version.*
+47. Refused before any write: class `INVENTORY_BASIS` or `UNEXPLAINED`; ref `def-12`, `DEF-12a`, `''`; empty note; a line with Δ 0 or classed `UNMAPPED_KEY` / `INVENTORY_BASIS` / `SUPPLIER_ADVANCE_1240`; an unknown line. *Mutant: relying on the DB CHECK alone (it accepts the `UNMAPPED_KEY` line).*
+48. Append-only: a second disposition on the same line adds a row, the first intact, the week view shows the latest; an org-B actor cannot record against an org-A store. *Mutant: upsert.*
+49. Pack: Lipa (ties 7 · explained 6 · no_data) + Malvar (explained 5 · explained 5, plus a superseded 0-day version) → total 23, Lipa 13, Malvar 10, signable. Malvar's second week at 4 days → not signable, "Malvar 9 < 10" named; any `open` week → not signable; the `no_data` week listed apart. *Mutants: all versions counted; no_data counted; per-store threshold dropped.*
+50. A disposition newer than its current version makes the pack stale and not signable. An actor scoped to one store calling `dualRunPack` gets `AuthorizationError` (review fix). *Mutants: staleness ignored; pack authorized per reported store only.*
+51. The defect list shows each `V2_DEFECT` line with its `DEF-nnn`; class totals use Σ|Δ| (a +100 and a −100 line give 200.00). *Mutant: signed sum.*
+52. Render: a `view_financial_reports`-only actor sees the lines and **no** form posting the action; a `run_cutover` holder sees the form with exactly the two class options and `pattern="DEF-[0-9]+"`; the history marks "v1 changed" between two versions whose v1 fingerprints differ; `nav.tsx` holds `/reports/dual-run`. Smoketested on 9008 at 375 px (done-when). *Mutant: form rendered for everyone.*
+
+## Ian rulings, 2026-10-13 (binding; supersede the text above where they differ)
+- **Grab/Foodpanda payouts: YES.** During the dual run the v2 encoder enters channel payouts (and so their fees). Channel bank, fee and receivable lines are expected to tie; a missing payout is a real delta, not a policy class.
+- **Re-run rule: option (a).** The snapshot is still deleted after every `--apply` (R3 unchanged). A disposition counts only after a fresh extract (Ian's laptop) and compare; the pack shows "re-run compare" and is not signable until that re-run exists. Ian's laptop must be on for the 15 Nov sign-off run (Risk 6).
+- **Who records a disposition: ADMINS ONLY (option b).** The S5 server action and the domain writer require `run_cutover` AND `view_financial_reports` at the line's store AND an actor whose role is `admin` or `super_admin`, checked in the domain (not only in the UI). A manager who holds `run_cutover` (the default) is refused; managers still see the pages read-only. No new capability; `run_cutover` stays with managers (T-134 attestations untouched). Invariant 45 must include a default manager WITH `run_cutover` being refused.

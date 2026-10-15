@@ -146,10 +146,12 @@ describe('K1 (T-343 S5.5u item 3) — after a refusal, the write-off form keeps 
 
       const reasonTag = /<input\b[^>]*name="reason"[^>]*>/.exec(refundForm!)?.[0];
       const refundTag = /<input\b[^>]*name="refundAmount"[^>]*>/.exec(refundForm!)?.[0];
-      const accountTag = /<input\b[^>]*name="refundAccountCode"[^>]*>/.exec(refundForm!)?.[0];
+      // T-406: the refund account is now a <select name="refundAccountCode"> whose options are the
+      // same four money-account codes (values unchanged); the saved code must come back selected.
+      const accountTag = /<select\b[^>]*name="refundAccountCode"[^>]*>[\s\S]*?<\/select>/.exec(refundForm!)?.[0];
       expect(reasonTag, 'expected the reason <input> tag').toBeTruthy();
       expect(refundTag, 'expected the refundAmount <input> tag').toBeTruthy();
-      expect(accountTag, 'expected the refundAccountCode <input> tag').toBeTruthy();
+      expect(accountTag, 'expected the refundAccountCode <select> tag').toBeTruthy();
 
       expect(reasonTag, 'wanted: defaultValue="Cancelled early" — was red: no defaultValue at all').toMatch(
         /defaultValue="Cancelled early"|value="Cancelled early"/,
@@ -157,9 +159,15 @@ describe('K1 (T-343 S5.5u item 3) — after a refusal, the write-off form keeps 
       expect(refundTag, 'wanted: defaultValue="1,000" — was red: no defaultValue at all').toMatch(
         /defaultValue="1,000"|value="1,000"/,
       );
-      expect(accountTag, 'wanted: defaultValue="1110" — was red: no defaultValue at all').toMatch(
-        /defaultValue="1110"|value="1110"/,
-      );
+      for (const code of ['1110', '1120', '1130', '1140']) {
+        expect(accountTag, `expected an option with value="${code}"`).toMatch(
+          new RegExp(`<option\\b[^>]*value="${code}"`),
+        );
+      }
+      expect(
+        /<option\b[^>]*value="1110"[^>]*selected/.test(accountTag!),
+        'wanted: the saved code 1110 is the selected option',
+      ).toBe(true);
     },
     30000,
   );

@@ -24,7 +24,7 @@
  * SQL is written. This file only decides WHAT to write (the elevated set, the revoke-then-
  * insert sequence for a role change) and calls the repo to write it.
  */
-import { accessRepo, goneSentence, personsRepo, refuse, type Tx } from '@shareat/db';
+import { accessRepo, auditLogRepo, goneSentence, authzDenialCountsRepo, personsRepo, refuse, type Tx } from '@shareat/db';
 import {
   CAPABILITIES,
   CAPABILITY_SCOPE,
@@ -114,6 +114,7 @@ export async function assignRole(tx: Tx, input: AssignRoleInput): Promise<Assign
         });
       }
       elevatedGrants = ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER;
+      await recordManagerElevated(tx, input.orgId, input.personId, input.grantedBy, elevatedGrants, 'adminless_appointment');
     }
   }
 
@@ -512,12 +513,28 @@ export async function assignRoleAsActor(
     }
   }
 
-  return assignRole(tx, {
+  const result = await assignRole(tx, {
     personId: input.personId,
     orgId: actor.orgId,
     role: input.role,
     grantedBy: actor.personId,
   });
+  // T-402 S2: exactly one row per gated assignment (assignRole, the ungated primitive, writes only the elevation).
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'role.assigned',
+    storeId: null,
+    entityId: input.personId,
+    before: { role: targetRole?.role ?? null },
+    after: {
+      role: input.role,
+      elevatedGrants: result.elevatedGrants.length,
+      materialisedStores: result.materialisedStoreIds.length,
+      revokedElevatedGrants: result.revokedElevatedGrants.length,
+    },
+    source: 'web',
+  });
+  return result;
 }
 
 export interface GrantCapabilityAsActorInput {
@@ -650,6 +667,7 @@ export async function grantCapabilityAsActor(
         grantedBy: actor.personId,
         grantSource: 'grant',
       });
+      await recordCapabilityGranted(tx, actor, input, result.wrote, null);
       return { wrote: result.wrote, heldEverywhere: result.heldEverywhere, storeName: null };
     }
 
@@ -661,6 +679,7 @@ export async function grantCapabilityAsActor(
       grantSource: 'grant',
       atStoreId: row.storeId,
     });
+    await recordCapabilityGranted(tx, actor, input, result.wrote, row.storeId);
     return {
       wrote: result.wrote,
       heldEverywhere: result.heldEverywhere,
@@ -678,6 +697,7 @@ export async function grantCapabilityAsActor(
     // admin-arrival revocation (`revokeElevationGrantsForOrg` matches only `'elevation'`).
     grantSource: 'grant',
   });
+  await recordCapabilityGranted(tx, actor, input, result.wrote, null);
   return { wrote: result.wrote, heldEverywhere: result.heldEverywhere, storeName: null };
 }
 
@@ -699,7 +719,7 @@ export async function grantCapabilityAsActor(
  */
 export async function elevateManager(
   tx: Tx,
-  input: { personId: string; grantedBy: string | null },
+  input: { personId: string; orgId?: string; grantedBy: string | null },
 ): Promise<readonly Capability[]> {
   for (const capability of ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER) {
     await accessRepo.grantCapability(tx, {
@@ -709,5 +729,65 @@ export async function elevateManager(
       grantSource: 'elevation',
     });
   }
+  // A4: callers pass `actor.orgId`. An omitted org is looked up from the person, and an org that cannot be resolved THROWS
+  // (rolling the grants back): an unrecorded critical elevation is worse than a refused one.
+  const orgId = input.orgId ?? (await authzDenialCountsRepo.orgIdOfPerson(tx, input.personId));
+  if (!orgId) throw refuse('That change could not be recorded in the activity log, so it was not made.', 'That change could not be recorded in the activity log, so it was not made. Please tell the developers.');
+  await recordManagerElevated(tx, orgId, input.personId, input.grantedBy, ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER, 'explicit');
   return ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER;
+}
+
+/** T-402 S2: one `capability.granted` per grant that was actually written; a repeat (`wrote: false`) is not an event. */
+async function recordCapabilityGranted(
+  tx: Tx,
+  actor: Actor,
+  input: GrantCapabilityAsActorInput,
+  wrote: boolean,
+  atStoreId: string | null,
+): Promise<void> {
+  if (!wrote) return;
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'capability.granted',
+    storeId: null,
+    entityId: input.personId,
+    before: null,
+    after: { capability: input.capability, atStoreId },
+    source: 'web',
+  });
+}
+
+/**
+ * T-402 S2: one `manager.elevated` per elevation (not per capability). Written by a person when `grantedBy` names one,
+ * by the system when it does not (an elevation nobody asked for by name).
+ */
+async function recordManagerElevated(
+  tx: Tx,
+  orgId: string,
+  personId: string,
+  grantedBy: string | null,
+  capabilities: readonly Capability[],
+  via: 'adminless_appointment' | 'explicit',
+): Promise<void> {
+  const after = { capabilities: [...capabilities], via };
+  if (grantedBy) {
+    await auditLogRepo.append(tx, orgId, {
+      actorPersonId: grantedBy,
+      action: 'manager.elevated',
+      storeId: null,
+      entityId: personId,
+      before: null,
+      after,
+      source: 'web',
+    });
+  } else {
+    await auditLogRepo.appendSystem(tx, orgId, {
+      action: 'manager.elevated',
+      storeId: null,
+      entityId: personId,
+      before: null,
+      after,
+      source: 'web',
+    });
+  }
 }

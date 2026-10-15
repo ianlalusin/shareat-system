@@ -67,7 +67,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                 <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                   <th className="px-3 py-2 font-medium">Supplier</th>
                   <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 text-right font-medium">Owed (2110)</th>
+                  <th className="px-3 py-2 text-right font-medium">Owed</th>
                 </tr>
               </thead>
               <tbody>

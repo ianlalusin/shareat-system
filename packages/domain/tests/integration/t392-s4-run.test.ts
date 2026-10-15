@@ -258,13 +258,13 @@ describe('R. compare reads the snapshot and v2Figures and runs S2 (verdict, no_d
   );
 
   it(
-    'R4 (R12, exit code): a v1-only supplier debt with no v2 entry is open, classed UNEXPLAINED (R9 matching is not wired, so NOT_DOUBLE_ENTERED does not fire), and exitCode 2; a recorded V2_DEFECT disposition at that exact delta is read and classes the line V2_DEFECT (week stays open: 0 compared days, S2 ruling, exitCode 2); the CLI path READS dispositions. Mutant: dispositions ignored. Red today: runDualRun undefined',
+    'R4 (R12, exit code): a v1-only supplier debt with no v2 entry is open, classed NOT_DOUBLE_ENTERED (S4b: R9 document matching is wired, and v2 holds no candidate), and exitCode 2; a recorded V2_DEFECT disposition at that exact delta is read and classes the line V2_DEFECT (week stays open: 0 compared days, S2 ruling, exitCode 2); the CLI path READS dispositions. Mutant: dispositions ignored. Red today: runDualRun undefined',
     async () => {
       const f = await fixture('r4');
       const open = await run(f, { apply: false });
       expect(weekOf(open, f.storeA.code)).toMatchObject({ verdict: 'open' });
       expect(apLineOf(weekOf(open, f.storeA.code))).toMatchObject({ v1: 50000, v2: 0, delta: -50000 });
-      expect(apLineOf(weekOf(open, f.storeA.code)).class).toBe('UNEXPLAINED');
+      expect(apLineOf(weekOf(open, f.storeA.code)).class).toBe('NOT_DOUBLE_ENTERED');
       expect(open.exitCode).toBe(2);
       await sql`insert into dual_run_dispositions (org_id, store_id, week_start, kind, line_key, delta_at, class, ref, note, created_by)
                 values (${f.orgId}, ${f.storeA.id}, '2026-10-19', 'ap_supplier', ${f.supId}, '-500.00', 'V2_DEFECT', 'DEF-901', 'invoice not entered', ${f.admin.personId})`;
@@ -338,9 +338,10 @@ describe('I. idempotence and versions (R8, invariant 26)', () => {
     async () => {
       const f = await fixture('i1');
       await postApInvoice(f, '2026-10-21', '500.00');
-      const first = await run(f);
+      const sameLeg = apLeg(500); // v1 ids are stable: a re-extract holds the SAME leg
+      const first = await run(f, { snapshot: snap({ journal: [sameLeg] }) });
       const before = await counts(f);
-      const second = await run(f, { snapshot: snap({ journal: [apLeg(500)], extractedAt: '2026-10-27T01:00:00.000Z' }), snapshotSha: sha256('another extract') });
+      const second = await run(f, { snapshot: snap({ journal: [sameLeg], extractedAt: '2026-10-27T01:00:00.000Z' }), snapshotSha: sha256('another extract') });
       expect(weekOf(first, f.storeA.code).status).toBe('inserted');
       expect(weekOf(second, f.storeA.code).status).toBe('unchanged');
       expect(weekOf(second, f.storeA.code).reportId).toBe(weekOf(first, f.storeA.code).reportId);
@@ -384,7 +385,8 @@ describe('I. idempotence and versions (R8, invariant 26)', () => {
     async () => {
       const f = await fixture('i3');
       await postApInvoice(f, '2026-10-21', '500.00');
-      const [a, b] = await Promise.all([run(f, { storeCodes: [f.storeA.code] }), run(f, { storeCodes: [f.storeA.code] })]);
+      const sameSnap = snap({ journal: [apLeg(500)] });
+      const [a, b] = await Promise.all([run(f, { snapshot: sameSnap, storeCodes: [f.storeA.code] }), run(f, { snapshot: sameSnap, storeCodes: [f.storeA.code] })]);
       const statuses = [weekOf(a, f.storeA.code).status, weekOf(b, f.storeA.code).status].sort();
       expect(statuses).toEqual(['inserted', 'unchanged']);
       expect((await counts(f)).reports).toBe(1);
@@ -494,13 +496,14 @@ describe('A. authorization and refusals (nothing is written on any of them)', ()
     async () => {
       const f = await fixture('a3');
       await postApInvoice(f, '2026-10-21', '500.00');
-      await run(f, { snapshot: snap({ journal: [apLeg(500)], extractedAt: '2026-10-28T01:00:00.000Z' }) });
+      const sameLeg = apLeg(500);
+      await run(f, { snapshot: snap({ journal: [sameLeg], extractedAt: '2026-10-28T01:00:00.000Z' }) });
       const before = await counts(f);
       await expect(
         run(f, { snapshot: snap({ journal: [apLeg(999)], extractedAt: '2026-10-27T01:00:00.000Z' }) }),
       ).rejects.toThrow(/older/i);
       expect(await counts(f)).toEqual(before);
-      const same = await run(f, { snapshot: snap({ journal: [apLeg(500)], extractedAt: '2026-10-28T01:00:00.000Z' }) });
+      const same = await run(f, { snapshot: snap({ journal: [sameLeg], extractedAt: '2026-10-28T01:00:00.000Z' }) });
       expect(weekOf(same, f.storeA.code).status).toBe('unchanged');
     },
     90_000,

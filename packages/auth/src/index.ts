@@ -24,7 +24,9 @@ export type { Role, Capability, CapabilityScope, CapabilityArea } from './capabi
 
 // canAt answers "can THIS person do X at this store" for an arbitrary personId: operator scripts only
 // (T-391 S6 readiness). NEVER call it from a request path; tests/unit/t391-s6-can-at-callers.test.ts enforces it.
-export { authorize, canAt, heldCapabilities } from './authorize';
+export { authorize, can, canAt, heldCapabilities } from './authorize';
+/** T-402 S2: drains the security-event outbox (tests, graceful shutdown). */
+export { flushSecurityEvents } from './security-events';
 /** ⭐ From the leaf, not from the modules that throw them — `packages/auth/src/errors.ts` says why.
  *  An app that needs only the classes should import `@shareat/auth/errors` and skip this barrel. */
 export { AuthenticationError, AuthorizationError } from './errors';

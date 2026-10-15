@@ -9,7 +9,7 @@
  * `resolveActor` (T-138), which is why `created_by` on an employment is worth anything at all —
  * v1's equivalent is a client-supplied parameter on ~24 server actions (landmine #17).
  */
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, can, type Actor } from '@shareat/auth';
 import {
   accessRepo,
   auditLogRepo,
@@ -198,6 +198,23 @@ export async function createEmployment(
   // T-289 moment 3 — a hire applies whatever position defaults the assigned positions carry.
   await reconcilePositionGrants(tx, actor, { personId: input.personId, storeId: input.storeId });
 
+  // T-402 S2 - last, so a refused hire (every throw above) leaves no row, and a rolled-back hire takes it with it.
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'employment.created',
+    storeId: input.storeId,
+    entityId: employment.id,
+    before: null,
+    after: {
+      personId: input.personId,
+      storeId: input.storeId,
+      staffCode,
+      employmentStatus: input.employmentStatus,
+      startedOn: input.startedOn,
+    },
+    source: input.source ?? 'web',
+  });
+
   return employment;
 }
 
@@ -245,19 +262,18 @@ export async function searchPersons(
     throw new EmploymentError('You have no store scope, so you may not search for staff to hire.');
   }
 
-  let lastError: unknown;
+  // T-402 S2 (A2): each store is asked with the non-logging `can()`; only when none passes is `authorize()` called ONCE
+  // on the first store, so a refused search logs one real denial and throws the usual refusal (like trade's authorizeEither).
   let authorized = false;
   for (const storeId of storeIds) {
-    try {
-      await authorize(tx, actor, 'enrol_staff', { storeId });
+    if (await can(tx, actor, 'enrol_staff', { storeId })) {
       authorized = true;
       break;
-    } catch (err) {
-      lastError = err;
     }
   }
   if (!authorized) {
-    throw lastError instanceof Error ? lastError : new EmploymentError('Not authorized to search staff.');
+    await authorize(tx, actor, 'enrol_staff', { storeId: storeIds[0]! });
+    throw new EmploymentError('Not authorized to search staff.');
   }
 
   return personsRepo.searchPersons(tx, { orgId: actor.orgId, query: input.query });
@@ -309,6 +325,16 @@ export async function endEmployment(
     }
   }
 
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'employment.ended',
+    storeId: existing.storeId,
+    entityId: existing.id,
+    before: { employmentStatus: existing.employmentStatus, endedOn: existing.endedOn },
+    after: { employmentStatus: input.employmentStatus, endedOn: input.endedOn, personId: existing.personId },
+    source: 'web',
+  });
+
   return closed;
 }
 
@@ -335,6 +361,16 @@ export async function setEmploymentPositions(
   // T-289 moment 4 — a positions change reconciles the new set: capabilities the old positions
   // defaulted and the new ones do not are revoked; capabilities the new ones default are granted.
   await reconcilePositionGrants(tx, actor, { personId: existing.personId, storeId: existing.storeId });
+
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'employment.positions_set',
+    storeId: existing.storeId,
+    entityId: existing.id,
+    before: null,
+    after: { personId: existing.personId, positionIds: input.positionIds, primaryPositionId: input.primaryPositionId },
+    source: 'web',
+  });
 }
 
 /** Add or rename a store's own position. ⛔ Canonical positions are not editable by a store. */
