@@ -55,6 +55,7 @@ import { receiveDelivery } from '../../../../packages/domain/src/deliveries/rece
 import { quantity } from '../../../../packages/domain/src/stock/quantity';
 import { importTestDay, linkTestStore, seedTestTenders } from '../../../../packages/domain/tests/integration/_fixtures/pos-day';
 import { urlOf } from '../helpers/flash-jar';
+import { legacyPostPull } from '../../../../packages/domain/tests/integration/_fixtures/pull-draft';
 import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });
@@ -82,7 +83,7 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 }
 
 /** A finalized pull for DAY at one store; `manager` may void it, `nobody` holds no role. */
-async function fixture(hint: string) {
+async function fixture(hint: string, opts: { legacy?: boolean } = {}) {
   const code = uid(`t374s7w-${hint}`);
   const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
@@ -140,6 +141,15 @@ async function fixture(hint: string) {
     finalizeSections(tx, manager, { pullId: built.pullId, sections: ['direct', 'recipe', 'orphan'], confirmedKeys: built.lines.map((l) => l.key) }),
   );
   if (!fin.ok) throw new Error(`fixture: ${fin.reason}`);
+  // T-401 S6 (Ian 15 Oct): finalize now makes a usage DRAFT. The reversal this form exists for is of pulls finalized BEFORE S6, whose
+  // usage was POSTED and linked to the pull (production has them), so the default fixture turns the draft into that legacy state;
+  // `{ legacy: false }` keeps the new state (an unposted draft) for the draft-only void.
+  if (opts.legacy !== false) {
+    await legacyPostPull(sql, asOrg, manager, {
+      pullId: built.pullId, storeId, date: DAY,
+      lines: built.lines.filter((l) => l.section === 'direct' && !l.blocked && l.itemId).map((l) => ({ key: l.key, itemId: l.itemId!, locationId: l.locationId!, quantity: l.quantity! })),
+    });
+  }
   return { orgId, storeId, dayId, pullId: built.pullId, manager, nobody: actor(orgId, nobodyId), managerId };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -172,10 +182,26 @@ const pullStatus = async (id: string) => (await sql<{ status: string }[]>`select
 const postedRecords = async (f: Fixture) =>
   Number((await sql<{ n: string }[]>`select count(*)::text as n from stock_usage_records where org_id = ${f.orgId} and status = 'posted'`)[0]!.n);
 
+const draftsOfDay = async (f: Fixture) =>
+  Number((await sql<{ n: string }[]>`select count(*)::text as n from stock_usage_records where org_id = ${f.orgId} and status = 'draft'`)[0]!.n);
+
 describe('T12 - voidPullAction', () => {
+  it('(T-401 S6) a pull whose draft is still UNPOSTED: voiding it succeeds (an ok banner, no error), removes the draft, and stock stays untouched', async () => {
+    const f = await fixture('draftonly', { legacy: false });
+    expect(await draftsOfDay(f), 'control: finalize made one draft').toBe(1);
+    expect(await postedRecords(f), 'control: nothing posted').toBe(0);
+    const r = await run(f, f.manager, form(f));
+    expect(r.q.get('error')).toBeNull();
+    expect(r.q.get('ok')).toBeTruthy();
+    expect(await pullStatus(f.pullId)).toBe('void');
+    expect(await draftsOfDay(f), 'the draft goes with the pull').toBe(0);
+    const [m] = await sql<{ n: string }[]>`select count(*)::text as n from stock_movements where org_id = ${f.orgId} and quantity < 0`;
+    expect(Number(m!.n)).toBe(0);
+  });
+
   it('ok banner with the count; the pull is void; the loader shows no live pull for the day', async () => {
     const f = await fixture('ok');
-    expect(await postedRecords(f), 'control: the finalized pull made one posted usage record').toBe(1);
+    expect(await postedRecords(f), 'control: the (legacy) finalized pull has one posted usage record').toBe(1);
     const { findLivePull } = await import('../../src/app/inventory/pos-usage/lib');
     expect(await findLivePull(f.orgId, f.storeId, f.dayId), 'control: before the void the day has a live pull').not.toBeNull();
 

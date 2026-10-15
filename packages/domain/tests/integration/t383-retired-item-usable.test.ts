@@ -373,8 +373,19 @@ async function pull(w: World, dayId: string, section: 'direct' | 'recipe') {
   return { plan, outcome: result.sections[0]! };
 }
 
+/** T-401 S6: the pull only DRAFTS. The day's usage draft, and the manager's post of it (what actually moves stock). */
+async function postTheDayDraft(w: World, itemId: string): Promise<{ lineQty: string | null }> {
+  const rows = await sql<{ id: string; q: string }[]>`
+    select r.id, l.quantity::text as q from stock_usage_records r join stock_usage_lines l on l.record_id = r.id
+     where r.org_id = ${w.orgId} and r.kind = 'usage' and r.status = 'draft' and l.item_id = ${itemId}`;
+  expect(rows, 'the pull drafted the retired item').toHaveLength(1);
+  const posted = await asOrg(w.orgId, (tx) => postUsage(tx, w.mgr, { recordId: rows[0]!.id }));
+  expect(posted.ok, posted.ok ? '' : posted.reason).toBe(true);
+  return { lineQty: rows[0]!.q };
+}
+
 describe('C5-C6 - POS usage pull still depletes a retired item (direct map, recipe map)', () => {
-  it('C5 direct map: 11 sold -> the retired item is depleted (50 -> 39), nothing blocked. GREEN on HEAD. Mutant: buildPlan/finalizeSections skip or block a line whose item is not active -> red', async () => {
+  it('C5 direct map: 11 sold -> the pull drafts 11 of the retired item (stock still 50), nothing blocked; the manager post of the draft depletes it (50 -> 39). Mutant: buildPlan/finalizeSections skip or block a line whose item is not active -> red', async () => {
     const w = await world('c5');
     await linkPos(w);
     const item = await mkItem(w, 'C5 Coke');
@@ -388,12 +399,15 @@ describe('C5-C6 - POS usage pull still depletes a retired item (direct map, reci
 
     const { plan, outcome } = await pull(w, day, 'direct');
     expect(plan.lines.find((l) => l.posItemKey === 'coke')?.itemId).toBe(item);
-    expect(outcome).toMatchObject({ ok: true, postedLineCount: 1, held: [], finalized: true });
+    expect(outcome).toMatchObject({ ok: true, postedLineCount: 0, held: [], finalized: true });
+    expect(await onHand(item, w.kitchenA), 'the pull moved nothing').toBe('50.000');
+    expect(await movementCount(item, 'out')).toBe(0);
+    expect((await postTheDayDraft(w, item)).lineQty).toBe('11.000');
     expect(await onHand(item, w.kitchenA)).toBe('39.000');
     expect(await movementCount(item, 'out')).toBe(1);
   });
 
-  it('C6 recipe map: a recipe whose ingredient is retired still depletes it (4 sold x 0.5 -> 10 down to 8). GREEN on HEAD. Mutant: recipe explosion drops a retired ingredient -> red', async () => {
+  it('C6 recipe map: a recipe whose ingredient is retired is still drafted (4 sold x 0.5 = 2, stock still 10) and the manager post depletes it (10 down to 8). Mutant: recipe explosion drops a retired ingredient -> red', async () => {
     const w = await world('c6');
     await linkPos(w);
     const ingredient = await mkItem(w, 'C6 Cheese');
@@ -412,7 +426,9 @@ describe('C5-C6 - POS usage pull still depletes a retired item (direct map, reci
 
     const { plan, outcome } = await pull(w, day, 'recipe');
     expect(plan.lines.find((l) => l.itemId === ingredient), 'the retired ingredient must be in the plan').toBeDefined();
-    expect(outcome).toMatchObject({ ok: true, postedLineCount: 1, held: [], finalized: true });
+    expect(outcome).toMatchObject({ ok: true, postedLineCount: 0, held: [], finalized: true });
+    expect(await onHand(ingredient, w.kitchenA), 'the pull moved nothing').toBe('10.000');
+    expect((await postTheDayDraft(w, ingredient)).lineQty).toBe('2.000');
     expect(await onHand(ingredient, w.kitchenA)).toBe('8.000');
   });
 });

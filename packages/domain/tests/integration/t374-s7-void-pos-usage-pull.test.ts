@@ -50,6 +50,7 @@ import { closedStockPeriodSentence } from '../../src/stock/period-guard';
 import { humanDate } from '../../src/shared/refusal-leaf';
 import type { LocationLike } from '../../src/stock-locations/rules';
 import { testItemCode } from './_fixtures/item-code';
+import { legacyPostPull } from './_fixtures/pull-draft';
 
 const sql = postgres(url, { max: 12 });
 let seq = 0;
@@ -258,6 +259,16 @@ async function pulled(f: Fixture, mode: 'none' | 'direct' | 'all', opts: { date?
   if (mode !== 'none') {
     const out = await finalize(f, built.pullId, keys, mode === 'all' ? ['direct', 'recipe', 'orphan'] : ['direct']);
     if (!out.ok) throw new Error(`fixture: finalize refused: ${out.reason}`);
+  }
+  // T-401 S6 (Ian 15 Oct): finalize now makes a usage DRAFT, no stock. Production still holds pulls finalized before S6 whose records
+  // were POSTED and linked to the pull, and those are what this file voids, so a finalized pull is turned into that legacy state here.
+  if (mode !== 'none') {
+    await legacyPostPull(sql, asOrg, f.manager, {
+      pullId: built.pullId,
+      storeId: f.storeId,
+      date: opts.date ?? DAY,
+      lines: built.lines.filter((l) => l.section === 'direct' && !l.blocked && l.itemId).map((l) => ({ key: l.key, itemId: l.itemId!, locationId: l.locationId!, quantity: l.quantity! })),
+    });
   }
   const records = (
     await sql<{ id: string }[]>`select distinct usage_record_id as id from pos_usage_pull_lines where pull_id = ${built.pullId} and usage_record_id is not null`
@@ -725,12 +736,14 @@ describe('T10 - A voids the pull (uncommitted), B finalizes the same pull', () =
     expect(await onHand(f.cheese, f.kitchen)).toBe('50.000');
   });
 
-  it('control: with no void in flight the same finalize posts', async () => {
+  it('control: with no void in flight the same finalize goes through (T-401 S6: it drafts ONE usage record for the day, one per store + day, and moves no stock)', async () => {
     const f = await fixture('t10c');
     const p = await pulled(f, 'none');
     const out = await finalize(f, p.pullId, p.keys, ['direct']);
     expect(out.ok).toBe(true);
-    expect(await usageRecordCount(f)).toBe(2);
+    expect(await usageRecordCount(f)).toBe(1);
+    expect(await onHand(f.cheese, f.kitchen)).toBe('50.000');
+    expect(await onHand(f.rice, f.display)).toBe('50.000');
   });
 });
 
