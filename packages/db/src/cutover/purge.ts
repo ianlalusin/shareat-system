@@ -433,11 +433,21 @@ export async function dumpAuditLog(opts: { databaseUrl: string; dir: string; asO
     chmodSync(file, 0o600);
     // 3. The dump's own table of contents must hold TABLE DATA for every partition and for the event keys.
     const list = await runTool(bin('pg_restore'), ['--list', file], env);
-    if (list.code !== 0) throw new Error(`pg_restore --list exited ${String(list.code)}: ${list.stderr}`);
+    if (list.code !== 0) {
+      throw refuse(
+        `cutover purge: pg_restore --list exited ${String(list.code)}: ${scrub(list.stderr).trim().slice(0, 600)}`,
+        'REFUSED. The audit log dump could not be read back (pg_restore --list failed). Nothing was changed.',
+      );
+    }
     const dataLines = list.stdout.split('\n').filter((l) => /TABLE DATA/.test(l));
     const has = (rel: string): boolean => dataLines.some((l) => l.includes(` ${rel} `));
     const missing = [...leaves, 'audit_log_event_keys'].filter((r) => !has(r));
-    if (missing.length > 0) throw new Error(`the dump holds no data entry for: ${missing.join(', ')}`);
+    if (missing.length > 0) {
+      throw refuse(
+        `cutover purge: the dump holds no data entry for: ${missing.join(', ')}`,
+        'REFUSED. The audit log dump is incomplete (a table has no data entry). Nothing was changed.',
+      );
+    }
 
     const sha256 = await sha256Of(file);
     writeFileSync(sidecar, `${sha256}  ${basename(file)}\n`, { mode: 0o600 });
