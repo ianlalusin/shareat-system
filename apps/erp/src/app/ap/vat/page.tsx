@@ -27,7 +27,8 @@ export default async function VatListPage({ searchParams }: { searchParams: Prom
   const { actor } = await requireSession('/ap/vat');
   const stores = await listStores(actor.orgId);
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.month ?? '') ? sp.month! : toBusinessDate().slice(0, 7);
-  const storeId = sp.store ?? '';
+  // Only a store of this org is ever queried: a garbage or foreign id is treated as "no store chosen" (T-408 audit #2).
+  const storeId = stores.find((s) => s.id === sp.store)?.id ?? '';
 
   // The gate is the verifier's capability at the chosen store: the manager who checks bills against the paper.
   const data = storeId
