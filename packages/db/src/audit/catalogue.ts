@@ -153,6 +153,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('menu.usage_tolerance_set', 'stock', 'normal', 'org', 'organizations', 'T-401'),
   def('menu.item_usage_tolerance_set', 'stock', 'normal', 'org', 'items', 'T-401'),
   def('stock.usage_tolerance_verified', 'stock', 'high', 'store', 'stock_usage_records', 'T-401'),
+  // The system posted a pull-made usage draft itself (14:00 Manila the day after its business date); written by the usage auto-post job, never by a person.
+  def('stock.usage_auto_posted', 'stock', 'normal', 'store', 'stock_usage_records', 'T-401', { actor: 'system' }),
   // Written by T-401's setOptionOffer (price / withdraw) but absent from 0197's copy list (a ternary the S1a scan missed). Dotted on purpose: never in 0197's list, so no row can carry the underscore form.
   def('menu.option_offer_set', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),
   def('menu.option_offer_withdraw', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),

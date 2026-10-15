@@ -71,6 +71,8 @@ export * from './stock-locations/service';
 export * from './deliveries/documents';
 export * from './stock/usage-records';
 export * from './stock/usage-tolerance';
+export * from './stock/usage-auto-post';
+export * from './stock/usage-check-report';
 export * from './stock/count-workflow';
 export * from './commissary/outcome';
 export * from './commissary/transfer';

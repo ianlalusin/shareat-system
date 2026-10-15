@@ -86,6 +86,11 @@ export default async function SettingsPage() {
           description="Which POS store each branch sells under. A linked branch's sales days come from POS and can't be typed; a branch that isn't linked keeps typing them in. Admin only."
         />
         <SettingsCard
+          href="/settings/usage-tolerance"
+          title="Usage tolerance"
+          description="How far the usage staff record may stray from what POS sales say was used before a manager needs a reason to post it. One organisation-wide band, and an optional band per item. Admin only."
+        />
+        <SettingsCard
           href="/settings/wastage-monitor"
           title="Wastage Monitor"
           description="Who answers for a wasted or refunded order at each branch. With nobody named, a reviewed wastage is created ownerless and the store absorbs it after 15 days — silently, and nothing is recovered."

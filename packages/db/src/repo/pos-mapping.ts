@@ -523,6 +523,36 @@ export async function postedUsageRecordIdsForPull(tx: Tx, pullId: string): Promi
   return rows.map((r) => r.id);
 }
 
+/** T-401 S6: the distinct usage records this pull linked that are still `draft`, in id order. */
+export async function draftUsageRecordIdsForPull(tx: Tx, pullId: string): Promise<string[]> {
+  const rows = await tx
+    .selectDistinct({ id: stockUsageRecords.id })
+    .from(posUsagePullLines)
+    .innerJoin(stockUsageRecords, eq(stockUsageRecords.id, posUsagePullLines.usageRecordId))
+    .where(and(eq(posUsagePullLines.pullId, pullId), eq(stockUsageRecords.status, 'draft')))
+    .orderBy(stockUsageRecords.id);
+  return rows.map((r) => r.id);
+}
+
+/** T-401 S6: unlink every line of this pull from one usage record (the draft is being dropped). */
+export async function clearLineUsageRecord(tx: Tx, pullId: string, recordId: string): Promise<void> {
+  await tx
+    .update(posUsagePullLines)
+    .set({ usageRecordId: null })
+    .where(and(eq(posUsagePullLines.pullId, pullId), eq(posUsagePullLines.usageRecordId, recordId)));
+}
+
+/** T-401 S6: does a line of a non-void pull other than this one's still point at the record? */
+export async function recordHasOtherPullLines(tx: Tx, recordId: string, exceptPullId: string): Promise<boolean> {
+  const rows = await tx
+    .select({ id: posUsagePullLines.id })
+    .from(posUsagePullLines)
+    .innerJoin(posUsagePulls, eq(posUsagePulls.id, posUsagePullLines.pullId))
+    .where(and(eq(posUsagePullLines.usageRecordId, recordId), ne(posUsagePulls.id, exceptPullId), ne(posUsagePulls.status, 'void')))
+    .limit(1);
+  return rows.length > 0;
+}
+
 /** R10: the non-void pull, with its sales day's business date, that links this usage record; none when no live pull does. */
 export async function livePullForUsageRecord(tx: Tx, recordId: string): Promise<{ pullId: string; businessDate: string } | undefined> {
   const [row] = await tx

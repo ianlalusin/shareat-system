@@ -16,6 +16,7 @@
 import { fiscalPeriodsRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { closeReadiness, type Finding } from '../findings';
+import { usageCloseRefusal } from '../stock/usage-check-report';
 import { refuse } from '../shared/refusal';
 import { classifyHoles } from './holes';
 
@@ -111,6 +112,7 @@ export async function refuseOnMissingEarlierPeriod(
  * Gate order (bible-adjacent discipline: cheapest and least ambiguous first):
  *   1. `authorize(actor, 'close_period')` — capability, then (for a manager) org-wide store scope.
  *   2. Unposted `expenses`/`deliveries` drafts dated in the period — actionable, named by count.
+ *   2b. T-401 S6: usage drafts, and posted out-of-band usage with no reason, dated in the period (auto-posted records never block).
  *   3. `closeReadiness` — the SAME hard findings `/findings` already shows, re-run here so the
  *      screen's verdict is never trusted, only reproduced.
  *   4. No earlier period in the org still open — periods close in order.
@@ -139,6 +141,10 @@ export async function closePeriod(
         'Post or void them first.',
     );
   }
+
+  // T-401 S6 (Ian 15 Oct): unposted usage drafts, and posted out-of-band usage with no reason, hold the month open.
+  const usageBlock = await usageCloseRefusal(tx, actor.orgId, startsOn, endsOn);
+  if (usageBlock) throw refuse(`closePeriod: ${input.period} cannot close - usage not settled`, `${input.period} cannot close: ${usageBlock}`);
 
   if (blocking.length > 0) {
     const kinds = [...new Set(blocking.map((b) => b.kind))].join(', ');

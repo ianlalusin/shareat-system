@@ -38,6 +38,7 @@ import { runAmortisationAsSystem } from '../prepaid';
 import { runOrderWastageBackstop } from '../wastage/orders';
 import { sweepOrphanedFiles } from '../files';
 import { fiscalPeriodSeedWindow } from '../organizations';
+import { autoPostDueUsageDrafts } from '../stock/usage-auto-post';
 import { classifyHoles } from '../fiscal-periods';
 
 import { money, toBusinessDate } from '@shareat/core';
@@ -1263,4 +1264,41 @@ function addOneDay(date: string): string {
 function monthEndFromLabel(yyyyMm: string): string {
   const [y, mo] = yyyyMm.split('-').map(Number) as [number, number];
   return new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10);
+}
+
+// =====================================================================================
+
+/**
+ * ⭐ **T-401 S6 round 2 (Ian, 15 Oct) - the usage auto-post sweep, DAILY 14:05 Manila.** Posts every pull-made usage draft still
+ * unposted at 14:00 Manila the day after its business date (`stock/usage-auto-post.ts` holds the rules). One org at a time, each
+ * under that org's system principal, so a refused record or a failing org never stops the next.
+ *
+ * Deliberately NOT a `SCHEDULER_JOBS` entry (that needs a `scheduler_runs` migration and a unit-pair registry change); the run is
+ * reported by the script's own log lines and exit code, and every post it makes is audited as `stock.usage_auto_posted`.
+ */
+export interface UsageAutoPostOutcome {
+  readonly orgName: string;
+  readonly posted: number;
+  readonly skipped: readonly { readonly recordId: string; readonly reason: string }[];
+  readonly error?: string;
+}
+
+export interface UsageAutoPostSweepResult {
+  readonly outcomes: UsageAutoPostOutcome[];
+  readonly hadFailures: boolean;
+}
+
+export async function usageAutoPostSweep(options: { orgId?: string; now?: Date } = {}): Promise<UsageAutoPostSweepResult> {
+  const now = options.now ?? new Date();
+  const orgs = await listOrgsToRun(options.orgId);
+  const outcomes: UsageAutoPostOutcome[] = [];
+  for (const org of orgs) {
+    try {
+      const result = await asSystem(org.id, (tx) => autoPostDueUsageDrafts(tx, now));
+      outcomes.push({ orgName: org.name, posted: result.posted.length, skipped: result.skipped });
+    } catch (err) {
+      outcomes.push({ orgName: org.name, posted: 0, skipped: [], error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return { outcomes, hadFailures: outcomes.some((o) => o.error !== undefined) };
 }

@@ -7,10 +7,12 @@
  * ⭐ The domain module (`packages/domain/src/stock/usage-records.ts`) owns the rules; this file only
  * reads rows and writes what the domain decided (bible §4.3).
  */
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { stockUsageLines, stockUsageRecords, type UsageKind, type UsageStatus } from '../../schema/stock-usage';
 import { departments, stockLocations } from '../../schema/stock-locations';
 import { items } from '../../schema/items';
+import { stores } from '../../schema/stores';
+import { auditLog } from '../../schema/audit-log';
 import { organizations } from '../../schema/organizations';
 import { persons } from '../../schema/persons';
 import { posUsagePullLines, posUsagePulls } from '../../schema/pos-mapping';
@@ -38,6 +40,8 @@ export interface UsageRecordRow {
   readonly voidReason: string | null;
   readonly createdBy: string;
   readonly createdAt: Date;
+  /** T-401 S6 (migration 0198): true when the system, not a manager, posted it. */
+  readonly autoPosted: boolean;
 }
 
 export interface InsertUsageRecordInput {
@@ -119,6 +123,7 @@ export async function getUsageRecord(tx: Tx, id: string): Promise<UsageRecordRow
       voidReason: stockUsageRecords.voidReason,
       createdBy: stockUsageRecords.createdBy,
       createdAt: stockUsageRecords.createdAt,
+      autoPosted: stockUsageRecords.autoPosted,
     })
     .from(stockUsageRecords)
     .where(eq(stockUsageRecords.id, id));
@@ -225,10 +230,10 @@ export async function setUsageLineMovement(tx: Tx, lineId: string, movementId: s
   await tx.update(stockUsageLines).set({ movementId }).where(eq(stockUsageLines.id, lineId));
 }
 
-export async function markUsagePosted(tx: Tx, id: string, postedBy: string): Promise<void> {
+export async function markUsagePosted(tx: Tx, id: string, postedBy: string, autoPosted = false): Promise<void> {
   await tx
     .update(stockUsageRecords)
-    .set({ status: 'posted', postedAt: new Date(), postedBy })
+    .set({ status: 'posted', postedAt: new Date(), postedBy, autoPosted })
     .where(eq(stockUsageRecords.id, id));
 }
 
@@ -435,4 +440,229 @@ export async function listStoreUsageQueue(tx: Tx, storeId: string): Promise<Stor
     byRecord.set(l.recordId, list);
   }
   return rows.map((r) => ({ ...r, lines: byRecord.get(r.id) ?? [] }));
+}
+
+// -----------------------------------------------------------------------------------------
+// T-401 S6 round 2 (Ian, 15 Oct) - the pull's draft, the next-day auto-post, the month-close block and the scorecard
+// -----------------------------------------------------------------------------------------
+
+/** The display name of the per-org "system" person that authors a pull's usage draft and posts an auto-post. */
+export const USAGE_SYSTEM_AUTHOR_NAME = 'POS usage pull (system)';
+
+/**
+ * The org's system author: an inactive NON-HUMAN person (`kind = 'terminal'`, the schema's one non-person kind, which every staff
+ * listing already skips) with no role and no credential, so it appears in no staff list and can sign in nowhere. Found by name,
+ * created on first use. A usage record needs a real `persons` row for `created_by` / `posted_by`.
+ */
+export async function systemAuthorId(tx: Tx, orgId: string): Promise<string> {
+  const [found] = await tx
+    .select({ id: persons.id })
+    .from(persons)
+    .where(and(eq(persons.orgId, orgId), eq(persons.displayName, USAGE_SYSTEM_AUTHOR_NAME), eq(persons.kind, 'terminal')))
+    .orderBy(asc(persons.createdAt), asc(persons.id))
+    .limit(1);
+  if (found) return found.id;
+  const [row] = await tx
+    .insert(persons)
+    .values({ orgId, displayName: USAGE_SYSTEM_AUTHOR_NAME, isActive: false, kind: 'terminal' })
+    .returning({ id: persons.id });
+  return row!.id;
+}
+
+/** The store's oldest `usage` DRAFT for one day and room, under `FOR UPDATE`; none when there is not one. */
+export async function findUsageDraftForUpdate(
+  tx: Tx,
+  storeId: string,
+  usedOn: string,
+  locationId: string,
+): Promise<{ id: string } | undefined> {
+  const [row] = await tx
+    .select({ id: stockUsageRecords.id })
+    .from(stockUsageRecords)
+    .where(
+      and(
+        eq(stockUsageRecords.storeId, storeId),
+        eq(stockUsageRecords.usedOn, usedOn),
+        eq(stockUsageRecords.locationId, locationId),
+        eq(stockUsageRecords.kind, 'usage'),
+        eq(stockUsageRecords.status, 'draft'),
+      ),
+    )
+    .orderBy(asc(stockUsageRecords.createdAt), asc(stockUsageRecords.id))
+    .limit(1)
+    .for('update');
+  return row;
+}
+
+export async function updateUsageLineQuantity(tx: Tx, lineId: string, quantity: Quantity): Promise<void> {
+  await tx.update(stockUsageLines).set({ quantity }).where(eq(stockUsageLines.id, lineId));
+}
+
+/** The auto-post rewrites a draft before posting it: a line whose posted quantity would be zero is dropped. */
+export async function deleteUsageLines(tx: Tx, lineIds: readonly string[]): Promise<void> {
+  if (lineIds.length === 0) return;
+  await tx.delete(stockUsageLines).where(inArray(stockUsageLines.id, [...lineIds]));
+}
+
+export interface DueUsageDraftRow {
+  readonly id: string;
+  readonly orgId: string;
+  readonly storeId: string;
+  readonly usedOn: string;
+}
+
+/**
+ * The pull-made usage drafts whose deadline has passed: 14:00 Manila the day AFTER the business date. "Pull-made" = at least one
+ * line of a non-void pull points at the record. A manual draft (nothing the pull covers) is never listed.
+ */
+export async function listDuePullUsageDrafts(tx: Tx, now: Date): Promise<DueUsageDraftRow[]> {
+  return tx
+    .select({ id: stockUsageRecords.id, orgId: stockUsageRecords.orgId, storeId: stockUsageRecords.storeId, usedOn: stockUsageRecords.usedOn })
+    .from(stockUsageRecords)
+    .where(
+      and(
+        eq(stockUsageRecords.kind, 'usage'),
+        eq(stockUsageRecords.status, 'draft'),
+        sql`((${stockUsageRecords.usedOn} + 1)::timestamp + interval '14 hours') at time zone 'Asia/Manila' <= ${now.toISOString()}::timestamptz`,
+        sql`exists (select 1 from pos_usage_pull_lines pl join pos_usage_pulls p on p.id = pl.pull_id
+                     where pl.usage_record_id = ${stockUsageRecords.id} and p.status <> 'void')`,
+      ),
+    )
+    .orderBy(asc(stockUsageRecords.usedOn), asc(stockUsageRecords.id));
+}
+
+/** Locks one record row and returns its status (another run may have posted it since the list was read). */
+export async function lockUsageStatus(tx: Tx, id: string): Promise<UsageStatus | undefined> {
+  const [row] = await tx.select({ status: stockUsageRecords.status }).from(stockUsageRecords).where(eq(stockUsageRecords.id, id)).for('update');
+  return row?.status;
+}
+
+/** Usage drafts (any author) of one store dated one day, for the day-close warning. */
+export async function countUsageDraftsOn(tx: Tx, storeId: string, usedOn: string): Promise<number> {
+  const [row] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(stockUsageRecords)
+    .where(
+      and(
+        eq(stockUsageRecords.storeId, storeId),
+        eq(stockUsageRecords.usedOn, usedOn),
+        eq(stockUsageRecords.kind, 'usage'),
+        eq(stockUsageRecords.status, 'draft'),
+      ),
+    );
+  return row?.n ?? 0;
+}
+
+export interface MonthUsageRecordRow {
+  readonly id: string;
+  readonly storeId: string;
+  readonly usedOn: string;
+  readonly status: UsageStatus;
+  readonly kind: UsageKind;
+  readonly itemIds: readonly string[];
+}
+
+/**
+ * Usage and wastage records of the org dated in `[startsOn, endsOn]` that the month close must look at: every draft, and every
+ * `usage` record a PERSON posted (an auto-posted record is never listed: its out-of-band lines went in at expected).
+ */
+export async function listMonthUsageRecordsForClose(tx: Tx, orgId: string, startsOn: string, endsOn: string): Promise<MonthUsageRecordRow[]> {
+  const rows = await tx
+    .select({
+      id: stockUsageRecords.id,
+      storeId: stockUsageRecords.storeId,
+      usedOn: stockUsageRecords.usedOn,
+      status: stockUsageRecords.status,
+      autoPosted: stockUsageRecords.autoPosted,
+      kind: stockUsageRecords.kind,
+    })
+    .from(stockUsageRecords)
+    .where(
+      and(
+        eq(stockUsageRecords.orgId, orgId),
+        gte(stockUsageRecords.usedOn, startsOn),
+        lte(stockUsageRecords.usedOn, endsOn),
+        inArray(stockUsageRecords.kind, ['usage', 'wastage']),
+        inArray(stockUsageRecords.status, ['draft', 'posted']),
+      ),
+    );
+  const keep = rows.filter((r) => r.status === 'draft' || (r.kind === 'usage' && !r.autoPosted));
+  if (keep.length === 0) return [];
+  const lines = await tx
+    .select({ recordId: stockUsageLines.recordId, itemId: stockUsageLines.itemId })
+    .from(stockUsageLines)
+    .where(inArray(stockUsageLines.recordId, keep.map((r) => r.id)));
+  const itemsOf = new Map<string, Set<string>>();
+  for (const l of lines) itemsOf.set(l.recordId, (itemsOf.get(l.recordId) ?? new Set<string>()).add(l.itemId));
+  return keep.map((r) => ({ id: r.id, storeId: r.storeId, usedOn: r.usedOn, status: r.status, kind: r.kind, itemIds: [...(itemsOf.get(r.id) ?? [])] }));
+}
+
+/** `recordId|itemId` of every out-of-band verification (a reason was given at the post) among these records. */
+export async function verifiedToleranceKeys(tx: Tx, orgId: string, recordIds: readonly string[]): Promise<Set<string>> {
+  if (recordIds.length === 0) return new Set();
+  const rows = await tx
+    .select({ entityId: auditLog.entityId, itemId: sql<string>`${auditLog.after} ->> 'itemId'` })
+    .from(auditLog)
+    .where(and(eq(auditLog.orgId, orgId), eq(auditLog.action, 'stock.usage_tolerance_verified'), inArray(auditLog.entityId, [...recordIds])));
+  return new Set(rows.map((r) => `${r.entityId}|${r.itemId}`));
+}
+
+export interface ScorecardStoreRow {
+  readonly storeId: string;
+  readonly storeName: string;
+  readonly pullDrafts: number;
+  readonly postedByManager: number;
+  readonly autoPosted: number;
+}
+
+/**
+ * Per store, over `used_on` in `[from, to]`: the usage records a pull made (any line of a non-void pull points at them), not void.
+ * Stores with none still get a row of zeros. `storeIds` limits the stores (a scoped manager).
+ */
+export async function usageCheckScorecardRows(
+  tx: Tx,
+  orgId: string,
+  from: string,
+  to: string,
+  storeIds: readonly string[],
+): Promise<ScorecardStoreRow[]> {
+  if (storeIds.length === 0) return [];
+  const counted = await tx
+    .select({
+      storeId: stockUsageRecords.storeId,
+      pullDrafts: sql<number>`count(*)::int`,
+      postedByManager: sql<number>`(count(*) filter (where ${stockUsageRecords.status} = 'posted' and not ${stockUsageRecords.autoPosted}))::int`,
+      autoPosted: sql<number>`(count(*) filter (where ${stockUsageRecords.autoPosted}))::int`,
+    })
+    .from(stockUsageRecords)
+    .where(
+      and(
+        eq(stockUsageRecords.orgId, orgId),
+        inArray(stockUsageRecords.storeId, [...storeIds]),
+        eq(stockUsageRecords.kind, 'usage'),
+        sql`${stockUsageRecords.status} <> 'void'`,
+        gte(stockUsageRecords.usedOn, from),
+        lte(stockUsageRecords.usedOn, to),
+        sql`exists (select 1 from pos_usage_pull_lines pl join pos_usage_pulls p on p.id = pl.pull_id
+                     where pl.usage_record_id = ${stockUsageRecords.id} and p.status <> 'void')`,
+      ),
+    )
+    .groupBy(stockUsageRecords.storeId);
+  const byStore = new Map(counted.map((r) => [r.storeId, r]));
+  const named = await tx
+    .select({ id: stores.id, name: stores.name })
+    .from(stores)
+    .where(and(eq(stores.orgId, orgId), inArray(stores.id, [...storeIds])));
+  return named
+    .map((s) => {
+      const c = byStore.get(s.id);
+      return { storeId: s.id, storeName: s.name, pullDrafts: c?.pullDrafts ?? 0, postedByManager: c?.postedByManager ?? 0, autoPosted: c?.autoPosted ?? 0 };
+    })
+    .sort((a, b) => a.storeName.localeCompare(b.storeName) || a.storeId.localeCompare(b.storeId));
+}
+
+/** Active store ids of the org (the scorecard's population, before the viewer's scope narrows it). */
+export async function activeStoreIds(tx: Tx, orgId: string): Promise<string[]> {
+  const rows = await tx.select({ id: stores.id }).from(stores).where(and(eq(stores.orgId, orgId), eq(stores.isActive, true)));
+  return rows.map((r) => r.id);
 }

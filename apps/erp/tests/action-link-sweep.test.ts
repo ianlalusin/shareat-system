@@ -427,7 +427,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1158 (T-387 S5-S7 on main) + 12 (T-390 S5 cutover UI) = 1170, measured after merging origin/main 12 Oct.
     // 1170 + 2 (T-404, 2026-10-14: /admin/stores "Open a branch" summary + /ap/suppliers/[id] invoice row link) = 1172.
     // release 2026-10-14: 1170 + 2 (T-404) + 18 (T-392 S5) + 86 (T-401 S4) + 16 (T-401 S5) = 1292.
-    expect(results.length).toBe(1292);
+    // 1292 -> 1302, T-401 S6 round 2 (15 Oct): +10 PASS, FAIL/UNRESOLVED unmoved. New /settings/usage-tolerance (two forms: 2 inputs + 1 select +
+    // 2 buttons, and the crumb link), the usage queue's check-date input and drafts link, the post form's reason input, and the day page's
+    // usage-queue link. Verified by running the census (1302).
+    expect(results.length).toBe(1302);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

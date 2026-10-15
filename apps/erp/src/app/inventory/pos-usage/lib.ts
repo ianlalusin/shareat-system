@@ -4,7 +4,7 @@
 import { eq, inArray } from 'drizzle-orm';
 import { posMappingRepo, posV1Repo, salesDaysRepo, schema, stockUsageRepo } from '@shareat/db';
 import type { PosV1FeedPurpose } from '@shareat/db/schema';
-import { buildPlan, pullHolds } from '@shareat/domain';
+import { buildPlan } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
@@ -53,9 +53,9 @@ export interface PullLineView {
   readonly locationName: string | null;
   readonly quantity: string | null;
   readonly usageRecordId: string | null;
+  /** T-401 S6: the status of the usage record this line went into ('draft' until a manager or the auto-post posts it). */
+  readonly recordStatus: string | null;
   readonly blocked: { reason: string } | null;
-  /** T-388 R12: why this unposted line would be held right now (plain words), or null. Live stock, not the stamp. */
-  readonly hold: string | null;
 }
 
 export interface PullView {
@@ -78,7 +78,6 @@ export async function pullView(orgId: string, pullId: string): Promise<PullView 
     const pull = await posMappingRepo.getPull(tx, pullId);
     if (!pull) return null;
     const lines = await posMappingRepo.listPullLines(tx, pullId);
-    const holds = await pullHolds(tx, orgId, pullId);
     const feed = pull.posV1DayFeedId ? await posV1Repo.getFeedById(tx, orgId, pull.posV1DayFeedId) : undefined;
 
     const itemIds = [...new Set(lines.map((l) => l.itemId).filter((v): v is string => !!v))];
@@ -92,6 +91,12 @@ export async function pullView(orgId: string, pullId: string): Promise<PullView 
     const itemNameById = new Map(itemRows.map((r) => [r.id, r.name]));
     const locationNameById = new Map(locationRows.map((r) => [r.id, r.name]));
 
+    const recordIds = [...new Set(lines.map((l) => l.usageRecordId).filter((v): v is string => !!v))];
+    const statusRows = recordIds.length
+      ? await tx.select({ id: schema.stockUsageRecords.id, status: schema.stockUsageRecords.status }).from(schema.stockUsageRecords).where(inArray(schema.stockUsageRecords.id, recordIds))
+      : [];
+    const statusById = new Map(statusRows.map((r) => [r.id, r.status as string]));
+
     const toView = (l: (typeof lines)[number]): PullLineView => ({
       lineKey: l.lineKey,
       posItemKey: l.posItemKey,
@@ -100,8 +105,8 @@ export async function pullView(orgId: string, pullId: string): Promise<PullView 
       locationName: l.locationId ? (locationNameById.get(l.locationId) ?? l.locationId) : null,
       quantity: l.quantity,
       usageRecordId: l.usageRecordId,
+      recordStatus: l.usageRecordId ? (statusById.get(l.usageRecordId) ?? null) : null,
       blocked: l.blocked,
-      hold: holds.get(l.lineKey) ?? null,
     });
 
     return {

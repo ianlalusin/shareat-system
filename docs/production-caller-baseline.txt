@@ -9,7 +9,6 @@ allocationsFor
 appendClientEvent
 applyCreditAction
 arrivalLag
-assertUsageSource
 assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
@@ -26,7 +25,6 @@ countedVariances
 createRecipe
 customerReturnableQuantity
 datesInWeek
-decideHolds
 declareSupplierItem
 depreciateAsset
 depreciationDrift
@@ -58,7 +56,6 @@ listPayRates
 listPunchesForDay
 listRecipeLines
 listRoster
-listUsageVariances
 listWriteOffsForCharge
 markReviewed
 mintUniqueToken
@@ -76,6 +73,7 @@ positionsBySupplier
 previewDrawingClose
 projectStoreMenu
 proxy
+pullHolds
 purgeComplete
 rateFor
 realSourceTypesForSpecName
@@ -99,7 +97,6 @@ scaleRecipeToTarget
 seedCanonicalPositions
 setCostBasisItem
 setItemPricing
-setLineUsageRecord
 setTillFloat
 signOffPack
 sumTender
@@ -116,6 +113,7 @@ updateMoneyAccount
 updateOwner
 upsertCategoryLife
 upsertPolicy
+usageCheckScorecard
 validateFingerprintTemplates
 voidShift
 withPrincipal

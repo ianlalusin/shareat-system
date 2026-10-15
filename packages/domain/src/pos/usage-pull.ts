@@ -1,10 +1,13 @@
 /**
  * The daily POS usage pull — plan then finalize. T-177.
  *
- * ⭐ **T-401 S6 (bible row 335, Ian 2026-10-14): the pull is a CHECK ONLY.** It used to write T-168 usage records and post stock out
- * (T-177 invariant 5). It no longer does: manager-posted staff usage drafts (`stock/usage-records.ts` `postUsage`) are the actual usage
- * that moves stock, and this plan is the expectation `stock/usage-tolerance.ts` compares them against (+-10% by default). Finalize
- * reviews and stamps the sections and writes no usage record and no stock movement. The T-177/T-388 text below that speaks of posting,
+ * ⭐ **T-401 S6 (Ian 2026-10-14, then 15 Oct): finalizing the pull CREATES A USAGE DRAFT and moves no stock.** The pull used to write
+ * T-168 usage records and post stock out (T-177 invariant 5). Now finalizing a section writes ONE T-168 usage record per (store, day,
+ * ROOM) with status `draft`, authored by the org's system person, one line per covered item at the EXPECTED quantity; staff edit the
+ * lines to actuals and a manager posts (`stock/usage-records.ts` `postUsage`), or the system posts it at 14:00 Manila the next day
+ * (`stock/usage-auto-post.ts`). Finalize is idempotent: a draft already there for that store + day + room (made by an earlier
+ * section, or started by staff) is added to, never duplicated, and a quantity staff typed is never overwritten. The plan is also the
+ * expectation `stock/usage-tolerance.ts` holds the drafts to (+-10% by default). The T-177/T-388 text below that speaks of posting,
  * holds and frozen rooms is history; it applies to pulls finalized before S6 (their records are still voidable with the pull).
  *
  * ⭐ **The server rebuilds the plan at finalize time** (invariant 2) — it does not trust the STORED
@@ -43,6 +46,8 @@ import {
   posMappingRepo,
   posV1Repo,
   salesDaysRepo,
+  stockLocationsRepo,
+  stockUsageRepo,
   storesRepo,
   type Tx,
 } from '@shareat/db';
@@ -52,8 +57,8 @@ import { closedStockPeriodSentence } from '../stock/period-guard';
 import { lockLiveSalesDay } from '../sales-days/live-day';
 import { RefusalError, gone, humanDate, internalFault, refuse } from '../shared/refusal';
 import { toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
-import { compareQuantity, quantity } from '../stock/quantity';
-import type { HeldLine } from './usage-holds';
+import { addQuantity, compareQuantity, quantity, ZERO_QUANTITY } from '../stock/quantity';
+import { assertUsageSource } from '../stock-locations/rules';
 import { loadDepletionLookups, planInstant } from './depletion-source';
 import { explodePosSales, type PlanLine, type PlanSection, type PosSoldItemInput } from './plan';
 import { sameItemsProjection, soldItemsFromFeed } from './v1-sold-items';
@@ -311,12 +316,117 @@ export async function buildPlan(tx: Tx, actor: Actor, input: BuildPlanInput): Pr
 // T-388 holds - RETIRED by T-401 S6
 // -----------------------------------------------------------------------------------------
 /**
- * T-401 S6 (bible row 335): the pull takes nothing out of stock any more, so no line can be held for short stock, a room under
- * count or a room that cannot take usage. The map stays (the page still asks) and is always empty. A manager-posted usage
- * draft meets those checks when it posts (`postUsage`), not here.
+ * T-401 S6 (bible row 335): finalizing takes nothing out of stock any more, so no line can be held for short stock, a room under
+ * count or a room that cannot take usage. The map stays (the page still asks) and is always empty. The draft meets those checks when
+ * it posts (`postUsage`, or the auto-post), not here.
  */
 export async function pullHolds(_tx: Tx, _orgId: string, _pullId: string): Promise<ReadonlyMap<string, string>> {
   return new Map<string, string>();
+}
+
+// -----------------------------------------------------------------------------------------
+// The day's usage draft (T-401 S6, Ian 15 Oct)
+// -----------------------------------------------------------------------------------------
+interface DraftInputLine {
+  readonly key: string;
+  readonly itemId: string;
+  readonly locationId: string;
+  readonly quantity: string;
+}
+
+/** The confirmed, usable, unlinked lines of one section of the fresh rebuild. */
+function draftCandidates(freshLines: readonly PlanLine[], section: PlanSection, confirmed: ReadonlySet<string>, linkedKeys: ReadonlySet<string>): DraftInputLine[] {
+  const out: DraftInputLine[] = [];
+  for (const l of freshLines) {
+    if (l.section !== section || !confirmed.has(l.key) || linkedKeys.has(l.key) || l.blocked) continue;
+    if (!l.itemId || !l.quantity || !l.locationId) continue;
+    if (compareQuantity(quantity(l.quantity), ZERO_QUANTITY) <= 0) continue;
+    out.push({ key: l.key, itemId: l.itemId, locationId: l.locationId, quantity: l.quantity });
+  }
+  return out;
+}
+
+/** Rooms a usage record cannot be drawn from (not operating, inactive, storage), by name, for the sentence. */
+async function unusableRoomNames(tx: Tx, lines: readonly DraftInputLine[]): Promise<string[]> {
+  const names: string[] = [];
+  for (const roomId of [...new Set(lines.map((l) => l.locationId))]) {
+    const room = await stockLocationsRepo.getLocation(tx, roomId);
+    if (!room || !assertUsageSource(room).ok) names.push(room?.name ?? 'a room');
+  }
+  return names;
+}
+
+/**
+ * Writes the section's lines into the day's usage DRAFT, one draft per (store, day, room). A draft already there (an earlier
+ * section's, or one staff started) is added to under its row lock: an item with no line gets one at the expected quantity; an item whose
+ * line still equals what the pull put there grows by the new expectation; an item whose line staff changed is left alone (the
+ * band check at post time reads the difference). Every line is then linked to its record, with the plan quantity.
+ * Returns the number of pull lines linked.
+ */
+async function writeDayDraft(
+  tx: Tx,
+  pull: { id: string; orgId: string; storeId: string },
+  usedOn: string,
+  inputs: readonly DraftInputLine[],
+): Promise<number> {
+  if (inputs.length === 0) return 0;
+  const author = await stockUsageRepo.systemAuthorId(tx, pull.orgId);
+  const byRoom = new Map<string, DraftInputLine[]>();
+  for (const l of inputs) byRoom.set(l.locationId, [...(byRoom.get(l.locationId) ?? []), l]);
+
+  let linkedCount = 0;
+  for (const [locationId, group] of byRoom) {
+    // Expected per item in this room: the sum of its pull lines.
+    const expected = new Map<string, ReturnType<typeof quantity>>();
+    for (const l of group) expected.set(l.itemId, addQuantity(expected.get(l.itemId) ?? ZERO_QUANTITY, quantity(l.quantity)));
+
+    const found = await stockUsageRepo.findUsageDraftForUpdate(tx, pull.storeId, usedOn, locationId);
+    let recordId: string;
+    if (!found) {
+      const made = await stockUsageRepo.insertUsageRecord(tx, { orgId: pull.orgId, storeId: pull.storeId, locationId, kind: 'usage', usedOn, createdBy: author });
+      recordId = made.id;
+      await stockUsageRepo.insertUsageLines(
+        tx,
+        recordId,
+        [...expected].map(([itemId, q], i) => ({ lineNo: String(i + 1), itemId, quantity: q })),
+      );
+    } else {
+      recordId = found.id;
+      const existing = await stockUsageRepo.listUsageLines(tx, recordId);
+      // What the pull has already put in this record, per item (its linked lines, any section).
+      const linked = (await posMappingRepo.listPullLines(tx, pull.id)).filter((x) => x.usageRecordId === recordId && x.itemId && x.quantity);
+      const pulled = new Map<string, ReturnType<typeof quantity>>();
+      for (const x of linked) pulled.set(x.itemId!, addQuantity(pulled.get(x.itemId!) ?? ZERO_QUANTITY, quantity(x.quantity!)));
+      let nextNo = existing.reduce((m, l) => Math.max(m, Number(l.lineNo) || 0), existing.length) + 1;
+      const fresh: { lineNo: string; itemId: string; quantity: ReturnType<typeof quantity> }[] = [];
+      for (const [itemId, q] of expected) {
+        const mine = existing.filter((l) => l.itemId === itemId);
+        if (mine.length === 0) {
+          fresh.push({ lineNo: String(nextNo++), itemId, quantity: q });
+          continue;
+        }
+        const have = addQuantity(...mine.map((l) => quantity(l.quantity)));
+        const put = pulled.get(itemId);
+        // Untouched since the pull wrote it: the new expectation is added. Anything else is somebody's actual: leave it.
+        if (put !== undefined && compareQuantity(have, put) === 0) {
+          await stockUsageRepo.updateUsageLineQuantity(tx, mine[0]!.id, addQuantity(have, q));
+        }
+      }
+      await stockUsageRepo.insertUsageLines(tx, recordId, fresh);
+    }
+
+    const linkedRows = await posMappingRepo.setLineUsageRecord(
+      tx,
+      pull.id,
+      group.map((l) => ({ lineKey: l.key, itemId: l.itemId, locationId: l.locationId, quantity: quantity(l.quantity), usageRecordId: recordId })),
+    );
+    const unlinked = group.filter((_, i) => linkedRows[i] !== 1);
+    if (unlinked.length > 0) {
+      throw internalFault(`finalizeSections: pull ${pull.id}: ${unlinked.length} line(s) matched other than one stored row (${unlinked.map((l) => l.key).join(', ')})`);
+    }
+    linkedCount += group.length;
+  }
+  return linkedCount;
 }
 
 // -----------------------------------------------------------------------------------------
@@ -332,12 +442,15 @@ export interface SectionOutcome {
   readonly section: PlanSection;
   readonly ok: boolean;
   readonly reason?: string;
+  /** Always 0 since T-401 S6: finalizing posts nothing. Kept so older readers still see the field. */
   readonly postedLineCount: number;
-  /** T-388: the confirmed lines left unposted by this call (short stock, a room under count, a room that can't take usage). */
-  readonly held: readonly HeldLine[];
-  /** T-388 R11: one sentence per held (item, room), then the closing untick sentence; [] when nothing is held. */
+  /** T-401 S6 (Ian 15 Oct): the plan lines this call wrote into the day's usage draft (linked to it, no stock moved). */
+  readonly draftedLineCount: number;
+  /** Always empty since T-401 S6 (nothing is held back any more). */
+  readonly held: readonly never[];
+  /** Always empty since T-401 S6. */
   readonly heldSentences: readonly string[];
-  /** T-388 R7: true only when THIS call stamped the section (nothing confirmed left unposted). */
+  /** True when THIS call stamped the section. */
   readonly finalized: boolean;
 }
 
@@ -435,12 +548,22 @@ export async function finalizeSections(tx: Tx, actor: Actor, input: FinalizeSect
     }
   }
 
+  const postedKeys = new Set(postedStored.map((l) => l.lineKey));
+
   // T-401 S6: nothing is posted here, so a closed stock month is no reason to refuse (the draft's own post meets the period lock).
+  // A room a usage cannot be drawn from would make the draft insert fail halfway: refused here, before any write, with the room named.
+  const toWrite = requestedSections.flatMap((section) =>
+    section === 'orphan' || alreadyFinalized[section] ? [] : draftCandidates(freshLines, section, confirmedSet, postedKeys),
+  );
+  const badRooms = await unusableRoomNames(tx, toWrite);
+  if (badRooms.length > 0) {
+    return fail(`${badRooms.join(', ')} can't take usage (it is not an operating room, or it is inactive). Pick another room for this plan and build it again.`);
+  }
 
   // From here on, a refusal after a write THROWS (never `return { ok: false }`): the caller commits on `ok: false`.
   for (const section of requestedSections) {
     if (alreadyFinalized[section]) {
-      results.push({ section, ok: false, reason: `the ${section} section was already finalized`, postedLineCount: 0, held: [], heldSentences: [], finalized: false });
+      results.push({ section, ok: false, reason: `the ${section} section was already finalized`, postedLineCount: 0, draftedLineCount: 0, held: [], heldSentences: [], finalized: false });
       continue;
     }
 
@@ -449,16 +572,18 @@ export async function finalizeSections(tx: Tx, actor: Actor, input: FinalizeSect
       // this section's review is done for today, so it stops being offered as "open."
       await posMappingRepo.markSectionFinalized(tx, pull.id, 'orphan');
       alreadyFinalized.orphan = new Date();
-      results.push({ section, ok: true, postedLineCount: 0, held: [], heldSentences: [], finalized: true });
+      results.push({ section, ok: true, postedLineCount: 0, draftedLineCount: 0, held: [], heldSentences: [], finalized: true });
       continue;
     }
 
-    // T-401 S6 (bible row 335, Ian 2026-10-14): CHECK ONLY. The manager-posted staff usage drafts are what move stock (actual
-    // usage); this pull is the expectation they are compared against, so finalizing it writes no usage record and no stock
-    // movement, and nothing can be held. The section is reviewed and stamped, as an orphan section always was.
+    // T-401 S6 (Ian 15 Oct): the confirmed lines go into the day's usage DRAFT at their expected quantity. No stock moves, no journal
+    // entry; the section is reviewed and stamped. Posting is the manager's (or the system's, next afternoon).
+    const inputs = draftCandidates(freshLines, section, confirmedSet, postedKeys);
+    const drafted = await writeDayDraft(tx, { id: pull.id, orgId: pull.orgId, storeId: pull.storeId }, salesDay.businessDate, inputs);
+    for (const l of inputs) postedKeys.add(l.key);
     await posMappingRepo.markSectionFinalized(tx, pull.id, section);
     alreadyFinalized[section] = new Date();
-    results.push({ section, ok: true, postedLineCount: 0, held: [], heldSentences: [], finalized: true });
+    results.push({ section, ok: true, postedLineCount: 0, draftedLineCount: drafted, held: [], heldSentences: [], finalized: true });
   }
 
   // T-377 S2 (DEF-597, R2/R3): ALL OR NONE. When EVERY unstamped section is empty in BOTH the stored plan (read after
@@ -541,6 +666,10 @@ export async function voidPosUsagePull(
   const closed = dayClosed === null ? null : await closedStockPeriodSentence(tx, pull.orgId, voidedOn, 'voided');
   if (closed) throw refuse(`${raw}: stock month closed for ${voidedOn}`, closed);
 
+  // T-401 S6: a draft this pull made is simply removed (it never moved stock); one staff started and the pull only added to keeps
+  // staff's lines and is merely unlinked. Done before the posted records are reversed, so the day is free to pull again.
+  await removePullDrafts(tx, pull);
+
   const recordIds = await posMappingRepo.postedUsageRecordIdsForPull(tx, pull.id);
   for (const recordId of recordIds) {
     const result = await voidPullUsageRecord(tx, { recordId, reason, voidedOn, voidedBy: actor.personId });
@@ -551,4 +680,18 @@ export async function voidPosUsagePull(
 
   await posMappingRepo.markPullVoid(tx, pull.id, actor.personId, reason);
   return { ok: true, reversedRecordCount: recordIds.length };
+}
+
+/** Unlinks the pull's lines from their DRAFT records and deletes the drafts the system itself authored. */
+async function removePullDrafts(tx: Tx, pull: { id: string; orgId: string }): Promise<void> {
+  const draftIds = await posMappingRepo.draftUsageRecordIdsForPull(tx, pull.id);
+  if (draftIds.length === 0) return;
+  const author = await stockUsageRepo.systemAuthorId(tx, pull.orgId);
+  for (const recordId of draftIds) {
+    await posMappingRepo.clearLineUsageRecord(tx, pull.id, recordId);
+    const record = await stockUsageRepo.getUsageRecord(tx, recordId);
+    if (record && record.status === 'draft' && record.createdBy === author && !(await posMappingRepo.recordHasOtherPullLines(tx, recordId, pull.id))) {
+      await stockUsageRepo.deleteUsageDraft(tx, recordId);
+    }
+  }
 }

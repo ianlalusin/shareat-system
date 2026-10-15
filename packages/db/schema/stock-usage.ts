@@ -25,6 +25,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   date,
   index,
@@ -88,9 +89,15 @@ export const stockUsageRecords = pgTable(
     createdBy: uuid('created_by')
       .notNull()
       .references(() => persons.id, { onDelete: 'restrict' }),
+    /**
+     * T-401 S6 (migration 0198). True when the system posted this record itself (`autoPostDueUsageDrafts`, 14:00 Manila the day
+     * after its business date) instead of a manager. Out-of-band lines of such a record were posted at the EXPECTED quantity.
+     */
+    autoPosted: boolean('auto_posted').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check('stock_usage_auto_posted_shape_check', sql`${t.autoPosted} = false or ${t.postedAt} is not null`),
     check('stock_usage_wastage_reason_check', sql`${t.kind} <> 'wastage' or ${t.reasonCode} is not null`),
     check('stock_usage_reason_only_on_wastage_check', sql`${t.kind} = 'wastage' or ${t.reasonCode} is null`),
     check(
