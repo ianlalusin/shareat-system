@@ -6,7 +6,7 @@ import { createDeliveryAction } from './actions';
 import { deliveryFormData, deliveryRegister, listStores } from './lib';
 import { NewDeliveryForm } from './NewDeliveryForm';
 import { Page } from '@/components/shell/Page';
-import { Badge, FlashBanner, Select } from '@/components/ui';
+import { Badge, FlashBanner, LinkRow, RowLink, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -106,11 +106,11 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
               </thead>
               <tbody>
                 {deliveries.map((d) => (
-                  <tr key={d.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={d.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
-                      <Link href={`/inventory/deliveries/${d.id}`} className="underline underline-offset-4">
+                      <RowLink href={`/inventory/deliveries/${d.id}`}>
                         {d.deliveredOn}
-                      </Link>
+                      </RowLink>
                     </td>
                     <td className="px-3 py-2">{KIND_LABEL[d.kind] ?? d.kind}</td>
                     <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{d.supplierName ?? '—'}</td>
@@ -120,7 +120,7 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
                     <td className="px-3 py-2">
                       <Badge status={d.status} />
                     </td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>

@@ -5,7 +5,7 @@ import { listStores, listCategoriesGrouped, withOrgPrincipal } from './lib';
 import { requireSession } from '../../lib/session';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, Select } from '@/components/ui';
+import { Badge, Button, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Expenses — Shareat System' };
 
@@ -111,20 +111,20 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
             </thead>
             <tbody>
               {expenses.map((e) => (
-                <tr key={e.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                <LinkRow key={e.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-2 font-mono text-neutral-500 dark:text-neutral-400">{e.businessDate}</td>
                   <td className="px-3 py-2">{storeById.get(e.storeId)?.code ?? e.storeId}</td>
                   <td className="px-3 py-2">{categoryLabelById.get(e.categoryId) ?? e.categoryId}</td>
                   <td className="px-3 py-2">
-                    <a href={`/expenses/${e.id}?${carry}`} className="underline hover:no-underline">
+                    <RowLink href={`/expenses/${e.id}?${carry}`}>
                       {e.particulars}
-                    </a>
+                    </RowLink>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatMoney(money(e.totalAmount))}</td>
                   <td className="px-3 py-2">
                     <Badge status={e.status} />
                   </td>
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
           </table>

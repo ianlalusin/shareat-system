@@ -103,15 +103,16 @@ describe('T-262 — geometry model self-check (§6.2 step 4, measured in a real 
     expect(hit).toMatchObject({ status: 'fail', px: 22 });
   });
 
-  it('app/customers/page.tsx <Link> inheriting text-sm models to 20px, under the 24px floor (measured 196×19 — 1px is inline content-height, not model error)', () => {
-    const line = lineOfOpeningTag(
-      resolve(srcRoot, 'app/customers/page.tsx'),
-      '<Link',
-      'href={`/customers/${c.id}`}',
-    );
-    const hit = results.find((r) => r.file === 'app/customers/page.tsx' && r.line === line && r.tag === 'Link');
-    expect(hit).toBeDefined();
-    expect(hit).toMatchObject({ status: 'fail', px: 20 });
+  it('app/customers/page.tsx register row links to its customer via <RowLink> inside a <LinkRow> (T-411: the whole row is the tap target, so it is not a census candidate)', () => {
+    // Was: a bare <Link> inheriting text-sm, modelled at 20px (measured 196×19). T-411 moved it to
+    // <RowLink>, which the census does not model (only the bare `Link` tag is a candidate). The
+    // intent — the customers list still links each row to its customer — is checked from source.
+    const file = resolve(srcRoot, 'app/customers/page.tsx');
+    const line = lineOfOpeningTag(file, '<RowLink', 'href={`/customers/${c.id}`}');
+    const hit = results.find((r) => r.file === 'app/customers/page.tsx' && r.line === line);
+    expect(hit).toBeUndefined();
+    const above = readFileSync(file, 'utf8').split(/\r?\n/).slice(Math.max(0, line - 12), line).join('\n');
+    expect(above).toMatch(/<LinkRow\b/);
   });
 });
 
@@ -222,7 +223,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 49 -> 48 UNRESOLVED, T-387 S5 2026-10-11: components/dashboard/Tile.tsx retired (its baseline entry removed). FAIL unmoved at 148.
     // 148 -> 147 FAIL, T-387 S7 2026-10-11: app/staff/page.tsx's 20px name link in the old table is gone (the page is now the
     // ID-card wall plus the live roster, every control min-h-11); its touch-target-baseline.json entry is removed.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 147, unresolved: 48 });
+    // 116 FAIL / 1259 total, T-411 2026-10-15: 30 tables' row links are full-height rows (h-11).
+    // components/ui/Table.tsx UNRESOLVED (T-411): RowLink's tap target is its stretched ::after (absolute inset-0) over the
+    // enclosing LinkRow, which is h-11 (44px); RowLink's own class carries no height by design.
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 48 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -427,7 +431,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1158 (T-387 S5-S7 on main) + 12 (T-390 S5 cutover UI) = 1170, measured after merging origin/main 12 Oct.
     // 1170 + 2 (T-404, 2026-10-14: /admin/stores "Open a branch" summary + /ap/suppliers/[id] invoice row link) = 1172.
     // release 2026-10-14: 1170 + 2 (T-404) + 18 (T-392 S5) + 86 (T-401 S4) + 16 (T-401 S5) = 1292.
-    expect(results.length).toBe(1292);
+    // 116 FAIL / 1259 total, T-411 2026-10-15: 30 tables' row links are full-height rows (h-11).
+    expect(results.length).toBe(1259);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

@@ -12,7 +12,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Owners — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -100,16 +100,16 @@ export default async function OwnersPage({
             </thead>
             <tbody>
               {owners.map((o) => (
-                <tr
+                <LinkRow
                   key={o.id}
                   className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
                     o.status === 'active' ? '' : 'opacity-60'
                   }`}
                 >
                   <td className="px-3 py-2">
-                    <Link href={`/owners/${o.id}`} className="underline underline-offset-2">
+                    <RowLink href={`/owners/${o.id}`}>
                       {personById.get(o.personId)?.displayName ?? 'Unknown'}
-                    </Link>
+                    </RowLink>
                     <div className="text-xs text-neutral-400 dark:text-neutral-600">
                       {o.role ?? '—'}
                       {o.ownershipPercentage && (
@@ -137,7 +137,7 @@ export default async function OwnersPage({
                       ? `${peso(o.drawingLimit)} ${o.drawingLimitPeriod}`
                       : 'none'}
                   </td>
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
           </table>

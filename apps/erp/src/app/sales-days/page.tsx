@@ -6,7 +6,7 @@ import { requireSession } from '../../lib/session';
 import { withOrgPrincipal } from '../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Banner, Button, Select } from '@/components/ui';
+import { Badge, Banner, Button, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Sales days — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -123,11 +123,11 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
             </thead>
             <tbody>
               {days.map((d) => (
-                <tr key={d.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                <LinkRow key={d.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-2 font-mono">
-                    <a href={`/sales-days/${d.id}?${carry.toString()}`} className="underline hover:no-underline">
+                    <RowLink href={`/sales-days/${d.id}?${carry.toString()}`}>
                       {d.businessDate}
-                    </a>
+                    </RowLink>
                   </td>
                   <td className="px-3 py-2">{storeById.get(d.storeId)?.code ?? d.storeId}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatMoney(money(d.totalSales))}</td>
@@ -142,7 +142,7 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
                   <td className="px-3 py-2">
                     <Badge status={d.status} />
                   </td>
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
           </table>

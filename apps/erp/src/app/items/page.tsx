@@ -12,7 +12,7 @@ import { listItems, mayApproveItem, pendingRequestCodes, pendingRequests, duplic
 import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
-import { Banner, Button, Checkbox, FlashBanner, Input, Select, FormGrid, Field } from '@/components/ui';
+import { Banner, Button, Checkbox, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, Field } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Items — Shareat System' };
@@ -198,9 +198,9 @@ export default async function ItemsPage({
               </thead>
               <tbody>
                 {items.map((i) => (
-                  <tr key={i.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={i.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
-                      <a href={`/items/${i.id}`} className="underline hover:no-underline">{i.name}</a>
+                      <RowLink href={`/items/${i.id}`}>{i.name}</RowLink>
                       {i.status !== 'active' && (
                         <span className="ml-2 text-xs text-neutral-500">({i.status})</span>
                       )}
@@ -209,7 +209,7 @@ export default async function ItemsPage({
                     <td className="px-3 py-2">{itemKindLabel(i.kind)}</td>
                     <td className="px-3 py-2">{i.baseUnit}</td>
                     <td className="px-3 py-2 text-xs text-neutral-600 dark:text-neutral-400">{soldAsLabel(i)}</td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>

@@ -9,7 +9,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, FlashBanner, Select } from '@/components/ui';
+import { Badge, Banner, FlashBanner, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Usage & wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -112,11 +112,11 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
               </thead>
               <tbody>
                 {records.map((r) => (
-                  <tr key={r.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={r.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
-                      <Link href={`/inventory/usage/${r.id}`} className="underline underline-offset-4">
+                      <RowLink href={`/inventory/usage/${r.id}`}>
                         {r.usedOn}
-                      </Link>
+                      </RowLink>
                     </td>
                     <td className="px-3 py-2">{KIND_LABEL[r.kind] ?? r.kind}</td>
                     <td className="px-3 py-2">{r.locationName}</td>
@@ -127,7 +127,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
                     <td className="px-3 py-2">
                       <Badge status={r.status} />
                     </td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>

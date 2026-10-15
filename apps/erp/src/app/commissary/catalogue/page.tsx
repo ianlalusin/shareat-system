@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { commissaryCatalogueRepo } from '@shareat/db';
 import { requireSession } from '../../../lib/session';
 import { removeMapAction, upsertLinkAction, upsertMapAction, upsertOfferingAction } from './actions';
@@ -13,7 +12,7 @@ import {
 } from './lib';
 import { selectDefaultCommissaryStoreId } from './default-store';
 import { Page } from '@/components/shell/Page';
-import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Button, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -116,20 +115,17 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
               </thead>
               <tbody>
                 {links.map((l) => (
-                  <tr key={l.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={l.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
                       {l.branchName} <span className="ml-1 font-mono text-xs text-neutral-500">{l.branchCode}</span>
                     </td>
                     <td className="px-3 py-2">{l.status}</td>
                     <td className="px-3 py-2">
-                      <Link
-                        href={`/commissary/catalogue?commissary=${commissaryStoreId}&branch=${l.branchStoreId}`}
-                        className="underline underline-offset-4"
-                      >
+                      <RowLink href={`/commissary/catalogue?commissary=${commissaryStoreId}&branch=${l.branchStoreId}`}>
                         Map items →
-                      </Link>
+                      </RowLink>
                     </td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>

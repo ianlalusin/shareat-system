@@ -12,7 +12,7 @@ import {
 import type { QueuedDay, ReviewDayRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, Input, Select } from '@/components/ui';
+import { Badge, Button, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Attendance review — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -186,11 +186,11 @@ function QueueRow({ day }: { day: QueuedDay }) {
 
 function RosterRow({ day }: { day: ReviewDayRow }) {
   return (
-    <tr className="border-t border-surface-border">
+    <LinkRow className="border-t border-surface-border">
       <td className="py-2 pr-4">
-        <Link href={`/attendance/${day.id}`} className="underline underline-offset-2">
+        <RowLink href={`/attendance/${day.id}`}>
           {day.shiftDay}
-        </Link>
+        </RowLink>
       </td>
       <td className="pr-4">{day.personName}</td>
       <td className="pr-4 text-right tabular-nums">
@@ -208,6 +208,6 @@ function RosterRow({ day }: { day: ReviewDayRow }) {
         <Badge status={day.status} />
         {day.frozenAt ? ' · frozen' : ''}
       </td>
-    </tr>
+    </LinkRow>
   );
 }

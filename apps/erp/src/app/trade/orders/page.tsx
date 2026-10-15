@@ -6,7 +6,7 @@ import { listStores, orderFormData, orderRegister, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, FlashBanner, Select } from '@/components/ui';
+import { Badge, FlashBanner, LinkRow, RowLink, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Trade orders — Shareat System' };
@@ -90,11 +90,11 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
             </thead>
             <tbody>
               {orders.map((o) => (
-                <tr key={o.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                <LinkRow key={o.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-2 tabular-nums">
-                    <Link href={`/trade/orders/${o.id}`} className="underline underline-offset-4">
+                    <RowLink href={`/trade/orders/${o.id}`}>
                       {o.orderDate}
-                    </Link>
+                    </RowLink>
                     {o.referenceNo && <span className="ml-2 text-xs text-neutral-500">{o.referenceNo}</span>}
                   </td>
                   <td className="px-3 py-2">
@@ -111,7 +111,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
                   <td className="px-3 py-2"><Badge status={o.status} /></td>
                   <td className="px-3 py-2 text-right tabular-nums">{o.lineCount}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(o.totalAmount)}</td>
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
           </table>
