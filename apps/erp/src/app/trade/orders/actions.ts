@@ -81,7 +81,7 @@ export async function dispatchOrderAction(fd: FormData): Promise<void> {
     // and a world apart (the customers screen makes the same point).
     message =
       result.treatment === 'internal'
-        ? 'Dispatched. The goods are in transit at cost (1340) and the commissary’s stock is relieved; ' +
+        ? 'Dispatched. The goods are in transit at cost and the commissary’s stock is relieved; ' +
           'both stores’ books move when the branch confirms what actually arrived.'
         : 'Dispatched and billed: the receivable is raised against the customer, stock is relieved ' +
           'and cost of sales posted.' +

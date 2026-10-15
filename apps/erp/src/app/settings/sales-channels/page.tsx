@@ -15,6 +15,7 @@ import { Banner, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/c
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { SALES_CHANNEL_EDIT } from './typed-forms';
+import { accountLabel } from '@/lib/account-label';
 
 export const metadata = { title: 'Sales channels — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -154,7 +155,7 @@ export default async function SalesChannelsSettingsPage({
               <div>
                 <span className="font-medium">{c.name}</span>{' '}
                 <span className="text-neutral-500 dark:text-neutral-400">
-                  · {c.isRemittedDaily ? 'reached the till' : `settled to ${c.receivableAccountCode}`}
+                  · {c.isRemittedDaily ? 'reached the till' : `settled to ${accountLabel(c.receivableAccountCode)}`}
                 </span>
               </div>
               <form action={setSalesChannelActiveAction}>

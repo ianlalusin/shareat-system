@@ -226,7 +226,7 @@ export async function recordCollectionAction(formData: FormData): Promise<void> 
     message =
       `Collected. ₱${result.allocated} settled against named charges` +
       (compare(money(result.surplus), ZERO) > 0
-        ? `, and ₱${result.surplus} more than was owed is now store credit (2140) they can spend next time.`
+        ? `, and ₱${result.surplus} more than was owed is now store credit they can spend next time.`
         : '.');
   } catch (err) {
     return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { error: errorMessage(err) });
@@ -287,7 +287,7 @@ export async function writeOffChargeAction(formData: FormData): Promise<void> {
     // implying a second write-off just posted.
     message = result.alreadyRecorded
       ? 'This write-off was already recorded — nothing new was posted.'
-      : `₱${amount} written off to bad debt (6860). Entry ${result.entryId.slice(0, 8)}.`;
+      : `₱${amount} written off to bad debt. Entry ${result.entryId.slice(0, 8)}.`;
   } catch (err) {
     // ⛔ The domain refuses the charge's own author, and that refusal is SURFACED rather than
     // pre-empted. Hiding the button for that person would teach that write-off is unavailable,

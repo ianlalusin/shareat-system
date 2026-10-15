@@ -237,7 +237,7 @@ export async function resolveVarianceAction(formData: FormData): Promise<void> {
           reason: str(formData, 'reason') || null,
         }),
       );
-      ok = 'Overage recognised as other income (7350).';
+      ok = 'Overage recognised as other income.';
     } else if (action === 'write_off') {
       // T-366 A1 (Ian, 2026-09-30): no write-off — a shortage is always charged to a person. The
       // screen no longer offers one, and the domain refuses it regardless of what a form posts.

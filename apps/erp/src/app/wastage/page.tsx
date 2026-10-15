@@ -161,7 +161,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
               <select name="disposition" defaultValue="" className="mt-1 block w-full min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink">
                 <option value="">(reviewed channel — leave blank)</option>
                 <option value="platform_paid">Platform paid — posts nothing</option>
-                <option value="absorbed">Store absorbs — Dr 5300</option>
+                <option value="absorbed">Store absorbs — booked as wastage</option>
               </select>
             </Field>
           </FormGrid>

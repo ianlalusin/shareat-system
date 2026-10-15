@@ -77,7 +77,7 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
         <strong>This is a business record, not a BIR return.</strong> Shareat System is a management
         ledger and computes no VAT — amounts here are recorded as the till calculated them. Nothing
         on this page posts to the ledger; the daily senior/PWD totals on the sales day remain the
-        only figures that reach account 4900.
+        only figures that reach sales discounts in the ledger.
       </Banner>
 
       {/* ⛔ The honest caveat, and it is the important one on this screen. There is no paper

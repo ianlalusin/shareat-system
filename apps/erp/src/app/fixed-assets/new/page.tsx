@@ -37,7 +37,7 @@ export default async function NewAssetPage({
         <PageDescription>
           Adding it here records what the business owns.{' '}
           <strong>It does not post the purchase</strong> — an asset bought through an expense is
-          already in 1510. Use this for something being brought onto the register directly.
+          already on the books as equipment. Use this for something being brought onto the register directly.
         </PageDescription>
       </div>
 

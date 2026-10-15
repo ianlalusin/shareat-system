@@ -349,7 +349,7 @@ export default async function AssetDetailPage({
               <h2 className="font-medium text-danger">Dispose / write off</h2>
               <p className="text-sm text-neutral-600 dark:text-neutral-400">
                 Clears the accumulated depreciation, removes the cost, and writes the remaining{' '}
-                <strong>{formatMoney(bookValue)}</strong> off to loss on disposal (7400). This is a
+                <strong>{formatMoney(bookValue)}</strong> off to loss on disposal. This is a
                 write-off at zero proceeds — there is no sale-with-proceeds flow.
               </p>
               <form action={disposeAssetAction} className="space-y-3">
