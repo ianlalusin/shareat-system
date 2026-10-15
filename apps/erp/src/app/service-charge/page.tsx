@@ -86,7 +86,7 @@ export default async function ServiceChargePage({
         </div>
         <div className="font-mono text-lg font-medium tabular-nums">{peso(balance)}</div>
         <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">
-          ⭐ Derived from the ledger — `2160`, credits minus debits, this store only. A store may
+          ⭐ Derived from the ledger — the service charge float, credits minus debits, this store only. A store may
           never spend another store&apos;s float.
         </p>
       </div>

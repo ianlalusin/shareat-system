@@ -15,6 +15,7 @@ import { personName } from '@/lib/person-name';
 import { typedFor } from '@/lib/keep-typing';
 import { EXPENSE_DRAFT_EDIT } from '../typed-forms';
 import { EditableRecord } from '@/components/forms';
+import { accountCodeAndName } from '@/lib/account-label';
 import { Badge, Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
@@ -334,7 +335,7 @@ function LedgerTable({ lines }: { lines: EntryLineWithAccountCode[] }) {
           {lines.map((l) => (
             <tr key={l.lineNo} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
               <td className="px-3 py-2 text-neutral-400">{l.lineNo}</td>
-              <td className="px-3 py-2 font-mono">{l.accountCode}</td>
+              <td className="px-3 py-2">{accountCodeAndName(l.accountCode)}</td>
               <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400">
                 {l.partyType ? `${l.partyType}:${l.partyId}` : '—'}
               </td>

@@ -28,11 +28,19 @@ export const ACCOUNT_WORDS: Record<string, string> = {
   '1320': 'Supplies and packaging stock',
   '1330': 'Prepared goods stock',
   '1340': 'Stock in transit between branches',
+  '1510': 'Equipment and property',
   '2110': 'Owed to suppliers',
   '2120': 'Goods received, bill not yet in',
   '2140': 'Customer store credit',
   '2150': 'Due to related store',
+  '2160': 'Service charge held for staff',
+  '2500': 'Other amounts owed',
   '3200': "Owner's drawings",
+  '4100': 'Unlimited sales',
+  '4150': 'À la carte sales',
+  '4500': 'Other charges income',
+  '4900': 'Sales discounts',
+  '4950': 'Comps, returns and voids',
   '5100': 'Cost of food sold',
   '5300': 'Wastage and spoilage',
   '5400': 'Stock count differences',
@@ -42,6 +50,8 @@ export const ACCOUNT_WORDS: Record<string, string> = {
   '6860': 'Bad debt expense',
   '6870': 'Bank charges',
   '7100': 'Platform settlement gain',
+  '7350': 'Cash over and short',
+  '7400': 'Loss on disposal of assets',
 };
 
 function wordsFor(code: string | null | undefined): string | undefined {

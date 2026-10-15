@@ -81,7 +81,7 @@ export default async function LiabilityPage({
               <Figure label="Outstanding" value={peso(liability.position.outstanding)} emphasis />
             </div>
             <p className="text-xs text-neutral-500 dark:text-neutral-500">
-              ⭐ <strong>Outstanding</strong> is the balance of <code>2500</code> for this
+              ⭐ <strong>Outstanding</strong> is what the ledger still shows owed on this
               obligation. Charged and paid are the same balance split by what happened — which is
               why they cannot disagree with it, and why nothing here is stored.
               {owing <= 0 && liability.position.charged !== '0.00' && (
@@ -112,7 +112,7 @@ export default async function LiabilityPage({
                 </option>
                 {targets.map((a) => (
                   <option key={a.code} value={a.code}>
-                    {a.code} — {a.name}
+                    {a.name}
                   </option>
                 ))}
               </Select>

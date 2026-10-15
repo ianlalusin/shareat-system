@@ -12,6 +12,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { personName } from '@/lib/person-name';
+import { accountLabel, accountCodeAndName } from '@/lib/account-label';
+
 import { typedFor } from '@/lib/keep-typing';
 import { PLATFORM_SALES_EDIT } from '../typed-forms';
 import { EditableRecord } from '@/components/forms';
@@ -178,30 +180,30 @@ export default async function SalesDayDetailPage({
 
       <section className="grid gap-4 md:grid-cols-2">
         <Panel title="Revenue">
-          <Row label="Unlimited → 4100" value={formatMoney(money(day.unliSales))} />
-          <Row label="À la carte → 4150" value={formatMoney(money(day.alaCarteSales))} />
+          <Row label="Unlimited" value={formatMoney(money(day.unliSales))} />
+          <Row label="À la carte" value={formatMoney(money(day.alaCarteSales))} />
           <Row label="Total" value={formatMoney(money(day.totalSales))} strong />
         </Panel>
 
         <Panel title="Tender">
-          <Row label="Cash → 1110" value={formatMoney(money(day.cashCollected))} />
-          <Row label="Online → 1140" value={formatMoney(money(day.onlineCollected))} />
+          <Row label="Cash" value={formatMoney(money(day.cashCollected))} />
+          <Row label="Online" value={formatMoney(money(day.onlineCollected))} />
           {isPositive(day.creditSales) && (
             <Row label="Credit / on account" value={formatMoney(money(day.creditSales))} />
           )}
           {compare(nonRemittedTotal, ZERO) > 0 && (
             <Row label="Non-remitted channels" value={formatMoney(nonRemittedTotal)} />
           )}
-          <Row label="Discounts → 4900" value={formatMoney(discountsTotal)} />
-          <Row label="Comps → 4950" value={formatMoney(money(day.comps))} />
-          {isPositive(day.refunds) && <Row label="Refunds (POS) → 4950" value={formatMoney(money(day.refunds))} />}
+          <Row label="Discounts" value={formatMoney(discountsTotal)} />
+          <Row label="Comps" value={formatMoney(money(day.comps))} />
+          {isPositive(day.refunds) && <Row label="Refunds (POS)" value={formatMoney(money(day.refunds))} />}
           {isPositive(day.otherCharges) && (
-            <Row label="Other charges → 4500" value={formatMoney(money(day.otherCharges))} />
+            <Row label="Other charges" value={formatMoney(money(day.otherCharges))} />
           )}
           {/* ⭐ A float — neither revenue nor AP. Fills here, empties through payroll, and never
               reaches the P&L (bible row 135). */}
           {isPositive(day.serviceCharge) && (
-            <Row label="Service charge → 2160 float (held for staff)" value={formatMoney(money(day.serviceCharge))} />
+            <Row label="Service charge (held for staff)" value={formatMoney(money(day.serviceCharge))} />
           )}
         </Panel>
 
@@ -242,7 +244,7 @@ export default async function SalesDayDetailPage({
                   <tr key={c.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">{c.channelName}</td>
                     <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400">
-                      {c.isRemittedDaily ? 'reaches the till' : `settles later → ${c.receivableAccountCode}`}
+                      {c.isRemittedDaily ? 'reaches the till' : `settles later → ${accountLabel(c.receivableAccountCode)}`}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {/* ⭐ "confirmed no sales" is a different claim from a blank, and from a zero. */}
@@ -538,7 +540,7 @@ function LedgerTable({ lines }: { lines: EntryLine[] }) {
           {lines.map((l) => (
             <tr key={l.lineNo} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
               <td className="px-3 py-2 text-neutral-400">{l.lineNo}</td>
-              <td className="px-3 py-2 font-mono">{l.accountCode}</td>
+              <td className="px-3 py-2">{accountCodeAndName(l.accountCode)}</td>
               <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400">
                 {l.partyType ? `${l.partyType}:${l.partyId}` : '—'}
               </td>
