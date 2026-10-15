@@ -258,6 +258,16 @@ export async function findOpenEmployment(
   return row as EmploymentRow | undefined;
 }
 
+/**
+ * T-407 (Invariant 21): lock ALL of a person's employment rows in one org, in id order, in ONE statement.
+ * Two concurrent endEmployment calls for the same person then serialise here instead of each updating its
+ * own row and then taking `for share` on the other's (a 40P01 deadlock).
+ */
+export async function lockPersonEmployments(tx: Tx, personId: string, orgId: string): Promise<void> {
+  await tx.execute(sql`
+    select id from employments where person_id = ${personId} and org_id = ${orgId} order by id for update`);
+}
+
 export async function getEmployment(tx: Tx, id: string): Promise<EmploymentRow | undefined> {
   const [row] = await tx.select().from(employments).where(eq(employments.id, id)).limit(1);
   return row as EmploymentRow | undefined;

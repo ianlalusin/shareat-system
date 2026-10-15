@@ -85,6 +85,8 @@ async function setup(hint: string): Promise<Fixture> {
   for (const personId of [f.personId, f.adminId]) {
     for (const storeId of [f.storeId, f.storeId2]) {
       await sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${storeId})`;
+      // T-407: sign-in also needs the org-level rule (an open employment, an admin role, or a never-employed manager), so the fixture person is also employed.
+      await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeId}, ${personId}, ${`FX${++seq}`}, 'regular', '2020-01-01')`;
     }
   }
   return f;
@@ -108,6 +110,8 @@ async function mkOrdinaryFirebasePerson(orgId: string, hint: string): Promise<{ 
     insert into persons (org_id, display_name) values (${orgId}, ${`Person ${hint}`}) returning id
   `;
   const externalId = uid(`fbuid-${hint}`);
+  // T-407: an email sign-in needs the org-level rule; these are the admin email sign-in cases (R1 leg b).
+  await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${orgId}, 'admin')`;
   await sql`insert into person_credentials (person_id, kind, external_id) values (${p!.id}, 'firebase', ${externalId})`;
   return { personId: p!.id, externalId };
 }

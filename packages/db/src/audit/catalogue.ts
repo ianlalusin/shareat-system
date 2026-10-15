@@ -155,7 +155,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
 
   // ---- S2 (security events): live (T-402 S2 flipped them); the S3/S5 ones stay reserved ----
   def('auth.signin_succeeded', 'security', 'low', 'org', 'persons', 'T-402'),
-  // Written reasons only: `terminal_credential` and `not_a_firebase_credential` (a KNOWN account that may not sign in). A bad token or an unknown identifier has no trustworthy org: one logger line, no row. A disabled / ended / revoked person is DEF-649's.
+  // Written reasons: `terminal_credential`, `not_a_firebase_credential`, `employment_ended`, `credential_revoked` (T-407: a KNOWN account that may not sign in). A bad token or an unknown identifier has no trustworthy org: one logger line, no row.
   def('auth.signin_refused', 'security', 'normal', 'org', 'persons', 'T-402', { actor: 'either' }),
   def('auth.pin_signin_succeeded', 'security', 'low', 'store', 'persons', 'T-402'),
   def('auth.pin_paused', 'security', 'high', 'store', 'stores', 'T-402', { actor: 'either' }),

@@ -105,7 +105,7 @@ export function enqueueAuthorizeDenied(
 }
 
 /** R11: a Firebase token that verified, for a KNOWN account that is not allowed in. The actor is null: nobody signed in. */
-export function enqueueSigninRefused(orgId: string, personId: string, reason: 'terminal_credential' | 'not_a_firebase_credential'): void {
+export function enqueueSigninRefused(orgId: string, personId: string, reason: 'terminal_credential' | 'not_a_firebase_credential' | 'employment_ended' | 'credential_revoked'): void {
   pushEvent(orgId, (tx) =>
     auditLogRepo.appendSystem(tx, orgId, {
       action: 'auth.signin_refused',

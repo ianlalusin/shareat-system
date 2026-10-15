@@ -6,7 +6,7 @@
  * indexed lookup on a unique column and nothing more. Anything that makes it a join over roles or
  * scopes will be felt on every page.
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { personCredentials, sessions } from '../../schema/sessions';
 import { persons } from '../../schema/persons';
@@ -97,6 +97,26 @@ export async function findActiveCredentialByExternalId(
     .where(and(eq(personCredentials.externalId, externalId), isNull(personCredentials.revokedAt)))
     .limit(1);
   return row as ExternalCredentialRow | undefined;
+}
+
+/**
+ * ⭐ T-407 R3 - failure path only: the most recently REVOKED credential for a Firebase uid, with its person's org, so a
+ * refusal can be filed as `credential_revoked` under the right org. Undefined for a uid that never belonged to anyone
+ * (that stays one logger line, no row). No index on revoked rows (the unique one is partial); the table is small and
+ * this never runs on a success.
+ */
+export async function findLatestRevokedCredentialByExternalId(
+  tx: Tx,
+  externalId: string,
+): Promise<{ personId: string; personOrgId: string } | undefined> {
+  const [row] = await tx
+    .select({ personId: personCredentials.personId, personOrgId: persons.orgId })
+    .from(personCredentials)
+    .innerJoin(persons, eq(persons.id, personCredentials.personId))
+    .where(and(eq(personCredentials.externalId, externalId), isNotNull(personCredentials.revokedAt)))
+    .orderBy(desc(personCredentials.revokedAt))
+    .limit(1);
+  return row;
 }
 
 export interface InsertCredentialInput {
