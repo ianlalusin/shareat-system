@@ -89,13 +89,13 @@ async function checkRecipe(
   );
   const out = items.get(input.outputItemId);
   if (!out) return refusal('The item this recipe makes does not exist. Pick it from the list.');
-  if (out.status !== 'active') return refusal(notActiveItemSentence(out.status, 'put on a recipe', 'The output'));
+  if (out.status !== 'active') return refusal(notActiveItemSentence(out.status, 'put on a new recipe', 'The output'));
 
   const lines: Checked['lines'] = [];
   for (const [i, line] of input.lines.entries()) {
     const item = items.get(line.itemId);
     if (!item) return refusal(`Ingredient ${i + 1} does not exist. Pick it from the list.`);
-    if (item.status !== 'active') return refusal(notActiveItemSentence(item.status, 'put on a recipe', `Ingredient ${i + 1}`));
+    if (item.status !== 'active') return refusal(notActiveItemSentence(item.status, 'put on a new recipe', `Ingredient line ${i + 1}`));
     const sent = line.unit?.trim();
     if (sent && sent !== item.baseUnit) {
       return refusal(`Ingredient ${i + 1}: ${item.name} is counted in ${item.baseUnit}, not ${sent}. Enter the quantity in ${item.baseUnit}.`);

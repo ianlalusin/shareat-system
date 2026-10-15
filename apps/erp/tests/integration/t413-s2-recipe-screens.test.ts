@@ -265,7 +265,7 @@ describe('the actions (thin adapters over the domain)', () => {
   it('retireRecipeAction: refused while a POS item uses the recipe (names it), succeeds after; restoreRecipeAction brings it back; a manager is refused', async () => {
     const w = await world('act-r');
     await sql`insert into pos_item_maps (org_id, store_id, pos_item_key, pos_item_name, mode, recipe_id, status, created_by) values (${w.c.orgId}, ${w.c.storeA}, 'stew-box', 'Stew Box', 'recipe', ${w.stew}, 'active', ${w.c.admin.personId})`;
-    const blocked = await run(ACTIONS, 'retireRecipeAction', w.c.admin, fd({ recipeId: w.stew }));
+    const blocked = await run(ACTIONS, 'retireRecipeAction', w.c.admin, fd({ recipeId: w.stew, confirmName: 'Stew' }));
     expectSentenceError(blocked.flash.error, 'retire with a map');
     expect(blocked.flash.error).toContain('Stew Box');
     expect((await recipeRow(w.stew))!.status).toBe('active');
@@ -275,7 +275,7 @@ describe('the actions (thin adapters over the domain)', () => {
     expect((await recipeRow(w.stew))!.status).toBe('active');
 
     await sql`update pos_item_maps set status = 'inactive' where recipe_id = ${w.stew}`;
-    const ok = await run(ACTIONS, 'retireRecipeAction', w.c.admin, fd({ recipeId: w.stew }));
+    const ok = await run(ACTIONS, 'retireRecipeAction', w.c.admin, fd({ recipeId: w.stew, confirmName: 'Stew' }));
     expect(ok.flash.error, `unexpected error: ${ok.flash.error}`).toBeUndefined();
     expect((await recipeRow(w.stew))!.status).toBe('inactive');
     const back = await run(ACTIONS, 'restoreRecipeAction', w.c.admin, fd({ recipeId: w.stew }));
