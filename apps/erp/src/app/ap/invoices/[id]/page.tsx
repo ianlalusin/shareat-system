@@ -149,6 +149,12 @@ return (
               {compare(otherFees, ZERO) !== 0 && <Row label="Other fees" value={peso(otherFees)} />}
             </dl>
           )}
+          {/* T-408 R5 - what was stored, read-only. A figure is shown only when one was typed: nothing is computed here. */}
+          <dl className="mt-1 space-y-0.5 text-sm text-neutral-500 dark:text-neutral-400">
+            <Row label="VAT type" value={invoice.vatType ? VAT_TYPE_LABEL[invoice.vatType] : 'Not recorded'} />
+            {invoice.vatAmount != null && <Row label="VAT amount" value={peso(invoice.vatAmount)} />}
+            <Row label="Official receipt" value={invoice.isOfficialReceipt ? 'Yes' : 'No'} />
+          </dl>
         </div>
       </div>
 
@@ -566,6 +572,8 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     </label>
   );
 }
+
+const VAT_TYPE_LABEL = { vatable: 'Vatable', zero_rated: 'Zero-rated', exempt: 'Exempt', non_vat: 'Non-VAT' } as const;
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (

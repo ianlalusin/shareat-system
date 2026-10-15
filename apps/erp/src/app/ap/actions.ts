@@ -185,6 +185,15 @@ export async function recordInvoiceAction(formData: FormData): Promise<void> {
         otherFees: str(formData, 'otherFees') || null,
         notes: str(formData, 'notes') || null,
         receiptFileId,
+        // T-408 R1 - VAT type (blank = not recorded, so an old form post is unchanged), the amount typed from the paper,
+        // and the OR flag ('' = the supplier's habit). The domain resolves 'supplier_default' and refuses contradictions.
+        vatType: (str(formData, 'vatType') || null) as never,
+        vatAmount: str(formData, 'vatAmount') || null,
+        ...(str(formData, 'isOfficialReceipt') === 'yes'
+          ? { isOfficialReceipt: true }
+          : str(formData, 'isOfficialReceipt') === 'no'
+            ? { isOfficialReceipt: false }
+            : {}),
       });
     });
     id = result.id;

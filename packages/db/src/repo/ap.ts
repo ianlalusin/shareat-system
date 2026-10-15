@@ -195,6 +195,7 @@ export interface SupplierInvoiceRow {
   vatRate: string | null;
   vatAmount: string | null;
   vatExclusiveAmount: string | null;
+  isOfficialReceipt: boolean;
   createdBy: string;
   createdAt: Date;
   voidedBy: string | null;
@@ -1080,4 +1081,91 @@ export async function unallocatedOf(tx: Tx, orgId: string, paymentId: string): P
     where ap.id = ${paymentId} and ap.org_id = ${orgId}
   `)) as unknown as { unallocated: string }[];
   return row?.unallocated ?? '0.00';
+}
+
+// -------------------------------------------------------------------------------------
+// T-408 R4 - the monthly "invoices by VAT type x OR" list
+// -------------------------------------------------------------------------------------
+
+export interface VatOrGroup {
+  /** null = no VAT type recorded ("not recorded"). */
+  vatType: SupplierInvoiceVatType | null;
+  isOfficialReceipt: boolean;
+  count: number;
+  /** SQL `numeric` sums, as strings - never a JS number. */
+  total: string;
+  /** null when no invoice in the cell carries a VAT amount. */
+  vat: string | null;
+}
+export interface VatOrInvoice {
+  id: string;
+  invoiceDate: string;
+  supplierName: string;
+  invoiceNo: string | null;
+  totalAmount: string;
+  vatAmount: string | null;
+  vatType: SupplierInvoiceVatType | null;
+  isOfficialReceipt: boolean;
+}
+
+/** `month` is `YYYY-MM`, taken by `invoice_date` (never `created_at`). Voided invoices are excluded. Both queries
+ *  filter `org_id` AND `store_id` explicitly - RLS is the backstop, not the filter. */
+export async function invoicesByVatAndOr(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  month: string,
+): Promise<{ groups: VatOrGroup[]; invoices: VatOrInvoice[] }> {
+  const [y, m] = month.split('-').map(Number) as [number, number];
+  const from = `${month}-01`;
+  const to = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+  const inScope = sql`si.org_id = ${orgId} and si.store_id = ${storeId} and si.status <> 'voided'
+    and si.invoice_date >= ${from}::date and si.invoice_date < ${to}::date`;
+
+  const groups = await tx.execute<{
+    vat_type: SupplierInvoiceVatType | null;
+    is_official_receipt: boolean;
+    n: string;
+    total: string;
+    vat: string | null;
+  }>(sql`
+    select si.vat_type, si.is_official_receipt, count(*)::text as n,
+           sum(si.total_amount)::text as total, sum(si.vat_amount)::text as vat
+    from supplier_invoices si where ${inScope}
+    group by si.vat_type, si.is_official_receipt`);
+  const invoices = await tx.execute<{
+    id: string;
+    invoice_date: string;
+    supplier_name: string;
+    invoice_no: string | null;
+    total_amount: string;
+    vat_amount: string | null;
+    vat_type: SupplierInvoiceVatType | null;
+    is_official_receipt: boolean;
+  }>(sql`
+    select si.id, si.invoice_date::text as invoice_date, s.name as supplier_name, si.invoice_no,
+           si.total_amount::text as total_amount, si.vat_amount::text as vat_amount, si.vat_type, si.is_official_receipt
+    from supplier_invoices si join suppliers s on s.id = si.supplier_id and s.org_id = si.org_id
+    where ${inScope}
+    order by si.invoice_date, si.created_at, si.id`);
+
+  return {
+    groups: [...groups].map((g) => ({
+      vatType: g.vat_type,
+      isOfficialReceipt: g.is_official_receipt,
+      count: Number(g.n),
+      total: g.total,
+      vat: g.vat,
+    })),
+    invoices: [...invoices].map((r) => ({
+      id: r.id,
+      invoiceDate: r.invoice_date,
+      supplierName: r.supplier_name,
+      invoiceNo: r.invoice_no,
+      totalAmount: r.total_amount,
+      vatAmount: r.vat_amount,
+      vatType: r.vat_type,
+      isOfficialReceipt: r.is_official_receipt,
+    })),
+  };
 }

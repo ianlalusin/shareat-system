@@ -443,7 +443,8 @@ export interface RecordInvoiceInput {
   /** ⭐ The brokered file id from T-141's upload — the ONLY accepted form of evidence.
    *  ⛔ There is deliberately no `receiptPhotoUrl`: it was plain text, so `x` satisfied it. */
   receiptFileId?: string | null;
-  vatType?: SupplierInvoiceVatType | null;
+  /** T-408 R1: `'supplier_default'` resolves on the server from the supplier's `vat_status`; omitted/null stays null. */
+  vatType?: SupplierInvoiceVatType | 'supplier_default' | null;
   vatRate?: string | null;
   vatAmount?: string | null;
   vatExclusiveAmount?: string | null;
@@ -522,6 +523,65 @@ export async function recordInvoice(
       { blank: 'null' },
     );
 
+    // T-408 R1-R3: VAT is a LABEL typed from the paper (bible row 75), never computed at 12%. Every refusal is
+    // thrown here, before the first write. `vat_rate` is never written and the exclusive figure is derived.
+    const vatType: SupplierInvoiceVatType | null =
+      input.vatType === 'supplier_default'
+        ? supplier.vatStatus === 'vat_registered'
+          ? 'vatable'
+          : supplier.vatStatus === 'non_vat'
+            ? 'non_vat'
+            : null
+        : (input.vatType ?? null);
+    if (vatType !== null && !['vatable', 'zero_rated', 'exempt', 'non_vat'].includes(vatType)) {
+      throw refuse(`recordInvoice: unknown VAT type "${String(vatType)}".`, "That VAT type isn't one we know.");
+    }
+    if (supplier.vatStatus === 'non_vat') {
+      if (vatType === 'vatable' || vatType === 'zero_rated') {
+        throw refuse(
+          `recordInvoice: ${supplier.name} is not VAT-registered, so a ${vatType} bill is not possible.`,
+          `${supplier.name} is not VAT-registered, so this bill can't be vatable or zero-rated.`,
+        );
+      }
+      if (vatAmount !== null) {
+        throw refuse(
+          `recordInvoice: ${supplier.name} is not VAT-registered, so it cannot carry a VAT amount.`,
+          `${supplier.name} is not VAT-registered, so this bill can't carry a VAT amount.`,
+        );
+      }
+    }
+    let storedVatAmount: Money | null = null;
+    let storedVatExclusive: Money | null = null;
+    if (vatType === 'vatable') {
+      if (vatAmount === null) throw refuse('recordInvoice: a vatable bill needs its VAT amount.', 'A vatable bill needs the VAT amount printed on it.');
+      if (compare(vatAmount, ZERO) <= 0) throw refuse('recordInvoice: the VAT amount must be greater than zero.', 'The VAT amount has to be greater than zero.');
+      if (compare(vatAmount, total) > 0) throw refuse('recordInvoice: the VAT amount is more than the total.', "The VAT amount can't be more than the invoice total.");
+      storedVatAmount = vatAmount;
+      storedVatExclusive = subtract(total, vatAmount);
+    } else if (vatType === 'zero_rated') {
+      if (vatAmount !== null && compare(vatAmount, ZERO) !== 0) {
+        throw refuse('recordInvoice: a zero-rated bill carries no VAT.', 'A zero-rated bill has no VAT amount. Leave it blank or enter 0.');
+      }
+      storedVatAmount = ZERO;
+      storedVatExclusive = total;
+    } else if (vatAmount !== null) {
+      throw refuse(
+        `recordInvoice: a VAT amount needs a vatable VAT type (type is ${vatType ?? 'not set'}).`,
+        'A VAT amount only goes with a vatable bill. Clear the amount, or choose the vatable type.',
+      );
+    }
+    // The caller may not contradict what the server derived (refused, not overwritten): `vat_rate` is always null,
+    // and the exclusive figure is whatever the derivation says.
+    if (vatRate !== null) {
+      throw refuse('recordInvoice: a VAT rate is not recorded; it was sent anyway.', "A VAT rate isn't recorded on a bill. Remove it.");
+    }
+    if (vatExclusiveAmount !== null && (storedVatExclusive === null || compare(vatExclusiveAmount, storedVatExclusive) !== 0)) {
+      throw refuse(
+        'recordInvoice: the VAT-exclusive amount sent disagrees with total minus VAT.',
+        "The VAT-exclusive amount doesn't match the total minus the VAT. It is worked out for you, so leave it blank.",
+      );
+    }
+
     // T-367 S3 (DEF-499, R9): the due date. A malformed date is a sentence, not a raw throw (DEF-566: a raw throw
     // is a digest page in production). A blank due date takes the supplier's terms, COPIED at recording time (never
     // read through - changing the terms later must not rewrite an existing bill); cash on delivery (null terms)
@@ -573,10 +633,10 @@ export async function recordInvoice(
       otherFees,
       notes: input.notes?.trim() || null,
       receiptFileId: input.receiptFileId ?? null,
-      vatType: input.vatType ?? null,
-      vatRate,
-      vatAmount,
-      vatExclusiveAmount,
+      vatType,
+      vatRate: null,
+      vatAmount: storedVatAmount,
+      vatExclusiveAmount: storedVatExclusive,
       /**
        * ⭐ T-188. COPIED from the supplier's habit, not read through to it.
        *
