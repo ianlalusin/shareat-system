@@ -5,9 +5,10 @@
  * T-168 usage records and post stock out (T-177 invariant 5). Now finalizing a section writes ONE T-168 usage record per (store, day,
  * ROOM) with status `draft`, authored by the org's system person, one line per covered item at the EXPECTED quantity; staff edit the
  * lines to actuals and a manager posts (`stock/usage-records.ts` `postUsage`), or the system posts it at 14:00 Manila the next day
- * (`stock/usage-auto-post.ts`). Finalize is idempotent: a draft already there for that store + day + room (made by an earlier
- * section, or started by staff) is added to, never duplicated, and a quantity staff typed is never overwritten. The plan is also the
- * expectation `stock/usage-tolerance.ts` holds the drafts to (+-10% by default). The T-177/T-388 text below that speaks of posting,
+ * (`stock/usage-auto-post.ts`). Audit rulings A2-A5 (15 Oct): the pull ALWAYS writes its OWN draft and never touches one staff started;
+ * finalize is idempotent (a later section adds to the pull's own draft for the room, never a second one, and a quantity staff typed is
+ * never overwritten); the pre-filled quantity is the expectation less what other records already hold, and that figure is kept as the
+ * draft's snapshot, which `stock/usage-tolerance.ts` holds the draft to (+-10% by default). The T-177/T-388 text below that speaks of posting,
  * holds and frozen rooms is history; it applies to pulls finalized before S6 (their records are still voidable with the pull).
  *
  * ⭐ **The server rebuilds the plan at finalize time** (invariant 2) — it does not trust the STORED
@@ -57,7 +58,7 @@ import { closedStockPeriodSentence } from '../stock/period-guard';
 import { lockLiveSalesDay } from '../sales-days/live-day';
 import { RefusalError, gone, humanDate, internalFault, refuse } from '../shared/refusal';
 import { toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
-import { addQuantity, compareQuantity, quantity, ZERO_QUANTITY } from '../stock/quantity';
+import { addQuantity, compareQuantity, quantity, subtractQuantity, ZERO_QUANTITY } from '../stock/quantity';
 import { assertUsageSource } from '../stock-locations/rules';
 import { loadDepletionLookups, planInstant } from './depletion-source';
 import { explodePosSales, type PlanLine, type PlanSection, type PosSoldItemInput } from './plan';
@@ -357,11 +358,20 @@ async function unusableRoomNames(tx: Tx, lines: readonly DraftInputLine[]): Prom
 }
 
 /**
- * Writes the section's lines into the day's usage DRAFT, one draft per (store, day, room). A draft already there (an earlier
- * section's, or one staff started) is added to under its row lock: an item with no line gets one at the expected quantity; an item whose
- * line still equals what the pull put there grows by the new expectation; an item whose line staff changed is left alone (the
- * band check at post time reads the difference). Every line is then linked to its record, with the plan quantity.
- * Returns the number of pull lines linked.
+ * Writes the section's lines into the pull's OWN usage draft, one draft per (store, day, ROOM), authored by the org's system person.
+ *
+ * ⭐ T-401 S6 audit ruling A2: the pull NEVER adds to, or edits, a draft staff started. The draft it adds to is only one of its own (a
+ * pull line already points at it: an earlier section made it). Staff record actuals by editing the pull draft; anything the POS does not
+ * sell goes in a separate manual draft.
+ *
+ * ⭐ A5: the line's pre-filled quantity is what the plan expects of the item in this room, less what the store's OTHER usage records of
+ * the day already hold of it (posted or draft, any room, never this pull's own drafts), floor 0 (a floor of 0 writes no line). A4: that
+ * figure is the line's SNAPSHOT of what was expected: it goes on the line (`expected_qty`) and, summed per item, on the pull's own
+ * lines (`draft_expected_qty`), where it survives staff removing and re-typing the line (T-168 has no edit-quantity call). The band at
+ * post time and at month close read it, never a live recomputation (A3: an item whose line staff deleted is still covered by it).
+ *
+ * A later section adds to the same draft: an item whose line still holds what the pull put there grows; one staff changed or deleted
+ * keeps staff's quantity (only its snapshot grows). Returns the number of pull lines linked.
  */
 async function writeDayDraft(
   tx: Tx,
@@ -376,43 +386,58 @@ async function writeDayDraft(
 
   let linkedCount = 0;
   for (const [locationId, group] of byRoom) {
-    // Expected per item in this room: the sum of its pull lines.
-    const expected = new Map<string, ReturnType<typeof quantity>>();
-    for (const l of group) expected.set(l.itemId, addQuantity(expected.get(l.itemId) ?? ZERO_QUANTITY, quantity(l.quantity)));
+    // What this call adds to the plan, per item, in this room.
+    const planNew = new Map<string, ReturnType<typeof quantity>>();
+    for (const l of group) planNew.set(l.itemId, addQuantity(planNew.get(l.itemId) ?? ZERO_QUANTITY, quantity(l.quantity)));
 
-    const found = await stockUsageRepo.findUsageDraftForUpdate(tx, pull.storeId, usedOn, locationId);
+    const found = await posMappingRepo.pullDraftForRoomForUpdate(tx, pull.id, locationId);
     let recordId: string;
-    if (!found) {
-      const made = await stockUsageRepo.insertUsageRecord(tx, { orgId: pull.orgId, storeId: pull.storeId, locationId, kind: 'usage', usedOn, createdBy: author });
-      recordId = made.id;
-      await stockUsageRepo.insertUsageLines(
-        tx,
-        recordId,
-        [...expected].map(([itemId, q], i) => ({ lineNo: String(i + 1), itemId, quantity: q })),
-      );
-    } else {
+    let prior: Awaited<ReturnType<typeof posMappingRepo.linkedLinesOfRecord>> = [];
+    if (found) {
       recordId = found.id;
-      const existing = await stockUsageRepo.listUsageLines(tx, recordId);
-      // What the pull has already put in this record, per item (its linked lines, any section).
-      const linked = (await posMappingRepo.listPullLines(tx, pull.id)).filter((x) => x.usageRecordId === recordId && x.itemId && x.quantity);
-      const pulled = new Map<string, ReturnType<typeof quantity>>();
-      for (const x of linked) pulled.set(x.itemId!, addQuantity(pulled.get(x.itemId!) ?? ZERO_QUANTITY, quantity(x.quantity!)));
-      let nextNo = existing.reduce((m, l) => Math.max(m, Number(l.lineNo) || 0), existing.length) + 1;
-      const fresh: { lineNo: string; itemId: string; quantity: ReturnType<typeof quantity> }[] = [];
-      for (const [itemId, q] of expected) {
-        const mine = existing.filter((l) => l.itemId === itemId);
-        if (mine.length === 0) {
-          fresh.push({ lineNo: String(nextNo++), itemId, quantity: q });
-          continue;
+      prior = await posMappingRepo.linkedLinesOfRecord(tx, pull.id, recordId);
+    } else {
+      recordId = (await stockUsageRepo.insertUsageRecord(tx, { orgId: pull.orgId, storeId: pull.storeId, locationId, kind: 'usage', usedOn, createdBy: author })).id;
+    }
+    const priorPlan = new Map<string, ReturnType<typeof quantity>>();
+    const priorExpected = new Map<string, ReturnType<typeof quantity>>();
+    for (const x of prior) {
+      priorPlan.set(x.itemId, addQuantity(priorPlan.get(x.itemId) ?? ZERO_QUANTITY, quantity(x.quantity ?? '0')));
+      priorExpected.set(x.itemId, addQuantity(priorExpected.get(x.itemId) ?? ZERO_QUANTITY, quantity(x.draftExpectedQty ?? '0')));
+    }
+
+    // A5: held by OTHER records. This pull's own drafts (every room) are not "others": a plan split over rooms is not double counted.
+    const ownRecords = new Set(await posMappingRepo.recordIdsOfPull(tx, pull.id));
+    ownRecords.add(recordId);
+    const held = await stockUsageRepo.usageHeldByOthers(tx, pull.storeId, usedOn, [...planNew.keys()], [...ownRecords]);
+
+    const existing = await stockUsageRepo.listUsageLines(tx, recordId);
+    let nextNo = existing.reduce((m, l) => Math.max(m, Number(l.lineNo) || 0), existing.length) + 1;
+    const newExpected = new Map<string, ReturnType<typeof quantity>>();
+    for (const [itemId, q] of planNew) {
+      const prevExp = priorExpected.get(itemId) ?? ZERO_QUANTITY;
+      const totalPlan = addQuantity(priorPlan.get(itemId) ?? ZERO_QUANTITY, q);
+      const afterOthers = subtractQuantity(totalPlan, quantity(held.get(itemId) ?? '0'));
+      const resid = compareQuantity(afterOthers, ZERO_QUANTITY) > 0 ? afterOthers : ZERO_QUANTITY;
+      const expected = compareQuantity(resid, prevExp) > 0 ? resid : prevExp;
+      newExpected.set(itemId, expected);
+
+      const mine = existing.filter((l) => l.itemId === itemId);
+      const have = mine.length === 0 ? ZERO_QUANTITY : addQuantity(...mine.map((l) => quantity(l.quantity)));
+      if (compareQuantity(have, prevExp) === 0) {
+        // Untouched since the pull wrote it (or nothing was written because nothing was expected): it carries the new expectation.
+        if (compareQuantity(expected, ZERO_QUANTITY) > 0) {
+          if (mine.length === 0) {
+            await stockUsageRepo.insertUsageLines(tx, recordId, [{ lineNo: String(nextNo++), itemId, quantity: expected, expectedQty: expected }]);
+          } else {
+            await stockUsageRepo.updateUsageLineQuantity(tx, mine[0]!.id, expected, expected);
+            await stockUsageRepo.deleteUsageLines(tx, mine.slice(1).map((l) => l.id));
+          }
         }
-        const have = addQuantity(...mine.map((l) => quantity(l.quantity)));
-        const put = pulled.get(itemId);
-        // Untouched since the pull wrote it: the new expectation is added. Anything else is somebody's actual: leave it.
-        if (put !== undefined && compareQuantity(have, put) === 0) {
-          await stockUsageRepo.updateUsageLineQuantity(tx, mine[0]!.id, addQuantity(have, q));
-        }
+      } else if (mine.length > 0) {
+        // Somebody's actual (or deleted): the quantity stays; the snapshot is still what the pull expects.
+        await stockUsageRepo.updateUsageLineExpected(tx, mine[0]!.id, expected);
       }
-      await stockUsageRepo.insertUsageLines(tx, recordId, fresh);
     }
 
     const linkedRows = await posMappingRepo.setLineUsageRecord(
@@ -424,6 +449,7 @@ async function writeDayDraft(
     if (unlinked.length > 0) {
       throw internalFault(`finalizeSections: pull ${pull.id}: ${unlinked.length} line(s) matched other than one stored row (${unlinked.map((l) => l.key).join(', ')})`);
     }
+    for (const [itemId, expected] of newExpected) await posMappingRepo.setDraftExpected(tx, pull.id, recordId, itemId, expected);
     linkedCount += group.length;
   }
   return linkedCount;
@@ -682,16 +708,36 @@ export async function voidPosUsagePull(
   return { ok: true, reversedRecordCount: recordIds.length };
 }
 
-/** Unlinks the pull's lines from their DRAFT records and deletes the drafts the system itself authored. */
+/**
+ * Unlinks the pull's lines from their DRAFT records.
+ *
+ * ⭐ T-401 S6 A7: a draft staff NEVER touched (every item holds exactly what the pull expected) is deleted, as before. One staff edited
+ * is not staff work to throw away: it stays a draft, no pull line points at it any more (so it never auto-posts: it is a manual draft
+ * now) and it is flagged `pull_voided` for the queue ("pull voided - check"). A draft not authored by the system (made before A2) is
+ * always kept and flagged.
+ */
 async function removePullDrafts(tx: Tx, pull: { id: string; orgId: string }): Promise<void> {
   const draftIds = await posMappingRepo.draftUsageRecordIdsForPull(tx, pull.id);
   if (draftIds.length === 0) return;
   const author = await stockUsageRepo.systemAuthorId(tx, pull.orgId);
   for (const recordId of draftIds) {
-    await posMappingRepo.clearLineUsageRecord(tx, pull.id, recordId);
     const record = await stockUsageRepo.getUsageRecord(tx, recordId);
-    if (record && record.status === 'draft' && record.createdBy === author && !(await posMappingRepo.recordHasOtherPullLines(tx, recordId, pull.id))) {
+    let untouched = false;
+    if (record && record.status === 'draft' && record.createdBy === author) {
+      const snapshot = await posMappingRepo.draftExpectedByItem(tx, recordId);
+      const lines = await stockUsageRepo.listUsageLines(tx, recordId);
+      const own = new Map<string, ReturnType<typeof quantity>>();
+      for (const l of lines) own.set(l.itemId, addQuantity(own.get(l.itemId) ?? ZERO_QUANTITY, quantity(l.quantity)));
+      untouched =
+        [...own.keys()].every((itemId) => snapshot.has(itemId)) &&
+        [...snapshot].every(([itemId, expected]) => compareQuantity(own.get(itemId) ?? ZERO_QUANTITY, quantity(expected)) === 0);
+    }
+    await posMappingRepo.clearLineUsageRecord(tx, pull.id, recordId);
+    if (!record || record.status !== 'draft') continue;
+    if (untouched && !(await posMappingRepo.recordHasOtherPullLines(tx, recordId, pull.id))) {
       await stockUsageRepo.deleteUsageDraft(tx, recordId);
+    } else {
+      await stockUsageRepo.markPullVoided(tx, recordId);
     }
   }
 }

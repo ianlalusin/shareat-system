@@ -15,12 +15,13 @@
  * `numeric` as text.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { auditLogRepo, itemsRepo, stockUsageRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, itemsRepo, posMappingRepo, stockUsageRepo, type Tx } from '@shareat/db';
 import { gone, internalFault, refuse } from '../shared/refusal';
 import { humanDate } from '../shared/refusal-leaf';
 import { menuRuleCoveredItemIds } from '../pos/depletion-source';
 import type { BusinessDate } from '@shareat/core/datetime';
 import { decimal, type Decimal } from '@shareat/core/money';
+import { addQuantity, quantity } from './quantity';
 
 // -------------------------------------------------------------------------------------------------------------------
 // The band (pure)
@@ -190,25 +191,58 @@ export interface ToleranceGate {
 }
 
 /**
- * For a usage draft about to post: which of its items are covered and outside the band (its own quantity is already in `actual`,
- * as a draft). With no non-blank `reason` an out-of-band item refuses the post; with one it passes and `verified` names them.
+ * ⭐ T-401 S6 audit rulings A3/A4. For a usage record a POS pull made, every item the pull covered is judged against the record's OWN
+ * snapshot of what was expected of it (`pos_usage_pull_lines.draft_expected_qty`, summed per item), never against a live
+ * recomputation and never against other records' quantities: `actual` is what THIS record holds of the item. An item whose line staff
+ * deleted still counts (actual 0 against its snapshot): "covered" survives the deletion. `lines` are the record's current lines.
+ */
+export async function snapshotVariancesFor(
+  tx: Tx,
+  orgId: string,
+  recordId: string,
+  lines: readonly { readonly itemId: string; readonly quantity: string }[],
+): Promise<UsageVariance[]> {
+  const snapshot = await posMappingRepo.draftExpectedByItem(tx, recordId);
+  if (snapshot.size === 0) return [];
+  const own = new Map<string, string>();
+  for (const l of lines) own.set(l.itemId, addQuantity(quantity(own.get(l.itemId) ?? '0'), quantity(l.quantity)));
+  const ids = [...snapshot.keys()];
+  const tolerances = await stockUsageRepo.usageTolerancesFor(tx, orgId, ids);
+  const out: UsageVariance[] = [];
+  for (const itemId of ids) {
+    const expected = snapshot.get(itemId)!;
+    const actual = own.get(itemId) ?? '0';
+    const tolerance = tolerances.byItem.get(itemId) ?? tolerances.org;
+    const item = await itemsRepo.getItemById(tx, orgId, itemId);
+    out.push({ itemId, itemName: item?.name ?? 'an item', expected, actual, tolerance, withinBand: isWithinUsageTolerance(expected, actual, tolerance) });
+  }
+  return out.sort((a, b) => a.itemName.localeCompare(b.itemName) || a.itemId.localeCompare(b.itemId));
+}
+
+/**
+ * For a usage draft about to post. Items the pull covered IN THIS RECORD are judged against the record's own snapshot (`snapshotVariancesFor`);
+ * every other item of the draft (a manual draft, or an extra line staff added) is judged as before, the day's total against the plan
+ * (`usageVariancesFor`). With no non-blank `reason` an out-of-band item refuses the post; with one it passes and `verified` names them.
  */
 export async function checkUsageTolerance(
   tx: Tx,
-  record: { readonly orgId: string; readonly storeId: string; readonly usedOn: string },
+  record: { readonly id: string; readonly orgId: string; readonly storeId: string; readonly usedOn: string },
   itemIds: readonly string[],
   reason: string | undefined,
 ): Promise<ToleranceGate> {
-  const variances = await usageVariancesFor(tx, record.orgId, record.storeId, record.usedOn, itemIds);
-  const outside = variances.filter((v) => !v.withinBand);
+  const lines = await stockUsageRepo.listUsageLines(tx, record.id);
+  const own = await snapshotVariancesFor(tx, record.orgId, record.id, lines);
+  const snapshotIds = new Set(own.map((v) => v.itemId));
+  const live = await usageVariancesFor(tx, record.orgId, record.storeId, record.usedOn, itemIds.filter((id) => !snapshotIds.has(id)));
+  const outside = [...own, ...live].filter((v) => !v.withinBand);
   if (outside.length === 0) return { refusal: null, verified: [] };
   if (reason !== undefined && reason.trim() !== '') return { refusal: null, verified: outside };
   const day = humanDate(record.usedOn as BusinessDate);
-  const lines = outside.map(
+  const sentences = outside.map(
     (v) => `${v.itemName}: ${plain(v.actual)} recorded against ${plain(v.expected)} expected for ${day} (more than ${percentWords(v.tolerance)} apart)`,
   );
   return {
-    refusal: `${lines.join('; ')}. A manager who has checked the count can post it with a reason.`,
+    refusal: `${sentences.join('; ')}. A manager who has checked the count can post it with a reason.`,
     verified: [],
   };
 }

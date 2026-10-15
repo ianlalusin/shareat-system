@@ -7,12 +7,14 @@
  * ⭐ The domain module (`packages/domain/src/stock/usage-records.ts`) owns the rules; this file only
  * reads rows and writes what the domain decided (bible §4.3).
  */
-import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte, notInArray, sql } from 'drizzle-orm';
 import { stockUsageLines, stockUsageRecords, type UsageKind, type UsageStatus } from '../../schema/stock-usage';
 import { departments, stockLocations } from '../../schema/stock-locations';
 import { items } from '../../schema/items';
 import { stores } from '../../schema/stores';
 import { auditLog } from '../../schema/audit-log';
+import * as auditLogRepo from './audit-log';
+import type { AuditLogSource } from './audit-log';
 import { organizations } from '../../schema/organizations';
 import { persons } from '../../schema/persons';
 import { posUsagePullLines, posUsagePulls } from '../../schema/pos-mapping';
@@ -42,6 +44,8 @@ export interface UsageRecordRow {
   readonly createdAt: Date;
   /** T-401 S6 (migration 0198): true when the system, not a manager, posted it. */
   readonly autoPosted: boolean;
+  /** T-401 S6 A7 (migration 0198): the pull that made this draft was voided after staff edited it. */
+  readonly pullVoided: boolean;
 }
 
 export interface InsertUsageRecordInput {
@@ -88,6 +92,8 @@ export interface InsertUsageLineInput {
   readonly itemId: string;
   /** Decimal string. SIGNED only for `kind='adjustment'`, which this pass never writes. */
   readonly quantity: Quantity;
+  /** T-401 S6 A4: the expectation the pull wrote this line with; omitted for a line staff add. */
+  readonly expectedQty?: Quantity | null;
 }
 
 export async function insertUsageLines(
@@ -98,7 +104,7 @@ export async function insertUsageLines(
   if (lines.length === 0) return [];
   return tx
     .insert(stockUsageLines)
-    .values(lines.map((l) => ({ recordId, lineNo: l.lineNo, itemId: l.itemId, quantity: l.quantity })))
+    .values(lines.map((l) => ({ recordId, lineNo: l.lineNo, itemId: l.itemId, quantity: l.quantity, expectedQty: l.expectedQty ?? null })))
     .returning({ id: stockUsageLines.id });
 }
 
@@ -124,6 +130,7 @@ export async function getUsageRecord(tx: Tx, id: string): Promise<UsageRecordRow
       createdBy: stockUsageRecords.createdBy,
       createdAt: stockUsageRecords.createdAt,
       autoPosted: stockUsageRecords.autoPosted,
+      pullVoided: stockUsageRecords.pullVoided,
     })
     .from(stockUsageRecords)
     .where(eq(stockUsageRecords.id, id));
@@ -194,6 +201,8 @@ export interface UsageLineRow {
   readonly baseUnit: string;
   readonly quantity: string;
   readonly movementId: string | null;
+  /** T-401 S6 A4: the pull's snapshot for this line; null for a line staff added. */
+  readonly expectedQty: string | null;
 }
 
 export async function listUsageLines(tx: Tx, recordId: string): Promise<UsageLineRow[]> {
@@ -209,6 +218,7 @@ export async function listUsageLines(tx: Tx, recordId: string): Promise<UsageLin
       baseUnit: items.baseUnit,
       quantity: stockUsageLines.quantity,
       movementId: stockUsageLines.movementId,
+      expectedQty: stockUsageLines.expectedQty,
     })
     .from(stockUsageLines)
     .innerJoin(items, eq(items.id, stockUsageLines.itemId))
@@ -396,6 +406,8 @@ export interface StoreUsageQueueRow {
   readonly createdAt: Date;
   readonly createdBy: string;
   readonly createdByName: string;
+  /** T-401 S6 A7: the pull that made this draft was voided after staff edited it. */
+  readonly pullVoided: boolean;
   readonly lines: readonly { readonly itemId: string; readonly itemName: string; readonly unit: string; readonly quantity: string }[];
 }
 
@@ -413,6 +425,7 @@ export async function listStoreUsageQueue(tx: Tx, storeId: string): Promise<Stor
       createdAt: stockUsageRecords.createdAt,
       createdBy: stockUsageRecords.createdBy,
       createdByName: persons.displayName,
+      pullVoided: stockUsageRecords.pullVoided,
     })
     .from(stockUsageRecords)
     .innerJoin(stockLocations, eq(stockLocations.id, stockUsageRecords.locationId))
@@ -454,48 +467,83 @@ export const USAGE_SYSTEM_AUTHOR_NAME = 'POS usage pull (system)';
  * listing already skips) with no role and no credential, so it appears in no staff list and can sign in nowhere. Found by name,
  * created on first use. A usage record needs a real `persons` row for `created_by` / `posted_by`.
  */
-export async function systemAuthorId(tx: Tx, orgId: string): Promise<string> {
-  const [found] = await tx
-    .select({ id: persons.id })
-    .from(persons)
-    .where(and(eq(persons.orgId, orgId), eq(persons.displayName, USAGE_SYSTEM_AUTHOR_NAME), eq(persons.kind, 'terminal')))
-    .orderBy(asc(persons.createdAt), asc(persons.id))
-    .limit(1);
-  if (found) return found.id;
+export async function systemAuthorId(tx: Tx, orgId: string, source: AuditLogSource = 'web'): Promise<string> {
+  const find = async () => {
+    const [found] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(and(eq(persons.orgId, orgId), eq(persons.displayName, USAGE_SYSTEM_AUTHOR_NAME), eq(persons.kind, 'terminal')))
+      .orderBy(asc(persons.createdAt), asc(persons.id))
+      .limit(1);
+    return found?.id;
+  };
+  const existing = await find();
+  if (existing) return existing;
+  // T-401 S6 A9: two first uses at the same moment must not each create one. The lock is held to the end of this transaction, so the
+  // second caller waits, then finds the first caller's person (read again after the lock, a fresh statement snapshot).
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`usage_system_author:${orgId}`}, 0))`);
+  const afterLock = await find();
+  if (afterLock) return afterLock;
   const [row] = await tx
     .insert(persons)
     .values({ orgId, displayName: USAGE_SYSTEM_AUTHOR_NAME, isActive: false, kind: 'terminal' })
     .returning({ id: persons.id });
+  await auditLogRepo.appendSystem(tx, orgId, {
+    action: 'stock.usage_system_author_created',
+    storeId: null,
+    entityId: row!.id,
+    before: null,
+    after: { displayName: USAGE_SYSTEM_AUTHOR_NAME, kind: 'terminal' },
+    source,
+  });
   return row!.id;
 }
 
-/** The store's oldest `usage` DRAFT for one day and room, under `FOR UPDATE`; none when there is not one. */
-export async function findUsageDraftForUpdate(
+export async function updateUsageLineQuantity(tx: Tx, lineId: string, quantity: Quantity, expectedQty?: Quantity | null): Promise<void> {
+  await tx
+    .update(stockUsageLines)
+    .set(expectedQty === undefined ? { quantity } : { quantity, expectedQty })
+    .where(eq(stockUsageLines.id, lineId));
+}
+
+/** T-401 S6 A4: rewrite only the snapshot of a line (staff's quantity stays). */
+export async function updateUsageLineExpected(tx: Tx, lineId: string, expectedQty: Quantity): Promise<void> {
+  await tx.update(stockUsageLines).set({ expectedQty }).where(eq(stockUsageLines.id, lineId));
+}
+
+/**
+ * T-401 S6 A5: how much of each item the store's OTHER usage records of that day already hold, posted or draft, any room, never void or
+ * wastage. `exceptRecordIds` are left out (the pull's own drafts).
+ */
+export async function usageHeldByOthers(
   tx: Tx,
   storeId: string,
   usedOn: string,
-  locationId: string,
-): Promise<{ id: string } | undefined> {
-  const [row] = await tx
-    .select({ id: stockUsageRecords.id })
-    .from(stockUsageRecords)
+  itemIds: readonly string[],
+  exceptRecordIds: readonly string[],
+): Promise<Map<string, string>> {
+  if (itemIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ itemId: stockUsageLines.itemId, total: sql<string>`sum(${stockUsageLines.quantity})::text` })
+    .from(stockUsageLines)
+    .innerJoin(stockUsageRecords, eq(stockUsageRecords.id, stockUsageLines.recordId))
     .where(
       and(
         eq(stockUsageRecords.storeId, storeId),
         eq(stockUsageRecords.usedOn, usedOn),
-        eq(stockUsageRecords.locationId, locationId),
         eq(stockUsageRecords.kind, 'usage'),
-        eq(stockUsageRecords.status, 'draft'),
+        inArray(stockUsageRecords.status, ['draft', 'posted']),
+        inArray(stockUsageLines.itemId, [...itemIds]),
+        exceptRecordIds.length > 0 ? notInArray(stockUsageRecords.id, [...exceptRecordIds]) : sql`true`,
       ),
     )
-    .orderBy(asc(stockUsageRecords.createdAt), asc(stockUsageRecords.id))
-    .limit(1)
-    .for('update');
-  return row;
+    .groupBy(stockUsageLines.itemId);
+  return new Map(rows.map((r) => [r.itemId, r.total]));
 }
 
-export async function updateUsageLineQuantity(tx: Tx, lineId: string, quantity: Quantity): Promise<void> {
-  await tx.update(stockUsageLines).set({ quantity }).where(eq(stockUsageLines.id, lineId));
+/** T-401 S6 A7: mark a draft kept after its pull was voided. */
+export async function markPullVoided(tx: Tx, recordId: string): Promise<void> {
+  await tx.update(stockUsageRecords).set({ pullVoided: true }).where(eq(stockUsageRecords.id, recordId));
 }
 
 /** The auto-post rewrites a draft before posting it: a line whose posted quantity would be zero is dropped. */
@@ -508,6 +556,7 @@ export interface DueUsageDraftRow {
   readonly id: string;
   readonly orgId: string;
   readonly storeId: string;
+  readonly locationId: string;
   readonly usedOn: string;
 }
 
@@ -517,13 +566,14 @@ export interface DueUsageDraftRow {
  */
 export async function listDuePullUsageDrafts(tx: Tx, now: Date): Promise<DueUsageDraftRow[]> {
   return tx
-    .select({ id: stockUsageRecords.id, orgId: stockUsageRecords.orgId, storeId: stockUsageRecords.storeId, usedOn: stockUsageRecords.usedOn })
+    .select({ id: stockUsageRecords.id, orgId: stockUsageRecords.orgId, storeId: stockUsageRecords.storeId, locationId: stockUsageRecords.locationId, usedOn: stockUsageRecords.usedOn })
     .from(stockUsageRecords)
     .where(
       and(
         eq(stockUsageRecords.kind, 'usage'),
         eq(stockUsageRecords.status, 'draft'),
-        sql`((${stockUsageRecords.usedOn} + 1)::timestamp + interval '14 hours') at time zone 'Asia/Manila' <= ${now.toISOString()}::timestamptz`,
+        // A10: the LATER of 14:00 Manila the day after the business date and four hours after the draft was made.
+        sql`greatest(((${stockUsageRecords.usedOn} + 1)::timestamp + interval '14 hours') at time zone 'Asia/Manila', ${stockUsageRecords.createdAt} + interval '4 hours') <= ${now.toISOString()}::timestamptz`,
         sql`exists (select 1 from pos_usage_pull_lines pl join pos_usage_pulls p on p.id = pl.pull_id
                      where pl.usage_record_id = ${stockUsageRecords.id} and p.status <> 'void')`,
       ),
@@ -582,11 +632,12 @@ export async function listMonthUsageRecordsForClose(tx: Tx, orgId: string, start
         eq(stockUsageRecords.orgId, orgId),
         gte(stockUsageRecords.usedOn, startsOn),
         lte(stockUsageRecords.usedOn, endsOn),
-        inArray(stockUsageRecords.kind, ['usage', 'wastage']),
+        // A6: only `usage` records hold the month open; a wastage draft keeps its earlier (non-blocking) behaviour.
+        eq(stockUsageRecords.kind, 'usage'),
         inArray(stockUsageRecords.status, ['draft', 'posted']),
       ),
     );
-  const keep = rows.filter((r) => r.status === 'draft' || (r.kind === 'usage' && !r.autoPosted));
+  const keep = rows.filter((r) => r.status === 'draft' || !r.autoPosted);
   if (keep.length === 0) return [];
   const lines = await tx
     .select({ recordId: stockUsageLines.recordId, itemId: stockUsageLines.itemId })

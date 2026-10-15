@@ -1,0 +1,16 @@
+# T-401 S6 (audit ruling A1) - DAILY, 14:05 Manila.
+#
+# Why 14:05 and not 14:00: the deadline for a business date is 14:00 Manila the next day, so every draft due that day is already
+# past its deadline when this fires (the sweep itself also waits four hours after a draft was made).
+
+[Unit]
+Description=Shareat - next-afternoon auto-post of POS-pull usage drafts, daily (T-401 S6)
+
+[Timer]
+OnCalendar=*-*-* 14:05:00 Asia/Manila
+# Catch up after a reboot or an outage rather than skipping silently - same reasoning as every other daily job's timer (DEF-044).
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

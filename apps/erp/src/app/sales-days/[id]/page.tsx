@@ -3,7 +3,7 @@ import { authorize, can as canDo } from '@shareat/auth';
 import { salesDaysRepo, journalRepo, posV1Repo } from '@shareat/db';
 import { packageCapExcess, unpostedUsageDraftCount } from '@shareat/domain';
 import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
-import { addDays, formatBusinessDateTime, toBusinessDate } from '@shareat/core/datetime';
+import { addDays, formatBusinessDateTime, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listActingPersons, getStoreLink } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { postPosCorrectionAction, recheckPosDayAction, reimportSalesDayAction, setPlatformSalesAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
@@ -82,11 +82,11 @@ export default async function SalesDayDetailPage({
   });
   const unverified = day.status === 'open' || day.status === 'submitted';
 
-  // T-401 S6 (Ian 15 Oct): a WARNING, never a block - how many of this store's usage drafts dated yesterday still wait for a manager.
+  // T-401 S6 (Ian 15 Oct; A11): a WARNING, never a block - how many of this store's usage drafts dated the day BEFORE THE SALES DAY BEING VIEWED still wait for a manager.
   // Shown only to someone who can post them; the count is the domain's own read.
   const unpostedUsage = await withOrgPrincipal(orgId, async (tx) =>
     (await canDo(tx, actor, 'post_usage', { storeId: day.storeId }))
-      ? unpostedUsageDraftCount(tx, actor, { storeId: day.storeId, businessDate: addDays(toBusinessDate(), -1) })
+      ? unpostedUsageDraftCount(tx, actor, { storeId: day.storeId, businessDate: addDays(parseBusinessDate(day.businessDate), -1) })
       : 0,
   );
 

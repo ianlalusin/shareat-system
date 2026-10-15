@@ -159,6 +159,9 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
                     </td>
                     <td className="px-3 py-2">
                       <Badge status={d.status} />
+                      {d.pullVoided && (
+                        <span className="ml-2 text-xs text-amber-700 dark:text-amber-400">Pull voided - check this draft against what was really used.</span>
+                      )}
                     </td>
                   </tr>
                 ))}

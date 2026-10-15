@@ -11,7 +11,7 @@
  */
 import { authorize, canAt, type Actor } from '@shareat/auth';
 import { stockUsageRepo, type Tx } from '@shareat/db';
-import { usageVariancesFor } from './usage-tolerance';
+import { snapshotVariancesFor, usageVariancesFor } from './usage-tolerance';
 
 /**
  * The sentence the month close refuses with, or `null` when no usage record stands in the way. `startsOn`/`endsOn` are the month's
@@ -24,21 +24,27 @@ export async function usageCloseRefusal(tx: Tx, orgId: string, startsOn: string,
   const drafts = records.filter((r) => r.status === 'draft');
   const posted = records.filter((r) => r.status === 'posted' && r.kind === 'usage');
 
-  // Posted by a person, out of band, and no reason on file for that item: judged the way the post gate judges it (the day's total
-  // for the item against the plan's expectation), reading the stored reason from the audit row `stock.usage_tolerance_verified`.
+  // Posted by a person, out of band, and no reason on file for that item. A4: an item the POS pull covered in THIS record is judged
+  // against the record's own snapshot (never a live recomputation, never other records' quantities, so another room's explained post
+  // cannot turn it out of band); any other item is judged by the day's total against the plan, as the post gate judges it. The stored
+  // reason is the audit row `stock.usage_tolerance_verified`.
   let unexplained = 0;
   if (posted.length > 0) {
     const verified = await stockUsageRepo.verifiedToleranceKeys(tx, orgId, posted.map((r) => r.id));
     const cache = new Map<string, Awaited<ReturnType<typeof usageVariancesFor>>>();
     for (const r of posted) {
+      const lines = await stockUsageRepo.listUsageLines(tx, r.id);
+      const own = await snapshotVariancesFor(tx, orgId, r.id, lines);
+      const ownIds = new Set(own.map((v) => v.itemId));
       const key = `${r.storeId}|${r.usedOn}`;
       let day = cache.get(key);
       if (!day) {
         day = await usageVariancesFor(tx, orgId, r.storeId, r.usedOn);
         cache.set(key, day);
       }
-      const outside = new Set(day.filter((v) => !v.withinBand).map((v) => v.itemId));
-      if (r.itemIds.some((itemId) => outside.has(itemId) && !verified.has(`${r.id}|${itemId}`))) unexplained += 1;
+      const outside = new Set([...own, ...day.filter((v) => !ownIds.has(v.itemId))].filter((v) => !v.withinBand).map((v) => v.itemId));
+      const touched = new Set([...r.itemIds, ...ownIds]);
+      if ([...touched].some((itemId) => outside.has(itemId) && !verified.has(`${r.id}|${itemId}`))) unexplained += 1;
     }
   }
 

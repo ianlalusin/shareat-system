@@ -94,6 +94,11 @@ export const stockUsageRecords = pgTable(
      * after its business date) instead of a manager. Out-of-band lines of such a record were posted at the EXPECTED quantity.
      */
     autoPosted: boolean('auto_posted').notNull().default(false),
+    /**
+     * T-401 S6 audit ruling A7 (migration 0198). True when the POS pull that made this draft was voided after staff had edited it: the
+     * draft is kept as a MANUAL draft (nothing links it to a pull, so it never auto-posts) and the queue flags it "pull voided - check".
+     */
+    pullVoided: boolean('pull_voided').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -166,11 +171,18 @@ export const stockUsageLines = pgTable(
      * quantity would make "used −5" a silent stock-in.
      */
     quantity: numeric('quantity', { precision: 14, scale: 3 }).notNull(),
+    /**
+     * T-401 S6 audit ruling A4 (migration 0198). What the POS pull expected for this line when it wrote it - a SNAPSHOT, never recomputed.
+     * Null for a line staff added by hand.
+     */
+    expectedQty: numeric('expected_qty', { precision: 14, scale: 3 }),
     movementId: uuid('movement_id').references(() => stockMovements.id, { onDelete: 'restrict' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('stock_usage_lines_record_line_key').on(t.recordId, t.lineNo),
+    check('stock_usage_lines_expected_qty_check', sql`${t.expectedQty} is null or ${t.expectedQty} >= 0`),
+    check('stock_usage_lines_expected_qty_finite_check', sql`${t.expectedQty} > '-Infinity'::numeric and ${t.expectedQty} < 'Infinity'::numeric`),
     check('stock_usage_lines_quantity_not_zero_check', sql`${t.quantity} <> 0`),
     index('stock_usage_lines_item_idx').on(t.itemId),
     check('stock_usage_lines_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),

@@ -12,8 +12,11 @@
  *
  * ## Exit code is load-bearing
  *
- * Non-zero when an org failed outright, or when no org was found at all (a configuration fault wearing the costume of a quiet
- * afternoon). A draft that was skipped is printed as a warning and does NOT fail the run: it is still a draft a manager can post.
+ * Non-zero when an org failed outright, when any draft was left unposted (a room under count, a closed stock month, a short item:
+ * the failure shows in systemd, and the draft is still there for a manager to post), or when no org was found at all (a
+ * configuration fault wearing the costume of a quiet afternoon).
+ *
+ * Flags: `--org=<id>` runs one org; `--manual` records audit source and run trigger `manual` instead of `cron`.
  *
  * Registering this job is not the finish line. Arming its timer is, and only Ian can do that (docs/ops/README.md).
  */
@@ -33,7 +36,7 @@ async function main(): Promise<number> {
   const trigger = process.argv.includes('--manual') ? 'manual' : 'cron';
   console.log(`usage-auto-post: running (${trigger})${orgId ? ` for org ${orgId}` : ''}`);
 
-  const result = await usageAutoPostSweep({ orgId });
+  const result = await usageAutoPostSweep({ orgId, trigger, now: new Date() });
 
   for (const o of result.outcomes) {
     const head = `  ${o.orgName}`;
