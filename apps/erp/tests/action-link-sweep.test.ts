@@ -432,6 +432,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1170 + 2 (T-404, 2026-10-14: /admin/stores "Open a branch" summary + /ap/suppliers/[id] invoice row link) = 1172.
     // release 2026-10-14: 1170 + 2 (T-404) + 18 (T-392 S5) + 86 (T-401 S4) + 16 (T-401 S5) = 1292.
     // 116 FAIL / 1259 total, T-411 2026-10-15: 30 tables' row links are full-height rows (h-11).
+    // + T-408 (/ap VAT/OR controls, /ap/vat page). Total re-measured on release 2026-10-16.
     expect(results.length).toBe(1259);
   });
 
