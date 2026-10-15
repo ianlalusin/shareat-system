@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 
 import type { Actor } from '@shareat/auth';
 import { cast, expectSentenceError, fd, rawItem, rawOption, rawRule, run, sql, uid, type Cast } from './t401-s4-common';
@@ -75,6 +76,9 @@ const MENU_ACTIONS = () => import('../../src/app/menu/actions');
 const ITEM_ACTIONS = () => import('../../src/app/menu/items/[id]/actions');
 const PRICE_ACTIONS = () => import('../../src/app/menu/prices/actions');
 const REQUEST_ACTIONS = () => import('../../src/app/menu/requests/actions');
+/** Mirrors `confirmTokenFor` in src/app/menu/lib.ts (not imported: this file loads app modules only after its mocks). */
+const confirmToken = (name: string) =>
+  createHash('sha256').update(`menu-request-confirm|${name.trim().replace(/\s+/g, ' ').toLowerCase()}`).digest('hex').slice(0, 24);
 
 let shared: Promise<Ctx> | null = null;
 function ctx(): Promise<Ctx> {
@@ -360,7 +364,12 @@ const cases: Case[] = [
       { who: x.c.staff, label: 'staff', form: fd({ storeId: x.c.storeA, name: uid('NoReq'), itemType: 'a_la_carte', confirmed: '1' }) },
       { who: x.c.managerA, label: 'manager scoped to A, at B', form: fd({ storeId: x.c.storeB, name: uid('NoReq'), itemType: 'a_la_carte', confirmed: '1' }) },
     ],
-    allowed: (x) => [{ who: x.c.managerA, label: 'manager at A', form: fd({ storeId: x.c.storeA, name: uid('Req'), itemType: 'a_la_carte', confirmed: '1' }) }],
+    // The real "Send request anyway" token for this name: `1` is never accepted, so without it the look-alike check can
+    // see earlier `Req-*` requests in this org and return the duplicate warning instead (order-dependent in the full suite).
+    allowed: (x) => {
+      const name = uid('Req');
+      return [{ who: x.c.managerA, label: 'manager at A', form: fd({ storeId: x.c.storeA, name, itemType: 'a_la_carte', confirmed: confirmToken(name) }) }];
+    },
   },
   {
     name: 'withdrawItemRequestAction (the requester only; another manager and staff refused)',
