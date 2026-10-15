@@ -225,10 +225,11 @@ describe('S2 flips its catalogue entries live (and only those)', () => {
     'capability.granted', 'manager.elevated', 'security.authorize_denied', 'employment.created', 'employment.ended',
     'employment.positions_set',
   ];
-  it('the 17 S2 entries are not reserved; the S3/S5 security entries stay reserved', () => {
+  it('the 17 S2 entries are not reserved; the S3 envelope entries are live and the S5 summary stays reserved', () => {
     for (const a of S2) expect(catalogueEntry(a)?.reserved, `${a} reserved?`).toBe(false);
-    for (const a of ['security.authorize_denied_summary', 'security.event_replay_conflict', 'security.event_store_mismatch']) {
-      expect(catalogueEntry(a)?.reserved, `${a} stays reserved (S3/S5 own it)`).toBe(true);
+    expect(catalogueEntry('security.authorize_denied_summary')?.reserved, 'stays reserved (S5 owns it)').toBe(true);
+    for (const a of ['security.event_replay_conflict', 'security.event_store_mismatch']) {
+      expect(catalogueEntry(a)?.reserved, `${a} is live (T-402 S3 flipped it)`).toBe(false);
     }
     expect(AUDIT_CATALOGUE.some((e) => e.reserved)).toBe(true);
   });

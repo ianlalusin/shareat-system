@@ -6,7 +6,6 @@ activateTerminal
 addUsageLine
 adjudicateRange
 allocationsFor
-appendClientEvent
 applyCreditAction
 arrivalLag
 assetsMissingCapitalisation
@@ -78,6 +77,7 @@ rateFor
 realSourceTypesForSpecName
 recentRuns
 reconcileSupplier
+recordClientEvents
 remainingFor
 remainingOf
 removeUsageLine
