@@ -271,3 +271,20 @@ describe('Invariant 14 - personMaySignInAtStore is still ONE round trip', () => 
     });
   });
 });
+
+describe('Q2 - an employment whose ended_on is in the FUTURE counts as ended (PIN door)', () => {
+  it('manager with manual scope at A whose only employment (at A) ends TOMORROW: BAD_PIN, no session', async () => {
+    const f = await fixture('future-end');
+    const p = await f.person('Leaving Manager', 'manager');
+    const tomorrow = (await sql<{ d: string }[]>`select (current_date + 1)::text as d`)[0]!.d;
+    await f.employ(p.personId, f.storeA, '2026-01-01', tomorrow);
+    await f.scope(p.personId, f.storeA, 'manual');
+    const e = await f.pinAt(p.pin, f.storeA).then(
+      () => null,
+      (x: Error) => x,
+    );
+    expect(e, 'mutant: `ended_on <= current_date` - a future end date still counts as open').toBeInstanceOf(AuthenticationError);
+    expect(e!.message).toBe(BAD_PIN);
+    expect((await sql`select 1 from sessions where person_id = ${p.personId}`).length).toBe(0);
+  });
+});

@@ -293,3 +293,16 @@ describe('Invariant 10 - accessRepo.personMaySignInToOrg: the truth table, and t
     expect(await ask(x.orgId, adminX.personId, y.orgId), 'mutant: org_id filter dropped from the role leg').toBe(false);
   });
 });
+
+describe('Q2 - an employment whose ended_on is in the FUTURE counts as ended (open means ended_on is null)', () => {
+  it('manager whose only employment ends TOMORROW is refused at the Firebase door with NO_ACCESS and no session', async () => {
+    const f = await fixture('future-end');
+    const p = await f.person('Leaving Manager', 'manager');
+    const tomorrow = (await sql<{ d: string }[]>`select (current_date + 1)::text as d`)[0]!.d;
+    await f.employ(p.personId, f.storeA, '2026-01-01', tomorrow);
+    const e = await refused(p.externalId);
+    expect(e, 'mutant: `ended_on <= current_date` - a future end date still counts as open and the sign-in succeeds').toBeInstanceOf(AuthenticationError);
+    expect(e.message).toBe(NO_ACCESS);
+    expect(await sessionCount(p.personId)).toBe(0);
+  });
+});

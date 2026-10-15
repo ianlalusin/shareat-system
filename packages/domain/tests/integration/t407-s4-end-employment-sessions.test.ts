@@ -28,7 +28,14 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 // Failure switches for Invariant 18: the session UPDATE, or the session.ended_all audit append, can be forced to fail.
-const ctl = vi.hoisted(() => ({ failSessionUpdate: false, failEndedAllAudit: false }));
+const ctl = vi.hoisted(() => ({
+  failSessionUpdate: false,
+  failEndedAllAudit: false,
+  // Invariant 21: when set, `personMaySignInToOrg` waits (up to barrierMs) until `barrierSize` callers have arrived.
+  barrierSize: 0,
+  barrierMs: 4000,
+  arrived: 0,
+}));
 vi.mock('@shareat/db', async (importOriginal) => {
   const real = await importOriginal<typeof import('@shareat/db')>();
   return {
@@ -37,6 +44,17 @@ vi.mock('@shareat/db', async (importOriginal) => {
       ...real.sessionsRepo,
       endAllForPerson: (...a: Parameters<typeof real.sessionsRepo.endAllForPerson>) =>
         ctl.failSessionUpdate ? Promise.reject(new Error('forced session update failure')) : real.sessionsRepo.endAllForPerson(...a),
+    },
+    accessRepo: {
+      ...real.accessRepo,
+      personMaySignInToOrg: async (...a: Parameters<typeof real.accessRepo.personMaySignInToOrg>) => {
+        if (ctl.barrierSize > 0) {
+          ctl.arrived += 1;
+          const t0 = Date.now();
+          while (ctl.arrived < ctl.barrierSize && Date.now() - t0 < ctl.barrierMs) await new Promise((r) => setTimeout(r, 20));
+        }
+        return real.accessRepo.personMaySignInToOrg(...a);
+      },
     },
     auditLogRepo: {
       ...real.auditLogRepo,
@@ -316,4 +334,32 @@ describe('Invariant 20 - ending the last admin\'s employment never locks the org
     expect(await endedAll(f.orgId)).toHaveLength(0);
     expect((await f.browserSession(admin)).personId, 'and a fresh sign-in still works').toBe(admin.personId);
   });
+});
+
+describe('Invariant 21 - two terminations of the SAME person (different stores) must serialise, not deadlock', () => {
+  it('both endEmployment calls succeed; the person ends with no open employment and no live session', async () => {
+    const f = await fixture('inv21');
+    const s = await f.person('Floater', 'staff');
+    const empA = await f.hire(s.personId, f.storeA);
+    const empB = await f.hire(s.personId, f.storeB);
+    await f.browserSession(s);
+    await f.pinSession(s, f.storeA);
+    expect(await live(s.personId)).toBe(2);
+
+    // Barrier: each transaction has done its employment UPDATE before either runs the eligibility check, so the two
+    // `for share` reads cross the two row locks (A holds A, wants B; B holds B, wants A) unless the code serialises first.
+    ctl.barrierSize = 2;
+    ctl.arrived = 0;
+    let results: PromiseSettledResult<unknown>[];
+    try {
+      results = await Promise.allSettled([f.end(f.bossActor, empA), f.end(f.bossActor, empB)]);
+    } finally {
+      ctl.barrierSize = 0;
+    }
+    const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected').map((r) => String((r.reason as { code?: string })?.code ?? r.reason));
+    expect(failures, 'mutant: lock-all-employments-in-order removed - Postgres aborts one with deadlock 40P01').toEqual([]);
+    expect(await employmentOpen(empA)).toBe(false);
+    expect(await employmentOpen(empB)).toBe(false);
+    expect(await live(s.personId), 'no live session left').toBe(0);
+  }, 30_000);
 });
