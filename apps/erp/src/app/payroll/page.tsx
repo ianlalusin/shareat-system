@@ -1,10 +1,10 @@
-import { requirePageAccess } from '../../lib/page-access';
+import { requirePageAccess, StoreNotAvailable } from '../../lib/page-access';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { postPayRunAction, setPayRateAction, voidPayRunAction } from './actions';
 import {
   cashAccountsFor,
   currentPeriod,
-  listStores,
+  payrollStoresFor,
   payoutDateFor,
   periodsForMonth,
   periodLabel,
@@ -49,7 +49,10 @@ export default async function PayrollPage({
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
 
-  const stores = await listStores(actor.orgId);
+  const stores = await payrollStoresFor(actor);
+  if (stores.length === 0) return <StoreNotAvailable />;
+  // T-435: a requested store the actor does not hold is one sentence — never a fallback to another store.
+  if (sp.store && !stores.some((s) => s.id === sp.store)) return <StoreNotAvailable />;
   const storeId = sp.store || stores[0]?.id;
   if (!storeId) {
     return (
@@ -61,7 +64,7 @@ export default async function PayrollPage({
   }
 
   // ⭐ The period comes from the STORE'S configuration, not from a hardcoded 1st-to-15th.
-  const cfg = await premiumSettingsFor(actor.orgId, storeId);
+  const cfg = await premiumSettingsFor(actor, storeId);
   const periodOptions = cfg ? periodsForMonth(cfg) : [];
   const fallback = cfg ? currentPeriod(cfg) : { start: '', end: '', label: '' };
   // ⚠️ The picker and the two date inputs BOTH submit, so precedence has to be explicit: the
@@ -73,13 +76,13 @@ export default async function PayrollPage({
 
   const [{ preview: pv, error: previewError }, roster, runs, accounts] = await Promise.all([
     preview(actor.orgId, actor, { storeId, periodStart, periodEnd }),
-    rosterFor(actor.orgId, storeId),
-    runsFor(actor.orgId, storeId),
-    cashAccountsFor(actor.orgId, storeId),
+    rosterFor(actor, storeId),
+    runsFor(actor, storeId),
+    cashAccountsFor(actor, storeId),
   ]);
 
   const latest = runs[0];
-  const latestSlips = latest ? await slipsFor(actor.orgId, latest.id) : [];
+  const latestSlips = latest ? await slipsFor(actor, latest.id) : [];
 
   return (
     <Page density="table">

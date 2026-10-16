@@ -419,6 +419,19 @@ export async function listOtherOpenBranches(
   }));
 }
 
+/**
+ * T-435: does this person have an employment (any status) at one of `storeIds`? The scope test behind a viewer's access to
+ * a person-level read (the sign-in PIN state) - a person outside the viewer's stores is not theirs to see.
+ */
+export async function personHasEmploymentAtStores(tx: Tx, personId: string, storeIds: readonly string[]): Promise<boolean> {
+  if (storeIds.length === 0) return false;
+  const result = await tx.execute(sql`
+    select 1 as one from employments e
+    where e.person_id = ${personId} and e.store_id in (${sql.join(storeIds.map((i) => sql`${i}`), sql`, `)})
+    limit 1`);
+  return (result as unknown as unknown[]).length > 0;
+}
+
 /** The roster — reads the VIEW, which is the only answer to "who is active". */
 export async function listActiveRoster(tx: Tx, storeId: string): Promise<RosterRow[]> {
   const result = await tx.execute(sql`

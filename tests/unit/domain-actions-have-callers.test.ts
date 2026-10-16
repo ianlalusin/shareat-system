@@ -107,6 +107,9 @@ const EXEMPT: Record<string, string> = {
     'event. ⚠️ The LAST of DEF-190’s five still without a screen: a charge raised outside a trade ' +
     'order is T-226 §6, and it is blocked on Ian deciding which revenue account a manual credit ' +
     'sale credits — no wholesale-revenue account exists in the chart.',
+  recordChargeWithCollection:
+    'INTERNAL — `dispatchTradeOrder` calls it (`trade/index.ts:602`) when the buyer pays at dispatch (T-433 S1); ' +
+    'dispatch is the billing event, not a separate human boundary.',
   writeToleranceVerified:
     'INTERNAL — `postUsage` calls it (`stock/usage-records.ts:298`) in the same transaction to record the manager’s reason for an out-of-band line.',
   capitalizeApprovedExpense:

@@ -1,7 +1,7 @@
 import { getArAgingReport } from '@shareat/domain';
 import { customersRepo } from '@shareat/db';
 import { formatMoney } from '@shareat/core/money';
-import { reportScope, runReport } from '../../lib';
+import { mayReadCustomerBalances, reportScope, runReport } from '../../lib';
 import { csvResponse } from '@/lib/csv';
 
 /** The AR aging register's CSV export — T-209c. Same query the screen itself runs; same auth. */
@@ -12,6 +12,9 @@ export async function GET(request: Request) {
 
   const scope = await reportScope('/reports/ar-aging', 'view_financial_reports', store);
   const orgId = scope.actor.orgId;
+  if (!(await mayReadCustomerBalances(scope))) {
+    return new Response('You do not have access to customer balances (record_ar_collection).', { status: 403 });
+  }
 
   const { report, customerNames } = await runReport(orgId, async (tx) => {
     const [report, customers] = await Promise.all([

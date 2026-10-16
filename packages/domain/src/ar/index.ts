@@ -83,12 +83,12 @@ async function creditExposure(
   const reason = opts.reason?.trim() || '';
   const mayOverride = await can(trx, actor, 'override_credit_limit', { storeId });
   if (!mayOverride || !reason) {
-    throw new Error(
-      `recordCharge: ${customer.name} owes ₱${owed} and this charge is ` +
-        `₱${addedExposure}, which would take them to ₱${after} against a ` +
-        `limit of ₱${customer.creditLimit}. A manager or admin can charge it anyway by ` +
-        'saying why.',
-    );
+    const said =
+      `${customer.name} owes ₱${owed} and this charge is ` +
+      `₱${addedExposure}, which would take them to ₱${after} against a ` +
+      `limit of ₱${customer.creditLimit}. A manager or admin can charge it anyway by ` +
+      'saying why.';
+    throw refuse(`recordCharge: ${said}`, said);
   }
   return { owed, after, limit, over, overrideBy: actor.personId, overrideReason: reason };
 }
@@ -253,7 +253,7 @@ export async function recordChargeWithCollection(
     const { customer, totalAmount } = await loadChargeSubject(trx, actor, input);
 
     const paid = parseMoneyInput(input.payNow.amount, 'recordChargeWithCollection: the payment', 'The amount paid now');
-    if (compare(paid, ZERO) <= 0) throw new Error('recordChargeWithCollection: the amount paid now has to be greater than zero.');
+    if (compare(paid, ZERO) <= 0) throw refuse('recordChargeWithCollection: the amount paid now has to be greater than zero.', 'The amount paid now has to be more than zero.');
     if (compare(paid, totalAmount) > 0) {
       throw refuse(
         `recordChargeWithCollection: paid ${paid} is more than the ${totalAmount} charge.`,
@@ -264,7 +264,7 @@ export async function recordChargeWithCollection(
       throw refuse('recordChargeWithCollection: no money account named.', 'Choose the account the payment went into.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.payNow.moneyAccountId);
-    if (!account) throw new Error('recordChargeWithCollection: that money account does not exist.');
+    if (!account) throw refuse('recordChargeWithCollection: that money account does not exist.', 'That money account does not exist.');
     if (account.storeId !== input.storeId) {
       throw refuse(
         `recordChargeWithCollection: money account ${account.id} is at another store than the charge.`,

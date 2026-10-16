@@ -4,7 +4,7 @@ import { SHORTAGE_REASONS } from '@shareat/db/schema';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../../../lib/session';
 import { dispatchOrderAction, receiveOrderAction, setBirInvoiceNoAction, voidOrderAction } from '../actions';
-import { creditPreview, orderDetail, peso, storeMoneyAccounts, today } from '../lib';
+import { canSeeCreditLimit, creditPreview, orderDetail, peso, storeMoneyAccounts, today } from '../lib';
 import { ACTION_LINK } from '@/components/action-link';
 import { PhotoInput } from '@/components/PhotoInput';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
@@ -49,9 +49,13 @@ export default async function TradeOrderPage({
   const { id } = await params;
   const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/trade/orders/${id}`);
-  const detail = await orderDetail(actor.orgId, id);
+  const detail = await orderDetail(actor, id);
   if (!detail) notFound();
-  const { order, lines, customer, treatment, sellingStore, receivingStore } = detail;
+  const { order, lines, treatment, sellingStore, receivingStore } = detail;
+  // T-435 / bible row 353 - the buyer's credit limit is shown only to someone who can approve_buyer or override_credit_limit at
+  // THIS order's store. For everyone else it is dropped here, before anything below can print it.
+  const limitVisible = await canSeeCreditLimit(actor, detail.order.storeId);
+  const customer = limitVisible ? detail.customer : { ...detail.customer, creditLimit: null };
 
   const isInternal = treatment === 'internal';
   const canDispatch = order.status === 'draft' || order.status === 'confirmed';
@@ -146,7 +150,7 @@ export default async function TradeOrderPage({
                 </label>
                 <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
                   Proof of payment (required for GCash or bank)
-                  <PhotoInput name="receiptPhoto" accept="image/*" className="text-sm" />
+                  <PhotoInput name="receiptPhoto" className="text-sm" />
                 </label>
               </fieldset>
             )}

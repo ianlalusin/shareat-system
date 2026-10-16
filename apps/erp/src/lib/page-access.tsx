@@ -23,7 +23,7 @@
 import { withOrgPrincipal } from '../app/expenses/lib';
 import { heldCapabilities, type Actor } from '@shareat/auth';
 import { requireSession } from './session';
-import { capabilityForRoute } from './route-capability';
+import { capabilitiesForRoute } from './route-capability';
 
 export interface PageAccess {
   actor: Actor;
@@ -41,8 +41,8 @@ export interface PageAccess {
  */
 export async function requirePageAccess(route: string): Promise<PageAccess> {
   const { actor } = await requireSession(route);
-  const required = capabilityForRoute(route);
-  if (required === null) return { actor, refusal: null };
+  const accepted = capabilitiesForRoute(route);
+  if (accepted.length === 0) return { actor, refusal: null };
 
   // ⛔ `withOrgPrincipal`, never a bare `transaction()` — T-231. A plain transaction connects as
   //    the table OWNER, for which row-level security does not apply, so every policy in the
@@ -50,9 +50,9 @@ export async function requirePageAccess(route: string): Promise<PageAccess> {
   //    which are org-scoped: unprincipalled, a read gate would have been consulting rows across
   //    tenancy boundaries. Caught by `tests/unit/no-direct-transaction-in-erp.test.ts`.
   const held = await withOrgPrincipal(actor.orgId, (tx) => heldCapabilities(tx, actor));
-  if (held.has(required)) return { actor, refusal: null };
+  if (accepted.some((c) => held.has(c))) return { actor, refusal: null };
 
-  return { actor, refusal: <AccessRefused capability={required} /> };
+  return { actor, refusal: <AccessRefused capability={accepted.join(' or ')} /> };
 }
 
 function AccessRefused({ capability }: { capability: string }) {
@@ -77,6 +77,20 @@ function AccessRefused({ capability }: { capability: string }) {
         >
           Back to the dashboard
         </a>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * T-435 — the one sentence for a requested store the actor does not hold (design 3). Nothing else: no store name, no
+ * fallback to another store.
+ */
+export function StoreNotAvailable() {
+  return (
+    <div className="mx-auto max-w-xl p-8">
+      <div className="rounded-lg border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+        <p>This store is not available to you.</p>
       </div>
     </div>
   );

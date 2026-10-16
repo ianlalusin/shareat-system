@@ -31,8 +31,8 @@
  * scoped to every store in the org sees the org-wide view.
  */
 import { accessRepo, type Tx } from '@shareat/db';
-import { authorize, type Actor, type Capability } from '@shareat/auth';
-import { and, asc, eq } from 'drizzle-orm';
+import { authorize, can, type Actor, type Capability } from '@shareat/auth';
+import { asc, eq } from 'drizzle-orm';
 import { schema } from '@shareat/db';
 import { requireSession } from '../../lib/session';
 import { withOrgPrincipal } from '../expenses/lib';
@@ -84,34 +84,7 @@ export async function reportScope(
       .where(eq(schema.organizations.id, actor.orgId))
       .limit(1);
 
-    const orgStores = await tx
-      .select({
-        id: schema.stores.id,
-        name: schema.stores.name,
-        code: schema.stores.code,
-      })
-      .from(schema.stores)
-      // ⛔ DEF-200 — ACTIVE stores only, and the `is_active` half is not a nicety, it is the whole
-      // bug. `personCoversWholeOrg` (`repo/access.ts`) answers "do you hold every store?" from
-      // `activeStoreIdsForOrg` — **active** stores. This query had no such filter, so a person who
-      // held every active store was told `coversWholeOrg = true` and then handed a store list that
-      // ALSO contained the retired ones. `authorizeForScope` proves the capability per store, hit a
-      // store nobody has a scope row for, and threw: **seven report screens returned HTTP 500 for
-      // every role**, super-admin included, from the moment one store was deactivated.
-      //
-      // ⭐ Two functions disagreeing about what "the org's stores" means — the same shape as every
-      // other two-sources-of-truth defect in this project. `personCoversWholeOrg` is the authority
-      // because it is the one the gate actually consults; this query now matches its definition.
-      //
-      // ⚠️ And a retired store has no business in a report scope anyway: it can post nothing new,
-      // and offering it as the default filter (it sorted last, so it was the one that broke) shows
-      // a period no one is trading in.
-      .where(and(eq(schema.stores.orgId, actor.orgId), eq(schema.stores.isActive, true)))
-      .orderBy(asc(schema.stores.name));
-
-    const coversWholeOrg = await accessRepo.personCoversWholeOrg(tx, actor.personId, actor.orgId);
-    const heldIds = new Set(await accessRepo.storeIdsForPerson(tx, actor.personId));
-    const stores = coversWholeOrg ? orgStores : orgStores.filter((s) => heldIds.has(s.id));
+    const { stores, coversWholeOrg } = await scopedStores(tx, actor);
 
     // A requested store is honoured only if it is one of theirs. Anything else falls back — and
     // for someone who is NOT org-wide the fallback is their first store, never "all stores",
@@ -134,6 +107,38 @@ export async function reportScope(
       coversWholeOrg,
     };
   });
+}
+
+/**
+ * T-435 — the store list half of `reportScope`, extracted so every personal-data page uses the SAME rule (bible row 353).
+ *
+ * Active stores only (DEF-200: `personCoversWholeOrg` answers from ACTIVE stores, so a list that also held retired ones made
+ * `authorize` hit a store nobody has a row for). The whole org's active stores if the actor covers the whole org, else the
+ * actor's own scope rows. `includeRetired` (payroll final pay at a closed branch) adds retired stores ONLY where the actor
+ * has a scope row, so `authorize` can pass; no admin bypass.
+ */
+export async function scopedStores(
+  tx: Tx,
+  actor: Actor,
+  opts: { includeRetired?: boolean } = {},
+): Promise<{ stores: StoreOption[]; coversWholeOrg: boolean }> {
+  const orgStores = await tx
+    .select({
+      id: schema.stores.id,
+      name: schema.stores.name,
+      code: schema.stores.code,
+      isActive: schema.stores.isActive,
+    })
+    .from(schema.stores)
+    .where(eq(schema.stores.orgId, actor.orgId))
+    .orderBy(asc(schema.stores.name));
+
+  const coversWholeOrg = await accessRepo.personCoversWholeOrg(tx, actor.personId, actor.orgId);
+  const heldIds = new Set(await accessRepo.storeIdsForPerson(tx, actor.personId));
+  const stores = orgStores
+    .filter((s) => (s.isActive ? coversWholeOrg || heldIds.has(s.id) : opts.includeRetired === true && heldIds.has(s.id)))
+    .map(({ id, name, code }) => ({ id, name, code }));
+  return { stores, coversWholeOrg };
 }
 
 async function authorizeForScope(
@@ -172,3 +177,19 @@ export async function runReport<T>(orgId: string, fn: (tx: Tx) => Promise<T>): P
   return withOrgPrincipal(orgId, fn);
 }
 
+
+/**
+ * T-435 / bible row 353 - customer names and balances in a report only for stores where the viewer holds
+ * `record_ar_collection` (view_financial_reports alone is not a right to read customers). One store: that store. Org-wide view:
+ * every store in the list must pass.
+ */
+export async function mayReadCustomerBalances(scope: Pick<ReportScope, 'actor' | 'stores' | 'storeId'>): Promise<boolean> {
+  return withOrgPrincipal(scope.actor.orgId, async (tx) => {
+    const ids = scope.storeId ? [scope.storeId] : scope.stores.map((s) => s.id);
+    if (ids.length === 0) return false;
+    for (const storeId of ids) {
+      if (!(await can(tx, scope.actor, 'record_ar_collection', { storeId }))) return false;
+    }
+    return true;
+  });
+}

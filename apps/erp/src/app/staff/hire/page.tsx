@@ -1,8 +1,8 @@
 import { EMPLOYMENT_STATUSES, ENDED_STATUSES } from '@shareat/db/schema';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess, StoreNotAvailable } from '../../../lib/page-access';
 import { hireAction } from '../actions';
-import { listStores, positionsForStore, searchPersonsFor } from '../lib';
+import { positionsForStore, searchPersonsFor, staffStoresFor } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { Button, FlashBanner, FormGrid, Field, Input } from '@/components/ui';
@@ -32,9 +32,13 @@ const HIRE_STATUSES = EMPLOYMENT_STATUSES.filter((s) => !(ENDED_STATUSES as read
 
 export default async function HireStaffPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/staff/hire');
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+  // T-435 / bible row 353 - hiring needs enrol_staff, at the viewer's own stores only.
+  const { actor, refusal } = await requirePageAccess('/staff/hire');
+  if (refusal) return refusal;
+  const stores = await staffStoresFor(actor, ['enrol_staff']);
+  if (stores.length === 0) return <StoreNotAvailable />;
+  if (sp.store && !stores.some((s) => s.id === sp.store)) return <StoreNotAvailable />;
+  const storeId = sp.store || stores[0]?.id;
 
   if (!storeId) {
     return (
@@ -103,7 +107,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
           {results.map((p) => (
             <label key={p.id} className="flex items-center gap-2 text-sm">
               <input type="radio" name="personChoice" value={`existing:${p.id}`} required className="h-4 w-4" />
-              Use this person: <strong>{p.displayName}</strong>
+              Use this person: <strong>{p.displayName}</strong>{'branches' in p && ` (works at ${p.branches.join(', ')})`}
             </label>
           ))}
           <label className="flex flex-wrap items-center gap-2 text-sm">

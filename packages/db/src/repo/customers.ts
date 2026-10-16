@@ -106,6 +106,49 @@ export async function listCustomers(tx: Tx, orgId: string): Promise<CustomerRow[
   return rows as CustomerRow[];
 }
 
+/** T-435: the comma-separated bound ids of a store list (callers handle the empty list: an empty `in ()` is a syntax error). */
+function storeList(storeIds: readonly string[]) {
+  return sql.join(storeIds.map((i) => sql`${i}`), sql`, `);
+}
+
+/**
+ * T-435 (Ian Q1: no cross-branch customers). The customers a viewer holding `storeIds` may see: any AR row (charge or
+ * collection) at one of those stores, or a counterparty store that is one of them, or NO AR rows anywhere.
+ */
+export async function visibleCustomerIds(tx: Tx, orgId: string, storeIds: readonly string[]): Promise<Set<string>> {
+  const rows = (await tx.execute(sql`
+    select c.id as id
+    from customers c
+    where c.org_id = ${orgId}
+      and (
+        ${(storeIds.length === 0 ? sql`false` : sql`c.counterparty_store_id in (${storeList(storeIds)})`)}
+        or exists (select 1 from ar_charges ch where ch.customer_id = c.id and ${(storeIds.length === 0 ? sql`false` : sql`ch.store_id in (${storeList(storeIds)})`)})
+        or exists (select 1 from ar_collections co where co.customer_id = c.id and ${(storeIds.length === 0 ? sql`false` : sql`co.store_id in (${storeList(storeIds)})`)})
+        or (
+          not exists (select 1 from ar_charges ch2 where ch2.customer_id = c.id)
+          and not exists (select 1 from ar_collections co2 where co2.customer_id = c.id)
+        )
+      )
+  `)) as unknown as Record<string, string>[];
+  return new Set(rows.map((r) => String(r.id)));
+}
+
+export async function listCustomersInScope(tx: Tx, orgId: string, storeIds: readonly string[]): Promise<CustomerRow[]> {
+  const [all, visible] = await Promise.all([listCustomers(tx, orgId), visibleCustomerIds(tx, orgId, storeIds)]);
+  return all.filter((c) => visible.has(c.id));
+}
+
+export async function getByIdInScope(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  storeIds: readonly string[],
+): Promise<CustomerRow | undefined> {
+  const row = await getById(tx, orgId, id);
+  if (!row) return undefined;
+  return (await visibleCustomerIds(tx, orgId, storeIds)).has(id) ? row : undefined;
+}
+
 export async function updateCustomer(
   tx: Tx,
   orgId: string,
@@ -163,7 +206,12 @@ export async function balanceOf(tx: Tx, orgId: string, customerId: string): Prom
 }
 
 /** Every customer's balance in one query — the register's N+1 guard. */
-export async function balancesByCustomer(tx: Tx, orgId: string): Promise<Map<string, string>> {
+export async function balancesByCustomer(
+  tx: Tx,
+  orgId: string,
+  /** T-435: only these stores' lines. Omitted = org-wide (the posting paths); the register always passes it. */
+  storeIds?: readonly string[],
+): Promise<Map<string, string>> {
   const rows = (await tx.execute(sql`
     select jl.party_id as customer_id, coalesce(sum(jl.debit - jl.credit), 0)::text as balance
     from journal_lines jl
@@ -173,6 +221,7 @@ export async function balancesByCustomer(tx: Tx, orgId: string): Promise<Map<str
       and jl.party_type = ${PARTY_TYPE}
       and a.code = ${AR_CONTROL_CODE}
       and je.status <> 'draft'
+      ${storeIds ? sql`and ${(storeIds.length === 0 ? sql`false` : sql`jl.store_id in (${storeList(storeIds)})`)}` : sql``}
     group by jl.party_id
   `)) as unknown as Record<string, string>[];
   const map = new Map<string, string>();

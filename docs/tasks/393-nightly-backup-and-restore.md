@@ -390,3 +390,5 @@ could download every night's copy and read it.
 1. The production database name does **not** match `^shareat_(restore_drill|test_drill_[a-z0-9]+)$`.
 2. `SYSTEM_DATABASE_URL` uses port **25060** (direct), not 25061 (the pooler).
 3. DO's native backup retention for this cluster is **7 days**. The spec relies on that number.
+
+**Q5 answered (Ian, 16 Oct):** no encryption of backup files. The bucket stays Private with a bucket-only key.

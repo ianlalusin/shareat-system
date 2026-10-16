@@ -1083,7 +1083,7 @@ export async function setBirInvoiceNo(
 ): Promise<{ birInvoiceNo: string | null }> {
   const run = async (trx: Tx) => {
     const order = await tradeRepo.getOrderById(trx, actor.orgId, input.orderId, { forUpdate: true });
-    if (!order) throw new Error(`setBirInvoiceNo: order ${input.orderId} does not exist.`);
+    if (!order) throw refuse(`setBirInvoiceNo: order ${input.orderId} does not exist.`, 'That order no longer exists.');
     await authorize(trx, actor, 'approve_buyer', { storeId: order.storeId });
 
     if ((order.status !== 'dispatched' && order.status !== 'received') || !order.arChargeId) {
