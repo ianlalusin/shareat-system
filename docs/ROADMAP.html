@@ -225,8 +225,9 @@
         <h3>Cutover machinery, three lanes</h3>
         <ul>
           <li>Merged 16 Oct (PR #28): T-401 S6 usage drafts + 14:00 auto-post (0198), T-412 admin-PIN confirms (0199), T-408 VAT/OR, T-409, T-410, T-411, T-413</li>
-          <li>Ian: install the usage auto-post timer on the droplet; brief managers; answer the decisions page</li>
-          <li>Follow-ups: AR collection void PIN (DEF-654), per-actor PIN budget (DEF-653)</li>
+          <li>Done 16 Oct (PR #30): T-414 cash requests in the expense payment list (row 347); DEF-654 closed (collection void, owner write-off, liability retire); auto-post timer installed</li>
+          <li>Ian: brief managers; answer the decisions page; give YANIYOW its own port (DEF-660)</li>
+          <li>Follow-ups: float row locks (DEF-657/658), ensureStaffCashAccount silent null (DEF-659), per-actor PIN budget (DEF-653)</li>
           <li>POS/Customer v2: phase plan drafted; PC-2 monorepo setup next</li>
         </ul>
       </div>
@@ -448,6 +449,7 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-411</div><div class="task-what">Click anywhere on a row: shared RowLink on 30 tables</div><div class="task-note">DONE 16 Oct (a879264, PR #28); sweep 147 to 116 FAIL. Recommended answers; page answers pending</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-412</div><div class="task-what">Two-tier confirm for destructive actions: retype the name, or an admin PIN checked on the server</div><div class="task-note">DONE 16 Oct (a879264, PR #28, migration 0199). M6 per-actor PIN budget deferred (DEF-653); AR collection void not covered (DEF-654)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-413</div><div class="task-what">Production recipe admin: create, edit, retire, restore; guarded edits</div><div class="task-note">DONE 16 Oct (a879264, PR #28). Recommended answers; page answers pending</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-414</div><div class="task-what">Cash requests appear in the expense payment list; approve re-checks live balance under a lock; release auto-creates the staff cash account</div><div class="task-note">DONE 16 Oct (PR #30). Spec docs/tasks/414-expense-cash-request-source.md; row 347</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-395</div><div class="task-what">PIN sign-in: each attempt charged before the check (DEF-626); 50 wrong PINs a day stop a store; attempt log</div><div class="task-note">Done 10 Oct. S1 live (PR #8, 0190); S2 (3954f31) on main: wrong-PIN findings and a manager reopens on /staff; smoked. DEF-063, DEF-626 fixed</div></div>
       </div>
     </div>

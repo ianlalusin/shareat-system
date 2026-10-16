@@ -1,6 +1,6 @@
 # T-414: an expense shows every open cash request at its store, and approve cannot over-spend one
 
-**Status:** SPEC 2026-10-16 (Opus planner). Branch `lane/t414` from `main` `a879264`.
+**Status:** DONE 16 Oct, PR #30
 **Model:** Sonnet lanes, tester first, then builder (bible row 184). Money path: Sonnet, not Haiku.
 **Migration:** none. `expense_payments.money_account_id` is nullable with no CHECK (0025, 0141). Next free number unchanged.
 **Source:** Ian, live, 16 Oct: a store with a RELEASED cash request; New expense does not offer it under Paid from.

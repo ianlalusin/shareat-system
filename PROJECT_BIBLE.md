@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1682` 13. Decision log
-- `1683–1702` 14. Amendment protocol
-- `1703–1707` 15. Engineering standards — the industry practices this project follows
-  - `1708–1713` 15.1 Build order: walking skeleton first
-  - `1714–1725` 15.2 Golden-master testing — the most important practice here
-  - `1726–1734` 15.3 Strangler Fig, not big-bang cutover
-  - `1735–1739` 15.4 No dual-write
-  - `1740–1748` 15.5 Expand/contract migrations
-  - `1749–1757` 15.6 Observability from day zero, not later
-  - `1758–1762` 15.7 CI gates
-  - `1763–1767` 15.8 Backups and a tested restore
-  - `1768–1772` 15.9 Twelve-Factor config
-  - `1773–1780` 15.10 Append-only ledgers — but not event sourcing
-  - `1781–1785` 15.11 Defence in depth
-  - `1786–1814` 15.12 Skills are lenses, not assurance
-  - `1815–1821` 15.13 Reconciliation is a permanent feature
-- `1822–1826` 16. The accounting spine
-  - `1827–1858` 16.0 What we are actually fixing — the diagnosis
-  - `1859–1902` 16.1 The ten invariants — non-negotiable
-  - `1903–1917` 16.2 The oracle: how "correct" is tested
-  - `1918–1939` 16.3 The model — header + lines, not legs
-  - `1940–1959` 16.4 Deliberately simpler than ERPNext
-  - `1960–2026` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2027–2051` 16.6 What v1 already gets right — preserve the intent
-  - `2052–2073` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2074–2088` 16.8 What v1's accounting already gets right
-  - `2089–2132` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2133–2183` 16.10 Posting patterns — one canonical pattern per business event
-  - `2184–2216` 16.11 Inventory's accounting integration
+- `1329–1683` 13. Decision log
+- `1684–1703` 14. Amendment protocol
+- `1704–1708` 15. Engineering standards — the industry practices this project follows
+  - `1709–1714` 15.1 Build order: walking skeleton first
+  - `1715–1726` 15.2 Golden-master testing — the most important practice here
+  - `1727–1735` 15.3 Strangler Fig, not big-bang cutover
+  - `1736–1740` 15.4 No dual-write
+  - `1741–1749` 15.5 Expand/contract migrations
+  - `1750–1758` 15.6 Observability from day zero, not later
+  - `1759–1763` 15.7 CI gates
+  - `1764–1768` 15.8 Backups and a tested restore
+  - `1769–1773` 15.9 Twelve-Factor config
+  - `1774–1781` 15.10 Append-only ledgers — but not event sourcing
+  - `1782–1786` 15.11 Defence in depth
+  - `1787–1815` 15.12 Skills are lenses, not assurance
+  - `1816–1822` 15.13 Reconciliation is a permanent feature
+- `1823–1827` 16. The accounting spine
+  - `1828–1859` 16.0 What we are actually fixing — the diagnosis
+  - `1860–1903` 16.1 The ten invariants — non-negotiable
+  - `1904–1918` 16.2 The oracle: how "correct" is tested
+  - `1919–1940` 16.3 The model — header + lines, not legs
+  - `1941–1960` 16.4 Deliberately simpler than ERPNext
+  - `1961–2027` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2028–2052` 16.6 What v1 already gets right — preserve the intent
+  - `2053–2074` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2075–2089` 16.8 What v1's accounting already gets right
+  - `2090–2133` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2134–2184` 16.10 Posting patterns — one canonical pattern per business event
+  - `2185–2217` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1679,6 +1679,7 @@ just a patch.**
 | 344 | 2026-10-15 | **ACTIVITY-LOG FREE TEXT IS CAPPED AT 500 CODE POINTS** plus `…[truncated]` in the log's `after` payload; the cap counts code points so an emoji is never split. Source tables keep the full text. | Orchestrator ruling 2026-10-15 during the T-402 S3 audit; recorded in `docs/tasks/402-activity-log.md` S3; merged PR #27 | Yes |
 | 345 | 2026-10-15 | ⭐ **KEEP AGENTS BUSY (standing).** Never leave lanes idle: while CI or tests run, start work that shares no state with them (no edits to files, databases or branches the running gate depends on). Extends row 298 (work-faster practices); row 336 picks the model. | Ian, 2026-10-15 (orchestrator session); memory note "Keep agents busy" | No |
 | 346 | 2026-10-16 | **T-408, T-409, T-411, T-412, T-413 SHIPPED ON THE RECOMMENDED ANSWERS, NOT IAN'S.** Their questions sit on the decisions page unanswered; the recommended options were built so the lanes could merge. An answer that differs from the recommendation reopens that task as a follow-up. The decisions page lists newest and unanswered questions first. | Ian, 2026-10-15 evening ("merge all lanes when built"); each task's Status line says "answered by default only" | Yes, per question |
+| 347 | 2026-10-16 | ⭐ **R-AUTO: RELEASING A CASH REQUEST CREATES THE STORE'S STAFF CASH ACCOUNT IF MISSING (Ian, 16 Oct).** Open cash requests also appear in the expense payment list ("Name · cash request — Balance") with no staff-account gate; the store is chosen first; approve re-checks each request's live balance under a row lock. Shipped as T-414 (PR #30). Spec: `docs/tasks/414-expense-cash-request-source.md`. Follow-ups: DEF-657/658/659 |
 
 ## 14. Amendment protocol
 
