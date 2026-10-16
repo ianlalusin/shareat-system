@@ -42,3 +42,28 @@ copy (T-422 Ruling 6). Re-running the copy script brings the originals back; re-
 
 - `src/components/dashboard/WeatherLogFloatingButton.tsx` (6d): removed the "View calendar" button that pushed to the dropped `/weather-calendar`; the weather logger itself is unchanged.
 - `src/components/shared/WeatherLoggerModal.tsx` (6d): removed the "See monthly logs" button that pushed to `/weather-calendar`; the weather logger itself is unchanged.
+
+## T-423 edits (money in centavos, one receipt series per tablet, unpaid-void fixes)
+
+- `src/lib/money.ts` (T-423 S1): now only re-exports `roundMoney` / `round2` from `lib/money/centavos.ts`; the float rounder is gone (DEF-003).
+- `src/lib/tax.ts` (T-423 S1): rewritten on exact fractions; same `calculateBillTotals` signature and keys, new `calculateBillTotalsCentavos`; the private `round()` is deleted. Golden-tested against the v1 original.
+- `src/lib/types.ts` (T-423 S2): `Receipt` gains the additive optional fields `terminalNo`, `terminalSeq`, `deviceId`.
+- `src/lib/offline/offlinePaymentSummary.ts` (T-423 S1): cents/pesos conversions go through `lib/money/centavos.ts`.
+- `src/lib/cash/handover.ts` (T-423 S1): cents/pesos conversions go through `lib/money/centavos.ts`.
+- `src/lib/offline/replayDeferredEffects.ts` (T-423 S3): optional `isSessionVoided` dep; a queued void reverses loyalty only if the session really is voided.
+- `src/components/cashier/firestore.ts` (T-423 S1-S3): `completePaymentFromUnits` takes the receipt number from the terminal series (`reserveNext()` outside the transaction), writes `receiptNumbers/{number}` and the three additive receipt fields, checks the terminal doc, uses the shared tender/change summary and centavo maths, no longer touches `counters/receipts`; `voidSession` re-reads tickets and table inside the transaction and queues the loyalty reversal before commit; `formatReceiptNumber` and `roundMoney` use are gone.
+- `src/components/cashier/offlinePayment.ts` (T-423 S2): numbers the sale from the same `reserveNext()` series (no `OL` numbers, no localStorage counter), writes the `receiptNumbers` doc in the batch, centavo maths.
+- `src/components/cashier/payment-modal.tsx` (T-423 S1): the private cents converters move onto `lib/money/centavos.ts`; sums are taken in centavos.
+- `src/components/cashier/void-session-dialog.tsx` (T-423 S3): the online loyalty refund drops the queued copy only when every refund call succeeded.
+- `src/components/shared/PaymentQueueSyncProvider.tsx` (T-423 S3): passes the `isSessionVoided` check (reads the session doc) to the replay.
+- `src/app/settings/page.tsx` (T-423 S2): adds the `Terminal` section (`components/settings/TerminalSection.tsx`, new file).
+
+- `src/lib/offline/browserDevice.ts` and `src/lib/offline/browserDevice.test.ts` (T-423 audit): removed the dead `deviceReceiptTag` (4-char tag for the old OL numbers) and its test block.
+- `src/lib/offline/replayDeferredEffects.ts` (T-423 audit): a queued void is never dropped within 10 minutes of its enqueue; after that only if the server read still says not voided.
+- `src/components/shared/PaymentQueueSyncProvider.tsx` (T-423 audit): the voided check reads the session with `getDocFromServer`.
+
+Files deleted (T-423 S2): `src/lib/offline/offlineReceiptNumber.ts` and `src/lib/offline/offlineReceiptNumber.test.ts` (the localStorage daily counter, DEF-587).
+
+## Test fixtures
+
+- `src/lib/__fixtures__/tax-v1.ts` (T-423 slice T): the v1 tax module at commit e26d0c1, byte-identical (taken with git show from the v1 repo); read only by `src/lib/tax.golden.test.ts` as the golden reference for the new bill math. Do not edit it and do not import it from app code.

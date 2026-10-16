@@ -1,5 +1,5 @@
 "use client";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, getDocFromServer } from "firebase/firestore";
 import { usePaymentQueueSync } from "@/hooks/use-payment-queue-sync";
 import { replayDeferredEffects } from "@/lib/offline/replayDeferredEffects";
 import { updateQueueItem } from "@/lib/offline/payment-queue";
@@ -31,6 +31,10 @@ export function PaymentQueueSyncProvider() {
 
     return await replayDeferredEffects(item, {
       getToken: () => firebaseUser.getIdToken(),
+      isSessionVoided: async (storeId, sessionId) => {
+        const snap = await getDocFromServer(doc(db, "stores", storeId, "sessions", sessionId));
+        return snap.exists() && (snap.data() as any)?.status === "voided";
+      },
       onEffectDone: (updated) => updateQueueItem(updated.id, { effects: updated.effects }),
     });
   }, !!firebaseUser);

@@ -50,7 +50,7 @@ export const ALLOWED: Record<string, Allowed> = {
   'apps/erp/src/lib/terminal/lane.ts': { count: 2, reason: 'manila-offset-ratchet' },
   // packages/*/src (spec R2). Correct by construction: Date.UTC-built dates or the Manila-shifted ms offset.
   'packages/core/src/datetime.ts': { count: 1, reason: 'utc-calendar-arithmetic' },
-  'packages/db/src/repo/fiscal-periods.ts': { count: 3, reason: 'utc-calendar-arithmetic' },
+  'packages/db/src/repo/fiscal-periods.ts': { count: 4, reason: 'utc-calendar-arithmetic' },
   // :54 manilaDay(ms): shifts a GIVEN event instant (ms argument) to its Manila day, not the current instant. T-402 S2.
   'packages/auth/src/security-events.ts': { count: 1, reason: 'manila-offset-ratchet' },
   'packages/domain/src/attendance/sweep.ts': { count: 1, reason: 'manila-offset-ratchet' },

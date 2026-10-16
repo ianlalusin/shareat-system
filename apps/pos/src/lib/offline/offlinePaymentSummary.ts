@@ -1,5 +1,7 @@
 "use client";
 
+import { storedPesosToCentavos, toWirePesos } from "@/lib/money/centavos";
+
 export interface PaymentInput {
   methodId?: string;
   amount?: number;
@@ -30,13 +32,13 @@ export function buildOfflinePaymentSummary(args: {
   const { payments, paymentMethods, amountDueCents } = args;
 
   const totalPaidCents = payments.reduce(
-    (s, p) => s + Math.round(Number(p.amount || 0) * 100),
+    (s, p) => s + storedPesosToCentavos(p.amount),
     0,
   );
 
   if (totalPaidCents < amountDueCents - 1) {
     throw new Error(
-      `Cannot complete payment: balance is not zero. Paid: ₱${(totalPaidCents / 100).toFixed(2)}, Due: ₱${(amountDueCents / 100).toFixed(2)}`,
+      `Cannot complete payment: balance is not zero. Paid: ₱${toWirePesos(totalPaidCents).toFixed(2)}, Due: ₱${toWirePesos(amountDueCents).toFixed(2)}`,
     );
   }
 
@@ -45,7 +47,7 @@ export function buildOfflinePaymentSummary(args: {
     const method = paymentMethods.find((m) => m.id === payment.methodId);
     const key = method?.name || payment.methodId || "unknown";
     mopCentsMap[key] =
-      (mopCentsMap[key] || 0) + Math.round(Number(payment.amount || 0) * 100);
+      (mopCentsMap[key] || 0) + storedPesosToCentavos(payment.amount);
   }
 
   const changeCents = Math.max(0, totalPaidCents - amountDueCents);
@@ -60,14 +62,14 @@ export function buildOfflinePaymentSummary(args: {
     }
     if (mopCentsMap[cashKey] < changeCents) {
       throw new Error(
-        `Invalid payment: change (₱${(changeCents / 100).toFixed(2)}) exceeds cash paid (₱${(mopCentsMap[cashKey] / 100).toFixed(2)}).`,
+        `Invalid payment: change (₱${toWirePesos(changeCents).toFixed(2)}) exceeds cash paid (₱${toWirePesos(mopCentsMap[cashKey]).toFixed(2)}).`,
       );
     }
     mopCentsMap[cashKey] -= changeCents;
   }
 
   const mopMap: Record<string, number> = {};
-  for (const [key, cents] of Object.entries(mopCentsMap)) mopMap[key] = cents / 100;
+  for (const [key, cents] of Object.entries(mopCentsMap)) mopMap[key] = toWirePesos(cents);
 
-  return { mopMap, totalPaid: totalPaidCents / 100, change: changeCents / 100 };
+  return { mopMap, totalPaid: toWirePesos(totalPaidCents), change: toWirePesos(changeCents) };
 }

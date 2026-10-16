@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Capacitor } from '@capacitor/core';
 import { getLastPrinterAddress, setLastPrinterAddress, printViaNativeBluetooth, printViaWebUSB } from "@/lib/printing/printHub";
 import { getPinQrMode, setPinQrMode, renderPinQr, PIN_QR_MODES, PIN_QR_NATIVE_DOTS, DEFAULT_PIN_QR_MODE, type PinQrMode } from "@/lib/printing/pinQr";
+import { TerminalSection } from "@/components/settings/TerminalSection";
 import { getKitchenPrinterAddress, setKitchenPrinterAddress, printKitchenText } from "@/lib/printing/kitchenPrinter";
 
 export default function SettingsPage() {
@@ -350,6 +351,8 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        <TerminalSection />
 
         <Card>
           <CardHeader>

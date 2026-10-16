@@ -22,11 +22,8 @@ import {
   getCurrentSessionBillingState,
 } from "@/components/cashier/firestore";
 import { commitLocalFirst } from "@/lib/offline/commit";
-import {
-  nextDailySeq,
-  formatOfflineReceiptNumber,
-} from "@/lib/offline/offlineReceiptNumber";
-import { deviceReceiptTag, getBrowserDeviceId } from "@/lib/offline/browserDevice";
+import { storedPesosToCentavos } from "@/lib/money/centavos";
+import { formatTerminalReceiptNumber, reserveNext } from "@/lib/terminal/counter";
 import { buildOfflinePaymentSummary } from "@/lib/offline/offlinePaymentSummary";
 import { addToQueue } from "@/lib/offline/payment-queue";
 
@@ -34,8 +31,8 @@ import { addToQueue } from "@/lib/offline/payment-queue";
  * Records a completed sale entirely from the local Firestore cache — no
  * network. Mirrors the CORE of completePaymentFromUnits (reads → checks →
  * receipt → close → free table → mark tickets served) but: (1) reads from
- * cache via getDoc/getDocs; (2) mints a local OL receipt number instead of the
- * server counter; (3) writes via a single writeBatch committed local-first;
+ * cache via getDoc/getDocs; (2) takes the receipt number from this tablet's
+ * terminal series (IndexedDB counter, the same series as online); (3) writes via a single writeBatch committed local-first;
  * (4) defers ALL server-only effects (analytics, KDS rollups, loyalty, PINs)
  * to sync. Online sales still go through completePaymentFromUnits unchanged.
  */
@@ -54,7 +51,7 @@ export async function completePaymentOffline(
   const loyaltyDiscountInput = (loyaltyRedemptions || []).map((r) => ({ type: r.type, value: r.value }));
   const finalTotals = calculateBillTotals(billLines, store, billDiscount, customAdjustments, loyaltyDiscountInput);
   const amountDue = finalTotals.grandTotal;
-  if (typeof expectedTotal === "number" && Math.abs(Math.round(expectedTotal * 100) - Math.round(amountDue * 100)) > 1) {
+  if (typeof expectedTotal === "number" && Math.abs(storedPesosToCentavos(expectedTotal) - storedPesosToCentavos(amountDue)) > 1) {
     throw new Error(`Bill changed before payment could be finalized. Review the bill and collect ₱${amountDue.toFixed(2)}.`);
   }
 
@@ -85,18 +82,13 @@ export async function completePaymentOffline(
   }
 
   // 2. Tender/change validation + MOP (pure, shared with tests).
-  const amountDueCents = Math.round(Number(amountDue || 0) * 100);
+  const amountDueCents = storedPesosToCentavos(amountDue);
   const summary = buildOfflinePaymentSummary({ payments, paymentMethods, amountDueCents });
 
-  // 3. Mint the local OL receipt number (must not crash the sale on corruption).
-  let seq: number;
-  try {
-    seq = nextDailySeq(window.localStorage, new Date());
-  } catch (e) {
-    throw new Error("Offline receipt numbering is unavailable on this device. Reconnect to take payment, or contact support.");
-  }
-  const deviceTag = deviceReceiptTag(getBrowserDeviceId());
-  const receiptNumber = formatOfflineReceiptNumber({ storeCode: store.code, deviceTag, date: new Date(), seq });
+  // 3. Take the next number from this tablet's terminal series (the same reserveNext() as online). With no claim or a
+  // missing counter this refuses with the plain "set up this tablet's terminal number" message and writes nothing.
+  const reserved = await reserveNext();
+  const receiptNumber = formatTerminalReceiptNumber(store.code, reserved.terminalNo, reserved.terminalSeq);
 
   // 4. Build the local-first batch.
   const actor = getActorStamp(user);
@@ -169,9 +161,12 @@ export async function completePaymentOffline(
     totalPaid: summary.totalPaid,
     change: summary.change,
     status: "final",
-    receiptSeq: seq,
+    receiptSeq: reserved.terminalSeq,
     receiptNumber,
-    receiptNoFormatUsed: "OL",
+    receiptNoFormatUsed: "TERMINAL",
+    terminalNo: reserved.terminalNo,
+    terminalSeq: reserved.terminalSeq,
+    deviceId: reserved.deviceId,
     offlineOrigin: true,
     createdAtClientMs: now,
     lines: billLines,
@@ -201,6 +196,14 @@ export async function completePaymentOffline(
     createdAt: serverTs,
   });
   batch.set(receiptRef, receiptPayload);
+
+  // Uniqueness backstop (Ruling 7). Offline this is a plain set: the release gap in claim.ts is what prevents a collision.
+  batch.set(doc(db, `stores/${storeId}/receiptNumbers`, receiptNumber), {
+    receiptId: sessionId,
+    terminalNo: reserved.terminalNo,
+    terminalSeq: reserved.terminalSeq,
+    createdAt: serverTs,
+  });
 
   // free the table + its projection
   if (sessionData.tableId && sessionData.tableId !== "alacarte") {
