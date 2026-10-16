@@ -15,6 +15,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -99,6 +101,9 @@ export async function removeMapAction(fd: FormData): Promise<void> {
 
   let message = '';
   try {
+    // T-412 Tier R: the person retypes the branch item's name; the server compares it with the name IT loads.
+    const target = await loadDestructiveTarget(actor, 'commissary_item_map', id, ['manage_commissary_map']);
+    if (!retypeMatches(str(fd, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     await withOrgPrincipal(actor.orgId, (tx) => removeMap(tx, actor, { id }));
     message = 'Map row removed.';
   } catch (err) {

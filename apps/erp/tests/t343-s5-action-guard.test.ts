@@ -34,6 +34,15 @@ vi.mock('../src/app/sales-days/lib', () => ({
   withOrgPrincipal: async (_orgId: string, fn: (tx: unknown) => unknown) => fn({}),
 }));
 
+// T-412: voidSalesDayAction now reads the day's status through lib/destructive (an unverified day is a plain withdraw, a
+// verified one needs an administrator's PIN). This test is about how a refusal is DECODED, not about the PIN, so the day is
+// "open" (no PIN) and the two helpers that touch the database are stubbed - the real path is t412-destructive-actions.test.ts.
+vi.mock('@/lib/destructive', () => ({
+  loadDestructiveTarget: async () => ({ storeId: 'store-1', name: null, status: 'open' }),
+  assertApprovalStillRight: async () => undefined,
+  recordApproval: async () => undefined,
+}));
+
 const U = '0190a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b';
 const VOID_OPEN_DAY_SENTENCE =
   'Only a verified sales day can be voided — this one is open. An unverified day is edited instead.';

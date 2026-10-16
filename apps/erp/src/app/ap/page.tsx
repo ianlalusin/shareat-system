@@ -6,7 +6,8 @@ import { listSuppliersWithPosition, listInvoices, listStores, peso, today } from
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -40,6 +41,10 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
 
       <FlashBanner flash={sp} />
 
+      <p className="text-sm">
+        <Link href="/ap/vat" className={ACTION_LINK}>Invoices by VAT type and OR (monthly list)</Link>
+      </p>
+
       {pending.length > 0 && (
         <section className="space-y-2 rounded-lg border border-warning bg-warning-soft p-4 text-sm">
           <h2 className="font-medium text-warning-ink">
@@ -72,15 +77,15 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               </thead>
               <tbody>
                 {suppliers.map((s) => (
-                  <tr key={s.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={s.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
-                      <Link href={`/ap/suppliers/${s.id}`} className="underline underline-offset-2">
+                      <RowLink href={`/ap/suppliers/${s.id}`}>
                         {s.name}
-                      </Link>
+                      </RowLink>
                     </td>
                     <td className="px-3 py-2 text-xs">{s.status}</td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(s.controlBalance)}</td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>
@@ -161,6 +166,27 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               </Field>
               <Field label="Due date" hint="Leave blank to use the supplier's terms.">
                 <Input type="date" name="dueDate" className="w-full" />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Official receipt?">
+                <Select name="isOfficialReceipt" defaultValue="" className="w-full">
+                  <option value="">Supplier&apos;s usual</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </Select>
+              </Field>
+              <Field label="VAT type">
+                <Select name="vatType" defaultValue="supplier_default" className="w-full">
+                  <option value="supplier_default">Supplier&apos;s usual</option>
+                  <option value="vatable">Vatable</option>
+                  <option value="zero_rated">Zero-rated</option>
+                  <option value="exempt">Exempt</option>
+                  <option value="non_vat">Non-VAT</option>
+                </Select>
+              </Field>
+              <Field label="VAT amount (as printed)" hint="Type the VAT shown on the paper. Only for a vatable bill.">
+                <Input name="vatAmount" inputMode="decimal" placeholder="0.00" className="w-full" />
               </Field>
             </div>
             <Field

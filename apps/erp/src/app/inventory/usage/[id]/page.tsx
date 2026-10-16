@@ -8,7 +8,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, statusLabel } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, statusLabel } from '@/components/ui';
 
 export const metadata = { title: 'Usage record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -19,12 +19,22 @@ function when(d: Date | null): string {
   return d ? new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '—';
 }
 
+/** The post form's optional reason. A refusal sends back what was typed (the signed flash), so the box comes back filled. */
+function ReasonField({ kept }: { kept: string }) {
+  return (
+    <label className="flex min-w-0 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+      Reason, only if a line is outside the tolerance
+      <Input name="reason" defaultValue={kept} placeholder="e.g. counted twice" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
+    </label>
+  );
+}
+
 export default async function UsageRecordPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; ok?: string }>;
+  searchParams: Promise<{ error?: string; ok?: string; reason?: string }>;
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
@@ -65,11 +75,11 @@ export default async function UsageRecordPage({
           </thead>
           <tbody>
             {lines.map((l) => (
-              <tr key={l.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+              <LinkRow key={l.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                 <td className="px-3 py-2">
-                  <Link href={`/items/${l.itemId}`} className="underline underline-offset-4">
+                  <RowLink href={`/items/${l.itemId}`}>
                     {l.itemName}
-                  </Link>
+                  </RowLink>
                   <span className="ml-2 font-mono text-xs text-neutral-500">{l.itemCode}</span>
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">
@@ -78,7 +88,7 @@ export default async function UsageRecordPage({
                 <td className="px-3 py-2 text-right tabular-nums text-neutral-500">
                   {l.onHand} {l.baseUnit}
                 </td>
-              </tr>
+              </LinkRow>
             ))}
           </tbody>
         </table>
@@ -97,6 +107,7 @@ export default async function UsageRecordPage({
               entry — nothing has moved until this.
             </p>
           </div>
+          <ReasonField kept={sp.reason ?? ''} />
           <Button type="submit" variant="primary">
             Post
           </Button>
@@ -107,9 +118,11 @@ export default async function UsageRecordPage({
         <form action={deleteUsageDraftAction} className="flex items-center gap-3">
           <input type="hidden" name="recordId" value={record.id} />
           <input type="hidden" name="storeId" value={record.storeId} />
-          <Button type="submit" variant="danger">
-            Delete draft
-          </Button>
+          <ConfirmDestructive
+            tier="admin-pin"
+            label="Delete usage draft"
+            consequence="Deletes this draft for good. An administrator must approve with their own PIN."
+          />
         </form>
       )}
 
@@ -144,9 +157,11 @@ export default async function UsageRecordPage({
             Void — say why
             <Input name="reason" required placeholder="reason" className="w-full" />
           </label>
-          <Button type="submit" variant="danger">
-            Void
-          </Button>
+          <ConfirmDestructive
+            tier="admin-pin"
+            label="Void usage"
+            consequence="Reverses this usage record and restores the stock. An administrator must approve with their own PIN."
+          />
           <span className="max-w-xs text-xs text-neutral-500 dark:text-neutral-400">
             Stock, the FIFO layers and the original journal entry are all reversed together.
           </span>

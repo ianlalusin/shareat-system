@@ -64,6 +64,7 @@ import {
 } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { captureRedirect, outcomeOf, pageParamsOf } from '../helpers/flash-jar';
+import { givePin } from '../helpers/approval-pin';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -112,7 +113,9 @@ async function orgFixture(hint: string, opening: string | null = null) {
   const [admin] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
   await sql`insert into person_roles (person_id, org_id, role) values (${admin!.id}, ${orgId}, 'admin')`;
   await sql`insert into person_store_scope (person_id, store_id) values (${admin!.id}, ${store!.id})`;
-  return { orgId, storeId: store!.id, adminId: admin!.id, admin: actor(orgId, admin!.id) };
+  // T-412: a prepaid write-off is Tier P; the administrator approves with their own PIN.
+  const pin = await givePin(sql, { orgId, storeId: store!.id, personId: admin!.id });
+  return { orgId, storeId: store!.id, adminId: admin!.id, admin: actor(orgId, admin!.id), pin };
 }
 
 const UNICODE_PESO = '₱';
@@ -158,9 +161,10 @@ async function prepaidStatus(itemId: string): Promise<string> {
   return row!.status;
 }
 
-function writeOffForm(f: { itemId: string }, over: Record<string, string>): FormData {
+function writeOffForm(f: { itemId: string; pin?: string }, over: Record<string, string>): FormData {
   const fd = new FormData();
   fd.set('prepaidItemId', f.itemId);
+  if (f.pin) fd.set('adminPin', f.pin);
   fd.set('writtenOffOn', '2026-04-10');
   for (const [k, v] of Object.entries(over)) fd.set(k, v);
   return fd;

@@ -7,7 +7,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Daily POS usage pull — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -88,16 +88,10 @@ function SectionTable({
                     {section !== 'orphan' && <td className="px-3 py-2">{l.itemName ?? '—'}</td>}
                     {showQuantity && <td className="px-3 py-2 text-right tabular-nums">{l.quantity ?? '—'}</td>}
                     {section !== 'orphan' && <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{l.locationName ?? '—'}</td>}
-                    {/* T-388 R12: posted / held (the live sentence, red) / not posted (old data in a stamped section) / pending */}
-                    {l.usageRecordId || section === 'orphan' || (!l.hold && !finalizedAt) ? (
-                      <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
-                        {l.usageRecordId ? 'posted' : section === 'orphan' ? 'unmapped' : 'pending'}
-                      </td>
-                    ) : l.hold && !finalizedAt ? (
-                      <td className="px-3 py-2 text-danger">{l.hold}</td>
-                    ) : (
-                      <td className="px-3 py-2 text-neutral-500">not posted</td>
-                    )}
+                    {/* T-401 S6: in the day's usage draft / posted / unmapped / pending */}
+                    <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
+                      {l.usageRecordId ? (l.recordStatus === 'draft' ? 'in usage draft' : 'posted') : section === 'orphan' ? 'unmapped' : finalizedAt ? 'not drafted' : 'pending'}
+                    </td>
                   </tr>
                 ))}
                 {blocked.map((l) => (
@@ -190,8 +184,10 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
         <div>
           <h1 className="text-2xl font-semibold">Daily POS usage pull</h1>
           <PageDescription className="mt-1">
-            A day&apos;s POS sales, turned into inventory consumption — physical quantity (sold +
-            comped − voided), never the billable one.
+            A day&apos;s POS sales, turned into the quantities the kitchen should have used — physical quantity (sold +
+            comped − voided), never the billable one. This pull is a check: finalizing it makes a usage draft at those expected
+            quantities, staff correct it to what was really used, and a manager posts it. Nothing moves until it is posted
+            (or it posts itself at 14:00 the next day).
           </PageDescription>
         </div>
         <Link href={`/inventory/pos-map?store=${storeId}`} className="text-sm underline underline-offset-4">
@@ -318,7 +314,7 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
             <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
               <h2 className="text-sm font-medium">Void this pull</h2>
               <p className="mt-1 text-xs text-neutral-500">
-                Puts back the stock this pull used and reverses its cost, so the day can be pulled again. All of it or none.
+                Removes the usage draft this pull made, and reverses any usage a manager already posted from it, so the day can be pulled again. All of it or none.
               </p>
               <form action={voidPullAction} className="mt-3 flex flex-wrap items-end gap-3">
                 <input type="hidden" name="storeId" value={storeId} />
@@ -328,9 +324,11 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
                   <span className="block text-neutral-600 dark:text-neutral-400">Why is it being voided?</span>
                   <Input name="reason" required className="w-full" />
                 </label>
-                <Button type="submit" variant="danger">
-                  Void this pull
-                </Button>
+                <ConfirmDestructive
+                  tier="admin-pin"
+                  label="Void this pull"
+                  consequence="Reverses every usage record this pull made. An administrator must approve with their own PIN."
+                />
               </form>
             </section>
           )}

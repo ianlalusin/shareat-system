@@ -1,10 +1,15 @@
 /**
  * The daily POS usage pull — plan then finalize. T-177.
  *
- * ⭐ **Finalize writes T-168 usage records and posts through T-164** (invariant 5) by calling
- * `saveUsageDraft`/`postUsage` (`stock/usage-records.ts`) directly — the exact same document layer
- * a human uses, so there is one implementation of "how a usage record becomes stock movements and
- * a journal entry," never a second copy for POS-driven consumption.
+ * ⭐ **T-401 S6 (Ian 2026-10-14, then 15 Oct): finalizing the pull CREATES A USAGE DRAFT and moves no stock.** The pull used to write
+ * T-168 usage records and post stock out (T-177 invariant 5). Now finalizing a section writes ONE T-168 usage record per (store, day,
+ * ROOM) with status `draft`, authored by the org's system person, one line per covered item at the EXPECTED quantity; staff edit the
+ * lines to actuals and a manager posts (`stock/usage-records.ts` `postUsage`), or the system posts it at 14:00 Manila the next day
+ * (`stock/usage-auto-post.ts`). Audit rulings A2-A5 (15 Oct): the pull ALWAYS writes its OWN draft and never touches one staff started;
+ * finalize is idempotent (a later section adds to the pull's own draft for the room, never a second one, and a quantity staff typed is
+ * never overwritten); the pre-filled quantity is the expectation less what other records already hold, and that figure is kept as the
+ * draft's snapshot, which `stock/usage-tolerance.ts` holds the draft to (+-10% by default). The T-177/T-388 text below that speaks of posting,
+ * holds and frozen rooms is history; it applies to pulls finalized before S6 (their records are still voidable with the pull).
  *
  * ⭐ **The server rebuilds the plan at finalize time** (invariant 2) — it does not trust the STORED
  * `pos_usage_pull_lines` rows written at plan time as the source of truth for what to write. It
@@ -39,28 +44,22 @@ import { authorize, type Actor } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { formatMoney, isZero, money } from '@shareat/core/money';
 import {
-  countSessionsRepo,
-  itemsRepo,
   posMappingRepo,
   posV1Repo,
   salesDaysRepo,
-  stockLayersRepo,
-  stockLedgerRepo,
   stockLocationsRepo,
+  stockUsageRepo,
   storesRepo,
   type Tx,
 } from '@shareat/db';
 import type { PosV1FeedPurpose } from '@shareat/db/schema';
-import { postUsage, saveUsageDraft } from '../stock/usage-records';
 import { voidPullUsageRecord } from '../stock/void-pull-usage-record';
 import { closedStockPeriodSentence } from '../stock/period-guard';
 import { lockLiveSalesDay } from '../sales-days/live-day';
 import { RefusalError, gone, humanDate, internalFault, refuse } from '../shared/refusal';
 import { toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
-import { addQuantity, compareQuantity, quantity, ZERO_QUANTITY } from '../stock/quantity';
-import { isFrozenBySessions } from '../stock/count-workflow';
+import { addQuantity, compareQuantity, quantity, subtractQuantity, ZERO_QUANTITY } from '../stock/quantity';
 import { assertUsageSource } from '../stock-locations/rules';
-import { decideHolds, heldSentences, type HeldLine, type HoldInputLine } from './usage-holds';
 import { loadDepletionLookups, planInstant } from './depletion-source';
 import { explodePosSales, type PlanLine, type PlanSection, type PosSoldItemInput } from './plan';
 import { sameItemsProjection, soldItemsFromFeed } from './v1-sold-items';
@@ -315,127 +314,145 @@ export async function buildPlan(tx: Tx, actor: Actor, input: BuildPlanInput): Pr
 }
 
 // -----------------------------------------------------------------------------------------
-// T-388: holds - the facts a section is judged on, and the words
+// T-388 holds - RETIRED by T-401 S6
 // -----------------------------------------------------------------------------------------
-/** The confirmed, unposted, stock-affecting lines of one section, as the pure hold decision takes them. */
-function candidateLines(
-  freshLines: readonly PlanLine[],
-  section: 'direct' | 'recipe',
-  confirmed: ReadonlySet<string>,
-  postedKeys: ReadonlySet<string>,
-): HoldInputLine[] {
-  const out: HoldInputLine[] = [];
+/**
+ * T-401 S6 (bible row 335): finalizing takes nothing out of stock any more, so no line can be held for short stock, a room under
+ * count or a room that cannot take usage. The map stays (the page still asks) and is always empty. The draft meets those checks when
+ * it posts (`postUsage`, or the auto-post), not here.
+ */
+export async function pullHolds(_tx: Tx, _orgId: string, _pullId: string): Promise<ReadonlyMap<string, string>> {
+  return new Map<string, string>();
+}
+
+// -----------------------------------------------------------------------------------------
+// The day's usage draft (T-401 S6, Ian 15 Oct)
+// -----------------------------------------------------------------------------------------
+interface DraftInputLine {
+  readonly key: string;
+  readonly itemId: string;
+  readonly locationId: string;
+  readonly quantity: string;
+}
+
+/** The confirmed, usable, unlinked lines of one section of the fresh rebuild. */
+function draftCandidates(freshLines: readonly PlanLine[], section: PlanSection, confirmed: ReadonlySet<string>, linkedKeys: ReadonlySet<string>): DraftInputLine[] {
+  const out: DraftInputLine[] = [];
   for (const l of freshLines) {
-    if (l.section !== section || l.blocked || !confirmed.has(l.key) || postedKeys.has(l.key)) continue;
+    if (l.section !== section || !confirmed.has(l.key) || linkedKeys.has(l.key) || l.blocked) continue;
     if (!l.itemId || !l.quantity || !l.locationId) continue;
     if (compareQuantity(quantity(l.quantity), ZERO_QUANTITY) <= 0) continue;
-    out.push({ key: l.key, section, itemId: l.itemId, locationId: l.locationId, quantity: l.quantity });
+    out.push({ key: l.key, itemId: l.itemId, locationId: l.locationId, quantity: l.quantity });
   }
   return out;
 }
 
-interface HoldFacts {
-  readonly onHand: Map<string, string>;
-  readonly layerRemaining: Map<string, string>;
-  readonly frozen: Set<string>;
-  readonly unusable: Set<string>;
-}
-
-const byText = (a: string, b: string): number => a.localeCompare(b);
-
-/**
- * R3/R4/R4a. With `lock`: the item's layers are locked first (the lock `consume()` takes), sorted by item id, then each
- * (item, room)'s movement rows (the lock transfers take) in (item, room) order. Without it (the page's `pullHolds`),
- * plain reads. A room's role, purpose, status and freeze are READ, never inferred from a thrown error.
- */
-async function readHoldFacts(tx: Tx, storeId: string, lines: readonly HoldInputLine[], lock: boolean): Promise<HoldFacts> {
-  const itemIds = [...new Set(lines.map((l) => l.itemId))].sort(byText);
-  const layerRemaining = new Map<string, string>();
-  if (lock) {
-    for (const itemId of itemIds) {
-      const open = await stockLayersRepo.openLayersForUpdate(tx, itemId, storeId);
-      layerRemaining.set(itemId, addQuantity(...open.map((layer) => quantity(layer.remainingQuantity))));
-    }
-  } else if (itemIds.length > 0) {
-    const wanted = new Set(itemIds);
-    for (const row of await stockLayersRepo.valuation(tx, storeId)) if (wanted.has(row.itemId)) layerRemaining.set(row.itemId, row.quantity);
-  }
-
-  const pairs = [...new Map(lines.map((l) => [`${l.itemId}|${l.locationId}`, l] as const)).values()].sort(
-    (a, b) => byText(a.itemId, b.itemId) || byText(a.locationId, b.locationId),
-  );
-  const onHand = new Map<string, string>();
-  for (const l of pairs) {
-    onHand.set(
-      `${l.itemId}|${l.locationId}`,
-      lock ? await stockLedgerRepo.onHandForUpdate(tx, l.itemId, l.locationId) : await stockLedgerRepo.onHand(tx, l.itemId, l.locationId),
-    );
-  }
-
-  const roomIds = [...new Set(lines.map((l) => l.locationId))].sort(byText);
-  const unusable = new Set<string>();
-  for (const roomId of roomIds) {
+/** Rooms a usage record cannot be drawn from (not operating, inactive, storage), by name, for the sentence. */
+async function unusableRoomNames(tx: Tx, lines: readonly DraftInputLine[]): Promise<string[]> {
+  const names: string[] = [];
+  for (const roomId of [...new Set(lines.map((l) => l.locationId))]) {
     const room = await stockLocationsRepo.getLocation(tx, roomId);
-    if (!room || !assertUsageSource(room).ok) unusable.add(roomId);
+    if (!room || !assertUsageSource(room).ok) names.push(room?.name ?? 'a room');
   }
-  const sessions = await countSessionsRepo.freezingSessionsFor(tx, roomIds);
-  const frozen = new Set(roomIds.filter((roomId) => isFrozenBySessions(sessions, roomId)));
-  return { onHand, layerRemaining, frozen, unusable };
-}
-
-/** Item and room names (and the item's base unit as stored) for the sentences. */
-async function namesFor(tx: Tx, orgId: string, held: readonly HeldLine[]) {
-  const items = new Map<string, { name: string; unit: string }>();
-  const rooms = new Map<string, string>();
-  for (const itemId of new Set(held.map((h) => h.itemId))) {
-    const item = await itemsRepo.getItemById(tx, orgId, itemId);
-    items.set(itemId, { name: item?.name ?? 'an item', unit: item?.baseUnit ?? '' });
-  }
-  for (const roomId of new Set(held.map((h) => h.locationId))) {
-    rooms.set(roomId, (await stockLocationsRepo.getLocation(tx, roomId))?.name ?? 'a room');
-  }
-  return {
-    item: (id: string): string => items.get(id)?.name ?? 'an item',
-    unit: (id: string): string => items.get(id)?.unit ?? '',
-    room: (id: string): string => rooms.get(id) ?? 'a room',
-  };
+  return names;
 }
 
 /**
- * T-388 (for the page, S2): per unposted line of each UNSTAMPED section, its hold sentence NOW, or none. Read-only, no
- * locks, from the stored plan. Each section is judged on its own (as one finalize press is); it does NOT subtract
- * another open section's unposted need, so with two open sections on one item it can under-warn. Documented, not fixed:
- * finalize re-decides under R3's locks, so the worst case is a hold the page did not predict.
+ * Writes the section's lines into the pull's OWN usage draft, one draft per (store, day, ROOM), authored by the org's system person.
+ *
+ * ⭐ T-401 S6 audit ruling A2: the pull NEVER adds to, or edits, a draft staff started. The draft it adds to is only one of its own (a
+ * pull line already points at it: an earlier section made it). Staff record actuals by editing the pull draft; anything the POS does not
+ * sell goes in a separate manual draft.
+ *
+ * ⭐ A5: the line's pre-filled quantity is what the plan expects of the item in this room, less what the store's OTHER usage records of
+ * the day already hold of it (posted or draft, any room, never this pull's own drafts), floor 0 (a floor of 0 writes no line). A4: that
+ * figure is the line's SNAPSHOT of what was expected: it goes on the line (`expected_qty`) and, summed per item, on the pull's own
+ * lines (`draft_expected_qty`), where it survives staff removing and re-typing the line (T-168 has no edit-quantity call). The band at
+ * post time and at month close read it, never a live recomputation (A3: an item whose line staff deleted is still covered by it).
+ *
+ * A later section adds to the same draft: an item whose line still holds what the pull put there grows; one staff changed or deleted
+ * keeps staff's quantity (only its snapshot grows). Returns the number of pull lines linked.
  */
-export async function pullHolds(tx: Tx, orgId: string, pullId: string): Promise<ReadonlyMap<string, string>> {
-  const out = new Map<string, string>();
-  const pull = await posMappingRepo.getPull(tx, pullId);
-  if (!pull || pull.orgId !== orgId || pull.status === 'void') return out;
-  const stored = await posMappingRepo.listPullLines(tx, pullId);
+async function writeDayDraft(
+  tx: Tx,
+  pull: { id: string; orgId: string; storeId: string },
+  usedOn: string,
+  inputs: readonly DraftInputLine[],
+): Promise<number> {
+  if (inputs.length === 0) return 0;
+  const author = await stockUsageRepo.systemAuthorId(tx, pull.orgId);
+  const byRoom = new Map<string, DraftInputLine[]>();
+  for (const l of inputs) byRoom.set(l.locationId, [...(byRoom.get(l.locationId) ?? []), l]);
 
-  for (const section of ['direct', 'recipe'] as const) {
-    if (section === 'direct' ? pull.directFinalizedAt : pull.recipeFinalizedAt) continue;
-    const inputs: HoldInputLine[] = [];
-    for (const l of stored) {
-      if (l.section !== section || l.usageRecordId !== null || l.blocked !== null) continue;
-      if (!l.itemId || !l.locationId || !l.quantity) continue;
-      if (compareQuantity(quantity(l.quantity), ZERO_QUANTITY) <= 0) continue;
-      inputs.push({ key: l.lineKey, section, itemId: l.itemId, locationId: l.locationId, quantity: l.quantity });
-    }
-    if (inputs.length === 0) continue;
+  let linkedCount = 0;
+  for (const [locationId, group] of byRoom) {
+    // What this call adds to the plan, per item, in this room.
+    const planNew = new Map<string, ReturnType<typeof quantity>>();
+    for (const l of group) planNew.set(l.itemId, addQuantity(planNew.get(l.itemId) ?? ZERO_QUANTITY, quantity(l.quantity)));
 
-    const facts = await readHoldFacts(tx, pull.storeId, inputs, false);
-    const { held } = decideHolds(inputs, facts.onHand, facts.layerRemaining, facts.frozen, facts.unusable);
-    if (held.length === 0) continue;
-    const names = await namesFor(tx, orgId, held);
-    for (const h of held) {
-      // The sentence of this line's own group: the same (item, room), or the whole frozen room.
-      const group = held.filter((o) => o.cause === h.cause && o.locationId === h.locationId && (h.cause === 'frozen' || o.itemId === h.itemId));
-      const sentence = heldSentences(section, group, names)[0];
-      if (sentence !== undefined) out.set(h.key, sentence);
+    const found = await posMappingRepo.pullDraftForRoomForUpdate(tx, pull.id, locationId);
+    let recordId: string;
+    let prior: Awaited<ReturnType<typeof posMappingRepo.linkedLinesOfRecord>> = [];
+    if (found) {
+      recordId = found.id;
+      prior = await posMappingRepo.linkedLinesOfRecord(tx, pull.id, recordId);
+    } else {
+      recordId = (await stockUsageRepo.insertUsageRecord(tx, { orgId: pull.orgId, storeId: pull.storeId, locationId, kind: 'usage', usedOn, createdBy: author })).id;
     }
+    const priorPlan = new Map<string, ReturnType<typeof quantity>>();
+    const priorExpected = new Map<string, ReturnType<typeof quantity>>();
+    for (const x of prior) {
+      priorPlan.set(x.itemId, addQuantity(priorPlan.get(x.itemId) ?? ZERO_QUANTITY, quantity(x.quantity ?? '0')));
+      priorExpected.set(x.itemId, addQuantity(priorExpected.get(x.itemId) ?? ZERO_QUANTITY, quantity(x.draftExpectedQty ?? '0')));
+    }
+
+    // A5: held by OTHER records. This pull's own drafts (every room) are not "others": a plan split over rooms is not double counted.
+    const ownRecords = new Set(await posMappingRepo.recordIdsOfPull(tx, pull.id));
+    ownRecords.add(recordId);
+    const held = await stockUsageRepo.usageHeldByOthers(tx, pull.storeId, usedOn, [...planNew.keys()], [...ownRecords]);
+
+    const existing = await stockUsageRepo.listUsageLines(tx, recordId);
+    let nextNo = existing.reduce((m, l) => Math.max(m, Number(l.lineNo) || 0), existing.length) + 1;
+    const newExpected = new Map<string, ReturnType<typeof quantity>>();
+    for (const [itemId, q] of planNew) {
+      const prevExp = priorExpected.get(itemId) ?? ZERO_QUANTITY;
+      const totalPlan = addQuantity(priorPlan.get(itemId) ?? ZERO_QUANTITY, q);
+      const afterOthers = subtractQuantity(totalPlan, quantity(held.get(itemId) ?? '0'));
+      const resid = compareQuantity(afterOthers, ZERO_QUANTITY) > 0 ? afterOthers : ZERO_QUANTITY;
+      const expected = compareQuantity(resid, prevExp) > 0 ? resid : prevExp;
+      newExpected.set(itemId, expected);
+
+      const mine = existing.filter((l) => l.itemId === itemId);
+      const have = mine.length === 0 ? ZERO_QUANTITY : addQuantity(...mine.map((l) => quantity(l.quantity)));
+      if (compareQuantity(have, prevExp) === 0) {
+        // Untouched since the pull wrote it (or nothing was written because nothing was expected): it carries the new expectation.
+        if (compareQuantity(expected, ZERO_QUANTITY) > 0) {
+          if (mine.length === 0) {
+            await stockUsageRepo.insertUsageLines(tx, recordId, [{ lineNo: String(nextNo++), itemId, quantity: expected, expectedQty: expected }]);
+          } else {
+            await stockUsageRepo.updateUsageLineQuantity(tx, mine[0]!.id, expected, expected);
+            await stockUsageRepo.deleteUsageLines(tx, mine.slice(1).map((l) => l.id));
+          }
+        }
+      } else if (mine.length > 0) {
+        // Somebody's actual (or deleted): the quantity stays; the snapshot is still what the pull expects.
+        await stockUsageRepo.updateUsageLineExpected(tx, mine[0]!.id, expected);
+      }
+    }
+
+    const linkedRows = await posMappingRepo.setLineUsageRecord(
+      tx,
+      pull.id,
+      group.map((l) => ({ lineKey: l.key, itemId: l.itemId, locationId: l.locationId, quantity: quantity(l.quantity), usageRecordId: recordId })),
+    );
+    const unlinked = group.filter((_, i) => linkedRows[i] !== 1);
+    if (unlinked.length > 0) {
+      throw internalFault(`finalizeSections: pull ${pull.id}: ${unlinked.length} line(s) matched other than one stored row (${unlinked.map((l) => l.key).join(', ')})`);
+    }
+    for (const [itemId, expected] of newExpected) await posMappingRepo.setDraftExpected(tx, pull.id, recordId, itemId, expected);
+    linkedCount += group.length;
   }
-  return out;
+  return linkedCount;
 }
 
 // -----------------------------------------------------------------------------------------
@@ -451,12 +468,15 @@ export interface SectionOutcome {
   readonly section: PlanSection;
   readonly ok: boolean;
   readonly reason?: string;
+  /** Always 0 since T-401 S6: finalizing posts nothing. Kept so older readers still see the field. */
   readonly postedLineCount: number;
-  /** T-388: the confirmed lines left unposted by this call (short stock, a room under count, a room that can't take usage). */
-  readonly held: readonly HeldLine[];
-  /** T-388 R11: one sentence per held (item, room), then the closing untick sentence; [] when nothing is held. */
+  /** T-401 S6 (Ian 15 Oct): the plan lines this call wrote into the day's usage draft (linked to it, no stock moved). */
+  readonly draftedLineCount: number;
+  /** Always empty since T-401 S6 (nothing is held back any more). */
+  readonly held: readonly never[];
+  /** Always empty since T-401 S6. */
   readonly heldSentences: readonly string[];
-  /** T-388 R7: true only when THIS call stamped the section (nothing confirmed left unposted). */
+  /** True when THIS call stamped the section. */
   readonly finalized: boolean;
 }
 
@@ -532,7 +552,6 @@ export async function finalizeSections(tx: Tx, actor: Actor, input: FinalizeSect
   // `alreadyFinalized` is also updated as sections are processed BELOW (not only read once from the
   // DB up front), for the same reason.
   const requestedSections = [...new Set(input.sections)];
-  const postedKeys = new Set(postedStored.map((l) => l.lineKey));
   const freshByKey = new Map(freshLines.map((l) => [l.key, l]));
 
   // T-388 R8: a posted key's fresh rebuild must still be the same item, room and quantity, for every UNSTAMPED
@@ -555,20 +574,22 @@ export async function finalizeSections(tx: Tx, actor: Actor, input: FinalizeSect
     }
   }
 
-  // T-388 R6: a closed stock month refuses only when there is something to post. Checked before the section loop,
-  // so the refusal writes nothing. (A held section whose month closed can still be stamped by unticking its held lines.)
-  const somethingToPost = requestedSections.some(
-    (section) => section !== 'orphan' && !alreadyFinalized[section] && candidateLines(freshLines, section, confirmedSet, postedKeys).length > 0,
+  const postedKeys = new Set(postedStored.map((l) => l.lineKey));
+
+  // T-401 S6: nothing is posted here, so a closed stock month is no reason to refuse (the draft's own post meets the period lock).
+  // A room a usage cannot be drawn from would make the draft insert fail halfway: refused here, before any write, with the room named.
+  const toWrite = requestedSections.flatMap((section) =>
+    section === 'orphan' || alreadyFinalized[section] ? [] : draftCandidates(freshLines, section, confirmedSet, postedKeys),
   );
-  if (somethingToPost) {
-    const closed = await closedStockPeriodSentence(tx, pull.orgId, salesDay.businessDate, 'used');
-    if (closed) return fail(closed);
+  const badRooms = await unusableRoomNames(tx, toWrite);
+  if (badRooms.length > 0) {
+    return fail(`${badRooms.join(', ')} can't take usage (it is not an operating room, or it is inactive). Pick another room for this plan and build it again.`);
   }
 
   // From here on, a refusal after a write THROWS (never `return { ok: false }`): the caller commits on `ok: false`.
   for (const section of requestedSections) {
     if (alreadyFinalized[section]) {
-      results.push({ section, ok: false, reason: `the ${section} section was already finalized`, postedLineCount: 0, held: [], heldSentences: [], finalized: false });
+      results.push({ section, ok: false, reason: `the ${section} section was already finalized`, postedLineCount: 0, draftedLineCount: 0, held: [], heldSentences: [], finalized: false });
       continue;
     }
 
@@ -577,73 +598,18 @@ export async function finalizeSections(tx: Tx, actor: Actor, input: FinalizeSect
       // this section's review is done for today, so it stops being offered as "open."
       await posMappingRepo.markSectionFinalized(tx, pull.id, 'orphan');
       alreadyFinalized.orphan = new Date();
-      results.push({ section, ok: true, postedLineCount: 0, held: [], heldSentences: [], finalized: true });
+      results.push({ section, ok: true, postedLineCount: 0, draftedLineCount: 0, held: [], heldSentences: [], finalized: true });
       continue;
     }
 
-    // Invariant 2, direction 2 — a rebuilt line the caller never confirmed is simply excluded here,
-    // never written, even though the rebuild produced it. Lines that already carry a usage record are skipped (R8).
-    const inputs = candidateLines(freshLines, section, confirmedSet, postedKeys);
-
-    // R3/R4/R4a: read under the locks the writers take, per section (after earlier sections wrote), then decide.
-    const facts = await readHoldFacts(tx, pull.storeId, inputs, true);
-    const decision = decideHolds(inputs, facts.onHand, facts.layerRemaining, facts.frozen, facts.unusable);
-    const held: HeldLine[] = [...decision.held];
-
-    const byLocation = new Map<string, HoldInputLine[]>();
-    for (const line of decision.post) {
-      const group = byLocation.get(line.locationId) ?? [];
-      group.push(line);
-      byLocation.set(line.locationId, group);
-    }
-
-    let postedLineCount = 0;
-    for (const [locationId, group] of byLocation) {
-      let recordId: string;
-      try {
-        recordId = await tx.transaction(async (inner) => {
-          const draft = await saveUsageDraft(inner as Tx, actor, {
-            orgId: pull.orgId,
-            storeId: pull.storeId,
-            locationId,
-            kind: 'usage',
-            usedOn: salesDay.businessDate,
-            lines: group.map((l) => ({ itemId: l.itemId, quantity: quantity(l.quantity) })),
-          });
-          if (!draft.ok) throw refuse(`usage-pull: draft refused: ${draft.reason}`, draft.reason);
-          const posted = await postUsage(inner as Tx, actor, { recordId: draft.recordId });
-          if (!posted.ok) throw refuse(`usage-pull: post refused: ${posted.reason}`, posted.reason);
-          return draft.recordId;
-        });
-      } catch (err) {
-        // R5: the savepoint already unwound this room's partial write. A count started in the gap since the read is the
-        // one failure that waits; anything else is re-thrown so the whole call unwinds and nothing is stamped.
-        const sessions = await countSessionsRepo.freezingSessionsFor(tx, [locationId]);
-        if (!isFrozenBySessions(sessions, locationId)) throw err;
-        held.push(...decideHolds(group, facts.onHand, facts.layerRemaining, new Set([locationId]), new Set()).held);
-        continue;
-      }
-      // R10: the link is written OUTSIDE the catch above, so a failure here can never be mistaken for a freeze.
-      const linked = await posMappingRepo.setLineUsageRecord(
-        tx,
-        pull.id,
-        group.map((l) => ({ lineKey: l.key, itemId: l.itemId, locationId: l.locationId, quantity: quantity(l.quantity), usageRecordId: recordId })),
-      );
-      const unlinked = group.filter((_, i) => linked[i] !== 1);
-      if (unlinked.length > 0) {
-        throw internalFault(`finalizeSections: pull ${pull.id}: ${unlinked.length} posted line(s) matched other than one stored row (${unlinked.map((l) => l.key).join(', ')})`);
-      }
-      postedLineCount += group.length;
-    }
-
-    // R7: stamped only when nothing confirmed is left unposted.
-    const finalized = held.length === 0;
-    if (finalized) {
-      await posMappingRepo.markSectionFinalized(tx, pull.id, section);
-      alreadyFinalized[section] = new Date();
-    }
-    const names = await namesFor(tx, pull.orgId, held);
-    results.push({ section, ok: true, postedLineCount, held, heldSentences: heldSentences(section, held, names), finalized });
+    // T-401 S6 (Ian 15 Oct): the confirmed lines go into the day's usage DRAFT at their expected quantity. No stock moves, no journal
+    // entry; the section is reviewed and stamped. Posting is the manager's (or the system's, next afternoon).
+    const inputs = draftCandidates(freshLines, section, confirmedSet, postedKeys);
+    const drafted = await writeDayDraft(tx, { id: pull.id, orgId: pull.orgId, storeId: pull.storeId }, salesDay.businessDate, inputs);
+    for (const l of inputs) postedKeys.add(l.key);
+    await posMappingRepo.markSectionFinalized(tx, pull.id, section);
+    alreadyFinalized[section] = new Date();
+    results.push({ section, ok: true, postedLineCount: 0, draftedLineCount: drafted, held: [], heldSentences: [], finalized: true });
   }
 
   // T-377 S2 (DEF-597, R2/R3): ALL OR NONE. When EVERY unstamped section is empty in BOTH the stored plan (read after
@@ -726,6 +692,10 @@ export async function voidPosUsagePull(
   const closed = dayClosed === null ? null : await closedStockPeriodSentence(tx, pull.orgId, voidedOn, 'voided');
   if (closed) throw refuse(`${raw}: stock month closed for ${voidedOn}`, closed);
 
+  // T-401 S6: a draft this pull made is simply removed (it never moved stock); one staff started and the pull only added to keeps
+  // staff's lines and is merely unlinked. Done before the posted records are reversed, so the day is free to pull again.
+  await removePullDrafts(tx, pull);
+
   const recordIds = await posMappingRepo.postedUsageRecordIdsForPull(tx, pull.id);
   for (const recordId of recordIds) {
     const result = await voidPullUsageRecord(tx, { recordId, reason, voidedOn, voidedBy: actor.personId });
@@ -736,4 +706,38 @@ export async function voidPosUsagePull(
 
   await posMappingRepo.markPullVoid(tx, pull.id, actor.personId, reason);
   return { ok: true, reversedRecordCount: recordIds.length };
+}
+
+/**
+ * Unlinks the pull's lines from their DRAFT records.
+ *
+ * ⭐ T-401 S6 A7: a draft staff NEVER touched (every item holds exactly what the pull expected) is deleted, as before. One staff edited
+ * is not staff work to throw away: it stays a draft, no pull line points at it any more (so it never auto-posts: it is a manual draft
+ * now) and it is flagged `pull_voided` for the queue ("pull voided - check"). A draft not authored by the system (made before A2) is
+ * always kept and flagged.
+ */
+async function removePullDrafts(tx: Tx, pull: { id: string; orgId: string }): Promise<void> {
+  const draftIds = await posMappingRepo.draftUsageRecordIdsForPull(tx, pull.id);
+  if (draftIds.length === 0) return;
+  const author = await stockUsageRepo.systemAuthorId(tx, pull.orgId);
+  for (const recordId of draftIds) {
+    const record = await stockUsageRepo.getUsageRecord(tx, recordId);
+    let untouched = false;
+    if (record && record.status === 'draft' && record.createdBy === author) {
+      const snapshot = await posMappingRepo.draftExpectedByItem(tx, recordId);
+      const lines = await stockUsageRepo.listUsageLines(tx, recordId);
+      const own = new Map<string, ReturnType<typeof quantity>>();
+      for (const l of lines) own.set(l.itemId, addQuantity(own.get(l.itemId) ?? ZERO_QUANTITY, quantity(l.quantity)));
+      untouched =
+        [...own.keys()].every((itemId) => snapshot.has(itemId)) &&
+        [...snapshot].every(([itemId, expected]) => compareQuantity(own.get(itemId) ?? ZERO_QUANTITY, quantity(expected)) === 0);
+    }
+    await posMappingRepo.clearLineUsageRecord(tx, pull.id, recordId);
+    if (!record || record.status !== 'draft') continue;
+    if (untouched && !(await posMappingRepo.recordHasOtherPullLines(tx, recordId, pull.id))) {
+      await stockUsageRepo.deleteUsageDraft(tx, recordId);
+    } else {
+      await stockUsageRepo.markPullVoided(tx, recordId);
+    }
+  }
 }

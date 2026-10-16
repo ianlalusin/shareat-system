@@ -14,6 +14,8 @@ import { enrolCard, enrolFingerprint, revokeCredential } from '@shareat/domain';
 import { withOrgPrincipal } from '../../../expenses/lib';
 import { requireActor } from '../../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -64,6 +66,9 @@ export async function revokeCredentialAction(formData: FormData): Promise<void> 
   const credentialId = str(formData, 'credentialId');
   const reason = str(formData, 'reason');
   try {
+    // T-412 Tier R: the person retypes the employee's name; the server compares it with the name IT loads.
+    const target = await loadDestructiveTarget(actor, 'attendance_credential', credentialId, ['manage_attendance']);
+    if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     await withOrgPrincipal(actor.orgId, (tx) => revokeCredential(tx, actor, { credentialId, reason }));
   } catch (err) {
     return await redirectWithFlash(`/staff/${employmentId}/credentials`, {}, { error: errorMessage(err) });

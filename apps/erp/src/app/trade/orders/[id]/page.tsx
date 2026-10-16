@@ -8,19 +8,7 @@ import { orderDetail, peso, today } from '../lib';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import {
-  Button,
-  FlashBanner,
-  Input,
-  Select,
-  StatusHero,
-  exitStepFromTimestamps,
-  simpleStepIndexFor,
-  statusLabel,
-  tradeOrderSteps,
-  type StatusIconKind,
-  type Tone,
-} from '@/components/ui';
+import { Button, ConfirmDestructive, exitStepFromTimestamps, FlashBanner, Input, LinkRow, RowAction, RowLink, Select, simpleStepIndexFor, StatusHero, statusLabel, tradeOrderSteps, type StatusIconKind, type Tone } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Trade order — Shareat System' };
@@ -162,11 +150,11 @@ export default async function TradeOrderPage({
               {lines.map((l) => {
                 const packed = l.fulfilledQuantity ?? l.quantity;
                 return (
-                  <tr key={l.id} className="border-b border-neutral-100 align-top last:border-0 dark:border-neutral-900">
+                  <LinkRow key={l.id} className="border-b border-neutral-100 align-top last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
-                      <Link href={`/items/${l.itemId}`} className="underline underline-offset-4">
+                      <RowLink href={`/items/${l.itemId}`}>
                         {l.itemName}
-                      </Link>
+                      </RowLink>
                       <span className="ml-2 font-mono text-xs text-neutral-500">{l.itemCode}</span>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
@@ -182,29 +170,31 @@ export default async function TradeOrderPage({
                     {isInternal && (
                       <td className="px-3 py-2 text-right tabular-nums">
                         {canReceive ? (
-                          <div className="flex flex-col items-end gap-1">
-                            <input type="hidden" name="lineId" value={l.id} />
-                            <Input
-                              name="receivedQuantity"
-                              inputMode="decimal"
-                              defaultValue={packed}
-                              className="w-24 text-right tabular-nums"
-                            />
-                            <Select name="shortageReason" className="text-xs" defaultValue="">
-                              <option value="">If short: why?</option>
-                              {SHORTAGE_REASONS.map((r) => (
-                                <option key={r} value={r}>
-                                  {REASON_LABEL[r] ?? r}
-                                </option>
-                              ))}
-                            </Select>
-                          </div>
+                          <RowAction>
+                            <div className="flex flex-col items-end gap-1">
+                              <input type="hidden" name="lineId" value={l.id} />
+                              <Input
+                                name="receivedQuantity"
+                                inputMode="decimal"
+                                defaultValue={packed}
+                                className="w-24 text-right tabular-nums"
+                              />
+                              <Select name="shortageReason" className="text-xs" defaultValue="">
+                                <option value="">If short: why?</option>
+                                {SHORTAGE_REASONS.map((r) => (
+                                  <option key={r} value={r}>
+                                    {REASON_LABEL[r] ?? r}
+                                  </option>
+                                ))}
+                              </Select>
+                            </div>
+                          </RowAction>
                         ) : (
                           (l.receivedQuantity ?? '—')
                         )}
                       </td>
                     )}
-                  </tr>
+                  </LinkRow>
                 );
               })}
             </tbody>
@@ -305,9 +295,11 @@ export default async function TradeOrderPage({
             Void — say why
             <Input name="reason" required placeholder="reason" className="w-full" />
           </label>
-          <Button type="submit" variant="danger">
-            Void order
-          </Button>
+          <ConfirmDestructive
+            tier="admin-pin"
+            label="Void trade order"
+            consequence="Voids this order and reverses any posting. An administrator must approve with their own PIN."
+          />
           {order.status !== 'draft' && order.status !== 'confirmed' && (
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               The posting is <strong>reversed</strong>, never deleted; the ledger keeps both halves.

@@ -94,70 +94,63 @@ export async function signInWithPin(
   tx: Tx | null,
   input: { orgId: string; storeId: string; pin: string; deviceId?: string },
 ): Promise<SignInResult> {
-  if (tx) return runPinSignInWithThrottle(tx, tx, input);
+  return runChargedPinLookup(tx, input, (lookupTx) => runPinSignIn(lookupTx, input));
+}
+
+/**
+ * ⭐ T-412 - the ONE charge / note / refuse / lookup / refund sequence, shared by `signInWithPin` and `verifyAdminApproval`
+ * (`admin-approval.ts`), so a wrong approval PIN is a wrong PIN on exactly the budget a wrong sign-in PIN uses. Not exported
+ * from the package index: an approval is not a sign-in and nothing outside `packages/auth` may drive this.
+ *
+ * `input.storeId` null is the ORGANISATION's own bucket (migration 0198): the same limits, nobody else's budget; the
+ * store-scoped security events (pin paused / stopped) are not written for it - they have no store to be about.
+ *
+ * With `tx === null` (production): the charge runs in its own principal'd transaction that COMMITS before the lookup starts
+ * (T-395 R14 / DEF-626), so a miss survives the throw. With a `tx`, everything runs on it (tests, callers with their own
+ * open principal'd transaction).
+ */
+export async function runChargedPinLookup<T>(
+  tx: Tx | null,
+  input: { orgId: string; storeId: string | null; deviceId?: string },
+  lookup: (lookupTx: Tx) => Promise<T>,
+): Promise<T> {
+  const chargeInput = { orgId: input.orgId, storeId: input.storeId, deviceId: input.deviceId ?? null };
+  if (tx) {
+    const charge = await pinAttemptsRepo.chargeAttempt(tx, chargeInput);
+    await noteRefusedCharge(tx, charge, input);
+    refuseIfCharged(charge);
+    let result: T;
+    try {
+      result = await lookup(tx);
+    } catch (err) {
+      await notePauseStarted(tx, charge, input);
+      throw err;
+    }
+    await pinAttemptsRepo.refundOnSuccess(tx, input.storeId, charge, input.orgId);
+    return result;
+  }
 
   // ⭐ T-395 R14 / DEF-626 - charge BEFORE the lookup, in its own principal'd transaction that
-  // COMMITS before `runPinSignIn` starts. The charge locks the store's throttle row, refuses if
+  // COMMITS before the lookup starts. The charge locks the store's throttle row, refuses if
   // stopped or paused, and otherwise writes the miss and the tier-1 increment, so attempts are
   // serialised before any scrypt runs and the guess bound is exact under a parallel burst.
-  const charge = await withOrgPrincipal(input.orgId, (ptx) =>
-    pinAttemptsRepo.chargeAttempt(ptx, {
-      orgId: input.orgId,
-      storeId: input.storeId,
-      deviceId: input.deviceId ?? null,
-    }),
-  );
+  const charge = await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.chargeAttempt(ptx, chargeInput));
   noteRefusedCharge(null, charge, input);
   refuseIfCharged(charge);
 
-  // ⭐ T-302 / B1 - **under a real principal, not the auth door.** This line read
-  // `authTransaction((trx) => …)` under the comment *"DEF-288: the credential lookup precedes
-  // knowing the org, so it cannot carry a principal."* That sentence was true of PIN-FIRST
-  // sign-in and stopped being true the moment T-304 landed: `input.orgId` is a parameter,
-  // resolved from the terminal's own credential by `resolveTerminalIdentity` BEFORE this runs.
-  // T-304 §Q4 and its invariant 3 both say this lookup leaves the door; the move is what makes
-  // that true of the code rather than only of the document.
-  //
-  // ⛔ **And T-302 is what makes it necessary, not merely tidy.** Once the lookup key is
-  // `orgId:pin`, the org prefix inside the HMAC is the only thing keeping a PIN inside its
-  // organisation - one layer, for a tenancy risk. Bible §15.11 / RULES §6 item 3: no layer may
-  // be the only one. Under `withOrgPrincipal` the `person_credentials_via_person` RLS policy
-  // (`p.org_id = app_current_org()`) refuses a foreign-org row independently of the hash, so a
-  // key-derivation mistake cannot by itself cross a tenant boundary.
-  //
+  // ⭐ T-302 / B1 - **under a real principal, not the auth door.** The lookup moved off the auth door when T-304 made
+  // `orgId` a parameter resolved BEFORE this runs. ⛔ And T-302 is what makes it necessary: the org prefix inside the HMAC is
+  // the only thing keeping a PIN inside its organisation; under `withOrgPrincipal` the `person_credentials_via_person` RLS
+  // policy refuses a foreign-org row independently of the hash (bible §15.11: no layer may be the only one).
   // On any failure nothing more is written: the charge already counted it.
-  let result: SignInResult;
+  let result: T;
   try {
-    result = await withOrgPrincipal(input.orgId, (trx) => runPinSignIn(trx, input));
+    result = await withOrgPrincipal(input.orgId, (trx) => lookup(trx));
   } catch (err) {
     notePauseStarted(null, charge, input);
     throw err;
   }
-  await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.refundOnSuccess(ptx, input.storeId, charge));
-  return result;
-}
-
-/** Shared by the `tx`-supplied path: throttle and credential lookup on the same transaction. */
-async function runPinSignInWithThrottle(
-  throttleTx: Tx,
-  credentialTx: Tx,
-  input: { orgId: string; storeId: string; pin: string; deviceId?: string },
-): Promise<SignInResult> {
-  const charge = await pinAttemptsRepo.chargeAttempt(throttleTx, {
-    orgId: input.orgId,
-    storeId: input.storeId,
-    deviceId: input.deviceId ?? null,
-  });
-  await noteRefusedCharge(throttleTx, charge, input);
-  refuseIfCharged(charge);
-  let result: SignInResult;
-  try {
-    result = await runPinSignIn(credentialTx, input);
-  } catch (err) {
-    await notePauseStarted(throttleTx, charge, input);
-    throw err;
-  }
-  await pinAttemptsRepo.refundOnSuccess(throttleTx, input.storeId, charge);
+  await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.refundOnSuccess(ptx, input.storeId, charge, input.orgId));
   return result;
 }
 
@@ -166,7 +159,7 @@ async function runPinSignInWithThrottle(
 const STOPPED_MESSAGE =
   'PIN sign-in is stopped at this store after too many wrong PINs today. A manager can reopen it: sign in with email and password, then open Staff.';
 
-type PinInput = { orgId: string; storeId: string; deviceId?: string };
+type PinInput = { orgId: string; storeId: string | null; deviceId?: string };
 type AnyCharge = Awaited<ReturnType<typeof pinAttemptsRepo.chargeAttempt>>;
 
 /**
@@ -178,7 +171,8 @@ type AnyCharge = Awaited<ReturnType<typeof pinAttemptsRepo.chargeAttempt>>;
 function noteRefusedCharge(throttleTx: null, charge: AnyCharge, input: PinInput): void;
 function noteRefusedCharge(throttleTx: Tx, charge: AnyCharge, input: PinInput): Promise<void>;
 function noteRefusedCharge(throttleTx: Tx | null, charge: AnyCharge, input: PinInput): Promise<void> | void {
-  if (!(charge.refused === 'stopped' && charge.newlyStopped)) return throttleTx ? Promise.resolve() : undefined;
+  // T-412: the organisation's own bucket (storeId null) has no store for a store-scoped event to be about.
+  if (!(charge.refused === 'stopped' && charge.newlyStopped) || input.storeId === null) return throttleTx ? Promise.resolve() : undefined;
   if (!throttleTx) return enqueuePinStoppedForDay(input.orgId, input.storeId, input.deviceId ?? null);
   return auditLogRepo
     .appendSystem(throttleTx, input.orgId, {
@@ -197,7 +191,7 @@ function noteRefusedCharge(throttleTx: Tx | null, charge: AnyCharge, input: PinI
 function notePauseStarted(throttleTx: null, charge: AnyCharge, input: PinInput): void;
 function notePauseStarted(throttleTx: Tx, charge: AnyCharge, input: PinInput): Promise<void>;
 function notePauseStarted(throttleTx: Tx | null, charge: AnyCharge, input: PinInput): Promise<void> | void {
-  if (!(charge.refused === null && charge.startedPause)) return throttleTx ? Promise.resolve() : undefined;
+  if (!(charge.refused === null && charge.startedPause) || input.storeId === null) return throttleTx ? Promise.resolve() : undefined;
   if (!throttleTx) return enqueuePinPaused(input.orgId, input.storeId, input.deviceId ?? null);
   return auditLogRepo
     .appendSystem(throttleTx, input.orgId, {

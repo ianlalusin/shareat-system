@@ -18,6 +18,8 @@ import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { MONEY_ACCOUNT_RENAME } from './typed-forms';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -51,8 +53,12 @@ export async function retireMoneyAccountAction(formData: FormData): Promise<void
   const actor = await requireActor();
 
   try {
+    // T-412 Tier R: the person retypes the account's name; the server compares it with the name IT loads.
+    const moneyAccountId = str(formData, 'moneyAccountId');
+    const target = await loadDestructiveTarget(actor, 'money_account', moneyAccountId, ['manage_chart_of_accounts']);
+    if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     await withOrgPrincipal(actor.orgId, (tx) =>
-      retireMoneyAccount(tx, actor, { moneyAccountId: str(formData, 'moneyAccountId') }),
+      retireMoneyAccount(tx, actor, { moneyAccountId }),
     );
   } catch (err) {
     return await redirectWithFlash('/money-accounts', {}, { error: errorMessage(err) });

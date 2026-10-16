@@ -32,6 +32,8 @@ import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { INVOICE_LINES, SUPPLIER_EDIT } from './typed-forms';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -185,6 +187,15 @@ export async function recordInvoiceAction(formData: FormData): Promise<void> {
         otherFees: str(formData, 'otherFees') || null,
         notes: str(formData, 'notes') || null,
         receiptFileId,
+        // T-408 R1 - VAT type (blank = not recorded, so an old form post is unchanged), the amount typed from the paper,
+        // and the OR flag ('' = the supplier's habit). The domain resolves 'supplier_default' and refuses contradictions.
+        vatType: (str(formData, 'vatType') || null) as never,
+        vatAmount: str(formData, 'vatAmount') || null,
+        ...(str(formData, 'isOfficialReceipt') === 'yes'
+          ? { isOfficialReceipt: true }
+          : str(formData, 'isOfficialReceipt') === 'no'
+            ? { isOfficialReceipt: false }
+            : {}),
       });
     });
     id = result.id;
@@ -287,7 +298,13 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
   try {
     const reason = str(formData, 'reason');
     if (!reason) throw new Error('Say why this invoice is being voided.');
-    await withOrgPrincipal(actor.orgId, (tx) => voidInvoice(tx, actor, { invoiceId: id, reason }));
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const target = await loadDestructiveTarget(actor, 'supplier_invoice', id, ['void_supplier_invoice']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'void_supplier_invoice' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await voidInvoice(tx, actor, { invoiceId: id, reason });
+      await recordApproval(tx, actor, approval, { capability: 'void_supplier_invoice', entityType: 'supplier_invoice', entityId: id, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash(`/ap/invoices/${id}`, {}, { error: errorMessage(err) });
   }
@@ -406,6 +423,9 @@ export async function voidPaymentAction(formData: FormData): Promise<void> {
       : '/ap';
   let message: string;
   try {
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const target = await loadDestructiveTarget(actor, 'ap_payment', paymentId, ['record_ap_payment']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'record_ap_payment' });
     const voided = await withOrgPrincipal(actor.orgId, async (tx) => {
       // Read in the same transaction, before the void, only to word the banner.
       const payment = await apRepo.getApPaymentById(tx, actor.orgId, paymentId);
@@ -414,6 +434,7 @@ export async function voidPaymentAction(formData: FormData): Promise<void> {
         reason: str(formData, 'reason'),
         ...(str(formData, 'voidOn') ? { voidOn: str(formData, 'voidOn') } : {}),
       });
+      await recordApproval(tx, actor, approval, { capability: 'record_ap_payment', entityType: 'ap_payment', entityId: paymentId, storeId: target.storeId });
       return payment?.amount;
     });
     message = `Payment${voided ? ` of ${formatMoney(money(voided))}` : ''} voided — reversed, not deleted. The bills it paid are owed again.`;

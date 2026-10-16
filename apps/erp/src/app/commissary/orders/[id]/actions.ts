@@ -38,6 +38,8 @@ import { errorMessageOf, withOrgPrincipal } from '../lib';
 import { redirectWithFlash, type Flash, type TypedFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { COMMISSARY_LINE_FULFIL, COMMISSARY_LINE_UPDATE } from './typed-forms';
+import { verifyAdminApproval } from '@shareat/auth';
+import { assertApprovalStillRight, loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -196,8 +198,25 @@ export async function decideLineAction(fd: FormData): Promise<void> {
 /** Withdraw (branch) or cancel (commissary) before dispatch; void after it. One domain function. */
 export async function withdrawOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
+  const actor = await requireActor(`/commissary/orders/${orderId}`);
+  // T-412: ONE action serves "Withdraw / Cancel" (nothing dispatched: unguarded) and "Void dispatch" (reverses a posting: an
+  // administrator's PIN). The SERVER tells them apart from the order's status, never from the form.
+  const needsPin = (status: string | null) => status === 'dispatched' || status === 'received';
+  let approval: { approverPersonId: string } | null = null;
+  let storeOfOrder: string | null = null;
+  try {
+    const target = await loadDestructiveTarget(actor, 'trade_order', orderId, ['dispatch_branch_order', 'place_branch_order', 'fulfil_branch_order']);
+    storeOfOrder = target.storeId;
+    if (needsPin(target.status)) {
+      approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'dispatch_branch_order' });
+    }
+  } catch (err) {
+    return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, { error: errorMessageOf(err) });
+  }
   return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
+    await assertApprovalStillRight(tx, actor, 'trade_order', orderId, needsPin, approval !== null);
     const result = await voidTradeOrder(tx, actor, { orderId, reason: str(fd, 'reason') });
+    if (approval) await recordApproval(tx, actor, approval, { capability: 'dispatch_branch_order', entityType: 'trade_order', entityId: orderId, storeId: storeOfOrder });
     return result.reversedEntryId
       ? 'Voided. The dispatch posting is reversed — never deleted — and the stock is back on the commissary\'s shelf.'
       : 'Cancelled. Nothing had moved, so nothing needed reversing. The branch may order again.';

@@ -13,6 +13,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -25,8 +27,12 @@ export async function postSeparationAction(formData: FormData): Promise<void> {
   const employmentId = str(formData, 'employmentId');
   const separationDate = str(formData, 'separationDate');
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      postSeparation(tx, actor, {
+    // T-412 Tier P: posting a separation pays out and ends the employment. An administrator's PIN, verified on the server
+    // against the EMPLOYMENT's store (the record), not the form's `storeId`.
+    const target = await loadDestructiveTarget(actor, 'employment', employmentId, ['run_payroll']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'run_payroll' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await postSeparation(tx, actor, {
         storeId: store,
         employmentId,
         separationDate,
@@ -37,8 +43,9 @@ export async function postSeparationAction(formData: FormData): Promise<void> {
         clearanceConfirmedBy: str(formData, 'clearanceConfirmed') === 'on' ? actor.personId : '',
         clearanceNotes: str(formData, 'clearanceNotes') || null,
         notes: str(formData, 'notes') || null,
-      }),
-    );
+      });
+      await recordApproval(tx, actor, approval, { capability: 'run_payroll', entityType: 'employment', entityId: employmentId, storeId: target.storeId });
+    });
   } catch (err) {
     // ⭐ Keeps the form's selection alive on a rejection — a validation error should not also
     // throw away which employment and date were being processed.
@@ -55,9 +62,14 @@ export async function voidSeparationAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const store = str(formData, 'storeId');
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      voidSeparation(tx, actor, { id: str(formData, 'id'), reason: str(formData, 'reason') }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the page's `storeId` field).
+    const separationId = str(formData, 'id');
+    const target = await loadDestructiveTarget(actor, 'separation', separationId, ['run_payroll']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'run_payroll' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await voidSeparation(tx, actor, { id: separationId, reason: str(formData, 'reason') });
+      await recordApproval(tx, actor, approval, { capability: 'run_payroll', entityType: 'separation', entityId: separationId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash('/payroll/separations', { store }, { error: errorMessage(err) });
   }

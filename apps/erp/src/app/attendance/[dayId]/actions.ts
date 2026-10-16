@@ -26,6 +26,9 @@ import { recordAdjustment } from '@shareat/domain';
 import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../lib';
 import { errorMessage } from '@/lib/constraint-messages';
+import { verifyAdminApproval, type Actor } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
+import type { Tx } from '@shareat/db';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -42,6 +45,9 @@ type Kind = 'start_anchor' | 'early_out_approved' | 'half_day_override' | 'overt
 async function decide(
   formData: FormData,
   build: (fd: FormData) => { kind: Kind } & Record<string, unknown>,
+  /** T-412: only `voidDayAction` passes this - runs in the SAME transaction as the adjustment, after it, so the approval
+   *  event rolls back with the decision. Every other caller omits it and behaves exactly as before. */
+  inSameTx?: (tx: Tx, actor: Actor) => Promise<void>,
 ): Promise<{ dayId: string; error: string | null }> {
   const { actor, sessionId } = await requireSession();
   const dayId = str(formData, 'dayId');
@@ -49,14 +55,15 @@ async function decide(
   const shiftDay = str(formData, 'shiftDay');
   try {
     const payload = build(formData);
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      recordAdjustment(tx, actor, {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await recordAdjustment(tx, actor, {
         employmentId,
         shiftDay,
         sessionId,
         ...payload,
-      } as Parameters<typeof recordAdjustment>[2]),
-    );
+      } as Parameters<typeof recordAdjustment>[2]);
+      if (inSameTx) await inSameTx(tx, actor);
+    });
   } catch (err) {
     return { dayId, error: errorMessage(err) };
   }
@@ -123,9 +130,27 @@ export async function verifyDayAction(formData: FormData): Promise<void> {
 }
 
 export async function voidDayAction(formData: FormData): Promise<void> {
+  // T-412 Tier P: an administrator's PIN, verified HERE, before `decide()` - the shared helper keeps its shape for the other
+  // adjustment kinds. The store is the day RECORD's.
+  const dayId = str(formData, 'dayId');
+  let refusal: string | null = null;
+  let approval: { approverPersonId: string } | null = null;
+  let storeOfDay: string | null = null;
+  try {
+    const { actor } = await requireSession();
+    const target = await loadDestructiveTarget(actor, 'attendance_day', dayId, ['manage_attendance']);
+    storeOfDay = target.storeId;
+    approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'manage_attendance' });
+  } catch (err) {
+    refusal = errorMessage(err);
+  }
+  if (refusal !== null) return await redirectWithFlash(`/attendance/${dayId}`, {}, { error: refusal });
   const r = await decide(
     formData,
     (fd) => ({ kind: 'void', reason: str(fd, 'reason') }),
+    async (tx, actor) => {
+      if (approval) await recordApproval(tx, actor, approval, { capability: 'manage_attendance', entityType: 'attendance_day', entityId: dayId, storeId: storeOfDay });
+    },
   );
   if (r.error) return await redirectWithFlash(`/attendance/${r.dayId}`, {}, { error: r.error });
   return await redirectWithFlash(`/attendance/${r.dayId}`, {}, { stamp: 'VOID', ok: 'Day voided. ⛔ It contributes nothing to payroll. The punches are untouched — the evidence survives the decision.' });

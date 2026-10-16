@@ -60,6 +60,7 @@ import type { Actor } from '@shareat/auth';
 import { createCustomer, createPrepaidItem, recordCharge, writeOffPrepaidItem } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { paramsOf } from '../helpers/flash-jar';
+import { givePin } from '../helpers/approval-pin';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -90,7 +91,9 @@ async function orgFixture(hint: string) {
   const adminId = admin!.id;
   await sql`insert into person_roles (person_id, org_id, role) values (${adminId}, ${orgId}, 'admin')`;
   await sql`insert into person_store_scope (person_id, store_id) values (${adminId}, ${storeId})`;
-  return { orgId, storeId, admin: actor(orgId, adminId) };
+  // T-412: writing a prepaid item off is Tier P; the administrator approves with their own PIN.
+  const pin = await givePin(sql, { orgId, storeId, personId: adminId });
+  return { orgId, storeId, admin: actor(orgId, adminId), pin };
 }
 
 async function prepaidFixture(hint: string) {
@@ -123,11 +126,12 @@ async function journalEntryCountFor(itemId: string): Promise<number> {
   return Number(row!.count);
 }
 
-function writeOffFormData(f: { itemId: string }, overrides: { refundAmount?: string; refundAccountCode?: string } = {}): FormData {
+function writeOffFormData(f: { itemId: string; pin?: string }, overrides: { refundAmount?: string; refundAccountCode?: string } = {}): FormData {
   const fd = new FormData();
   fd.set('prepaidItemId', f.itemId);
   fd.set('writtenOffOn', '2026-01-15');
   fd.set('reason', 'Cancelled');
+  if (f.pin) fd.set('adminPin', f.pin);
   if (overrides.refundAmount !== undefined) fd.set('refundAmount', overrides.refundAmount);
   if (overrides.refundAccountCode !== undefined) fd.set('refundAccountCode', overrides.refundAccountCode);
   return fd;

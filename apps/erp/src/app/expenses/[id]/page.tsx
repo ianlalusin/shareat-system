@@ -16,7 +16,7 @@ import { typedFor } from '@/lib/keep-typing';
 import { EXPENSE_DRAFT_EDIT } from '../typed-forms';
 import { EditableRecord } from '@/components/forms';
 import { accountCodeAndName } from '@/lib/account-label';
-import { Badge, Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
 // that reader returns, so the two cannot drift.
@@ -280,9 +280,11 @@ export default async function ExpenseDetailPage({
             <strong className="text-neutral-900 dark:text-neutral-100">Delete this draft.</strong> Nothing
             has posted, so there is nothing to reverse — it is removed outright.
           </p>
-          <Button type="submit" variant="danger">
-            Delete draft
-          </Button>
+          <ConfirmDestructive
+            tier="admin-pin"
+            label="Delete draft"
+            consequence="Deletes this draft for good. An administrator must approve with their own PIN."
+          />
         </form>
       )}
 
@@ -299,9 +301,11 @@ export default async function ExpenseDetailPage({
           </p>
           <div className="flex gap-2">
             <Input name="reason" required placeholder="Why is this being voided?" className="flex-1" />
-            <Button type="submit" variant="danger">
-              Void
-            </Button>
+            <ConfirmDestructive
+              tier="admin-pin"
+              label="Void expense"
+              consequence="Reverses this posted expense. An administrator must approve with their own PIN."
+            />
           </div>
         </form>
       )}

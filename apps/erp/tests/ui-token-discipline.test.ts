@@ -281,7 +281,9 @@ function findClientDirectiveOrHook(source: string): string | null {
 
 describe('Guard 10 — no \'use client\', no hooks (§9 R4)', () => {
   it('none of the three component sources carries the client directive or a forbidden hook', () => {
-    for (const file of COMPONENT_FILES) {
+    // T-412: ConfirmDestructive is the ONE client island in this kit, by the spec's own words ('use client'; it holds the "reveal the
+    // panel" state inside an existing server-action form). apps/erp/tests/t412-destructive-census.test.ts guards its shape instead.
+    for (const file of COMPONENT_FILES.filter((f) => !/ConfirmDestructive\.tsx$/.test(f))) {
       expect(findClientDirectiveOrHook(readFileSync(file, 'utf8')), file).toBeNull();
     }
   });

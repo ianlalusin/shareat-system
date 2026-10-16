@@ -3,7 +3,7 @@ import { SEPARATION_CAUSES } from '@shareat/db/schema';
 import { postSeparationAction, voidSeparationAction } from './actions';
 import { cashAccountsFor, listStores, peso, preview, separationsFor, worklistFor } from './lib';
 import { Page } from '@/components/shell/Page';
-import { Badge, Button, FlashBanner, Banner, Field, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -190,9 +190,11 @@ export default async function SeparationsPage({
               <Input name="clearanceNotes" placeholder="Clearance notes (optional)" className="w-full" />
               <Input name="notes" placeholder="Notes (optional)" className="w-full" />
 
-              <Button type="submit" variant="primary">
-                Post separation
-              </Button>
+              <ConfirmDestructive
+                tier="admin-pin"
+                label="Post separation"
+                consequence="Pays out and ends this employment. An administrator must approve with their own PIN."
+              />
             </form>
           )}
         </section>
@@ -222,9 +224,11 @@ export default async function SeparationsPage({
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="id" value={s.id} />
                   <Input name="reason" placeholder="Why void it?" className="min-w-0 flex-1 basis-48" />
-                  <Button type="submit" variant="danger">
-                    Void
-                  </Button>
+                  <ConfirmDestructive
+                    tier="admin-pin"
+                    label="Void separation"
+                    consequence="Voids this separation and reverses its entries. An administrator must approve with their own PIN."
+                  />
                 </form>
               )}
             </div>

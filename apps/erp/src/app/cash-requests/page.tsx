@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import { createRequestAction } from './actions';
 import {
@@ -11,7 +10,7 @@ import {
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, FlashBanner, Input, Select, statusTone } from '@/components/ui';
+import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Cash requests — Shareat System' };
@@ -93,19 +92,16 @@ export default async function CashRequestsPage({
                   r.status === 'cancelled' ||
                   r.status === 'liquidated';
                 return (
-                  <tr
+                  <LinkRow
                     key={r.id}
                     className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
                       dormant ? 'opacity-60' : ''
                     }`}
                   >
                     <td className="px-3 py-2">
-                      <Link
-                        href={`/cash-requests/${r.id}`}
-                        className="underline underline-offset-2"
-                      >
+                      <RowLink href={`/cash-requests/${r.id}`}>
                         {r.purpose}
-                      </Link>
+                      </RowLink>
                       <div className="text-xs text-neutral-400 dark:text-neutral-600">
                         {r.requestedOn}
                       </div>
@@ -137,7 +133,7 @@ export default async function CashRequestsPage({
                     <td className="px-3 py-2">
                       <Badge tone={statusTone(r.status)} label={STATUS_LABEL[r.status] ?? r.status} />
                     </td>
-                  </tr>
+                  </LinkRow>
                 );
               })}
             </tbody>

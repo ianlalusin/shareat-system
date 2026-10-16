@@ -7,7 +7,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Clock terminals — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -156,9 +156,12 @@ export default async function TerminalsPage({
                             <input type="hidden" name="terminalId" value={t.id} />
                             <input type="hidden" name="storeId" value={storeId} />
                             <Input name="reason" required placeholder="Reason to revoke" />
-                            <Button type="submit" variant="danger">
-                              Revoke
-                            </Button>
+                            <ConfirmDestructive
+                              tier="retype"
+                              label="Revoke terminal"
+                              consequence="Revokes this terminal. It can no longer punch, and it cannot be revived."
+                              expectedName={t.label}
+                            />
                           </form>
                         </div>
                       </td>

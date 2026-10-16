@@ -30,7 +30,7 @@ import {
 } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, FlashBanner, Input } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowAction, RowLink } from '@/components/ui';
 
 export const metadata = { title: 'Customer — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -263,14 +263,13 @@ export default async function CustomerDetailPage({
                 {charges.map((c) => {
                   const overdue = c.dueDate !== null && c.dueDate < now && compare(money(c.outstanding), ZERO) > 0;
                   return (
-                    <tr
+                    <LinkRow
                       key={c.chargeId}
                       // T-258/DEF-244: the row itself is the tap target when there's an entry to view —
-                      // `relative` is the containing block the "entry" link's `after:absolute` stretches
-                      // against. A `<tr>` cannot be wrapped in `<a>` (invalid HTML — `<tr>` only accepts
-                      // `<td>/<th>`), so the stretched-link technique is how a real anchor still ends up
-                      // covering the whole row without breaking table semantics.
-                      className={`relative border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
+                      // LinkRow (T-411) is the containing block the "entry" RowLink stretches over. A `<tr>`
+                      // cannot be wrapped in `<a>` (invalid HTML), so the stretched link is how a real anchor
+                      // still ends up covering the whole row without breaking table semantics.
+                      className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
                         c.status === 'posted' ? '' : 'opacity-60'
                       } ${c.journalEntryId ? 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900/40' : ''}`}
                     >
@@ -284,13 +283,13 @@ export default async function CustomerDetailPage({
                         {/* ⭐ Every figure walks back to the entry that produced it — the thing v1
                             structurally cannot do, because its "entry" was a single leg. */}
                         {c.journalEntryId && (
-                          <Link
+                          <RowLink
                             href={`/reports/journal-lines?entry=${c.journalEntryId}`}
                             aria-label={`View journal entry — ${c.referenceNo ?? c.chargeDate}, ${peso(c.outstanding)} outstanding`}
-                            className="ml-2 text-xs text-neutral-500 after:absolute after:inset-0 after:content-[''] dark:text-neutral-400"
+                            className="ml-2 text-xs text-neutral-500 dark:text-neutral-400"
                           >
                             entry
-                          </Link>
+                          </RowLink>
                         )}
                       </td>
                       <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.totalAmount)}</td>
@@ -298,7 +297,7 @@ export default async function CustomerDetailPage({
                       <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.writtenOffAmount)}</td>
                       <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.outstanding)}</td>
                       <td className="px-3 py-3 text-xs">{c.status}</td>
-                    </tr>
+                    </LinkRow>
                   );
                 })}
               </tbody>
@@ -350,9 +349,11 @@ export default async function CustomerDetailPage({
                     <Field label="Why is it uncollectible?" className="min-w-[14rem] flex-[2]">
                       <Input name="reason" required className="w-full" />
                     </Field>
-                    <Button type="submit" variant="danger">
-                      Write off as bad debt
-                    </Button>
+                    <ConfirmDestructive
+                      tier="admin-pin"
+                      label="Write off as bad debt"
+                      consequence="Writes this charge off to bad debt. An administrator must approve with their own PIN."
+                    />
                   </form>
                 )}
                 {canVoidAt(c.storeId) && (
@@ -363,9 +364,11 @@ export default async function CustomerDetailPage({
                     <Field label="Void this charge — why?" className="min-w-[14rem] flex-[2]">
                       <Input name="reason" required className="w-full" />
                     </Field>
-                    <Button type="submit" variant="danger">
-                      Void charge
-                    </Button>
+                    <ConfirmDestructive
+                      tier="admin-pin"
+                      label="Void charge"
+                      consequence="Voids this charge and reverses its entry. An administrator must approve with their own PIN."
+                    />
                   </form>
                 )}
               </div>
@@ -391,26 +394,26 @@ export default async function CustomerDetailPage({
               </thead>
               <tbody>
                 {collections.map((c) => (
-                  <tr
+                  <LinkRow
                     key={c.collectionId}
                     // T-258/DEF-244: same stretched-link technique as the Charges table. This row can
                     // carry BOTH the entry link and the void form at once (a posted collection with a
-                    // journal entry) — the void form is a real sibling with its own `relative z-10`,
-                    // never nested inside the entry link's anchor, so neither swallows the other.
-                    className={`relative border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
+                    // journal entry) — the void form and the receipt link sit in a RowAction above the
+                    // stretched entry link, so neither swallows the other.
+                    className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
                       c.status === 'posted' ? '' : 'opacity-60'
                     } ${c.journalEntryId ? 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900/40' : ''}`}
                   >
                     <td className="px-3 py-3">
                       {c.collectionDate}
                       {c.journalEntryId && (
-                        <Link
+                        <RowLink
                           href={`/reports/journal-lines?entry=${c.journalEntryId}`}
                           aria-label={`View journal entry — collection ${c.collectionDate}, ${peso(c.amount)}`}
-                          className="ml-2 text-xs text-neutral-500 after:absolute after:inset-0 after:content-[''] dark:text-neutral-400"
+                          className="ml-2 text-xs text-neutral-500 dark:text-neutral-400"
                         >
                           entry
-                        </Link>
+                        </RowLink>
                       )}
                     </td>
                     <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.amount)}</td>
@@ -419,14 +422,16 @@ export default async function CustomerDetailPage({
                       {c.moneyAccountName ?? '—'}
                       {c.referenceNo && <div className="text-neutral-400">{c.referenceNo}</div>}
                       {c.receiptFileId && viewableReceipts.has(c.receiptFileId) && (
-                        <a
-                          href={`/files/${c.receiptFileId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`${ACTION_LINK} relative z-10`}
-                        >
-                          View photo
-                        </a>
+                        <RowAction>
+                          <a
+                            href={`/files/${c.receiptFileId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={ACTION_LINK}
+                          >
+                            View photo
+                          </a>
+                        </RowAction>
                       )}
                     </td>
                     {/* ⭐ WHAT it settled, not merely how much came in. A list of amounts cannot
@@ -445,32 +450,31 @@ export default async function CustomerDetailPage({
                     <td className="px-3 py-3 text-xs">
                       {c.status}
                       {c.status === 'posted' && (
-                        <form
-                          action={voidCollectionAction}
-                          className="relative z-10 mt-1 flex flex-wrap items-center gap-1"
-                        >
-                          <input type="hidden" name="customerId" value={customerId} />
-                          <input type="hidden" name="storeId" value={storeId} />
-                          <input type="hidden" name="collectionId" value={c.collectionId} />
-                          <Input
-                            name="reason"
-                            required
-                            placeholder="why?"
-                            aria-label="Why is this collection being voided?"
-                            className="w-28 text-xs"
-                          />
-                          {/* T-258 found in passing: this button was the same undersized DEF-239 shape,
-                              missed by DEF-239's census and by action-link-sweep.test.ts's shape guard
-                              because it inherited text-xs from the ancestor <td> rather than carrying it
-                              itself. Orchestrator-approved fix, bundled here since the form is already
-                              being touched for the z-10 escape hatch. */}
-                          <button type="submit" className={ACTION_LINK}>
-                            void
-                          </button>
-                        </form>
+                        <RowAction className="mt-1 flex">
+                          <form action={voidCollectionAction} className="flex flex-wrap items-center gap-1">
+                            <input type="hidden" name="customerId" value={customerId} />
+                            <input type="hidden" name="storeId" value={storeId} />
+                            <input type="hidden" name="collectionId" value={c.collectionId} />
+                            <Input
+                              name="reason"
+                              required
+                              placeholder="why?"
+                              aria-label="Why is this collection being voided?"
+                              className="w-28 text-xs"
+                            />
+                            {/* T-258 found in passing: this button was the same undersized DEF-239 shape,
+                                missed by DEF-239's census and by action-link-sweep.test.ts's shape guard
+                                because it inherited text-xs from the ancestor <td> rather than carrying it
+                                itself. Orchestrator-approved fix, bundled here since the form is already
+                                being touched for the z-10 escape hatch. */}
+                            <button type="submit" className={ACTION_LINK}>
+                              void
+                            </button>
+                          </form>
+                        </RowAction>
                       )}
                     </td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>

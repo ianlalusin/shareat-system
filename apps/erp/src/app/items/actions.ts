@@ -37,6 +37,8 @@ import { keepTyping } from '@/lib/keep-typing';
 import { ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT } from './typed-forms';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../lib/error-shape';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -268,6 +270,12 @@ export async function setItemStatusAction(formData: FormData): Promise<void> {
   const status = requested;
   let message = '';
   try {
+    // T-412 Tier R: RETIRING needs the item's name retyped (the server compares it with the name IT loads); restoring is not
+    // destructive and needs nothing. The operation is the one requested here, never a flag the form claims.
+    if (status === 'inactive') {
+      const target = await loadDestructiveTarget(actor, 'item', itemId, ['approve_item']);
+      if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
+    }
     const { changed } = await withOrgPrincipal(actor.orgId, (tx) => setItemStatus(tx, actor, { itemId, status }));
     message = !changed ? 'No change: it already is.' : status === 'inactive' ? 'Retired. Its records stay.' : 'Restored.';
   } catch (err) {

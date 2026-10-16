@@ -31,7 +31,8 @@ export type AuditLogSource =
   | 'kiosk'
   | 'cron'
   | 'ingestor'
-  | 'etl';
+  | 'etl'
+  | 'manual';
 
 /** `before` + `after` serialised must fit this (R5); above it the writer stores a diff of the changed top-level keys. */
 export const AUDIT_PAYLOAD_CAP_BYTES = 16 * 1024;

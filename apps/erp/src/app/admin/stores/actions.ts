@@ -32,6 +32,8 @@ import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../../lib/error-shape';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 import { STORE_DETAILS, STORE_OPENING_DATE, STORE_STOCK_MODEL } from './typed-forms';
 // T-346 Amendment R3.1 — the one date-validity check, never re-derived per call site.
 import { storesRepo } from '@shareat/db';
@@ -249,6 +251,9 @@ export async function deactivateStoreAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const storeId = str(fd, 'storeId');
   try {
+    // T-412 Tier R: retype the store's name; the server compares it with the name IT loads.
+    const target = await loadDestructiveTarget(actor, 'store', storeId, ['manage_stores']);
+    if (!retypeMatches(str(fd, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     await withOrgPrincipal(actor.orgId, (tx) => deactivateStore(tx, actor, storeId));
   } catch (err) {
     return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });

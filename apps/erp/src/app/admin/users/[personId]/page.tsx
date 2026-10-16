@@ -18,7 +18,7 @@ import {
   userDetail,
 } from '../lib';
 import { Page } from '@/components/shell/Page';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'User access — Shareat System' };
@@ -149,9 +149,18 @@ export default async function UserAccessPage({
                   <input type="hidden" name="personId" value={personId} />
                   <input type="hidden" name="storeId" value={s.id} />
                   <input type="hidden" name="granted" value={s.inScope ? 'false' : 'true'} />
-                  <Button type="submit" variant={s.inScope ? 'danger' : 'secondary'}>
-                    {s.inScope ? 'In scope — remove' : 'Add'}
-                  </Button>
+                  {s.inScope ? (
+                    <ConfirmDestructive
+                      tier="retype"
+                      label="In scope — remove"
+                      consequence={`Takes ${s.name} out of this person's store scope. They stop seeing that store's records.`}
+                      expectedName={person.displayName}
+                    />
+                  ) : (
+                    <Button type="submit" variant="secondary">
+                      Add
+                    </Button>
+                  )}
                 </form>
               </li>
             ))}
@@ -207,9 +216,12 @@ export default async function UserAccessPage({
                       <input type="hidden" name="grantId" value={g.id} />
                       <input type="hidden" name="granted" value="false" />
                       <Input name="reason" required placeholder="Reason to revoke" className="min-w-0 flex-1" />
-                      <Button type="submit" variant="danger">
-                        Revoke
-                      </Button>
+                      <ConfirmDestructive
+                        tier="retype"
+                        label="Revoke grant"
+                        consequence="Takes this capability away from the person."
+                        expectedName={capabilityTitle(g.grantName)}
+                      />
                     </form>
                   ) : (
                     // T-291 §C2 — a `'position'` row offers no revoke control here: the next
@@ -375,9 +387,12 @@ export default async function UserAccessPage({
                         placeholder="Reason to unlink"
                         className="min-w-0 flex-1"
                       />
-                      <Button type="submit" variant="danger">
-                        Unlink
-                      </Button>
+                      <ConfirmDestructive
+                        tier="retype"
+                        label="Unlink sign-in"
+                        consequence="Unlinks this sign-in account and signs the person out of every live session."
+                        expectedName={person.displayName}
+                      />
                     </form>
                   )}
                 </li>

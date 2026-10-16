@@ -13,7 +13,7 @@ import { CATEGORY_LABEL, STATUS_LABEL, getDetail, peso, thisPeriod } from '../li
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
 import { MONEY_ACCOUNT_CODES, accountLabel } from '@/lib/account-label';
 import { withFlash } from '@/lib/flash';
 
@@ -212,9 +212,11 @@ export default async function PrepaidItemPage({
                         <input type="hidden" name="prepaidItemId" value={item.id} />
                         <input type="hidden" name="period" value={p.period} />
                         <Input name="reason" required placeholder="Reason…" className="w-28 text-xs" />
-                        <Button type="submit" variant="danger">
-                          Reverse
-                        </Button>
+                        <ConfirmDestructive
+                          tier="admin-pin"
+                          label="Reverse month"
+                          consequence="Reverses this month's release. An administrator must approve with their own PIN."
+                        />
                       </form>
                     )}
                   </td>
@@ -282,9 +284,11 @@ export default async function PrepaidItemPage({
               Only the part that did <strong>not</strong> come back reaches the P&amp;L. The refund
               moves from one balance-sheet account to another.
             </p>
-            <Button type="submit" variant="danger">
-              Write it off
-            </Button>
+            <ConfirmDestructive
+              tier="admin-pin"
+              label="Write it off"
+              consequence="Writes off what is left of this prepaid item. An administrator must approve with their own PIN."
+            />
           </form>
         </section>
       )}

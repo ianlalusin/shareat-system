@@ -53,6 +53,10 @@ vi.mock('@/lib/constraint-messages', async () => {
   return await import('../src/lib/constraint-messages');
 });
 
+// T-412: the void actions read the record and verify an administrator's PIN first; this file is about how a REFUSAL is carried.
+vi.mock('@/lib/destructive', async () => (await import('./helpers/destructive-mocks')).destructiveLibMock());
+vi.mock('@shareat/auth', async (orig) => (await import('./helpers/destructive-mocks')).withApprovalStub(await orig<object>()));
+
 // Each file's own `./lib` (or, for credentials, `../../../expenses/lib`) — a minimal replacement,
 // never `importOriginal`: every one of these 11 files imports only `withOrgPrincipal` from it,
 // except pos-usage (`buildPlanForDay` too).

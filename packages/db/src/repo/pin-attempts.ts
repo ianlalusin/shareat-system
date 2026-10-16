@@ -60,17 +60,24 @@ export type Charge =
  */
 export async function chargeAttempt(
   tx: Tx,
-  input: { orgId: string; storeId: string; deviceId: string | null },
+  input: { orgId: string; storeId: string | null; deviceId: string | null },
   opts: ReopenOpts = {},
 ): Promise<Charge> {
   const { orgId, storeId, deviceId } = input;
   const auto = autoReopen(opts);
+  // T-412: storeId NULL is the organisation's own approval-PIN bucket (migration 0198). `bucket(col)` is the row filter
+  // for it; a store's filter is exactly what it was.
+  const bucket = (col: string) =>
+    storeId === null
+      ? sql`${sql.identifier(col)}.org_id = ${orgId} and ${sql.identifier(col)}.store_id is null`
+      : sql`${sql.identifier(col)}.store_id = ${storeId}`;
+  const conflict = storeId === null ? sql`on conflict (org_id) where store_id is null` : sql`on conflict (store_id)`;
 
   // 1. LOCK. A no-op update on conflict still takes the row lock until commit.
   const locked = (await tx.execute(sql`
     insert into pin_attempt_throttle (org_id, store_id)
-    values (${orgId}, ${storeId})
-    on conflict (store_id) do update set updated_at = pin_attempt_throttle.updated_at
+    values (${orgId}, ${storeId}::uuid)
+    ${conflict} do update set updated_at = pin_attempt_throttle.updated_at
     returning
       locked_until as "lockedUntil",
       (locked_until is not null and locked_until > now()) as "pauseLive",
@@ -83,8 +90,8 @@ export async function chargeAttempt(
   const counted = (await tx.execute(sql`
     select count(*)::int as n
       from sign_in_attempts a, pin_attempt_throttle t
-     where t.store_id = ${storeId}
-       and a.store_id = ${storeId}
+     where ${bucket('t')}
+       and ${bucket('a')}
        and a.kind = 'miss'
        and a.occurred_at > greatest(
              now() - make_interval(hours => ${DAILY_WINDOW_HOURS}),
@@ -95,11 +102,11 @@ export async function chargeAttempt(
   `)) as unknown as Array<{ n: number }>;
   if ((counted[0]?.n ?? 0) >= DAILY_MISS_BUDGET) {
     await tx.execute(
-      sql`update pin_attempt_throttle set stopped_at = now(), updated_at = now() where store_id = ${storeId}`,
+      sql`update pin_attempt_throttle set stopped_at = now(), updated_at = now() where ${bucket('pin_attempt_throttle')}`,
     );
     await tx.execute(sql`
       insert into sign_in_attempts (org_id, store_id, device_id, kind)
-      values (${orgId}, ${storeId}, ${deviceId}::uuid, 'stopped')
+      values (${orgId}, ${storeId}::uuid, ${deviceId}::uuid, 'stopped')
     `);
     return { refused: 'stopped', until: null, newlyStopped: true };
   }
@@ -127,19 +134,19 @@ export async function chargeAttempt(
         else null
       end,
       updated_at = now()
-    where store_id = ${storeId}
+    where ${bucket('pin_attempt_throttle')}
     returning (locked_until is not null) as "startedPause"
   `)) as unknown as Array<{ startedPause: boolean }>;
   const miss = (await tx.execute(sql`
     insert into sign_in_attempts (org_id, store_id, device_id, kind)
-    values (${orgId}, ${storeId}, ${deviceId}::uuid, 'miss')
+    values (${orgId}, ${storeId}::uuid, ${deviceId}::uuid, 'miss')
     returning id
   `)) as unknown as Array<{ id: string }>;
   let lockoutId: string | null = null;
   if (bumped[0]?.startedPause) {
     const lockout = (await tx.execute(sql`
       insert into sign_in_attempts (org_id, store_id, device_id, kind)
-      values (${orgId}, ${storeId}, ${deviceId}::uuid, 'lockout')
+      values (${orgId}, ${storeId}::uuid, ${deviceId}::uuid, 'lockout')
       returning id
     `)) as unknown as Array<{ id: string }>;
     lockoutId = lockout[0]!.id; // INSERT ... RETURNING always yields the row
@@ -167,15 +174,18 @@ export async function chargeAttempt(
  */
 export async function refundOnSuccess(
   tx: Tx,
-  storeId: string,
+  storeId: string | null,
   charge: { missId: string; lockoutId: string | null },
+  /** Required when `storeId` is null (T-412: the organisation's own bucket). */
+  orgId?: string,
 ): Promise<void> {
   const ids = charge.lockoutId ? [charge.missId, charge.lockoutId] : [charge.missId];
+  const scope = storeId === null ? sql`store_id is null and org_id = ${orgId}` : sql`store_id = ${storeId}`;
   await tx.execute(sql`
     delete from sign_in_attempts
-     where store_id = ${storeId} and id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})
+     where ${scope} and id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})
   `);
-  await clearOnSuccess(tx, storeId);
+  await clearOnSuccess(tx, storeId, orgId);
 }
 
 /**
@@ -205,13 +215,15 @@ export async function reopen(
  * the write entirely when there is nothing to clear, so the ordinary hot path (a correct PIN,
  * first try) touches no row.
  */
-export async function clearOnSuccess(tx: Tx, storeId: string): Promise<void> {
+export async function clearOnSuccess(tx: Tx, storeId: string | null, orgId?: string): Promise<void> {
   await tx
     .update(pinAttemptThrottle)
     .set({ failCount: 0, windowStartedAt: null, lockedUntil: null, updatedAt: sql`now()` })
     .where(
       and(
-        eq(pinAttemptThrottle.storeId, storeId),
+        storeId === null
+          ? and(eq(pinAttemptThrottle.orgId, orgId ?? ''), sql`${pinAttemptThrottle.storeId} is null`)
+          : eq(pinAttemptThrottle.storeId, storeId),
         or(gt(pinAttemptThrottle.failCount, 0), sql`${pinAttemptThrottle.lockedUntil} is not null`),
       ),
     );

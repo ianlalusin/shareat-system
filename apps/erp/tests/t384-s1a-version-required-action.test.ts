@@ -29,6 +29,8 @@ vi.mock('../src/lib/session', () => ({
   requireActor: vi.fn(async () => ({ orgId: 'org-1', personId: 'actor-1' })),
 }));
 vi.mock('@/lib/constraint-messages', async () => await import('../src/lib/constraint-messages'));
+// T-412: retiring a tender asks for its name, loaded by the server; this file is about the version rule, so the name is stubbed ('The Name').
+vi.mock('@/lib/destructive', async () => (await import('./helpers/destructive-mocks')).destructiveLibMock());
 vi.mock('../src/app/settings/pos-link/lib', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/app/settings/pos-link/lib')>();
   return { ...actual, withOrgPrincipal: async (_orgId: string, fn: (tx: unknown) => unknown) => fn({}) };
@@ -60,6 +62,7 @@ async function run(which: 'updateTenderAction' | 'setTenderActiveAction', fields
   fd.set('name', 'Gcash');
   fd.set('posV1Alias', 'Gcash');
   fd.set('isActive', 'false');
+  fd.set('confirmName', 'The Name');
   for (const [k, v] of Object.entries(fields)) if (v !== undefined) fd.set(k, v);
   const mod = await import('../src/app/settings/pos-link/actions');
   try {

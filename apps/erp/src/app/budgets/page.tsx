@@ -23,7 +23,7 @@ import { typedFor, type TypedView } from '@/lib/keep-typing';
 import { BUDGET_CAP_EDIT } from './typed-forms';
 import { accountLabel } from '@/lib/account-label';
 import { EditableRecord } from '@/components/forms';
-import { Banner, Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
+import { Banner, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Budgets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -209,9 +209,12 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                             <input type="hidden" name="storeId" value={storeId} />
                             <input type="hidden" name="periodKey" value={periodKey} />
                             <input type="hidden" name="budgetId" value={b.id} />
-                            <Button type="submit" variant="danger">
-                              Remove cap
-                            </Button>
+                            <ConfirmDestructive
+                              tier="retype"
+                              label="Remove cap"
+                              consequence="Removes this cap. The category then has NO cap, which is not the same as a cap of zero."
+                              expectedName={b.categoryLabel}
+                            />
                           </form>
                         </div>
                       </details>

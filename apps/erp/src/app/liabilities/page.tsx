@@ -7,7 +7,7 @@ import { CATEGORY_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Liabilities — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -90,16 +90,16 @@ export default async function LiabilitiesPage({
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr
+                <LinkRow
                   key={r.id}
                   className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
                     compare(money(r.position.outstanding), ZERO) > 0 ? '' : 'opacity-60'
                   }`}
                 >
                   <td className="px-3 py-2">
-                    <Link href={`/liabilities/${r.id}`} className="underline underline-offset-2">
+                    <RowLink href={`/liabilities/${r.id}`}>
                       {r.name}
-                    </Link>
+                    </RowLink>
                     <div className="text-xs text-neutral-400 dark:text-neutral-600">
                       {CATEGORY_LABEL[r.category] ?? r.category}
                     </div>
@@ -122,7 +122,7 @@ export default async function LiabilitiesPage({
                   <td className="px-3 py-2 text-right font-mono tabular-nums">
                     {peso(r.position.outstanding)}
                   </td>
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
           </table>

@@ -123,7 +123,7 @@ describe('I23 -- usage source resolution at plan time', () => {
     expect(normalise(plan.lines, labels)).toEqual(golden.planLines);
   }, 120_000);
 
-  it('finalize rebuilds with the SAME source: the posted usage is the menu rule, not the map (mutant: finalize still reads listActiveMaps)', async () => {
+  it('finalize rebuilds with the SAME source: the drafted usage is the menu rule, not the map (mutant: finalize still reads listActiveMaps)', async () => {
     const w = await world('i23f');
     const v = await rawVariant(w, 'Cheese Plate');
     await rawRule(w, v, { mode: 'direct', itemId: w.cheese, quantityPerSale: '0.5' });
@@ -136,8 +136,12 @@ describe('I23 -- usage source resolution at plan time', () => {
     const plan = await planOnly(w, w.a.storeId, d, w.a.kitchen);
     const fin = await asOrg(w.orgId, (tx) => finalizeSections(tx, w.manager, { pullId: plan.pullId, sections: ['direct'], confirmedKeys: ['direct:linked'] }));
     expect(fin.ok, fin.ok ? '' : fin.reason).toBe(true);
+    // T-401 S6: the pull drafts the EXPECTED usage (the menu rule's 2 x 0.5), and moves no stock.
+    const [moved] = await sql<{ n: string }[]>`select count(*)::text as n from stock_movements where org_id = ${w.orgId} and quantity < 0`;
+    expect(Number(moved!.n), 'no stock out by the pull').toBe(0);
     const out = await sql<{ item_id: string; q: string }[]>`
-      select item_id, (-sum(quantity))::text as q from stock_movements where org_id = ${w.orgId} and quantity < 0 group by item_id`;
+      select l.item_id, sum(l.quantity)::text as q from stock_usage_records r join stock_usage_lines l on l.record_id = r.id
+       where r.org_id = ${w.orgId} and r.status = 'draft' group by l.item_id`;
     expect(Object.fromEntries(out.map((r) => [r.item_id, Number(r.q)]))).toEqual({ [w.cheese]: 1 });
   }, 120_000);
 

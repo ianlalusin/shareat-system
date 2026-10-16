@@ -6,7 +6,7 @@ import { endEmploymentAction, issuePinAction, setPositionsAction } from '../acti
 import { employmentDetail, livePinFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { Banner, Button, FlashBanner, Input } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { STAFF_POSITIONS } from '../typed-forms';
@@ -217,9 +217,11 @@ export default async function EmploymentDetailPage({
                 ))}
               </select>
             </label>
-            <Button type="submit" variant="danger">
-              End employment
-            </Button>
+            <ConfirmDestructive
+              tier="admin-pin"
+              label="End employment"
+              consequence="Ends this employment. The record stays visible. An administrator must approve with their own PIN."
+            />
           </form>
         )}
       </section>

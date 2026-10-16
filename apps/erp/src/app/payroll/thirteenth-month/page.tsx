@@ -6,7 +6,7 @@ import { cashAccountsFor, listStores, payoutsFor, peso, preview, runsFor } from 
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
 
 export const metadata = { title: '13th-month pay — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -197,9 +197,11 @@ export default async function ThirteenthMonthPage({
                   <input type="hidden" name="year" value={run.year} />
                   <input type="hidden" name="runId" value={run.id} />
                   <Input name="reason" placeholder="Why void it?" className="min-w-0 flex-1 basis-48" />
-                  <Button type="submit" variant="danger">
-                    Void
-                  </Button>
+                  <ConfirmDestructive
+                    tier="admin-pin"
+                    label="Void 13th-month run"
+                    consequence="Voids this 13th-month run and reverses its entries. An administrator must approve with their own PIN."
+                  />
                   <span className="text-xs text-neutral-500">
                     ⭐ Reverses the entries, so the year is payable again.
                   </span>

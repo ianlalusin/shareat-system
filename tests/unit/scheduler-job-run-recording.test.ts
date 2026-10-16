@@ -420,6 +420,14 @@ const PINNED: PinnedKind[] = [
     expectedHopsFromEntry: 2,
     expectedPathFromEntry: ['runFiscalPeriodSeedForOrg'],
   },
+  {
+    kind: 'usage_auto_post',
+    entry: 'usageAutoPostSweep',
+    file: 'packages/domain/src/scheduler/index.ts',
+    walkFrom: 'usageAutoPostSweep',
+    expectedHopsFromEntry: 1,
+    expectedPathFromEntry: [],
+  },
 ];
 
 describe('Pass B — every registered SCHEDULER_JOBS kind reaches runJobForOrg, in the REAL repo', () => {
@@ -429,7 +437,7 @@ describe('Pass B — every registered SCHEDULER_JOBS kind reaches runJobForOrg, 
     expect(domainSourceFiles()).toContain('packages/domain/src/recurring-expenses/job.ts');
   });
 
-  it('⭐ PASS B COUNT: all 11 pinned SCHEDULER_JOBS kinds are reachable — reported separately from Pass A', () => {
+  it('⭐ PASS B COUNT: all 12 pinned SCHEDULER_JOBS kinds are reachable — reported separately from Pass A', () => {
     const results = PINNED.map((row) => {
       const bodies = functionBodies(read(row.file));
       // The entry must actually call `walkFrom` directly (or walkFrom IS the entry, for a direct
@@ -450,10 +458,10 @@ describe('Pass B — every registered SCHEDULER_JOBS kind reaches runJobForOrg, 
     });
 
     const unreached = results.filter((r) => !r.reached).map((r) => r.kind);
-    expect(unreached).toEqual([]); // every one of the 11 must be reached — no exemptions exist
+    expect(unreached).toEqual([]); // every one of the 12 must be reached — no exemptions exist
 
     const reachedCount = results.filter((r) => r.reached).length;
-    expect(reachedCount).toBe(11); // was 10/10 (system32-85); 11/11 since T-276's fiscal_period_seed
+    expect(reachedCount).toBe(12); // was 10/10 (system32-85); 11/11 since T-276's fiscal_period_seed; 12/12 since T-401 S6's usage_auto_post
   });
 
   it('⭐ PINNED kinds are exactly SCHEDULER_JOBS, sorted — a new job updates PINNED too, not just KNOWN_JOB_NAMES', () => {

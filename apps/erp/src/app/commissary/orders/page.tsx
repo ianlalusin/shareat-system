@@ -13,7 +13,7 @@ import {
 } from './lib';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
-import { Badge, Button, FlashBanner, FormGrid, Input, Select, statusTone } from '@/components/ui';
+import { Badge, Button, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -130,11 +130,11 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
               {orders.map((o) => {
                 const stage = branchOrderStage(o);
                 return (
-                  <tr key={o.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={o.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2 tabular-nums">
-                      <Link href={`/commissary/orders/${o.id}`} className="underline underline-offset-4">
+                      <RowLink href={`/commissary/orders/${o.id}`}>
                         {o.orderDate}
-                      </Link>
+                      </RowLink>
                     </td>
                     <td className="px-3 py-2">
                       {o.commissaryName} → {o.branchName ?? '—'}
@@ -152,7 +152,7 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
                     <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
                       {o.messageCount === 0 ? '—' : `${o.messageCount} message${o.messageCount === 1 ? '' : 's'}`}
                     </td>
-                  </tr>
+                  </LinkRow>
                 );
               })}
             </tbody>

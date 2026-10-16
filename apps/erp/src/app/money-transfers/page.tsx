@@ -11,7 +11,7 @@ import { CUSTODIAN_LABEL, listAccountBalances, listRecentTransfers, listSettleme
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, Button, FlashBanner, Input } from '@/components/ui';
+import { Badge, Banner, ConfirmDestructive, FlashBanner, Input } from '@/components/ui';
 
 export const metadata = { title: 'Money transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -273,9 +273,11 @@ export default async function MoneyTransfersPage({
                           {/* A reversal without a reason is a gap, so the reason is part of the
                               same control rather than a confirmation step that can be skipped. */}
                           <Input name="reason" required placeholder="Reason…" className="w-28" />
-                          <Button type="submit" variant="danger">
-                            Reverse
-                          </Button>
+                          <ConfirmDestructive
+                            tier="admin-pin"
+                            label="Reverse money transfer"
+                            consequence="Reverses this money transfer. An administrator must approve with their own PIN."
+                          />
                         </form>
                       )}
                     </td>

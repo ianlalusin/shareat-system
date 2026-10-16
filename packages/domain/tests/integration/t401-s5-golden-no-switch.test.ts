@@ -8,6 +8,17 @@
  * Mutants killed: listActiveMaps changed or skipped on the no-switch path; the no-switch path writing a `depletionSource`
  * key anywhere (plan line, pull row, usage record, audit row); the no-switch path resolving a location, quantity or section
  * differently; a switch of ANOTHER store (B) changing store A's output.
+ *
+ * ## T-401 S6 round 2 (Ian 15 Oct): the pull makes ONE DRAFT PER STORE + DAY + ROOM, so the golden now holds a Kitchen draft (Coke 3, Cheese 0.4, Rice 0.2)
+ * and a separate Display draft (Cheese 1.0). It was RE-CAPTURED from the real output (T401_S5_CAPTURE=1) and every number hand-checked against the fixture's
+ * recipe and sales maths (coke 3x1; cheese-direct 4x0.25 at Display; box 2x(Cheese 0.2, Rice 0.1) at Kitchen). The note below is the round-1 history.
+ *
+ * ## T-401 S6 (Ian 15 Oct): the GOLDEN WAS UPDATED BY HAND, to the new rule, not re-captured. The pull no longer posts: finalize writes
+ * ONE usage DRAFT for the store + day (one line per covered item at its expected quantity, location = the pull's location), no stock
+ * movement, and the finalize outcome reports 0 posted lines. Changed keys: finalizeOutcome[*].posted, usageRecords, stockOut. Unchanged and
+ * still asserted: the plan lines, the pull row, the stored pull lines (still linked to a record), the audit rows. The builder checks the
+ * hand-written values (the draft's author is not in the golden: `created_by` is not selected) and re-captures only if a difference is
+ * a real design choice (e.g. draft lines per room), telling the tester.
  * Finding recorded with the golden: today the usage pull writes NO audit_log row of its own (the JSON's auditRows holds only what the
  * postings write), so "the pull's audit row carries depletionSource only when switched" has nothing to attach to yet (see the report).
  */

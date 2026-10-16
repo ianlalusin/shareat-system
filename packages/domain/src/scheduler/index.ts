@@ -38,6 +38,7 @@ import { runAmortisationAsSystem } from '../prepaid';
 import { runOrderWastageBackstop } from '../wastage/orders';
 import { sweepOrphanedFiles } from '../files';
 import { fiscalPeriodSeedWindow } from '../organizations';
+import { autoPostDueUsageDrafts } from '../stock/usage-auto-post';
 import { classifyHoles } from '../fiscal-periods';
 
 import { money, toBusinessDate } from '@shareat/core';
@@ -1263,4 +1264,53 @@ function addOneDay(date: string): string {
 function monthEndFromLabel(yyyyMm: string): string {
   const [y, mo] = yyyyMm.split('-').map(Number) as [number, number];
   return new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10);
+}
+
+// =====================================================================================
+
+/**
+ * ⭐ **T-401 S6 (Ian, 15 Oct; audit ruling A1) - the usage auto-post sweep, DAILY 14:05 Manila.** Posts every system-made pull usage
+ * draft that is past its deadline (`stock/usage-auto-post.ts` holds the rules and the deadline). One org at a time, each under that
+ * org's system principal, through `runJobForOrg`: every run writes a `scheduler_runs` row (job `usage_auto_post`), and a draft the
+ * system could not post is a failure line, so the run is `partial`, `hadFailures` is true and the script exits non-zero (systemd shows
+ * the unit failed). A refused record or a failing org never stops the next.
+ */
+export interface UsageAutoPostOutcome {
+  readonly orgName: string;
+  readonly posted: number;
+  readonly skipped: readonly { readonly recordId: string; readonly subjectName: string; readonly reason: string }[];
+  readonly error?: string;
+}
+
+export interface UsageAutoPostSweepResult {
+  readonly outcomes: UsageAutoPostOutcome[];
+  readonly hadFailures: boolean;
+}
+
+export async function usageAutoPostSweep(
+  options: { orgId?: string; now: Date; trigger?: 'cron' | 'manual' },
+): Promise<UsageAutoPostSweepResult> {
+  const { now } = options;
+  const trigger = options.trigger ?? 'cron';
+  // Bookkeeping only, like the other daily jobs: the Manila month this run happened in.
+  const period = toBusinessDate(now).slice(0, 7);
+  const orgs = await listOrgsToRun(options.orgId);
+  const outcomes: UsageAutoPostOutcome[] = [];
+  let failed = false;
+  for (const org of orgs) {
+    let skipped: { recordId: string; subjectName: string; reason: string }[] = [];
+    const run = await runJobForOrg(org, 'usage_auto_post', period, trigger, async () => {
+      const result = await asSystem(org.id, (tx) => autoPostDueUsageDrafts(tx, now, trigger === 'manual' ? 'manual' : 'cron'));
+      skipped = [...result.skipped];
+      return {
+        posted: result.posted.length,
+        skipped: 0,
+        failures: result.skipped.map((s) => ({ subjectId: s.recordId, subjectName: s.subjectName, reason: s.reason })),
+        detail: `auto-posted ${result.posted.length} - left as draft ${result.skipped.length}`,
+      };
+    });
+    outcomes.push({ orgName: org.name, posted: run.posted, skipped, ...(run.error ? { error: run.error } : {}) });
+    if (run.error || run.failed > 0) failed = true;
+  }
+  return { outcomes, hadFailures: failed };
 }

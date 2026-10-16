@@ -214,7 +214,7 @@ const notRun = (f: F) =>
 
 // =====================================================================================================
 describe('E1 - the smoke case: direct finalized, recipe and orphan empty -> the pull finishes', () => {
-  it('items map only to direct; finalize [direct] -> finalized, three stamps, ONE results row, usage posted, the finding is gone', async () => {
+  it('items map only to direct; finalize [direct] -> finalized, three stamps, ONE results row, usage DRAFTED, the finding is gone', async () => {
     const f = await fixture('e1');
     await f.setMap('A', 'direct');
     const dayId = await day(f, DAY, sold('A'));
@@ -230,7 +230,7 @@ describe('E1 - the smoke case: direct finalized, recipe and orphan empty -> the 
     expect(pullFinalizedOf(out)).toBe(true);
     expect(stamps(row), 'all three stamps').toEqual([true, true, true]);
     expect(out.sections.map((s) => s.section), 'the sweep adds no results row (REV-6)').toEqual(['direct']);
-    expect((await storedLines(p.pullId)).every((l) => l.usage_record_id), 'the direct usage record is posted').toBe(true);
+    expect((await storedLines(p.pullId)).every((l) => l.usage_record_id), "the direct lines are linked to the day's usage draft (T-401 S6; nothing is posted)").toBe(true);
     expect(await usageCount(f)).toBe(1);
     expect(await notRun(f), 'the finding is gone').toHaveLength(0);
   });
@@ -285,7 +285,7 @@ describe('E3 - a section waiting for a person is never stamped (all or none)', (
 });
 
 describe('E9 - the remap hole (REV-2)', () => {
-  it('A direct, B unmapped, recipe empty; finalize [direct] stamps nothing else; map B to a recipe, build again -> the stored plan has the recipe line and finalize [recipe] posts it', async () => {
+  it('A direct, B unmapped, recipe empty; finalize [direct] stamps nothing else; map B to a recipe, build again -> the stored plan has the recipe line and finalize [recipe] drafts it', async () => {
     const f = await fixture('e9');
     await f.setMap('A', 'direct');
     const dayId = await day(f, DAY, sold('A', 'B'));
@@ -305,7 +305,8 @@ describe('E9 - the remap hole (REV-2)', () => {
     expect(stored.filter((l) => l.section === 'recipe').map((l) => l.line_key), "B's recipe line is in the stored plan, not dropped by a frozen recipe section").toEqual(['recipe:B:0']);
 
     mustOk(await fin(f, p.pullId, ['recipe'], ['recipe:B:0']));
-    expect(await usageCount(f), "B's recipe usage record is posted (A's direct one + B's)").toBe(2);
+    expect(await usageCount(f), "one usage draft per store + day: B's recipe line is filled into A's direct draft, no second record").toBe(1);
+    expect(await sql`select 1 from stock_usage_records where org_id = ${f.orgId} and status <> 'draft'`, 'nothing is posted by the pull').toHaveLength(0);
     const after = await storedLines(p.pullId);
     expect(after.find((l) => l.line_key === 'recipe:B:0')?.usage_record_id).toBeTruthy();
   });

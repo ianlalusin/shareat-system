@@ -21,7 +21,6 @@ closeYear
 confirmTradeOrder
 convertSpecimen
 countedVariances
-createRecipe
 customerReturnableQuantity
 datesInWeek
 declareSupplierItem
@@ -38,7 +37,6 @@ flushSecurityEvents
 formatConversionSummary
 formatCoverageReport
 getAllocationsForPayment
-getItemForProduction
 hasFingerprint
 hasOtherActiveAdmin
 isConvertibleUnit
@@ -53,7 +51,6 @@ listLiveForStore
 listOrderMessages
 listPayRates
 listPunchesForDay
-listRecipeLines
 listRoster
 listWriteOffsForCharge
 markReviewed
@@ -72,6 +69,7 @@ positionsBySupplier
 previewDrawingClose
 projectStoreMenu
 proxy
+pullHolds
 purgeComplete
 rateFor
 realSourceTypesForSpecName
@@ -92,7 +90,6 @@ runAnalyze
 runCapture
 runLoad
 sampleCandidates
-scaleRecipeToTarget
 seedCanonicalPositions
 setCostBasisItem
 setItemPricing

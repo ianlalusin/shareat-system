@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
-import { upsertStorePositionAction } from './actions';
+import { issueAdminPinAction, upsertStorePositionAction } from './actions';
 import { listStores, positionsForStore, rosterForStore, withOrgPrincipal } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
@@ -8,7 +8,7 @@ import { Button, FlashBanner, Input } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { can } from '@shareat/auth';
-import { employmentRepo, pinAttemptsRepo } from '@shareat/db';
+import { accessRepo, employmentRepo, pinAttemptsRepo } from '@shareat/db';
 import { todayStateFor } from '@shareat/domain';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { canViewPhoto } from '../../lib/photo-link';
@@ -83,6 +83,13 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     return pinAttemptsRepo.statusForStore(tx, storeId);
   });
 
+  // T-412 (Ian Q1 "a"): an administrator approves destructive actions with their own PIN, and one who signs in by email only
+  // has none - so whoever holds manage_users can issue one here, without an employment page.
+  const adminPins = await withOrgPrincipal(actor.orgId, async (tx) => {
+    if (!(await can(tx, actor, 'manage_users', {}))) return null;
+    return accessRepo.listActiveAdminsWithPinState(tx, actor.orgId);
+  });
+
   return (
     <Page density="table" className="space-y-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
@@ -131,6 +138,40 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
       </section>
 
       {pinStatus && <PinSignInPanel storeId={storeId} status={pinStatus} />}
+
+      {adminPins && adminPins.length > 0 && (
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">Administrator PINs</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            An administrator approves a void, a reversal, a delete or a cutover step by typing their own 6-digit PIN. One who
+            signs in by email only has no PIN until one is issued here. Issuing a new PIN replaces the old one and ends that
+            person&rsquo;s live sessions.
+          </p>
+          <ul className="divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
+            {adminPins.map((a) => (
+              <li key={a.personId} className="flex flex-wrap items-end justify-between gap-3 py-2">
+                <div>
+                  <div className="font-medium">{a.displayName}</div>
+                  <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                    {a.role === 'super_admin' ? 'Super admin' : 'Admin'} · {a.hasPin ? 'PIN issued' : 'No PIN yet'}
+                  </div>
+                </div>
+                <form action={issueAdminPinAction} className="flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="personId" value={a.personId} />
+                  <input type="hidden" name="storeId" value={storeId} />
+                  <label className="text-sm">
+                    <span className="block text-neutral-600 dark:text-neutral-400">{a.hasPin ? 'New PIN' : 'PIN'} (6 digits)</span>
+                    <Input name="pin" type="password" inputMode="numeric" autoComplete="off" maxLength={6} pattern="[0-9]{6}" required />
+                  </label>
+                  <Button type="submit" variant="secondary">
+                    {a.hasPin ? 'Re-issue PIN' : 'Issue PIN'}
+                  </Button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">This store&rsquo;s positions</h2>

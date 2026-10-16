@@ -1,6 +1,5 @@
 import { accountLabel } from '@/lib/account-label';
 import { toBusinessDate } from '@shareat/core/datetime';
-import Link from 'next/link';
 import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { auditLogRepo } from '@shareat/db';
 import { logger } from '@shareat/core/logger';
@@ -28,7 +27,7 @@ import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { PAYOUT_DESTINATION_EDIT } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Channel settlements — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -333,7 +332,7 @@ export default async function ChannelSettlementsPage({
                 </thead>
                 <tbody>
                   {waiting.map((d) => (
-                    <tr
+                    <LinkRow
                       key={`${d.salesDayId}:${d.channelId}`}
                       className="border-b border-neutral-100 last:border-0 dark:border-neutral-900"
                     >
@@ -353,14 +352,14 @@ export default async function ChannelSettlementsPage({
                         {d.ageDays}d
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <Link
+                        <RowLink
                           href={`/channel-settlements?channel=${d.channelId}&day=${d.salesDayId}#record`}
                           className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
                         >
                           Settle
-                        </Link>
+                        </RowLink>
                       </td>
-                    </tr>
+                    </LinkRow>
                   ))}
                 </tbody>
               </table>
@@ -503,9 +502,11 @@ export default async function ChannelSettlementsPage({
                           {/* A void without a reason is a gap, so the reason is part of the same
                               control rather than a confirmation step that can be skipped. */}
                           <Input name="reason" required placeholder="Reason…" className="w-28" />
-                          <Button type="submit" variant="danger">
-                            Void
-                          </Button>
+                          <ConfirmDestructive
+                            tier="admin-pin"
+                            label="Void settlement"
+                            consequence="Reverses this settlement. An administrator must approve with their own PIN."
+                          />
                         </form>
                       )}
                     </td>

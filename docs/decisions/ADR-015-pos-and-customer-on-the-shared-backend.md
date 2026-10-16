@@ -10,6 +10,9 @@
 | **Does not decide** | Receipt, order and menu table columns (a P1/P2 task spec, written in plan mode) · the LAN hub (reconsidered at P3 only, §5) · POS BIR registration (open, §8) |
 | **Amends** | ADR-003 "never two at once" (POS + CUSTOMER flip together) · ADR-005's sales bridge ("POSv2 is far out") · bible row 77 (24 h), §5.3, §5.4 rule 1, §8 ports, §1.2b (narrow). ⚠️ ADR-003 and ADR-005 are not edited in place by this ADR; the bible rows carry the supersession |
 
+> **Amended 2026-10-15** (end of file): Ian's 13 Oct posv2 rulings and 15 Oct rulings. Where the amendment and the
+> sections above disagree, the amendment wins. The accepted text above is kept as it was.
+
 ## 1. Context
 
 - ADR-003 (2026-08-23) already set the end state: one Postgres for four apps, revenue posted from the receipt, the
@@ -135,3 +138,105 @@ beyond P0.
 - Offline-proposal Q1–Q4, Q6 (tablets per store, router UPS, printers, offline tenders, offline refunds): the
   recommendations above stand until Ian rules.
 - Firebase exit scope (§6).
+
+---
+
+## Amendment 2026-10-15 — the posv2 plan rulings (13 Oct) and Ian's 15 Oct rulings
+
+| | |
+|---|---|
+| **Status** | ✅ ACCEPTED for every item marked RULED. Items marked **OPEN** wait for Ian; the recommended option is a working default only where stated |
+| **Sources** | posv2 plan artifact and Ian's 128 answers (13 Oct) · Ian's 14 Oct rulings (bible rows 318-323, 335) · Ian's 15 Oct rulings (recorded in `docs/plans/pos-customer-v2-phase-plan.md` §3) · `pos-v1-study.md`, `customer-v1-study.md` (15 Oct) |
+| **Supersedes in this ADR** | §2 P0 date ("live after 1 Jan") · §5's offline tender list · §6's PROVISIONAL status · §7 "new ports assigned at P0" · §8 BIR and offline Q1-Q4, Q6 |
+
+### A1. Where the apps live and how they ship (RULED)
+
+1. **Same repo** (row 269, confirmed 15 Oct): POS v2 is `apps/pos`, Customer v2 is `apps/customer`, as workspaces of
+   this monorepo. Each app has its **own `tsconfig.json`**; the root typecheck excludes both (root `tsc` already needs
+   a 4 GB heap, DEF-631).
+2. **An installed Android app (APK), not a browser web app** (`apk-vs-web` = a, `pos-apk` = yes). **Capacitor, one
+   APK per app**, built in CI only, never on a droplet (DEF-238). The server receives finished artifacts.
+3. **A new Android app id for v2**, not v1's `culinaryflow`. v1 stays installed beside v2 as that store's roll-back;
+   reusing the id would install over v1 and could wipe v1's unsent offline sales.
+4. **One release keystore for v2, held as a GitHub secret that Ian adds.** No agent handles the key.
+5. **Ports** (`ports` = a): POS v2 **9009**, Customer v2 **9010**. Closes §7's "assigned at P0". 9003/9004 stay v1's.
+6. **CI:** path-filtered per-app jobs; no Turborepo now (phase plan §4 has the numbers). In P0 the POS server routes
+   run as a second service on `159.223.46.224`; Customer as a third from P3; memory measured after each starts.
+
+### A2. Firebase exit — no longer provisional (RULED)
+
+§6's working default (row 275) was **superseded by row 280** (2026-10-05): completely off Firebase — database,
+sign-in and push. The 13 Oct answer fixes the **timing** (`firebase-exit` = a): **in steps** — staff sign-in at P1,
+sales at P2, tables and Customer at P3; the Firebase project is **closed 90 days after the last store** moves.
+Customer v2 sends **no push**: on-page notices only (A6).
+
+### A3. Stores, devices and offline (RULED)
+
+| Ruling | Source | Changes |
+|---|---|---|
+| **One tablet per store** runs the POS; the ERP runs on any other device | row 313 (`tablets-per-store` = a) | §5's owner-device and LAN-hub concerns cannot arise in a store. The soak harness still runs two tablets to prove duplicates are refused |
+| **Keep today's tablets** (`tablet-model` = b) and **Bluetooth thermal printers** (`printers` = a) | 13 Oct | Model, Android version and memory are counted before the soak; only failing tablets are replaced |
+| Router on a **small UPS per store**; stores also have generators | `router-ups` = a | — |
+| Offline, take **cash, plus GCash/Maya recorded with the reference number as "to check"** | `offline-tenders` = a | **Narrows §5's refused list:** e-wallets are accepted offline as unverified, checked on sync. Card stays refused |
+| Offline refunds: **same tablet, same day, cash only, manager PIN** | `offline-refunds` = a | Confirms §5 O6 |
+| **Warn the manager at ₱50,000 unsent; keep selling** | `offline-cap` = b | A warning in the P0 offline slice; no hard stop |
+
+### A4. Receipts and money on the till (RULED)
+
+1. **The unsafe v1 void must not be ported.** Live POS (build #238, commit `e26d0c1`) voids with a plain status
+   update in `src/app/receipts/page.tsx:514`: no transaction, no cash disposition; the 27 Jun double-void (₱3,503)
+   came from it. v2 ports **only the transactional logic** (a void before payment, in one transaction, tested with two
+   tabs voiding at once). Paid receipts stay immutable (row 272).
+2. **Wrong tender on a paid receipt** (Ian, 15 Oct): the receipt never changes. The cashier marks it; **a correction
+   entry approved by manager PIN fixes the tender before shift close**. After close it is refund + re-ring (row 272).
+   One correction document replaces v1's in-place edit (`EditReceiptDialog`) and "payment conversion"
+   (`PaymentConvertModal`). No receipt figure is edited, so row 272 holds.
+3. **One price per head** for packages (Ian, 15 Oct): no child, senior or age tiers. v1's bundle rule is kept.
+4. **Redesign the payment and table screens before go-live** (`redesign` = b, against the recommended a; row 283).
+   Mock-ups go to Ian first. A dine-in table may also take à la carte lines (Ian's 13 Oct note).
+5. **BIR: keep today's set-up** (`bir` = b). The POS stays an internal record; X/Z readings are cash-control slips,
+   not BIR documents. Closes §8's BIR item. Numbering stays per-machine (§5), so registering later needs no rework.
+6. **Keep all extras; AI is the hub of the app family** (`keep-extras` = b). Usage counts set build order only.
+
+### A5. The till and stock usage (RULED)
+
+1. **The till stays an ERP record; POS v2 gets a till SCREEN over the ERP's till rows** (row 319, worklist row 319).
+   Open shift, count, close, shortage and remittance stay ERP actions (T-186, T-153, T-143, T-366); the POS shows and
+   drives them. There is no separate POS till entity. The wrong-tender correction (A4.2) is gated on that shift
+   still being open.
+2. **POS sales create pre-filled stock-usage drafts** (Ian, 15 Oct; T-401 S6): each sale's expected usage (sold x
+   rule) pre-fills a draft; staff adjust it; the manager posts (rows 318, 335). **A draft not posted by 14:00 the
+   next day posts automatically**, logged as an automatic posting. Row 335 stands: the v1 usage pull becomes a check
+   only (±10% gap flagged) once S6 lands. Specced as T-401 S6, not yet built.
+3. Store orders addressed to a store show on the POS screen (row 318). One person, one ID (row 322); a person with two
+   or more positions picks one at sign-in, and the pick only narrows (row 323).
+
+### A6. Customer v2 scope (RULED)
+
+| Ruling | Source |
+|---|---|
+| **No pay-from-phone and no bill split from the phone in the first release** | Ian, 15 Oct |
+| **On-page notices only, no push** | Ian, 15 Oct; row 280 |
+| **Feedback** tied to table + receipt, one per participant; **1-2 stars alert the manager; 4-5 stars show the store's Google-review link** (Ian supplies each link) | Ian, 15 Oct |
+| **Privacy: a consent tick at sign-up; members inactive 3 years are deleted** by a scheduled job, logged as a deliberate deletion (PH Data Privacy Act; Customer v1 has neither today) | Ian, 15 Oct |
+| Diner sign-up proves the phone with one SMS code; login is phone + password; only a manager resets, in person | row 314 |
+| No admin areas in the app; admin work lives in the ERP/POS | row 307 |
+
+### A7. Stores and rollout (RULED unless marked)
+
+| Item | Ruling |
+|---|---|
+| First store | **Lipa** (`first-store` = a) |
+| Pace | first store 2 weeks, then one store a week (`rollout-pace` = a): Malvar, Banay-Banay, Davao |
+| Padre Garcia | same apps, its own org and books, **goes last** (`franchise` = a; row 305 covers its ERP) |
+| Customer v2 | P3 (Q2 2027), moving store by store with POS (row 269) |
+| First-store date | **OPEN** — A8 Q2 |
+
+### A8. Still OPEN for Ian
+
+| # | Question | Recommended | If not answered |
+|---|---|---|---|
+| Q1 | **When does a sales day end?** (a 1 AM sale) | **(a) at the store's closing time**: late sales belong to the day the store opened, and the ERP sales day uses the same rule. (b) midnight; (c) a fixed 5 AM | Blocks the Z-reading, day close (PC-8) and the till screen's day boundary |
+| Q2 | **First-store go-live date** | **(a) Monday 11 January 2027**: one clean ERP week after the 1 Jan cutover; Lipa staff trained 4-8 Jan. Moves to 1 Feb 2027 if the soak fails twice or the mock-ups are not approved by 27 Nov. (b) 1 Jan | The 9 Nov - 18 Dec build window is unaffected |
+| Q3 | **Freeze new features in POS v1 from early November?** (bug fixes allowed) | **(a) yes**: v2 copies v1 once at `e26d0c1`; every later v1 fix is listed and ported | Each later v1 feature is built twice |
+| Q4 | **Fix the unsafe void in live POS v1 now?** | **(a) yes**: connect v1's already-written transactional void. Needs Ian's exception (this project never edits v1) and whoever builds the v1 APK | The double-void risk stays until each store switches (Lipa to Davao) |

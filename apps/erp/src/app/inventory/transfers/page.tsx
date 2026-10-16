@@ -14,7 +14,8 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, Input, Select } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Stock transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -24,7 +25,7 @@ interface SearchParams {
 }
 
 export default async function TransfersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const sp = await searchParams;
+  const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/inventory/transfers');
   const stores = await listStores(actor.orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
@@ -101,6 +102,7 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
         Room to room, within one store. ⭐ Posts no journal entry and consumes no FIFO layer — a
         transfer moves quantity only.
       </PageDescription>
+      <FlashBanner flash={sp} />
 
       <FilterRow className="mt-6">
         <label className="text-sm">
@@ -181,9 +183,11 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
                     <form action={voidTransferAction} className="flex items-center gap-1">
                       <input type="hidden" name="transferId" value={t.id} />
                       <Input name="reason" placeholder="void reason" required className="w-28" />
-                      <Button type="submit" variant="danger">
-                        Void
-                      </Button>
+                      <ConfirmDestructive
+                        tier="admin-pin"
+                        label="Void transfer"
+                        consequence="Reverses this stock transfer. An administrator must approve with their own PIN."
+                      />
                     </form>
                   </div>
                 </td>

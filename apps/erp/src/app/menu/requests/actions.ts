@@ -28,6 +28,7 @@ const PATH = '/menu/requests';
 export async function submitItemRequestAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PATH);
   // "Send request anyway" counts only for the very name that was checked: `confirmed` must be that name's token (never a bare 1).
+  // T-412 allow-list: `confirmed` here is a duplicate-name look-alike token (server-derived from the typed name), NOT a destructive-action gate.
   const confirmed = str(fd, 'confirmed') === confirmTokenFor(str(fd, 'name'));
   let outcome: { kind: 'warn'; names: string[]; pending: string[] } | { kind: 'sent' };
   try {

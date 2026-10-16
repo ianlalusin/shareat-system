@@ -23,6 +23,8 @@ import {
 import { requireActor } from '../../lib/session';
 import { withOrgPrincipal } from '../expenses/lib';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -189,9 +191,15 @@ export async function reverseAutoChargeAction(fd: FormData): Promise<void> {
   const reason = str(fd, 'reason');
 
   try {
-    const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      reverseAutoCharge(tx, actor, { wastageId: id, storeId, reason, reversedOn: toBusinessDate() }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store. The domain call below gets the
+    // record's store too, not the form's `storeId`.
+    const target = await loadDestructiveTarget(actor, 'order_wastage', id, ['reverse_auto_charge']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'reverse_auto_charge' });
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const reversed = await reverseAutoCharge(tx, actor, { wastageId: id, storeId: target.storeId ?? storeId, reason, reversedOn: toBusinessDate() });
+      if (reversed.ok) await recordApproval(tx, actor, approval, { capability: 'reverse_auto_charge', entityType: 'order_wastage', entityId: id, storeId: target.storeId });
+      return reversed;
+    });
     if (!result.ok) return await redirectWithFlash(`/wastage/${id}`, {}, { error: result.reason });
     revalidatePath('/wastage');
     revalidatePath(`/wastage/${id}`);

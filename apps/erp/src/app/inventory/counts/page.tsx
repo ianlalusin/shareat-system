@@ -3,7 +3,7 @@ import { countsRegister, listStores } from './lib';
 import { openCountSessionAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { Page } from '@/components/shell/Page';
-import { Badge, Button, FlashBanner, FormGrid, Field, Input, Select, statusTone } from '@/components/ui';
+import { Badge, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -134,11 +134,11 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
             </thead>
             <tbody>
               {sessions.map((s) => (
-                <tr key={s.id} className="border-b border-neutral-200 align-top dark:border-neutral-800">
+                <LinkRow key={s.id} className="border-b border-neutral-200 align-top dark:border-neutral-800">
                   <td className="py-2 pr-4">
-                    <Link href={`/inventory/counts/${s.id}`} className="underline underline-offset-4">
+                    <RowLink href={`/inventory/counts/${s.id}`}>
                       {s.locations.map((l) => l.name).join(', ') || '—'}
-                    </Link>
+                    </RowLink>
                     {s.note && <div className="text-xs text-neutral-500">{s.note}</div>}
                   </td>
                   <td className="py-2 pr-4 tabular-nums">{s.countedOn}</td>
@@ -149,7 +149,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
                   <td className="py-2 text-xs text-neutral-500">
                     {s.openedByName} · {when(s.openedAt)}
                   </td>
-                </tr>
+                </LinkRow>
               ))}
             </tbody>
           </table>

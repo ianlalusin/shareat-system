@@ -71,7 +71,7 @@ export async function runScenario(w: World, storeId: string, salesDayId: string,
   const records = await sql`
     select r.kind, r.status, r.location_id, r.used_on::text as used_on,
            (select json_agg(json_build_object('item', l.item_id, 'quantity', l.quantity::text) order by l.item_id::text) from stock_usage_lines l where l.record_id = r.id) as lines
-    from stock_usage_records r where r.org_id = ${w.orgId} and r.store_id = ${storeId} order by r.location_id::text`;
+    from stock_usage_records r where r.org_id = ${w.orgId} and r.store_id = ${storeId} order by (r.location_id = ${kitchen}) desc, r.location_id::text`;
   const movements = await sql`
     select item_id, location_id, quantity::text as quantity from stock_movements
     where org_id = ${w.orgId} and store_id = ${storeId} and quantity < 0 order by item_id::text, location_id::text`;

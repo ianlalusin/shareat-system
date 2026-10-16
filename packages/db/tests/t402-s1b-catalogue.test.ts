@@ -98,7 +98,8 @@ describe('T-402 S1b - the catalogue is closed, typed and in one file (R2, R3, R4
       expect(CATEGORIES, `${e.action} category`).toContain(e.category);
       expect(SENSITIVITIES, `${e.action} sensitivity`).toContain(e.sensitivity);
       expect(['r10y', 'r2y'], `${e.action} retention`).toContain(e.retention);
-      expect(['store', 'org'], `${e.action} scope`).toContain(e.scope);
+      // T-412: 'either' (destructive.approved) - a store-scoped record carries its store, an organisation-level one carries none.
+      expect(['store', 'org', 'either'], `${e.action} scope`).toContain(e.scope);
       expect(['person', 'system', 'either'], `${e.action} actor`).toContain(e.actor);
       expect(['store', 'admin'], `${e.action} viewers`).toContain(e.viewers);
       expect(e.entity.length, `${e.action} entity`).toBeGreaterThan(0);

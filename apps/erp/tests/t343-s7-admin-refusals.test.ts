@@ -38,6 +38,10 @@ vi.mock('@/lib/constraint-messages', async () => {
   return await import('../src/lib/constraint-messages');
 });
 
+// T-412: revoking a grant and unlinking a sign-in account now ask the person to retype a name the SERVER loads. This file is about how a
+// REFUSAL is carried, so the loaded names are stubbed and the forms below type them (the real path: t412-destructive-actions.test.ts).
+vi.mock('@/lib/destructive', async () => (await import('./helpers/destructive-mocks')).destructiveLibMock());
+
 // Partial mock, exactly as the spec's own harness note prescribes — `authorize`/`capabilityTitle`
 // stay real (S6b's label logic, and `setStoreScopeAction`'s own `authorize()` call, neither driven
 // here). `grantCapabilityAsActor`/`assignRoleAsActor`/`linkFirebaseCredential`/`unlinkCredential`
@@ -76,6 +80,7 @@ vi.mock('@shareat/db', async (importOriginal) => {
       ...actual.accessRepo,
       revokeGrantById: (...args: unknown[]) => revokeGrantById(...args),
     },
+    destructiveTargetsRepo: { targetOf: vi.fn(async () => ({ storeId: null, name: 'void_expense', status: null })) },
   };
 });
 
@@ -273,6 +278,7 @@ describe('P4 — admin/users: a recordGone-shaped presentable error (grant, then
       fd.set('grantId', U);
       fd.set('granted', 'false');
       fd.set('reason', 'No longer needed.');
+      fd.set('confirmName', (await import('../../../packages/auth/src/capabilities')).capabilityTitle('void_expense'));
       const to = await expectRedirectTo(() => setCapabilityGrantAction(fd));
       expect(errorOf(to)).toBe(goneSentence('grant'));
     },
@@ -291,6 +297,7 @@ describe('P4 — admin/users: a recordGone-shaped presentable error (grant, then
       fd.set('personId', 'person-2');
       fd.set('credentialId', U);
       fd.set('reason', 'Retired.');
+      fd.set('confirmName', 'The Name');
       const to = await expectRedirectTo(() => unlinkCredentialAction(fd));
       expect(errorOf(to)).toBe(goneSentence('sign-in account'));
     },

@@ -1,10 +1,9 @@
-import Link from 'next/link';
 import { requirePageAccess } from '../../../lib/page-access';
 import { listStoresForAdmin } from './lib';
 import { createStoreAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
+import { Badge, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Stores — Shareat System' };
@@ -59,19 +58,18 @@ export default async function StoresPage({
           </thead>
           <tbody>
             {stores.map((s) => (
-              <tr
+              <LinkRow
                 key={s.id}
                 // Ian 2026-10-14 (T-404): the WHOLE row opens the store — the T-258 stretched-link technique.
-                className="relative border-t border-neutral-200 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
+                className="border-t border-neutral-200 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
               >
                 <td className="p-3 font-medium">
-                  <Link
+                  <RowLink
                     href={`/admin/stores/${s.id}`}
                     aria-label={`Open store ${s.code} — ${s.name}`}
-                    className="underline underline-offset-2 after:absolute after:inset-0 after:content-['']"
                   >
                     {s.code}
-                  </Link>
+                  </RowLink>
                 </td>
                 <td className="p-3">{s.name}</td>
                 <td className="p-3">
@@ -93,7 +91,7 @@ export default async function StoresPage({
                     <span className="text-success">Opened {s.openingDate}</span>
                   )}
                 </td>
-              </tr>
+              </LinkRow>
             ))}
             {stores.length === 0 && (
               <tr>

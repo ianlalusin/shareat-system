@@ -10,7 +10,7 @@ import { recordStatutoryDiscountAction, voidStatutoryDiscountAction } from './ac
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'SC/PWD register — Shareat System' };
@@ -184,9 +184,11 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
                           <input type="hidden" name="from" value={carry.from} />
                           <input type="hidden" name="to" value={carry.to} />
                           <Input name="voidReason" required placeholder="Reason" className="w-28 text-xs" />
-                          <Button type="submit" variant="danger" className="text-xs">
-                            Void
-                          </Button>
+                          <ConfirmDestructive
+                            tier="admin-pin"
+                            label="Void statutory discount"
+                            consequence="Voids this statutory discount. An administrator must approve with their own PIN."
+                          />
                         </form>
                       )}
                     </td>

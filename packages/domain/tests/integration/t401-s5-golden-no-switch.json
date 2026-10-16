@@ -60,14 +60,14 @@
     {
       "section": "direct",
       "ok": true,
-      "posted": 2,
+      "posted": 0,
       "held": 0,
       "finalized": true
     },
     {
       "section": "recipe",
       "ok": true,
-      "posted": 2,
+      "posted": 0,
       "held": 0,
       "finalized": true
     },
@@ -149,22 +149,14 @@
   "usageRecords": [
     {
       "kind": "usage",
-      "status": "posted",
+      "status": "draft",
       "location_id": "room:Kitchen",
       "used_on": "2026-08-20",
       "lines": [
         {
           "item": "item:Coke",
           "quantity": "3.000"
-        }
-      ]
-    },
-    {
-      "kind": "usage",
-      "status": "posted",
-      "location_id": "room:Kitchen",
-      "used_on": "2026-08-20",
-      "lines": [
+        },
         {
           "item": "item:Cheese",
           "quantity": "0.400"
@@ -177,7 +169,7 @@
     },
     {
       "kind": "usage",
-      "status": "posted",
+      "status": "draft",
       "location_id": "room:Display",
       "used_on": "2026-08-20",
       "lines": [
@@ -188,27 +180,17 @@
       ]
     }
   ],
-  "stockOut": [
+  "stockOut": [],
+  "auditRows": [
     {
-      "item_id": "item:Coke",
-      "location_id": "room:Kitchen",
-      "quantity": "-3.000"
-    },
-    {
-      "item_id": "item:Cheese",
-      "location_id": "room:Kitchen",
-      "quantity": "-0.400"
-    },
-    {
-      "item_id": "item:Cheese",
-      "location_id": "room:Display",
-      "quantity": "-1.000"
-    },
-    {
-      "item_id": "item:Rice",
-      "location_id": "room:Kitchen",
-      "quantity": "-0.200"
+      "action": "stock.usage_system_author_created",
+      "entity": "persons",
+      "before": null,
+      "after": {
+        "kind": "terminal",
+        "displayName": "POS usage pull (system)"
+      },
+      "store_id": null
     }
-  ],
-  "auditRows": []
+  ]
 }

@@ -16,6 +16,8 @@ import { withOrgPrincipal } from '../expenses/lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash, type Nav } from '@/lib/flash';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -83,12 +85,14 @@ export async function recordStatutoryDiscountAction(formData: FormData): Promise
 export async function voidStatutoryDiscountAction(formData: FormData): Promise<void> {
   const actor = await requireActor('/statutory-discounts');
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      voidStatutoryDiscount(tx, actor, {
-        id: str(formData, 'id'),
-        reason: str(formData, 'voidReason'),
-      }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const discountId = str(formData, 'id');
+    const target = await loadDestructiveTarget(actor, 'statutory_discount', discountId, ['void_statutory_discount']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'void_statutory_discount' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await voidStatutoryDiscount(tx, actor, { id: discountId, reason: str(formData, 'voidReason') });
+      await recordApproval(tx, actor, approval, { capability: 'void_statutory_discount', entityType: 'statutory_discount', entityId: discountId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash('/statutory-discounts', navOf(formData), { error: errorMessage(err) });
   }

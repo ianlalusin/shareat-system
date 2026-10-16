@@ -269,7 +269,7 @@ async function holdsSuperAdminAuthority(
  * this is the set of roles that can ADMINISTER, and reading it out of the matrix at runtime would
  * make a future capability edit silently redefine what a lockout is.
  */
-function isAdministrative(role: string | undefined | null): boolean {
+export function isAdministrative(role: string | undefined | null): boolean {
   return role === 'admin' || role === 'super_admin';
 }
 

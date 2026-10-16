@@ -107,6 +107,8 @@ const EXEMPT: Record<string, string> = {
     'event. ⚠️ The LAST of DEF-190’s five still without a screen: a charge raised outside a trade ' +
     'order is T-226 §6, and it is blocked on Ian deciding which revenue account a manual credit ' +
     'sale credits — no wholesale-revenue account exists in the chart.',
+  writeToleranceVerified:
+    'INTERNAL — `postUsage` calls it (`stock/usage-records.ts:298`) in the same transaction to record the manager’s reason for an out-of-band line.',
   capitalizeApprovedExpense:
     'INTERNAL — `approveExpense` calls it for a CAPEX category (`expenses/approve.ts:231`). It is ' +
     'deliberately not a human boundary: the caller is approving an expense, not managing assets.',
@@ -191,9 +193,6 @@ const EXEMPT: Record<string, string> = {
   undoWriteOff:
     'UNWIRED — DEF-198. `/prepaid` wires `writeOffPrepaidItem` and not its undo, so a mistaken ' +
     'write-off is final.',
-  createRecipe:
-    'UNWIRED — DEF-198. `/inventory/production` LISTS recipes (`productionRepo.listRecipes`) and ' +
-    'nothing creates one, so a cook run has no recipe to run unless one is inserted by hand.',
   addUsageLine:
     'UNWIRED — DEF-198. `/inventory/usage` saves a whole draft through `saveUsageDraft`; the ' +
     'per-line editors have no caller.',

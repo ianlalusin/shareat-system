@@ -20,7 +20,7 @@ export { Textarea } from './Textarea';
 export type { TextareaProps } from './Textarea';
 export { Checkbox } from './Checkbox';
 export type { CheckboxProps } from './Checkbox';
-export { Table, Th, Td, NumTd } from './Table';
+export { Table, Th, Td, NumTd, LinkRow, RowLink, RowAction, ROW_LINK_STRETCH } from './Table';
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps, EmptyStateIllustration } from './EmptyState';
 export { StatusIcon, STATUS_ICON_KINDS } from './StatusIcon';
@@ -31,3 +31,6 @@ export type { Tone } from './status-tone';
 export { StatusHero } from './StatusHero';
 export type { StatusHeroProps } from './StatusHero';
 export * from './status-steps';
+// T-412: the one danger button, two tiers (retype the name / an administrator's PIN).
+export { ConfirmDestructive } from './ConfirmDestructive';
+export type { ConfirmDestructiveProps } from './ConfirmDestructive';

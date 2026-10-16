@@ -8,7 +8,7 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
 
 export const metadata = { title: 'Loan — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -214,9 +214,11 @@ export default async function LoanPage({
                         <input type="hidden" name="loanId" value={loan.id} />
                         <input type="hidden" name="entryId" value={p.entryId} />
                         <Input name="reason" required placeholder="Reason…" className="w-28" />
-                        <Button type="submit" variant="danger">
-                          Reverse
-                        </Button>
+                        <ConfirmDestructive
+                          tier="admin-pin"
+                          label="Reverse loan entry"
+                          consequence="Reverses this entry; the debt goes back to what it was. An administrator must approve with their own PIN."
+                        />
                       </form>
                     </td>
                   </tr>

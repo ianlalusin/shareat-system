@@ -32,7 +32,7 @@ import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { CASH_POLICY_EDIT } from './typed-forms';
 import { EditableRecord } from '@/components/forms';
-import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'Remittance — Shareat System' };
@@ -521,9 +521,11 @@ export default async function RemittancePage({
                           <input type="hidden" name="remittanceId" value={r.id} />
                           <input type="hidden" name="storeId" value={storeId} />
                           <Input name="reason" required placeholder="Reason…" className="w-28 text-xs" />
-                          <Button type="submit" variant="danger" className="text-xs">
-                            Reverse
-                          </Button>
+                          <ConfirmDestructive
+                            tier="admin-pin"
+                            label="Reverse remittance"
+                            consequence="Reverses this remittance; the days it settled are owed again. An administrator must approve with their own PIN."
+                          />
                         </form>
                       )}
                     </td>

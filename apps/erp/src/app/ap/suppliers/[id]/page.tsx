@@ -7,7 +7,7 @@ import { SUPPLIER_CLASSIFICATIONS, SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES } fr
 import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL, maskAccountNumber } from '../../lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { Badge, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { AutoAllocatePaymentForm } from './AutoAllocatePaymentForm';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -269,13 +269,13 @@ export default async function SupplierDetailPage({
               </thead>
               <tbody>
                 {openItems.map((i) => (
-                  <tr key={i.expenseId} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={i.expenseId} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
-                      <a href={`/expenses/${i.expenseId}`} className="underline hover:no-underline">{i.particulars}</a>
+                      <RowLink href={`/expenses/${i.expenseId}`}>{i.particulars}</RowLink>
                     </td>
                     <td className="px-3 py-2">{i.businessDate}</td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(i.outstanding)}</td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>
@@ -322,25 +322,25 @@ export default async function SupplierDetailPage({
               </thead>
               <tbody>
                 {invoicesNewestFirst.map((inv) => (
-                  <tr
+                  <LinkRow
                     key={inv.id}
-                    className="relative border-b border-neutral-100 last:border-0 hover:bg-neutral-50 dark:border-neutral-900 dark:hover:bg-neutral-900"
+                    className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50 dark:border-neutral-900 dark:hover:bg-neutral-900"
                   >
                     <td className="px-3 py-2">
-                      <a
+                      <RowLink
                         href={`/ap/invoices/${inv.id}`}
                         aria-label={`Open invoice ${inv.invoiceNo ?? 'with no number'} of ${inv.invoiceDate}`}
-                        className="inline-flex min-h-6 items-center underline hover:no-underline after:absolute after:inset-0 after:content-['']"
+                        className="inline-flex min-h-6 items-center"
                       >
                         {inv.invoiceNo ?? 'No number'}
-                      </a>
+                      </RowLink>
                     </td>
                     <td className="px-3 py-2">{inv.invoiceDate}</td>
                     <td className="px-3 py-2">
                       <Badge status={inv.status} />
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(inv.totalAmount)}</td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>

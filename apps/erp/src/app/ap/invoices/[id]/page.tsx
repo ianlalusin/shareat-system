@@ -19,7 +19,7 @@ import { MoneyLines } from '@/components/money/MoneyLines';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
 import { ACTION_LINK } from '@/components/action-link';
-import { Badge, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -149,6 +149,12 @@ return (
               {compare(otherFees, ZERO) !== 0 && <Row label="Other fees" value={peso(otherFees)} />}
             </dl>
           )}
+          {/* T-408 R5 - what was stored, read-only. A figure is shown only when one was typed: nothing is computed here. */}
+          <dl className="mt-1 space-y-0.5 text-sm text-neutral-500 dark:text-neutral-400">
+            <Row label="VAT type" value={invoice.vatType ? VAT_TYPE_LABEL[invoice.vatType] : 'Not recorded'} />
+            {invoice.vatAmount != null && <Row label="VAT amount" value={peso(invoice.vatAmount)} />}
+            <Row label="Official receipt" value={invoice.isOfficialReceipt ? 'Yes' : 'No'} />
+          </dl>
         </div>
       </div>
 
@@ -282,9 +288,9 @@ return (
               </thead>
               <tbody>
                 {existingLines.map((l) => (
-                  <tr key={l.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={l.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
-                      <a href={`/items/${l.itemId}`} className="underline hover:no-underline">{l.itemName}</a>
+                      <RowLink href={`/items/${l.itemId}`}>{l.itemName}</RowLink>
                     </td>
                     <td className="px-3 py-2 text-neutral-500 dark:text-neutral-400">
                       {l.quantity} {l.purchaseUnit} @ {peso(l.unitPrice)}
@@ -293,7 +299,7 @@ return (
                       {peso(Number(l.basePrice).toFixed(2))}/{l.baseUnit}
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(l.lineTotal)}</td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>
@@ -328,17 +334,17 @@ return (
                     const cat = categoryById.get(e.categoryId);
                     running += Number(e.totalAmount);
                     return (
-                      <tr key={e.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                      <LinkRow key={e.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                         <td className="px-3 py-2">{cat?.category ?? e.categoryId}</td>
                         <td className="px-3 py-2 font-mono text-xs text-neutral-500 dark:text-neutral-400">
                           {cat?.accountCode ? accountLabel(cat.accountCode) : <span className="text-danger">unmapped — will block</span>}
                         </td>
                         <td className="px-3 py-2">
-                          <a href={`/expenses/${e.id}`} className="underline hover:no-underline">{e.particulars}</a>
+                          <RowLink href={`/expenses/${e.id}`}>{e.particulars}</RowLink>
                         </td>
                         <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(e.totalAmount)}</td>
                         <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(running.toFixed(2))}</td>
-                      </tr>
+                      </LinkRow>
                     );
                   });
                 })()}
@@ -463,9 +469,11 @@ return (
                           <Input name="voidOn" type="date" required defaultValue={today} className="w-full" />
                         </Field>
                       )}
-                      <Button type="submit" variant="danger">
-                        Void payment
-                      </Button>
+                      <ConfirmDestructive
+                        tier="admin-pin"
+                        label="Void payment"
+                        consequence="Reverses this payment, and the bills it paid are owed again. An administrator must approve with their own PIN."
+                      />
                     </form>
                   </details>
                 )}
@@ -545,9 +553,11 @@ return (
           <Field label="Void reason">
             <Input name="reason" required className="w-full" />
           </Field>
-          <Button type="submit" variant="danger">
-            Void — cascades through every linked expense
-          </Button>
+          <ConfirmDestructive
+            tier="admin-pin"
+            label="Void invoice"
+            consequence="Voids this invoice and reverses every linked expense. An administrator must approve with their own PIN."
+          />
         </form>
       )}
     </Page>
@@ -566,6 +576,8 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     </label>
   );
 }
+
+const VAT_TYPE_LABEL = { vatable: 'Vatable', zero_rated: 'Zero-rated', exempt: 'Exempt', non_vat: 'Non-VAT' } as const;
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (

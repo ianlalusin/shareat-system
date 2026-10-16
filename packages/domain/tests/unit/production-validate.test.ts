@@ -9,10 +9,24 @@ import {
   computeValueIdentity,
   PRODUCTION_QTY_EPS,
   validateConvertLineage,
-  validateProductionLines,
+  validateProductionLines as validateProductionLinesRaw,
   type ProductionInputLine,
   type ProductionOutputLine,
 } from '../../src/production/validate';
+
+/**
+ * T-409: a slice line needs a category (slab in, sliced meat out; refused otherwise, see t409-slice-category.test.ts). The
+ * fixture lines below carry no category, so for a `slice` this wrapper gives them the kinds a real slice has. Assertions are
+ * unchanged; a line that names its own category keeps it.
+ */
+const validateProductionLines: typeof validateProductionLinesRaw = (i) =>
+  i.kind === 'slice'
+    ? validateProductionLinesRaw({
+        ...i,
+        inputs: i.inputs.map((l) => ({ ...l, category: l.category ?? 'meat_slab' })),
+        outputs: i.outputs.map((l) => ({ ...l, category: l.category ?? 'meat_sliced' })),
+      })
+    : validateProductionLinesRaw(i);
 
 /** T-176 §9 test 4 / §8 invariant 4 — the pure conversion table. */
 describe('unit-conversion.ts — the single copy (DEF-093)', () => {

@@ -24,7 +24,8 @@ export interface CatalogueEntry {
   /** Derived from category + sensitivity (R7), never written by hand. */
   readonly retention: AuditRetention;
   /** `store`: store_id is required. `org`: store_id must be null (R14). */
-  readonly scope: 'store' | 'org';
+  /** 'either' (T-412): the record may or may not have a store (an organisation-level approval carries none). */
+  readonly scope: 'store' | 'org' | 'either';
   readonly actor: 'person' | 'system' | 'either';
   /** Who may read it (R8): `store` = view_activity_log, `admin` = view_activity_log_restricted. */
   readonly viewers: 'store' | 'admin';
@@ -60,7 +61,7 @@ function def(
   action: string,
   category: AuditCategory,
   sensitivity: AuditSensitivity,
-  scope: 'store' | 'org',
+  scope: 'store' | 'org' | 'either',
   entity: string,
   owner: string,
   o: Opts = {},
@@ -89,6 +90,8 @@ const LOYALTY: Opts = { reserved: true, clientSources: ['customer'] };
 export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // ---- LIVE: the 48 actions written today (labels identical to migration 0197's copy list) ----
   def('reopen_pin_sign_in', 'security', 'high', 'store', 'store', 'T-395'),
+  // T-412: an administrator's PIN approved a destructive action. Store-scoped when the record has a store, org-level when it has none.
+  def('destructive.approved', 'security', 'high', 'either', 'persons', 'T-412', { actor: 'either' }),
   def('set_supplier_credit_terms', 'money', 'normal', 'org', 'suppliers', 'T-362'),
   def('set_supplier_status', 'money', 'normal', 'org', 'suppliers', 'T-391'),
   def('set_supplier_bank_account', 'money', 'high', 'org', 'suppliers', 'T-365'),
@@ -131,6 +134,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('menu_offer_cancel', 'menu_price', 'high', 'store', 'menu_offers', 'T-401'),
   def('menu_offer_withdraw', 'menu_price', 'high', 'store', 'menu_offers', 'T-401'),
   def('menu_option_offer_cancel', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),
+  def('production.recipe_create', 'stock', 'normal', 'org', 'production_recipes', 'T-413'),
+  def('production.recipe_edit', 'stock', 'normal', 'org', 'production_recipes', 'T-413'),
+  def('production.recipe_retire', 'stock', 'normal', 'org', 'production_recipes', 'T-413'),
+  def('production.recipe_restore', 'stock', 'normal', 'org', 'production_recipes', 'T-413'),
   def('menu_depletion_rule_set', 'stock', 'high', 'org', 'menu_depletion_rules', 'T-401'),
   def('menu_depletion_rule_cancel', 'stock', 'high', 'org', 'menu_depletion_rules', 'T-401'),
   def('menu_item_request', 'menu_price', 'normal', 'store', 'menu_item_requests', 'T-401'),
@@ -149,6 +156,14 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('menu.pos_v1_link', 'stock', 'normal', 'store', 'menu_pos_v1_links', 'T-401'),
   def('menu.pos_v1_unlink', 'stock', 'normal', 'store', 'menu_pos_v1_links', 'T-401'),
   def('menu.usage_source_switch', 'stock', 'high', 'store', 'menu_usage_source_switches', 'T-401'),
+  // S6: the usage tolerance band. The org setting and an item's override are admin-set; an out-of-band post a manager verified with a reason.
+  def('menu.usage_tolerance_set', 'stock', 'normal', 'org', 'organizations', 'T-401'),
+  def('menu.item_usage_tolerance_set', 'stock', 'normal', 'org', 'items', 'T-401'),
+  def('stock.usage_tolerance_verified', 'stock', 'high', 'store', 'stock_usage_records', 'T-401'),
+  // The system posted a pull-made usage draft itself (14:00 Manila the day after its business date); written by the usage auto-post job, never by a person.
+  // The org's usage system person (the author of every POS-pull usage draft) was created, once, on first use (audit ruling A9).
+  def('stock.usage_system_author_created', 'stock', 'normal', 'org', 'persons', 'T-401', { actor: 'system' }),
+  def('stock.usage_auto_posted', 'stock', 'normal', 'store', 'stock_usage_records', 'T-401', { actor: 'system' }),
   // Written by T-401's setOptionOffer (price / withdraw) but absent from 0197's copy list (a ternary the S1a scan missed). Dotted on purpose: never in 0197's list, so no row can carry the underscore form.
   def('menu.option_offer_set', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),
   def('menu.option_offer_withdraw', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),

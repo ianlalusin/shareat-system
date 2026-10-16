@@ -15,6 +15,8 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -101,12 +103,14 @@ export async function voidMoneyTransferAction(formData: FormData): Promise<void>
     if (!reason) {
       throw new Error('Say why this transfer is being reversed — a reversal with no reason is a gap.');
     }
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      voidMoneyTransfer(tx, actor, {
-        moneyTransferId: str(formData, 'moneyTransferId'),
-        reason,
-      }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const moneyTransferId = str(formData, 'moneyTransferId');
+    const target = await loadDestructiveTarget(actor, 'money_transfer', moneyTransferId, ['transfer_funds']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'transfer_funds' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await voidMoneyTransfer(tx, actor, { moneyTransferId, reason });
+      await recordApproval(tx, actor, approval, { capability: 'transfer_funds', entityType: 'money_transfer', entityId: moneyTransferId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash('/money-transfers', {}, { error: errorMessage(err) });
   }

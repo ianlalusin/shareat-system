@@ -14,6 +14,8 @@ import { recordReturn, refundSupplierCredit, voidReturn } from '@shareat/domain'
 import { requireActor } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { errorMessage } from '@/lib/constraint-messages';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -69,7 +71,14 @@ export async function voidReturnAction(fd: FormData): Promise<void> {
   const keep: Nav = store ? { store } : {};
   let result: Awaited<ReturnType<typeof voidReturn>>;
   try {
-    result = await withOrgPrincipal(actor.orgId, (tx) => voidReturn(tx, actor, returnId, reason));
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the form's `store`).
+    const target = await loadDestructiveTarget(actor, 'supplier_return', returnId, ['void_supplier_return']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_supplier_return' });
+    result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const voided = await voidReturn(tx, actor, returnId, reason);
+      if (voided.ok) await recordApproval(tx, actor, approval, { capability: 'void_supplier_return', entityType: 'supplier_return', entityId: returnId, storeId: target.storeId });
+      return voided;
+    });
   } catch (err) {
     return await redirectWithFlash('/inventory/returns', keep, { error: errorMessage(err) });
   }

@@ -24,6 +24,8 @@ import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { PAYOUT_DESTINATION_EDIT } from './typed-forms';
+import { verifyAdminApproval } from '@shareat/auth';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -173,9 +175,14 @@ export async function voidSettlementAction(formData: FormData): Promise<void> {
     if (!reason) {
       throw new Error('Say why this settlement is being voided — a reversal with no reason is a gap.');
     }
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      voidChannelSettlement(tx, actor, { settlementId: str(formData, 'settlementId'), reason }),
-    );
+    // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
+    const settlementId = str(formData, 'settlementId');
+    const target = await loadDestructiveTarget(actor, 'channel_settlement', settlementId, ['record_ar_collection']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'record_ar_collection' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await voidChannelSettlement(tx, actor, { settlementId, reason });
+      await recordApproval(tx, actor, approval, { capability: 'record_ar_collection', entityType: 'channel_settlement', entityId: settlementId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash('/channel-settlements', {}, { error: errorMessage(err) });
   }

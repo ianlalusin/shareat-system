@@ -23,6 +23,8 @@ import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash, splitReturnTo, type Nav } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { PLATFORM_SALES_EDIT } from './typed-forms';
+import { verifyAdminApproval } from '@shareat/auth';
+import { assertApprovalStillRight, loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -254,7 +256,18 @@ export async function voidSalesDayAction(formData: FormData): Promise<void> {
   const id = str(formData, 'salesDayId');
   const nav = carryNav(formData);
   try {
-    await withOrgPrincipal(actor.orgId, (tx) => voidSalesDay(tx, actor, id, str(formData, 'reason')));
+    // T-412: ONE action serves "Withdraw day" (unverified: nothing was posted) and "Void" (verified: reverses the posting).
+    // The SERVER tells them apart from the record's status, never from the form: a verified day needs an administrator's PIN.
+    const target = await loadDestructiveTarget(actor, 'sales_day', id, ['void_sales_day']);
+    const needsPin = (status: string | null) => status === 'verified';
+    const approval = needsPin(target.status)
+      ? await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'void_sales_day' })
+      : null;
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await assertApprovalStillRight(tx, actor, 'sales_day', id, needsPin, approval !== null);
+      await voidSalesDay(tx, actor, id, str(formData, 'reason'));
+      if (approval) await recordApproval(tx, actor, approval, { capability: 'void_sales_day', entityType: 'sales_day', entityId: id, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
   }
