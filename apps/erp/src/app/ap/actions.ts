@@ -5,7 +5,7 @@
  *
  * ⛔ The gates live in the services, not here — same discipline as liabilities/actions.ts.
  */
-import { apRepo } from '@shareat/db';
+import { apRepo, moneyAccountsRepo } from '@shareat/db';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 import { logger } from '@shareat/core/logger';
 import { compare, formatMoney, money, ZERO } from '@shareat/core/money';
@@ -383,14 +383,38 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
       }))
       .filter((a) => a.amountApplied);
 
+    // T-432 ruling 3: `source` is `float:<cashRequestId>` or a money account id. For a float the SERVER picks the
+    // staff cash account of the POSTED store and ignores any posted account / request field; the domain judges the rest.
+    const source = str(formData, 'source');
+    let sourceAccountId = str(formData, 'moneyAccountId');
+    let sourceRequestId: string | null = str(formData, 'cashRequestId') || null;
+    const FLOAT_PREFIX = 'float:';
+    if (source.startsWith(FLOAT_PREFIX)) {
+      const requestId = source.slice(FLOAT_PREFIX.length);
+      if (!UUID_SHAPE.test(requestId)) {
+        throw new Error('That cash request could not be found. Refresh the page and pick it again.');
+      }
+      const staffCash = await withOrgPrincipal(actor.orgId, (tx) =>
+        moneyAccountsRepo.listMoneyAccounts(tx, actor.orgId, { storeId, custodian: 'staff', instrument: 'cash' }),
+      );
+      if (!staffCash[0]) {
+        throw new Error('This store has no staff cash account, so a cash request cannot pay a supplier here yet.');
+      }
+      sourceAccountId = staffCash[0].id;
+      sourceRequestId = requestId;
+    } else if (source) {
+      sourceAccountId = source;
+      sourceRequestId = null;
+    }
+
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       recordPayment(tx, actor, {
         storeId,
         supplierId,
         businessDate: str(formData, 'businessDate'),
         amount: str(formData, 'amount'),
-        moneyAccountId: str(formData, 'moneyAccountId'),
-        cashRequestId: str(formData, 'cashRequestId') || null,
+        moneyAccountId: sourceAccountId,
+        cashRequestId: sourceRequestId,
         referenceNo: str(formData, 'referenceNo') || null,
         notes: str(formData, 'notes') || null,
         allocations,

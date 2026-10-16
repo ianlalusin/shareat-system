@@ -94,6 +94,29 @@ async function openFloatsFor(tx: Tx, orgId: string, storeId: string): Promise<Fl
 }
 
 /**
+ * T-432 ruling 4 - the open floats at one store, for someone who could spend them there to pay a supplier.
+ * Returns `[]` (no names, no balances) unless the viewer holds `record_ap_payment` AT THAT STORE; otherwise exactly
+ * what `openFloatsFor` returns (it has no filter of its own). The domain re-judges everything on submit.
+ */
+async function gatedFloats(orgId: string, storeId: string, actor: Actor): Promise<FloatOption[]> {
+  if (!storeId) return [];
+  return withOrgPrincipal(orgId, async (tx) => {
+    if (!(await can(tx, actor, 'record_ap_payment', { storeId }))) return [];
+    return openFloatsFor(tx, orgId, storeId);
+  });
+}
+
+/** Floats the viewer may pay a supplier from: only those with a staff cash account to pay from (`moneyAccountId` set). */
+export async function openFloatsForStore(orgId: string, storeId: string, actor: Actor): Promise<FloatOption[]> {
+  return (await gatedFloats(orgId, storeId, actor)).filter((f) => f.moneyAccountId !== null);
+}
+
+/** For a holder only: an open request here has no staff cash account yet (released before T-414 R-AUTO). */
+export async function hasUnroutedFloatsForStore(orgId: string, storeId: string, actor: Actor): Promise<boolean> {
+  return (await gatedFloats(orgId, storeId, actor)).some((f) => f.moneyAccountId === null);
+}
+
+/**
  * Everything `<MoneyLines>` needs for one store, in one transaction.
  *
  * ⭐ **Scoped to the store** — DEF-291. The picker used to pass `{}` and offer every account at
