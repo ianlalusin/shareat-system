@@ -442,7 +442,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // +1 (16 Oct): T-430 "Starts from" date field on the expenses/recurring create form.
     // +4 (16 Oct): T-431 Everything unpaid page controls (all pass: 32/32/32/44px)
     // +6 (16 Oct): T-433 order page — Print delivery receipt link, BIR invoice no. input + save button, pay-now amount, money account select, receipt photo
-    expect(results.length).toBe(1260);
+    // -1 (16 Oct): T-433 BIR invoice no. form moved into EditableRecord, so its Save button leaves the census
+    expect(results.length).toBe(1259);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
