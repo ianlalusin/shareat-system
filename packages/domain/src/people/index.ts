@@ -39,6 +39,9 @@ export {
   seedStoreAccessDefaults,
 } from './position-defaults';
 
+// T-434: staff photo and signature (upload / replace / remove / guarded view).
+export * from './staff-media';
+
 export class EmploymentError extends Error {
   /** A sentence a person at the screen (or Ian at the terminal) can act on. Set where the refusal is about their input. */
   readonly userReason?: string;

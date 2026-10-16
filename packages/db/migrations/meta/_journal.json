@@ -1282,6 +1282,13 @@
       "when": 1803612707084,
       "tag": "0203_t433_bir_invoice_no",
       "breakpoints": true
+    },
+    {
+      "idx": 204,
+      "version": "7",
+      "when": 1803699107084,
+      "tag": "0204_t434_staff_photo_and_signature",
+      "breakpoints": true
     }
   ]
 }

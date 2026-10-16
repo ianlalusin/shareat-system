@@ -14,8 +14,9 @@
  * authorization ("what you may do") arrives with its own task (bible §7 rule 3).
  */
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, index, pgTable, text, timestamp, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
+import { storedFiles } from './stored-files';
 
 export const persons = pgTable(
   'persons',
@@ -35,11 +36,21 @@ export const persons = pgTable(
      * wrong (the spec's own words).
      */
     kind: text('kind', { enum: ['person', 'terminal'] }).notNull().default('person'),
+    /**
+     * T-434, migration 0204. The person's CURRENT signature (a PNG filed through the broker, purpose `staff_signature`).
+     * On the PERSON, not the employment: a signature is the human's legal mark. Never selected by a list, a wall or an
+     * export; read only through the signature rule in `@shareat/domain` (people/signature).
+     */
+    signatureFileId: uuid('signature_file_id').references((): AnyPgColumn => storedFiles.id, { onDelete: 'restrict' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
     check('persons_kind_check', sql`${t.kind} in ('person', 'terminal')`),
+    // NOTE: persons_signature_file_id_same_org_fk FOREIGN KEY (org_id, signature_file_id) -> stored_files (org_id, id) - hand-added in
+    // migration 0204 (T-434), no Drizzle mirror: declaring it here would make `persons` and `stored_files` reference each other's
+    // composite columns and TypeScript cannot infer either table. It is the same-org twin of the single-column FK above (T-398 S1
+    // convention) and needs `stored_files_org_id_id_unique`, also added by 0204.
     // NOTE: persons_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0194 (T-398 S1 /
     // DEF-491), no Drizzle mirror here. Trivially true (id alone is already unique); it exists so
     // the 153 composite `(org_id, "<col>") REFERENCES persons (org_id, id)` same-org FKs declared
