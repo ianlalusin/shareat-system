@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1672` 13. Decision log
-- `1673–1692` 14. Amendment protocol
-- `1693–1697` 15. Engineering standards — the industry practices this project follows
-  - `1698–1703` 15.1 Build order: walking skeleton first
-  - `1704–1715` 15.2 Golden-master testing — the most important practice here
-  - `1716–1724` 15.3 Strangler Fig, not big-bang cutover
-  - `1725–1729` 15.4 No dual-write
-  - `1730–1738` 15.5 Expand/contract migrations
-  - `1739–1747` 15.6 Observability from day zero, not later
-  - `1748–1752` 15.7 CI gates
-  - `1753–1757` 15.8 Backups and a tested restore
-  - `1758–1762` 15.9 Twelve-Factor config
-  - `1763–1770` 15.10 Append-only ledgers — but not event sourcing
-  - `1771–1775` 15.11 Defence in depth
-  - `1776–1804` 15.12 Skills are lenses, not assurance
-  - `1805–1811` 15.13 Reconciliation is a permanent feature
-- `1812–1816` 16. The accounting spine
-  - `1817–1848` 16.0 What we are actually fixing — the diagnosis
-  - `1849–1892` 16.1 The ten invariants — non-negotiable
-  - `1893–1907` 16.2 The oracle: how "correct" is tested
-  - `1908–1929` 16.3 The model — header + lines, not legs
-  - `1930–1949` 16.4 Deliberately simpler than ERPNext
-  - `1950–2016` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2017–2041` 16.6 What v1 already gets right — preserve the intent
-  - `2042–2063` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2064–2078` 16.8 What v1's accounting already gets right
-  - `2079–2122` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2123–2173` 16.10 Posting patterns — one canonical pattern per business event
-  - `2174–2206` 16.11 Inventory's accounting integration
+- `1329–1682` 13. Decision log
+- `1683–1702` 14. Amendment protocol
+- `1703–1707` 15. Engineering standards — the industry practices this project follows
+  - `1708–1713` 15.1 Build order: walking skeleton first
+  - `1714–1725` 15.2 Golden-master testing — the most important practice here
+  - `1726–1734` 15.3 Strangler Fig, not big-bang cutover
+  - `1735–1739` 15.4 No dual-write
+  - `1740–1748` 15.5 Expand/contract migrations
+  - `1749–1757` 15.6 Observability from day zero, not later
+  - `1758–1762` 15.7 CI gates
+  - `1763–1767` 15.8 Backups and a tested restore
+  - `1768–1772` 15.9 Twelve-Factor config
+  - `1773–1780` 15.10 Append-only ledgers — but not event sourcing
+  - `1781–1785` 15.11 Defence in depth
+  - `1786–1814` 15.12 Skills are lenses, not assurance
+  - `1815–1821` 15.13 Reconciliation is a permanent feature
+- `1822–1826` 16. The accounting spine
+  - `1827–1858` 16.0 What we are actually fixing — the diagnosis
+  - `1859–1902` 16.1 The ten invariants — non-negotiable
+  - `1903–1917` 16.2 The oracle: how "correct" is tested
+  - `1918–1939` 16.3 The model — header + lines, not legs
+  - `1940–1959` 16.4 Deliberately simpler than ERPNext
+  - `1960–2026` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2027–2051` 16.6 What v1 already gets right — preserve the intent
+  - `2052–2073` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2074–2088` 16.8 What v1's accounting already gets right
+  - `2089–2132` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2133–2183` 16.10 Posting patterns — one canonical pattern per business event
+  - `2184–2216` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1669,6 +1669,16 @@ just a patch.**
 | 334 | 2026-10-14 | **DUAL RUN: ONLY ADMIN / SUPER_ADMIN MAY RECORD A DISPOSITION.** Checked in the domain, not only the UI: `run_cutover` AND `view_financial_reports` at the line's store AND an actor whose role is `admin` or `super_admin`. Managers keep `run_cutover` (T-134 attestations untouched) and see the pages read-only. No new capability. | Ian's ruling (option b), recorded in `docs/tasks/392-dual-run-comparator.md` "## Ian rulings, 2026-10-13" | Yes, before T-392 S5 |
 | 335 | 2026-10-14 | **STOCK USAGE: MANAGER-POSTED STAFF DRAFTS MOVE STOCK; THE POS USAGE PULL BECOMES A CHECK ONLY.** Actual usage is what staff record and the manager posts. The POS pull compares expected (sold x rule) against posted actual and flags a gap beyond ±10%; once T-401 S6 lands it no longer takes stock out. **Narrows and extends row 318** (drafts queued by many staff, posted by the manager). Specced as T-401 S6, **not yet built**. | Ian's ruling 2026-10-14, recorded in `docs/tasks/401-erp-menu-catalog-master.md` (S5 rulings + the Ian ruling line after them) | Yes, before T-401 S6 |
 | 336 | 2026-10-14 | ⭐ **HAIKU WHEREVER HAIKU CAN DO THE JOB.** Subagents for discovery, greps, count bumps and mechanical sweeps pass `model: "haiku"`; Sonnet for money, auth and schema lanes; Opus for specs and rulings. **Extends rows 184 and 298.** | Ian, 2026-10-14 (orchestrator session); see also memory note "Discovery on Haiku/Sonnet" | No |
+| 337 | 2026-10-15 | **THE GITHUB REPO STAYS PUBLIC.** Answers the open question from 13 Oct. Consequence: nothing secret is ever committed (the `secrets/` scan at wrap-up and the no-key-in-repo rules stand), and CI runs on the self-hosted runner as today. | Ian, 2026-10-15 (chat); recorded here at the 16 Oct wrap-up | Yes (making it private later is a settings change) |
+| 338 | 2026-10-15 | **POS v2 AND CUSTOMER v2 LIVE IN THIS REPO** as `apps/pos` and `apps/customer`, each with its own `tsconfig.json`; **one Capacitor APK per app**, built in CI only, new Android app id for v2, release keystore held as a GitHub secret Ian adds. Ports 9009 (POS v2) and 9010 (Customer v2). Confirms row 269. | Ian, 2026-10-15; recorded in `docs/decisions/ADR-015-pos-and-customer-on-the-shared-backend.md` "Amendment 2026-10-15" §A1 and `docs/plans/pos-customer-v2-phase-plan.md` §3 | Yes, before POS v2 PC-2 (monorepo setup) |
+| 339 | 2026-10-15 | **T-400 (parallel integration tests) MERGED; TURBOREPO ASSESSED AND DECLINED FOR NOW.** PR #18 merged after #26 on a fresh green CI (`1516ad7`). Turborepo was assessed with numbers during POS/Customer planning: path-filtered per-app CI jobs instead; revisit when per-app build + typecheck exceeds 5 min or a 4th app arrives. Scion is not usable here and is not considered. | Ian's plan, 2026-10-15; assessment in `docs/plans/pos-customer-v2-phase-plan.md` §4 ("Turborepo assessment", "Decision: no Turborepo now") | Yes |
+| 340 | 2026-10-15 | **ENDED EMPLOYMENT ENDS ACCESS (T-407 Q1-Q3, recommended options).** Q1: an owner-manager with an org-wide role and no employment row ever (a franchise owner) may sign in. Q2: access stops when an end date is RECORDED, even a future one. Q3: `persons.is_active` stays unused and is dropped in a later migration batch. Fixes DEF-649/650. | Ian answered Q1-Q3 2026-10-15; recorded in `docs/tasks/407-def649-ended-employment-signin.md`; merged PR #27, live since the 2e9d72d deploy | Yes |
+| 341 | 2026-10-15 | **STOCK USAGE, REVISED: THE v1 PULL CREATES PRE-FILLED USAGE DRAFTS; UNPOSTED PULL DRAFTS AUTO-POST AT 14:00 MANILA NEXT DAY.** One draft per store+day (+location) at the expected quantity; staff correct lines; the manager posts. A pull draft still unposted at 14:00 the next day auto-posts (out-of-band unexplained lines post at expected), flagged `auto_posted`, audit `stock.usage_auto_posted`, by the `shareat-usage-auto-post` timer. Manual drafts never auto-post. T-388 pull holds retired. All stores at once. **Supersedes row 335's "pull becomes a check only".** | Ian, 2026-10-15 (revised the same day); recorded in `docs/tasks/401-erp-menu-catalog-master.md` "S6 audit rulings" A1-A12; built T-401 S6, migration 0198, merged a879264 | Yes, but posted stock moves stay posted |
+| 342 | 2026-10-15 | **USAGE CONTROLS AROUND THE AUTO-POST.** Day close shows a WARNING for unposted usage and never blocks a sales day. Month close is BLOCKED while pull drafts are unposted, unexplained out-of-band lines remain, or manual usage drafts are open (usage records only; wastage keeps today's rule). A manager scorecard shows auto-posted vs manager-posted per store. | Ian, 2026-10-15; `docs/tasks/401-erp-menu-catalog-master.md` S6 rulings (A6 et al.); built in T-401 S6 | Yes |
+| 343 | 2026-10-15 | **POS/CUSTOMER v2 ROUND-2 ANSWERS.** Pay-from-phone is not in v2's first release. Customer notices are on-page only (no push). Feedback links to table + receipt, alerts the manager on 1-2 stars, and invites 4-5 star diners to leave a Google review (link only). Privacy: consent tick at sign-up; members inactive 3 years are deleted. Package = one price per head. Wrong tender: the cashier marks it, a manager-PIN correction entry before shift close; after close, refund + re-ring. Read-only usage counts on v1 data approved (customer + POS). **Still open:** business-day cut-off, first-store date, v1 freeze, v1 safe-void fix, VAT strictness, recipe questions, admin PIN for email-only admins. | Ian, 2026-10-15, on the decisions page (round 2); recorded in `docs/decisions/ADR-015-pos-and-customer-on-the-shared-backend.md` amendment and `docs/plans/pos-customer-v2-phase-plan.md` §3 | Yes, before the POS v2 phase that builds each item |
+| 344 | 2026-10-15 | **ACTIVITY-LOG FREE TEXT IS CAPPED AT 500 CODE POINTS** plus `…[truncated]` in the log's `after` payload; the cap counts code points so an emoji is never split. Source tables keep the full text. | Orchestrator ruling 2026-10-15 during the T-402 S3 audit; recorded in `docs/tasks/402-activity-log.md` S3; merged PR #27 | Yes |
+| 345 | 2026-10-15 | ⭐ **KEEP AGENTS BUSY (standing).** Never leave lanes idle: while CI or tests run, start work that shares no state with them (no edits to files, databases or branches the running gate depends on). Extends row 298 (work-faster practices); row 336 picks the model. | Ian, 2026-10-15 (orchestrator session); memory note "Keep agents busy" | No |
+| 346 | 2026-10-16 | **T-408, T-409, T-411, T-412, T-413 SHIPPED ON THE RECOMMENDED ANSWERS, NOT IAN'S.** Their questions sit on the decisions page unanswered; the recommended options were built so the lanes could merge. An answer that differs from the recommendation reopens that task as a follow-up. The decisions page lists newest and unanswered questions first. | Ian, 2026-10-15 evening ("merge all lanes when built"); each task's Status line says "answered by default only" | Yes, per question |
 
 ## 14. Amendment protocol
 
