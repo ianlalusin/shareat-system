@@ -99,3 +99,6 @@ wraps, no sideways page scroll, bars line up under the line.
 ## Questions for Ian (plain language)
 1. **More than six channels.** The palette has six colours; a seventh channel would reuse the first colour (the donut
    already does). (a) Leave it — recommended: today there are fewer than six. (b) Add more colours (small follow-up).
+
+## Ian's answers (16 Oct)
+- Six colours; a 7th channel reuses one (as the donut does). Accepted.

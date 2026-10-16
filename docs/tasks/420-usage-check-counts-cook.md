@@ -107,3 +107,7 @@ bible row (Opus, at wrap-up): "posted cooking counts as used in the usage check;
    over, because the 2 kg left over sits as cooked "Adobo base". That flag is correct, but noisy if the kitchen always
    cooks ahead. Recommended: watch it for two weeks after go-live; if it is noisy, map those menu items to the cooked
    item instead of the recipe, so sales take from the cooked batch.
+
+## Ian's answers (16 Oct)
+- The morning usage sheet does NOT subtract cooking yet; the check and the 14:00 auto-post handle it.
+- Over-cooking flags: watch for two weeks after go-live; if noisy, point those menu items at the cooked dish.
