@@ -9,7 +9,7 @@
  * history.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, auditLogRepo, expensesRepo, journalRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, journalRepo, personsRepo, transaction, type Tx } from '@shareat/db';
 import { compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -105,6 +105,24 @@ async function runVoidExpense(tx: Tx, actor: Actor, expenseId: string, reason: s
       'voidExpense: reason is required and cannot be empty or whitespace-only',
       'Reason is required and cannot be empty or whitespace-only.',
     );
+  }
+
+  // ⭐ T-415 (DEF-661, ruling 4): voiding puts float money back on its cash request, so every request this expense drew on
+  // must still be open. Locked (id order, de-duplicated) after the expense lock above and before the reversal, so a
+  // settle that is closing the request is waited for, then read.
+  const requestIds = [
+    ...new Set((await expensesRepo.getPaymentsForExpense(tx, expenseId)).map((p) => p.cashRequestId).filter((id): id is string => !!id)),
+  ];
+  if (requestIds.length > 0) {
+    for (const req of await cashRequestsRepo.lockForSpend(tx, actor.orgId, requestIds)) {
+      if (req.status !== 'released') {
+        const holder = (await personsRepo.getPersonById(tx, actor.orgId, req.requestedFor))?.displayName ?? 'The holder';
+        throw refuse(
+          `voidExpense: expense ${expenseId} drew on cash request ${req.id}, which is ${req.status}`,
+          `${holder}'s cash request is ${req.status}, so this cannot be voided. The request must still be released.`,
+        );
+      }
+    }
   }
 
   const result = await reverseEntry(tx, {
