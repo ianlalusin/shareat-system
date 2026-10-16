@@ -1,6 +1,6 @@
 # T-424: POS v2 server — manager-PIN approvals, refunds, tender corrections, server-gated void (P0, PC-4 part 2)
 
-**Status:** spec written 2026-10-16 (Opus planner, POS v2 lane, plan mode); revised the same day after the Opus spec
+**Status:** DONE 2026-10-17 — merged to main; in release PR #34 (not yet live; POS v2 lane — in use only after the docs/ops/pos2-runbook.md steps).
 review (B1, B2, M1-M6 and minors folded in, marked ✎R). Re-review before build.
 **Model:** Sonnet tester -> Sonnet builder -> Sonnet auditor; S5 (auth) is an auth lane: Sonnet, its own test DB
 copied with `CREATE DATABASE … TEMPLATE shareat_test_t416`.
