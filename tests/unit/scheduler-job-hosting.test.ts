@@ -68,12 +68,14 @@ function knownScripts(): string[] {
  *
  * - `erp` — `shareat-erp.service` is the ERP web app itself, not a scheduled job. It has no timer,
  *   so it is listed only in the `.service` allowance.
+ * - `pos` — T-417: `shareat-pos.service` is POS v2's web process (second long-running `next start` on 9009,
+ *   beside the ERP), not a scheduled job. No timer; `.service` allowance only, like `erp`.
  * - `month-end-retry` — a SECOND timer firing the SAME `shareat-month-end.service` (its own
  *   `[Timer] Unit=shareat-month-end.service` line, not derived from its filename). It has no
  *   `.service` of its own by design (Ian's 03:00 retry, `docs/ops/shareat-month-end-retry.timer`'s
  *   own header) — listed only in the `.timer` allowance.
  */
-const NAMED_NON_JOB_SERVICE = ['erp'];
+const NAMED_NON_JOB_SERVICE = ['erp', 'pos'];
 const NAMED_SECONDARY_TIMER_ONLY = ['month-end-retry'];
 
 /**

@@ -1,14 +1,7 @@
-# @shareat/customer — not yet built
+# @shareat/customer — Shareat Customer v2 (empty shell)
 
-Reserved for the customer front-end. **Port 9004** (bible §8 — ports are never shared).
+Port **9010** (dev and start). App id `net.shareat.order`. Spec: `docs/tasks/417-pos-customer-monorepo-setup.md`.
 
-Nothing lives here yet. Sequencing is set by ADR-003: the accounting spine ships
-first, then front-ends one at a time behind feature flags, never two at once.
-
-When this app is built it consumes `@shareat/db` and `@shareat/core` like every
-other front-end. It must **never** import from another app — apps talk to packages,
-never to each other. That rule is the whole reason the integration layer was deleted.
-
-The corresponding reference repo is READ-ONLY (bible §2 rule 1, §13 row 80): copy from
-it, keep what is clean, clean what is not, omit what is not needed, add what is missing.
-Findings go to `docs/DEFECTS-REGISTER.md`, never a patch at the source.
+- `npm run dev:customer` (from the repo root) serves the shell.
+- `npm run build -w @shareat/customer` is the server build; `npm run build:cap -w @shareat/customer` is the static export to `out/` for the Android app.
+- One page, no API routes. It must never import from another app (`tests/unit/app-boundaries.test.ts`).

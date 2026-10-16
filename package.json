@@ -4,7 +4,9 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "apps/erp"
+    "apps/erp",
+    "apps/pos",
+    "apps/customer"
   ],
   "engines": {
     "node": ">=20"
@@ -13,6 +15,8 @@
     "dev": "npm run dev -w @shareat/erp",
     "build": "npm run build -w @shareat/erp",
     "start": "npm run start -w @shareat/erp",
+    "dev:pos": "npm run dev -w @shareat/pos",
+    "dev:customer": "npm run dev -w @shareat/customer",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",

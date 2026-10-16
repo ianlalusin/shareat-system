@@ -949,3 +949,13 @@ detection path may read that table — it is an observation log, not finding sta
 detector consults it, T-135's rule is broken and v1's suppression defect is back. An integration
 test asserts this by deleting every row and re-reading the feed. The gap is real; closing it this
 way costs more than it buys.
+
+## `shareat-pos.service` — POS v2's web process (T-417, file only)
+
+A second long-running `next start`, beside `shareat-erp.service`, on the production droplet
+(`159.223.46.224`). It binds `127.0.0.1:9009` and is capped at `MemoryMax=768M` so it cannot starve
+the ERP on the 4 GB box. Like the ERP unit it never builds: it runs a tree CI shipped.
+
+⚠️ **Not installed and not enabled.** `provision.sh` copies it with the other `shareat-*.service` files but
+enables only `shareat-erp.service`. Shipping a POS build in `deploy.yml`, the Caddy route and the memory
+check are a later task plus ops steps on the droplet.

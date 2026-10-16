@@ -1,0 +1,21 @@
+{
+  "name": "@shareat/pos",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 9009",
+    "build": "next build",
+    "build:cap": "node scripts/build-cap.mjs",
+    "start": "next start -p 9009 -H 127.0.0.1"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.2.1",
+    "next": "^16.1.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/cli": "^6.2.1"
+  }
+}

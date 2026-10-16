@@ -28,6 +28,8 @@ jobs:
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     outputs:
       docs_only: ${{ steps.check.outputs.docs_only }}
+      pos: ${{ steps.apps.outputs.pos }}
+      customer: ${{ steps.apps.outputs.customer }}
     steps:
       # fetch-depth: 0 — a shallow clone would not contain `before`'s commit object, and the diff
       # below needs to read it. This job is the only one that needs full history.
@@ -101,6 +103,33 @@ jobs:
 
           echo "docs_only=$DOCS_ONLY" >> "$GITHUB_OUTPUT"
           echo "::notice::T-306: docs_only=$DOCS_ONLY for $BEFORE..$AFTER"
+
+      - name: Determine affected apps
+        id: apps
+        # T-417: which app jobs (app-pos, app-customer) must run. Same BEFORE/AFTER logic as the step above,
+        # but the answer is per app. FAILS OPEN: anything uncertain (no base SHA, a failed diff, a missing
+        # node) is UNKNOWN, and the script answers "both apps".
+        run: |
+          set -uo pipefail
+
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BEFORE="${{ github.event.pull_request.base.sha }}"
+            AFTER="${{ github.event.pull_request.head.sha }}"
+          fi
+
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            CHANGED="UNKNOWN"
+          elif ! CHANGED="$(git diff --name-only "$BEFORE" "$AFTER" 2>&1)"; then
+            CHANGED="UNKNOWN"
+          fi
+
+          if ! RESULT="$(echo "$CHANGED" | node scripts/ci-affected-apps.mjs)"; then
+            RESULT="$(echo pos=true; echo customer=true)"
+          fi
+          echo "$RESULT" >> "$GITHUB_OUTPUT"
+          echo "::notice::T-417: $(echo $RESULT)"
 
   verify:
     name: typecheck, test, build
@@ -215,3 +244,23 @@ jobs:
       - name: Build
         if: needs.changes.outputs.docs_only != 'true'
         run: npm run build
+
+  app-pos:
+    # T-417: the app jobs. Each runs only when its own output is true, on GitHub-hosted runners
+    # (app-build.yml pins ubuntu-latest) so they never queue on the self-hosted runner that serves `verify`.
+    name: apps/pos
+    needs: changes
+    if: needs.changes.outputs.pos == 'true'
+    uses: ./.github/workflows/app-build.yml
+    with:
+      app: pos
+    secrets: inherit
+
+  app-customer:
+    name: apps/customer
+    needs: changes
+    if: needs.changes.outputs.customer == 'true'
+    uses: ./.github/workflows/app-build.yml
+    with:
+      app: customer
+    secrets: inherit
