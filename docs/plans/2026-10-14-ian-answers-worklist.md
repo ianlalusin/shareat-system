@@ -35,3 +35,8 @@
 | 23 | ERP customer screen shows the diner's loyalty profile: optional, audited customer ↔ diner-person link | Q13, row 331 | M | ADR-015 P3 loyalty, diner principal | Yes | Yes |
 
 **Closed with no work:** Q3 (row 321 — the balance rule is already enforced on the expense screen), Q14 (nothing to retire).
+
+## Status census (orchestrator, 16 Oct, from code + task files)
+DONE: 1 (T-408) · 2 (T-405, person-name.ts) · 4 (T-409) · 7 (T-412; draft deletes relaxed by T-418) · 8 (T-410) · 16 (T-411) · 17 (docs/discovery/41) · 21 (ADR-015 amendment).
+PARTIAL: 3 (raw account code left at cutover/opening/page.tsx:357) · 6 (manual settlement only, no file parsers) · 9 (T-216 built, no catch-up → **T-430**) · 13 (price lists, no rule/frozen rate).
+OPEN: 5 · 10 (→ **T-431**) · 11 · 12 · 14 · 15 · 18 · 19 · 20 · 22 · 23. Also DEF-662 AP float picker → **T-432**. Task numbers 422-429 are reserved for the POS v2 session.
