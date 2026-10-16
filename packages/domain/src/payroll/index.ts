@@ -318,6 +318,9 @@ async function buildPreview(
         });
       }
       if (inputs.length === 0 || !payRateId) continue;
+      // T-190 audit gap 5: minimum-wage earner status is judged on the daily rate IN FORCE AT period_end, not on the last day worked.
+      const rateAtEnd = await payrollRepo.rateInForceOn(trx, actor.orgId, employmentId, input.periodEnd);
+      if (rateAtEnd && rateAtEnd.basis === 'daily') dailyRateAtEnd = money(rateAtEnd.amount);
 
       // ⭐ Every premium is now a per-store SETTING rather than a constant (T-189b, Ian's
       // "configurable to x1.25 or fix amount" and "holiday must be configurable too").

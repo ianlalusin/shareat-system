@@ -10,6 +10,8 @@
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
@@ -286,5 +288,54 @@ describe('T-190 - org scope and classification', () => {
       expect(CUTOVER_CLASSIFICATION[t], `${t} is not in cutover/classification.ts`).toBeDefined();
       expect((RLS_REGISTRY as Record<string, unknown>)[t], `${t} is not in rls/registry.ts`).toBeDefined();
     }
+  });
+});
+
+
+describe('T-190 audit gap 1 (DB level) - a confirmed bracket set is closed to INSERT', () => {
+  it('a raw INSERT of another row into a confirmed (frequency, effective_from) set fails; an unconfirmed set still takes rows', async () => {
+    const f = await fixture('closed-set');
+    const ins = (frequency: string, over: string, confirmed: boolean) => sql`
+      insert into withholding_brackets (org_id, frequency, effective_from, "over", base_tax, rate, source_ref, confirmed_at, confirmed_by)
+      values (${f.orgId}, ${frequency}, '2026-01-01', ${over}, '0', '0.1', 'x', ${confirmed ? new Date() : null}, ${confirmed ? f.adminId : null})`;
+    await ins('monthly', '0', true);
+    await expect(ins('monthly', '20833', false)).rejects.toThrow();
+    await expect(ins('monthly', '20833', true)).rejects.toThrow();
+    const rows = await sql<{ n: string }[]>`select count(*)::text as n from withholding_brackets where org_id = ${f.orgId} and frequency = 'monthly'`;
+    expect(rows[0]!.n).toBe('1');
+    await ins('weekly', '0', false);
+    await expect(ins('weekly', '4808', false), 'an unconfirmed set must still accept rows').resolves.toBeDefined();
+  });
+});
+
+describe('T-190 audit gap 4 - the 0206 seed goes to the main org by its key, not the oldest org', () => {
+  it('re-running the seed with an OLDER non-main org present seeds only the org coded "shareat"  [mutant: ORDER BY created_at LIMIT 1]', async () => {
+    const file = readFileSync(fileURLToPath(new URL('../../migrations/0206_t190_statutory.sql', import.meta.url)), 'utf8');
+    const seedSql = file.slice(file.indexOf('-- Seed:'));
+    const statements = seedSql.split('--> statement-breakpoint').map((x) => x.trim()).filter((x) => /^(--[^\n]*\n)*\s*INSERT/i.test(x));
+    expect(statements.length, 'the seed statements were not found').toBeGreaterThanOrEqual(2);
+    const ROLLBACK = new Error('rollback');
+    let seen: { old: number; main: number } | null = null;
+    await sql
+      .begin(async (tx) => {
+        await tx`set local session_replication_role = replica`;
+        await tx`delete from statutory_rates`;
+        await tx`delete from withholding_brackets`;
+        await tx`delete from minimum_wages`;
+        let [main] = await tx<{ id: string }[]>`select id from organizations where code = 'shareat'`;
+        if (!main) [main] = await tx<{ id: string }[]>`insert into organizations (name, code) values ('Shareat', 'shareat') returning id`;
+        const [old] = await tx<{ id: string }[]>`insert into organizations (name, code, created_at) values ('Older org', ${uid('older')}, '1999-01-01') returning id`;
+        for (const st of statements) await tx.unsafe(st);
+        const count = async (org: string) =>
+          Number((await tx<{ n: string }[]>`select ((select count(*) from statutory_rates where org_id = ${org}) + (select count(*) from withholding_brackets where org_id = ${org}))::text as n`)[0]!.n);
+        seen = { old: await count(old!.id), main: await count(main!.id) };
+        throw ROLLBACK;
+      })
+      .catch((e) => {
+        if (e !== ROLLBACK) throw e;
+      });
+    expect(seen).not.toBeNull();
+    expect(seen!.old, 'the older non-main org was seeded').toBe(0);
+    expect(seen!.main, 'the org coded shareat got no seed').toBeGreaterThan(0);
   });
 });

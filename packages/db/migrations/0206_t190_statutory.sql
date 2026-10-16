@@ -10,7 +10,7 @@
 -- trigger refuses any other change (owner included) plus a second confirmation. A CONFIRMED row cannot be deleted; an unconfirmed,
 -- never-used row can (a used contribution row is also held by the payslip FK, restrict). A correction is a NEW row with a later date.
 --
--- SEED. The 2026 figures are seeded as DATA for the FIRST organisation only (the main org; Padre Garcia gets none, row 305), every row
+-- SEED. The 2026 figures are seeded as DATA for the main organisation only (code = 'shareat'; none if it does not exist) (the main org; Padre Garcia gets none, row 305), every row
 -- with confirmed_at NULL until the accountant confirms. minimum_wages is NOT seeded: each store's region and wage order are unknown
 -- here, so a store's payroll POST refuses ("minimum wage") until the accountant adds and confirms its row.
 --
@@ -180,6 +180,18 @@ BEGIN
 	RETURN NEW;
 END $fn$;
 --> statement-breakpoint
+-- A confirmed bracket set is CLOSED: no row may be added to a (org, frequency, effective_from) set that already holds a confirmed row.
+CREATE FUNCTION t190_bracket_set_closed() RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN
+	IF EXISTS (SELECT 1 FROM withholding_brackets b WHERE b.org_id = NEW.org_id AND b.frequency = NEW.frequency
+	           AND b.effective_from = NEW.effective_from AND b.confirmed_at IS NOT NULL) THEN
+		RAISE EXCEPTION 'withholding_brackets set (% , %) is confirmed and closed; add a new set with a later effective_from', NEW.frequency, NEW.effective_from USING ERRCODE = '23000';
+	END IF;
+	RETURN NEW;
+END $fn$;
+--> statement-breakpoint
+CREATE TRIGGER "withholding_brackets_set_closed" BEFORE INSERT ON "withholding_brackets" FOR EACH ROW EXECUTE FUNCTION t190_bracket_set_closed();
+--> statement-breakpoint
 CREATE TRIGGER "statutory_rates_immutable" BEFORE UPDATE OR DELETE ON "statutory_rates" FOR EACH ROW EXECUTE FUNCTION t190_reference_row_immutable();
 --> statement-breakpoint
 CREATE TRIGGER "withholding_brackets_immutable" BEFORE UPDATE OR DELETE ON "withholding_brackets" FOR EACH ROW EXECUTE FUNCTION t190_reference_row_immutable();
@@ -285,10 +297,10 @@ ALTER TABLE "payslips" DROP CONSTRAINT "payslips_advance_within_gross_check";
 ALTER TABLE "payslips" ADD CONSTRAINT "payslips_advance_within_gross_check" CHECK ("advance_recovered" <= "gross_pay" - "sss_ee" - "philhealth_ee" - "pagibig_ee" - "withholding");
 --> statement-breakpoint
 
--- Seed: the 2026 tables for the FIRST organisation only, every row UNCONFIRMED. The accountant confirms (or corrects) each "verify" row.
+-- Seed: the 2026 tables for the main organisation only (code = 'shareat'; none if it does not exist), every row UNCONFIRMED. The accountant confirms (or corrects) each "verify" row.
 INSERT INTO "statutory_rates" ("org_id", "agency", "effective_from", "ee_rate", "er_rate", "base_kind", "floor", "ceiling", "step", "low_threshold", "low_ee_rate", "ec_threshold", "ec_low", "ec_high", "source_ref")
 SELECT o.id, v.agency, DATE '2026-01-01', v.ee, v.er, v.base_kind, v.floor, v.ceiling, v.step, v.low_threshold, v.low_ee, v.ec_threshold, v.ec_low, v.ec_high, v.source_ref
-FROM (SELECT id FROM organizations ORDER BY created_at, id LIMIT 1) o
+FROM (SELECT id FROM organizations WHERE code = 'shareat') o
 CROSS JOIN (VALUES
 	('sss', 0.05::numeric, 0.10::numeric, 'gross', 5000::numeric, 35000::numeric, 500::numeric, NULL::numeric, NULL::numeric, 15000::numeric, 10::numeric, 30::numeric, 'SSS Circular 2024-006 (RA 11199 final step). VERIFY: no 2026 circular seen.'),
 	('philhealth', 0.025::numeric, 0.025::numeric, 'basic', 10000::numeric, 100000::numeric, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric, 'RA 11223 s10; PhilHealth Circular 2020-0005. VERIFY the 2026 rate.'),
@@ -297,7 +309,7 @@ CROSS JOIN (VALUES
 --> statement-breakpoint
 INSERT INTO "withholding_brackets" ("org_id", "frequency", "effective_from", "over", "base_tax", "rate", "source_ref")
 SELECT o.id, v.frequency, DATE '2026-01-01', v."over", v.base_tax, v.rate, 'RR 11-2018 Annex E, 1 Jan 2023 onwards (TRAIN, RA 10963)'
-FROM (SELECT id FROM organizations ORDER BY created_at, id LIMIT 1) o
+FROM (SELECT id FROM organizations WHERE code = 'shareat') o
 CROSS JOIN (VALUES
 	('semi_monthly', 0::numeric, 0::numeric, 0::numeric),
 	('semi_monthly', 10417::numeric, 0::numeric, 0.15::numeric),

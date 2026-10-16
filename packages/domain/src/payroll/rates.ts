@@ -21,6 +21,17 @@ function assertDate(fn: string, v: string, what: string): void {
   }
 }
 
+/** T-190 audit gap 2: a table may not be dated into a period that is already paid (a posted payslip used the table then in force). */
+async function assertNotPaidAlready(trx: Tx, orgId: string, fn: string, effectiveFrom: string): Promise<void> {
+  const latest = await statutoryRepo.latestPostedPeriodEnd(trx, orgId);
+  if (latest !== null && effectiveFrom <= latest) {
+    throw refuse(
+      `${fn}: effective_from ${effectiveFrom} is on or before the latest posted period_end ${latest}`,
+      `A payroll period up to ${latest} is already paid, so a table cannot start on or before that date. Pick a date after ${latest}.`,
+    );
+  }
+}
+
 function run<T>(tx: Tx | null, fn: (trx: Tx) => Promise<T>): Promise<T> {
   return tx ? fn(tx) : transaction(fn);
 }
@@ -57,6 +68,7 @@ export function addStatutoryRate(tx: Tx | null, actor: Actor, input: AddStatutor
         'A contribution table takes effect on the 1st of a month. Pick the first day of the month.',
       );
     }
+    await assertNotPaidAlready(trx, actor.orgId, 'addStatutoryRate', input.effectiveFrom);
     if (!input.sourceRef.trim()) {
       throw refuse('addStatutoryRate: source_ref is blank', 'Say where this rate comes from (the circular or law), so it can be checked.');
     }
@@ -165,6 +177,13 @@ export function addWithholdingBracketSet(
     if (input.rows.length === 0 || !input.sourceRef.trim()) {
       throw refuse('addWithholdingBracketSet: no rows or no source', 'Give the bracket rows and say where the table comes from.');
     }
+    await assertNotPaidAlready(trx, actor.orgId, 'addWithholdingBracketSet', input.effectiveFrom);
+    if (await statutoryRepo.bracketSetIsConfirmed(trx, actor.orgId, input.frequency, input.effectiveFrom)) {
+      throw refuse(
+        `addWithholdingBracketSet: the ${input.frequency} set from ${input.effectiveFrom} is confirmed and closed`,
+        'That withholding table is already approved and closed. To change it, add a whole new table with a later date.',
+      );
+    }
     const parsed = input.rows.map((r) => ({
       over: parseDecimalInput(r.over, '14,2', 'addWithholdingBracketSet: over', 'The "over" amount'),
       baseTax: parseDecimalInput(r.baseTax, '14,2', 'addWithholdingBracketSet: base tax', 'The base tax'),
@@ -218,6 +237,7 @@ export function addMinimumWage(
   return run(tx, async (trx) => {
     await authorize(trx, actor, CAPABILITY);
     assertDate('addMinimumWage', input.effectiveFrom, 'The effective date');
+    await assertNotPaidAlready(trx, actor.orgId, 'addMinimumWage', input.effectiveFrom);
     if (!input.wageOrderRef.trim()) {
       throw refuse('addMinimumWage: wage order is blank', 'Say which wage order sets this rate, so it can be checked.');
     }
@@ -259,6 +279,54 @@ export function confirmMinimumWage(tx: Tx | null, actor: Actor, input: { id: str
   });
 }
 
+/** Discards a withholding table (every row of one frequency + date) that was never approved. */
+export function discardWithholdingBracketSet(
+  tx: Tx | null,
+  actor: Actor,
+  input: { frequency: (typeof FREQUENCIES)[number]; effectiveFrom: string },
+): Promise<{ discarded: number }> {
+  return run(tx, async (trx) => {
+    await authorize(trx, actor, CAPABILITY);
+    const ids = await statutoryRepo.discardUnconfirmedBracketSet(trx, actor.orgId, input.frequency, input.effectiveFrom);
+    if (ids.length === 0) {
+      throw refuse(
+        'discardWithholdingBracketSet: nothing to discard (absent, or confirmed)',
+        'That withholding table does not exist or is already approved. An approved table cannot be discarded; add a new one with a later date.',
+      );
+    }
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'payroll_rate.change',
+      storeId: null,
+      entityId: ids[0]!,
+      before: { frequency: input.frequency, effectiveFrom: input.effectiveFrom, rows: ids.length },
+      after: { table: 'withholding_brackets', event: 'discard' },
+      source: 'web',
+    });
+    return { discarded: ids.length };
+  });
+}
+
+/** Discards a minimum-wage row that was never approved. */
+export function discardMinimumWage(tx: Tx | null, actor: Actor, input: { id: string }): Promise<void> {
+  return run(tx, async (trx) => {
+    await authorize(trx, actor, CAPABILITY);
+    if (!(await statutoryRepo.minimumWageExists(trx, actor.orgId, input.id))) throw gone('discardMinimumWage: no such row', 'That minimum wage');
+    if (!(await statutoryRepo.discardUnconfirmedMinimumWage(trx, actor.orgId, input.id))) {
+      throw refuse('discardMinimumWage: row is confirmed', 'An approved minimum wage cannot be discarded. Add a new row with a later date.');
+    }
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'payroll_rate.change',
+      storeId: null,
+      entityId: input.id,
+      before: { table: 'minimum_wages' },
+      after: { table: 'minimum_wages', event: 'discard' },
+      source: 'web',
+    });
+  });
+}
+
 /**
  * Sets a person's government numbers (blank clears one). `enrol_staff` at the person's store, as the staff page: the numbers are
  * personal data and also decide which agencies a payslip deducts. A wrong format is refused with a plain sentence.
@@ -286,8 +354,28 @@ export function setGovernmentIds(
     };
     // Numbers decide which agencies a payslip deducts: lock the person like a post does, so a run cannot read half a change.
     await statutoryRepo.lockPersons(trx, actor.orgId, [input.personId]);
+    const [current] = await statutoryRepo.governmentIdsFor(trx, actor.orgId, [input.personId]);
     if (!(await statutoryRepo.setGovernmentIds(trx, actor.orgId, input.personId, ids))) {
       throw gone('setGovernmentIds: no such person', 'That person');
+    }
+    // Audit the FIELD NAMES that changed, never a number (government numbers are personal data).
+    const pairs: [string, string | null, string | null][] = [
+      ['sss_no', current?.sssNo ?? null, ids.sssNo],
+      ['philhealth_no', current?.philhealthNo ?? null, ids.philhealthNo],
+      ['pagibig_no', current?.pagibigNo ?? null, ids.pagibigNo],
+      ['tin', current?.tin ?? null, ids.tin],
+    ];
+    const changed = pairs.filter(([, a, b]) => a !== b).map(([name]) => name);
+    if (changed.length > 0) {
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'staff_gov_ids.changed',
+        storeId: input.storeId,
+        entityId: input.personId,
+        before: { changedFields: changed },
+        after: { changedFields: changed },
+        source: 'web',
+      });
     }
   });
 }

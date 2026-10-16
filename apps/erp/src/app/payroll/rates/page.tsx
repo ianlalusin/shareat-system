@@ -7,7 +7,9 @@ import {
   confirmMinimumWageAction,
   confirmStatutoryRateAction,
   confirmWithholdingBracketSetAction,
+  discardMinimumWageAction,
   discardStatutoryRateAction,
+  discardWithholdingBracketSetAction,
 } from './actions';
 import { listStores, ratesView } from './lib';
 import { Page } from '@/components/shell/Page';
@@ -176,6 +178,13 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
                         Approve
                       </Button>
                     </form>
+                    <form action={discardWithholdingBracketSetAction}>
+                      <input type="hidden" name="frequency" value={b.frequency} />
+                      <input type="hidden" name="effectiveFrom" value={b.effectiveFrom} />
+                      <Button type="submit" variant="secondary">
+                        Discard
+                      </Button>
+                    </form>
                   </>
                 )}
               </li>
@@ -243,6 +252,12 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
                       <input type="hidden" name="id" value={m.id} />
                       <Button type="submit" variant="secondary">
                         Approve
+                      </Button>
+                    </form>
+                    <form action={discardMinimumWageAction}>
+                      <input type="hidden" name="id" value={m.id} />
+                      <Button type="submit" variant="secondary">
+                        Discard
                       </Button>
                     </form>
                   </>

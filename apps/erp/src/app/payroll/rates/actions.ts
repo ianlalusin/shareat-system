@@ -14,7 +14,9 @@ import {
   confirmMinimumWage,
   confirmStatutoryRate,
   confirmWithholdingBracketSet,
+  discardMinimumWage,
   discardStatutoryRate,
+  discardWithholdingBracketSet,
 } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
@@ -152,4 +154,31 @@ export async function confirmMinimumWageAction(fd: FormData): Promise<void> {
   }
   revalidatePath(PAGE);
   return await redirectWithFlash(PAGE, {}, { ok: 'Minimum wage approved.' });
+}
+
+export async function discardWithholdingBracketSetAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(PAGE);
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      discardWithholdingBracketSet(tx, actor, {
+        frequency: str(fd, 'frequency') as 'monthly' | 'semi_monthly' | 'weekly',
+        effectiveFrom: str(fd, 'effectiveFrom'),
+      }),
+    );
+  } catch (err) {
+    return await redirectWithFlash(PAGE, {}, { error: errorMessage(err) });
+  }
+  revalidatePath(PAGE);
+  return await redirectWithFlash(PAGE, {}, { ok: 'Withholding table discarded.' });
+}
+
+export async function discardMinimumWageAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(PAGE);
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => discardMinimumWage(tx, actor, { id: str(fd, 'id') }));
+  } catch (err) {
+    return await redirectWithFlash(PAGE, {}, { error: errorMessage(err) });
+  }
+  revalidatePath(PAGE);
+  return await redirectWithFlash(PAGE, {}, { ok: 'Minimum wage discarded.' });
 }

@@ -38,14 +38,24 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, RefusalError, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
+  addMinimumWage,
   addStatutoryRate,
+  addWithholdingBracketSet,
   confirmStatutoryRate,
+  setGovernmentIds,
   post13thMonthRun,
   postPayRun,
   previewPayRun,
   setPayRate,
   voidPayRun,
 } from '@shareat/domain';
+
+import * as domainAll from '@shareat/domain';
+/** Named by the tester (audit gap 6); not exported yet, hence the cast. */
+const { discardWithholdingBracketSet, discardMinimumWage } = domainAll as unknown as {
+  discardWithholdingBracketSet: (tx: Tx, a: Actor, i: { frequency: 'monthly' | 'semi_monthly' | 'weekly'; effectiveFrom: string }) => Promise<unknown>;
+  discardMinimumWage: (tx: Tx, a: Actor, i: { id: string }) => Promise<unknown>;
+};
 
 const sql = postgres(url, { max: 8 });
 let seq = 0;
@@ -141,10 +151,14 @@ const BRACKETS: Record<Frequency, [string, string, string][]> = {
 };
 
 async function insertBrackets(f: Fixture, frequency: Frequency, confirmed = true) {
+  // A confirmed set is closed to further rows (audit gap 1): insert the whole set UNCONFIRMED, then confirm it.
   for (const [over, baseTax, rate] of BRACKETS[frequency]) {
-    await sql`insert into withholding_brackets (org_id, frequency, effective_from, "over", base_tax, rate, source_ref, confirmed_at, confirmed_by)
-              values (${f.orgId}, ${frequency}, '2026-01-01', ${over}, ${baseTax}, ${rate}, 'T-190 test fixture',
-                      ${confirmed ? new Date() : null}, ${confirmed ? f.adminId : null})`;
+    await sql`insert into withholding_brackets (org_id, frequency, effective_from, "over", base_tax, rate, source_ref)
+              values (${f.orgId}, ${frequency}, '2026-01-01', ${over}, ${baseTax}, ${rate}, 'T-190 test fixture')`;
+  }
+  if (confirmed) {
+    await sql`update withholding_brackets set confirmed_at = now(), confirmed_by = ${f.adminId}
+              where org_id = ${f.orgId} and frequency = ${frequency} and effective_from = '2026-01-01'`;
   }
 }
 
@@ -746,5 +760,120 @@ describe('T-190 - missing government numbers (cases 16 and 17)', () => {
     expect(r).toMatchObject({ sss_ee: '525.00', sss_er: '1050.00', sss_ec: '10.00', philhealth_ee: '260.00', pagibig_ee: '0.00', skipped_agencies: [] });
     const [a] = await slips(first.runId);
     expect(a).toMatchObject({ sss_ee: '0.00', skipped_agencies: ['sss'] }); // an old payslip never changes when the number is added
+  });
+});
+
+
+// =====================================================================================================================
+// Audit gaps (coordinator, 17 Oct)
+
+const auditCount = async (orgId: string, like: string) =>
+  Number((await sql<{ n: string }[]>`select count(*)::text as n from audit_log where org_id = ${orgId} and (coalesce(before::text, '') || ' ' || coalesce(after::text, '')) ilike ${like}`)[0]!.n);
+
+describe('T-190 audit gap 1 - a confirmed bracket set is closed', () => {
+  it('adding a row to an existing CONFIRMED (frequency, effective_from) set is refused with a RefusalError and the set is unchanged', async () => {
+    const f = await ready('g1');
+    const n = async () => Number((await sql<{ n: string }[]>`select count(*)::text as n from withholding_brackets where org_id = ${f.orgId} and frequency = 'semi_monthly' and effective_from = '2026-01-01'`)[0]!.n);
+    const before = await n();
+    const text = await refusalText(
+      asOrg(f.orgId, (tx) => addWithholdingBracketSet(tx, f.admin, { frequency: 'semi_monthly', effectiveFrom: '2026-01-01', rows: [{ over: '999999', baseTax: '0', rate: '0.40' }], sourceRef: 'extra row' })),
+    );
+    expect(text, 'a row was added to a confirmed set').not.toBeNull();
+    expect(await n()).toBe(before);
+  });
+});
+
+describe('T-190 audit gap 2 - no new table may be dated into a period already paid', () => {
+  async function paid(hint: string) {
+    const f = await ready(hint);
+    await addDays(f, dates('2026-01', 1, 13));
+    await post(f, H1); // latest posted period_end = 2026-01-15
+    return f;
+  }
+  it('a statutory rate effective on or before the latest posted period_end is refused; a later one is accepted', async () => {
+    const f = await paid('g2a');
+    const add = (effectiveFrom: string) =>
+      asOrg(f.orgId, (tx) => addStatutoryRate(tx, f.admin, { agency: 'pagibig', effectiveFrom, eeRate: '0.02', erRate: '0.02', baseKind: 'basic', floor: '0', ceiling: '10000', sourceRef: 'late' }));
+    expect(await refusalText(add('2025-12-01')), 'a rate dated before a paid period was accepted').not.toBeNull();
+    await expect(add('2026-02-01')).resolves.toBeDefined();
+  });
+  it('a minimum wage effective on or before the latest posted period_end is refused (2026-01-15 refused, 2026-01-16 accepted)', async () => {
+    const f = await paid('g2b');
+    const add = (effectiveFrom: string) => asOrg(f.orgId, (tx) => addMinimumWage(tx, f.admin, { storeId: f.storeId, effectiveFrom, dailyRate: '720.00', wageOrderRef: 'late' }));
+    expect(await refusalText(add('2026-01-15')), 'a minimum wage dated into a paid period was accepted').not.toBeNull();
+    await expect(add('2026-01-16')).resolves.toBeDefined();
+  });
+  it('a bracket set effective on or before the latest posted period_end is refused; a later one is accepted', async () => {
+    const f = await paid('g2c');
+    const add = (effectiveFrom: string) =>
+      asOrg(f.orgId, (tx) => addWithholdingBracketSet(tx, f.admin, { frequency: 'weekly', effectiveFrom, rows: [{ over: '0', baseTax: '0', rate: '0' }], sourceRef: 'late' }));
+    expect(await refusalText(add('2026-01-10')), 'a bracket set dated into a paid period was accepted').not.toBeNull();
+    await expect(add('2026-02-01')).resolves.toBeDefined();
+  });
+});
+
+describe('T-190 audit gap 3 - setGovernmentIds is audited by FIELD NAME, never by number', () => {
+  const FIELDS = /sss_no|philhealth_no|pagibig_no|\btin\b/g;
+  const rowsFor = async (f: Fixture) =>
+    sql<{ t: string }[]>`select (coalesce(before::text, '') || ' ' || coalesce(after::text, '')) as t from audit_log
+                         where org_id = ${f.orgId} and entity_id = ${f.workerId} order by recorded_at, id`;
+  it('setting SSS no. and TIN writes one audit row naming exactly sss_no and tin, with neither number in it; clearing SSS no. is audited too', async () => {
+    const f = await ready('g3', { numbers: [] });
+    await sql`update persons set tin = null where id = ${f.workerId}`;
+    const base = { personId: f.workerId, storeId: f.storeId };
+    await asOrg(f.orgId, (tx) => setGovernmentIds(tx, f.admin, { ...base, sssNo: '1234567890', tin: '987654321' }));
+    const set = await rowsFor(f);
+    expect(set, 'setting government numbers wrote no audit row').toHaveLength(1);
+    expect([...new Set(set[0]!.t.match(FIELDS) ?? [])].sort()).toEqual(['sss_no', 'tin']);
+    expect(set[0]!.t).not.toMatch(/1234567890|987654321/);
+
+    await asOrg(f.orgId, (tx) => setGovernmentIds(tx, f.admin, { ...base, sssNo: '', tin: '987654321' }));
+    const all = await rowsFor(f);
+    expect(all, 'clearing a number wrote no audit row').toHaveLength(2);
+    expect([...new Set(all[1]!.t.match(FIELDS) ?? [])]).toEqual(['sss_no']);
+    expect(all[1]!.t).not.toMatch(/1234567890|987654321/);
+  });
+});
+
+describe('T-190 audit gap 5 - MWE is decided on the rate in force at period_end', () => {
+  it("a raise to 700 on 14 Jan (last shift 13 Jan at 695, period_end 15 Jan) makes the slip NOT MWE  [mutant: last worked day's rate]", async () => {
+    const f = await ready('g5', { rate: '695.00' });
+    await asOrg(f.orgId, (tx) => setPayRate(tx, f.admin, { employmentId: f.employmentId, storeId: f.storeId, basis: 'daily', amount: '700.00', effectiveFrom: '2026-01-14' }));
+    await addDays(f, dates('2026-01', 1, 13));
+    const out = await post(f, H1);
+    const [r] = await slips(out.runId);
+    expect(r!.gross_pay).toBe('9035.00'); // the days are still paid at 695
+    expect(r!.is_mwe, "judged on the last worked day's rate, not the rate at period_end").toBe(false);
+  });
+});
+
+describe('T-190 audit gap 6 - discarding an unconfirmed table', () => {
+  it('an UNCONFIRMED bracket set is discarded (rows gone, audited); a CONFIRMED set cannot be', async () => {
+    const f = await ready('g6a', { brackets: ['semi_monthly'] });
+    await asOrg(f.orgId, (tx) => addWithholdingBracketSet(tx, f.admin, { frequency: 'weekly', effectiveFrom: '2026-03-01', rows: [{ over: '0', baseTax: '0', rate: '0' }, { over: '4808', baseTax: '0', rate: '0.15' }], sourceRef: 'draft' }));
+    const n = async (fr: string, from: string) =>
+      Number((await sql<{ n: string }[]>`select count(*)::text as n from withholding_brackets where org_id = ${f.orgId} and frequency = ${fr} and effective_from = ${from}`)[0]!.n);
+    expect(await n('weekly', '2026-03-01')).toBe(2);
+    const before = await auditCount(f.orgId, '%discard%');
+    await asOrg(f.orgId, (tx) => discardWithholdingBracketSet(tx, f.admin, { frequency: 'weekly', effectiveFrom: '2026-03-01' }));
+    expect(await n('weekly', '2026-03-01')).toBe(0);
+    expect(await auditCount(f.orgId, '%discard%'), 'the discard was not audited').toBeGreaterThan(before);
+
+    const text = await refusalText(asOrg(f.orgId, (tx) => discardWithholdingBracketSet(tx, f.admin, { frequency: 'semi_monthly', effectiveFrom: '2026-01-01' })));
+    expect(text, 'a confirmed set was discarded').not.toBeNull();
+    expect(await n('semi_monthly', '2026-01-01')).toBe(6);
+  });
+  it('an UNCONFIRMED minimum wage is discarded (gone, audited); a CONFIRMED one cannot be', async () => {
+    const f = await ready('g6b');
+    const mw = await asOrg(f.orgId, (tx) => addMinimumWage(tx, f.admin, { storeId: f.storeId, effectiveFrom: '2026-03-01', dailyRate: '720.00', wageOrderRef: 'draft' }));
+    const before = await auditCount(f.orgId, '%discard%');
+    await asOrg(f.orgId, (tx) => discardMinimumWage(tx, f.admin, { id: mw.id }));
+    expect(await sql`select 1 from minimum_wages where id = ${mw.id}`).toHaveLength(0);
+    expect(await auditCount(f.orgId, '%discard%'), 'the discard was not audited').toBeGreaterThan(before);
+
+    const [confirmed] = await sql<{ id: string }[]>`select id from minimum_wages where org_id = ${f.orgId} and effective_from = '2026-01-01'`;
+    const text = await refusalText(asOrg(f.orgId, (tx) => discardMinimumWage(tx, f.admin, { id: confirmed!.id })));
+    expect(text, 'a confirmed minimum wage was discarded').not.toBeNull();
+    expect(await sql`select 1 from minimum_wages where id = ${confirmed!.id}`).toHaveLength(1);
   });
 });

@@ -242,6 +242,66 @@ export async function confirmBrackets(
   return rows.map((r) => r.id);
 }
 
+/** The latest period_end of any POSTED pay run of the org (a voided run paid nobody), or null when none. */
+export async function latestPostedPeriodEnd(tx: Tx, orgId: string): Promise<string | null> {
+  const rows = (await tx.execute(
+    sql`select max(period_end)::text as "d" from pay_runs where org_id = ${orgId} and status = 'posted'`,
+  )) as unknown as { d: string | null }[];
+  return rows[0]?.d ?? null;
+}
+
+/** Whether the set already holds a confirmed row (a confirmed set is closed to new rows). */
+export async function bracketSetIsConfirmed(tx: Tx, orgId: string, frequency: WithholdingFrequency, effectiveFrom: string): Promise<boolean> {
+  const rows = await tx
+    .select({ id: withholdingBrackets.id })
+    .from(withholdingBrackets)
+    .where(
+      and(
+        eq(withholdingBrackets.orgId, orgId),
+        eq(withholdingBrackets.frequency, frequency),
+        eq(withholdingBrackets.effectiveFrom, effectiveFrom),
+        sql`${withholdingBrackets.confirmedAt} is not null`,
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Deletes the rows of a set that has NO confirmed row. Returns the ids removed (empty when the set is absent or confirmed). */
+export async function discardUnconfirmedBracketSet(
+  tx: Tx,
+  orgId: string,
+  frequency: WithholdingFrequency,
+  effectiveFrom: string,
+): Promise<string[]> {
+  if (await bracketSetIsConfirmed(tx, orgId, frequency, effectiveFrom)) return [];
+  const rows = await tx
+    .delete(withholdingBrackets)
+    .where(
+      and(
+        eq(withholdingBrackets.orgId, orgId),
+        eq(withholdingBrackets.frequency, frequency),
+        eq(withholdingBrackets.effectiveFrom, effectiveFrom),
+        isNull(withholdingBrackets.confirmedAt),
+      ),
+    )
+    .returning({ id: withholdingBrackets.id });
+  return rows.map((r) => r.id);
+}
+
+export async function discardUnconfirmedMinimumWage(tx: Tx, orgId: string, id: string): Promise<boolean> {
+  const rows = await tx
+    .delete(minimumWages)
+    .where(and(eq(minimumWages.id, id), eq(minimumWages.orgId, orgId), isNull(minimumWages.confirmedAt)))
+    .returning({ id: minimumWages.id });
+  return rows.length > 0;
+}
+
+export async function minimumWageExists(tx: Tx, orgId: string, id: string): Promise<boolean> {
+  const rows = await tx.select({ id: minimumWages.id }).from(minimumWages).where(and(eq(minimumWages.id, id), eq(minimumWages.orgId, orgId))).limit(1);
+  return rows.length > 0;
+}
+
 export async function insertMinimumWage(
   tx: Tx,
   input: { orgId: string; storeId: string; effectiveFrom: string; dailyRate: Money; wageOrderRef: string },
