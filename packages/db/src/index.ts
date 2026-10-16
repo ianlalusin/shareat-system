@@ -364,6 +364,7 @@ export * as budgetsRepo from './repo/budgets';
 
 // T-216 — recurring-expense templates. Configuration, not documents: nothing here posts.
 export * as recurringExpensesRepo from './repo/recurring-expenses';
+export * as unpaidLiabilitiesRepo from './repo/unpaid-liabilities';
 
 // T-228 / DEF-195 — the organizations writer that never existed until now. `seedReferenceData`
 // applies the chart and the categories INSIDE the caller's transaction; see its header before

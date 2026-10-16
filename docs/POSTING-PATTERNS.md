@@ -444,8 +444,8 @@ scheduler stopped running for two straight months, confirmed by Ian — this fix
 ## Loan payment and disbursement (`loan_payment` 221 legs / `loan_disbursement` 4 legs)
 
 Disbursement is **always** pure balance sheet (no interest leg, ever); payment is nominal
-**only** when `interestAmount > 0`. 2400 requires party — the lender, filed under
-`party_type = 'supplier'` (see the trap below).
+**only** when `interestAmount > 0`. 2400 requires party — the loan itself, filed under
+`party_type = 'loan'`, party = the loan (see the trap below).
 
 ### `loan_payment.principal-only` — Zero P&L lines
 
@@ -453,12 +453,11 @@ A ₱5,000 principal-only repayment on a term loan.
 
 | Account | Debit | Credit | Party |
 |---|---:|---:|---|
-| 2400 Loans payable | 5,000.00 | | supplier |
+| 2400 Loans payable | 5,000.00 | | loan |
 | 1110 Cash on hand — cashier | | 5,000.00 | — |
 
-**Trap:** 2400's documented party_type is **"supplier"** even though the counterparty is a
-lender, not a supplier of goods (T-118 Contract §2). This is a deliberate reuse of the closed
-`party_type` enum — do not invent a "lender" party_type.
+**Trap:** 2400's party_type is **"loan"** and the party is the loan, not the lender and not a
+supplier (`LOAN_PARTY_TYPE` in `repo/loans.ts`). Do not file it under "supplier".
 
 ### `loan_payment.with-interest` — The conditional P&L leg appears
 

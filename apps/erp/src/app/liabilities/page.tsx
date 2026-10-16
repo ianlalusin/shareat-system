@@ -7,6 +7,7 @@ import { CATEGORY_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { ACTION_LINK } from '@/components/action-link';
 import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Liabilities — Shareat System' };
@@ -44,6 +45,9 @@ export default async function LiabilitiesPage({
           <strong>this is the residual</strong>, and naming it precisely is what stops it becoming a
           dumping ground.
         </PageDescription>
+        <Link href="/liabilities/unpaid" className={ACTION_LINK}>
+          Everything unpaid
+        </Link>
       </div>
 
       <FlashBanner flash={sp} />

@@ -284,37 +284,13 @@ export async function lastPaymentDate(
  * ⛔ **DEF-145 applies here identically**, and the register is where it showed: `2400` movements
  * are keyed on the LOAN PARTY, so a repayment docked out of a platform payout counts. Interest is
  * a second leg because `7200` carries no party — hence the union rather than one scan.
+ *
+ * T-431: an optional `storeId` limits both legs to ledger lines at that store (`jl.store_id`).
  */
-export async function positionsByLoan(tx: Tx, orgId: string): Promise<Map<string, LoanPosition>> {
-  const rows = await tx.execute(sql`
-    select loan_id,
-           coalesce(sum(disbursed), 0)::text      as disbursed,
-           coalesce(sum(principal_paid), 0)::text as principal_paid,
-           coalesce(sum(interest_paid), 0)::text  as interest_paid
-    from (
-      select jl.party_id::text as loan_id,
-             case when je.source_type = ${DISBURSEMENT_SOURCE} then jl.credit - jl.debit else 0 end as disbursed,
-             case when je.source_type <> ${DISBURSEMENT_SOURCE} then jl.debit - jl.credit else 0 end as principal_paid,
-             0 as interest_paid
-      from journal_lines jl
-      join journal_entries je on je.id = jl.entry_id
-      join accounts a on a.id = jl.account_id
-      -- ⚠️ Reversed entries stay IN: they and their reversals net to zero. See positionOf.
-      where je.org_id = ${orgId} and je.status <> 'draft'
-        and a.code = ${LOAN_LIABILITY_CODE} and jl.party_type = ${LOAN_PARTY_TYPE} and jl.party_id is not null
-      union all
-      select je.source_id::text, 0, 0, jl.debit - jl.credit
-      from journal_lines jl
-      join journal_entries je on je.id = jl.entry_id
-      join accounts a on a.id = jl.account_id
-      where je.org_id = ${orgId} and je.status <> 'draft'
-        and a.code = ${INTEREST_EXPENSE_CODE} and je.source_type = ${PAYMENT_SOURCE}
-    ) legs
-    group by loan_id
-  `);
-
+export async function positionsByLoan(tx: Tx, orgId: string, storeId?: string): Promise<Map<string, LoanPosition>> {
+  const rows = await loanLegs(tx, orgId, storeId === undefined ? undefined : [storeId], false);
   const map = new Map<string, LoanPosition>();
-  for (const r of rows as unknown as Record<string, string>[]) {
+  for (const r of rows) {
     const disbursed = Number(r.disbursed ?? 0);
     const principalPaid = Number(r.principal_paid ?? r.principalPaid ?? 0);
     const interestPaid = Number(r.interest_paid ?? r.interestPaid ?? 0);
@@ -326,4 +302,70 @@ export async function positionsByLoan(tx: Tx, orgId: string): Promise<Map<string
     });
   }
   return map;
+}
+
+export interface LoanStorePosition {
+  loanId: string;
+  storeId: string;
+  /** Exact `numeric(14,2)` text: principal disbursed - principal repaid, on lines at this store. Never interest. */
+  outstanding: string;
+}
+
+/** T-431 — one grouped query: every loan's principal outstanding PER STORE (where each `2400` line landed). */
+export async function outstandingByLoanAndStore(
+  tx: Tx,
+  orgId: string,
+  storeIds?: readonly string[],
+): Promise<LoanStorePosition[]> {
+  const rows = await loanLegs(tx, orgId, storeIds, true);
+  return rows.map((r) => ({
+    loanId: String(r.loan_id),
+    storeId: String(r.store_id),
+    outstanding: String(r.outstanding),
+  }));
+}
+
+async function loanLegs(
+  tx: Tx,
+  orgId: string,
+  storeIds: readonly string[] | undefined,
+  perStore: boolean,
+): Promise<Record<string, string>[]> {
+  const tail =
+    storeIds === undefined
+      ? sql``
+      : storeIds.length === 0
+        ? sql`and false`
+        : sql`and jl.store_id in (${sql.join(storeIds.map((id) => sql`${id}`), sql`, `)})`;
+  const rows = await tx.execute(sql`
+    select loan_id,
+           ${perStore ? sql`store_id,` : sql``}
+           coalesce(sum(disbursed), 0)::text      as disbursed,
+           coalesce(sum(principal_paid), 0)::text as principal_paid,
+           coalesce(sum(interest_paid), 0)::text  as interest_paid,
+           coalesce(sum(disbursed - principal_paid), 0)::numeric(14,2)::text as outstanding
+    from (
+      select jl.party_id::text as loan_id, jl.store_id::text as store_id,
+             case when je.source_type = ${DISBURSEMENT_SOURCE} then jl.credit - jl.debit else 0 end as disbursed,
+             case when je.source_type <> ${DISBURSEMENT_SOURCE} then jl.debit - jl.credit else 0 end as principal_paid,
+             0 as interest_paid
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      -- ⚠️ Reversed entries stay IN: they and their reversals net to zero. See positionOf.
+      where je.org_id = ${orgId} and je.status <> 'draft'
+        and a.code = ${LOAN_LIABILITY_CODE} and jl.party_type = ${LOAN_PARTY_TYPE} and jl.party_id is not null
+        ${tail}
+      union all
+      select je.source_id::text, jl.store_id::text, 0, 0, jl.debit - jl.credit
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      where je.org_id = ${orgId} and je.status <> 'draft'
+        and a.code = ${INTEREST_EXPENSE_CODE} and je.source_type = ${PAYMENT_SOURCE}
+        ${tail}
+    ) legs
+    group by loan_id${perStore ? sql`, store_id` : sql``}
+  `);
+  return rows as unknown as Record<string, string>[];
 }

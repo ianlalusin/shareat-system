@@ -181,10 +181,16 @@ export async function positionOf(
   return toPosition(row);
 }
 
-/** Every obligation's position in one query — the register's N+1 guard. */
+/**
+ * Every obligation's position in one query — the register's N+1 guard.
+ *
+ * T-431: an optional `storeId` limits the sum to ledger lines at that store (`jl.store_id`, the same
+ * column the per-store ledger comparison uses). Omitted, it is org-wide, exactly as before.
+ */
 export async function positionsByLiability(
   tx: Tx,
   orgId: string,
+  storeId?: string,
 ): Promise<Map<string, LiabilityPosition>> {
   const rows = (await tx.execute(sql`
     select jl.party_id as liability_id, ${POSITION_SELECT}
@@ -195,11 +201,55 @@ export async function positionsByLiability(
       and jl.party_type = ${PARTY_TYPE}
       and a.code = ${LIABILITY_CONTROL_CODE}
       and je.status <> 'draft'
+      ${storeId === undefined ? sql`` : sql`and jl.store_id = ${storeId}`}
     group by jl.party_id
   `)) as unknown as Record<string, string>[];
   const map = new Map<string, LiabilityPosition>();
   for (const r of rows) map.set(String(r.liability_id ?? r.liabilityId), toPosition(r));
   return map;
+}
+
+export interface LiabilityStorePosition {
+  liabilityId: string;
+  storeId: string;
+  /** Exact `numeric(14,2)` text of credit - debit on this obligation's lines at this store. */
+  outstanding: string;
+}
+
+/**
+ * T-431 — one grouped query: every obligation's outstanding PER STORE (the store each ledger line
+ * landed at), for the stores given or every store when omitted. Same lines, same filters as
+ * `positionsByLiability`.
+ */
+export async function outstandingByLiabilityAndStore(
+  tx: Tx,
+  orgId: string,
+  storeIds?: readonly string[],
+): Promise<LiabilityStorePosition[]> {
+  const tail =
+    storeIds === undefined
+      ? sql``
+      : storeIds.length === 0
+        ? sql`and false`
+        : sql`and jl.store_id in (${sql.join(storeIds.map((id) => sql`${id}`), sql`, `)})`;
+  const rows = (await tx.execute(sql`
+    select jl.party_id::text as liability_id, jl.store_id::text as store_id,
+           coalesce(sum(jl.credit - jl.debit), 0)::numeric(14,2)::text as outstanding
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and a.code = ${LIABILITY_CONTROL_CODE}
+      and je.status <> 'draft'
+      ${tail}
+    group by jl.party_id, jl.store_id
+  `)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({
+    liabilityId: String(r.liability_id),
+    storeId: String(r.store_id),
+    outstanding: String(r.outstanding),
+  }));
 }
 
 /** Is this account code postable at all, and is it a liability? Used to validate a charge target. */

@@ -105,7 +105,7 @@ one `Card` per line (name · counterparty · due · amount), whole card is the l
 9. A loan payment then its reversal: still ₱50,000 owed. *Kills: filtering out reversed entries (the T-126 bug).*
 10. Stores A and B (clean): kind 1, 3 and 4 leftovers are exactly zero and no banner shows; store C (case 3) shows the banner. *Kills: leftover dropped, or kinds summed org-wide.*
 11. Kinds 3 and 4 at store A exclude a liability and a loan recorded at store B. *Kills: missing `jl.store_id` filter.*
-12. DEF-145: a loan repaid from store B's payout shows a non-zero `2400` leftover and the banner at both stores. *Kills: hiding the leftover.*
+12. DEF-145: a loan repaid from store B's payout shows a non-zero `2400` leftover and the banner at store B only (the `jl.store_id` filter). *Kills: hiding the leftover.*
 13. `2150`: Lipa owes Malvar ₱650 → shown at Lipa, badged internal; nothing at Malvar; the all-stores grand total excludes it. *Kills: 2150 in the grand total, or shown at the owed store.*
 14. `2130` ₱1,200 owed to staff shows under `accountLabel('2130')` ("Reimbursements payable to employees"), not a code. *Kills: a raw code.*
 15. `2250` is absent (zero today); a `2900` balance never appears. *Kills: suspense included.*
