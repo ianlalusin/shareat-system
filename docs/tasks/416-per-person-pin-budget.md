@@ -1,6 +1,6 @@
 # T-416 — Administrator-PIN approvals get a per-person miss cap, off the store's sign-in budget (DEF-653)
 
-**Status:** spec written 2026-10-16, not started. Opus spec. Closes **DEF-653** (T-412 M6, deferred).
+**Status:** DONE 2026-10-16 (merged to main). Opus spec. Closes **DEF-653** (T-412 M6, deferred).
 **Model: SONNET** for every slice (auth + schema). Tests first, confirmed red for the right reason; one mutant per
 invariant; a **fresh Sonnet audit** (no build context) after S2. **Migration 0200** (reserved for this task), hand-authored
 per ADR-012 §5. ⛔ A migration is gated on the **FULL integration suite on a fresh DB** (memory "full suite for

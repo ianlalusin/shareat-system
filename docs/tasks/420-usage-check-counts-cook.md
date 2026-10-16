@@ -1,6 +1,6 @@
 # T-420 — The daily usage check counts ingredients already used by posted recipe cooking
 
-**Status:** spec written 2026-10-16, not started. Opus spec. **Depends on T-419** (merged first: it adds the cook repo
+**Status:** DONE 2026-10-16 (merged to main). Opus spec. **Depends on T-419** (merged first: it adds the cook repo
 query and the "Used in cooking" section this task builds on). Touches the **T-401 S6** check (`docs/tasks/401-erp-menu-catalog-master.md`
 §S6, rulings A1-A12) and **T-409** cooking (`409-production-slice-pickers.md`).
 **Source:** Ian, 16 Oct (answer to T-419 Q2): counting cooked ingredients in the usage check is a separate task.

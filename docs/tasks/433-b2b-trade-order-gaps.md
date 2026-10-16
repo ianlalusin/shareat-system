@@ -1,6 +1,6 @@
 # T-433: business customers on trade orders: pay now, a printable delivery receipt, the credit-limit warning
 
-**Status:** spec written 2026-10-16, not started (revised same day after Opus review; Ian answered Q1/Q2)
+**Status:** DONE 2026-10-16 (merged to main; in the next release); revised same day after Opus review; Ian answered Q1/Q2)
 **Model:** Sonnet tester first (commits red), then Sonnet builder, per slice (bible row 184). Money path: Sonnet, not Haiku.
 **Migration:** YES, S2 only: `0203` (orchestrator to confirm the number; 0202 is reserved for POS). Adds
 `trade_orders.bir_invoice_no text null` plus a partial unique index `(org_id, bir_invoice_no) where bir_invoice_no is

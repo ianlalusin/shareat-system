@@ -1,6 +1,6 @@
 # T-431 — "Everything unpaid": one read-only view of what the business owes
 
-> **Status:** spec written 2026-10-16, not started. Opus review approved with fixes, folded in 2026-10-16.
+> **Status:** DONE 2026-10-16 (merged to main). Opus review approved with fixes, folded in 2026-10-16.
 > **Source:** worklist `docs/plans/2026-10-14-ian-answers-worklist.md` row 10 · Ian's Q9 · bible §13 **row 327** ·
 > Ian's answers of 16 Oct (§9).
 > **Model:** Sonnet (builder and tester). **Migration:** none expected — read queries only. If the builder

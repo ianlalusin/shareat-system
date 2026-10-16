@@ -1,6 +1,6 @@
 # T-398: Padre Garcia on v2 as its own organisation (plan C11)
 
-**Status:** S1 BUILT on lane/t398-s1 (`247c537`, wt-t386, DB shareat_test_t398s1): migration **0194**, 229 same-org composite FKs, 12/12 on its own test. NOT in PR #16. It needs its own PR, the full suite on CI, and Ian's 0194 precheck. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). Amendments A1-A10 in §8 bind and win
+**Status:** S1 SHIPPED (migration **0194**, on main); S2-S7 not built. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). Amendments A1-A10 in §8 bind and win
 over any earlier sentence they correct; the corrected sentences are also fixed in place.
 **Model:** Sonnet lanes (tester then builder per slice); Opus for the review and for any spec amendment.
 **Why now:** bible row 305 (Ian, 2026-10-10, plan-q4 = (b)): *Padre Garcia runs on v2 by 1 January 2027, as its own
