@@ -22,6 +22,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { SettleHow } from './SettleHow';
 
 export const metadata = { title: 'Owner — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -118,16 +119,7 @@ export default async function OwnerPage({
           <form action={settleAction} className="space-y-4">
             <input type="hidden" name="ownerId" value={owner.id} />
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="How">
-                <Select name="how" required defaultValue="" className="w-full">
-                  <option value="" disabled>
-                    Choose…
-                  </option>
-                  <option value="cash">Cash back — the money returns to an account</option>
-                  <option value="pay">Recover from pay — becomes a salary advance</option>
-                  <option value="writeoff">Write off — it becomes a drawing</option>
-                </Select>
-              </Field>
+              <SettleHow />
               <Field label="Amount">
                 <input
                   name="amount"

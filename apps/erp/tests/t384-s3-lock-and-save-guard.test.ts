@@ -90,7 +90,6 @@ const COMMANDS: Record<string, string> = {
   'Verify &amp; post': 'moves a status',
   'Verify &mdash; all four must be checked': 'moves a status',
   'Void': 'voids a document',
-  'void': 'voids a document',
   'Cancel count': 'moves a status',
   'Commit': 'commits a count',
   'Close': 'moves a status',

@@ -243,9 +243,14 @@ export async function voidCollectionAction(formData: FormData): Promise<void> {
   try {
     const reason = str(formData, 'reason');
     if (!reason) throw new Error('Say why this collection is being voided.');
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      voidCollection(tx, actor, { collectionId: str(formData, 'collectionId'), reason }),
-    );
+    // T-412 Tier P (DEF-654): an administrator's PIN, verified on the server against the RECORD's store.
+    const collectionId = str(formData, 'collectionId');
+    const target = await loadDestructiveTarget(actor, 'ar_collection', collectionId, ['record_ar_collection']);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId!, pin: str(formData, 'adminPin'), capability: 'record_ar_collection' });
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      await voidCollection(tx, actor, { collectionId, reason });
+      await recordApproval(tx, actor, approval, { capability: 'record_ar_collection', entityType: 'ar_collection', entityId: collectionId, storeId: target.storeId });
+    });
   } catch (err) {
     return await redirectWithFlash(`/customers/${customerId}`, { store: storeId }, { error: errorMessage(err) });
   }

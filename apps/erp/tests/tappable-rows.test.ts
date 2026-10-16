@@ -60,8 +60,8 @@ describe('whole-row tap target — T-258 / DEF-244', () => {
     expect(content.slice(Math.max(0, at - 200), at)).toMatch(/<RowAction\b[^>]*>\s*$/);
   });
 
-  it('the void button uses ACTION_LINK — found-in-passing DEF-239-shape fix, not left at bare underline', () => {
-    expect(content).toMatch(/<button type="submit" className=\{ACTION_LINK\}>\s*void\s*<\/button>/);
+  it('the void button is the T-412 ConfirmDestructive (DEF-654), no longer a bare ACTION_LINK button', () => {
+    expect(content).toMatch(/<ConfirmDestructive\s+tier="admin-pin"\s+label="Void collection"/);
     expect(content).not.toMatch(/<button type="submit" className="underline underline-offset-2">/);
   });
 });

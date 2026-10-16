@@ -18,7 +18,8 @@ import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
 import { verifyAdminApproval } from '@shareat/auth';
-import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
+import { loadDestructiveTarget, recordApproval, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 import { refuse } from '@shareat/db';
 
 function str(fd: FormData, key: string): string {
@@ -127,6 +128,9 @@ export async function retireAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'liabilityId');
   try {
+    // T-412 Tier R: the person retypes the liability's name; the server compares it with the name IT loads.
+    const target = await loadDestructiveTarget(actor, 'liability', id, ['approve_expense']);
+    if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     await withOrgPrincipal(actor.orgId, (tx) => retireLiability(tx, actor, { liabilityId: id }));
   } catch (err) {
     return await redirectWithFlash(`/liabilities/${id}`, {}, { error: errorMessage(err) });
