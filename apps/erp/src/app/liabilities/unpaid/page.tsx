@@ -28,7 +28,8 @@ export default async function UnpaidPage({ searchParams }: { searchParams: Promi
   );
 
   const today = toBusinessDate();
-  const storeName = (id: string): string => scope.stores.find((s) => s.id === id)?.name ?? 'Another store';
+  const storeName = (id: string | null): string =>
+    id === null ? 'No store' : (scope.stores.find((s) => s.id === id)?.name ?? 'Another store');
   const currentStore = scope.storeId ? storeName(scope.storeId) : 'All stores';
 
   return (
@@ -86,9 +87,11 @@ export default async function UnpaidPage({ searchParams }: { searchParams: Promi
         {result.totals.excludesWages && (
           <p className="text-xs text-muted">This total excludes wages: they are {PAYROLL_ONLY.toLowerCase()}.</p>
         )}
-        <p className="text-xs text-muted">
-          Money one store owes another store (internal) is shown but not added: across all stores it nets to zero.
-        </p>
+        {scope.storeId === undefined && (
+          <p className="text-xs text-muted">
+            Money one store owes another store (internal) is shown but not added: across all stores it nets to zero.
+          </p>
+        )}
       </section>
     </Page>
   );
@@ -118,7 +121,7 @@ function KindSection({
 }: {
   kind: UnpaidKind;
   today: string;
-  storeName: (id: string) => string;
+  storeName: (id: string | null) => string;
   showStore: boolean;
 }) {
   const lines = orderLines(kind.lines, today);
@@ -229,7 +232,7 @@ function LineSummary({
 }: {
   line: UnpaidLine;
   today: string;
-  storeName: (id: string) => string;
+  storeName: (id: string | null) => string;
   showStore: boolean;
 }) {
   return (

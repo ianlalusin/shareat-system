@@ -347,6 +347,21 @@ describe('T-431 case 22 - the page', () => {
     expect(strip(before)).toContain('Tanauan');
   });
 
+  it('a line with no store is grouped under "No store": no "null" text, no store=null link, and the totals still add up', async () => {
+    const r = fullResult();
+    const k6 = r.kinds.find((k) => k.id === 'other_ledger')!;
+    k6.lines.push({ storeId: null as unknown as string, name: 'x', counterparty: null, dueOn: null, amount: '3000.00', href: '/reports/trial-balance', accountCode: '2210' });
+    k6.subtotal = '4200.00';
+    r.totals = { booked: '55200.00', notYetBooked: '25800.00', grand: '81000.00', excludesWages: false };
+    H.result = r;
+    const html = await render();
+    const text = strip(html);
+    expect(text).toContain('No store');
+    expect(text).not.toMatch(/null|undefined/);
+    expect(html).not.toContain('store=null');
+    expect(html).not.toContain('store=undefined');
+  });
+
   it('no banner and no "Unmatched" wording when every leftover is zero', async () => {
     const text = strip(await render());
     expect(text).not.toContain('Unmatched in the books');

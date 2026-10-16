@@ -13,13 +13,15 @@
  */
 import { accessRepo, apRepo, liabilitiesRepo, loansRepo, unpaidLiabilitiesRepo, type Tx } from '@shareat/db';
 import { authorize, can, type Actor } from '@shareat/auth';
+import { logger } from '@shareat/core/logger';
 import { ZERO, add, compare, isZero, money, subtract, type Money } from '@shareat/core/money';
 import { previewPayRun } from '../payroll';
 
 export type UnpaidKindId = 'supplier_invoices' | 'recurring_drafts' | 'register' | 'loans' | 'wages' | 'other_ledger';
 
 export interface UnpaidLine {
-  storeId: string;
+  /** null = a ledger line posted with no store (shown as its own "No store" group). */
+  storeId: string | null;
   name: string;
   counterparty: string | null;
   dueOn: string | null;
@@ -32,7 +34,7 @@ export interface UnpaidLine {
 
 export interface UnmatchedLeftover {
   accountCode: string;
-  storeId: string;
+  storeId: string | null;
   /** Ledger balance minus the kind's lines. Signed. */
   amount: string;
 }
@@ -46,7 +48,7 @@ export interface UnpaidKind {
   unratedDays?: number;
   lines: UnpaidLine[];
   unmatched: UnmatchedLeftover[];
-  withheld?: { accountCode: string; storeId: string }[];
+  withheld?: { accountCode: string; storeId: string | null }[];
   subtotal: string | null;
 }
 
@@ -158,32 +160,32 @@ export async function getUnpaidLiabilities(
   // ---- leftovers: ledger balance per store/account minus the kind's lines --------------------
   const ledgerTotal = new Map<string, Money>(); // `${code}|${store}`
   for (const r of ledger) {
-    const key = `${r.accountCode}|${r.storeId}`;
+    const key = `${r.accountCode}|${r.storeId ?? ''}`;
     ledgerTotal.set(key, add(ledgerTotal.get(key) ?? ZERO, money(r.balance)));
   }
   const leftovers = (code: string, lines: UnpaidLine[]): UnmatchedLeftover[] => {
     const out: UnmatchedLeftover[] = [];
-    const stores = new Set<string>();
+    const stores = new Set<string>(); // '' = no store
     for (const key of ledgerTotal.keys()) if (key.startsWith(`${code}|`)) stores.add(key.slice(code.length + 1));
-    for (const l of lines) stores.add(l.storeId);
+    for (const l of lines) stores.add(l.storeId ?? '');
     for (const s of stores) {
-      const explained = sumOf(lines.filter((l) => l.storeId === s));
+      const explained = sumOf(lines.filter((l) => (l.storeId ?? '') === s));
       const left = subtract(ledgerTotal.get(`${code}|${s}`) ?? ZERO, explained);
-      if (!isZero(left)) out.push({ accountCode: code, storeId: s, amount: left });
+      if (!isZero(left)) out.push({ accountCode: code, storeId: s === '' ? null : s, amount: left });
     }
-    return out.sort((a, b) => a.storeId.localeCompare(b.storeId));
+    return out.sort((a, b) => (a.storeId ?? '').localeCompare(b.storeId ?? ''));
   };
 
   // ---- kind 6 ------------------------------------------------------------------------------
   const otherSet = new Set<string>(OTHER_CODES);
   const k6: UnpaidLine[] = [];
-  const withheld = new Map<string, { accountCode: string; storeId: string }>();
+  const withheld = new Map<string, { accountCode: string; storeId: string | null }>();
   for (const r of ledger) {
     if (!otherSet.has(r.accountCode)) continue;
     const amount = money(r.balance);
     if (!isPositive(amount)) continue; // only what is OWED; an owed-to side shows nothing here
-    if (r.accountCode === WAGES_CODE && !payrollSet.has(r.storeId)) {
-      withheld.set(r.storeId, { accountCode: WAGES_CODE, storeId: r.storeId });
+    if (r.accountCode === WAGES_CODE && (r.storeId === null || !payrollSet.has(r.storeId))) {
+      withheld.set(r.storeId ?? '', { accountCode: WAGES_CODE, storeId: r.storeId });
       continue;
     }
     const internal = r.accountCode === INTERNAL_CODE;
@@ -201,12 +203,12 @@ export async function getUnpaidLiabilities(
       counterparty,
       dueOn: null,
       amount,
-      href: `/reports/trial-balance?store=${r.storeId}`,
+      href: r.storeId === null ? '/reports/trial-balance' : `/reports/trial-balance?store=${r.storeId}`,
       accountCode: r.accountCode,
       ...(internal ? { internal: true } : {}),
     });
   }
-  k6.sort((a, b) => (a.accountCode ?? '').localeCompare(b.accountCode ?? '') || a.storeId.localeCompare(b.storeId));
+  k6.sort((a, b) => (a.accountCode ?? '').localeCompare(b.accountCode ?? '') || (a.storeId ?? '').localeCompare(b.storeId ?? ''));
 
   // ---- kind 5 ------------------------------------------------------------------------------
   const wages: UnpaidKind = {
@@ -223,7 +225,10 @@ export async function getUnpaidLiabilities(
     let unrated = 0;
     for (const s of payrollStores) {
       try {
-        const p = await previewPayRun(tx, actor, { storeId: s, periodStart: FAR_PAST, periodEnd: FAR_FUTURE });
+        // A savepoint: a real SQL error inside the preview must not abort the page transaction.
+        const p = await tx.transaction((sp) =>
+          previewPayRun(sp, actor, { storeId: s, periodStart: FAR_PAST, periodEnd: FAR_FUTURE }),
+        );
         needsReview += p.needsReviewDays;
         unrated += p.unratedEmployments.reduce((n, u) => n + u.days, 0);
         for (const slip of p.slips) {
@@ -240,11 +245,12 @@ export async function getUnpaidLiabilities(
       } catch (e) {
         const storeName = names.stores.get(s) ?? 'This store';
         const msg = e instanceof Error ? e.message : String(e);
-        reasons.push(
-          msg.includes('no attendance configuration')
-            ? `${storeName} has no attendance configuration, so wages cannot be worked out.`
-            : `${storeName}: wages cannot be worked out (${msg})`,
-        );
+        if (msg.includes('no attendance configuration')) {
+          reasons.push(`${storeName} has no attendance configuration, so wages cannot be worked out.`);
+        } else {
+          logger.warn({ err: e, storeId: s }, 'getUnpaidLiabilities: the payroll preview failed');
+          reasons.push(`Wages could not be loaded for ${storeName}.`);
+        }
       }
     }
     if (reasons.length > 0) wages.unavailableReason = reasons.join(' ');
@@ -253,6 +259,9 @@ export async function getUnpaidLiabilities(
     wages.subtotal = sumOf(wages.lines);
   }
 
+  // 2150 nets to zero across the whole org, so it is left out of the ALL-stores totals only.
+  // In a single-store view it is that store's real debt and counts.
+  const allStores = (input.storeId ?? undefined) === undefined;
   const kind = (
     id: UnpaidKindId,
     lines: UnpaidLine[],
@@ -264,7 +273,7 @@ export async function getUnpaidLiabilities(
     visible: true,
     lines: lines.sort(byDue),
     unmatched,
-    subtotal: sumOf(lines.filter((l) => !l.internal)),
+    subtotal: sumOf(allStores ? lines.filter((l) => !l.internal) : lines),
     ...over,
   });
 

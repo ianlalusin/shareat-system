@@ -56,7 +56,8 @@ export async function unpaidRecurringDrafts(
 export interface LedgerBalanceRow {
   accountCode: string;
   accountName: string;
-  storeId: string;
+  /** null = a ledger line posted with no store. */
+  storeId: string | null;
   partyType: string | null;
   partyId: string | null;
   /** Exact `numeric(14,2)` text of credit - debit (liability side positive), non-draft entries, reversals included. */
@@ -88,7 +89,7 @@ export async function ledgerBalancesByAccount(
   return rows.map((r) => ({
     accountCode: String(r.account_code),
     accountName: String(r.account_name),
-    storeId: String(r.store_id),
+    storeId: r.store_id === null || r.store_id === undefined ? null : String(r.store_id),
     partyType: r.party_type ?? null,
     partyId: r.party_id ?? null,
     balance: String(r.balance),

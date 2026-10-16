@@ -612,6 +612,11 @@ describe('kind 6 - other amounts owed in the books', () => {
     expect(r.totals.grand).toBe('1200.00');
     expect(other(r).subtotal, 'kind 6 subtotal leaves out the internal 2150 line').toBe('1200.00');
     expect(other(r).lines.filter((l) => l.accountCode === '2130')[0]!.internal).not.toBe(true);
+    // Ruling (16 Oct): in a SINGLE-store view 2150 counts in that store's kind-6 subtotal and totals; only the all-stores grand total leaves it out.
+    const atLipa = await view(f, f.admin, f.stores.A);
+    expect(other(atLipa).subtotal).toBe('1850.00');
+    expect(atLipa.totals.booked).toBe('1850.00');
+    expect(atLipa.totals.grand).toBe('1850.00');
     const atMalvar = await view(f, f.admin, f.stores.B);
     expect(other(atMalvar).lines.filter((l) => l.accountCode === '2150')).toEqual([]);
   });
@@ -808,5 +813,50 @@ describe('who sees what', () => {
 
     await expect(view(f, f.staff, f.stores.A)).rejects.toBeInstanceOf(AuthorizationError);
     await expect(view(f, f.staff)).rejects.toBeInstanceOf(AuthorizationError);
+  });
+});
+
+describe('gaps found by the audit', () => {
+  it('24 - a 2xxx ledger line with NO store: shown in the all-stores view as its own "no store" line, not a null link, no spurious banner, totals add up', async () => {
+    const f = await fixture('c24');
+    await post(f.orgId, '2026-01-02', 'opening_balance', [
+      { code: '3900', storeId: null as unknown as string, debit: '3000.00' },
+      { code: '2210', storeId: null as unknown as string, credit: '3000.00' },
+    ]);
+    await post(f.orgId, '2026-02-11', 'expense', [
+      { code: '6600', storeId: f.stores.A, debit: '1200.00' },
+      { code: '2130', storeId: f.stores.A, credit: '1200.00', partyType: 'employee', partyId: f.workerId },
+    ]);
+    const r = await view(f, f.admin);
+    const noStore = kindOf(r, 'other_ledger').lines.find((l) => l.accountCode === '2210');
+    expect(noStore, 'the no-store balance is listed').toBeDefined();
+    expect(noStore!.storeId).toBeNull();
+    expect(noStore!.amount).toBe('3000.00');
+    expect(noStore!.href).not.toMatch(/null|undefined/);
+    expect(r.banners).toEqual([]);
+    const sumLines = everyLine(r).filter((l) => !l.internal).reduce((t, l) => t + Math.round(Number(l.amount) * 100), 0);
+    expect(r.totals.grand).toBe((sumLines / 100).toFixed(2));
+    expect(r.totals.grand).toBe('4200.00');
+  });
+
+  it('25 - a non-config failure in the payroll preview never reaches the page as raw text; the other kinds still render', async () => {
+    const f = await fixture('c25');
+    // An hourly rate makes previewPayRun throw "only a daily basis has a compute path": a plain Error, not a config problem.
+    await asOrg(f.orgId, (tx) =>
+      setPayRate(tx, f.admin, { employmentId: f.workerEmpId, storeId: f.stores.A, basis: 'hourly', amount: '60.00', effectiveFrom: '2026-01-01' }));
+    await sql`
+      insert into attendance_days
+        (org_id, store_id, person_id, employment_id, shift_day, attendance_config_id, anchor_mode,
+         status, computed_minutes, is_half_day, pending_ot_minutes, night_diff_minutes, holiday_minutes, is_holiday, holiday_type)
+      values (${f.orgId}, ${f.stores.A}, ${f.workerId}, ${f.workerEmpId}, '2026-01-05', ${f.configId!},
+              'exact', 'verified', 540, false, 0, 0, 0, false, null)`;
+    await creditInvoice(f, f.stores.A, '900.00');
+    const r = await view(f, f.admin, f.stores.A);
+    const k = kindOf(r, 'wages');
+    expect(k.unavailableReason ?? '').toMatch(/could not be loaded/i);
+    expect(JSON.stringify(k)).not.toMatch(/daily basis|compute path|previewPayRun/i);
+    expect(k.lines).toEqual([]);
+    expect(kindOf(r, 'supplier_invoices').lines).toHaveLength(1);
+    expect(r.totals.booked).toBe('900.00');
   });
 });

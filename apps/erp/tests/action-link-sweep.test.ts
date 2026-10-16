@@ -439,7 +439,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1245 -> 1244, DEF-654 2026-10-16: the plain 'void' collection button became a ConfirmDestructive (not a census candidate).
     // +4 (16 Oct): T-416 clear-approval-PIN-cap button on admin/users/[personId]; T-418 one-click Delete draft / Delete usage draft / Delete template buttons (expenses/[id], inventory/usage/[id], expenses/recurring).
     // +1 (16 Oct): T-432 the bill page's "Pay this bill" link (ap/invoices/[id]); the form's new `source` select replaces the old account select, net 0.
-    expect(results.length).toBe(1249);
+    // +4 (16 Oct): T-431 Everything unpaid page controls (all pass: 32/32/32/44px)
+    expect(results.length).toBe(1253);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
