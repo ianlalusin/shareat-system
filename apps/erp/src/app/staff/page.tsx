@@ -80,7 +80,8 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   const now = new Date();
   const today = toBusinessDate(now);
   const storeName = stores.find((s) => s.id === storeId)?.name ?? '';
-  const view: 'cards' | 'roster' = sp.view === 'roster' ? 'roster' : 'cards';
+  const view: 'cards' | 'roster' | 'positions' =
+    sp.view === 'roster' ? 'roster' : sp.view === 'positions' ? 'positions' : 'cards';
 
   // T-395 S2 - the PIN sign-in panel is for anyone holding enrol_staff at this store (R5).
   const pinStatus = await withOrgPrincipal(actor.orgId, async (tx) => {
@@ -130,22 +131,41 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
         <ViewSwitch view={view} storeId={storeId} />
       </div>
 
-      <section id="positions" className="scroll-mt-20 space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      {view === 'positions' ? (
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Positions</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           The canonical six belong to the organisation and cannot be renamed here. A store may add
           its own beyond them.
         </p>
-        <ul className="flex flex-wrap gap-2 text-sm">
-          {positions.map((p) => (
-            <li
-              key={p.id}
-              className="rounded-lg border border-neutral-200 px-3 py-1.5 dark:border-neutral-800"
-            >
-              {p.name}
-              {p.isCanonical && <span className="ml-1 text-xs text-neutral-400">(canonical)</span>}
-            </li>
-          ))}
+        <ul className="space-y-2 text-sm">
+          {positions.map((p) => {
+            const holders = roster.filter((r) => r.positions.some((a) => a.positionId === p.id));
+            return (
+              <li key={p.id} className="rounded-lg border border-neutral-200 dark:border-neutral-800">
+                <details>
+                  <summary className="flex min-h-11 cursor-pointer items-center px-3 py-1.5">
+                    {p.name}
+                    {p.isCanonical && <span className="ml-1 text-xs text-neutral-400">(canonical)</span>}
+                    <span className="ml-1">· {holders.length}</span>
+                  </summary>
+                  {holders.length === 0 ? (
+                    <p className="px-3 pb-2 text-xs text-neutral-500 dark:text-neutral-400">Nobody holds this position here.</p>
+                  ) : (
+                    <ul className="space-y-1 px-3 pb-2">
+                      {holders.map((h) => (
+                        <li key={h.id}>
+                          <Link href={`/staff/${h.id}`} className="inline-flex min-h-6 items-center underline">
+                            {h.displayName}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </details>
+              </li>
+            );
+          })}
         </ul>
         <form
           action={upsertStorePositionAction}
@@ -161,7 +181,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
           </Button>
         </form>
       </section>
-
+      ) : (
       <section className="space-y-3">
         {people.length === 0 ? (
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -173,6 +193,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
           <CardWall people={people} storeName={storeName} today={today} states={states} />
         )}
       </section>
+      )}
 
       {pinStatus && <PinSignInPanel storeId={storeId} status={pinStatus} />}
 

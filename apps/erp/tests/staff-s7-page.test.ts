@@ -198,18 +198,27 @@ describe('T-387 S7 - /staff views', () => {
     expect(roster).toMatch(/<a[^>]*view=roster[^>]*aria-current="page"|<a[^>]*aria-current="page"[^>]*view=roster/);
   });
 
-  it('Hire is the primary action, above the wall; the positions card sits above the wall too, in both views', async () => {
+  it('Hire is the primary action, above the wall, in both views; Positions is a third tab, not a box above the wall', async () => {
     for (const sp of [{}, { view: 'roster' }] as Record<string, string>[]) {
       const html = await render(sp);
       const hire = html.search(/<a[^>]*href="\/staff\/hire[^"]*"[^>]*>/);
       expect(hire).toBeGreaterThanOrEqual(0);
       expect(html.match(/<a[^>]*href="\/staff\/hire[^"]*"[^>]*>/)![0]).toContain('bg-brand');
       const view = html.search(/data-view="(cards|roster)"/);
-      const positions = html.indexOf('Positions</h2>');
-      expect(positions).toBeGreaterThanOrEqual(0);
+      expect(html).not.toContain('Positions</h2>');
       expect(hire).toBeLessThan(view);
-      expect(positions).toBeLessThan(view);
     }
+  });
+
+  it('?view=positions is the third tab: expandable position cards with holder counts and links, no wall', async () => {
+    const html = await render({ view: 'positions' });
+    expect(html).toContain('Positions</h2>');
+    expect(html).not.toContain('data-view=');
+    expect(html).toMatch(/<details[^>]*>[\s\S]*Cashier[\s\S]*· <!-- -->1|<details[^>]*>[\s\S]*Cashier[\s\S]*· 1/);
+    expect((html.match(/<details/g) ?? []).length).toBe(1);
+    expect(html).toContain('href="/staff/emp-ana"');
+    expect(html).not.toContain('href="/staff/emp-ben"');
+    expect(html).toMatch(/<a[^>]*view=positions[^>]*aria-current="page"|<a[^>]*aria-current="page"[^>]*view=positions/);
   });
 });
 

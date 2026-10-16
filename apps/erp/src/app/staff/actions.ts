@@ -278,10 +278,10 @@ export async function upsertStorePositionAction(formData: FormData): Promise<voi
   try {
     outcome = (await withOrgPrincipal(actor.orgId, (tx) => upsertStorePosition(tx, actor, { storeId, name })))?.outcome;
   } catch (err) {
-    return await redirectWithFlash('/staff', { store: storeId }, { error: errorMessage(err) });
+    return await redirectWithFlash('/staff', { view: 'positions', store: storeId }, { error: errorMessage(err) });
   }
   const verb = outcome === 'reactivated' ? 're-activated' : outcome === 'existing' ? 'already exists' : 'added';
-  return await redirectWithFlash('/staff', { store: storeId }, { ok: `Position "${name}" ${verb}.` });
+  return await redirectWithFlash('/staff', { view: 'positions', store: storeId }, { ok: `Position "${name}" ${verb}.` });
 }
 
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
