@@ -462,14 +462,11 @@ export default async function CustomerDetailPage({
                               aria-label="Why is this collection being voided?"
                               className="w-28 text-xs"
                             />
-                            {/* T-258 found in passing: this button was the same undersized DEF-239 shape,
-                                missed by DEF-239's census and by action-link-sweep.test.ts's shape guard
-                                because it inherited text-xs from the ancestor <td> rather than carrying it
-                                itself. Orchestrator-approved fix, bundled here since the form is already
-                                being touched for the z-10 escape hatch. */}
-                            <button type="submit" className={ACTION_LINK}>
-                              void
-                            </button>
+                            <ConfirmDestructive
+                              tier="admin-pin"
+                              label="Void collection"
+                              consequence="Voids this collection and reverses its entry; the charges it settled open again. An administrator must approve with their own PIN."
+                            />
                           </form>
                         </RowAction>
                       )}

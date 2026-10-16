@@ -74,11 +74,11 @@ export interface InvoicePickerOption {
  * invoice's own page (`/ap/invoices/[id]`) does NOT use this — it already knows its one invoice
  * and only renders once that invoice is verified.
  */
-export async function listOpenInvoicesForPicker(orgId: string): Promise<InvoicePickerOption[]> {
+export async function listOpenInvoicesForPicker(orgId: string, storeId?: string): Promise<InvoicePickerOption[]> {
   return withOrgPrincipal(orgId, async (tx) => {
     const [pending, verified, suppliers] = await Promise.all([
-      apRepo.listSupplierInvoices(tx, orgId, { status: 'pending' }),
-      apRepo.listSupplierInvoices(tx, orgId, { status: 'verified' }),
+      apRepo.listSupplierInvoices(tx, orgId, { status: 'pending', ...(storeId ? { storeId } : {}) }),
+      apRepo.listSupplierInvoices(tx, orgId, { status: 'verified', ...(storeId ? { storeId } : {}) }),
       apRepo.listSuppliers(tx, orgId, { includeInactive: true }),
     ]);
     const supplierName = new Map(suppliers.map((s) => [s.id, s.name]));

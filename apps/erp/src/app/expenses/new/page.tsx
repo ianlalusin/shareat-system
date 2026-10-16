@@ -11,6 +11,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Banner, Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'New expense — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -27,12 +28,10 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
   const { actor } = await requireSession('/expenses/new');
   const orgId = actor.orgId;
 
-  const [storeRows, categories, invoices] = await Promise.all([
-    listStores(orgId),
-    listActiveCategoriesGrouped(orgId),
-    listOpenInvoicesForPicker(orgId),
-  ]);
+  const [storeRows, categories] = await Promise.all([listStores(orgId), listActiveCategoriesGrouped(orgId)]);
   const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : (storeRows[0]?.id ?? '');
+  // T-414 (ruling 2): the invoice list follows the store, as the action already requires (it refuses another store's invoice).
+  const invoices = await listOpenInvoicesForPicker(orgId, storeId || undefined);
 
   // ⭐ T-266 — accounts with their LEDGER balances plus every open float at this store, flattened
   // into one list. Scoped to the store (DEF-291); the picker used to offer every account in the
@@ -58,7 +57,8 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
           still pending. No manager and no verification wait: verifying the invoice later posts
           this automatically, or approve it yourself from the expense once you can (T-196). No
           invoice to pick from?{' '}
-          <a href="/ap" className="underline">Log one first</a>.
+          <a href="/ap" className="underline">Log one first</a>. <strong>Pick the store first</strong> —
+          the invoices and the cash requests offered are that store&apos;s, and switching store starts the form over.
         </PageDescription>
       </div>
 
@@ -70,7 +70,24 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
           <a className="text-sm underline" href="/expenses">expenses list</a>.
         </Banner>
       ) : (
+        <>
+        {/* ⭐ T-414 (ruling 1): the store is the FIRST decision, a GET filter row (the app's standing pattern). The
+            expense form below carries it as a hidden input, so the page, the action and the lists all read one store.
+            Nothing typed travels in this URL (T-380); switching store reloads and clears the form. */}
+        <FilterRow submitLabel="Use this store">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Store</span>
+            <Select id="store" name="store" defaultValue={storeId} invalid={sp.field === 'store'}>
+              {storeRows.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.code})
+                </option>
+              ))}
+            </Select>
+          </label>
+        </FilterRow>
         <form action={createExpenseAction} className="space-y-6">
+          <input type="hidden" name="storeId" value={storeId} />
           {/* ⭐ T-215. The cap matters at the moment of spending — a report at month end is a
               post-mortem. Renders nothing until a capped category is picked. */}
           {caps.length > 0 && (
@@ -87,18 +104,6 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
           )}
           {/* ⭐ No orgId, no "acting as" — the session supplies both (T-138). */}
           <FormGrid>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Store</span>
-              <Select id="store" name="storeId" defaultValue={storeId} invalid={sp.field === 'store'}>
-                {storeRows.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.code})
-                  </option>
-                ))}
-              </Select>
-            </label>
-
-
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
                 Supplier invoice <span className="italic">(sets the date and the supplier)</span>
@@ -165,6 +170,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
             Save draft
           </Button>
         </form>
+        </>
       )}
     </Page>
   );

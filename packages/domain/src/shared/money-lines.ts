@@ -127,8 +127,9 @@ export interface FloatOption {
   cashRequestId: string;
   holderName: string;
   outstanding: string;
-  /** The staff-float money account this float posts against — resolves the `1120` GL code. */
-  moneyAccountId: string;
+  /** The staff-float money account this float posts against — resolves the `1120` GL code. T-414: `null` for a request
+   *  released before the store had one (R-AUTO now creates it at release); routing then credits 1120 with the request. */
+  moneyAccountId: string | null;
   storeId: string;
 }
 
