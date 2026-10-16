@@ -50,7 +50,7 @@
 | Warn the manager at ₱50,000 unsent, keep selling (`offline-cap` = b); router UPS + generators | 13 Oct | P0 offline slice |
 | Keep all extras, AI is the hub (`keep-extras` = b); diner sign-up proves the phone by one SMS code, login phone + password (row 314) | 13 Oct | Counts now set build ORDER, not keep/drop |
 | Till stays an ERP record, POS gets a till **screen** (row 319); one person one ID (row 322); position pick (row 323); store orders shown on the POS (row 318) | 14 Oct | P1/P2 scope; ADR-015 amendment (PC-1) |
-| Ian's notes: dine-in tables should also take à la carte (v1 cannot); mark online-queue sales as "online"; reservation fee online and offline; SC/PWD ID read by local OCR | 13 Oct answers | Folded into PC-7 (table design), P3 and P1 (OCR via row 330) |
+| Ian's notes: dine-in tables should also take à la carte (v1 already allows it — AddonsPOSModal has no mode check; corrected 16 Oct from discovery 42); mark online-queue sales as "online"; reservation fee online and offline; SC/PWD ID read by local OCR | 13 Oct answers | Folded into PC-7 (table design), P3 and P1 (OCR via row 330) |
 | **Still open:** business-day cut-off | — | Question Q1; blocks the Z-reading and the till screen |
 
 ## 4. Monorepo setup slice (phase S)

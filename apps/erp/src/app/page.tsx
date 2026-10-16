@@ -162,7 +162,8 @@ export default async function DashboardPage({
     orderOf.set(c.channelId ?? 'pos-corrections', i);
   });
   const hidden = new Set(salesNow.unreconciledDays ?? []);
-  const dayBlocks = new Map((salesNow.channelDays ?? []).map((d) => [d.day, d.channels] as const));
+  const dayBlocks = new Map<string, NonNullable<typeof salesNow.channelDays>[number]['channels']>();
+  for (const d of salesNow.channelDays ?? []) dayBlocks.set(d.day, d.channels);
   const lines = salesNow.channels.map((c) => {
     const key = c.channelId ?? 'pos-corrections';
     return {

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { pinAttemptsRepo } from '@shareat/db';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
+import { logger } from '@shareat/core/logger';
 import { CAPABILITY_SCOPE, ROLES, ROLE_LABEL, capabilityTitle, type Capability } from '@shareat/auth';
 import { requirePageAccess } from '../../../../lib/page-access';
 import {
@@ -59,7 +60,11 @@ export default async function UserAccessPage({
 
   const { person, stores, grants, credentials } = detail;
   // T-416: is this person's administrator-PIN approval bucket capped right now (auto-lift applied)?
-  const approvalCap = await withOrgPrincipal(actor.orgId, (tx) => pinAttemptsRepo.statusForActor(tx, actor.orgId, personId));
+  // Informational banner only: if the status read fails the page still renders, just without the banner.
+  const approvalCap = await withOrgPrincipal(actor.orgId, (tx) => pinAttemptsRepo.statusForActor(tx, actor.orgId, personId)).catch((err: unknown): { capped: boolean; cappedAt: Date | null } => {
+    logger.warn({ err }, 'admin/users: could not read the approval-PIN cap status; rendering without the banner');
+    return { capped: false, cappedAt: null };
+  });
   const isSelf = actor.personId === personId;
   const activeGrants = grants.filter((g) => g.revokedAt === null);
   const revokedGrants = grants.filter((g) => g.revokedAt !== null);
