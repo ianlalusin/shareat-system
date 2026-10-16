@@ -37,7 +37,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   if (!storeId) {
     return (
       <Page density="table" className="">
-        <h1 className="text-2xl font-semibold">Staff</h1>
+        <h1 className="text-2xl font-semibold">Staff and positions</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
       </Page>
     );
@@ -94,9 +94,9 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     <Page density="table" className="space-y-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Staff</h1>
+          <h1 className="text-2xl font-semibold">Staff and positions</h1>
           <PageDescription className="mt-1">
-            Who is on the roster at this store right now. ⭐ Every attendance, payroll and
+            Who is on the roster at this store right now, and the positions they hold. ⭐ Every attendance, payroll and
             credential screen in this app needs an employment to point at — this is where one gets
             created (DEF-131).
           </PageDescription>
@@ -124,6 +124,38 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
         </FilterRow>
         <ViewSwitch view={view} storeId={storeId} />
       </div>
+
+      <section id="positions" className="scroll-mt-20 space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Positions</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          The canonical six belong to the organisation and cannot be renamed here. A store may add
+          its own beyond them.
+        </p>
+        <ul className="flex flex-wrap gap-2 text-sm">
+          {positions.map((p) => (
+            <li
+              key={p.id}
+              className="rounded-lg border border-neutral-200 px-3 py-1.5 dark:border-neutral-800"
+            >
+              {p.name}
+              {p.isCanonical && <span className="ml-1 text-xs text-neutral-400">(canonical)</span>}
+            </li>
+          ))}
+        </ul>
+        <form
+          action={upsertStorePositionAction}
+          className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800"
+        >
+          <input type="hidden" name="storeId" value={storeId} />
+          <label className="text-sm">
+            <span className="block text-neutral-600 dark:text-neutral-400">Add a position</span>
+            <Input name="name" required placeholder="Barista" />
+          </label>
+          <Button type="submit" variant="secondary">
+            Save
+          </Button>
+        </form>
+      </section>
 
       <section className="space-y-3">
         {people.length === 0 ? (
@@ -172,38 +204,6 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
           </ul>
         </section>
       )}
-
-      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">This store&rsquo;s positions</h2>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          The canonical six belong to the organisation and cannot be renamed here. A store may add
-          its own beyond them.
-        </p>
-        <ul className="flex flex-wrap gap-2 text-sm">
-          {positions.map((p) => (
-            <li
-              key={p.id}
-              className="rounded-lg border border-neutral-200 px-3 py-1.5 dark:border-neutral-800"
-            >
-              {p.name}
-              {p.isCanonical && <span className="ml-1 text-xs text-neutral-400">(canonical)</span>}
-            </li>
-          ))}
-        </ul>
-        <form
-          action={upsertStorePositionAction}
-          className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800"
-        >
-          <input type="hidden" name="storeId" value={storeId} />
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Add a position</span>
-            <Input name="name" required placeholder="Barista" />
-          </label>
-          <Button type="submit" variant="secondary">
-            Save
-          </Button>
-        </form>
-      </section>
     </Page>
   );
 }

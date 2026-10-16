@@ -10,7 +10,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
  *  - one `data-staff-card` per person (cards view); a live chip `data-live-state="on|break|off"` per person only for a viewer
  *    who holds manage_attendance at the store (no chip, and no `data-live-state` anywhere, otherwise)
  *  - photo `<img src="/files/<fileId>"`; without a viewable photo, the initials of the display name
- *  - Hire: the link to /staff/hire, primary styled (`bg-brand`), above the wall; the positions card BELOW it
+ *  - Hire: the link to /staff/hire, primary styled (`bg-brand`), above the wall; the Positions card also above the wall
  *  - no schedule band anywhere (t387-q6 = a)
  * Data seams mocked: lib `rosterForStore`/`positionsForStore`, `listStores`/`withOrgPrincipal`,
  * `employmentRepo.photoFileIds`, `todayStateFor`, `canViewPhoto`, `authorize`.
@@ -172,16 +172,17 @@ describe('T-387 S7 - /staff views', () => {
     expect(roster).toMatch(/<a[^>]*view=roster[^>]*aria-current="page"|<a[^>]*aria-current="page"[^>]*view=roster/);
   });
 
-  it('Hire is the primary action, above the wall; the positions card stays below it, in both views', async () => {
+  it('Hire is the primary action, above the wall; the positions card sits above the wall too, in both views', async () => {
     for (const sp of [{}, { view: 'roster' }] as Record<string, string>[]) {
       const html = await render(sp);
       const hire = html.search(/<a[^>]*href="\/staff\/hire[^"]*"[^>]*>/);
       expect(hire).toBeGreaterThanOrEqual(0);
       expect(html.match(/<a[^>]*href="\/staff\/hire[^"]*"[^>]*>/)![0]).toContain('bg-brand');
       const view = html.search(/data-view="(cards|roster)"/);
-      const positions = html.indexOf('positions</h2>');
+      const positions = html.indexOf('Positions</h2>');
+      expect(positions).toBeGreaterThanOrEqual(0);
       expect(hire).toBeLessThan(view);
-      expect(positions).toBeGreaterThan(view);
+      expect(positions).toBeLessThan(view);
     }
   });
 });
