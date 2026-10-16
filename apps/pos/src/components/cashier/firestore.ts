@@ -51,7 +51,10 @@ import type {
 import { stripUndefined } from '@/lib/firebase/utils';
 import { printKitchenTicketBackup } from '@/lib/printing/kitchenBackupPrint';
 import { makeKitchenBackupDeps } from '@/lib/printing/kitchenBackupDeps';
-import { roundMoney } from '@/lib/money';
+import { roundHalfUp, storedPesosToCentavos, toWirePesos } from '@/lib/money/centavos';
+import { formatTerminalReceiptNumber, reserveNext } from '@/lib/terminal/counter';
+import { buildOfflinePaymentSummary } from '@/lib/offline/offlinePaymentSummary';
+import { addToQueue, getQueue } from '@/lib/offline/payment-queue';
 import { computeSessionLabel } from '@/lib/utils/session';
 import { writeActivityLog } from '@/components/cashier/activity-log';
 import { commitLocalFirst } from '@/lib/offline/commit';
@@ -100,21 +103,6 @@ export type StartSessionPayload = {
   sessionMode: 'package_dinein' | 'alacarte';
 };
 
-
-/**
- * Formats a receipt number based on a template and a sequence number.
- * @param fmt The format string (e.g., "PREFIX-#####").
- * @param seq The sequence number.
- * @returns The formatted receipt number string.
- */
-function formatReceiptNumber(fmt: string, seq: number): string {
-  const m = fmt.match(/#+/g);
-  if (!m) return `${fmt}${seq}`;
-
-  const run = m.sort((a, b) => b.length - a.length)[0];
-  const padded = String(seq).padStart(run.length, '0');
-  return fmt.replace(run, padded);
-}
 
 export async function getCurrentSessionBillingState(storeId: string, sessionId: string) {
   const sessionRef = doc(db, `stores/${storeId}/sessions`, sessionId);
@@ -438,11 +426,14 @@ export async function completePaymentFromUnits(
   const loyaltyDiscountInput = (loyaltyRedemptions || []).map((r) => ({ type: r.type, value: r.value }));
   const finalTotals = calculateBillTotals(billLines, store, billDiscount, customAdjustments, loyaltyDiscountInput);
   const amountDue = finalTotals.grandTotal;
-  if (typeof expectedTotal === "number" && Math.abs(Math.round(expectedTotal * 100) - Math.round(amountDue * 100)) > 1) {
+  const amountDueCents = storedPesosToCentavos(amountDue);
+  if (typeof expectedTotal === "number" && Math.abs(storedPesosToCentavos(expectedTotal) - amountDueCents) > 1) {
     throw new Error(
       `Bill changed before payment could be finalized. Review the bill and collect ₱${amountDue.toFixed(2)}.`
     );
   }
+  // Tender/change check before a receipt number is reserved, so a short payment does not burn a number.
+  buildOfflinePaymentSummary({ payments, paymentMethods, amountDueCents });
   const now = Date.now();
 
   const kdsDeltas: { old: any; new: any }[] = [];
@@ -453,22 +444,27 @@ export async function completePaymentFromUnits(
   const activeTicketsQuery = query(ticketsRef, where("status", "in", ['preparing', 'ready']));
   const activeTicketsSnap = await getDocs(activeTicketsQuery);
 
+  // T-423: ONE receipt number per payment from this tablet's own series, reserved BEFORE (and outside) the transaction
+  // callback so a Firestore retry reuses it. A crash can skip a number, never reuse one. Refuses with no terminal claim.
+  const reserved = await reserveNext();
+  const receiptNumber = formatTerminalReceiptNumber(store.code, reserved.terminalNo, reserved.terminalSeq);
+
   await runTransaction(db, async (tx: Transaction) => {
     // --- READ PHASE ---
     const sessionRef = doc(db, `stores/${storeId}/sessions`, sessionId);
-    const settingsRef = doc(db, `stores/${storeId}/receiptSettings`, 'main');
-    const counterRef = doc(db, `stores/${storeId}/counters`, 'receipts');
     const receiptRef = doc(db, `stores/${storeId}/receipts`, sessionId);
     const activeProjectionRef = doc(db, `stores/${storeId}/activeSessions`, sessionId);
-    
+    const terminalRef = doc(db, `stores/${storeId}/terminals`, String(reserved.terminalNo).padStart(2, '0'));
+    const receiptNumberRef = doc(db, `stores/${storeId}/receiptNumbers`, receiptNumber);
+
     const [
-      sessionSnap, receiptSnap, settingsSnap, counterSnap, activeProjectionSnap
+      sessionSnap, receiptSnap, activeProjectionSnap, terminalSnap, receiptNumberSnap
     ] = await Promise.all([
       tx.get(sessionRef),
       tx.get(receiptRef),
-      tx.get(settingsRef),
-      tx.get(counterRef),
       tx.get(activeProjectionRef),
+      tx.get(terminalRef),
+      tx.get(receiptNumberRef),
     ]);
     
 
@@ -500,6 +496,16 @@ export async function completePaymentFromUnits(
       return;
     }
 
+    // T-423 Ruling 6/7: this tablet must still hold its terminal, and the number must be unused.
+    if (!terminalSnap.exists() || terminalSnap.data()?.deviceId !== reserved.deviceId) {
+      throw new Error(
+        `This tablet no longer holds terminal ${String(reserved.terminalNo).padStart(2, '0')}. Ask a manager to check the terminal in Settings before taking payment.`
+      );
+    }
+    if (receiptNumberSnap.exists()) {
+      throw new Error(`Receipt number ${receiptNumber} is already in use. Nothing was charged; try the payment again.`);
+    }
+
     let tableRef: DocumentReference<DocumentData> | null = null;
     let tableSnap: DocumentSnapshot<DocumentData> | null = null;
 
@@ -508,17 +514,8 @@ export async function completePaymentFromUnits(
       tableSnap = await tx.get(tableRef);
     }
 
-    
-    const totalPaidCents = payments.reduce((s, p) => s + Math.round(Number(p.amount || 0) * 100), 0);
-    const amountDueCents = Math.round(Number(amountDue || 0) * 100);
-
-    if (totalPaidCents < amountDueCents - 1) { // Allow 1c rounding difference
-      throw new Error(
-        `Cannot complete payment: balance is not zero. Paid: ₱${(totalPaidCents / 100).toFixed(
-          2
-        )}, Due: ₱${(amountDueCents / 100).toFixed(2)}`
-      );
-    }
+    // Tender, change and the mode-of-payment split (one shared implementation with the offline path).
+    const summary = buildOfflinePaymentSummary({ payments, paymentMethods, amountDueCents });
 
     const actor = getActorStamp(user);
     const serverTs = serverTimestamp();
@@ -607,47 +604,12 @@ export async function completePaymentFromUnits(
         })
     }
 
-    // receipt numbering
-    const receiptNoFormat = settingsSnap.exists()
-      ? settingsSnap.data()?.receiptNoFormat ?? 'SELIP-######'
-      : 'SELIP-######';
+    const mopMap = summary.mopMap;
+    const totalPaid = summary.totalPaid;
+    const change = summary.change;
 
-    const currentSeq = counterSnap.exists() ? Number(counterSnap.data()?.seq ?? 0) : 0;
-    const nextSeq = currentSeq + 1;
-
-    tx.set(counterRef, { seq: nextSeq, updatedAt: serverTs }, { merge: true });
-
-    const receiptNumber = formatReceiptNumber(receiptNoFormat, nextSeq);
-    finalReceiptNumber = receiptNumber;
-
-    const mopCentsMap: Record<string, number> = {};
-    for (const payment of payments) {
-        const method = paymentMethods.find((m) => m.id === payment.methodId);
-        const key = method?.name || payment.methodId || "unknown";
-        mopCentsMap[key] = (mopCentsMap[key] || 0) + Math.round(Number(payment.amount || 0) * 100);
-    }
-    const changeCents = Math.max(0, totalPaidCents - amountDueCents);
-    if (changeCents > 1) { // >1 to ignore 1-cent rounding artifacts
-        const cashMethod =
-          paymentMethods.find((pm: any) => String(pm.type || "").toLowerCase() === "cash") ||
-          paymentMethods.find((pm: any) => String(pm.name || "").toLowerCase().includes("cash"));
-        let cashKey = cashMethod?.name;
-        if (!cashKey) cashKey = Object.keys(mopCentsMap).find((k) => k.toLowerCase().includes("cash"));
-        if (!cashKey || mopCentsMap[cashKey] == null) {
-          throw new Error("Change exists but no Cash payment was included. Add Cash payment.");
-        }
-        if (mopCentsMap[cashKey] < changeCents) {
-            throw new Error(`Invalid payment: change (₱${(changeCents / 100).toFixed(2)}) exceeds cash paid (₱${(mopCentsMap[cashKey] / 100).toFixed(2)}).`);
-        }
-        mopCentsMap[cashKey] -= changeCents;
-    }
-    const mopMap: Record<string, number> = {};
-    for (const [key, cents] of Object.entries(mopCentsMap)) {
-        mopMap[key] = cents / 100;
-    }
-    
-    const totalPaid = totalPaidCents / 100;
-    const change = changeCents / 100;
+    // Uniqueness backstop: the web SDK's Transaction has no create(), so this is a read (above) then a set.
+    tx.set(receiptNumberRef, { receiptId: sessionId, terminalNo: reserved.terminalNo, terminalSeq: reserved.terminalSeq, createdAt: serverTs });
 
     const receiptPayload: Omit<Receipt, 'createdAt'> = stripUndefined({
       id: sessionId, storeId, sessionId, createdByUid: actor.uid, createdByUsername: actor.username,
@@ -656,7 +618,8 @@ export async function completePaymentFromUnits(
       tableNumber: sessionData.sessionMode === 'alacarte' ? null : sessionData.tableNumber ?? null,
       customerName: sessionData.customer?.name ?? sessionData.customerName ?? null,
       total: amountDue, totalPaid, change, status: 'final',
-      receiptSeq: nextSeq, receiptNumber, receiptNoFormatUsed: receiptNoFormat,
+      receiptSeq: reserved.terminalSeq, receiptNumber, receiptNoFormatUsed: 'TERMINAL',
+      terminalNo: reserved.terminalNo, terminalSeq: reserved.terminalSeq, deviceId: reserved.deviceId,
       createdAtClientMs: Date.now(), lines: billLines, billDiscount: billDiscount ?? null, customAdjustments: customAdjustments ?? [], receiptId: sessionId,
       loyaltyRedemptions: loyaltyRedemptions ?? [],
     } as Omit<Receipt, 'createdAt'>);
@@ -666,8 +629,10 @@ export async function completePaymentFromUnits(
             if (line.type !== 'package' && line.type !== 'addon') return acc;
             const netQty = Math.max(0, line.qtyOrdered - (line.freeQty || 0) - (line.voidedQty || 0));
             if (netQty <= 0) return acc;
-            const grossAmount = netQty * line.unitPrice;
-            const discountBaseUnit = store.taxType === 'VAT_INCLUSIVE' && store.taxRatePct && store.taxRatePct > 0 ? line.unitPrice / (1 + store.taxRatePct / 100) : line.unitPrice;
+            // T-423: this block works in CENTAVOS and rounds once per line; amounts are turned back into pesos below.
+            const unitCentavos = storedPesosToCentavos(line.unitPrice);
+            const grossAmount = netQty * unitCentavos;
+            const discountBaseUnit = store.taxType === 'VAT_INCLUSIVE' && store.taxRatePct && store.taxRatePct > 0 ? unitCentavos / (1 + store.taxRatePct / 100) : unitCentavos;
             const adjs = Object.values((line as any).lineAdjustments ?? {}) as LineAdjustment[];
             const discountAdjs = adjs.filter(a => a.kind === "discount").sort((a, b) => (a.createdAtClientMs || 0) - (b.createdAtClientMs || 0));
             let discountAmount = 0;
@@ -677,7 +642,7 @@ export async function completePaymentFromUnits(
                 const q = Math.min(Number(a.qty || 0), remaining);
                 if (q <= 0) continue;
                 if (a.type === "percent") discountAmount += q * discountBaseUnit * ((Number(a.value || 0)) / 100);
-                else discountAmount += Math.min(discountBaseUnit, Number(a.value || 0)) * q;
+                else discountAmount += Math.min(discountBaseUnit, storedPesosToCentavos(a.value)) * q;
                 remaining -= q;
                 if (remaining <= 0) break;
               }
@@ -685,10 +650,10 @@ export async function completePaymentFromUnits(
               const discountQty = Math.min(line.discountQty || 0, netQty);
               if (discountQty > 0) {
                 if (line.discountType === 'percent') discountAmount = discountQty * discountBaseUnit * ((line.discountValue || 0) / 100);
-                else discountAmount = Math.min(discountBaseUnit, line.discountValue ?? 0) * discountQty;
+                else discountAmount = Math.min(discountBaseUnit, storedPesosToCentavos(line.discountValue)) * discountQty;
               }
             }
-            const netAmount = roundMoney(grossAmount - discountAmount);
+            const netAmount = roundHalfUp(grossAmount - discountAmount);
             const categoryName = (line as any).category || 'Uncategorized';
             acc.salesByItem ??= {}; acc.salesByCategory ??= {};
             if (!acc.salesByItem[line.itemName]) acc.salesByItem[line.itemName] = { qty: 0, amount: 0, categoryName };
@@ -699,6 +664,9 @@ export async function completePaymentFromUnits(
         },
         {} as { salesByItem?: ReceiptAnalyticsV2['salesByItem']; salesByCategory?: ReceiptAnalyticsV2['salesByCategory']; }
     );
+    for (const entry of [...Object.values(salesAnalytics.salesByItem ?? {}), ...Object.values(salesAnalytics.salesByCategory ?? {})]) {
+      entry.amount = toWirePesos(entry.amount);
+    }
     let guestCountSnapshot: ReceiptAnalyticsV2['guestCountSnapshot'] | undefined = undefined;
     if (sessionData.sessionMode === 'package_dinein') {
       const cashierInitial = sessionData.guestCountCashierInitial ?? 0;
@@ -735,6 +703,7 @@ export async function completePaymentFromUnits(
     // analytics applied separately below to avoid hitting 500-transform limit
     tx.set(receiptRef, finalReceipt);
     receiptId = receiptRef.id;
+    finalReceiptNumber = receiptNumber;
 
     if (tableSnap && tableRef && tableSnap.exists()) {
       const t = tableSnap.data() as any;
@@ -905,7 +874,7 @@ export async function voidSession({
         tx.get(sessionRef),
         tx.get(activeProjectionRef),
     ]);
-    
+
     if (!sessionSnap.exists()) throw new Error("Session disappeared during transaction.");
     const sessionData = sessionSnap.data() as any;
     if (sessionData.status === 'closed' || sessionData.status === 'voided' || sessionData.isPaid) {
@@ -917,10 +886,41 @@ export async function voidSession({
       ? sessionData.loyaltyRedemptions.map((r: any) => r.redemptionId).filter(Boolean)
       : [];
 
+    // T-423 Ruling 9: re-read every ticket the pre-read found, INSIDE the transaction. A ticket that was served (or otherwise
+    // changed) in the meantime is left alone.
+    const liveTickets: { ref: DocumentReference<DocumentData>; state: KitchenTicket }[] = [];
+    for (const preRead of activeTicketsSnap.docs) {
+      const fresh = await tx.get(preRead.ref);
+      if (!fresh.exists()) continue;
+      const state = fresh.data() as KitchenTicket;
+      if (state.status !== 'preparing' && state.status !== 'ready') continue;
+      liveTickets.push({ ref: preRead.ref, state });
+    }
+
+    // ...and re-read the table: it is freed only if it still points at THIS session.
+    let tableRef: DocumentReference<DocumentData> | null = null;
+    let freeTable = false;
+    if (sessionData.tableId && sessionData.tableId !== 'alacarte') {
+      tableRef = doc(db, 'stores', storeId, 'tables', sessionData.tableId);
+      const tableSnap = await tx.get(tableRef);
+      freeTable = tableSnap.exists() && (tableSnap.data() as any)?.currentSessionId === sessionId;
+    }
+
+    // The loyalty reversal is queued BEFORE the commit (a crash can no longer lose it) and de-duplicated, so a retry of this
+    // callback or a second call adds nothing. The replay checks the session really is voided before it reverses anything.
+    if (redemptionIdsToReverse.length > 0 && !getQueue().some((q) => q.sessionId === sessionId && q.kind === 'void')) {
+      addToQueue({
+        storeId,
+        sessionId,
+        receiptId: sessionId,
+        kind: 'void',
+        ctx: { amount: 0, redemptionIds: redemptionIdsToReverse },
+        effects: { analytics: 'skip', loyaltyFinalize: 'skip', loyaltyEarn: 'skip', pinFinalize: 'skip', loyaltyReverse: 'pending' },
+      });
+    }
+
     // Cancel any remaining active tickets
-    for (const ticketDoc of activeTicketsSnap.docs) {
-        const ticketRef = ticketDoc.ref;
-        const oldTicketState = ticketDoc.data() as KitchenTicket;
+    for (const { ref: ticketRef, state: oldTicketState } of liveTickets) {
         const updatePayload = {
             status: 'cancelled' as const,
             cancelledAt: serverTimestamp(),
@@ -933,7 +933,7 @@ export async function voidSession({
 
         tx.update(ticketRef, updatePayload);
         
-        const stationId = ticketDoc.data().kitchenLocationId;
+        const stationId = oldTicketState.kitchenLocationId;
         if(stationId) {
             const rtKdsDocRef = doc(db, "stores", storeId, "rtKdsTickets", stationId);
             tx.update(rtKdsDocRef, {
@@ -963,10 +963,9 @@ export async function voidSession({
       tx.delete(activeProjectionRef);
     }
     
-    if (sessionData.tableId && sessionData.tableId !== 'alacarte') {
-      const tableRef = doc(db, 'stores', storeId, 'tables', sessionData.tableId);
+    if (tableRef && freeTable) {
       tx.update(tableRef, { status: 'available', currentSessionId: null, updatedAt: serverTimestamp() });
-      
+
       const tableProjectionRef = doc(db, `stores/${storeId}/storeConfig/current/tables`, sessionData.tableId);
       tx.update(tableProjectionRef, {
         status: 'available',

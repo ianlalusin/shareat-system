@@ -12,7 +12,17 @@ export interface ReplayDeps {
   getToken: () => Promise<string>;
   fetchImpl?: typeof fetch;
   onEffectDone?: (item: QueuedPayment) => void;
+  /**
+   * T-423 Ruling 9: for a queued void, true only if the session really is `voided`. Checked before any loyalty reversal is
+   * sent: false drops the effect (the void never committed), a throw leaves it pending for a later try. Absent: unchanged.
+   */
+  isSessionVoided?: (storeId: string, sessionId: string) => Promise<boolean>;
+  /** Clock for the grace period (tests). */
+  now?: () => number;
 }
+
+/** A queued void younger than this is never dropped: the voidSession commit may simply not have landed yet. */
+export const VOID_DROP_GRACE_MS = 10 * 60 * 1000;
 
 async function post(
   fetchImpl: typeof fetch,
@@ -69,6 +79,21 @@ export async function replayDeferredEffects(
         okResult = await post(fetchImpl, "/api/pins/disable", token, { storeId, sessionId });
       }
     } else if (effect === "loyaltyReverse") {
+      if (item.kind === "void" && deps.isSessionVoided) {
+        let voided: boolean;
+        try {
+          voided = await deps.isSessionVoided(storeId, sessionId);
+        } catch {
+          continue; // cannot check right now: send nothing, keep the effect pending
+        }
+        if (!voided) {
+          const ageMs = (deps.now ?? Date.now)() - (item.queuedAtMs ?? 0);
+          if (ageMs < VOID_DROP_GRACE_MS) continue; // too young to judge: keep it pending
+          out = markEffect(out, effect, "skip"); // old and the server still says not voided: the void never happened
+          deps.onEffectDone?.(out);
+          continue;
+        }
+      }
       const redemptionIds = ctx.redemptionIds ?? [];
       okResult = true;
       for (const redemptionId of redemptionIds) {

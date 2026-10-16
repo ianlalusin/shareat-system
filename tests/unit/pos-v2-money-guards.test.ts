@@ -35,6 +35,8 @@ function stripComments(src: string): string {
   return noBlock.split('\n').map((l) => l.replace(/(^|\s)\/\/.*$/, '$1')).join('\n');
 }
 const codeLines = (f: string) => stripComments(read(f)).split('\n').map((text, i) => ({ text, n: i + 1 }));
+/** `file:line` of every code line (comments stripped) matching `re`. */
+const hits = (f: string, re: RegExp) => codeLines(f).filter((l) => re.test(l.text)).map((l) => `${rel(f)}:${l.n}`);
 
 const MONEY_DIR = path.join(SRC, 'lib', 'money');
 const centavosFile = path.join(MONEY_DIR, 'centavos.ts');

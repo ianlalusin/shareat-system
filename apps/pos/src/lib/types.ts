@@ -1537,6 +1537,10 @@ export type Receipt = {
     receiptSeq: number;
     receiptNumber: string;
     receiptNoFormatUsed: string;
+    /** T-423 additive fields: the terminal series (`<CODE>-<TT>-<NNNNNN>`); `receiptSeq === terminalSeq`. */
+    terminalNo?: number;
+    terminalSeq?: number;
+    deviceId?: string;
     analytics?: any | ReceiptAnalyticsV2;
     analyticsApplied?: boolean;
     analyticsAppliedAt?: any;

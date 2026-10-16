@@ -172,4 +172,26 @@ Make `receiptNumbers` create-only in the Firestore rules (deployed from v1's rep
 fix). Not required: the release gap covers it.
 
 ## Golden findings
-(Filled in by the builder: each class of ≤ 1-centavo difference from v1, with one example bill.)
+Filled 16 Oct 2026 by the builder. Run: `tax.golden.test.ts`, 2,500 generated bills (seed 423423), 244 of them with a stage exactly on a
+half centavo. The new `calculateBillTotalsCentavos` uses exact fractions (BigInt) between v1's rounding stages, so it equals the
+exact-rational oracle on **every field of every bill (0 differences)**. Every difference from v1 is therefore a v1 float error.
+
+**One class only: "v1 float error at a half-centavo stage".** v1 rounds with `Math.round((x + EPSILON) * 100) / 100` on a float that
+is a hair below or above the true x.xx5, so it sometimes rounds the wrong way; the new code rounds the true value half-up.
+Bills that differ from v1, per field: grandTotal 37, taxableAmount 20, vatableSales 20, totalDiscounts 20, chargesTotal 13,
+lineDiscountsTotal 13, vatExemptSales 7, taxTotal 5, loyaltyDiscountTotal 4, billDiscountTotal 3. subtotal never differs. Largest
+difference from v1 on any field: 1 centavo, except one bill (below).
+
+**Change to `grandTotal` vs v1 (FOR IAN'S SIGN-OFF):** 37 of 2,500 stress bills (1.5%; the generator is biased to half-centavo
+edges, real bills hit them far less often) charge 1 centavo different from v1, always toward the exact answer. Example (VAT inclusive
+10%, one line 70.75 x 12 with 1 voided, 30% line discount on 7 units): v1 charges 629.68, exact and new 629.67. Examples of the other
+fields on the same kind of bill: lineDiscountsTotal v1 148.57, new 148.58 (same bill); taxTotal v1 184.28, new 184.27 (VAT inclusive
+10%, two lines, 50% bill discount, two loyalty rewards); billDiscountTotal v1 2196.92, new 2196.93 (VAT-exempt 50% on three discounted
+lines); chargesTotal v1 135.07, new 135.08 (7.5% VAT inclusive, 7.5% charge on subtotal after a 1,875.12 fixed bill discount).
+
+**Spec ambiguity hit (planner ruling 1):** one bill (VAT inclusive 7.5%, percent charges of 7.5% and 10% on "total") has v1 itself 2
+centavos off the exact answer (grandTotal v1 5467.91, exact and new 5467.89). It is judged against the oracle and listed here for
+sign-off. No other field on any bill is more than 1 centavo from v1.
+
+**Wire check:** every peso value on the wire times 100 is an integer (property test, 500 random bills; centavo and peso functions agree).
+
