@@ -384,5 +384,5 @@ export async function viewStaffSignatureAction(formData: FormData): Promise<void
   } catch (err) {
     return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
-  redirect(url);
+  redirect(`${url}`);
 }

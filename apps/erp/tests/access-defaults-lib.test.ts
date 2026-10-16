@@ -112,10 +112,10 @@ describe('L1 — gridCapabilityGroups: area order, exactly-91-once, and the 76/1
   // ⭐ 93 -> 99 (T-401): seven menu capabilities join, SIX of them offerable: view_menu, manage_menu, set_menu_depletion (org),
   // request_menu_item, set_menu_price, switch_usage_source (store). `add_menu_item` is super-admin-only, so it is in
   // SUPER_ADMIN_ONLY_CAPABILITIES and never offerable (asserted below).
-  it('the 102 offerable capabilities each appear exactly once across every area of every scope', () => {
+  it('the 103 offerable capabilities each appear exactly once across every area of every scope', () => {
     const rendered = groups.flatMap((g) => g.areas.flatMap((a) => a.capabilities.map((c) => c.capability)));
-    expect(rendered.length).toBe(102); // T-424: +approve_pos_correction
-    expect(new Set(rendered).size, 'no capability appears twice').toBe(102);
+    expect(rendered.length).toBe(103); // T-424: +approve_pos_correction; T-434: +view_staff_signature
+    expect(new Set(rendered).size, 'no capability appears twice').toBe(103);
     expect(rendered).not.toContain('add_menu_item');
   });
 
@@ -123,7 +123,7 @@ describe('L1 — gridCapabilityGroups: area order, exactly-91-once, and the 76/1
   it('store holds 82, org holds 20 (§1\'s totals)', () => {
     const countFor = (scope: (typeof SCOPE_ORDER)[number]) =>
       groups.find((g) => g.scope === scope)!.areas.reduce((n, a) => n + a.capabilities.length, 0);
-    expect(countFor('store')).toBe(82); // T-402 S1b: +view_activity_log; T-424: +approve_pos_correction
+    expect(countFor('store')).toBe(83); // T-402 S1b: +view_activity_log; T-424: +approve_pos_correction; T-434: +view_staff_signature
     expect(countFor('org')).toBe(20); // T-402 S1b: +view_activity_log_restricted
   });
 
