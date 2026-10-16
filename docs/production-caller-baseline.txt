@@ -6,7 +6,6 @@ activateTerminal
 addDocumentNonBlocking
 addUsageLine
 adjudicateRange
-allocateOfflineReceiptNumber
 allocationsFor
 apiUrl
 applyCreditAction
@@ -16,6 +15,7 @@ branchOrderDetail
 buildCoverageReport
 cancelScheduledDepletionRule
 capitalizeFromExpense
+cashPayment
 catalogueProblems
 checkValuesMatch
 childLogger
@@ -26,6 +26,8 @@ collectActorUids
 confirmTradeOrder
 convertSpecimen
 countedVariances
+createFakeFirestore
+createFakeIdb
 customerReturnableQuantity
 datesInWeek
 declareSupplierItem
@@ -42,16 +44,19 @@ fetchApplicableGlobalDiscounts
 findCurrentDocument
 findLiveOfKind
 findPostedSettlementForChannelDay
+firebaseFirestoreModule
 flushSecurityEvents
 formatConversionSummary
 formatCoverageReport
 formatKitchenQty
 formatLogAmount
 formatLogDescription
+getActiveFake
 getAllocationsForPayment
 getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
+getNonCentavoCount
 groupIntoFamilies
 hasFingerprint
 hasOtherActiveAdmin
@@ -79,10 +84,12 @@ listPunchesForDay
 listRoster
 listWriteOffsForCharge
 markReviewed
+memoryLocalStorage
 mintUniqueToken
 nameMatches
 newCorrelationId
 openFloatsForStore
+parsePesoInput
 partitionVisibleRefills
 pendingItemRequests
 periodForDate
@@ -108,6 +115,7 @@ recordClientEvents
 remainingFor
 remainingOf
 removeUsageLine
+resetNonCentavoCount
 resolveFingerprintMatchToken
 retireMenuItem
 retireMenuVariant
@@ -115,11 +123,14 @@ returnableQuantity
 reverseOwnerEntry
 revokeRoleById
 rlsScopeOf
+roundMoney
 runAnalyze
 runCapture
 runLoad
 sampleCandidates
 seedCanonicalPositions
+seedSession
+setActiveFake
 setCostBasisItem
 setDocumentNonBlocking
 setItemPricing
@@ -155,3 +166,4 @@ useUser
 validateFingerprintTemplates
 voidShift
 withPrincipal
+writtenReceipt
