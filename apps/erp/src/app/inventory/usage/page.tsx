@@ -107,6 +107,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
                   <th className="px-3 py-2 font-medium">Item</th>
                   <th className="px-3 py-2 text-right font-medium">Expected</th>
                   <th className="px-3 py-2 text-right font-medium">Recorded</th>
+                  <th className="px-3 py-2 text-right font-medium">Used in cooking</th>
                   <th className="px-3 py-2 font-medium">Check</th>
                 </tr>
               </thead>
@@ -116,6 +117,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
                     <td className="px-3 py-2">{v.itemName}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{plainQty(v.expected)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{plainQty(v.actual)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{v.cooked && plainQty(v.cooked) !== '0' ? plainQty(v.cooked) : ''}</td>
                     <td className={`px-3 py-2 ${v.withinBand ? 'text-success' : 'text-danger'}`}>
                       {v.withinBand ? `Within ${pctOf(v.tolerance)}` : `Outside ${pctOf(v.tolerance)}`}
                       {!v.withinBand && plainQty(v.actual) === '0' ? ' (nothing recorded yet)' : ''}
@@ -149,20 +151,20 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
               </thead>
               <tbody>
                 {queue.cooked.map((c, i) => (
-                  <tr key={`${c.recordId}-${c.itemId}-${i}`} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={`${c.recordId}-${c.itemId}-${i}`} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">{c.itemName}</td>
                     <td className={`px-3 py-2 text-right tabular-nums ${c.isDraft ? 'text-neutral-500 dark:text-neutral-500' : ''}`}>
                       {plainQty(c.quantity)} {c.unit}
                     </td>
                     <td className="px-3 py-2">
-                      <Link href={`/inventory/production/${c.recordId}`} className="underline underline-offset-4">
+                      <RowLink href={`/inventory/production/${c.recordId}`}>
                         Recipe: {c.recipeName}
-                      </Link>
+                      </RowLink>
                     </td>
                     <td className="px-3 py-2">
                       {c.isDraft ? <span className="text-xs text-amber-700 dark:text-amber-400">Draft — not posted yet</span> : 'Posted'}
                     </td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>
