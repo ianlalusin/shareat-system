@@ -13,13 +13,57 @@ const W = 1000;
 const BASE = 350;
 const TOP = 40;
 
-function build(values: number[], max: number): string[] {
+function build(values: number[], max: number): [number, number][] {
   const n = values.length;
   return values.map((v, i) => {
     const x = n === 1 ? (i === 0 ? 0 : W) : (i * W) / (n - 1);
     const y = BASE - (max > 0 ? (v / max) * (BASE - TOP) : 0);
-    return x.toFixed(1) + ' ' + y.toFixed(1);
+    return [x, y];
   });
+}
+
+const f = (n: number) => n.toFixed(1);
+
+/**
+ * Smooth curve through every point (monotone cubic, Fritsch-Carlson): it passes exactly through each day's
+ * value and never overshoots between two days, so a zero day stays on the baseline and no bump rises above
+ * the real busiest day.
+ */
+function smoothPath(pts: [number, number][]): string {
+  const n = pts.length;
+  if (n < 3) return 'M ' + pts.map(([x, y]) => f(x) + ' ' + f(y)).join(' L ');
+  const dx: number[] = [];
+  const m: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    dx.push(pts[i + 1]![0] - pts[i]![0]);
+    m.push((pts[i + 1]![1] - pts[i]![1]) / dx[i]!);
+  }
+  const t: number[] = [m[0]!];
+  for (let i = 1; i < n - 1; i++) t.push(m[i - 1]! * m[i]! <= 0 ? 0 : (m[i - 1]! + m[i]!) / 2);
+  t.push(m[n - 2]!);
+  for (let i = 0; i < n - 1; i++) {
+    if (m[i] === 0) {
+      t[i] = 0;
+      t[i + 1] = 0;
+      continue;
+    }
+    const a = t[i]! / m[i]!;
+    const b = t[i + 1]! / m[i]!;
+    const s = a * a + b * b;
+    if (s > 9) {
+      const k = 3 / Math.sqrt(s);
+      t[i] = k * a * m[i]!;
+      t[i + 1] = k * b * m[i]!;
+    }
+  }
+  let d = 'M ' + f(pts[0]![0]) + ' ' + f(pts[0]![1]);
+  for (let i = 0; i < n - 1; i++) {
+    const [x0, y0] = pts[i]!;
+    const [x1, y1] = pts[i + 1]!;
+    const h = dx[i]! / 3;
+    d += ' C ' + f(x0 + h) + ' ' + f(y0 + t[i]! * h) + ' ' + f(x1 - h) + ' ' + f(y1 - t[i + 1]! * h) + ' ' + f(x1) + ' ' + f(y1);
+  }
+  return d;
 }
 
 export function SalesLine({
@@ -44,8 +88,8 @@ export function SalesLine({
   // One day has one point: draw it as a flat segment so there is something to see.
   const curPts = points.length === 1 ? [cur[0]!, cur[0]!] : cur;
   const prevPts = points.length === 1 ? [prev[0]!, prev[0]!] : prev;
-  const curPath = 'M ' + curPts.join(' L ');
-  const prevPath = 'M ' + prevPts.join(' L ');
+  const curPath = smoothPath(curPts);
+  const prevPath = smoothPath(prevPts);
   const areaPath = curPath + ' L ' + W + ' ' + BASE + ' L 0 ' + BASE + ' Z';
 
   let peakIdx = 0;
