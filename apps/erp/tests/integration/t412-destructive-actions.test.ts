@@ -7,7 +7,7 @@ import postgres from 'postgres';
  * docs/tasks/412-confirm-destructive-tiers.md, "Tests" I10, V1, V6, V7, V8 (mutants M1, M6, M8, M9, M10).
  *
  * One action per batch, run through the REAL server action with the session mocked (the T-390 S5 idiom):
- *   AP/expenses        voidExpenseAction (posted expense), deleteDraftAction (an UNPOSTED draft: Ian Q2, recommended = PIN)
+ *   AP/expenses        voidExpenseAction (posted expense); the draft delete moved to Tier W (T-418)
  *   ledger reversals   voidMoneyTransferAction, reverseEntryAction (loan)
  *   cutover            postOpeningBalancesAction (created BEFORE the one real purge, like t402-s3)
  *   Tier R             setItemStatusAction (retire an item; super-admin only)
@@ -146,18 +146,6 @@ const builders: Record<string, Builder> = {
       c: {
         name: 'voidExpenseAction', modulePath: '../../src/app/expenses/actions', action: 'voidExpenseAction', f, actor: f.manager,
         fields: { expenseId: e.id, reason: 'Wrong supplier' }, entityId: e.id, storeId: f.storeId, state: expenseState(e.id), secondCallRefused: true,
-      },
-    };
-  },
-  deleteDraftAction: async () => {
-    const { f, adminPin, managerPin } = await approvedFixture('i10-deldraft');
-    const e = await postedExpense(f, '150.00'); // left a DRAFT: Ian Q2 puts "delete" in the PIN tier even though nothing is posted
-    return {
-      adminPin,
-      managerPin,
-      c: {
-        name: 'deleteDraftAction (an UNPOSTED draft)', modulePath: '../../src/app/expenses/actions', action: 'deleteDraftAction', f, actor: f.manager,
-        fields: { expenseId: e.id }, entityId: e.id, storeId: f.storeId, state: expenseState(e.id), secondCallRefused: true,
       },
     };
   },

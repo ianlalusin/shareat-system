@@ -19,6 +19,7 @@ import { organizations } from '../../schema/organizations';
 import { persons } from '../../schema/persons';
 import { posUsagePullLines, posUsagePulls } from '../../schema/pos-mapping';
 import { salesDays } from '../../schema/sales-days';
+import { recordGone } from './record-gone';
 import type { Tx } from '../client';
 import type { Decimal, Quantity } from '@shareat/core/money';
 
@@ -233,7 +234,15 @@ export async function deleteUsageLine(tx: Tx, lineId: string): Promise<void> {
 /** The whole draft, header and lines together — the FK cascade takes the lines. Callers check the
  *  record is still `draft` BEFORE calling this; the repo enforces no business rule (bible §4.3). */
 export async function deleteUsageDraft(tx: Tx, id: string): Promise<void> {
-  await tx.delete(stockUsageRecords).where(eq(stockUsageRecords.id, id));
+  // T-418: the guard rides on the DELETE itself (a post can land between the domain's draft check and here); the org is
+  // scoped by RLS. Zero rows throws, so the domain path rolls back instead of looking like success.
+  const deleted = await tx
+    .delete(stockUsageRecords)
+    .where(and(eq(stockUsageRecords.id, id), eq(stockUsageRecords.status, 'draft')))
+    .returning({ id: stockUsageRecords.id });
+  if (deleted.length === 0) {
+    throw recordGone(`deleteUsageDraft: usage record ${id} does not exist or is not a draft`, 'usage record', 'a draft');
+  }
 }
 
 export async function setUsageLineMovement(tx: Tx, lineId: string, movementId: string): Promise<void> {

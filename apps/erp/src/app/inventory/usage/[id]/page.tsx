@@ -118,11 +118,10 @@ export default async function UsageRecordPage({
         <form action={deleteUsageDraftAction} className="flex items-center gap-3">
           <input type="hidden" name="recordId" value={record.id} />
           <input type="hidden" name="storeId" value={record.storeId} />
-          <ConfirmDestructive
-            tier="admin-pin"
-            label="Delete usage draft"
-            consequence="Deletes this draft for good. An administrator must approve with their own PIN."
-          />
+          <Button type="submit" variant="danger">
+            Delete usage draft
+          </Button>
+          <span className="text-xs text-neutral-500">Deletes this draft. Nothing was posted.</span>
         </form>
       )}
 

@@ -280,13 +280,20 @@ export async function deleteRecurringTemplate(
     const template = await recurringExpensesRepo.getById(trx, actor.orgId, input.templateId);
     if (!template) throw new Error('that template does not exist.');
     await authorize(trx, actor, 'manage_recurring_expenses', { storeId: template.storeId });
-    if (template.lastDraftedExpenseId !== null) {
-      throw new Error(
-        `${template.name} has already produced an expense, so it is history — pause it instead. ` +
+    const pauseInstead = (name: string) =>
+      new Error(
+        `${name} has already produced an expense, so it is history — pause it instead. ` +
           'Deleting it would strand the answer to "why does this draft exist?".',
       );
+    if (template.lastDraftedExpenseId !== null) throw pauseInstead(template.name);
+    try {
+      await recurringExpensesRepo.deleteTemplate(trx, actor.orgId, input.templateId);
+    } catch (err) {
+      // T-418: the job may have stamped it after the check above; the repo's guarded DELETE then deleted nothing.
+      const now = await recurringExpensesRepo.getById(trx, actor.orgId, input.templateId);
+      if (now && now.lastDraftedExpenseId !== null) throw pauseInstead(now.name);
+      throw err;
     }
-    await recurringExpensesRepo.deleteTemplate(trx, actor.orgId, input.templateId);
   };
   if (tx) return run(tx);
   return transaction(run);
