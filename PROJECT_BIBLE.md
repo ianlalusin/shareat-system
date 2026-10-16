@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1685` 13. Decision log
-- `1686–1705` 14. Amendment protocol
-- `1706–1710` 15. Engineering standards — the industry practices this project follows
-  - `1711–1716` 15.1 Build order: walking skeleton first
-  - `1717–1728` 15.2 Golden-master testing — the most important practice here
-  - `1729–1737` 15.3 Strangler Fig, not big-bang cutover
-  - `1738–1742` 15.4 No dual-write
-  - `1743–1751` 15.5 Expand/contract migrations
-  - `1752–1760` 15.6 Observability from day zero, not later
-  - `1761–1765` 15.7 CI gates
-  - `1766–1770` 15.8 Backups and a tested restore
-  - `1771–1775` 15.9 Twelve-Factor config
-  - `1776–1783` 15.10 Append-only ledgers — but not event sourcing
-  - `1784–1788` 15.11 Defence in depth
-  - `1789–1817` 15.12 Skills are lenses, not assurance
-  - `1818–1824` 15.13 Reconciliation is a permanent feature
-- `1825–1829` 16. The accounting spine
-  - `1830–1861` 16.0 What we are actually fixing — the diagnosis
-  - `1862–1905` 16.1 The ten invariants — non-negotiable
-  - `1906–1920` 16.2 The oracle: how "correct" is tested
-  - `1921–1942` 16.3 The model — header + lines, not legs
-  - `1943–1962` 16.4 Deliberately simpler than ERPNext
-  - `1963–2029` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2030–2054` 16.6 What v1 already gets right — preserve the intent
-  - `2055–2076` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2077–2091` 16.8 What v1's accounting already gets right
-  - `2092–2135` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2136–2186` 16.10 Posting patterns — one canonical pattern per business event
-  - `2187–2219` 16.11 Inventory's accounting integration
+- `1329–1686` 13. Decision log
+- `1687–1706` 14. Amendment protocol
+- `1707–1711` 15. Engineering standards — the industry practices this project follows
+  - `1712–1717` 15.1 Build order: walking skeleton first
+  - `1718–1729` 15.2 Golden-master testing — the most important practice here
+  - `1730–1738` 15.3 Strangler Fig, not big-bang cutover
+  - `1739–1743` 15.4 No dual-write
+  - `1744–1752` 15.5 Expand/contract migrations
+  - `1753–1761` 15.6 Observability from day zero, not later
+  - `1762–1766` 15.7 CI gates
+  - `1767–1771` 15.8 Backups and a tested restore
+  - `1772–1776` 15.9 Twelve-Factor config
+  - `1777–1784` 15.10 Append-only ledgers — but not event sourcing
+  - `1785–1789` 15.11 Defence in depth
+  - `1790–1818` 15.12 Skills are lenses, not assurance
+  - `1819–1825` 15.13 Reconciliation is a permanent feature
+- `1826–1830` 16. The accounting spine
+  - `1831–1862` 16.0 What we are actually fixing — the diagnosis
+  - `1863–1906` 16.1 The ten invariants — non-negotiable
+  - `1907–1921` 16.2 The oracle: how "correct" is tested
+  - `1922–1943` 16.3 The model — header + lines, not legs
+  - `1944–1963` 16.4 Deliberately simpler than ERPNext
+  - `1964–2030` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2031–2055` 16.6 What v1 already gets right — preserve the intent
+  - `2056–2077` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2078–2092` 16.8 What v1's accounting already gets right
+  - `2093–2136` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2137–2187` 16.10 Posting patterns — one canonical pattern per business event
+  - `2188–2220` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1682,6 +1682,7 @@ just a patch.**
 | 347 | 2026-10-16 | ⭐ **R-AUTO: RELEASING A CASH REQUEST CREATES THE STORE'S STAFF CASH ACCOUNT IF MISSING (Ian, 16 Oct).** Open cash requests also appear in the expense payment list ("Name · cash request — Balance") with no staff-account gate; the store is chosen first; approve re-checks each request's live balance under a row lock. Shipped as T-414 (PR #30). Spec: `docs/tasks/414-expense-cash-request-source.md`. Follow-ups: DEF-657/658/659 | Ian, 2026-10-16 (orchestrator session) | Yes |
 | 348 | 2026-10-16 | **DECISIONS PAGE, ROUND 2 CLOSED (Ian, 16 Oct).** Business day ends at the store closing time; after-midnight sales belong to the day that opened. First store on v2: 11 Jan. POS v1 feature freeze from 9 Nov (fixes allowed). Live POS v1 = APK build #238, commit `e26d0c1`. **Yes, connect POS v1 to its safe void now (DEF-651)**. VAT on supplier invoices: typed from the paper; the VAT list is seen by managers for their own stores and admins for all. Recipes: same cap for ingredients; edit refused while unposted cooks use it; retire refused until menu items are re-mapped. Slicing a blocked item: blocked. Admins without a PIN: the Staff page issues one. Receipt photos: under 1,000 a month; OCR = test locally on 30 receipts first. **Two answers DIFFER from what shipped and reopen work:** (1) deleting an unposted DRAFT needs NO admin PIN; only posted records do (reopens T-412); (2) recipe-cook ingredients ALSO appear on the daily usage screen, labelled as coming from the recipe (reopens T-409/T-401 usage). **Still open:** whether diners share the people list with staff (Ian: discuss further). | Ian, 2026-10-16, on the decisions page https://claude.ai/artifact/H8YVDBG9nuBDBQi2Sguwrs (answers read by the orchestrator) | Yes, per answer |
 | 349 | 2026-10-16 | **CUSTOMER v2 TAKES OVER customer.shareat.net ONCE STABLE.** Customer v2 launches at order.shareat.net (POS v2 at pos2.shareat.net; Android ids `net.shareat.order` / `net.shareat.pos2`). When order.shareat.net is working well and stable, customer.shareat.net is pointed at it, and Customer v1 is either retired fully or moved to legacycustomer.shareat.net. Which of the two, and the date, are decided at that time. | Ian, 2026-10-16 (orchestrator session) | Yes |
+| 350 | 2026-10-16 | **DINERS LIVE IN THE SAME PEOPLE LIST AS STAFF, MARKED AS DINERS.** When Customer v2 moves to the shared backend, diner accounts are rows in the one people list (one sign-in path, one privacy rule: consent tick, delete after 3 years inactive). A staff member who is also a diner is ONE person. Hard rule: a diner-only person can reach no ERP or POS screen or action; every capability check must prove it with a test that the diner is refused. v1 member data (points, visits) is migrated when Customer v2 is built. Closes the last open question of row 348. | Ian, 2026-10-16 (orchestrator session; decisions page said "discuss further") | Yes, before Customer v2 diner accounts exist; costly after |
 
 ## 14. Amendment protocol
 
