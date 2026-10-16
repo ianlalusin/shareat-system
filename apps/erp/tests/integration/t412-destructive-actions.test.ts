@@ -94,6 +94,9 @@ async function runAction(modulePath: string, name: string, fields: Record<string
 
 const missCount = async (storeId: string) =>
   (await sql<{ n: number }[]>`select count(*)::int as n from sign_in_attempts where store_id = ${storeId} and kind = 'miss'`)[0]!.n;
+/** T-416: a wrong approval PIN is charged to the ACTOR's bucket (actor_person_id, no store). */
+const actorMissCount = async (personId: string) =>
+  (await sql<{ n: number }[]>`select count(*)::int as n from sign_in_attempts where actor_person_id = ${personId} and store_id is null and kind = 'miss'`)[0]!.n;
 
 interface Case {
   name: string;
@@ -210,15 +213,17 @@ describe.each(Object.keys(builders))('I10 Tier P: %s', (key) => {
     expect(await auditRows(sql, c.f.orgId, 'destructive.approved', c.entityId), 'no approval event for a refused action').toHaveLength(0);
   });
 
-  it('a wrong PIN is refused, charged at the RECORD’s store (a forged storeId field is ignored), and nothing changes (V6, M8)', async () => {
+  it('a wrong PIN is refused, charged to the ACTOR (no store; a forged storeId field charges nothing), and nothing changes (V6, M8, T-416)', async () => {
     const { c } = await builders[key]!();
     const [other] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${c.f.orgId}, ${uid('forged')}, 'Forged') returning id`;
     const before = await c.state();
-    const missesBefore = await missCount(c.storeId);
+    const actorBefore = await actorMissCount(c.actor.personId);
+    const recordBefore = await missCount(c.storeId);
     const o = await runAction(c.modulePath, c.action, { ...c.fields, adminPin: '000000', storeId: other!.id }, c.actor);
     expect(o.flash.error).toBe(ADMIN_PIN_REFUSED);
     expect(await c.state()).toBe(before);
-    expect(await missCount(c.storeId), 'the miss is the RECORD store’s').toBe(missesBefore + 1);
+    expect(await actorMissCount(c.actor.personId), 'the miss is the actor’s').toBe(actorBefore + 1);
+    expect(await missCount(c.storeId), 'nothing is charged at the record’s store').toBe(recordBefore);
     expect(await missCount(other!.id), 'nothing is charged at the store the browser named').toBe(0);
   });
 
