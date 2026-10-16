@@ -117,7 +117,7 @@ async function fixture(hint: string, opts: { noAttendanceConfig?: boolean } = {}
   const names = { A: 'Lipa', B: 'Malvar', C: 'Tanauan' } as const;
   for (const k of ['A', 'B', 'C'] as const) {
     const [s] = await sql<{ id: string }[]>`
-      insert into stores (org_id, code, name) values (${orgId}, ${uid(k)}, ${names[k]}) returning id`;
+      insert into stores (org_id, code, name, opening_date) values (${orgId}, ${uid(k)}, ${names[k]}, '2020-01-01') returning id`;
     stores[k] = s!.id;
   }
   for (let m = 1; m <= 12; m++) {
@@ -377,7 +377,7 @@ describe('kind 2 - recurring bills drafted, not recorded', () => {
     await asOrg(f.orgId, (tx) =>
       createRecurringTemplate(tx, f.manager, {
         storeId: f.stores.A, name, categoryId: f.rentCategoryId, supplierId: f.supplierId,
-        defaultAmount: '25000.00', interval: 'monthly', anchorDay: 5, from: '2026-09-01', ...over,
+        defaultAmount: '25000.00', interval: 'monthly', anchorDay: 5, startsOn: '2026-09-01', ...over,
       }),
     );
   }
@@ -764,7 +764,7 @@ describe('kind 5 - wages worked, not yet paid', () => {
     await asOrg(f.orgId, (tx) =>
       createRecurringTemplate(tx, f.manager, {
         storeId: f.stores.A, name: 'Rent', categoryId: f.rentCategoryId, supplierId: f.supplierId,
-        defaultAmount: '1000.00', interval: 'monthly', anchorDay: 5, from: '2026-09-01',
+        defaultAmount: '1000.00', interval: 'monthly', anchorDay: 5, startsOn: '2026-09-01',
       }));
     await creditInvoice(f, f.stores.A, '900.00');
     const counts = async () => {
