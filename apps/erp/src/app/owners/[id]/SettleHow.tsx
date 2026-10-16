@@ -25,7 +25,7 @@ export function SettleHow() {
       {how === 'writeoff' && (
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Administrator PIN (write-off only)</span>
-          <Input name="adminPin" type="password" inputMode="numeric" autoComplete="off" maxLength={6} className="w-full" />
+          <Input name="adminPin" type="password" inputMode="numeric" autoComplete="off" maxLength={6} required className="w-full" />
           <span className="text-xs text-neutral-500">An administrator must approve a write-off with their own PIN.</span>
         </label>
       )}

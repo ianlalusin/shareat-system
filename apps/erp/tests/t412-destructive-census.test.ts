@@ -335,8 +335,11 @@ describe('DEF-654: no destructive SERVER ACTION hides behind a non-danger button
     'app/menu/prices/actions.ts#cancelScheduledOptionPriceAction': 'clears a FUTURE option price offer; no ledger, no stock',
     'app/staff/actions.ts#reopenPinSignInAction': 'lifts a staff sign-in lock; not a money record',
   };
-  // Found unguarded by the sweep and held red by its own test below until Ian rules the tier and the builder wires it.
-  const PENDING = new Set(['app/owners/actions.ts#settleAction']);
+  // Tier P by BRANCH: a select-driven form (no danger button, no ConfirmDestructive) whose action only forgives money on one
+  // branch. It cannot be a row in `rows` (those are controls with a ConfirmDestructive); it is classified here and asserted below.
+  const BRANCH_P = [
+    { key: 'app/owners/actions.ts#settleAction', branch: 'writeoff', mutation: 'writeOffReceivable' },
+  ];
   const TRIGGER = /(?<![A-Za-z])(?:void|reverse|writeOff|dispose|delete|cancel|reopen)[A-Za-z0-9]*\(/;
   function exportedActions(src: string): { name: string; body: string }[] {
     const out: { name: string; body: string }[] = [];
@@ -362,7 +365,7 @@ describe('DEF-654: no destructive SERVER ACTION hides behind a non-danger button
   const classified = new Set(rows.filter((r) => r.action && r.actionFile).map((r) => `${r.actionFile}#${r.action}`));
 
   it('every destructive-looking server action is a row in the census table or an exempt one with a reason', () => {
-    const unclassified = found.filter((f) => !classified.has(f.key) && !(f.key in EXEMPT) && !PENDING.has(f.key)).map((f) => f.key);
+    const unclassified = found.filter((f) => !classified.has(f.key) && !(f.key in EXEMPT) && !BRANCH_P.some((b) => b.key === f.key)).map((f) => f.key);
     expect(unclassified, 'classify each in `rows` (tier P / R / W) or in EXEMPT with its reason').toEqual([]);
   });
   it('the scan is not vacuous: it finds the known actions, and every exemption still names a real action', () => {
@@ -370,15 +373,37 @@ describe('DEF-654: no destructive SERVER ACTION hides behind a non-danger button
     expect(found.map((f) => f.key)).toContain('app/customers/actions.ts#voidCollectionAction');
     for (const k of Object.keys(EXEMPT)) expect(found.map((f) => f.key), `${k} still exists and still matches`).toContain(k);
   });
-  it('owners settleAction (its `writeoff` branch writes a posted owner receivable off as a drawing) verifies the admin PIN before writeOffReceivable', () => {
-    // Found by the DEF-654 sweep: the select-driven form at app/owners/[id]/page.tsx has no danger button and no guard. A write-off
-    // is Tier P everywhere else (customers writeOffChargeAction, prepaid writeOffAction). Ian to confirm the tier; red until then.
-    const body = functionBody(read('app/owners/actions.ts'), 'settleAction');
-    expect(body, 'settleAction exists').toBeDefined();
-    const call = body!.indexOf('verifyAdminApproval(');
-    expect(call, 'settleAction calls verifyAdminApproval( for the writeoff branch').toBeGreaterThan(-1);
-    expect(call, 'before writeOffReceivable(').toBeLessThan(body!.indexOf('writeOffReceivable('));
-  });
+  for (const bp of BRANCH_P) {
+    it(`${bp.key} is Tier P on its \`${bp.branch}\` branch: verifyAdminApproval( INSIDE that branch block, before ${bp.mutation}(, store from the record, other branches unguarded`, () => {
+      const [file, name] = bp.key.split('#') as [string, string];
+      const body = functionBody(read(file), name);
+      expect(body, `${name} exists`).toBeDefined();
+      const at = body!.search(new RegExp("how === '" + bp.branch + "'"));
+      expect(at, `the ${bp.branch} branch exists`).toBeGreaterThan(-1);
+      const open = body!.indexOf('{', at);
+      let depth = 0;
+      let end = body!.length;
+      for (let i = open; i < body!.length; i++) {
+        if (body![i] === '{') depth++;
+        else if (body![i] === '}' && --depth === 0) { end = i; break; }
+      }
+      const block = body!.slice(open, end);
+      const outside = body!.slice(0, open) + body!.slice(end);
+      const call = block.indexOf('verifyAdminApproval(');
+      expect(call, 'verifyAdminApproval( is inside the branch block').toBeGreaterThan(-1);
+      const mut = block.indexOf(bp.mutation + '(');
+      expect(mut, `${bp.mutation}( is inside the branch block`).toBeGreaterThan(-1);
+      expect(call, 'before the mutation').toBeLessThan(mut);
+      expect(block, 'the PIN is read from the adminPin field').toMatch(/['"]adminPin['"]/);
+      const args = balanced(block, call + 'verifyAdminApproval'.length);
+      expect(args, 'the capability is named').toMatch(/capability/);
+      const storeProp = /storeId\s*:\s*([^,}\n]+)/.exec(args);
+      expect(storeProp, 'storeId is passed').not.toBeNull();
+      expect(storeProp![1]!, 'storeId is not read from the form').not.toMatch(FORM_READ);
+      expect(outside, 'no verifyAdminApproval( outside the branch (the other branches move money back, they forgive nothing)').not.toContain('verifyAdminApproval(');
+      expect(outside, `${bp.mutation}( is only called inside the branch`).not.toContain(bp.mutation + '(');
+    });
+  }
 });
 
 describe('Tier R: every action compares the typed name with the one it loads (V8, M10)', () => {
