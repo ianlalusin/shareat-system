@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1690` 13. Decision log
-- `1691–1710` 14. Amendment protocol
-- `1711–1715` 15. Engineering standards — the industry practices this project follows
-  - `1716–1721` 15.1 Build order: walking skeleton first
-  - `1722–1733` 15.2 Golden-master testing — the most important practice here
-  - `1734–1742` 15.3 Strangler Fig, not big-bang cutover
-  - `1743–1747` 15.4 No dual-write
-  - `1748–1756` 15.5 Expand/contract migrations
-  - `1757–1765` 15.6 Observability from day zero, not later
-  - `1766–1770` 15.7 CI gates
-  - `1771–1775` 15.8 Backups and a tested restore
-  - `1776–1780` 15.9 Twelve-Factor config
-  - `1781–1788` 15.10 Append-only ledgers — but not event sourcing
-  - `1789–1793` 15.11 Defence in depth
-  - `1794–1822` 15.12 Skills are lenses, not assurance
-  - `1823–1829` 15.13 Reconciliation is a permanent feature
-- `1830–1834` 16. The accounting spine
-  - `1835–1866` 16.0 What we are actually fixing — the diagnosis
-  - `1867–1910` 16.1 The ten invariants — non-negotiable
-  - `1911–1925` 16.2 The oracle: how "correct" is tested
-  - `1926–1947` 16.3 The model — header + lines, not legs
-  - `1948–1967` 16.4 Deliberately simpler than ERPNext
-  - `1968–2034` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2035–2059` 16.6 What v1 already gets right — preserve the intent
-  - `2060–2081` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2082–2096` 16.8 What v1's accounting already gets right
-  - `2097–2140` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2141–2191` 16.10 Posting patterns — one canonical pattern per business event
-  - `2192–2224` 16.11 Inventory's accounting integration
+- `1329–1691` 13. Decision log
+- `1692–1711` 14. Amendment protocol
+- `1712–1716` 15. Engineering standards — the industry practices this project follows
+  - `1717–1722` 15.1 Build order: walking skeleton first
+  - `1723–1734` 15.2 Golden-master testing — the most important practice here
+  - `1735–1743` 15.3 Strangler Fig, not big-bang cutover
+  - `1744–1748` 15.4 No dual-write
+  - `1749–1757` 15.5 Expand/contract migrations
+  - `1758–1766` 15.6 Observability from day zero, not later
+  - `1767–1771` 15.7 CI gates
+  - `1772–1776` 15.8 Backups and a tested restore
+  - `1777–1781` 15.9 Twelve-Factor config
+  - `1782–1789` 15.10 Append-only ledgers — but not event sourcing
+  - `1790–1794` 15.11 Defence in depth
+  - `1795–1823` 15.12 Skills are lenses, not assurance
+  - `1824–1830` 15.13 Reconciliation is a permanent feature
+- `1831–1835` 16. The accounting spine
+  - `1836–1867` 16.0 What we are actually fixing — the diagnosis
+  - `1868–1911` 16.1 The ten invariants — non-negotiable
+  - `1912–1926` 16.2 The oracle: how "correct" is tested
+  - `1927–1948` 16.3 The model — header + lines, not legs
+  - `1949–1968` 16.4 Deliberately simpler than ERPNext
+  - `1969–2035` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2036–2060` 16.6 What v1 already gets right — preserve the intent
+  - `2061–2082` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2083–2097` 16.8 What v1's accounting already gets right
+  - `2098–2141` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2142–2192` 16.10 Posting patterns — one canonical pattern per business event
+  - `2193–2225` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1687,6 +1687,7 @@ just a patch.**
 | 352 | 2026-10-16 | **BUSINESS (B2B) CUSTOMERS USE CUSTOMERS + TRADE ORDERS + AR, NOT A SALES CHANNEL.** Shareat has two customer kinds: walk-in/online diners (B2C: dine-in, take-out, online à la carte, bulk orders, through sales channels and the POS) and business customers (B2B, e.g. a samgyup house buying meat, paying cash or on account). B2B sales are a trade order to a named customer (T-132): dispatch bills Dr 1210 per customer / Cr 4300 and relieves stock; payment is an AR collection (T-131/T-226). A sales channel stays a B2C source label only. Gaps to build as T-433: pay-now at dispatch, a printable delivery receipt/invoice, a credit-limit warning with manager override. | Ian, 2026-10-16 (orchestrator session, research-evaluate-propose: "plan items 123") | Yes |
 | 353 | 2026-10-16 | ⭐ **STAFF AND CUSTOMER PERSONAL INFORMATION IS STRICTLY GUARDED (standing).** Personal data of staff and customers (names with contact details, addresses, government IDs, birthdays, photos, PIN data, bank/e-wallet details, B2B customer contacts and balances) is shown only to people whose capability needs it, enforced in the LOADER/domain (never only the UI), store-scoped, and never in exports or logs beyond what the task requires. **Signatures are the strictest class:** stored only through the file broker (never a data URL), viewable only by payroll staff and admins, never shown in lists, cards or exports, served by a short-lived link, and EVERY view and change is audited. Every new screen or report touching personal data needs a test proving an unauthorised viewer sees nothing. | Ian, 2026-10-16 (orchestrator session) | No — tightening only |
 | 354 | 2026-10-16 | **EARLY-PHASE CLOSE-OUT RULINGS.** (1) Backups (T-393, Phase 0): switch ON now with one proven restore drill, before the 15 Nov go/no-go (reverses row 306's "no backup for now"). (2) Leave/absence tracking (monthly and yearly caps, Phase 4, never built): BUILD before the 1 Jan go-live. (3) Expanded withholding tax on supplier payments (BIR 1601-E): Shareat does NOT withhold; closed as not applicable. (4) Payroll statutory deductions (SSS, PhilHealth, Pag-IBIG, withholding; T-190, then remittance T-193): start NOW from the official 2026 tables; staff data from the HR sheet when it arrives (due 31 Oct). | Ian, 2026-10-16 (orchestrator session, roadmap review) | Yes, per item |
+| 355 | 2026-10-16 | **LEAVE AND PAYROLL-DEDUCTION RULINGS.** Leave (T-436): caps and the 5 legal paid days reset every 1 January; unused legal days are paid out as cash at year end; whole days only at go-live; managers may attach medical-certificate photos (guarded per row 353); pro-rated paid days in the year a person reaches one year of service; nobody approves their own leave (a manager's or admin's own leave needs the super-admin). Payroll (T-190): a government contribution (SSS, PhilHealth, Pag-IBIG) is NOT deducted for a person until that agency's number is on file; the payroll preview lists who is missing what. Backups (T-393): files are not encrypted; the bucket stays private with a bucket-only key. | Ian, 2026-10-16 (orchestrator session); the orchestrator noted the penalty risk of skipping contributions | Yes |
 
 ## 14. Amendment protocol
 
