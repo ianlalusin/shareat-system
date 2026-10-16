@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { CUSTOMER_GROUPS } from '@shareat/db/schema';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess, StoreNotAvailable } from '../../lib/page-access';
 import { createCustomerAction, reconcileCustomerAction } from './actions';
 import {
   GROUP_LABEL,
@@ -8,7 +8,7 @@ import {
   TREATMENT_TONE,
   listLists,
   listRegister,
-  listStores,
+  arStoresFor,
   otherOrgs,
   peso,
   today,
@@ -32,11 +32,14 @@ export default async function CustomersPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/customers');
+  // T-435 / bible row 353 - the READ gate: `record_ar_collection`; the register shows the viewer's own stores' customers only.
+  const { actor, refusal } = await requirePageAccess('/customers');
+  if (refusal) return refusal;
+  const stores = await arStoresFor(actor);
+  if (stores.length === 0) return <StoreNotAvailable />;
 
-  const [customers, stores, orgs, priceLists] = await Promise.all([
-    listRegister(actor.orgId),
-    listStores(actor.orgId),
+  const [customers, orgs, priceLists] = await Promise.all([
+    listRegister(actor),
     otherOrgs(actor.orgId),
     listLists(actor.orgId),
   ]);

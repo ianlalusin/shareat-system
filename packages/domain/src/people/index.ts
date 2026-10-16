@@ -253,11 +253,14 @@ export async function createPerson(
  * `statutoryDiscounts/authorizeRead` already uses for a store-scoped capability with no one store
  * named.
  */
+/** A hire-search hit at the searcher's own stores (or unemployed) is the full row; one who works only elsewhere is name + branch. */
+export type PersonSearchHit = PersonRow | { id: string; displayName: string; branches: string[] };
+
 export async function searchPersons(
   tx: Tx,
   actor: Actor,
   input: { query: string },
-): Promise<PersonRow[]> {
+): Promise<PersonSearchHit[]> {
   const storeIds = await accessRepo.storeIdsForPerson(tx, actor.personId);
   if (storeIds.length === 0) {
     throw new EmploymentError('You have no store scope, so you may not search for staff to hire.');
@@ -266,10 +269,11 @@ export async function searchPersons(
   // T-402 S2 (A2): each store is asked with the non-logging `can()`; only when none passes is `authorize()` called ONCE
   // on the first store, so a refused search logs one real denial and throws the usual refusal (like trade's authorizeEither).
   let authorized = false;
+  const enrolStoreIds: string[] = [];
   for (const storeId of storeIds) {
     if (await can(tx, actor, 'enrol_staff', { storeId })) {
       authorized = true;
-      break;
+      enrolStoreIds.push(storeId);
     }
   }
   if (!authorized) {
@@ -277,7 +281,19 @@ export async function searchPersons(
     throw new EmploymentError('Not authorized to search staff.');
   }
 
-  return personsRepo.searchPersons(tx, { orgId: actor.orgId, query: input.query });
+  // T-435 (bible row 353, Ian 16 Oct): passing on enrol_staff at ONE store must not open every person's record. Someone who works
+  // only at branches the searcher does not hold is still FOUND (so a hire does not duplicate them) but as NAME + BRANCH ONLY.
+  const rows = await personsRepo.searchPersons(tx, { orgId: actor.orgId, query: input.query });
+  if (await accessRepo.personCoversWholeOrg(tx, actor.personId, actor.orgId)) return rows;
+  const held = new Set(enrolStoreIds);
+  const emps = await personsRepo.employmentStoresFor(tx, rows.map((r) => r.id));
+  const out: PersonSearchHit[] = [];
+  for (const r of rows) {
+    const mine = emps.filter((e) => e.personId === r.id);
+    if (mine.length === 0 || mine.some((e) => held.has(e.storeId))) out.push(r);
+    else out.push({ id: r.id, displayName: r.displayName, branches: [...new Set(mine.map((e) => e.storeName))] });
+  }
+  return out;
 }
 
 /**

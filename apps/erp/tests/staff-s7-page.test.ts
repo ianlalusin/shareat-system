@@ -97,6 +97,7 @@ vi.mock('@shareat/db', async (orig) => {
   const actual = await orig<typeof import('@shareat/db')>();
   return {
     ...actual,
+    pinAttemptsRepo: { ...actual.pinAttemptsRepo, statusForStore: vi.fn(async () => ({ locked: [], attempts: [] })) },
     employmentRepo: {
       ...actual.employmentRepo,
       photoFileIds: vi.fn(async (_tx: unknown, ids: string[]) => {
@@ -120,6 +121,15 @@ vi.mock('@shareat/domain', async (orig) => {
     }),
   };
 });
+// T-435: /staff is read-gated by requirePageAccess (enrol_staff OR manage_attendance); the gate itself is proven in t435-s3-staff.test.ts.
+vi.mock('../src/lib/page-access', async () => ({
+  requirePageAccess: vi.fn(async () => ({ actor: { orgId: 'org-1', personId: 'viewer-1' }, refusal: H.caps.has('enrol_staff') || H.caps.has('manage_attendance') ? null : 'REFUSED' })),
+  StoreNotAvailable: () => 'NOT_AVAILABLE',
+}));
+// T-435: the picker's store list comes from heldStoresFor (the real scopedStores needs a database); its rule is proven in t435-s3-staff.test.ts.
+vi.mock('../src/lib/held-stores', () => ({
+  heldStoresFor: vi.fn(async () => [{ id: 'store-1', name: 'Rizal Branch', code: 'RZL' }]),
+}));
 vi.mock('../src/lib/photo-link', () => ({
   canViewPhoto: vi.fn(async (_actor: unknown, fileId: string | null) => !!fileId && H.viewable.has(fileId)),
 }));
@@ -147,6 +157,22 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe('T-435 - /staff reads through the gate and the Actor-taking loader', () => {
+  it('a viewer with neither capability gets the refusal and no roster', async () => {
+    H.caps = new Set();
+    const html = await render();
+    expect(html).not.toContain('Ana Reyes');
+  });
+
+  it('rosterForStore is called with the full Actor first, then the store', async () => {
+    const lib = await import('../src/app/staff/lib');
+    await render();
+    const call = (lib.rosterForStore as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1)!;
+    expect(call[0]).toMatchObject({ orgId: 'org-1', personId: 'viewer-1' });
+    expect(call[1]).toBe('store-1');
+  });
 });
 
 describe('T-387 S7 - /staff views', () => {
@@ -220,8 +246,8 @@ describe('T-387 S7 - a card', () => {
     expect(html).toContain('data-live-state="off"');
   });
 
-  it('GATE x: without manage_attendance no chip renders (and the page still renders)', async () => {
-    H.caps = new Set();
+  it('GATE x: with enrol_staff but without manage_attendance no chip renders (and the page still renders)', async () => {
+    H.caps = new Set(['enrol_staff']);
     const html = await render();
     expect(html).toContain('Ana Reyes');
     expect(html).not.toContain('data-live-state');

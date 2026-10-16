@@ -1,7 +1,7 @@
-import { requirePageAccess } from '../../../lib/page-access';
+import { requirePageAccess, StoreNotAvailable } from '../../../lib/page-access';
 import { SEPARATION_CAUSES } from '@shareat/db/schema';
 import { postSeparationAction, voidSeparationAction } from './actions';
-import { cashAccountsFor, listStores, peso, preview, separationsFor, worklistFor } from './lib';
+import { cashAccountsFor, payrollStoresFor, peso, preview, separationsFor, worklistFor } from './lib';
 import { Page } from '@/components/shell/Page';
 import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -44,7 +44,10 @@ export default async function SeparationsPage({
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
 
-  const stores = await listStores(actor.orgId);
+  const stores = await payrollStoresFor(actor);
+  if (stores.length === 0) return <StoreNotAvailable />;
+  // T-435: a requested store the actor does not hold is one sentence — never a fallback to another store.
+  if (sp.store && !stores.some((s) => s.id === sp.store)) return <StoreNotAvailable />;
   const storeId = sp.store || stores[0]?.id;
   if (!storeId) {
     return (
@@ -56,9 +59,9 @@ export default async function SeparationsPage({
   }
 
   const [worklist, accounts, separations] = await Promise.all([
-    worklistFor(actor.orgId, storeId),
-    cashAccountsFor(actor.orgId, storeId),
-    separationsFor(actor.orgId, storeId),
+    worklistFor(actor, storeId),
+    cashAccountsFor(actor, storeId),
+    separationsFor(actor, storeId),
   ]);
 
   const selected = sp.employmentId ? worklist.find((w) => w.employmentId === sp.employmentId) : undefined;

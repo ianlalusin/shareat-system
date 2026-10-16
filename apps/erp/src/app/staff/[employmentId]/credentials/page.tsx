@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { eq } from 'drizzle-orm';
 import { employmentRepo, schema } from '@shareat/db';
 import { listCredentials, MAX_TEMPLATES, type CredentialSummary } from '@shareat/domain';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '../../../../lib/page-access';
+import { can } from '@shareat/auth';
 import { listStores, withOrgPrincipal } from '../../../expenses/lib';
 import { enrolCardAction, enrolFingerprintAction, revokeCredentialAction } from './actions';
 import { Page } from '@/components/shell/Page';
@@ -47,11 +48,17 @@ export default async function CredentialsPage({
 }) {
   const { employmentId } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/staff/${employmentId}/credentials`);
+  // T-435 / bible row 353 - the read gate; the person's name is read only AFTER the employment is proven to be at a store the
+  // viewer holds (enrol_staff or manage_attendance), so another store's employment is the same notFound as a forged id.
+  const { actor, refusal } = await requirePageAccess(`/staff/${employmentId}/credentials`);
+  if (refusal) return refusal;
 
   const { employment, personName } = await withOrgPrincipal(actor.orgId, async (tx) => {
     const employment = await employmentRepo.getEmployment(tx, employmentId);
     if (!employment) return { employment: undefined, personName: undefined };
+    if (!(await can(tx, actor, 'enrol_staff', { storeId: employment.storeId })) && !(await can(tx, actor, 'manage_attendance', { storeId: employment.storeId }))) {
+      return { employment: undefined, personName: undefined };
+    }
     const [person] = await tx
       .select({ displayName: schema.persons.displayName })
       .from(schema.persons)
@@ -60,6 +67,17 @@ export default async function CredentialsPage({
     return { employment, personName: person?.displayName };
   });
   if (!employment || employment.orgId !== actor.orgId) notFound();
+
+  // Credentials are listed under manage_attendance; someone who holds only enrol_staff gets a plain refusal, not a throw.
+  const mayListCredentials = await withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'manage_attendance', { storeId: employment.storeId }));
+  if (!mayListCredentials) {
+    return (
+      <Page density="table">
+        <h1 className="text-2xl font-semibold">Credentials</h1>
+        <p className="mt-4 text-sm">You do not have access to this screen. Credentials need the manage_attendance capability at this store.</p>
+      </Page>
+    );
+  }
 
   const [stores, credentials] = await Promise.all([
     listStores(actor.orgId),

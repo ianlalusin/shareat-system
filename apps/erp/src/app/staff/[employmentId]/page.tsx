@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { ENDED_STATUSES } from '@shareat/db/schema';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { endEmploymentAction, issuePinAction, setPositionsAction } from '../actions';
 import { employmentDetail, livePinFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { Page } from '@/components/shell/Page';
@@ -26,17 +26,19 @@ export default async function EmploymentDetailPage({
 }) {
   const { employmentId } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/staff/${employmentId}`);
-  const detail = await employmentDetail(actor.orgId, employmentId);
+  // T-435 / bible row 353 - the read gate, then the by-id scope (the same notFound for another store's employment as for a forged id).
+  const { actor, refusal } = await requirePageAccess(`/staff/${employmentId}`);
+  if (refusal) return refusal;
+  const detail = await employmentDetail(actor, employmentId);
   if (!detail) notFound();
 
   const isEnded = detail.employment.endedOn !== null;
   const [positions, livePin, otherBranches] = await Promise.all([
     positionsForStore(actor.orgId, detail.employment.storeId),
-    livePinFor(actor.orgId, detail.employment.personId),
+    livePinFor(actor, detail.employment.personId),
     // ⭐ T-302 — read BEFORE the form renders, because the warning it feeds has to be on screen
     // before the button is pressed, not in a toast after the write.
-    otherOpenBranchesFor(actor.orgId, detail.employment.personId, detail.employment.storeId),
+    otherOpenBranchesFor(actor, detail.employment.personId, detail.employment.storeId),
   ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
@@ -127,10 +129,14 @@ export default async function EmploymentDetailPage({
           branch too. A confirmation after the write would not be a control, and "this affects
           somewhere else" is not something an admin can act on — so it names the branches.
         */}
-        {!isEnded && otherBranches.length > 0 && (
+        {!isEnded && otherBranches.branches.length + otherBranches.hiddenCount > 0 && (
           <Banner tone="warning">
-            ⚠️ This person also works at{' '}
-            <strong>{otherBranches.map((b) => b.storeName).join(', ')}</strong>. They have one PIN
+            ⚠️ This person works at{' '}
+            <strong>
+              {[detail.storeName, ...otherBranches.branches.map((b) => b.storeName)].join(', ')}
+              {otherBranches.hiddenCount > 0 &&
+                ` and ${otherBranches.hiddenCount} other branch${otherBranches.hiddenCount === 1 ? '' : 'es'}`}
+            </strong>. They have one PIN
             for the whole business, so issuing a new one here{' '}
             <strong>changes the PIN they use there too</strong> — tell them the new digits before
             their next shift at either branch.

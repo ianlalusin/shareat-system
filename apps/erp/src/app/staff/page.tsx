@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess, StoreNotAvailable } from '../../lib/page-access';
 import { issueAdminPinAction, upsertStorePositionAction } from './actions';
-import { listStores, positionsForStore, rosterForStore, withOrgPrincipal } from './lib';
+import { positionsForStore, rosterForStore, staffStoresFor, withOrgPrincipal } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { Button, FlashBanner, Input } from '@/components/ui';
@@ -30,9 +30,14 @@ const INPUT =
 
 export default async function StaffPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/staff');
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+  // T-435 / bible row 353 - enrol_staff OR manage_attendance (Ian Q2), for the viewer's own stores only.
+  const { actor, refusal } = await requirePageAccess('/staff');
+  if (refusal) return refusal;
+  const stores = await staffStoresFor(actor);
+  if (stores.length === 0) return <StoreNotAvailable />;
+  // A requested store the viewer does not hold is one sentence - never a quiet fallback to another store.
+  if (sp.store && !stores.some((s) => s.id === sp.store)) return <StoreNotAvailable />;
+  const storeId = sp.store || stores[0]?.id;
 
   if (!storeId) {
     return (
@@ -44,7 +49,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   }
 
   const [roster, positions] = await Promise.all([
-    rosterForStore(actor.orgId, storeId),
+    rosterForStore(actor, storeId),
     positionsForStore(actor.orgId, storeId),
   ]);
 

@@ -15,8 +15,12 @@ import {
   type PriceListRow,
 } from '@shareat/db';
 import type { CustomerTreatment } from '@shareat/db/schema';
-import { add, money } from '@shareat/core/money';
-import { listStores, withOrgPrincipal } from '../expenses/lib';
+import { add, compare, money } from '@shareat/core/money';
+import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import type { Tx } from '@shareat/db';
+import { withOrgPrincipal } from '../expenses/lib';
+import type { StoreOption } from '../expenses/lib';
+import { heldStoresFor } from '../../lib/held-stores';
 
 export { peso } from '../../lib/format';
 export { listStores, withOrgPrincipal } from '../expenses/lib';
@@ -27,11 +31,34 @@ export interface CustomerListRow extends CustomerRow {
   balance: string;
 }
 
-export async function listRegister(orgId: string): Promise<CustomerListRow[]> {
+// ⛔ T-435 / bible row 353 — every reader of customer data takes the FULL Actor and is limited to the stores the actor may
+//    collect at (`record_ar_collection`, store-scoped). Customers are org master data with no store of their own, so a viewer
+//    sees a customer if it has any AR row at a held store, a held counterparty store, or no AR rows at all (Ian Q1: no
+//    cross-branch customers). A refusal is authorize()'s AuthorizationError.
+
+/** The stores `actor` may collect at; throws authorize()'s refusal when there are none. */
+async function heldArStores(tx: Tx, actor: Actor): Promise<StoreOption[]> {
+  const held = await heldStoresFor(tx, actor, ['record_ar_collection'], { includeRetired: true });
+  if (held.length === 0) {
+    await authorize(tx, actor, 'record_ar_collection', {}); // store-scoped with no storeId: always refuses
+    throw new AuthorizationError('authorize: no store is held for record_ar_collection', 'record_ar_collection');
+  }
+  return held;
+}
+
+/** The stores the viewer may see, for the page's pickers and counterparty names. */
+export async function arStoresFor(actor: Actor): Promise<StoreOption[]> {
+  // Never throws: the pages turn an empty list into the plain refusal sentence.
+  return withOrgPrincipal(actor.orgId, (tx) => heldStoresFor(tx, actor, ['record_ar_collection'], { includeRetired: true }));
+}
+
+export async function listRegister(actor: Actor): Promise<CustomerListRow[]> {
+  const orgId = actor.orgId;
   return withOrgPrincipal(orgId, async (tx) => {
+    const storeIds = (await heldArStores(tx, actor)).map((s) => s.id);
     const [rows, balances] = await Promise.all([
-      customersRepo.listCustomers(tx, orgId),
-      customersRepo.balancesByCustomer(tx, orgId),
+      customersRepo.listCustomersInScope(tx, orgId, storeIds),
+      customersRepo.balancesByCustomer(tx, orgId, storeIds),
     ]);
     return rows.map((c) => ({
       ...c,
@@ -69,50 +96,77 @@ export interface CustomerDetail extends CustomerRow {
   treatment: CustomerTreatment;
 }
 
-export async function getCustomer(orgId: string, id: string): Promise<CustomerDetail | null> {
-  return withOrgPrincipal(orgId, async (tx) => {
-    const row = await customersRepo.getById(tx, orgId, id);
+export async function getCustomer(actor: Actor, id: string): Promise<CustomerDetail | null> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const storeIds = (await heldArStores(tx, actor)).map((s) => s.id);
+    const row = await customersRepo.getByIdInScope(tx, actor.orgId, id, storeIds);
     return row ? { ...row, treatment: treatmentOf(row) } : null;
   });
 }
 
 /**
- * What the customer owes.
+ * What the customer owes AT THE STORES THE VIEWER HOLDS (or at one chosen held store).
  *
- * ⚠️ **Org-wide by default, per store when asked, and the page must never conflate them.** A
- * credit limit is extended to a BUYER (`recordCharge` judges it org-wide); allocation happens per
- * STORE, because a collection posts every leg at its own store.
+ * ⚠️ **Per store when asked, and the page must never conflate them.** A credit limit is extended to a BUYER
+ * (`recordCharge` judges it org-wide) - see `isOverLimit`, the only org-wide judgement that leaves this file, and only as a
+ * yes/no. Allocation happens per STORE, because a collection posts every leg at its own store.
  */
-export async function getPosition(orgId: string, customerId: string, storeId?: string): Promise<string> {
-  return withOrgPrincipal(orgId, async (tx) => {
-    const { controlBalance } = await arRepo.positionOf(tx, orgId, customerId, storeId);
+export async function getPosition(actor: Actor, customerId: string, storeId?: string): Promise<string> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const storeIds = (await heldArStores(tx, actor)).map((s) => s.id);
+    if (storeId) await authorize(tx, actor, 'record_ar_collection', { storeId });
+    const { controlBalance } = await arRepo.positionOf(tx, actor.orgId, customerId, storeId, storeIds);
     return controlBalance;
   });
 }
 
-/** Store credit held on the customer's behalf — `2140`, a liability, not a discount. */
-export async function creditBalance(orgId: string, customerId: string): Promise<string> {
-  return withOrgPrincipal(orgId, (tx) => arRepo.creditBalanceOf(tx, orgId, customerId));
+/**
+ * ⭐ T-435 - "is this buyer over their credit limit?", judged ORG-WIDE (a limit is extended to the buyer, not to a branch),
+ * returned as a yes/no ONLY. The org-wide figure and other stores' amounts never reach the page.
+ */
+export async function isOverLimit(actor: Actor, customerId: string): Promise<boolean> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const storeIds = (await heldArStores(tx, actor)).map((s) => s.id);
+    const row = await customersRepo.getByIdInScope(tx, actor.orgId, customerId, storeIds);
+    if (!row || row.creditLimit === null) return false;
+    const { controlBalance } = await arRepo.positionOf(tx, actor.orgId, customerId);
+    return compare(money(controlBalance), money(row.creditLimit)) > 0;
+  });
 }
 
-export async function listCharges(orgId: string, customerId: string, storeId?: string) {
-  return withOrgPrincipal(orgId, (tx) =>
-    arRepo.listChargesForCustomer(tx, orgId, customerId, storeId ? { storeId } : {}),
-  );
+/** Store credit held on the customer's behalf at the viewer's stores - `2140`, a liability, not a discount. */
+export async function creditBalance(actor: Actor, customerId: string): Promise<string> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const storeIds = (await heldArStores(tx, actor)).map((s) => s.id);
+    return arRepo.creditBalanceOf(tx, actor.orgId, customerId, storeIds);
+  });
 }
 
-export async function listCollections(orgId: string, customerId: string, storeId?: string) {
-  return withOrgPrincipal(orgId, (tx) =>
-    arRepo.listCollectionsForCustomer(tx, orgId, customerId, storeId ? { storeId } : {}),
-  );
+export async function listCharges(actor: Actor, customerId: string, storeId?: string) {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const storeIds = (await heldArStores(tx, actor)).map((s) => s.id);
+    if (storeId) await authorize(tx, actor, 'record_ar_collection', { storeId });
+    return arRepo.listChargesForCustomer(tx, actor.orgId, customerId, storeId ? { storeId } : { storeIds });
+  });
 }
 
-export async function openItemsFor(orgId: string, customerId: string, storeId: string) {
-  return withOrgPrincipal(orgId, (tx) => arRepo.openItems(tx, orgId, customerId, storeId));
+export async function listCollections(actor: Actor, customerId: string, storeId?: string) {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const storeIds = (await heldArStores(tx, actor)).map((s) => s.id);
+    if (storeId) await authorize(tx, actor, 'record_ar_collection', { storeId });
+    return arRepo.listCollectionsForCustomer(tx, actor.orgId, customerId, storeId ? { storeId } : { storeIds });
+  });
+}
+
+export async function openItemsFor(actor: Actor, customerId: string, storeId: string) {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    await authorize(tx, actor, 'record_ar_collection', { storeId });
+    return arRepo.openItems(tx, actor.orgId, customerId, storeId);
+  });
 }
 
 /**
- * Which stores this customer owes money at, with the total and the count.
+ * Which of the VIEWER'S stores this customer owes money at, with the total and the count.
  *
  * ⭐ Mirrors `/ap/suppliers/[id]`'s helper deliberately, including the reason it exists: the store
  * is **CHOSEN**, never inferred from whichever open item sorted first. AP's older behaviour booked
@@ -120,14 +174,14 @@ export async function openItemsFor(orgId: string, customerId: string, storeId: s
  * account went negative and the other's never cleared.
  */
 export async function storesWithOpenItems(
-  orgId: string,
+  actor: Actor,
   customerId: string,
 ): Promise<{ storeId: string; storeName: string; outstanding: string; count: number }[]> {
-  return withOrgPrincipal(orgId, async (tx) => {
-    const stores = await listStores(orgId);
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const stores = await heldArStores(tx, actor);
     const out: { storeId: string; storeName: string; outstanding: string; count: number }[] = [];
     for (const s of stores) {
-      const items = await arRepo.openItems(tx, orgId, customerId, s.id);
+      const items = await arRepo.openItems(tx, actor.orgId, customerId, s.id);
       if (items.length === 0) continue;
       out.push({
         storeId: s.id,
@@ -140,8 +194,10 @@ export async function storesWithOpenItems(
   });
 }
 
-export async function moneyAccountsFor(orgId: string, storeId: string) {
+export async function moneyAccountsFor(actor: Actor, storeId: string) {
+  const orgId = actor.orgId;
   return withOrgPrincipal(orgId, async (tx) => {
+    await authorize(tx, actor, 'record_ar_collection', { storeId });
     const accounts = await moneyAccountsRepo.listMoneyAccounts(tx, orgId, { storeId });
     return Promise.all(
       accounts.map(async (a) => ({ ...a, balance: await moneyAccountsRepo.balanceOf(tx, orgId, a) })),

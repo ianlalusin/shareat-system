@@ -24,6 +24,7 @@ import { branchPriceFor, previewCreditExposure } from '@shareat/domain';
 import { money, subtract } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
+import { scopedStores } from '../../reports/lib';
 
 export { peso } from '../../../lib/format';
 export { listStores, withOrgPrincipal };
@@ -49,7 +50,10 @@ export interface CustomerOption {
   treatment: CustomerTreatment;
   counterpartyStoreId: string | null;
   priceListId: string | null;
-  creditLimit: string | null;
+  // ⛔ T-435: `orderFormData` never fills a credit limit. This is serialised to the browser, where nothing read it; a buyer's limit is
+  //    shown on the order page only to someone who can approve_buyer / override_credit_limit at the order's store. (Typed `null`
+  //    only so older callers that build an option by hand still compile; it can never carry a figure.)
+  creditLimit?: null;
 }
 
 export interface ItemOption {
@@ -97,7 +101,6 @@ export async function orderFormData(orgId: string): Promise<OrderFormData> {
         treatment: treatmentOf(c),
         counterpartyStoreId: c.counterpartyStoreId,
         priceListId: c.priceListId,
-        creditLimit: c.creditLimit,
       }));
 
     const quotes: Record<string, Record<string, string>> = {};
@@ -122,6 +125,21 @@ export async function orderFormData(orgId: string): Promise<OrderFormData> {
   });
 }
 
+/**
+ * T-435 / bible row 353 - the stores the viewer may see trade orders for: their own scoped stores (the domain's dispatch/
+ * receive gates are unchanged). A requested store outside this list is "not available", never a quiet fallback.
+ */
+export async function tradeStoresFor(actor: Actor): Promise<StoreOption[]> {
+  return withOrgPrincipal(actor.orgId, async (tx) => (await scopedStores(tx, actor)).stores);
+}
+
+/** Whether the viewer may see a buyer's credit limit on an order at `storeId`: approve_buyer or override_credit_limit there. */
+export async function canSeeCreditLimit(actor: Actor, storeId: string): Promise<boolean> {
+  return withOrgPrincipal(actor.orgId, async (tx) =>
+    (await can(tx, actor, 'approve_buyer', { storeId })) || (await can(tx, actor, 'override_credit_limit', { storeId })),
+  );
+}
+
 export async function orderRegister(orgId: string, storeId: string): Promise<TradeOrderListRow[]> {
   return withOrgPrincipal(orgId, (tx) => tradeRepo.listOrders(tx, orgId, storeId));
 }
@@ -142,11 +160,23 @@ export interface OrderDetail {
   receivingStore: StoreOption | undefined;
 }
 
-export async function orderDetail(orgId: string, id: string): Promise<OrderDetail | null> {
+/**
+ * T-435: an order is opened only by someone who holds approve_buyer, create_wholesale_order or record_ar_collection at the
+ * ORDER's store; anyone else gets `null` - the same as a forged id.
+ */
+export async function orderDetail(actor: Actor, id: string): Promise<OrderDetail | null> {
+  const orgId = actor.orgId;
   const stores = await listStores(orgId);
   return withOrgPrincipal(orgId, async (tx) => {
     const order = await tradeRepo.getOrderById(tx, orgId, id);
     if (!order) return null;
+    if (
+      !(await can(tx, actor, 'approve_buyer', { storeId: order.storeId })) &&
+      !(await can(tx, actor, 'create_wholesale_order', { storeId: order.storeId })) &&
+      !(await can(tx, actor, 'record_ar_collection', { storeId: order.storeId }))
+    ) {
+      return null;
+    }
     const customer = await customersRepo.getById(tx, orgId, order.customerId);
     if (!customer) return null;
     const rawLines = await tradeRepo.linesFor(tx, orgId, order.id);
@@ -212,7 +242,7 @@ export interface DeliveryReceiptData {
  * at the order's store), so a person without the right learns nothing about whether the order exists.
  */
 export async function deliveryReceiptData(actor: Actor, id: string): Promise<DeliveryReceiptData | null> {
-  const detail = await orderDetail(actor.orgId, id);
+  const detail = await orderDetail(actor, id);
   if (!detail) return null;
   const { order } = detail;
   if ((order.status !== 'dispatched' && order.status !== 'received') || !order.arChargeId) return null;
