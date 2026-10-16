@@ -75,7 +75,8 @@ textarea:focus-visible,.opt:focus-within{outline:2px solid var(--accent);outline
 const SECTIONS = [
   {id:"decided", title:"Already decided (record)", note:"Decisions you made in chat. Shown so they live somewhere you can see them; nothing to answer."},
   {id:"customer", title:"Customer app v2", note:"From the 15 Oct study of the current diner app."},
-  {id:"pos", title:"POS v2", note:"From the 15 Oct study of the current POS. Questions appear here when that study finishes."}
+  {id:"pos", title:"POS v2", note:"From the 15 Oct study of the current POS. Questions appear here when that study finishes."},
+  {id:"erp", title:"ERP (other)", note:"Questions from other ERP work running alongside."}
 ];
 let questions = [], answers = {}, db = null, canWrite = true;
 const $ = s => document.querySelector(s);
@@ -91,7 +92,10 @@ function render(){
   const root = $("#sections"); root.textContent = "";
   let open = 0, done = 0;
   for (const s of SECTIONS){
-    const qs = questions.filter(q => q.section === s.id).sort((a,b)=>(a.order||0)-(b.order||0));
+    // Newest first (Ian, 15 Oct): questions waiting on him on top, newest of those first; answered ones below, newest first.
+    const answeredQ = q => { const a = answers[q.id] || {}; return q.kind === "record" || !!(a.choice || (a.comment||"").trim()); };
+    const qs = questions.filter(q => q.section === s.id)
+      .sort((a,b) => (answeredQ(a) - answeredQ(b)) || ((b.order||0) - (a.order||0)));
     const sec = el("section"); sec.id = "sec-"+s.id;
     sec.append(el("h2", null, s.title), el("p","sec-note", s.note));
     if (!qs.length) sec.append(el("p","empty","Nothing here yet."));
