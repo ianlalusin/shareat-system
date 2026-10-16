@@ -128,6 +128,48 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
         )}
       </section>
 
+      {/* T-419: display only. Cooking from a recipe took these out of stock when it was posted; they are not recorded or posted from here. */}
+      <section>
+        <h2 className="text-lg font-medium">Used in cooking on {date}</h2>
+        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+          Taken from stock when the cooking was posted. Drafts have not taken anything yet. Shown for the full picture; not posted again from here.
+        </p>
+        {queue.cooked.length === 0 ? (
+          <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">No cooking from a recipe was recorded for this date.</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <table className="w-full min-w-[520px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
+                  <th className="px-3 py-2 font-medium">Item</th>
+                  <th className="px-3 py-2 text-right font-medium">Quantity</th>
+                  <th className="px-3 py-2 font-medium">From</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {queue.cooked.map((c, i) => (
+                  <tr key={`${c.recordId}-${c.itemId}-${i}`} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                    <td className="px-3 py-2">{c.itemName}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${c.isDraft ? 'text-neutral-500 dark:text-neutral-500' : ''}`}>
+                      {plainQty(c.quantity)} {c.unit}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Link href={`/inventory/production/${c.recordId}`} className="underline underline-offset-4">
+                        Recipe: {c.recipeName}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2">
+                      {c.isDraft ? <span className="text-xs text-amber-700 dark:text-amber-400">Draft — not posted yet</span> : 'Posted'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       <section>
         <h2 className="text-lg font-medium">Drafts waiting for a manager</h2>
         {queue.drafts.length === 0 ? (

@@ -7,7 +7,7 @@
  * there.
  */
 import { itemsRepo, posMappingRepo, stockLedgerRepo, stockUsageRepo } from '@shareat/db';
-import { listStoreUsageQueue, listUsageVariances, type UsageVariance } from '@shareat/domain';
+import { listCookUsageForDay, listStoreUsageQueue, listUsageVariances, type CookUsageLine, type UsageVariance } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
@@ -104,6 +104,8 @@ export interface UsageQueueView {
   readonly variances: UsageVariance[];
   /** Every usage draft of the store, from every author, oldest first. */
   readonly drafts: Awaited<ReturnType<typeof listStoreUsageQueue>>;
+  /** T-419: ingredients recipe cooking used that day (display only; drafts included, marked). */
+  readonly cooked: CookUsageLine[];
 }
 
 /**
@@ -112,10 +114,11 @@ export interface UsageQueueView {
  */
 export async function usageQueueData(orgId: string, actor: Actor, storeId: string, date: string): Promise<UsageQueueView> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const [variances, drafts] = await Promise.all([
+    const [variances, drafts, cooked] = await Promise.all([
       listUsageVariances(tx, actor, { storeId, date }),
       listStoreUsageQueue(tx, actor, storeId),
+      listCookUsageForDay(tx, actor, { storeId, date }),
     ]);
-    return { date, variances, drafts };
+    return { date, variances, drafts, cooked };
   });
 }
