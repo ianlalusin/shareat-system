@@ -32,11 +32,13 @@ import {
   advisoryLocksRepo,
   apRepo,
   auditLogRepo,
+  cashRequestsRepo,
   itemsRepo,
   journalRepo,
   expensesRepo,
   filesRepo,
   moneyAccountsRepo,
+  personsRepo,
   storesRepo,
   transaction,
   type Tx,
@@ -1068,8 +1070,8 @@ export interface RecordApPaymentInput {
    * even though no draw happens against it that day.
    */
   creditApplied?: string;
-  /** Set when this payment draws on a released cash request — attribution only, mirrors
-   *  `expense_payments.cashRequestId`'s role exactly. */
+  /** T-415: the released cash request this payment draws on. Required when `moneyAccountId` is a staff cash (1120)
+   *  account and cash leaves it; refused for any other account. The request is locked and its live balance checked. */
   cashRequestId?: string | null;
   referenceNo?: string | null;
   notes?: string | null;
@@ -1235,8 +1237,59 @@ export async function recordPayment(
     const atLeastZero = (m: Money): Money => (compare(m, ZERO) < 0 ? ZERO : m);
     const cashPortion = atLeastZero(subtract(amount, creditApplied));
     // `checkDraw` (money-accounts) takes `Money`; `cashPortion` is a finite, validated `Money` here.
-    const warning =
-      compare(cashPortion, ZERO) > 0 ? await checkDraw(trx, actor.orgId, account, cashPortion, 'recordPayment') : undefined;
+    // ⭐ T-415 (DEF-657): cash leaving a staff cash account (1120) is a draw on ONE cash request. Only when cash leaves.
+    // Lock order (ruling 2): expenses -> supplier credit (above) -> request lock -> live balance read.
+    const floatRequestId = input.cashRequestId ?? null;
+    let warning: string | undefined;
+    if (compare(cashPortion, ZERO) > 0) {
+      if (account.glAccountCode === '1120') {
+        if (!floatRequestId) {
+          throw refuse(
+            `recordPayment: money account ${account.id} is a staff cash account but no cash request was named.`,
+            'This is a staff cash account. Pick the cash request the money comes from.',
+          );
+        }
+        if (account.storeId !== input.storeId) {
+          throw refuse(
+            `recordPayment: staff cash account ${account.id} is at store ${account.storeId}, the payment at ${input.storeId}.`,
+            "A cash request can only be paid from its store's staff cash account.",
+          );
+        }
+        const [req] = await cashRequestsRepo.lockForSpend(trx, actor.orgId, [floatRequestId]);
+        if (!req) {
+          throw gone(`recordPayment: cash request ${floatRequestId} does not exist in org ${actor.orgId}.`, 'cash request');
+        }
+        const holder = (await personsRepo.getPersonById(trx, actor.orgId, req.requestedFor))?.displayName ?? 'The holder';
+        if (req.status !== 'released') {
+          throw refuse(
+            `recordPayment: cash request ${floatRequestId} is ${req.status}, not released.`,
+            `${holder}'s cash request is no longer open (${req.status}). Pick another source.`,
+          );
+        }
+        if (req.storeId !== input.storeId) {
+          throw refuse(
+            `recordPayment: payment at store ${input.storeId} draws on cash request ${floatRequestId}, released at store ${req.storeId}.`,
+            `${holder}'s cash request belongs to another store, so this payment cannot draw from it. Pick another source.`,
+          );
+        }
+        const outstanding = money((await cashRequestsRepo.floatPositionOf(trx, actor.orgId, floatRequestId)).outstanding);
+        if (compare(cashPortion, outstanding) > 0) {
+          throw refuse(
+            `recordPayment: payment draws ${cashPortion} from cash request ${floatRequestId}, which has ${outstanding} left.`,
+            `${holder}'s cash request has ${formatMoney(outstanding)} left — this payment draws ${formatMoney(cashPortion)} from it. Lower the amount or pay the rest another way.`,
+          );
+        }
+        // The per-request check above replaces `checkDraw` for a float leg (T-414 ruling 6).
+      } else {
+        if (floatRequestId) {
+          throw refuse(
+            `recordPayment: cash request ${floatRequestId} named but money account ${account.id} is not a staff cash account.`,
+            "A cash request can only be paid from its store's staff cash account.",
+          );
+        }
+        warning = (await checkDraw(trx, actor.orgId, account, cashPortion, 'recordPayment')) ?? undefined;
+      }
+    }
 
     const unallocated = atLeastZero(subtract(amount, allocatedTotal));
     const allocated = allocatedTotal;
@@ -1283,7 +1336,9 @@ export async function recordPayment(
               credit: cashPortion,
               ...(account.glAccountCode === '1140'
                 ? { partyType: 'money_account' as const, partyId: account.id }
-                : {}),
+                : account.glAccountCode === '1120' && floatRequestId
+                  ? { partyType: 'cash_request' as const, partyId: floatRequestId }
+                  : {}),
               lineMemo: `Payment to ${supplier.name}`,
             },
           ]
@@ -1305,7 +1360,8 @@ export async function recordPayment(
       businessDate: input.businessDate,
       amount,
       moneyAccountId: input.moneyAccountId,
-      cashRequestId: input.cashRequestId ?? null,
+      // T-415: only a payment that actually drew a float keeps the request id (a credit-only payment draws nothing).
+      cashRequestId: compare(cashPortion, ZERO) > 0 ? (input.cashRequestId ?? null) : null,
       referenceNo: input.referenceNo?.trim() || null,
       notes: input.notes?.trim() || null,
       createdBy: actor.personId,
@@ -1399,6 +1455,19 @@ export async function voidPayment(
 
     const reason = input.reason.trim();
     if (!reason) throw refuse('voidPayment: say why this payment is being voided.', 'Say why this payment is being voided.');
+
+    // ⭐ T-415 (ruling 4): a void puts float money back on the request, so the request must still be open. Locked after the
+    // supplier credit (above) and before the reversal, so a settle that is closing the request is waited for.
+    if (payment.cashRequestId) {
+      const [req] = await cashRequestsRepo.lockForSpend(trx, actor.orgId, [payment.cashRequestId]);
+      if (req && req.status !== 'released') {
+        const holder = (await personsRepo.getPersonById(trx, actor.orgId, req.requestedFor))?.displayName ?? 'The holder';
+        throw refuse(
+          `voidPayment: ap_payment ${input.paymentId} drew on cash request ${payment.cashRequestId}, which is ${req.status}.`,
+          `${holder}'s cash request is ${req.status}, so this cannot be voided. The request must still be released.`,
+        );
+      }
+    }
 
     // S0·N2: what this payment left on 1240 is its overpayment (`unallocated`, debited) less any
     // return credit it SPENT (`creditApplied`, credited back). Reversing it takes that NET out of the

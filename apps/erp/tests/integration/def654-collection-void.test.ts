@@ -80,6 +80,9 @@ async function run(fields: Record<string, string>, who: { personId: string; orgI
 }
 const missCount = async (storeId: string) =>
   (await sql<{ n: number }[]>`select count(*)::int as n from sign_in_attempts where store_id = ${storeId} and kind = 'miss'`)[0]!.n;
+/** T-416: a wrong approval PIN is charged to the ACTOR's bucket (actor_person_id, no store). */
+const actorMissCount = async (personId: string) =>
+  (await sql<{ n: number }[]>`select count(*)::int as n from sign_in_attempts where actor_person_id = ${personId} and store_id is null and kind = 'miss'`)[0]!.n;
 
 describe('DEF-654: voidCollectionAction is Tier P', () => {
   it('no adminPin -> refused with the one sentence, the collection stays posted, no approval event (M-a)', async () => {
@@ -91,15 +94,17 @@ describe('DEF-654: voidCollectionAction is Tier P', () => {
     expect(await auditRows(sql, t.f.orgId, 'destructive.approved', t.collectionId)).toHaveLength(0);
   });
 
-  it('a wrong PIN is refused, nothing changes, and the miss is charged to the RECORD store budget, not a forged storeId (M-b, M-c)', async () => {
+  it('a wrong PIN is refused, nothing changes, and the miss is charged to the ACTOR, not any store (a forged storeId charges nothing) (M-b, M-c, T-416)', async () => {
     const t = await fixture();
     const [other] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${t.f.orgId}, ${uid('forged')}, 'Forged') returning id`;
-    const before = await missCount(t.f.storeId);
+    const actorBefore = await actorMissCount(t.f.manager.personId);
+    const recordBefore = await missCount(t.f.storeId);
     const o = await run({ ...t.fields, adminPin: '000000', approvedStoreId: other!.id }, t.f.manager);
     expect(o.flash.error).toBe(ADMIN_PIN_REFUSED);
     expect(await t.status()).toBe('posted');
-    expect(await missCount(t.f.storeId), "the miss survives and is the record store's").toBe(before + 1);
-    expect(await missCount(other!.id)).toBe(0);
+    expect(await actorMissCount(t.f.manager.personId), "the miss survives and is the actor's").toBe(actorBefore + 1);
+    expect(await missCount(t.f.storeId), 'nothing at the record store').toBe(recordBefore);
+    expect(await missCount(other!.id), 'nothing at the forged store').toBe(0);
   });
 
   it("a manager's correct PIN (not an administrator) is refused and nothing changes (M-e)", async () => {

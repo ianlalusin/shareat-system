@@ -3,8 +3,9 @@
  * docs/tasks/412-confirm-destructive-tiers.md "How the server verifies a Tier P action"; bible row 329, row 196.
  *
  * ⭐ NO CLIENT FLAG IS EVER TRUSTED. The PIN is the ONLY value the form supplies; `storeId` is the store of the RECORD, loaded
- * by the action in its own read; `actor` comes from `resolveActor`. A wrong PIN is a `miss` on the store's sign-in budget
- * (`runChargedPinLookup` is the very sequence `signInWithPin` runs), committed on its own so it survives the throw.
+ * by the action in its own read; `actor` comes from `resolveActor`. A wrong PIN is a `miss` on the ACTOR's own bucket (T-416: 5 per person per
+ * rolling 24 h, never a store's sign-in budget; `runChargedPinLookup` is the sequence `signInWithPin` runs), committed on its
+ * own so it survives the throw.
  *
  * ⛔ Authority is computed IN FULL on every path (no short-circuit), so what a refusal costs does not say why it refused:
  *   isAdmin   = the PIN's owner holds an unrevoked admin / super_admin role in the actor's org;
@@ -16,7 +17,7 @@
  * is not an oracle for "right PIN, wrong person".
  */
 import type { Tx } from '@shareat/db';
-import { sessionsRepo, accessRepo } from '@shareat/db';
+import { sessionsRepo, accessRepo, pinAttemptsRepo } from '@shareat/db';
 import type { Actor } from './authorize';
 import { can } from './authorize';
 import type { Capability } from './capabilities';
@@ -40,7 +41,8 @@ export async function verifyAdminApproval(tx: Tx | null, input: AdminApprovalInp
   const { actor, storeId, pin, capability } = input;
   return runChargedPinLookup(
     tx,
-    { orgId: actor.orgId, storeId, ...(input.deviceId ? { deviceId: input.deviceId } : {}) },
+    // T-416: the PERSON's bucket - never the record's store, never the org's.
+    { orgId: actor.orgId, bucket: { actor: actor.personId }, ...(input.deviceId ? { deviceId: input.deviceId } : {}) },
     async (lookupTx) => {
       if (!isValidPinFormat(pin)) throw new AuthenticationError(ADMIN_PIN_REFUSED);
       const credential = await sessionsRepo.findActiveCredentialByLookupHash(lookupTx, pinLookupHash(actor.orgId, pin));
@@ -60,5 +62,6 @@ export async function verifyAdminApproval(tx: Tx | null, input: AdminApprovalInp
       if (!(verified && maySignIn && !isTerminal && (isAdmin || fallback))) throw new AuthenticationError(ADMIN_PIN_REFUSED);
       return { approverPersonId: credential.personId };
     },
+    { dailyMissBudget: pinAttemptsRepo.APPROVAL_DAILY_MISS_CAP, stopAutoReopenMinutes: pinAttemptsRepo.APPROVAL_CAP_AUTO_LIFT_MINUTES },
   );
 }

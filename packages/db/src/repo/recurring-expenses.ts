@@ -4,7 +4,8 @@
  * ⛔ A template is configuration, not a document: nothing here posts, and there is no
  * `journal_entry_id` for anyone to reach for.
  */
-import { and, asc, eq, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, lte, sql } from 'drizzle-orm';
+import { recordGone } from './record-gone';
 import type { Tx } from '../client';
 import {
   recurringExpenses,
@@ -125,7 +126,14 @@ export async function updateTemplate(
  * never removed.
  */
 export async function deleteTemplate(tx: Tx, orgId: string, id: string): Promise<void> {
-  await tx.delete(recurringExpenses).where(and(eq(recurringExpenses.id, id), eq(recurringExpenses.orgId, orgId)));
+  // T-418: the "never produced" guard rides on the DELETE (the job can stamp it after the domain looked). Zero rows throws.
+  const deleted = await tx
+    .delete(recurringExpenses)
+    .where(and(eq(recurringExpenses.id, id), eq(recurringExpenses.orgId, orgId), isNull(recurringExpenses.lastDraftedExpenseId)))
+    .returning({ id: recurringExpenses.id });
+  if (deleted.length === 0) {
+    throw recordGone(`deleteTemplate: template ${id} does not exist in org ${orgId} or has already produced an expense`, 'recurring template');
+  }
 }
 
 /**

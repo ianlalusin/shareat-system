@@ -280,11 +280,9 @@ export default async function ExpenseDetailPage({
             <strong className="text-neutral-900 dark:text-neutral-100">Delete this draft.</strong> Nothing
             has posted, so there is nothing to reverse — it is removed outright.
           </p>
-          <ConfirmDestructive
-            tier="admin-pin"
-            label="Delete draft"
-            consequence="Deletes this draft for good. An administrator must approve with their own PIN."
-          />
+          <Button type="submit" variant="danger">
+            Delete draft
+          </Button>
         </form>
       )}
 

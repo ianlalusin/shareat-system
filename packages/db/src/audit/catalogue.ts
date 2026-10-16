@@ -174,6 +174,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('auth.signin_refused', 'security', 'normal', 'org', 'persons', 'T-402', { actor: 'either' }),
   def('auth.pin_signin_succeeded', 'security', 'low', 'store', 'persons', 'T-402'),
   def('auth.pin_paused', 'security', 'high', 'store', 'stores', 'T-402', { actor: 'either' }),
+  // T-416: the attempt that tripped a person's administrator-PIN cap (system-written; the person is the entity).
+  def('auth.approval_pin_capped', 'security', 'high', 'org', 'persons', 'T-416', { actor: 'system' }),
+  // T-416: an administrator cleared a person's cap.
+  def('auth.approval_pin_cap_reset', 'security', 'high', 'org', 'persons', 'T-416'),
   def('auth.pin_stopped_for_day', 'security', 'critical', 'store', 'stores', 'T-402', { actor: 'either' }),
   def('session.ended', 'security', 'low', 'org', 'sessions', 'T-402'),
   def('session.ended_all', 'security', 'high', 'org', 'sessions', 'T-402', { actor: 'either' }),

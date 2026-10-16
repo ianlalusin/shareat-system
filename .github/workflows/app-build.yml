@@ -1,0 +1,79 @@
+name: App build
+
+# T-417: typecheck + web build + (when signing secrets exist) a signed Android APK for one app.
+# Called from ci.yml. GitHub-hosted runner on purpose: never the self-hosted one that runs `verify`.
+on:
+  workflow_call:
+    inputs:
+      app:
+        description: 'App folder under apps/ (pos or customer)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: build ${{ inputs.app }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npx tsc -p apps/${{ inputs.app }}/tsconfig.json --noEmit
+
+      - name: Web build
+        run: npm run build -w @shareat/${{ inputs.app }}
+
+      - name: Capacitor static export
+        run: npm run build:cap -w @shareat/${{ inputs.app }}
+
+      # Secrets reach the script only through env:. Missing keystore = skip (green); half-set = fail.
+      - name: Signing gate
+        id: gate
+        run: node scripts/apk-signing-gate.mjs
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Set up Java 17
+        if: steps.gate.outputs.signing == 'release'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Decode keystore
+        if: steps.gate.outputs.signing == 'release'
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > apps/${{ inputs.app }}/android/app/release.jks
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - name: Capacitor sync
+        if: steps.gate.outputs.signing == 'release'
+        working-directory: apps/${{ inputs.app }}
+        run: npx cap sync android
+
+      - name: Assemble release APK
+        if: steps.gate.outputs.signing == 'release'
+        working-directory: apps/${{ inputs.app }}/android
+        run: ./gradlew assembleRelease -PversionCode=${{ github.run_number }} -PversionName=0.1.${{ github.run_number }}
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Upload APK
+        if: steps.gate.outputs.signing == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.app }}-v2-${{ github.run_number }}.apk
+          path: apps/${{ inputs.app }}/android/app/build/outputs/apk/release/*.apk

@@ -24,7 +24,7 @@ This file adds: current size, per-capability goal/flaw view, and findings NOT in
 
 | Item | Value |
 |---|---|
-| Stack | Next.js 16 (App Router) + React 18 + Firebase client SDK 10 + firebase-admin 13, Tailwind/Radix (shadcn), Capacitor 6 Android shell (app id culinaryflow), Genkit + Anthropic SDK (AI), PayMongo REST. `package.json` |
+| Stack | Next.js 16 (App Router) + React 18 + Firebase client SDK 10 + firebase-admin 13, Tailwind/Radix (shadcn), Capacitor 6 Android shell (app id net.shareat.pos; npm name culinaryflow), Genkit + Anthropic SDK (AI), PayMongo REST. `package.json` |
 | Hosting | Firebase App Hosting (SSR + /api); APK loads static export from `https://localhost` and calls app.shareat.net cross-origin (`src/middleware.ts:1-47`); Cloud Scheduler for 10 cron jobs (`docs/CRON.md`, project shareat-hub-v2) |
 | Files / LOC | 671 files, ~107k LOC under `src/` (09 measured 601 / 98.9k on 25 Aug: +70 files, +8k LOC in 7 weeks, still growing) |
 | By area (non-test LOC) | components/cashier 11.1k, admin 7.3k, lib/server 7.0k, manager 6.4k, dashboard 4.9k, ui 4.6k, lib/analytics 3.2k, server 2.5k, receipts 2.2k, session-timeline 1.7k+1.0k, qr-wallet 1.4k, pins 1.3k, kitchen 1.2k, printing 1.1k |

@@ -153,6 +153,21 @@ export function enqueuePinStoppedForDay(orgId: string, storeId: string, deviceId
   );
 }
 
+/** T-416: the attempt that tripped a person's administrator-PIN cap, for the path where the charge already committed on its own. */
+export function enqueueApprovalPinCapped(orgId: string, personId: string, deviceId: string | null): void {
+  pushEvent(orgId, (tx) =>
+    auditLogRepo.appendSystem(tx, orgId, {
+      action: 'auth.approval_pin_capped',
+      storeId: null,
+      entityId: personId,
+      before: null,
+      after: { cap: pinAttemptsRepo.APPROVAL_DAILY_MISS_CAP },
+      source: 'web',
+      deviceId,
+    }),
+  );
+}
+
 /** A5: a Firebase sign-in whose session committed in the auth door (no org principal there). Never awaited. */
 export function enqueueFirebaseSignedIn(orgId: string, result: { personId: string; sessionId: string }): void {
   pushEvent(orgId, (tx) =>

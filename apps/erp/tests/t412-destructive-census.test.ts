@@ -69,15 +69,15 @@ const rows: Row[] = [
   { file: 'app/customers/[customerId]/page.tsx', tier: 'P', label: 'Void collection', danger: false, visible: 'Void collection', action: 'voidCollectionAction', actionFile: 'app/customers/actions.ts', mutation: 'voidCollection' },
   { file: 'app/cutover/opening/page.tsx', tier: 'P', label: 'Remove opening figure', danger: true, visible: 'Remove opening figure', action: 'removeOpeningFigureAction', actionFile: 'app/cutover/actions.ts', mutation: 'removeOpeningFigure' },
   { file: 'app/cutover/opening/page.tsx', tier: 'P', label: 'Post the opening balances', danger: false, visible: 'Post the opening balances', action: 'postOpeningBalancesAction', actionFile: 'app/cutover/actions.ts', mutation: 'postOpeningBalances' },
-  { file: 'app/expenses/[id]/page.tsx', tier: 'P', label: 'Delete draft', danger: true, visible: 'Delete draft', action: 'deleteDraftAction', actionFile: 'app/expenses/actions.ts', mutation: 'deleteExpenseDraft' },
+  { file: 'app/expenses/[id]/page.tsx', tier: 'W', label: 'Delete draft', danger: true, action: 'deleteDraftAction', actionFile: 'app/expenses/actions.ts' }, // T-418: a draft delete is a Tier W step (Ian row 348)
   { file: 'app/expenses/[id]/page.tsx', tier: 'P', label: 'Void expense', danger: true, visible: 'Void expense', action: 'voidExpenseAction', actionFile: 'app/expenses/actions.ts', mutation: 'voidExpense' },
-  { file: 'app/expenses/recurring/page.tsx', tier: 'P', label: 'Delete template', danger: true, visible: 'Delete template', action: 'deleteTemplateAction', actionFile: 'app/expenses/recurring/actions.ts', mutation: 'deleteRecurringTemplate' },
+  { file: 'app/expenses/recurring/page.tsx', tier: 'W', label: 'Delete template', danger: true, action: 'deleteTemplateAction', actionFile: 'app/expenses/recurring/actions.ts' }, // T-418: a draft delete is a Tier W step (Ian row 348)
   { file: 'app/fixed-assets/[id]/page.tsx', tier: 'P', label: 'Dispose', danger: true, visible: 'Dispose this asset', action: 'disposeAssetAction', actionFile: 'app/fixed-assets/actions.ts', mutation: 'disposeAsset' },
   { file: 'app/inventory/pos-usage/page.tsx', tier: 'P', label: 'Void this pull', danger: true, visible: 'Void this pull', action: 'voidPullAction', actionFile: 'app/inventory/pos-usage/actions.ts', mutation: 'voidPosUsagePull' },
   { file: 'app/inventory/production/[id]/page.tsx', tier: 'P', label: 'Void production', danger: true, visible: 'Void production', action: 'voidProductionAction', actionFile: 'app/inventory/production/actions.ts', mutation: 'voidProduction' },
   { file: 'app/inventory/returns/page.tsx', tier: 'P', label: 'Void supplier return', danger: true, visible: 'Void supplier return', action: 'voidReturnAction', actionFile: 'app/inventory/returns/actions.ts', mutation: 'voidReturn' },
   { file: 'app/inventory/transfers/page.tsx', tier: 'P', label: 'Void transfer', danger: true, visible: 'Void transfer', action: 'voidTransferAction', actionFile: 'app/inventory/transfers/actions.ts', mutation: 'voidTransfer' },
-  { file: 'app/inventory/usage/[id]/page.tsx', tier: 'P', label: 'Delete usage draft', danger: true, visible: 'Delete usage draft', action: 'deleteUsageDraftAction', actionFile: 'app/inventory/usage/actions.ts', mutation: 'deleteUsageDraft' },
+  { file: 'app/inventory/usage/[id]/page.tsx', tier: 'W', label: 'Delete usage draft', danger: true, action: 'deleteUsageDraftAction', actionFile: 'app/inventory/usage/actions.ts' }, // T-418: a draft delete is a Tier W step (Ian row 348)
   { file: 'app/inventory/usage/[id]/page.tsx', tier: 'P', label: 'Void usage', danger: true, visible: 'Void usage', action: 'voidUsageAction', actionFile: 'app/inventory/usage/actions.ts', mutation: 'voidUsage' },
   { file: 'app/liabilities/[id]/page.tsx', tier: 'P', label: 'Reverse liability entry', danger: true, visible: 'Reverse liability entry', action: 'reverseAction', actionFile: 'app/liabilities/actions.ts', mutation: 'reverseLiabilityEntry' },
   { file: 'app/loans/[id]/page.tsx', tier: 'P', label: 'Reverse loan entry', danger: true, visible: 'Reverse loan entry', action: 'reverseEntryAction', actionFile: 'app/loans/actions.ts', mutation: 'reverseLoanEntry' },
@@ -202,9 +202,9 @@ function topLevelArgs(argText: string): string[] {
 const FORM_READ = /formData|\bfd\b|str\(|opt\(|requireId\(|\.get\(/;
 
 describe('the census arithmetic (green today: the literal map matches the spec + the audit-round conditionals)', () => {
-  it('68 controls: P 36 (35 + DEF-654 Void collection), R 18 (14 + the 2 conditional danger buttons + T-413 Retire recipe + DEF-654 Retire liability), W 10, X 4; 63 are danger (2 conditional), in 49 files', () => {
+  it('68 controls: P 33 (36 - the 3 T-418 draft deletes), R 18, W 13 (10 + the 3 T-418 draft deletes), X 4; 63 are danger (2 conditional), in 49 files', () => {
     const by = (t: Tier) => rows.filter((r) => r.tier === t).length;
-    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([36, 18, 10, 4]);
+    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([33, 18, 13, 4]); // T-418: three draft deletes moved P -> W
     expect(rows).toHaveLength(68);
     expect(rows.filter((r) => r.danger)).toHaveLength(63);
     expect(rows.filter((r) => r.conditional)).toHaveLength(2);
@@ -434,6 +434,27 @@ describe('Tier W: reject / withdraw / cancel steps stay unguarded (Ian Q2, recom
       expect(body!).not.toMatch(/retypeMatches\(/);
     });
   }
+});
+
+describe('T-418: the three draft deletes are Tier W with no approval step; the cutover opening figure stays Tier P', () => {
+  const drafts = [
+    { file: 'app/expenses/actions.ts', fn: 'deleteDraftAction' },
+    { file: 'app/inventory/usage/actions.ts', fn: 'deleteUsageDraftAction' },
+    { file: 'app/expenses/recurring/actions.ts', fn: 'deleteTemplateAction' },
+  ];
+  for (const d of drafts) {
+    it(`${d.fn} reads no adminPin and writes no approval row`, () => {
+      const body = functionBody(read(d.file), d.fn);
+      expect(body, `${d.fn} exists`).toBeDefined();
+      expect(body!).not.toMatch(/verifyAdminApproval\(|recordApproval\(|loadDestructiveTarget\(/);
+      expect(body!).not.toMatch(/['"]adminPin['"]/);
+    });
+  }
+  it('Remove opening figure is still Tier P (Ian 16 Oct, answer 1)', () => {
+    const r = rows.find((x) => x.label === 'Remove opening figure');
+    expect(r?.tier).toBe('P');
+    expect(functionBody(read('app/cutover/actions.ts'), 'removeOpeningFigureAction')!).toMatch(/verifyAdminApproval\(/);
+  });
 });
 
 describe('no client flag is ever a gate (spec: nothing named confirmed / approved / pinOk / verified is read from the form)', () => {

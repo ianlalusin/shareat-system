@@ -283,13 +283,15 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'purge',
     reason:
       'A rate-limit counter, not configuration — same class as sessions and for the same ' +
-      'reason. A cooldown mid-window in December has no business surviving into January.',
+      'reason. A cooldown mid-window in December has no business surviving into January. ' +
+      'A bucket is a store, the organisation, or (T-416) the administrator-PIN approvals of one person.',
   },
   sign_in_attempts: {
     class: 'purge',
     reason:
       'Attempt history, same class as pin_attempt_throttle and for the same reason: attempt ' +
-      'history from December has no business in the January ledger.',
+      'history from December has no business in the January ledger. Rows belong to a store, ' +
+      'the organisation, or (T-416) the person who typed an administrator-approval PIN.',
   },
 
   v1_master_links: {

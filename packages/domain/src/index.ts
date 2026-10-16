@@ -95,6 +95,7 @@ export * from './sync';
 export * from './production';
 export * from './production/validate';
 export * from './production/unit-conversion';
+export * from './production/cook-usage-view';
 // T-177 — POS item mapping and the daily usage pull.
 export * from './pos/plan';
 export * from './pos/item-map';

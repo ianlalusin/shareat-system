@@ -414,12 +414,9 @@ export async function deleteDraftAction(formData: FormData): Promise<void> {
   const nav = carryNav(formData);
 
   try {
-    // T-412 Tier P: even an unposted draft's delete needs an administrator's PIN (Ian Q2, recommended). The store is the RECORD's.
-    const target = await loadDestructiveTarget(actor, 'expense', expenseId, ['edit_any_expense', 'edit_own_expense']);
-    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'edit_any_expense' });
+    // T-418 (Ian, row 348): an unposted draft needs NO admin PIN. The domain keeps its edit gate and its draft-only refusal.
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await deleteExpenseDraft(tx, actor, expenseId);
-      await recordApproval(tx, actor, approval, { capability: 'edit_any_expense', entityType: 'expense', entityId: expenseId, storeId: target.storeId });
     });
   } catch (err) {
     return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err) });

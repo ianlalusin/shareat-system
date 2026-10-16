@@ -54,6 +54,9 @@ async function call(mod: string, name: string, fields: Record<string, string>, w
 }
 const missCount = async (storeId: string) =>
   (await sql<{ n: number }[]>`select count(*)::int as n from sign_in_attempts where store_id = ${storeId} and kind = 'miss'`)[0]!.n;
+/** T-416: a wrong approval PIN is charged to the ACTOR's bucket (actor_person_id, no store). */
+const actorMissCount = async (personId: string) =>
+  (await sql<{ n: number }[]>`select count(*)::int as n from sign_in_attempts where actor_person_id = ${personId} and store_id is null and kind = 'miss'`)[0]!.n;
 
 async function ownerFixture() {
   const f = await moneyFixture(sql, 'def654o');
@@ -92,13 +95,15 @@ describe('DEF-654: owners settleAction write-off is Tier P', () => {
     expect(await auditRows(sql, t.f.orgId, 'destructive.approved', t.ownerId)).toHaveLength(0);
   });
 
-  it('a wrong PIN is refused, nothing written off, the miss is charged to the record store (M-o1)', async () => {
+  it('a wrong PIN is refused, nothing written off, the miss is charged to the ACTOR and no store (M-o1, T-416)', async () => {
     const t = await ownerFixture();
-    const before = await missCount(t.f.storeId);
+    const actorBefore = await actorMissCount(t.f.admin.personId);
+    const recordBefore = await missCount(t.f.storeId);
     const o = await call(OWNERS, 'settleAction', { ...t.fields, adminPin: '000000' }, t.f.admin);
     expect(o.flash.error).toBe(ADMIN_PIN_REFUSED);
     expect(await t.writeoffs()).toBe(0);
-    expect(await missCount(t.f.storeId)).toBe(before + 1);
+    expect(await actorMissCount(t.f.admin.personId)).toBe(actorBefore + 1);
+    expect(await missCount(t.f.storeId), 'nothing at the record store').toBe(recordBefore);
     expect(await auditRows(sql, t.f.orgId, 'destructive.approved', t.ownerId)).toHaveLength(0);
   });
 

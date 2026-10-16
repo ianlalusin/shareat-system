@@ -454,3 +454,66 @@ export async function getSalesByChannelAndMode(
     ],
   };
 }
+
+// T-421 — per-day channel split for the dashboard's stacked bars. docs/tasks/421-dashboard-channel-bars.md.
+export interface SalesByDayAndChannelRow {
+  /** 'YYYY-MM-DD'. */
+  day: string;
+  /** Null only on the synthetic "POS corrections" block. */
+  channelId: string | null;
+  channelName: string;
+  total: string;
+}
+
+/**
+ * The same source as the donut (`getSalesByChannelAndMode`) cut by day: verified `sales_day_channels` grouped by the
+ * sales day's business date and the channel id (never the name), plus POS correction journal lines grouped by their own
+ * entry date (the line counts a correction on the date it posts), as one `channelId null` "POS corrections" block.
+ * Never reads `dine_in_sales` / `take_out_sales` (docs/GLOSSARY.md).
+ */
+export async function getSalesByDayAndChannel(
+  ex: Executor,
+  filter: { orgId: string; storeId?: string | null; fromDate: string; toDate: string },
+): Promise<SalesByDayAndChannelRow[]> {
+  const channelRows = (await ex.execute(sql`
+    select sd.business_date::text as day, ch.id as channel_id, ch.name as channel_name,
+           coalesce(sum(sdc.amount), 0)::numeric(14,2)::text as total
+    from sales_day_channels sdc
+    join sales_days sd on sd.id = sdc.sales_day_id
+    join sales_channels ch on ch.id = sdc.channel_id
+    where sd.org_id = ${filter.orgId}
+      and sd.status = 'verified'
+      and sd.business_date >= ${filter.fromDate} and sd.business_date <= ${filter.toDate}
+      ${filter.storeId ? sql`and sd.store_id = ${filter.storeId}` : sql``}
+    group by sd.business_date, ch.id, ch.name
+    order by sd.business_date, ch.name, ch.id
+  `)) as unknown as { day: string; channel_id: string; channel_name: string; total: string }[];
+
+  const correctionRows = (await ex.execute(sql`
+    select je.entry_date::text as day, coalesce(sum(jl.credit - jl.debit), 0)::numeric(14,2)::text as total
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${filter.orgId}
+      and je.source_type = 'sale'
+      and je.status in ('posted', 'reversed')
+      and je.entry_date >= ${filter.fromDate} and je.entry_date <= ${filter.toDate}
+      and a.code in ('4100', '4150')
+      and je.source_id in (select c.id::text from sales_day_pos_corrections c where c.org_id = ${filter.orgId})
+      ${filter.storeId ? sql`and jl.store_id = ${filter.storeId}` : sql``}
+    group by je.entry_date
+    order by je.entry_date
+  `)) as unknown as { day: string; total: string }[];
+
+  const out: SalesByDayAndChannelRow[] = channelRows.map((r) => ({
+    day: String(r.day),
+    channelId: r.channel_id,
+    channelName: r.channel_name,
+    total: r.total,
+  }));
+  for (const r of correctionRows) {
+    if (Number(r.total) === 0) continue;
+    out.push({ day: String(r.day), channelId: null, channelName: 'POS corrections', total: r.total });
+  }
+  return out;
+}

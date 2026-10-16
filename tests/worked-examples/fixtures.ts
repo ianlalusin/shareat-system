@@ -656,6 +656,26 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       'contradiction: 2110 and 1240 are different accounts for a reason.',
   },
 
+  {
+    id: 'ap_payment.from_float',
+    sourceType: 'ap_payment',
+    title: 'AP payment from a cash-request float — the 1120 leg names the request',
+    narrative: 'A ₱600 supplier payment drawn from a released ₱1,000 cash-request float, through the ' +
+      "store's staff cash account. The 1120 credit carries the request as its party, so the float " +
+      'falls to ₱400 and the ledger still says whose money it was.',
+    frequency: 1,
+    input: { supplierId: 'SUP-0450', amountApplied: '600.00', amountPaid: '600.00', cashRequestId: 'CR-0201' },
+    expect: [
+      D('2110', '600.00', { type: 'supplier', id: 'supplier:SUP-0450' }, { lineMemo: 'AP cleared' }),
+      C('1120', '600.00', { type: 'cash_request', id: 'cash_request:CR-0201' }, { lineMemo: 'float drawn' }),
+    ],
+    entryDate: '2026-02-17',
+    trap: '1120 is party-requiring (docs/POSTING-PATTERNS.md:697-705, the cash-request release pattern this ' +
+      'mirrors): a supplier payment from a staff cash account with no request has no party and the ledger ' +
+      'refuses it. Only the cash that leaves draws the float; a payment fully covered by supplier credit ' +
+      'draws nothing and has no 1120 leg.',
+  },
+
   // =========================================================================================
   // supplier_return — v2-only, bible row 166. "The goods go back, and we hold a credit." Which
   // credit leg fires is DERIVED from whether the receipt carries a linked supplier invoice.

@@ -50,7 +50,7 @@
 | Warn the manager at ₱50,000 unsent, keep selling (`offline-cap` = b); router UPS + generators | 13 Oct | P0 offline slice |
 | Keep all extras, AI is the hub (`keep-extras` = b); diner sign-up proves the phone by one SMS code, login phone + password (row 314) | 13 Oct | Counts now set build ORDER, not keep/drop |
 | Till stays an ERP record, POS gets a till **screen** (row 319); one person one ID (row 322); position pick (row 323); store orders shown on the POS (row 318) | 14 Oct | P1/P2 scope; ADR-015 amendment (PC-1) |
-| Ian's notes: dine-in tables should also take à la carte (v1 cannot); mark online-queue sales as "online"; reservation fee online and offline; SC/PWD ID read by local OCR | 13 Oct answers | Folded into PC-7 (table design), P3 and P1 (OCR via row 330) |
+| Ian's notes: dine-in tables should also take à la carte (v1 already allows it — AddonsPOSModal has no mode check; corrected 16 Oct from discovery 42); mark online-queue sales as "online"; reservation fee online and offline; SC/PWD ID read by local OCR | 13 Oct answers | Folded into PC-7 (table design), P3 and P1 (OCR via row 330) |
 | **Still open:** business-day cut-off | — | Question Q1; blocks the Z-reading and the till screen |
 
 ## 4. Monorepo setup slice (phase S)
@@ -65,7 +65,7 @@ Root `package.json` workspaces list only `packages/*` and `apps/erp`. The root `
 | Versions | POS v1 = Next 16 + React 18 + Tailwind 3, same as `apps/erp`: copies cleanly. CUSTOMER v1 = Next 15.5 + React 19, `ignoreBuildErrors: true`: aligned **down** to the monorepo's React at P3 (ADR-015), type errors fixed, not hidden |
 | Ports | POS v2 **9009**, Customer v2 **9010** (`ports` = a). READMEs corrected; global port table updated by Ian's CLAUDE.md owner |
 | App boundary | `tests/unit/app-boundaries.test.ts` already covers every folder under `apps/`; add a test that each new app has its own tsconfig and is excluded from the root one |
-| Android app id | **new id** for v2 (not v1's `culinaryflow`), so v1 stays installed beside it as the roll-back for that store. Same id would install over v1 and could wipe v1's unsent offline sales |
+| Android app id | **new id** for v2 (not v1's `net.shareat.pos` (`culinaryflow` is only v1's npm package name; corrected 16 Oct from `POS/capacitor.config.ts`)), so v1 stays installed beside it as the roll-back for that store. Same id would install over v1 and could wipe v1's unsent offline sales |
 | Signing | one release keystore for v2, held as a GitHub secret. **Ian adds the secret** (an agent never handles it). Without it v1's workflow falls back to debug signing, and debug builds cannot update in place |
 | CI | path-filtered jobs: `pos` (typecheck + web build + APK) runs only when `apps/pos/**` or `packages/**` changed; `customer` likewise; ERP job unchanged. APK uploaded as a build artifact with version code = run number |
 | Deploy | `deploy.yml` stays the ERP's. POS: the APK is the release; in P0 its server routes (PayMongo webhook, PIN, crons) run as a second service on 159.223.46.224, built in CI. Customer: a third service from P3. Memory measured after each one starts (risk R6) |

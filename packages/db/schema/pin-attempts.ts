@@ -11,7 +11,7 @@
  * concurrency lock-clobber bug, ported forward as the invariant rather than rediscovered.
  */
 import { sql } from 'drizzle-orm';
-import { integer, pgTable, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
+import { check, integer, pgTable, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
@@ -23,8 +23,10 @@ export const pinAttemptThrottle = pgTable(
     orgId: uuid('org_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict' }),
-    // T-412 (migration 0198): NULL = the ORGANISATION's own bucket for approval-PIN misses at an action with no store.
+    // T-412 (migration 0199): NULL = the ORGANISATION's own bucket for approval-PIN misses at an action with no store.
     storeId: uuid('store_id').references(() => stores.id, { onDelete: 'restrict' }),
+    // T-416 (migration 0200): a PERSON's bucket for administrator-approval PIN misses. At most one of store_id / actor_person_id.
+    actorPersonId: uuid('actor_person_id').references(() => persons.id, { onDelete: 'restrict' }),
     failCount: integer('fail_count').notNull().default(0),
     windowStartedAt: timestamp('window_started_at', { withTimezone: true }),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
@@ -39,8 +41,18 @@ export const pinAttemptThrottle = pgTable(
     // the org (checked by the `orgId = (select org_id from stores ...)` shape at the write site,
     // never trusted from the caller — invariant 8, "never a client-supplied value").
     uniqueIndex('pin_attempt_throttle_store_id_unique').on(t.storeId),
-    // T-412 (migration 0198): one organisation-level bucket (store_id NULL) per org.
-    uniqueIndex('pin_attempt_throttle_org_bucket_unique').on(t.orgId).where(sql`${t.storeId} is null`),
+    // T-412 (migration 0199, narrowed by 0200): one organisation-level bucket (no store, no actor) per org.
+    uniqueIndex('pin_attempt_throttle_org_bucket_unique')
+      .on(t.orgId)
+      .where(sql`${t.storeId} is null and ${t.actorPersonId} is null`),
+    // T-416 (migration 0200): one bucket per person.
+    uniqueIndex('pin_attempt_throttle_actor_unique').on(t.orgId, t.actorPersonId).where(sql`${t.actorPersonId} is not null`),
+    check('pin_attempt_throttle_one_key_check', sql`not (${t.storeId} is not null and ${t.actorPersonId} is not null)`),
+    foreignKey({
+      columns: [t.orgId, t.actorPersonId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'pin_attempt_throttle_actor_person_id_same_org_fk',
+    }).onDelete('restrict'),
     // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
     // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
     // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /

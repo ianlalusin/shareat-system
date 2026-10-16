@@ -437,7 +437,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // ConfirmDestructive across screens (not itemised; net -10 measured). FAIL 116 unmoved. UNRESOLVED 48 -> 47: settings/pos-link's
     // "I understand" checkbox is gone (T-412 retype-the-name), so its touch-target-baseline.json entry is removed.
     // 1245 -> 1244, DEF-654 2026-10-16: the plain 'void' collection button became a ConfirmDestructive (not a census candidate).
-    expect(results.length).toBe(1244);
+    // +4 (16 Oct): T-416 clear-approval-PIN-cap button on admin/users/[personId]; T-418 one-click Delete draft / Delete usage draft / Delete template buttons (expenses/[id], inventory/usage/[id], expenses/recurring).
+    expect(results.length).toBe(1248);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

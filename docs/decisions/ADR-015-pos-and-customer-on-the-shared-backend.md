@@ -156,7 +156,7 @@ beyond P0.
    a 4 GB heap, DEF-631).
 2. **An installed Android app (APK), not a browser web app** (`apk-vs-web` = a, `pos-apk` = yes). **Capacitor, one
    APK per app**, built in CI only, never on a droplet (DEF-238). The server receives finished artifacts.
-3. **A new Android app id for v2**, not v1's `culinaryflow`. v1 stays installed beside v2 as that store's roll-back;
+3. **A new Android app id for v2**, not v1's `net.shareat.pos` (`culinaryflow` is only v1's npm package name; corrected 16 Oct from `POS/capacitor.config.ts`). v1 stays installed beside v2 as that store's roll-back;
    reusing the id would install over v1 and could wipe v1's unsent offline sales.
 4. **One release keystore for v2, held as a GitHub secret that Ian adds.** No agent handles the key.
 5. **Ports** (`ports` = a): POS v2 **9009**, Customer v2 **9010**. Closes §7's "assigned at P0". 9003/9004 stay v1's.

@@ -18,13 +18,14 @@
  * would show a float in someone's hands before anyone handed it over.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, formatMoney, money, ZERO, type Money } from '@shareat/core/money';
+import { logger } from '@shareat/core/logger';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { auditLogRepo, cashRequestsRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, cashRequestsRepo, moneyAccountsRepo, personsRepo, storesRepo, transaction, type Tx } from '@shareat/db';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { parseMoneyInput } from '../shared/money-input';
-import { refuse } from '../shared/refusal';
+import { gone, refuse } from '../shared/refusal';
 import { capAuditText } from '../shared/audit-text';
 
 export const STAFF_FLOAT_CODE = '1120';
@@ -258,6 +259,16 @@ export async function releaseCashRequest(
     // ⭐ T-414 / R-AUTO (Ian, 2026-10-16): the store always has a staff cash account once a float is out, so the released
     // money has a place to go. Created here in the SAME transaction (idempotent under concurrency), audited only when made.
     const staffAccount = await moneyAccountsRepo.ensureStaffCashAccount(trx, actor.orgId, req.storeId);
+    // T-415 (DEF-659): `null` means the account was NOT made (a same-name non-staff account exists). The release still
+    // posts - it debits 1120 directly - but the releaser is told.
+    let staffWarning: string | undefined;
+    if (!staffAccount) {
+      logger.warn({ storeId: req.storeId, cashRequestId: req.id }, 'releaseCashRequest: no staff cash account was made for the store');
+      const storeName = (await storesRepo.getById(trx, actor.orgId, req.storeId))?.name ?? 'this store';
+      staffWarning =
+        `No staff cash account was made for this store: another money account already uses the name "Staff cash — ${storeName}". ` +
+        'Rename it, then the next release makes one.';
+    }
     if (staffAccount?.created) {
       await auditLogRepo.append(trx, actor.orgId, {
         actorPersonId: actor.personId,
@@ -307,7 +318,8 @@ export async function releaseCashRequest(
       releasedBy: actor.personId,
     });
 
-    return { entryId: result.entryId, ...(warning ? { warning } : {}) };
+    const allWarnings = [warning, staffWarning].filter((w): w is string => !!w).join(' ');
+    return { entryId: result.entryId, ...(allWarnings ? { warning: allWarnings } : {}) };
   };
   if (tx) return run(tx);
   return transaction(run);
@@ -343,11 +355,17 @@ export async function settleCashRequest(
   },
 ): Promise<SettleResult> {
   const run = async (trx: Tx) => {
-    const req = await cashRequestsRepo.getById(trx, actor.orgId, input.requestId);
-    if (!req) throw new Error(`settleCashRequest: request ${input.requestId} does not exist.`);
+    // ⭐ T-415 (DEF-658): lock the request row BEFORE reading its status or balance, so a concurrent approve, AP payment,
+    // settle or void is waited for and its committed result is what this settle reads.
+    const [req] = await cashRequestsRepo.lockForSpend(trx, actor.orgId, [input.requestId]);
+    if (!req) throw gone(`settleCashRequest: request ${input.requestId} does not exist.`, 'cash request');
     await authorize(trx, actor, 'approve_expense', { storeId: req.storeId });
+    const holder = (await personsRepo.getPersonById(trx, actor.orgId, req.requestedFor))?.displayName ?? 'The holder';
     if (req.status !== 'released') {
-      throw new Error(`settleCashRequest: this request is ${req.status}, not released.`);
+      throw refuse(
+        `settleCashRequest: this request is ${req.status}, not released.`,
+        `${holder}'s cash request is already ${req.status}, so there is nothing left to settle.`,
+      );
     }
 
     const before = await cashRequestsRepo.floatPositionOf(trx, actor.orgId, req.id);
@@ -378,10 +396,9 @@ export async function settleCashRequest(
     // Both sides are (14,2), so the old half-centavo tolerance is exact equality in centavos.
     const accounted = add(returned, short);
     if (compare(accounted, held) > 0) {
-      throw new Error(
-        `settleCashRequest: ${accounted} is more than the ` +
-          `${before.outstanding} still held. Anything spent is recorded as an expense against ` +
-          'this request, not settled here.',
+      throw refuse(
+        `settleCashRequest: ${accounted} is more than the ${before.outstanding} still held.`,
+        `Only ${formatMoney(held)} is still held on this cash request. Anything spent is recorded as an expense, not settled here.`,
       );
     }
     if (compare(short, ZERO) > 0 && !input.shortReason?.trim()) {

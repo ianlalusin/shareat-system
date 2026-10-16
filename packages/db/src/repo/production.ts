@@ -512,3 +512,50 @@ export async function markLinesReversed(tx: Tx, lineIds: readonly string[]): Pro
     .set({ reversedAt: new Date() })
     .where(inArray(productionRecordLines.id, [...lineIds]));
 }
+
+// ---------------------------------------------------------------------------------------------
+// T-419 — ingredients used by recipe cooking, for the daily usage screen (display only)
+// ---------------------------------------------------------------------------------------------
+export interface CookInputRow {
+  readonly recordId: string;
+  readonly status: 'draft' | 'posted';
+  readonly recipeId: string;
+  readonly recipeName: string;
+  readonly itemId: string;
+  readonly itemCode: string;
+  readonly itemName: string;
+  readonly quantity: string;
+  readonly unit: string;
+  readonly locationId: string;
+}
+
+/**
+ * The ingredients (direction 'out' - the cooked dish is 'in') of the day's cook records at one store, drafts and posted, never void.
+ * Only lines not reversed by an edit. Posted first, then recipe name, then item name. One query.
+ */
+export async function listCookInputsForDay(tx: Tx, orgId: string, storeId: string, producedOn: string): Promise<CookInputRow[]> {
+  const rows = (await tx.execute(sql`
+    select r.id as record_id, r.status, rc.id as recipe_id, rc.name as recipe_name,
+           i.id as item_id, i.code as item_code, i.name as item_name,
+           l.quantity::text as quantity, l.unit, r.location_id
+      from production_records r
+      join production_recipes rc on rc.id = r.recipe_id
+      join production_record_lines l on l.record_id = r.id
+      join items i on i.id = l.item_id
+     where r.org_id = ${orgId}
+       and r.store_id = ${storeId}
+       and r.produced_on = ${producedOn}
+       and r.kind = 'cook'
+       and r.status in ('draft', 'posted')
+       and l.direction = 'out'
+       and l.reversed_at is null
+     order by (r.status = 'posted') desc, rc.name, i.name, r.id, l.created_at
+  `)) as unknown as {
+    record_id: string; status: 'draft' | 'posted'; recipe_id: string; recipe_name: string; item_id: string;
+    item_code: string; item_name: string; quantity: string; unit: string; location_id: string;
+  }[];
+  return rows.map((x) => ({
+    recordId: x.record_id, status: x.status, recipeId: x.recipe_id, recipeName: x.recipe_name, itemId: x.item_id,
+    itemCode: x.item_code, itemName: x.item_name, quantity: x.quantity, unit: x.unit, locationId: x.location_id,
+  }));
+}
