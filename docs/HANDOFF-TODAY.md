@@ -1,65 +1,88 @@
-# Handoff — 2026-10-14 (orchestrator, cold start)
+# Handoff — 2026-10-16
 
 ## Where things stand
-**Production (`159.223.46.224`, erp2.shareat.net) still runs `c7cf55a`, migrations through 0197.** Nothing deployed today.
-Today's work sits on **`release/2026-10-14`**, pushed, with **one PR to `main`** (see "Pick up here"). Merging it deploys.
-No new migration today; the next free number is still **0198**.
+Everything built on 15-16 Oct is merged to `main` (a879264, PR #28). PR #27 (2e9d72d) has been live since 15 Oct
+~22:08 Manila. The a879264 deploy (migrations 0198 + 0199) was running at the time of writing. Nothing is half-built
+on a lane. POS/Customer v2 is designed, not built: the phase plan is drafted (`docs/plans/pos-customer-v2-phase-plan.md`)
+and ADR-015 carries a 15 Oct amendment. Next free migration: **0200**.
 
-## Gates at the release head
-- **typecheck:** exit 0.
-- **unit:** 6,497 passed / 7 failed / 4 skipped across 6,508 in one full run. All 7 failing files pass when run alone (34/34): load timeouts on this laptop.
-- **integration:** run per lane on each lane's own DB (T-392 149/150 incl. 1 skip; T-394 S1+S2 35+44; T-401 S3-S5 290+; T-402 S2 1,222). **The full suite runs in CI on the PR.**
-- **build:** passed (109 s) on the combined branch, port 9008 free.
+PRODUCTION: a879264 LIVE since 16 Oct 08:57 Manila (deploy success; /api/health ok, database reachable; migrations 0198 + 0199 applied).
 
-## What happened this session (decisions are in bible §13 rows 319-336)
-- **T-392 dual run, build complete:** S1b (v1 channel receivables), S4b (document matching), S5 (screens `/reports/dual-run`, go/no-go pack, dispositions). Ian: v2 enters Grab/Foodpanda payouts; a disposition counts only after a fresh extract + compare (laptop on for 15 Nov); only admins record dispositions (rows 332-334).
-- **T-394 rehearsal:** S1 (guards, start/migrate/predump/purge/mark/app-env-check/rollback-check) and S2 (verify, verify --after-post, sanitised report). A rehearsal predump can no longer ping production's backup monitor.
-- **T-401 menu:** S3 (store-menu projection), S4 (menu screens), S5 (usage source switch, v1 maps → menu rules). Ian: manager-posted staff usage drafts move stock; the POS pull becomes a ±10% check only. That is **S6**, specced in the T-401 doc, needs a migration (row 335).
-- **T-402 activity log:** S2 done (security events). The first audit caught a pool-deadlock risk; it was redesigned (in-process outbox; `can()` for render probes). **S3 built on `lane/t402-s3` (pushed) but NOT merged**: open audit findings incl. one data-loss race in the purge, listed at the end of `docs/tasks/402-activity-log.md`.
-- **Cloud session (T-404) merged in:** supplier page, stores form, wording fixes. **Ian answered the 14 questions** (`docs/feedback/2026-10-14-ian-answers.md`, rows 319-331); work list `docs/plans/2026-10-14-ian-answers-worklist.md`.
-- **T-405** (names, never a raw person id) and **T-406 batch 1** (account names instead of codes on 20 screens) done, built mostly on Haiku. Ian: use Haiku where it can do the job (row 336).
-- **Defects:** DEF-649 (email sign-in ignores ended employment; ending employment leaves sessions — serious, unowned), DEF-650 (null-tx session ends, minor).
-- Roadmap, What's Left and task status lines updated.
+## Gates at c4aabaf (PR #28 CI, the release head merged as a879264)
+typecheck pass · unit 6,761 passed / 3 skipped · integration 8,052 / 8,052 · build compiled.
+
+## What happened this session (decisions: bible §13 rows 337-346)
+- **Stock usage (T-401 S6, 0198).** The v1 POS pull now creates a pre-filled usage DRAFT per store+day; staff correct,
+  the manager posts; unposted pull drafts auto-post at 14:00 Manila next day (timer `shareat-usage-auto-post`). Day-close
+  warning, month-close block, manager scorecard. Rows 341-342; rulings A1-A12 in `docs/tasks/401-erp-menu-catalog-master.md`.
+- **Destructive actions (T-412, 0199).** Two tiers: retype the name, or an admin PIN verified on the server. M6
+  (per-person PIN budget) deferred as DEF-653; AR collection void missed (DEF-654).
+- **Shipped on default answers:** T-408 VAT/OR on supplier invoices + /ap/vat, T-409 slice/cook rules, T-411 RowLink on
+  30 tables, T-413 recipe admin, plus T-412. Ian has NOT answered their page questions yet (row 346).
+- **Also merged:** T-410 single-identity guard; T-400 parallel integration tests (PR #18); PR #27: T-394 S3 runbook
+  draft, T-402 S3 (500-code-point cap, row 344), T-406 batch 2, T-407 (DEF-649/650 fixed; Q1-Q3 row 340).
+- **Ian's rulings:** repo stays public (337); POS/Customer v2 in this repo as apps/pos + apps/customer, one APK each
+  (338); no Turborepo for now (339); round-2 POS/customer answers (343); keep agents busy (345).
+- **Register:** DEF-651/652 (POS v1 unsafe void live in build #238; receipts not locked in v1 rules), DEF-653..656.
+  POS/Customer v1 studies are `docs/discovery/39-*` and `40-*`.
+- **Roadmap and What's Left:** updated (T-401, T-406..T-413 done; follow-ups added).
+
+## Only Ian can do these
+1. Install `shareat-usage-auto-post.service` + `.timer` on **159.223.46.224** (`docs/ops/README.md`, "Usage auto-post":
+   re-run `provision.sh`, then `systemctl enable --now shareat-usage-auto-post.timer`). Until then nothing auto-posts.
+2. Tell managers: POS usage now arrives as drafts; staff correct, manager posts; anything left posts itself at 14:00
+   the next day.
+3. Answer the decisions page https://claude.ai/artifact/H8YVDBG9nuBDBQi2Sguwrs (newest first): business-day cut-off,
+   first-store date (11 Jan), v1 freeze, v1 safe-void fix, VAT strictness, recipe questions, admin PIN for email-only
+   admins, and the T-408/409/411/412/413 questions.
+4. Run the read-only counts in `C:\Users\ianla\t409-counts.sql` and paste the results back.
 
 ## Pick up here
-1. **The PR:** watch CI. If green and Ian says go, merge (= deploy). If red, fix on `release/2026-10-14`.
-2. **T-402 S3:** fix the open audit findings on `lane/t402-s3` (the purge lock first), re-audit, merge into the next release.
-3. **DEF-649** (sign-in after employment ends) — spec and fix; then **T-401 S6** (migration 0198), **T-394 S3** runbook (due 7 Nov; include: close psql/Drizzle Studio before `verify`, and dump dir needs an ACL on Windows), **T-406 batch 2**, work-list items.
+1. Confirm the a879264 deploy is live and the auto-post timer is installed (`systemctl list-timers` on the droplet).
+2. DEF-654: put the AR collection void (`apps/erp/src/app/customers/[customerId]/page.tsx`) behind the T-412 admin
+   PIN tier and add it to the census. Small.
+3. DEF-653 (T-412 M6): per-person daily PIN miss cap. Needs storage, so a migration (0200).
+4. POS v2 PC-2: monorepo setup for `apps/pos` / `apps/customer` (phase plan). Spec in plan mode first.
+5. The rest of `docs/plans/2026-10-14-ian-answers-worklist.md`.
 
 ## Do not decide these alone — they are Ian's
-- **Public GitHub repo** (made public 13 Oct): recommend private. Still unanswered.
-- **Merge tonight's PR** after CI is green.
-- **Grab/Foodpanda payout sample files** (zip/xls/pdf) — needed before the settlement parsers (row 320).
-- T-391 rollout, T-393 backups on before 1 Nov, T-396 POS ids/keys — unchanged from 13 Oct.
+- Business-day cut-off for POS v2 (recommendation on the page).
+- Whether to patch POS v1's unsafe void before the v1 freeze (DEF-651; recommended: yes, route the page to the fixed
+  component).
+- Any T-408/409/411/412/413 answer that differs from the default reopens that task.
+- What reset `/srv` group-write on the droplet (DEF-655): find it, do not change the box without Ian.
 
 ## Traps that have actually bitten
-- **Two agents on one test DB** produce random FK/deadlock failures — one lane, one DB, one runner at a time.
-- **Lanes pass alone and break each other's guards when combined** (28 tests today: `can()` mocks, counts, COMMANDS labels). Run the guard/census files on the combined branch before the PR.
-- **Tests that leave orgs behind** poison later files (T-394 fixed; watch for it in new purge/rehearsal tests).
-- Worktree removal follows node_modules junctions into main — never remove one except by the memory's method.
-- Pushing `main` deploys. Ship through the PR.
+- Two vitest runs on one database give false failures. One run per DB.
+- Migrate the test DB first (`DATABASE_URL=<test url>` with the migrate script), then run tests.
+- Timeouts under machine load: rerun the failing file alone before calling it red.
+- `\b` written into a .ts file becomes a backspace (\x08); write backslashes via chr(92).
+- Never `git worktree remove --force` or `rm -rf` a lane worktree: its node_modules junction reaches main. Read the
+  memory note first.
+- t402-s1a "scanned live from git history" turns main red when an unmerged branch on origin adds an uncatalogued
+  action (DEF-656).
 
-## Lanes and worktrees (all idle)
+## Lanes and worktrees (all merged, all idle)
 | Worktree | Branch | State |
 |---|---|---|
-| `wt-t385` | lane/account-label | merged into release |
-| `wt-t386` | lane/t394-s2 | merged into release |
-| `wt-t390` | lane/t392-s4b | merged into release |
-| `wt-t401` | lane/t392-s5 | merged into release |
-| `wt-t402` | lane/t401-s5 | merged into release |
-| `wt-t403` | lane/t402-s3 | **unmerged, pushed** — S3 findings open |
-Lane DBs (`shareat_test_*` from today) are throwaway; drop with `drop-test-db.mjs` when convenient.
+| wt-t385 | wrap/2026-10-16 | this wrap-up's records |
+| wt-t386 | lane/t401-s6 | merged |
+| wt-t390 | lane/specs-1015 | merged |
+| wt-t401 | lane/t413 | merged |
+| wt-t402 | detached at release/2026-10-16 | merged |
+| wt-t403 | lane/t412 | merged |
+| wt-t400 | lane/t400 | merged (PR #18) |
 
 ## The paste-ready prompt
 ```
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global /orchestrator
 skill. Start COLD: read docs/HANDOFF-TODAY.md (all) and docs/RULES.md, then the spec of the lane you start.
 GREP the bible and register, never Read them whole.
-State: production runs c7cf55a (migrations through 0197). Today's work is on release/2026-10-14 with one open PR —
-check its CI; merge only when green AND Ian says go (merging deploys). Next free migration 0198.
-FIRST: ask Ian the public-repo question (still open) and whether to merge the PR.
-Next: T-402 S3 audit fixes (lane/t402-s3), DEF-649, T-401 S6 (migration 0198), T-394 S3 runbook (7 Nov), T-406 batch 2.
+State: main = a879264 (PR #28), migrations through 0199; next free 0200. Check the PRODUCTION line in the handoff.
+FIRST: ask Ian whether the auto-post timer is installed and whether he answered the decisions page.
+Next: DEF-654 (collection void PIN), DEF-653 (per-person PIN budget, 0200), POS v2 PC-2 (spec in plan mode).
 STANDING: lanes are subagents (tester/builder/auditor separate, own _test DB, worktree per lane, workers never run git,
-LF only); Haiku where it can do the job, Sonnet for money/auth/schema, Opus for specs and rulings; never remove a
-worktree except by the junction-safe method in memory; talk to Ian in plain language. Messages are short.
+LF only); keep agents busy while tests run; Haiku where it can do the job, Sonnet for money/auth/schema, Opus for
+specs and rulings; never remove a worktree except by the junction-safe method in memory; talk to Ian in plain
+language. Messages are short.
 ```

@@ -1,6 +1,6 @@
 # T-411 — Whole-row click everywhere: one shared `RowLink`, a 30-file sweep, and a census
 
-**Status:** SPEC 2026-10-15, Opus. Work list item 16 (`docs/plans/2026-10-14-ian-answers-worklist.md`), review item 13.
+**Status:** **DONE 2026-10-16, merged a879264 (PR #28)** (RowLink on 30 tables; sweep 147 -> 116 FAIL). Questions answered BY DEFAULT ONLY (Ian has not answered on the page yet). | Earlier: SPEC 2026-10-15, Opus. Work list item 16 (`docs/plans/2026-10-14-ian-answers-worklist.md`), review item 13.
 Generalises T-258 (`docs/tasks/258-def-244-tappable-rows.md`, the stretched-link technique, Ian 2026-09-10) and T-404's
 `admin/stores` row. **No migration. No server change. Size M.** **Model: HAIKU workers, one file each** (S1 is one Haiku
 worker with the code below pasted verbatim; S2 is up to 30 Haiku workers, one file each, run in parallel — they share no

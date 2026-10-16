@@ -1,6 +1,6 @@
 # T-408: VAT type, VAT amount and the OR flag on the supplier-invoice form, plus a monthly VAT × OR list
 
-**Status:** SPEC DRAFT 2026-10-15 (Opus planner). Not built. **No migration** (every column exists since T-188).
+**Status:** **DONE 2026-10-16, merged a879264 (PR #28).** Questions answered BY DEFAULT ONLY (recommended options built; Ian has not answered on the decisions page yet). | Earlier: SPEC DRAFT 2026-10-15 (Opus planner). Not built. **No migration** (every column exists since T-188).
 ≈1.25 lane-days, two slices. **Sonnet lane** (money: AP figures). Two questions for Ian below; the recommended option is built.
 
 ## Goal

@@ -1,6 +1,6 @@
 # T-409: Slicing takes only a meat slab and makes only sliced meat; cooking always runs from a recipe
 
-**Status:** SPEC DRAFT 2026-10-15 (Opus planner). Not built. **No migration.** ≈1.5 lane-days, two slices.
+**Status:** **DONE 2026-10-16, merged a879264 (PR #28).** Questions answered BY DEFAULT ONLY (recommended options built; Ian has not answered on the decisions page yet). | Earlier: SPEC DRAFT 2026-10-15 (Opus planner). Not built. **No migration.** ≈1.5 lane-days, two slices.
 **Sonnet lane** (posts stock and GL). Two questions for Ian below; the recommended option is built.
 
 ## Goal

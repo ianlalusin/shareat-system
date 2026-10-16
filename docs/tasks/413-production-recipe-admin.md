@@ -1,6 +1,6 @@
 # T-413: Production recipe admin (list, create, edit, retire)
 
-**Status:** SPEC DRAFT 2026-10-15 (Opus planner). Not built. **No migration** (recommended option; every column exists
+**Status:** **DONE 2026-10-16, merged a879264 (PR #28).** Questions answered BY DEFAULT ONLY (recommended options built; Ian has not answered on the page yet). | Earlier: SPEC DRAFT 2026-10-15 (Opus planner). Not built. **No migration** (recommended option; every column exists
 since T-176). ≈1.5 lane-days, two slices. **Sonnet lane** (stock consumption). **Blocks T-409's release:** once T-409
 ships, a cook needs an active recipe, and no screen makes one. Two questions for Ian below; the recommended option is built.
 
