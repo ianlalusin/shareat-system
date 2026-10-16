@@ -35,11 +35,23 @@ export const persons = pgTable(
      * wrong (the spec's own words).
      */
     kind: text('kind', { enum: ['person', 'terminal'] }).notNull().default('person'),
+    /**
+     * ⭐ T-190 (migration 0206) - government numbers. PERSONAL DATA: read only behind `run_payroll` / `enrol_staff`. A missing number
+     * means that agency is NOT deducted for the person (Ian, 16 Oct). Digits only; the format CHECKs are hand-added in 0206.
+     */
+    sssNo: text('sss_no'),
+    philhealthNo: text('philhealth_no'),
+    pagibigNo: text('pagibig_no'),
+    tin: text('tin'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
     check('persons_kind_check', sql`${t.kind} in ('person', 'terminal')`),
+    check('persons_sss_no_format_check', sql`${t.sssNo} is null or ${t.sssNo} ~ '^[0-9]{10}$'`),
+    check('persons_philhealth_no_format_check', sql`${t.philhealthNo} is null or ${t.philhealthNo} ~ '^[0-9]{12}$'`),
+    check('persons_pagibig_no_format_check', sql`${t.pagibigNo} is null or ${t.pagibigNo} ~ '^[0-9]{12}$'`),
+    check('persons_tin_format_check', sql`${t.tin} is null or ${t.tin} ~ '^[0-9]{9,12}$'`),
     // NOTE: persons_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0194 (T-398 S1 /
     // DEF-491), no Drizzle mirror here. Trivially true (id alone is already unique); it exists so
     // the 153 composite `(org_id, "<col>") REFERENCES persons (org_id, id)` same-org FKs declared

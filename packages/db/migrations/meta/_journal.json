@@ -1253,9 +1253,9 @@
       "version": "7",
       "when": 1803180707084,
       "tag": "0198_t401_s6_usage_tolerance",
-        "breakpoints": true
-      },
-      {
+      "breakpoints": true
+    },
+    {
       "idx": 199,
       "version": "7",
       "when": 1803267107084,
@@ -1288,6 +1288,13 @@
       "version": "7",
       "when": 1803612707084,
       "tag": "0203_t433_bir_invoice_no",
+      "breakpoints": true
+    },
+    {
+      "idx": 206,
+      "version": "7",
+      "when": 1803871907084,
+      "tag": "0206_t190_statutory",
       "breakpoints": true
     }
   ]

@@ -141,6 +141,7 @@ export * as advisoryLocksRepo from './repo/advisory-locks';
 export * as payrollRepo from './repo/payroll';
 // T-191 — 13th-month pay (Phase 5, after T-189).
 export * as thirteenthMonthRepo from './repo/thirteenth-month';
+export * as statutoryRepo from './repo/statutory';
 // T-192 — separations, final pay, clearance (Phase 5, after T-191).
 export * as separationsRepo from './repo/separations';
 export type { PayRateRow, PayRunRow, PayslipRow, PayableDay } from './repo/payroll';

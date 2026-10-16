@@ -71,6 +71,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // ⚠️ `/payroll` is the one people react to most strongly when it is visible on a counter
   //    tablet: it names colleagues' pay. It was reachable by any signed-in person until T-288.
   '/payroll': 'run_payroll',
+  // T-190: the statutory tables decide every payslip's deductions, so they are admin-only (the longer prefix wins over `/payroll`).
+  '/payroll/rates': 'manage_payroll_rates',
   // T-369 S1: names colleagues' money owed, like `/payroll`. The longer prefix wins over `/expenses`.
   '/expenses/reimbursements': 'record_ap_payment',
   '/owners': 'view_financial_reports',

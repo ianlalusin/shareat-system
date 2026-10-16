@@ -111,6 +111,9 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-424 S5: registering a POS v2 tablet as an ERP terminal person (dotted: new, never in 0197's copy list).
   def('pos_terminal_link.provision', 'settings', 'high', 'store', 'pos_terminal_links', 'T-424'),
   def('pos_terminal_link.revoke', 'settings', 'high', 'store', 'pos_terminal_links', 'T-424'),
+  // T-190: a change to the statutory tables (rate row, withholding table, minimum wage): add, confirm or discard. ONE entry (the catalogue
+  // size is capped); `after.table` / `after.event` say which. Dotted: new. Org-scoped, admin-readable; rows are immutable once confirmed.
+  def('payroll_rate.change', 'money', 'high', 'org', 'statutory_rates', 'T-190', ADMIN),
   def('create_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('update_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('reactivate_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),

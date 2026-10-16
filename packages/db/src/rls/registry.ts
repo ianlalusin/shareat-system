@@ -520,6 +520,18 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'What a job pays. A franchise reading another org’s rates would learn its labour cost.',
   },
+  statutory_rates: {
+    scope: 'org_column',
+    reason: 'T-190. An org’s own confirmed statutory rates; each org (Padre Garcia included) confirms its own, so none is shared.',
+  },
+  withholding_brackets: {
+    scope: 'org_column',
+    reason: 'T-190. An org’s own withholding tables, confirmed per org (same reasoning as pay_rates).',
+  },
+  minimum_wages: {
+    scope: 'org_column',
+    reason: 'T-190. A store’s minimum daily wage, confirmed per org; another org reading it would learn nothing it should act on.',
+  },
   pay_runs: {
     scope: 'org_column',
     reason: 'Which periods an org has paid, and from which account.',

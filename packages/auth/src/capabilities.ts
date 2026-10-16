@@ -227,6 +227,8 @@ export type Capability =
   | 'set_pay_rate'
   /** T-189. ⛔ Admin-only, as v1's postPayrollRunAction is. */
   | 'run_payroll'
+  /** T-190. Admin-only: the statutory rate, withholding and minimum-wage tables decide every payslip's deductions. */
+  | 'manage_payroll_rates'
   | 'provision_clock_terminal'
   // Configuration
   | 'manage_store_settings'
@@ -379,6 +381,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'manage_attendance',
   'set_pay_rate',
   'run_payroll',
+  'manage_payroll_rates',
   'provision_clock_terminal',
   'manage_store_settings',
   'set_cash_policy',
@@ -562,6 +565,8 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   manage_attendance: 'store',
   set_pay_rate: 'store',
   run_payroll: 'store',
+  // T-190. The rate tables are per org (each org confirms its own), not per store.
+  manage_payroll_rates: 'org',
   provision_clock_terminal: 'store',
 
   manage_store_settings: 'store',
@@ -749,6 +754,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   manage_attendance: 'staff',
   set_pay_rate: 'staff',
   run_payroll: 'staff',
+  manage_payroll_rates: 'staff', // T-190
   provision_clock_terminal: 'staff',
 
   run_cutover: 'books',
@@ -971,6 +977,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   manage_attendance: { super_admin: true, admin: true, manager: true, staff: false },
   set_pay_rate: { super_admin: true, admin: true, manager: false, staff: false },
   run_payroll: { super_admin: true, admin: true, manager: false, staff: false },
+  // T-190: admin-only. A manager must not be able to move the table that sets every payslip's deductions.
+  manage_payroll_rates: { super_admin: true, admin: true, manager: false, staff: false },
   // ⭐ ADMIN-ONLY (Ian, 2026-08-29, bible row 165). A provisioned terminal is the ONLY principal
   // allowed to read the credential mirror, so whoever may create one may read every enrolled
   // fingerprint template and card id at that store. Manager was v1's level; this is tighter.
@@ -1216,6 +1224,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   manage_attendance: 'manage attendance',
   set_pay_rate: 'set a pay rate',
   run_payroll: 'run payroll',
+  manage_payroll_rates: 'add or confirm the SSS, PhilHealth, Pag-IBIG and tax tables',
   provision_clock_terminal: 'set up a clock-in tablet',
   manage_store_settings: 'manage store settings',
   set_cash_policy: "set a store's cash policy",
