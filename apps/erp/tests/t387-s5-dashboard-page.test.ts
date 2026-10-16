@@ -93,6 +93,9 @@ function rollup(input: { groupBy: string; fromDate: string; toDate: string }) {
     modeTotal: m(total),
     reconciles: true,
     basis: {},
+    // T-421: the rollup also returns the per-day channel split; this file does not exercise it.
+    channelDays: [],
+    unreconciledDays: [],
   };
 }
 

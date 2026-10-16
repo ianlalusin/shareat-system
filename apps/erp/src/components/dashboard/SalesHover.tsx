@@ -14,18 +14,18 @@ export interface SalesHoverPoint {
   y: number;
 }
 
-export function SalesHover({ points }: { points: SalesHoverPoint[] }) {
+export function SalesHover({ points, centred = false }: { points: SalesHoverPoint[]; centred?: boolean }) {
   const [hit, setHit] = useState<{ i: number; py: number } | null>(null);
   const n = points.length;
   if (n === 0) return null;
 
-  const xOf = (i: number) => (n === 1 ? 0.5 : i / (n - 1));
+  const xOf = (i: number) => (centred ? (i + 0.5) / n : n === 1 ? 0.5 : i / (n - 1));
 
   function onMove(e: React.PointerEvent<HTMLDivElement>) {
     const r = e.currentTarget.getBoundingClientRect();
     const fx = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
     const fy = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
-    setHit({ i: n === 1 ? 0 : Math.round(fx * (n - 1)), py: fy });
+    setHit({ i: centred ? Math.min(n - 1, Math.floor(fx * n)) : n === 1 ? 0 : Math.round(fx * (n - 1)), py: fy });
   }
 
   const p = hit ? points[hit.i]! : null;
