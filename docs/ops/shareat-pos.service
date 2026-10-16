@@ -1,0 +1,34 @@
+# T-417 — POS v2's web process. INSTALL INSTRUCTIONS: docs/ops/README.md
+#
+# Second long-running web process beside shareat-erp.service on the production droplet
+# (159.223.46.224). Binds 127.0.0.1:9009 only (`next start -p 9009 -H 127.0.0.1`,
+# apps/pos/package.json); Caddy is the public listener. Written as a file only: shipping a POS
+# build in deploy.yml and installing/enabling this unit are a later task plus ops steps.
+
+[Unit]
+Description=Shareat System — POS v2 web app (next start)
+After=network-online.target
+Wants=network-online.target
+# Do NOT add After=postgresql.service — the database is DO Managed Postgres, off-box (ADR-002 §1 Option B).
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/shareat/apps/pos
+ExecStart=/usr/bin/npm run start
+User=shareat
+Group=shareat
+Restart=always
+RestartSec=5
+
+# ⚠️ NEVER build here. This is a 4 GB droplet shared with the ERP; a build OOMs it. This unit runs an
+# already-installed, already-built tree shipped by CI — bible §2.10.
+Environment=NODE_ENV=production
+
+# Risk R6: the POS process must never starve the ERP on a 4 GB box.
+MemoryMax=768M
+
+StandardOutput=append:/var/log/shareat/pos.log
+StandardError=append:/var/log/shareat/pos.log
+
+[Install]
+WantedBy=multi-user.target

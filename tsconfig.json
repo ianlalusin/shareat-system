@@ -93,6 +93,8 @@
   "exclude": [
     "node_modules",
     "**/node_modules",
-    "**/.next"
+    "**/.next",
+    "apps/pos",
+    "apps/customer"
   ]
 }
