@@ -22,6 +22,7 @@ const ROW_LINK: readonly string[] = [
   'app/admin/users/page.tsx',
   'app/ap/invoices/[id]/page.tsx',
   'app/ap/page.tsx',
+  'app/liabilities/unpaid/page.tsx', // T-431
   'app/ap/vat/page.tsx', // T-408, swept at the 2026-10-16 combined release
   'app/ap/suppliers/[id]/page.tsx',
   'app/ap/suppliers/page.tsx',

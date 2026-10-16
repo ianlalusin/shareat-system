@@ -164,6 +164,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // The org's usage system person (the author of every POS-pull usage draft) was created, once, on first use (audit ruling A9).
   def('stock.usage_system_author_created', 'stock', 'normal', 'org', 'persons', 'T-401', { actor: 'system' }),
   def('stock.usage_auto_posted', 'stock', 'normal', 'store', 'stock_usage_records', 'T-401', { actor: 'system' }),
+  // T-430: a recurring template was created (carries starts_on), resumed, or had its interval/anchor changed (the last two record dropped_due_dates).
+  def('recurring.template_created', 'money', 'normal', 'store', 'recurring_expenses', 'T-430'),
+  def('recurring.template_resumed', 'money', 'normal', 'store', 'recurring_expenses', 'T-430'),
+  def('recurring.template_rescheduled', 'money', 'normal', 'store', 'recurring_expenses', 'T-430'),
   // Written by T-401's setOptionOffer (price / withdraw) but absent from 0197's copy list (a ternary the S1a scan missed). Dotted on purpose: never in 0197's list, so no row can carry the underscore form.
   def('menu.option_offer_set', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),
   def('menu.option_offer_withdraw', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),
@@ -194,6 +198,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('employment.created', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('employment.ended', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('employment.positions_set', 'staff', 'normal', 'store', 'employments', 'T-402'),
+  def('position.reactivated', 'staff', 'normal', 'store', 'positions', 'T-402'),
 
   // ---- S3 (money / data steps before posting): the 15 S3_LIVE entries are live; expense.submitted/rejected, sales_day.reopened, remittance.confirmed and data.* stay reserved (no verb, C4/C5) ----
   def('expense.drafted', 'money', 'normal', 'store', 'expenses', 'T-402'),

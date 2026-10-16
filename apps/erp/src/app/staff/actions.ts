@@ -268,12 +268,14 @@ export async function upsertStorePositionAction(formData: FormData): Promise<voi
   const storeId = str(formData, 'storeId');
   const name = str(formData, 'name');
 
+  let outcome: string | undefined;
   try {
-    await withOrgPrincipal(actor.orgId, (tx) => upsertStorePosition(tx, actor, { storeId, name }));
+    outcome = (await withOrgPrincipal(actor.orgId, (tx) => upsertStorePosition(tx, actor, { storeId, name })))?.outcome;
   } catch (err) {
     return await redirectWithFlash('/staff', { store: storeId }, { error: errorMessage(err) });
   }
-  return await redirectWithFlash('/staff', { store: storeId }, { ok: `Position "${name}" added.` });
+  const verb = outcome === 'reactivated' ? 're-activated' : outcome === 'existing' ? 'already exists' : 'added';
+  return await redirectWithFlash('/staff', { store: storeId }, { ok: `Position "${name}" ${verb}.` });
 }
 
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

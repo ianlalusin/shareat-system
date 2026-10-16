@@ -164,6 +164,16 @@ export async function insertStorePosition(
   return row as PositionRow;
 }
 
+/** DEF-664 - bring a retired store position back. Store-scoped rows only (a canonical one is never retired). */
+export async function reactivateStorePosition(tx: Tx, orgId: string, positionId: string): Promise<PositionRow | undefined> {
+  const [row] = await tx
+    .update(positions)
+    .set({ isActive: true })
+    .where(and(eq(positions.orgId, orgId), eq(positions.id, positionId), sql`${positions.storeId} is not null`))
+    .returning();
+  return row as PositionRow | undefined;
+}
+
 export async function getPositionsByIds(tx: Tx, orgId: string, ids: string[]): Promise<PositionRow[]> {
   if (ids.length === 0) return [];
   const rows = await tx

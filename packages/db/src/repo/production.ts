@@ -559,3 +559,47 @@ export async function listCookInputsForDay(tx: Tx, orgId: string, storeId: strin
     itemCode: x.item_code, itemName: x.item_name, quantity: x.quantity, unit: x.unit, locationId: x.location_id,
   }));
 }
+
+/**
+ * T-420 - what POSTED recipe cooking took out of each item on one day at one store, for the usage check. One query, a `sum(...)::text`,
+ * never a float. Counts only `kind = 'cook'`, `status = 'posted'`, `direction = 'out'` (the dish is 'in'), lines not reversed by an edit.
+ * `locationId` narrows to cooks in that one room (a pull draft's own room); `itemIds` narrows to those items. Items with no cook are absent.
+ */
+export async function cookedByItemForDay(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  producedOn: string,
+  opts: { readonly locationId?: string; readonly itemIds?: readonly string[]; readonly skipSnapshotRooms?: boolean } = {},
+): Promise<Map<string, string>> {
+  if (opts.itemIds && opts.itemIds.length === 0) return new Map();
+  const room = opts.locationId ? sql`and r.location_id = ${opts.locationId}` : sql``;
+  // A cook in a room whose pull draft holds a snapshot of the item is already credited to THAT snapshot (room scope); the live,
+  // store-wide check must not credit it a second time.
+  const skip = opts.skipSnapshotRooms
+    ? sql`and not exists (
+        select 1 from pos_usage_pull_lines pl
+          join pos_usage_pulls p on p.id = pl.pull_id
+          join stock_usage_records u on u.id = pl.usage_record_id
+         where u.store_id = r.store_id and u.used_on = r.produced_on and u.location_id = r.location_id
+           and pl.item_id = l.item_id and p.status <> 'void' and u.status <> 'void' and pl.draft_expected_qty is not null)`
+    : sql``;
+  const only = opts.itemIds ? sql`and l.item_id in (${sql.join(opts.itemIds.map((id) => sql`${id}`), sql`, `)})` : sql``;
+  const rows = (await tx.execute(sql`
+    select l.item_id, sum(l.quantity)::text as qty
+      from production_records r
+      join production_record_lines l on l.record_id = r.id
+     where r.org_id = ${orgId}
+       and r.store_id = ${storeId}
+       and r.produced_on = ${producedOn}
+       and r.kind = 'cook'
+       and r.status = 'posted'
+       and l.direction = 'out'
+       and l.reversed_at is null
+       ${room}
+       ${skip}
+       ${only}
+     group by l.item_id
+  `)) as unknown as { item_id: string; qty: string }[];
+  return new Map(rows.map((x) => [x.item_id, x.qty]));
+}
