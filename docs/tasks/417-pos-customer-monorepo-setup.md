@@ -30,7 +30,7 @@ CI must stay exactly as green and no slower. Nothing here sells anything; it is 
   `assembleRelease -PversionCode=<run>`, keystore from `ANDROID_KEYSTORE_BASE64` + 3 more secrets).
 
 ## Rulings (planner)
-1. **App ids (working default, Open question 1):** POS v2 `net.shareat.posv2`, Customer v2 `net.shareat.customerv2`.
+1. **App ids (Ian, 16 Oct):** POS v2 `net.shareat.pos2`, Customer v2 `net.shareat.order` (from his web addresses pos2.shareat.net and order.shareat.net).
 2. **Versions:** both shells use exactly `apps/erp`'s ranges for `next`, `react`, `react-dom` (one hoisted copy).
    Capacitor `^6` (same major as v1, Java 17) so PC-3 copies cleanly. `@capacitor/core` in `dependencies`;
    `@capacitor/cli`, `@capacitor/android` in `devDependencies`.
@@ -161,6 +161,6 @@ copy offline: if this key is lost, installed tablets can never take an update in
 says the APK was skipped.
 
 ## Open questions
-1. App ids `net.shareat.posv2` / `net.shareat.customerv2`? They cannot be changed after tablets install them.
+1. ~~App ids~~ answered by Ian 16 Oct: `net.shareat.pos2` / `net.shareat.order`; web addresses pos2.shareat.net / order.shareat.net.
 2. While the key is missing, also build a test-only (debug) APK for one tablet trial? Recommended: no; it cannot
    update in place, and it risks reaching a store.
