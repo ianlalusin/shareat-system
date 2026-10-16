@@ -15,7 +15,7 @@
  * `numeric` as text.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { auditLogRepo, itemsRepo, posMappingRepo, stockUsageRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, itemsRepo, posMappingRepo, productionRepo, stockUsageRepo, type Tx } from '@shareat/db';
 import { gone, internalFault, refuse } from '../shared/refusal';
 import { humanDate } from '../shared/refusal-leaf';
 import { menuRuleCoveredItemIds } from '../pos/depletion-source';
@@ -128,6 +128,11 @@ export interface UsageVariance {
   /** Item base units, a decimal string ('0' when only a menu rule covers the item). */
   readonly expected: string;
   readonly actual: string;
+  /**
+   * T-420: what POSTED recipe cooking already took out of this item that day ('0' when none, else 3 dp: '0.500'). `actual` stays what
+   * staff recorded; the verdict judges `actual + cooked` against `expected`. A missing value (an old mock) reads as none.
+   */
+  readonly cooked: string;
   /** The tolerance in force for this item, as stored ('0.1000'). */
   readonly tolerance: string;
   readonly withinBand: boolean;
@@ -152,14 +157,24 @@ export async function usageVariancesFor(
   if (ids.length === 0) return [];
 
   const actuals = await stockUsageRepo.usageActualsForDay(tx, storeId, businessDate);
+  const cooks = await productionRepo.cookedByItemForDay(tx, orgId, storeId, businessDate, { itemIds: ids, skipSnapshotRooms: true });
   const tolerances = await stockUsageRepo.usageTolerancesFor(tx, orgId, ids);
   const out: UsageVariance[] = [];
   for (const itemId of ids) {
     const expected = planned.get(itemId) ?? '0';
     const actual = actuals.get(itemId) ?? '0';
+    const cooked = cooks.get(itemId) ?? '0';
     const tolerance = tolerances.byItem.get(itemId) ?? tolerances.org;
     const item = await itemsRepo.getItemById(tx, orgId, itemId);
-    out.push({ itemId, itemName: item?.name ?? 'an item', expected, actual, tolerance, withinBand: isWithinUsageTolerance(expected, actual, tolerance) });
+    out.push({
+      itemId,
+      itemName: item?.name ?? 'an item',
+      expected,
+      actual,
+      cooked,
+      tolerance,
+      withinBand: isWithinUsageTolerance(expected, addQuantity(quantity(actual), quantity(cooked)), tolerance),
+    });
   }
   return out.sort((a, b) => a.itemName.localeCompare(b.itemName) || a.itemId.localeCompare(b.itemId));
 }
@@ -199,22 +214,33 @@ export interface ToleranceGate {
 export async function snapshotVariancesFor(
   tx: Tx,
   orgId: string,
-  recordId: string,
+  record: { readonly id: string; readonly storeId: string; readonly usedOn: string; readonly locationId: string },
   lines: readonly { readonly itemId: string; readonly quantity: string }[],
 ): Promise<UsageVariance[]> {
-  const snapshot = await posMappingRepo.draftExpectedByItem(tx, recordId);
+  const snapshot = await posMappingRepo.draftExpectedByItem(tx, record.id);
   if (snapshot.size === 0) return [];
   const own = new Map<string, string>();
   for (const l of lines) own.set(l.itemId, addQuantity(quantity(own.get(l.itemId) ?? '0'), quantity(l.quantity)));
   const ids = [...snapshot.keys()];
   const tolerances = await stockUsageRepo.usageTolerancesFor(tx, orgId, ids);
+  // T-420 C3: only cooks in THIS record's own room, so one cook is credited to at most one pull draft (a pull writes one draft per room).
+  const cooks = await productionRepo.cookedByItemForDay(tx, orgId, record.storeId, record.usedOn, { locationId: record.locationId, itemIds: ids });
   const out: UsageVariance[] = [];
   for (const itemId of ids) {
     const expected = snapshot.get(itemId)!;
     const actual = own.get(itemId) ?? '0';
+    const cooked = cooks.get(itemId) ?? '0';
     const tolerance = tolerances.byItem.get(itemId) ?? tolerances.org;
     const item = await itemsRepo.getItemById(tx, orgId, itemId);
-    out.push({ itemId, itemName: item?.name ?? 'an item', expected, actual, tolerance, withinBand: isWithinUsageTolerance(expected, actual, tolerance) });
+    out.push({
+      itemId,
+      itemName: item?.name ?? 'an item',
+      expected,
+      actual,
+      cooked,
+      tolerance,
+      withinBand: isWithinUsageTolerance(expected, addQuantity(quantity(actual), quantity(cooked)), tolerance),
+    });
   }
   return out.sort((a, b) => a.itemName.localeCompare(b.itemName) || a.itemId.localeCompare(b.itemId));
 }
@@ -226,12 +252,12 @@ export async function snapshotVariancesFor(
  */
 export async function checkUsageTolerance(
   tx: Tx,
-  record: { readonly id: string; readonly orgId: string; readonly storeId: string; readonly usedOn: string },
+  record: { readonly id: string; readonly orgId: string; readonly storeId: string; readonly usedOn: string; readonly locationId: string },
   itemIds: readonly string[],
   reason: string | undefined,
 ): Promise<ToleranceGate> {
   const lines = await stockUsageRepo.listUsageLines(tx, record.id);
-  const own = await snapshotVariancesFor(tx, record.orgId, record.id, lines);
+  const own = await snapshotVariancesFor(tx, record.orgId, record, lines);
   const snapshotIds = new Set(own.map((v) => v.itemId));
   const live = await usageVariancesFor(tx, record.orgId, record.storeId, record.usedOn, itemIds.filter((id) => !snapshotIds.has(id)));
   const outside = [...own, ...live].filter((v) => !v.withinBand);
@@ -239,7 +265,10 @@ export async function checkUsageTolerance(
   if (reason !== undefined && reason.trim() !== '') return { refusal: null, verified: outside };
   const day = humanDate(record.usedOn as BusinessDate);
   const sentences = outside.map(
-    (v) => `${v.itemName}: ${plain(v.actual)} recorded against ${plain(v.expected)} expected for ${day} (more than ${percentWords(v.tolerance)} apart)`,
+    (v) => {
+      const cooking = v.cooked !== undefined && v.cooked !== '0' && plain(v.cooked) !== '0' ? ` + ${plain(v.cooked)} used in cooking` : '';
+      return `${v.itemName}: ${plain(v.actual)} recorded${cooking} against ${plain(v.expected)} expected for ${day} (more than ${percentWords(v.tolerance)} apart)`;
+    },
   );
   return {
     refusal: `${sentences.join('; ')}. A manager who has checked the count can post it with a reason.`,
