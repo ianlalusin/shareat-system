@@ -96,3 +96,14 @@ Re-run the grep at S1 start; a new caller with a store select joins S3.
 ## Not in scope
 Return/shortage paths' locking (if `returnCashRequest` does not lock the request row, log it as a finding, do not fix);
 v1; the reimbursement and recurring screens.
+
+## Ruling R-AUTO (Ian, 2026-10-16; binding, supersedes "floats shown regardless of a staff account")
+**Releasing a cash request creates the store's staff cash account if the store has none,** in the SAME transaction as the
+release, so the released money always has a place to go. The account is a normal money account: custodian `staff`,
+instrument `cash`, the store's, named "Staff cash — <store name>", on the existing staff-custody GL account the current
+float routing uses; it is audited (`money_account.created`, source = the release, actor = the releasing user) and is
+idempotent (two releases at once create ONE account: take a lock on the store's money accounts, or rely on a unique
+constraint if one exists — check; no migration unless unavoidable). `load.ts` keeps requiring the account, which now
+always exists after a release. Existing released requests at stores with no account (production may have some): the
+loader shows them anyway AND the next release or a one-off backfill creates the account — the builder adds a
+read-only count to the Done-when so Ian can see how many stores are affected before deploy.
