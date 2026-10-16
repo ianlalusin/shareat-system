@@ -3,10 +3,16 @@
  * day marked. Server-rendered inline SVG; the draw-in motion is CSS-only and lives in globals.css inside
  * the no-preference block, so reduced motion gets the finished chart.
  */
+import { SalesHover } from './SalesHover';
+
 export interface SalesLinePoint {
   label: string;
   current: number;
   previous: number;
+  /** Full date for the hover card, e.g. "Sat, Oct 10". */
+  day?: string;
+  /** Formatted sales for the hover card, without the peso sign. */
+  text?: string;
 }
 
 const W = 1000;
@@ -174,6 +180,13 @@ export function SalesLine({
           }}
         />
       </svg>
+      <SalesHover
+        points={points.map((p, i) => ({
+          day: p.day ?? p.label,
+          text: p.text ?? String(p.current),
+          y: Number(cur[i]![1]) / 360,
+        }))}
+      />
       <div className="dash-pop absolute h-0 w-0" style={{ left: peakX + '%', top: peakY * 100 + '%' }}>
         <span
           className="absolute -left-[6px] -top-[6px] h-3 w-3 rounded-full"

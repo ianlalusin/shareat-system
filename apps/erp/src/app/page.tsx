@@ -131,6 +131,8 @@ export default async function DashboardPage({
   const prevDays = eachDay(prev.from, prev.to);
   const points = nowDays.map((d, i) => ({
     label: shortDay(d),
+    day: shortDay(d, true),
+    text: fmtNum(nowMap.get(d) ?? 0),
     current: nowMap.get(d) ?? 0,
     previous: prevMap.get(prevDays[i]!) ?? 0,
   }));
