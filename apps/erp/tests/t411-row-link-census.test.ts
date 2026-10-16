@@ -66,6 +66,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'components/reports/StoreComparisonTable.tsx',
   'components/reports/TrialBalanceTable.tsx',
   // Editing grids / rows are forms (21)
+  'app/trade/orders/[id]/print/page.tsx', // T-433 S2: the printable delivery receipt, a print page with no row destination
   'app/page.tsx', // T-401 S6: the usage check scorecard on the dashboard, one row per store, no row destination
   'app/admin/access-defaults/grid.tsx',
   'app/attendance/lane/page.tsx',

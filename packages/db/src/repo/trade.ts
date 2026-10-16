@@ -7,10 +7,11 @@
  * disagreed with its own inputs on 13.3% of rows, which is what a maintained figure looks like
  * after a year.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Money, Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert } from './numeric-input';
+import { refuse } from '../refusal';
 import {
   tradeOrders,
   tradeOrderLines,
@@ -51,7 +52,10 @@ export interface TradeOrderRow {
   dispatchedBy: string | null;
   receivedAt: Date | null;
   receivedBy: string | null;
+  creditOverrideBy: string | null;
   creditOverrideReason: string | null;
+  /** T-433 S2. The pre-printed BIR booklet number, when someone noted it. */
+  birInvoiceNo: string | null;
   voidedAt: Date | null;
   voidReason: string | null;
   createdBy: string;
@@ -260,7 +264,7 @@ export async function markDispatched(
     creditOverrideReason: string | null;
   },
 ): Promise<void> {
-  await tx
+  const updated = await tx
     .update(tradeOrders)
     .set({
       status: 'dispatched',
@@ -272,7 +276,10 @@ export async function markDispatched(
       creditOverrideReason: values.creditOverrideReason,
       updatedAt: sql`now()`,
     })
-    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id), inArray(tradeOrders.status, ['draft', 'confirmed'])))
+    .returning({ id: tradeOrders.id });
+  // T-433: the status guard - a second concurrent dispatch that got past the read is refused, never double-posted.
+  if (updated.length === 0) throw refuse(`markDispatched: order ${id} is no longer draft or confirmed.`, 'This order was already dispatched.');
 }
 
 export async function markVoided(
@@ -441,4 +448,26 @@ export async function markReceived(
     .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)))
     .returning({ receivedAt: tradeOrders.receivedAt });
   return row!.receivedAt!;
+}
+
+/** T-433 S2. The order in this org that already carries this booklet number, if any. */
+export async function findByBirInvoiceNo(
+  tx: Tx,
+  orgId: string,
+  value: string,
+): Promise<{ id: string; referenceNo: string | null } | undefined> {
+  const [row] = await tx
+    .select({ id: tradeOrders.id, referenceNo: tradeOrders.referenceNo })
+    .from(tradeOrders)
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.birInvoiceNo, value)))
+    .limit(1);
+  return row;
+}
+
+/** T-433 S2. Set (or, with null, clear) the booklet number. */
+export async function setBirInvoiceNo(tx: Tx, orgId: string, id: string, value: string | null): Promise<void> {
+  await tx
+    .update(tradeOrders)
+    .set({ birInvoiceNo: value, updatedAt: sql`now()` })
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
 }

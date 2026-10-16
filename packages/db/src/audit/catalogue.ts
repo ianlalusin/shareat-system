@@ -182,6 +182,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('auth.approval_pin_capped', 'security', 'high', 'org', 'persons', 'T-416', { actor: 'system' }),
   // T-416: an administrator cleared a person's cap.
   def('auth.approval_pin_cap_reset', 'security', 'high', 'org', 'persons', 'T-416'),
+  // T-433: a charge let through over the customer's credit limit, with who and why.
+  def('credit_limit.overridden', 'money', 'high', 'store', 'ar_charges', 'T-433'),
+  // T-433: the pre-printed BIR booklet number set, changed or cleared on a trade order.
+  def('trade_order.bir_invoice_set', 'money', 'normal', 'store', 'trade_orders', 'T-433'),
   def('auth.pin_stopped_for_day', 'security', 'critical', 'store', 'stores', 'T-402', { actor: 'either' }),
   def('session.ended', 'security', 'low', 'org', 'sessions', 'T-402'),
   def('session.ended_all', 'security', 'high', 'org', 'sessions', 'T-402', { actor: 'either' }),

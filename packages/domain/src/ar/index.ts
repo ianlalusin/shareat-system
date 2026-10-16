@@ -8,10 +8,11 @@
  * ⛔ **The platform fee is booked here, once.** v1 recognised it twice and it cost ₱198,148.29
  * across two stores. `POSTING-PATTERNS.md`'s `ar_collection` is the authority for these legs.
  */
-import { arRepo, customersRepo, journalRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { arRepo, auditLogRepo, customersRepo, journalRepo, moneyAccountsRepo, transaction, type CustomerRow, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor, can } from '@shareat/auth';
 import { add, compare, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
+import { toBusinessDate } from '@shareat/core/datetime';
 import { postEntry } from '../ledger/post-entry';
 import { authorizeOtherStores, withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -40,6 +41,149 @@ export interface RecordChargeInput {
 }
 
 /**
+ * T-433 S3 - the ONE credit-limit gate. `addedExposure` is what this act ADDS to what the buyer owes: the full total for a
+ * plain charge; total minus the payment for a charge that is paid in the same transaction (only the function that also
+ * posts the payment may pass less than the total).
+ *
+ * `enforce: false` is the read-only preview: no lock, no refusal, only the figures. `enforce: true` first takes
+ * `SELECT ... FOR UPDATE` on the customer row, THEN reads the open AR, so two concurrent charges for one buyer queue
+ * instead of both reading the old balance.
+ *
+ * Exposure is org-wide on purpose: a limit is extended to a BUYER, not to a buyer at one branch.
+ */
+interface CreditExposure {
+  owed: Money;
+  after: Money;
+  limit: Money | null;
+  over: boolean;
+  /** Set only when enforcing, over the limit and a permitted override was given. */
+  overrideBy: string | null;
+  overrideReason: string | null;
+}
+
+async function creditExposure(
+  trx: Tx,
+  actor: Actor,
+  customer: CustomerRow,
+  storeId: string,
+  addedExposure: Money,
+  opts: { enforce: boolean; reason?: string | null },
+): Promise<CreditExposure> {
+  if (customer.creditLimit === null) {
+    return { owed: ZERO, after: ZERO, limit: null, over: false, overrideBy: null, overrideReason: null };
+  }
+  const limit = money(customer.creditLimit);
+  if (opts.enforce) await customersRepo.lockForCredit(trx, actor.orgId, customer.id);
+  // T-371 R4/C4 - the ledger figure and the stored limit are re-minted and compared exactly.
+  const owed = money((await arRepo.positionOf(trx, actor.orgId, customer.id)).controlBalance);
+  const after = add(owed, addedExposure);
+  const over = compare(after, limit) > 0;
+  if (!over || !opts.enforce) return { owed, after, limit, over, overrideBy: null, overrideReason: null };
+
+  const reason = opts.reason?.trim() || '';
+  const mayOverride = await can(trx, actor, 'override_credit_limit', { storeId });
+  if (!mayOverride || !reason) {
+    throw new Error(
+      `recordCharge: ${customer.name} owes ₱${owed} and this charge is ` +
+        `₱${addedExposure}, which would take them to ₱${after} against a ` +
+        `limit of ₱${customer.creditLimit}. A manager or admin can charge it anyway by ` +
+        'saying why.',
+    );
+  }
+  return { owed, after, limit, over, overrideBy: actor.personId, overrideReason: reason };
+}
+
+/** T-433 S3. An override is a decision about money: it leaves a row nobody can edit, beside the columns on the order. */
+async function auditCreditOverride(
+  trx: Tx,
+  actor: Actor,
+  storeId: string,
+  chargeId: string,
+  x: CreditExposure,
+): Promise<void> {
+  if (!x.overrideReason) return;
+  await auditLogRepo.append(trx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'credit_limit.overridden',
+    storeId,
+    entityId: chargeId,
+    before: null,
+    after: { reason: x.overrideReason, owed: x.owed, after: x.after, limit: x.limit },
+    source: 'web',
+  });
+}
+
+/** Validates the customer and amount, the part `recordCharge` and `recordChargeWithCollection` share. */
+async function loadChargeSubject(
+  trx: Tx,
+  actor: Actor,
+  input: RecordChargeInput,
+): Promise<{ customer: CustomerRow; totalAmount: Money }> {
+  const customer = await customersRepo.getById(trx, actor.orgId, input.customerId);
+  if (!customer) throw new Error(`recordCharge: customer ${input.customerId} does not exist.`);
+  if (customer.status !== 'active') {
+    throw new Error(`recordCharge: ${customer.name} is ${customer.status}, not active.`);
+  }
+  const totalAmount = parseMoneyInput(input.totalAmount, 'recordCharge: the charge amount', 'The charge amount');
+  // T-371 C4 - ordered in scaled bigint on the branded value, never `Number()` (NaN-blind).
+  if (compare(totalAmount, ZERO) <= 0) {
+    throw new Error('recordCharge: a charge has to be greater than zero.');
+  }
+  return { customer, totalAmount };
+}
+
+/** Inserts the charge and posts `Dr 1210 (party=customer) / Cr <revenue>`. No gate here: the callers hold it. */
+async function postCharge(
+  trx: Tx,
+  actor: Actor,
+  input: RecordChargeInput,
+  customer: CustomerRow,
+  totalAmount: Money,
+): Promise<{ chargeId: string; entryId: string }> {
+  const { id: chargeId } = await arRepo.insertCharge(trx, {
+    orgId: actor.orgId,
+    storeId: input.storeId,
+    customerId: input.customerId,
+    chargeDate: input.chargeDate,
+    dueDate: input.dueDate ?? null,
+    referenceNo: input.referenceNo?.trim() || null,
+    notes: input.notes?.trim() || null,
+    totalAmount,
+    revenueAccountCode: input.revenueAccountCode,
+    createdBy: actor.personId,
+  });
+
+  const result = await postEntry(trx, {
+    orgId: actor.orgId,
+    entryDate: input.chargeDate,
+    sourceType: 'ar_charge',
+    sourceId: chargeId,
+    idempotencyKey: `ar_charge:${chargeId}:post`,
+    memo: `Credit sale — ${customer.name}`,
+    postedBy: actor.personId,
+    lines: [
+      {
+        accountCode: AR_CONTROL_CODE,
+        storeId: input.storeId,
+        debit: totalAmount,
+        partyType: 'customer' as const,
+        partyId: input.customerId,
+        lineMemo: `Credit sale — ${customer.name}`,
+      },
+      {
+        accountCode: input.revenueAccountCode,
+        storeId: input.storeId,
+        credit: totalAmount,
+        lineMemo: `Credit sale — ${customer.name}`,
+      },
+    ],
+  });
+
+  if (result.created) await arRepo.markChargePosted(trx, actor.orgId, chargeId, { journalEntryId: result.entryId });
+  return { chargeId, entryId: result.entryId };
+}
+
+/**
  * A customer owes us money. Posts `Dr 1210 (party=customer) / Cr <revenue>` immediately —
  * there is no draft step, matching the "verification IS the approval" shape T-130 settled.
  *
@@ -47,6 +191,7 @@ export interface RecordChargeInput {
  * the general AR-charge primitive and bible §16.4 names the limit as enforced "at exactly one
  * gate." A second caller of `recordCharge` (a manual billing screen, a catering charge) must not
  * be able to bypass it just by not re-implementing the check trade/index.ts happened to add.
+ * T-433: the gate itself is `creditExposure` above, shared with `recordChargeWithCollection`.
  */
 export async function recordCharge(
   tx: Tx | null,
@@ -55,86 +200,130 @@ export async function recordCharge(
 ): Promise<{ chargeId: string; entryId: string; creditOverrideBy: string | null; creditOverrideReason: string | null }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_buyer', { storeId: input.storeId });
+    const { customer, totalAmount } = await loadChargeSubject(trx, actor, input);
 
-    const customer = await customersRepo.getById(trx, actor.orgId, input.customerId);
-    if (!customer) throw new Error(`recordCharge: customer ${input.customerId} does not exist.`);
-    if (customer.status !== 'active') {
-      throw new Error(`recordCharge: ${customer.name} is ${customer.status}, not active.`);
+    // ⛔ ONE gate, here, because this is the one act that creates AR exposure - at the FULL total.
+    const exposure = await creditExposure(trx, actor, customer, input.storeId, totalAmount, {
+      enforce: true,
+      reason: input.creditOverrideReason,
+    });
+
+    const { chargeId, entryId } = await postCharge(trx, actor, input, customer, totalAmount);
+    await auditCreditOverride(trx, actor, input.storeId, chargeId, exposure);
+    return { chargeId, entryId, creditOverrideBy: exposure.overrideBy, creditOverrideReason: exposure.overrideReason };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/** What is paid on the spot. The money account must be at the charge's own store. */
+export interface PayNowInput {
+  amount: string;
+  moneyAccountId: string;
+  receiptFileId?: string | null;
+  referenceNo?: string | null;
+}
+
+export type RecordChargeWithCollectionInput = RecordChargeInput & { payNow: PayNowInput };
+
+/**
+ * T-433 S1. A charge AND the payment that settles (all or part of) it, in ONE transaction: the buyer pays at the door.
+ * Posts exactly what two screens would - `ar_charge` then `ar_collection` - no new pattern. The collection is allocated
+ * to THIS charge only, and dated the day it happens (`toBusinessDate()`), not the charge's date: the order may be
+ * older than the payment.
+ *
+ * Only this function may pass a smaller `addedExposure` (total minus the payment) to the credit gate, because only it
+ * also posts the payment that makes that true.
+ */
+export async function recordChargeWithCollection(
+  tx: Tx | null,
+  actor: Actor,
+  input: RecordChargeWithCollectionInput,
+): Promise<{
+  chargeId: string;
+  entryId: string;
+  collectionId: string;
+  collectionEntryId: string;
+  creditOverrideBy: string | null;
+  creditOverrideReason: string | null;
+}> {
+  const run = async (trx: Tx) => {
+    // First statement: whoever raises the charge needs the charge capability, whatever else they hold.
+    await authorize(trx, actor, 'approve_buyer', { storeId: input.storeId });
+    const { customer, totalAmount } = await loadChargeSubject(trx, actor, input);
+
+    const paid = parseMoneyInput(input.payNow.amount, 'recordChargeWithCollection: the payment', 'The amount paid now');
+    if (compare(paid, ZERO) <= 0) throw new Error('recordChargeWithCollection: the amount paid now has to be greater than zero.');
+    if (compare(paid, totalAmount) > 0) {
+      throw refuse(
+        `recordChargeWithCollection: paid ${paid} is more than the ${totalAmount} charge.`,
+        `Paid now cannot be more than this order's ₱${totalAmount}.`,
+      );
     }
-    const totalAmount = parseMoneyInput(input.totalAmount, 'recordCharge: the charge amount', 'The charge amount');
-    // T-371 C4 — ordered in scaled bigint on the branded value, never `Number()` (NaN-blind).
-    if (compare(totalAmount, ZERO) <= 0) {
-      throw new Error('recordCharge: a charge has to be greater than zero.');
+    if (!input.payNow.moneyAccountId?.trim()) {
+      throw refuse('recordChargeWithCollection: no money account named.', 'Choose the account the payment went into.');
+    }
+    const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.payNow.moneyAccountId);
+    if (!account) throw new Error('recordChargeWithCollection: that money account does not exist.');
+    if (account.storeId !== input.storeId) {
+      throw refuse(
+        `recordChargeWithCollection: money account ${account.id} is at another store than the charge.`,
+        "Pay into a money account at this order's store.",
+      );
     }
 
-    // ⛔ ONE gate, here, because this is the one act that creates AR exposure — every caller
-    // (trade orders today, anything else tomorrow) goes through it.
-    let creditOverrideBy: string | null = null;
-    let creditOverrideReason: string | null = null;
-    if (customer.creditLimit !== null) {
-      // ⚠️ Derived from the ledger, never a stored balance — org-wide, because a credit limit is
-      // extended to a BUYER, not to a buyer at one branch.
-      // T-371 R4/C4 — the ledger figure and the stored limit are re-minted and compared exactly; on 2dp values the old
-      // `+ 0.005` tolerance decided nothing an exact comparison does not.
-      const controlBalance = money((await arRepo.positionOf(trx, actor.orgId, input.customerId)).controlBalance);
-      const after = add(controlBalance, totalAmount);
-      if (compare(after, money(customer.creditLimit)) > 0) {
-        const reason = input.creditOverrideReason?.trim() || '';
-        const mayOverride = await can(trx, actor, 'override_credit_limit', { storeId: input.storeId });
-        if (!mayOverride || !reason) {
-          throw new Error(
-            `recordCharge: ${customer.name} owes ₱${controlBalance} and this charge is ` +
-              `₱${totalAmount}, which would take them to ₱${after} against a ` +
-              `limit of ₱${customer.creditLimit}. A manager or admin can charge it anyway by ` +
-              'saying why.',
-          );
-        }
-        creditOverrideBy = actor.personId;
-        creditOverrideReason = reason;
-      }
-    }
+    const exposure = await creditExposure(trx, actor, customer, input.storeId, subtract(totalAmount, paid), {
+      enforce: true,
+      reason: input.creditOverrideReason,
+    });
 
-    const { id: chargeId } = await arRepo.insertCharge(trx, {
-      orgId: actor.orgId,
+    const { chargeId, entryId } = await postCharge(trx, actor, input, customer, totalAmount);
+    await auditCreditOverride(trx, actor, input.storeId, chargeId, exposure);
+
+    const collected = await recordCollection(trx, actor, {
       storeId: input.storeId,
       customerId: input.customerId,
-      chargeDate: input.chargeDate,
-      dueDate: input.dueDate ?? null,
-      referenceNo: input.referenceNo?.trim() || null,
-      notes: input.notes?.trim() || null,
-      totalAmount,
-      revenueAccountCode: input.revenueAccountCode,
-      createdBy: actor.personId,
+      collectionDate: toBusinessDate(),
+      amount: paid,
+      moneyAccountId: account.id,
+      receiptFileId: input.payNow.receiptFileId ?? null,
+      referenceNo: input.payNow.referenceNo ?? null,
+      allocations: [{ chargeId, amountApplied: paid }],
     });
+    return {
+      chargeId,
+      entryId,
+      collectionId: collected.collectionId,
+      collectionEntryId: collected.entryId,
+      creditOverrideBy: exposure.overrideBy,
+      creditOverrideReason: exposure.overrideReason,
+    };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
 
-    const result = await postEntry(trx, {
-      orgId: actor.orgId,
-      entryDate: input.chargeDate,
-      sourceType: 'ar_charge',
-      sourceId: chargeId,
-      idempotencyKey: `ar_charge:${chargeId}:post`,
-      memo: `Credit sale — ${customer.name}`,
-      postedBy: actor.personId,
-      lines: [
-        {
-          accountCode: AR_CONTROL_CODE,
-          storeId: input.storeId,
-          debit: totalAmount,
-          partyType: 'customer' as const,
-          partyId: input.customerId,
-          lineMemo: `Credit sale — ${customer.name}`,
-        },
-        {
-          accountCode: input.revenueAccountCode,
-          storeId: input.storeId,
-          credit: totalAmount,
-          lineMemo: `Credit sale — ${customer.name}`,
-        },
-      ],
-    });
-
-    if (result.created) await arRepo.markChargePosted(trx, actor.orgId, chargeId, { journalEntryId: result.entryId });
-    return { chargeId, entryId: result.entryId, creditOverrideBy, creditOverrideReason };
+/**
+ * T-433 S3. Before a dispatch is pressed: what the buyer owes, what this order would take them to, and the limit - so the
+ * screen can warn instead of refusing after the fact. Read-only, no lock; the gate still decides when the order posts.
+ * Needs `approve_buyer` at the store, the same right as the dispatch it previews, so staff see no customer figures.
+ */
+export async function previewCreditExposure(
+  tx: Tx | null,
+  actor: Actor,
+  input: { customerId: string; storeId: string; total: string; payNow?: string | null },
+): Promise<{ owed: string; after: string; limit: string | null; over: boolean }> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'approve_buyer', { storeId: input.storeId });
+    const customer = await customersRepo.getById(trx, actor.orgId, input.customerId);
+    if (!customer) throw new Error(`previewCreditExposure: customer ${input.customerId} does not exist.`);
+    const total = parseMoneyInput(input.total, 'previewCreditExposure: the order total', 'The order total');
+    const paidRaw = input.payNow?.trim();
+    const paid = paidRaw ? parseMoneyInput(paidRaw, 'previewCreditExposure: the payment', 'The amount paid now') : ZERO;
+    let added = subtract(total, paid);
+    if (compare(added, ZERO) < 0) added = ZERO;
+    const x = await creditExposure(trx, actor, customer, input.storeId, added, { enforce: false });
+    return { owed: x.owed, after: x.after, limit: x.limit, over: x.over };
   };
   if (tx) return run(tx);
   return transaction(run);
@@ -176,6 +365,16 @@ export async function voidCharge(
     if (!charge.journalEntryId) throw new Error('voidCharge: posted charge carries no journal entry.');
     const reason = input.reason.trim();
     if (!reason) throw new Error('voidCharge: say why this charge is being voided.');
+
+    // T-433 S1 (ruling 4): a charge with a payment against it cannot be voided, or the payment would stay allocated to a dead
+    // charge. Lock first (the same lock a collection takes), so a payment landing now is seen.
+    await arRepo.lockChargesForAllocation(trx, actor.orgId, [charge.id]);
+    if ((await arRepo.liveAllocationCount(trx, actor.orgId, charge.id)) > 0) {
+      throw refuse(
+        `voidCharge: charge ${charge.id} has payments allocated to it.`,
+        'This charge has payments against it. Void the payment first.',
+      );
+    }
 
     const result = await reverseEntry(trx, {
       entryId: charge.journalEntryId,

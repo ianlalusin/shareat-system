@@ -89,6 +89,14 @@ export async function getById(tx: Tx, orgId: string, id: string): Promise<Custom
   return row as CustomerRow | undefined;
 }
 
+/**
+ * T-433 S3. `SELECT ... FOR UPDATE` on the customer row, so two charges for ONE buyer queue: the second reads the
+ * open balance only after the first has committed. Take it BEFORE reading exposure, in the transaction that posts.
+ */
+export async function lockForCredit(tx: Tx, orgId: string, id: string): Promise<void> {
+  await tx.execute(sql`select id from customers where id = ${id} and org_id = ${orgId} for update`);
+}
+
 export async function listCustomers(tx: Tx, orgId: string): Promise<CustomerRow[]> {
   const rows = await tx
     .select()
