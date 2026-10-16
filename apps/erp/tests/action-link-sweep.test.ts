@@ -438,7 +438,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // "I understand" checkbox is gone (T-412 retype-the-name), so its touch-target-baseline.json entry is removed.
     // 1245 -> 1244, DEF-654 2026-10-16: the plain 'void' collection button became a ConfirmDestructive (not a census candidate).
     // +4 (16 Oct): T-416 clear-approval-PIN-cap button on admin/users/[personId]; T-418 one-click Delete draft / Delete usage draft / Delete template buttons (expenses/[id], inventory/usage/[id], expenses/recurring).
-    expect(results.length).toBe(1248);
+    // +1 (16 Oct): T-432 the bill page's "Pay this bill" link (ap/invoices/[id]); the form's new `source` select replaces the old account select, net 0.
+    // +1 (16 Oct): T-430 "Starts from" date field on the expenses/recurring create form.
+    // +4 (16 Oct): T-431 Everything unpaid page controls (all pass: 32/32/32/44px)
+    expect(results.length).toBe(1254);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

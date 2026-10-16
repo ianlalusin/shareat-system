@@ -53,6 +53,10 @@ const ALLOWED_PREFIXES = [
   // the fixtures carry an explicit `trap:` field warning that takeOutSales is a residual and must
   // never be charted as take-out. They TEACH the trap; exempting them protects the lesson.
   'tests/worked-examples/',
+  // T-422: apps/pos is a byte-for-byte copy of POS v1 at e26d0c1 (logged in apps/pos/V1-COPY.md),
+  // so it carries v1's real field names. They are renamed when T-423 (PC-4) rewrites that code.
+  // ⚠️ Temporary and broad: T-423 must narrow or delete this entry, or new POS code escapes the check.
+  'apps/pos/',
   // T-375 R12: the POS v1 wire field names are written ONCE, here (wire.ts) with the test payload builder
   // (fixtures.ts), exactly the ETL's reason: they are the real names on the wire and pretending otherwise would
   // misdescribe the source. Every other v2 file reads a feed through the v2-named keys exported from wire.ts.

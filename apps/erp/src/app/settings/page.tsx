@@ -105,7 +105,7 @@ export default async function SettingsPage() {
             discoverability, because somebody looking for "where do I add a position" looks in
             Settings first — v1 put it there. */}
         <SettingsCard
-          href="/staff"
+          href="/staff#positions"
           title="Store positions"
           description="The jobs this store’s people hold. The canonical six belong to the organisation; a store adds its own beyond them, on the Staff screen where they are assigned."
           elsewhere

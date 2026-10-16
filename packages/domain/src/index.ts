@@ -19,6 +19,7 @@ export * from './reports/cash-flow';
 export * from './reports/store-comparison';
 export * from './reports/sales-rollup';
 export * from './reports/pos-day-reconciliation';
+export * from './reports/unpaid-liabilities';
 export * from './expenses';
 export * from './sales-days';
 export * from './fixed-assets';

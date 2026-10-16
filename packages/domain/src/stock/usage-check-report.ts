@@ -34,7 +34,7 @@ export async function usageCloseRefusal(tx: Tx, orgId: string, startsOn: string,
     const cache = new Map<string, Awaited<ReturnType<typeof usageVariancesFor>>>();
     for (const r of posted) {
       const lines = await stockUsageRepo.listUsageLines(tx, r.id);
-      const own = await snapshotVariancesFor(tx, orgId, r.id, lines);
+      const own = await snapshotVariancesFor(tx, orgId, r, lines);
       const ownIds = new Set(own.map((v) => v.itemId));
       const key = `${r.storeId}|${r.usedOn}`;
       let day = cache.get(key);

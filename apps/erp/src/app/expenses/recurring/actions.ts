@@ -41,6 +41,8 @@ export async function createTemplateAction(formData: FormData): Promise<void> {
         interval: str(formData, 'interval') as RecurringInterval,
         // T-374 S5 / DEF-579 — raw: the domain parses it after `authorize()`; a blank is refused there, never read as 0.
         anchorDay: str(formData, 'anchorDay'),
+        // T-430: the period it starts from; blank = today. A past date makes the nightly job write catch-up drafts.
+        startsOn: str(formData, 'startsOn') || undefined,
         tillIsDeliberate: str(formData, 'tillIsDeliberate') === 'on',
       }),
     );

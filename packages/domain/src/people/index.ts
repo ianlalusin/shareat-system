@@ -408,7 +408,7 @@ export async function upsertStorePosition(
   tx: Tx,
   actor: Actor,
   input: { storeId: string; name: string },
-): Promise<PositionRow> {
+): Promise<PositionRow & { outcome: 'created' | 'reactivated' | 'existing' }> {
   await authorize(tx, actor, 'manage_store_settings', { storeId: input.storeId });
 
   const name = input.name.trim();
@@ -423,14 +423,30 @@ export async function upsertStorePosition(
   }
 
   const existing = await employmentRepo.findPositionByName(tx, actor.orgId, input.storeId, name);
-  if (existing) return existing;
+  if (existing && existing.isActive) return { ...existing, outcome: 'existing' };
+  if (existing) {
+    // DEF-664 - re-adding a retired position re-activates that same row (audited), never a hidden no-op.
+    const revived = await employmentRepo.reactivateStorePosition(tx, actor.orgId, existing.id);
+    if (!revived) throw new EmploymentError(`Position "${name}" could not be re-activated.`);
+    await auditLogRepo.append(tx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'position.reactivated',
+      storeId: input.storeId,
+      entityId: existing.id,
+      before: { isActive: false },
+      after: { isActive: true, name: existing.name },
+      source: 'web',
+    });
+    return { ...revived, outcome: 'reactivated' };
+  }
 
-  return employmentRepo.insertStorePosition(tx, {
+  const created = await employmentRepo.insertStorePosition(tx, {
     orgId: actor.orgId,
     storeId: input.storeId,
     name,
     createdBy: actor.personId,
   });
+  return { ...created, outcome: 'created' };
 }
 
 export async function listPositions(

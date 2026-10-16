@@ -251,14 +251,16 @@ describe('T-419 case 7 - display only: a draft moves nothing and counts nowhere'
     expect(before.porkOnHand).toBe('20.000');
   });
 
-  it('posted leg (T-420 edits this leg): on-hand drops 0.500 kg once; actuals, verdicts, close refusal and sweep are unchanged in T-419', async () => {
+  it('posted leg (T-420): on-hand drops 0.500 kg once; recorded actuals, close refusal and sweep are unchanged, and with NO plan covering pork there is still no band verdict to change (the covered case is t420-usage-check-cook.test.ts)', async () => {
     await stockUp();
     const before = await snapshot();
+    expect(before.variances, 'no plan in this fixture: nothing is covered, so nothing is judged').toEqual([]);
     await cookPosted('0.6');
     expect((await view()).filter((r) => !r.isDraft)).toHaveLength(2);
     const swept = await asOrg(orgA, (tx) => autoPostDueUsageDrafts(tx, new Date('2026-08-11T07:00:00Z')));
     expect(swept.posted).toEqual([]);
     const after = await snapshot();
+    expect(after.variances, 'still no covered item, so cooking creates no verdict (T-420 credits cooking only to a covered item)').toEqual([]);
     expect(after.porkOnHand).toBe('19.500');
     expect({ ...after, porkOnHand: before.porkOnHand, movements: before.movements }).toEqual(before);
   });

@@ -28,11 +28,18 @@ jobs:
       - name: Typecheck
         run: npx tsc -p apps/${{ inputs.app }}/tsconfig.json --noEmit
 
+      - name: Unit tests
+        run: npm test -w @shareat/${{ inputs.app }} --if-present
+
       - name: Web build
         run: npm run build -w @shareat/${{ inputs.app }}
+        env:
+          NEXT_PUBLIC_API_BASE: https://app.shareat.net
 
       - name: Capacitor static export
         run: npm run build:cap -w @shareat/${{ inputs.app }}
+        env:
+          NEXT_PUBLIC_API_BASE: https://app.shareat.net
 
       # Secrets reach the script only through env:. Missing keystore = skip (green); half-set = fail.
       - name: Signing gate

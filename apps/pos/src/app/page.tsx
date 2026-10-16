@@ -1,3 +1,6 @@
-export default function Page() {
-  return <main>Shareat POS v2</main>;
+
+import LoginPage from "./login/page";
+
+export default function RootPage() {
+  return <LoginPage />;
 }
