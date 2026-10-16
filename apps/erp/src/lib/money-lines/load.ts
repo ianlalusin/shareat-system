@@ -111,6 +111,12 @@ export async function openFloatsForStore(orgId: string, storeId: string, actor: 
   return (await gatedFloats(orgId, storeId, actor)).filter((f) => f.moneyAccountId !== null);
 }
 
+/** Both answers from ONE gated read: the floats to offer, and whether an unrouted one exists (holder only). */
+export async function payableFloatsForStore(orgId: string, storeId: string, actor: Actor): Promise<{ floats: FloatOption[]; unrouted: boolean }> {
+  const all = await gatedFloats(orgId, storeId, actor);
+  return { floats: all.filter((f) => f.moneyAccountId !== null), unrouted: all.some((f) => f.moneyAccountId === null) };
+}
+
 /** For a holder only: an open request here has no staff cash account yet (released before T-414 R-AUTO). */
 export async function hasUnroutedFloatsForStore(orgId: string, storeId: string, actor: Actor): Promise<boolean> {
   return (await gatedFloats(orgId, storeId, actor)).some((f) => f.moneyAccountId === null);

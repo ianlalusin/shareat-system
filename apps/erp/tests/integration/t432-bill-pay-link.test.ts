@@ -240,11 +240,14 @@ describe('case 21 - a forged ?bill= pre-selects nothing foreign, and posting the
     const f = await world();
     const mine = await f.mkSupplier(uid('S21a'));
     const theirs = await f.mkSupplier(uid('S21b'));
-    await verifiedBill(f, mine, '2000.00');
+    const own = await verifiedBill(f, mine, '2000.00');
     const foreign = await verifiedBill(f, theirs, '4000.00');
     const html = await renderSupplier(f.admin, mine, { store: f.storeA, bill: foreign.invoiceId });
     expect(html).not.toContain(foreign.expenseId);
     expect(html).not.toContain(foreign.invoiceId);
+    // A forged bill is ignored: the supplier's OWN items are pre-filled exactly as with no bill param, not blanked.
+    expect(amountBox(html, own.expenseId).value).toBe('2000.00');
+    expect(amountBox(await renderSupplier(f.admin, mine, { store: f.storeA }), own.expenseId).value).toBe('2000.00');
   });
 
   it("posting the other supplier's expense id with this supplier -> the domain's sentence, nothing posted", async () => {

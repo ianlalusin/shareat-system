@@ -394,9 +394,11 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
       if (!UUID_SHAPE.test(requestId)) {
         throw new Error('That cash request could not be found. Refresh the page and pick it again.');
       }
-      const staffCash = await withOrgPrincipal(actor.orgId, (tx) =>
-        moneyAccountsRepo.listMoneyAccounts(tx, actor.orgId, { storeId, custodian: 'staff', instrument: 'cash' }),
-      );
+      // Capability first: a non-holder must not learn whether this store has a staff cash account.
+      const staffCash = await withOrgPrincipal(actor.orgId, async (tx) => {
+        await authorize(tx, actor, 'record_ap_payment', { storeId });
+        return moneyAccountsRepo.listMoneyAccounts(tx, actor.orgId, { storeId, custodian: 'staff', instrument: 'cash' });
+      });
       if (!staffCash[0]) {
         throw new Error('This store has no staff cash account, so a cash request cannot pay a supplier here yet.');
       }
