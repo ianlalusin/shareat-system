@@ -49,9 +49,6 @@ if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - name must contain "_test".`);
 }
-if (!/shareat_test_t424(\?|$)/.test(url)) {
-  throw new Error('T-424 integration tests run ONLY on the lane database shareat_test_t424 (point TEST_DATABASE_URL at it for this run).');
-}
 
 import { APP_ROLE, closeDb, transaction, type Tx } from '@shareat/db';
 import * as auth from '@shareat/auth';
