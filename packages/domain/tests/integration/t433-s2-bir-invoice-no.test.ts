@@ -2,6 +2,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { closeDb } from '@shareat/db';
+import { voidTradeOrder } from '@shareat/domain';
 import { api, asOrg, audit, buyer, dispatch, fixture, freezeClock, internalOrder, orderWorth, sayOf, thawClock, type Fx } from './_fixtures/t433-b2b';
 
 /**
@@ -102,5 +103,45 @@ describe('S2 BIR invoice number', () => {
     await setNo(f, f.manager, live.orderId, '000102');
     expect(await stored(live.orderId)).toBe('000102');
     expect(await audit(sql, f.orgId, 'trade_order.bir_invoice_set')).toHaveLength(1);
+  });
+
+  it('B. voiding an order clears its bir_invoice_no, so the same booklet number can go on a new order', async () => {
+    const f = await fixture(sql, 's2gB');
+    const first = await dispatched(f, { referenceNo: 'WO-1' });
+    await setNo(f, f.manager, first.orderId, '004321');
+    await asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: first.orderId, reason: 'wrong buyer' }));
+    expect(await stored(first.orderId)).toBeNull();
+    const second = await dispatched(f, { referenceNo: 'WO-2' });
+    await setNo(f, f.manager, second.orderId, '004321');
+    expect(await stored(second.orderId)).toBe('004321');
+  });
+
+  it('C. two concurrent setBirInvoiceNo with the same number on different orders: the loser gets R6, not a raw SQL error', async () => {
+    const f = await fixture(sql, 's2gC');
+    const a = await dispatched(f, { referenceNo: 'WO-A' });
+    const b = await dispatched(f, { referenceNo: 'WO-B' });
+    let releaseFirst!: () => void;
+    const hold = new Promise<void>((res) => { releaseFirst = res; });
+    let firstSet!: () => void;
+    const done = new Promise<void>((res) => { firstSet = res; });
+    const first = asOrg(f.orgId, async (tx) => {
+      await api.setBirInvoiceNo(tx, f.manager, { orderId: a.orderId, value: '009999' });
+      firstSet();
+      await hold;
+    });
+    await done;
+    const second = sayOf(setNo(f, f.manager, b.orderId, '009999')).then(
+      (x) => ({ refused: true as const, x }),
+      (e: Error) => ({ refused: false as const, message: e.message }),
+    );
+    await new Promise((res) => setTimeout(res, 1500));
+    releaseFirst();
+    await first;
+    const r2 = await second;
+    expect(r2.refused, 'the loser must be refused').toBe(true);
+    const x = (r2 as { x: { said: string | null; message: string } }).x;
+    expect(x.said).toBe('Invoice no. 009999 is already on order WO-A.');
+    expect(x.message).not.toMatch(/duplicate key|unique constraint/i);
+    expect(await stored(b.orderId)).toBeNull();
   });
 });

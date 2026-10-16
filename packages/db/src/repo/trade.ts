@@ -7,10 +7,11 @@
  * disagreed with its own inputs on 13.3% of rows, which is what a maintained figure looks like
  * after a year.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Money, Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert } from './numeric-input';
+import { refuse } from '../refusal';
 import {
   tradeOrders,
   tradeOrderLines,
@@ -263,7 +264,7 @@ export async function markDispatched(
     creditOverrideReason: string | null;
   },
 ): Promise<void> {
-  await tx
+  const updated = await tx
     .update(tradeOrders)
     .set({
       status: 'dispatched',
@@ -275,7 +276,10 @@ export async function markDispatched(
       creditOverrideReason: values.creditOverrideReason,
       updatedAt: sql`now()`,
     })
-    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id), inArray(tradeOrders.status, ['draft', 'confirmed'])))
+    .returning({ id: tradeOrders.id });
+  // T-433: the status guard - a second concurrent dispatch that got past the read is refused, never double-posted.
+  if (updated.length === 0) throw refuse(`markDispatched: order ${id} is no longer draft or confirmed.`, 'This order was already dispatched.');
 }
 
 export async function markVoided(

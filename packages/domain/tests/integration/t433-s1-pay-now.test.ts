@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { arRepo, closeDb, tradeRepo } from '@shareat/db';
-import { voidTradeOrder, WHOLESALE_REVENUE_CODE } from '@shareat/domain';
+import { recordCharge, recordCollection, voidCharge, voidTradeOrder, writeOffCharge, WHOLESALE_REVENUE_CODE } from '@shareat/domain';
 import { api, asOrg, buyer, counts, dispatch, fixture, freezeClock, internalOrder, orderWorth, owed, payNow, sayOf, thawClock, TODAY, type Fx } from './_fixtures/t433-b2b';
 
 /**
@@ -193,5 +193,79 @@ describe('S1 pay now', () => {
     await asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: o.orderId, reason: 'wrong buyer' }));
     const order = await asOrg(f.orgId, (tx) => tradeRepo.getOrderById(tx, f.orgId, o.orderId));
     expect(order!.status).toBe('void');
+  });
+});
+
+describe('S1 audit gaps', () => {
+  it('A. double-dispatch race: two connections dispatch the SAME order with payNow; exactly one charge and one collection, the second is refused as already dispatched', async () => {
+    const f = await fixture(sql, 's1gA');
+    const o = await paidOrder(f);
+    let releaseFirst!: () => void;
+    const hold = new Promise<void>((res) => { releaseFirst = res; });
+    let firstPosted!: () => void;
+    const posted = new Promise<void>((res) => { firstPosted = res; });
+    const first = asOrg(f.orgId, async (tx) => {
+      const r = await api.dispatchTradeOrder(tx, f.manager, { orderId: o.orderId, ...payNow('2000.00', f.drawerA) });
+      firstPosted();
+      await hold;
+      return r;
+    });
+    await posted;
+    const second = dispatch(f, f.manager, o.orderId, payNow('2000.00', f.drawerA)).then(
+      () => ({ refused: false as const, message: '' }),
+      (e: Error) => ({ refused: true as const, message: e.message }),
+    );
+    await new Promise((res) => setTimeout(res, 1500));
+    releaseFirst();
+    await first;
+    const r2 = await second;
+    expect(r2.refused, 'the second dispatch must be refused').toBe(true);
+    expect(r2.message).toMatch(/already dispatched/i);
+    expect(await counts(sql, f, o.customerId)).toMatchObject({ charges: 1, collections: 1, allocations: 1 });
+    expect(await owed(sql, f, o.customerId)).toBe('3000.00');
+  });
+
+  it('D1. a charge partly written off cannot be voided; nothing changes', async () => {
+    const f = await fixture(sql, 's1gD1');
+    const customerId = await buyer(sql, f);
+    const ch = await asOrg(f.orgId, (tx) =>
+      recordCharge(tx, f.manager, { storeId: f.storeId, customerId, chargeDate: '2026-10-10', totalAmount: '1000.00', revenueAccountCode: WHOLESALE_REVENUE_CODE }),
+    );
+    await asOrg(f.orgId, (tx) => writeOffCharge(tx, f.admin, { chargeId: ch.chargeId, amount: '300.00', reason: 'bad debt' }));
+    const r = await sayOf(asOrg(f.orgId, (tx) => voidCharge(tx, f.manager, { chargeId: ch.chargeId, reason: 'oops' })));
+    expect(r.said, 'a refusal sentence, not a raw error').not.toBeNull();
+    expect(r.said).toMatch(/written off|write-off|settle|Void the payment first/i);
+    const [row] = await sql<{ status: string }[]>`select status from ar_charges where id = ${ch.chargeId}`;
+    expect(row!.status).toBe('posted');
+    expect(await owed(sql, f, customerId)).toBe('700.00');
+  });
+
+  it('D2. a charge settled partly with store credit cannot be voided', async () => {
+    const f = await fixture(sql, 's1gD2');
+    const customerId = await buyer(sql, f);
+    const mk = (amount: string) =>
+      asOrg(f.orgId, (tx) =>
+        recordCharge(tx, f.manager, { storeId: f.storeId, customerId, chargeDate: '2026-10-10', totalAmount: amount, revenueAccountCode: WHOLESALE_REVENUE_CODE }),
+      );
+    const small = await mk('100.00');
+    const target = await mk('1000.00');
+    // overpay the small charge: 500 against 100 leaves 400 store credit
+    await asOrg(f.orgId, (tx) =>
+      recordCollection(tx, f.manager, {
+        storeId: f.storeId, customerId, collectionDate: '2026-10-16', amount: '500.00', moneyAccountId: f.drawerA,
+        allocations: [{ chargeId: small.chargeId, amountApplied: '100.00' }],
+      }),
+    );
+    // settle 300 of the target charge purely with store credit
+    await asOrg(f.orgId, (tx) =>
+      recordCollection(tx, f.manager, {
+        storeId: f.storeId, customerId, collectionDate: '2026-10-16', amount: '300.00', creditApplied: '300.00', moneyAccountId: f.drawerA,
+        allocations: [{ chargeId: target.chargeId, amountApplied: '300.00' }],
+      }),
+    );
+    const r = await sayOf(asOrg(f.orgId, (tx) => voidCharge(tx, f.manager, { chargeId: target.chargeId, reason: 'oops' })));
+    expect(r.said).not.toBeNull();
+    const [row] = await sql<{ status: string }[]>`select status from ar_charges where id = ${target.chargeId}`;
+    expect(row!.status).toBe('posted');
   });
 });

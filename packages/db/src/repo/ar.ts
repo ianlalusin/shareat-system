@@ -278,7 +278,11 @@ export async function liveAllocationCount(tx: Tx, orgId: string, chargeId: strin
     join ar_collections c on c.id = a.ar_collection_id
     where c.org_id = ${orgId} and a.ar_charge_id = ${chargeId} and c.status = 'posted'
   `)) as unknown as { n: number }[];
-  return row ? Number(row.n) : 0;
+  // Store-credit applications are collections allocated to the charge, so they are counted above; write-offs settle it too.
+  const [wo] = (await tx.execute(sql`
+    select count(*)::int as n from ar_write_offs where org_id = ${orgId} and ar_charge_id = ${chargeId}
+  `)) as unknown as { n: number }[];
+  return (row ? Number(row.n) : 0) + (wo ? Number(wo.n) : 0);
 }
 
 /** T-433. What has been paid against this charge: the sum of its posted allocations, as 2dp text. */

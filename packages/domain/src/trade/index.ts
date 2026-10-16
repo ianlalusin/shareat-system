@@ -429,7 +429,7 @@ export async function dispatchTradeOrder(
   input: { orderId: string; creditOverrideReason?: string | null; payNow?: PayNowInput | null },
 ): Promise<DispatchResult> {
   const run = async (trx: Tx): Promise<DispatchResult> => {
-    const order = await tradeRepo.getOrderById(trx, actor.orgId, input.orderId);
+    const order = await tradeRepo.getOrderById(trx, actor.orgId, input.orderId, { forUpdate: true });
     if (!order) throw new Error(`dispatchTradeOrder: order ${input.orderId} does not exist.`);
     // ⭐ T-172. A BRANCH order's dispatch is its own capability — the posting event on the
     // commissary's side, manager+ — and never `approve_buyer`, which is about extending credit to
@@ -819,6 +819,19 @@ export async function voidTradeOrder(
       voidedBy: actor.personId,
       voidReason: reason,
     });
+    // T-433: a void frees the booklet number (the paper may be reused on a new order); the change is audited.
+    if (order.birInvoiceNo) {
+      await tradeRepo.setBirInvoiceNo(trx, actor.orgId, order.id, null);
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'trade_order.bir_invoice_set',
+        storeId: order.storeId,
+        entityId: order.id,
+        before: { birInvoiceNo: order.birInvoiceNo },
+        after: { birInvoiceNo: null, voided: true },
+        source: 'web',
+      });
+    }
     return { reversedEntryId };
   };
   if (tx) return run(tx);
@@ -1099,7 +1112,22 @@ export async function setBirInvoiceNo(
       }
     }
 
-    await tradeRepo.setBirInvoiceNo(trx, actor.orgId, order.id, next);
+    try {
+      // A savepoint, so a lost race on the unique index does not poison the surrounding transaction.
+      await trx.transaction(async (sp) => {
+        await tradeRepo.setBirInvoiceNo(sp, actor.orgId, order.id, next);
+      });
+    } catch (err) {
+      const e = err as { code?: string; cause?: { code?: string } };
+      if (next && (e.code === '23505' || e.cause?.code === '23505')) {
+        const holder = await tradeRepo.findByBirInvoiceNo(trx, actor.orgId, next);
+        throw refuse(
+          `setBirInvoiceNo: invoice no. ${next} is already on another order.`,
+          `Invoice no. ${next} is already on order ${holder?.referenceNo ?? holder?.id ?? 'another order'}.`,
+        );
+      }
+      throw err;
+    }
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,
       action: 'trade_order.bir_invoice_set',
