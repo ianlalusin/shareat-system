@@ -283,6 +283,10 @@ export default async function RecurringExpensesPage({
   );
 }
 
+function manilaTodayString(): string {
+  return new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
+}
+
 const INPUT =
   'rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 
@@ -388,6 +392,15 @@ function TemplateForm({
         />
       </Field>
     </FormGrid>
+
+    {!templateId && (
+      <Field
+        label="Starts from"
+        hint="The first period this bill applies to. A past date makes the nightly job write one catch-up draft for every due date since then (up to 12 a night, never paid). A future date waits until it comes."
+      >
+        <Input name="startsOn" type="date" defaultValue={manilaTodayString()} className="w-full" />
+      </Field>
+    )}
 
     <Field label="Paid from" hint="Optional — whatever this produces can name a different account.">
       <select

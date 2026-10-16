@@ -555,3 +555,35 @@ export async function insertPeriodOverride(
     .returning({ id: periodOverrides.id });
   return row!;
 }
+
+/**
+ * T-430 D4 - the first day on or after `date` that is not inside a closed or locked period.
+ *
+ * `date` itself when no period row covers it (a missing row is NOT closed) or the covering row is `open`; otherwise the
+ * day after the covering period's `ends_on`, repeated. Returns `null` when that answer would be after `today` (every
+ * period up to today is shut), so a draft is never dated in the future. `shutBy` names the first shut period passed over
+ * (for the note on the drafted bill); null when `date` was already usable.
+ */
+export async function firstOpenDateOnOrAfter(
+  tx: Tx,
+  orgId: string,
+  date: string,
+  today: string,
+): Promise<{ date: string; shutBy: { status: 'closed' | 'locked'; startsOn: string; endsOn: string } | null } | null> {
+  let d = date;
+  let shutBy: { status: 'closed' | 'locked'; startsOn: string; endsOn: string } | null = null;
+  for (let i = 0; i < 1200; i++) {
+    const [row] = await tx
+      .select({ status: fiscalPeriods.status, startsOn: fiscalPeriods.startsOn, endsOn: fiscalPeriods.endsOn })
+      .from(fiscalPeriods)
+      .where(and(eq(fiscalPeriods.orgId, orgId), lte(fiscalPeriods.startsOn, d), gte(fiscalPeriods.endsOn, d)))
+      .limit(1);
+    if (!row || row.status === 'open') return d > today ? null : { date: d, shutBy };
+    shutBy ??= { status: row.status as 'closed' | 'locked', startsOn: row.startsOn, endsOn: row.endsOn };
+    const next = new Date(`${row.endsOn}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    d = next.toISOString().slice(0, 10);
+    if (d > today) return null;
+  }
+  return null;
+}

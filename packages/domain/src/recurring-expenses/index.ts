@@ -14,14 +14,14 @@
  *
  * ⭐ **Nothing here posts.** A template carries no journal entry and no money.
  */
-import { moneyAccountsRepo, recurringExpensesRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, moneyAccountsRepo, recurringExpensesRepo, storesRepo, transaction, type Tx } from '@shareat/db';
 import type { RecurringInterval } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { compare, ZERO } from '@shareat/core/money';
 import { parseDecimalInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { refuse } from '../shared/refusal';
-import { firstDueDate, isAnchorValid } from './recurrence';
+import { firstDueDate, isAnchorValid, nextDueDate as nextDueDateAfter } from './recurrence';
 
 export interface CreateRecurringTemplateInput {
   storeId: string;
@@ -40,8 +40,11 @@ export interface CreateRecurringTemplateInput {
   interval: RecurringInterval;
   /** A raw box string is parsed here, after `authorize()` (T-374 S5 / DEF-579); a `number` is checked as-is. */
   anchorDay: number | string;
-  /** Defaults to today (Manila). The first due date is derived, never typed. */
-  from?: string;
+  /**
+   * T-430: the period the template starts from (`YYYY-MM-DD`). Defaults to today (Manila); a future date is allowed
+   * (nothing drafts until that due date comes). The first due date is derived from it, never typed. Replaces `from`.
+   */
+  startsOn?: string;
   /**
    * ⛔ Required to name a CASHIER account as the default. v1's `payment-routing.ts` resolves an
    * ambiguous scheduled payment to office cash at runtime because *"a recurring/scheduled payment
@@ -53,6 +56,13 @@ export interface CreateRecurringTemplateInput {
 
 function manilaToday(nowMs = Date.now()): string {
   return new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 10);
+}
+
+/** T-430 D1/D5: how many owed due dates a cursor move skips over (old cursor up to, not including, the new one). */
+function droppedDueDates(template: { nextDueDate: string; interval: RecurringInterval; anchorDay: number }, newCursor: string): number {
+  let n = 0;
+  for (let d = template.nextDueDate; d < newCursor && n < 5000; d = nextDueDateAfter(d, template.interval, template.anchorDay)) n += 1;
+  return n;
 }
 
 /**
@@ -140,7 +150,27 @@ export async function createRecurringTemplate(
 
     // ⭐ DERIVED, never typed. A template created on the 3rd with a monthly anchor of the 15th is
     // due THIS month — getting that wrong makes every new template a month late, silently.
-    const nextDueDate = firstDueDate(input.from ?? manilaToday(), input.interval, anchorDay);
+    const today = manilaToday();
+    const startsOn = input.startsOn ?? today;
+    if (!storesRepo.isValidDateString(startsOn)) {
+      throw refuse(`createRecurringTemplate: startsOn "${startsOn}" is not a date.`, 'Starts from has to be a date (YYYY-MM-DD).');
+    }
+    // T-430 D1: a start before the store opened has no books to land in; a store that has not opened has no past to catch up.
+    const store = await storesRepo.getById(trx, actor.orgId, input.storeId);
+    if (!store) throw new Error('that store does not exist.');
+    if (store.openingDate !== null && startsOn < store.openingDate) {
+      throw refuse(
+        `createRecurringTemplate: startsOn ${startsOn} is before the store's opening date ${store.openingDate}.`,
+        `Starts from cannot be before the store opened (${store.openingDate}).`,
+      );
+    }
+    if (store.openingDate === null && startsOn < today) {
+      throw refuse(
+        `createRecurringTemplate: startsOn ${startsOn} is in the past but the store has no opening date.`,
+        'This store has no opening date yet, so Starts from cannot be in the past. Set the store opening date first, or start from today.',
+      );
+    }
+    const nextDueDate = firstDueDate(startsOn, input.interval, anchorDay);
 
     const { id } = await recurringExpensesRepo.insertTemplate(trx, {
       orgId: actor.orgId,
@@ -156,7 +186,17 @@ export async function createRecurringTemplate(
       interval: input.interval,
       anchorDay,
       nextDueDate,
+      startsOn,
       createdBy: actor.personId,
+    });
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'recurring.template_created',
+      storeId: input.storeId,
+      entityId: id,
+      before: null,
+      after: { name, starts_on: startsOn, next_due_date: nextDueDate, interval: input.interval, anchor_day: anchorDay },
+      source: 'web',
     });
     return { id, nextDueDate };
   };
@@ -219,6 +259,7 @@ export async function updateRecurringTemplate(
     // edit that had nothing to do with timing. Caught in self-review, not by a test.
     const cursorMoved = interval !== template.interval || anchorDay !== template.anchorDay;
 
+    const newCursor = cursorMoved ? firstDueDate(manilaToday(), interval, anchorDay) : null;
     await recurringExpensesRepo.updateTemplate(trx, actor.orgId, input.templateId, {
       ...(input.name !== undefined ? { name: input.name.trim() } : {}),
       ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
@@ -230,8 +271,20 @@ export async function updateRecurringTemplate(
       tillIsDeliberate: isTill && deliberate,
       ...(input.interval !== undefined ? { interval } : {}),
       ...(suppliedAnchorDay !== undefined ? { anchorDay } : {}),
-      ...(cursorMoved ? { nextDueDate: firstDueDate(manilaToday(), interval, anchorDay) } : {}),
+      ...(newCursor !== null ? { nextDueDate: newCursor } : {}),
     });
+    // T-430 D1/D5: the cursor jump drops any owed due dates between the old cursor and the new one; never silent.
+    if (newCursor !== null) {
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'recurring.template_rescheduled',
+        storeId: template.storeId,
+        entityId: template.id,
+        before: { interval: template.interval, anchor_day: template.anchorDay, next_due_date: template.nextDueDate },
+        after: { interval, anchor_day: anchorDay, next_due_date: newCursor, dropped_due_dates: droppedDueDates(template, newCursor) },
+        source: 'web',
+      });
+    }
   };
   if (tx) return run(tx);
   return transaction(run);
@@ -257,14 +310,27 @@ export async function setRecurringTemplateStatus(
     // ⚠️ Resuming re-derives the cursor from TODAY. A template paused for three months would
     // otherwise wake with a due date three months behind and draft its way forward — noise on the
     // morning somebody switched it back on, and the opposite of what "resume" means.
-    const cursor =
+    const resumedCursor =
       input.status === 'active' && template.nextDueDate < manilaToday()
-        ? { nextDueDate: firstDueDate(manilaToday(), template.interval, template.anchorDay) }
-        : {};
+        ? firstDueDate(manilaToday(), template.interval, template.anchorDay)
+        : null;
+    const cursor = resumedCursor !== null ? { nextDueDate: resumedCursor } : {};
     await recurringExpensesRepo.updateTemplate(trx, actor.orgId, input.templateId, {
       status: input.status,
       ...cursor,
     });
+    // T-430 D1/D5: a resume that moves the cursor drops the owed due dates it skips over; recorded, never silent.
+    if (resumedCursor !== null) {
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'recurring.template_resumed',
+        storeId: template.storeId,
+        entityId: template.id,
+        before: { status: template.status, next_due_date: template.nextDueDate },
+        after: { status: 'active', next_due_date: resumedCursor, dropped_due_dates: droppedDueDates(template, resumedCursor) },
+        source: 'web',
+      });
+    }
   };
   if (tx) return run(tx);
   return transaction(run);

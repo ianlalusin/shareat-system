@@ -30,6 +30,8 @@ export interface RecurringExpenseRow {
   interval: RecurringInterval;
   anchorDay: number;
   nextDueDate: string;
+  /** T-430: the period the template starts from. */
+  startsOn: string;
   status: RecurringStatus;
   lastDraftedExpenseId: string | null;
   lastDraftedAt: Date | null;
@@ -42,6 +44,20 @@ export async function getById(tx: Tx, orgId: string, id: string): Promise<Recurr
     .from(recurringExpenses)
     .where(and(eq(recurringExpenses.id, id), eq(recurringExpenses.orgId, orgId)))
     .limit(1);
+  return row as RecurringExpenseRow | undefined;
+}
+
+/**
+ * T-430 D3: the same read, row-locked (`FOR UPDATE`). The catch-up job holds this for one due date's
+ * transaction, so a pause / edit / second runner waits for the stamp instead of racing it.
+ */
+export async function getByIdForUpdate(tx: Tx, orgId: string, id: string): Promise<RecurringExpenseRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(recurringExpenses)
+    .where(and(eq(recurringExpenses.id, id), eq(recurringExpenses.orgId, orgId)))
+    .limit(1)
+    .for('update');
   return row as RecurringExpenseRow | undefined;
 }
 
@@ -83,7 +99,7 @@ export async function listDue(tx: Tx, orgId: string, onOrBefore: string): Promis
 /** T-371 C2 — `defaultAmount` is a `Money` brand minted by `decimal()`/`money()`, never a raw string. */
 export type InsertTemplateInput = Pick<
   SafeInsert<typeof recurringExpenses>,
-  'orgId' | 'storeId' | 'name' | 'categoryId' | 'interval' | 'anchorDay' | 'nextDueDate'
+  'orgId' | 'storeId' | 'name' | 'categoryId' | 'interval' | 'anchorDay' | 'nextDueDate' | 'startsOn'
 > & {
   supplierId: string | null;
   defaultAmount: Money;
@@ -147,9 +163,12 @@ export async function stampDrafted(
   tx: Tx,
   orgId: string,
   id: string,
-  input: { expenseId: string; nextDueDate: string; at: Date },
+  input: { expenseId: string; nextDueDate: string; at: Date; expectedDueDate: string },
 ): Promise<void> {
-  await tx
+  // T-430 D3: compare-and-set. The cursor must still be the due date this transaction drafted AND the template must still
+  // be active, so it never moves backwards or skips, and a template paused mid-run is not advanced. Zero rows throws,
+  // which rolls back the invoice and expense made earlier in the same transaction.
+  const stamped = await tx
     .update(recurringExpenses)
     .set({
       lastDraftedExpenseId: input.expenseId,
@@ -157,7 +176,46 @@ export async function stampDrafted(
       nextDueDate: input.nextDueDate,
       updatedAt: sql`now()`,
     })
-    .where(and(eq(recurringExpenses.id, id), eq(recurringExpenses.orgId, orgId)));
+    .where(
+      and(
+        eq(recurringExpenses.id, id),
+        eq(recurringExpenses.orgId, orgId),
+        eq(recurringExpenses.nextDueDate, input.expectedDueDate),
+        eq(recurringExpenses.status, 'active'),
+      ),
+    )
+    .returning({ id: recurringExpenses.id });
+  if (stamped.length === 0) {
+    throw recordGone(
+      `stampDrafted: template ${id} no longer has ${input.expectedDueDate} as its due date, or is no longer active`,
+      'recurring template',
+    );
+  }
+}
+
+/**
+ * T-430 D3: a lost claim whose cursor is still on the drafted date (a runner died between claim and stamp). Advance the
+ * cursor with NO documents; same compare-and-set as `stampDrafted`. Returns false when the cursor had already moved.
+ */
+export async function advanceStuckCursor(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  input: { expectedDueDate: string; nextDueDate: string },
+): Promise<boolean> {
+  const rows = await tx
+    .update(recurringExpenses)
+    .set({ nextDueDate: input.nextDueDate, updatedAt: sql`now()` })
+    .where(
+      and(
+        eq(recurringExpenses.id, id),
+        eq(recurringExpenses.orgId, orgId),
+        eq(recurringExpenses.nextDueDate, input.expectedDueDate),
+        eq(recurringExpenses.status, 'active'),
+      ),
+    )
+    .returning({ id: recurringExpenses.id });
+  return rows.length > 0;
 }
 
 // =====================================================================================

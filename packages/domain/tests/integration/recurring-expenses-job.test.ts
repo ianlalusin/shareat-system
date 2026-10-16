@@ -58,7 +58,7 @@ async function fixture(hint: string, opts: { periodStatus?: 'open' | 'closed' } 
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
   const [store] = await sql<{ id: string }[]>`
-    insert into stores (org_id, code, name) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}) returning id`;
+    insert into stores (org_id, code, name, opening_date) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}, '2025-01-01') returning id`;
   const storeId = store!.id;
 
   const mk = async (name: string, role: string) => {
@@ -119,7 +119,7 @@ async function dueTemplate(
   over: Partial<Parameters<typeof createRecurringTemplate>[2]> = {},
 ) {
   const { id } = await asOrg(f.orgId, (tx) => createRecurringTemplate(tx, f.manager, {
-    ...template(f), ...over, from: '2026-09-01',
+    ...template(f), ...over, startsOn: '2026-09-01',
   }));
   return id;
 }
@@ -255,25 +255,24 @@ describe('⭐ idempotency — the cursor, and the guard the cursor cannot be', (
     expect(second.hadFailures).toBe(false);
   });
 
-  it('5 — ⭐ a template three periods overdue drafts ONCE and advances ONE interval', async () => {
-    // v1's restraint, ported in spirit: "never pre-create". Three drafts on one morning is noise;
-    // three consecutive daily runs converge honestly.
+  it('5 — ⭐ T-430: a template three periods overdue now drafts ALL three in one run (row 327 overruled "converges over daily runs")', async () => {
     const f = await fixture('overdue');
     const id = await dueTemplate(f);
     await sql`update recurring_expenses set next_due_date = '2026-06-05' where id = ${id}`;
 
-    await run(f);
+    const result = await run(f);
 
+    // 2026-06-05, 07-05, 08-05, 09-05 are all <= the pinned 2026-09-20: four due dates, four drafts, one run.
     const after = await counts(f.orgId);
-    expect(after.e).toBe(1);
+    expect(after.e).toBe(4);
+    expect(after.d).toBe(4);
     const row = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
-    expect(row!.nextDueDate).toBe('2026-07-05');
+    expect(row!.nextDueDate).toBe('2026-10-05');
+    expect(result.outcomes[0]!.posted).toBe(4);
 
-    // ...and the next run picks up the next missed one, rather than standing still.
+    // ...and a second run the same day has nothing left to do.
     await run(f);
-    expect((await counts(f.orgId)).e).toBe(2);
-    const row2 = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
-    expect(row2!.nextDueDate).toBe('2026-08-05');
+    expect((await counts(f.orgId)).e).toBe(4);
   });
 
   it('6 — a paused template drafts nothing', async () => {
@@ -393,25 +392,19 @@ describe('⛔ the human gate still stands in front of a machine-made draft', () 
     expect((await counts(f.orgId)).j).toBe(1);
   });
 
-  it('9 — ⭐ a due date in a CLOSED period still drafts; the draft simply cannot post', async () => {
-    // §J6.8. v1 needed a period guard because it POSTED. A draft posts nothing, there is no period
-    // guard on either create path to refuse it with, and a job that refused would leave the bill
-    // invisible until somebody reopened the month.
+  it('9 — ⭐ T-430 D4: when EVERY period up to today is closed there is no open day to date the draft on: nothing is drafted and the run says so', async () => {
+    // Replaces "a closed period still drafts". Re-dating onto a first open day is covered in t430-recurring-catch-up
+    // (case 10); here the only period is closed through today, so the draft waits (case 11b's shape).
     const f = await fixture('closed', { periodStatus: 'closed' });
     await dueTemplate(f);
 
     const result = await run(f);
 
     const after = await counts(f.orgId);
-    expect(after.e).toBe(1);
-    expect(after.i).toBe(1);
+    expect(after.e).toBe(0);
+    expect(after.i).toBe(0);
     expect(after.j).toBe(0);
-    expect(result.hadFailures).toBe(false);
-
-    const [expense] = await sql<{ id: string; status: string }[]>`
-      select id, status from expenses where org_id = ${f.orgId}`;
-    expect(expense!.status).toBe('draft');
-    await expect(asOrg(f.orgId, (tx) => approveExpense(tx, f.manager, expense!.id))).rejects.toThrow();
+    expect(result.outcomes[0]!.detail).toMatch(/no open period/);
   });
 });
 
