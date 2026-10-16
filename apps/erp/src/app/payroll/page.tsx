@@ -268,13 +268,14 @@ export default async function PayrollPage({
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[46rem] text-sm">
+              <table className="w-full min-w-[52rem] text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
                     <th className="py-1 pr-3 font-medium">Person</th>
                     <th className="py-1 pr-3 text-right font-medium">Days</th>
                     <th className="py-1 pr-3 text-right font-medium">Basic</th>
                     <th className="py-1 pr-3 text-right font-medium">OT + ND + Hol</th>
+                    <th className="py-1 pr-3 text-right font-medium">Leave + SIL payout</th>
                     <th className="py-1 pr-3 text-right font-medium">Gross</th>
                     <th className="py-1 pr-3 text-right font-medium">Advance</th>
                     <th className="py-1 text-right font-medium">Net</th>
@@ -293,6 +294,9 @@ export default async function PayrollPage({
                       </td>
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-neutral-500">
                         {peso(Number(s.otPay) + Number(s.nightDiffPay) + Number(s.holidayPay))}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-neutral-500">
+                        {peso(Number(s.leavePay) + Number(s.silConversionPay))}
                       </td>
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
                         {peso(Number(s.grossPay))}

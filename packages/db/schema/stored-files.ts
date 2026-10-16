@@ -45,6 +45,8 @@ export const FILE_PURPOSES = [
   'memo_document',
   'wastage_dispute',
   'onboarding_document',
+  // T-436 (migration 0205): a medical-certificate photo for a leave request. Row-353 guarded; read only via assertCanReadLeaveDocument.
+  'leave_document',
 ] as const;
 export type FilePurpose = (typeof FILE_PURPOSES)[number];
 

@@ -7,6 +7,8 @@
  * would never be paid by anything), and no day could be verified or voided.
  */
 import {
+  leaveGrid,
+  type LeaveRow,
   attendanceDayDetail,
   attendanceReviewQueue,
   attendanceRoster,
@@ -16,6 +18,7 @@ import {
   type ReviewDayRow,
 } from '@shareat/domain';
 import { attendanceConfigRepo } from '@shareat/db';
+import { AuthorizationError } from '@shareat/auth';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export { listStores, withOrgPrincipal } from '../expenses/lib';
@@ -39,6 +42,24 @@ export async function loadRoster(
   input: { storeId: string; from: string; to: string },
 ): Promise<ReviewDayRow[]> {
   return withOrgPrincipal(orgId, (tx) => attendanceRoster(tx, actor, input));
+}
+
+/**
+ * T-436: pending and approved leave in the period, with Paid / Unpaid per date and a clash flag where punches exist.
+ * The kind only - never a note and never a certificate. A viewer without `manage_attendance` here gets an empty grid,
+ * not an error: the review screen is already gated by what it reads first.
+ */
+export async function loadLeaveGrid(
+  orgId: string,
+  actor: Actor,
+  input: { storeId: string; from: string; to: string },
+): Promise<LeaveRow[]> {
+  try {
+    return await withOrgPrincipal(orgId, (tx) => leaveGrid(tx, actor, input));
+  } catch (err) {
+    if (err instanceof AuthorizationError) return [];
+    throw err;
+  }
 }
 
 export async function loadDay(

@@ -201,6 +201,9 @@ export interface PayslipRow {
   otPay: string;
   nightDiffPay: string;
   holidayPay: string;
+  /** T-436: paid leave days, and the year-end / final-pay SIL cash payout. Neither is part of `basicPay`. */
+  leavePay: string;
+  silConversionPay: string;
   grossPay: string;
   advanceRecovered: string;
   netPay: string;
@@ -230,6 +233,9 @@ export type PayslipInsert = Pick<
   otPay?: Money;
   nightDiffPay?: Money;
   holidayPay?: Money;
+  /** T-436 (migration 0205). NOT NULL DEFAULT 0 - omit to take the column default. */
+  leavePay?: Money;
+  silConversionPay?: Money;
   grossPay: Money;
   advanceRecovered?: Money;
   netPay: Money;
@@ -253,6 +259,8 @@ export async function insertPayslip(tx: Tx, input: PayslipInsert): Promise<{ id:
       otPay: input.otPay,
       nightDiffPay: input.nightDiffPay,
       holidayPay: input.holidayPay,
+      leavePay: input.leavePay,
+      silConversionPay: input.silConversionPay,
       grossPay: input.grossPay,
       advanceRecovered: input.advanceRecovered,
       netPay: input.netPay,
@@ -280,6 +288,8 @@ export async function listPayslips(tx: Tx, runId: string): Promise<PayslipRow[]>
       otPay: payslips.otPay,
       nightDiffPay: payslips.nightDiffPay,
       holidayPay: payslips.holidayPay,
+      leavePay: payslips.leavePay,
+      silConversionPay: payslips.silConversionPay,
       grossPay: payslips.grossPay,
       advanceRecovered: payslips.advanceRecovered,
       netPay: payslips.netPay,

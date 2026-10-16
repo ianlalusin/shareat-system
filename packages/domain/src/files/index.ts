@@ -22,6 +22,12 @@ import { filesRepo, goneSentence, RefusalError, transaction, withSystemOrgPrinci
 import { stripImageMetadata } from '@shareat/core/exif';
 import { logger } from '@shareat/core/logger';
 import { resolveStorageDriver } from './driver';
+import {
+  decideLeaveDocumentRead,
+  LEAVE_DOCUMENT_LINK_SECONDS,
+  recordLeaveDocumentViewed,
+  recordLeaveDocumentViewRefused,
+} from '../leave/document-access';
 
 export * from './driver';
 
@@ -39,6 +45,8 @@ export const PURPOSE_LIMITS: Record<
   memo_document: { types: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 15 * 1024 * 1024 },
   wastage_dispute: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
   onboarding_document: { types: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 25 * 1024 * 1024 },
+  // T-436: a medical-certificate photo. Images only; the app-wide 1 MB photo cap applies on top.
+  leave_document: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
 };
 
 /**
@@ -79,6 +87,9 @@ const PURPOSE_CAPABILITY: Record<FilePurpose, Parameters<typeof authorize>[2]> =
   memo_document: 'manage_users',
   wastage_dispute: 'record_wastage',
   onboarding_document: 'enrol_staff',
+  // T-436: this governs UPLOAD only (attaching a certificate is a manage_attendance act). ⛔ READING a leave_document never goes
+  // through this map - see `readFileUrl`'s leave branch and `leave/document-access.ts` (bible row 353).
+  leave_document: 'manage_attendance',
 };
 
 const EXTENSIONS: Record<string, string> = {
@@ -229,6 +240,9 @@ export async function canReadFiles(tx: Tx, actor: Actor, fileIds: readonly strin
     const files = await filesRepo.getByIds(tx, actor.orgId, [...new Set(fileIds)]);
     const verdicts = new Map<string, boolean>();
     for (const file of files) {
+      // ⛔ T-436: a leave document is never offered on the strength of the UPLOAD capability. The screens ask this to draw a
+      // "View photo" link; for a certificate the only reader is `openLeaveDocument` (row 353), so no link is ever drawn from here.
+      if (file.purpose === 'leave_document') continue;
       const key = `${PURPOSE_CAPABILITY[file.purpose]}|${file.storeId ?? ''}`;
       let ok = verdicts.get(key);
       if (ok === undefined) {
@@ -264,6 +278,22 @@ export async function readFileUrl(
       // A typed refusal, message unchanged: `/files/[fileId]` has to tell "no such file for you" (a 404)
       // from an internal fault (a 500), and a bare Error cannot be told from either.
       throw new FileNotFoundError(`readFileUrl: file ${input.fileId} does not exist in this org.`);
+    }
+    // ⛔ T-436 (bible row 353): a medical certificate is opened by its OWN rule, never by `PURPOSE_CAPABILITY` (which governs upload).
+    // A viewer who may not open it gets the SAME not-found as a missing id (so a guessed id confirms nothing), the attempt is
+    // written in a separate transaction so it survives this one rolling back, and the link lasts 60 seconds whatever was asked.
+    if (file.purpose === 'leave_document') {
+      const verdict = await decideLeaveDocumentRead(trx, actor, file);
+      if (!verdict.allowed) {
+        await recordLeaveDocumentViewRefused(actor, verdict);
+        throw new FileNotFoundError(`readFileUrl: file ${input.fileId} does not exist in this org.`);
+      }
+      await recordLeaveDocumentViewed(trx, actor, verdict);
+      const leaveUrl = await resolveStorageDriver().signedUrl(
+        file.storagePath,
+        Math.min(input.expiresInSeconds ?? LEAVE_DOCUMENT_LINK_SECONDS, LEAVE_DOCUMENT_LINK_SECONDS),
+      );
+      return { url: leaveUrl, contentType: file.contentType };
     }
     await assertCanRead(trx, actor, file);
 

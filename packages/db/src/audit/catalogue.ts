@@ -207,6 +207,28 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('employment.positions_set', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('position.reactivated', 'staff', 'normal', 'store', 'positions', 'T-402'),
 
+  // ---- T-436: leave and absence tracking. Payloads carry person, dates and kind - NEVER the note (bible row 353) or a file id. ----
+  def('leave.requested', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  def('leave.approved', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  // A super_admin approved their own leave: the one allowed exception to "nobody approves their own".
+  def('leave.self_approved', 'staff', 'high', 'store', 'leave_requests', 'T-436'),
+  def('leave.rejected', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  def('leave.cancelled', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  def('leave.recorded', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  def('leave.voided', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  // Approved or recorded with a pay mode other than the kind's default (a sixth SIL day as unpaid, a sick day as paid).
+  def('leave.paid_override', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  // Punches arrived on an approved, not-yet-paid leave date: the day is worked, not leave (written by the attendance recompute).
+  def('leave.superseded_by_work', 'staff', 'normal', 'store', 'leave_requests', 'T-436', { actor: 'system' }),
+  // A cap row set or changed. Org-wide defaults carry no store.
+  def('leave_cap.changed', 'settings', 'normal', 'either', 'leave_caps', 'T-436'),
+  def('leave_type.changed', 'settings', 'normal', 'org', 'leave_types', 'T-436'),
+  // The year-end / final-pay cash payout of unused Service Incentive Leave was taken by a pay run or a separation.
+  def('sil.commuted', 'money', 'normal', 'store', 'leave_commutations', 'T-436'),
+  // A medical certificate was opened, or somebody tried and was refused. Admin-viewed: who looks at a certificate is itself sensitive.
+  def('leave_document.viewed', 'security', 'normal', 'store', 'leave_requests', 'T-436', ADMIN),
+  def('leave_document.view_refused', 'security', 'high', 'store', 'leave_requests', 'T-436', ADMIN),
+
   // ---- S3 (money / data steps before posting): the 15 S3_LIVE entries are live; expense.submitted/rejected, sales_day.reopened, remittance.confirmed and data.* stay reserved (no verb, C4/C5) ----
   def('expense.drafted', 'money', 'normal', 'store', 'expenses', 'T-402'),
   def('expense.submitted', 'money', 'normal', 'store', 'expenses', 'T-402', RES),
