@@ -12,7 +12,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { accountAsSource, type MoneyAccountOption, type MoneyLine } from '@shareat/domain/money-lines';
+import { accountAsSource, floatAsSource, type FloatOption, type MoneyAccountOption, type MoneyLine } from '@shareat/domain/money-lines';
 import { MoneyLines } from '../src/components/money/MoneyLines';
 
 const cashierAccount: MoneyAccountOption = {
@@ -113,4 +113,48 @@ describe('R4 — a fresh form with a mustTotal does not paint the total-mismatch
       expect(html).not.toContain('The lines total');
     },
   );
+});
+
+/**
+ * T-414 I10 (docs/tasks/414-expense-cash-request-source.md ruling 4) - a float option reads
+ * "{holder} · cash request — Balance ₱{outstanding}"; the old " · float" suffix is gone. Mutant M10: revert to " · float" -> red.
+ * A float with no staff account (moneyAccountId null, legacy) must still paint selected and unjudged when its line names the request.
+ */
+const floatOpt = (over: Partial<FloatOption> & { moneyAccountId?: string | null }): FloatOption =>
+  ({ cashRequestId: 'req-1', holderName: 'Ana Reyes', outstanding: '1000', moneyAccountId: 'acct-staff-1', storeId: 'store-lipa', ...over }) as FloatOption;
+
+describe('T-414 I10 - the float option label', () => {
+  const html = (floats: FloatOption[], initialLines?: MoneyLine[]) =>
+    normalise(
+      renderToStaticMarkup(
+        createElement(MoneyLines, {
+          direction: 'out',
+          sources: [accountAsSource(cashierAccount), ...floats.map(floatAsSource)],
+          staff: [],
+          ...(initialLines ? { initialLines } : {}),
+        }) as never,
+      ),
+    );
+  const optionTexts = (h: string) => [...h.matchAll(/<option[^>]*>([\s\S]*?)<\/option>/g)].map((m) => m[1]!.replace(/<!-- -->/g, '').replace(/\s+/g, ' ').trim());
+
+  it('reads "Ana Reyes · cash request — Balance ₱1,000.00" and never " · float"', () => {
+    const h = html([floatOpt({})], [{ method: 'cash', amount: '', moneyAccountId: null }]);
+    const texts = optionTexts(h);
+    expect(texts, JSON.stringify(texts)).toContain('Ana Reyes · cash request — Balance ₱1,000.00');
+    expect(texts.some((t) => t.includes('· float'))).toBe(false);
+  });
+
+  it('a float with NO money account (moneyAccountId null) is labelled the same way', () => {
+    const texts = optionTexts(html([floatOpt({ moneyAccountId: null as unknown as string, outstanding: '250.5' })], [{ method: 'cash', amount: '', moneyAccountId: null }]));
+    expect(texts, JSON.stringify(texts)).toContain('Ana Reyes · cash request — Balance ₱250.50');
+  });
+
+  it('a loaded line that names a no-account float is selected and carries no "Choose where" error', () => {
+    const h = html(
+      [floatOpt({ moneyAccountId: null as unknown as string })],
+      [{ method: 'cash', amount: '600', moneyAccountId: null, cashRequestId: 'req-1' }],
+    );
+    expect(h).not.toContain('Choose where the money came from');
+    expect(h).toMatch(/name="[^"]*Request_0" value="req-1"/);
+  });
 });

@@ -204,6 +204,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('remittance.confirmed', 'money', 'normal', 'store', 'remittances', 'T-402', RES),
   def('cash_request.approved', 'money', 'normal', 'store', 'cash_requests', 'T-402'),
   def('cash_request.rejected', 'money', 'normal', 'store', 'cash_requests', 'T-402'),
+  // T-414 R-AUTO: releasing a cash request at a store with no staff cash account creates one (actor = the releaser).
+  def('money_account.created', 'money', 'normal', 'store', 'money_accounts', 'T-414'),
   def('ap_invoice.approved', 'money', 'normal', 'store', 'ap_invoices', 'T-402'),
   def('ap_payment.recorded', 'money', 'normal', 'store', 'ap_payments', 'T-402'),
   def('data.export_downloaded', 'data', 'high', 'org', 'exports', 'T-402', ADMIN_RES),

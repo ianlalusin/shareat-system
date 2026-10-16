@@ -53,6 +53,13 @@ const ALL_LINE_FIELDS: readonly LineField[] = ['method', 'amount', 'moneyAccount
 const peso = (v: string | number) =>
   `₱${Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+/** One option's text. T-414 (ruling 4): a float reads "{holder} · cash request — Balance ₱{outstanding}" - the balance is the
+ *  figure a person decides on; an account keeps "{name} · {custodian}  ₱{balance}". */
+const optionText = (s: SourceOption, branch = ''): string =>
+  s.kind === 'float'
+    ? `${labelOf(s)} · cash request — Balance ${peso(availableOf(s))}`
+    : `${labelOf(s)}${branch} · ${s.custodian}  ${peso(availableOf(s))}`;
+
 export interface MoneyLinesProps {
   direction: MoneyDirection;
   sources: SourceOption[];
@@ -309,10 +316,7 @@ export function MoneyLines({
                       >
                         {group.sources.map((s) => (
                           <option key={keyOfSource(s)} value={keyOfSource(s)}>
-                            {labelOf(s)}
-                            {s.kind === 'float' ? ' · float' : ` · ${s.custodian}`}
-                            {'  '}
-                            {peso(availableOf(s))}
+                            {optionText(s)}
                           </option>
                         ))}
                       </optgroup>
@@ -323,11 +327,7 @@ export function MoneyLines({
                           [...drawn].map(([k, v]) => [k, alreadyElsewhere(k)]),
                         )).flatMap((g) => g.sources).map((s) => (
                           <option key={keyOfSource(s)} value={keyOfSource(s)}>
-                            {labelOf(s)}
-                            {s.kind !== 'float' && storeNames[s.storeId] ? ` — ${storeNames[s.storeId]}` : ''}
-                            {s.kind === 'float' ? ' · float' : ` · ${s.custodian}`}
-                            {'  '}
-                            {peso(availableOf(s))}
+                            {optionText(s, s.kind !== 'float' && storeNames[s.storeId] ? ` — ${storeNames[s.storeId]}` : '')}
                           </option>
                         ))}
                       </optgroup>

@@ -64,11 +64,11 @@ async function openFloatsFor(tx: Tx, orgId: string, storeId: string): Promise<Fl
     moneyAccountsRepo.listMoneyAccounts(tx, orgId, { storeId, custodian: 'staff', instrument: 'cash' }),
   ]);
 
-  // The store's single staff-float account — what resolves the `1120` GL code for the payment row.
-  // ⚠️ `createMoneyAccount` refuses a second cash location per custodian per store, so there is
-  // exactly one; without it, a float has nowhere to post and is not offerable.
+  // The store's single staff-float account, when it has one. ⚠️ `createMoneyAccount` refuses a second cash location per
+  // custodian per store, so there is at most one. ⭐ T-414: a float is offered whether or not there is one - releasing a
+  // request now creates it (R-AUTO), and a request released before that is still spendable (routing credits 1120 with the
+  // request as party), so its `moneyAccountId` is then `null`.
   const floatAccount = staffAccounts[0];
-  if (!floatAccount) return [];
 
   const forStore = floats.filter((f) => f.storeId === storeId);
   if (forStore.length === 0) return [];
@@ -84,7 +84,7 @@ async function openFloatsFor(tx: Tx, orgId: string, storeId: string): Promise<Fl
       cashRequestId: f.id,
       holderName: nameOf.get(f.requestedFor) ?? 'Unknown holder',
       outstanding: positions.get(f.id)?.outstanding ?? '0.00',
-      moneyAccountId: floatAccount.id,
+      moneyAccountId: floatAccount?.id ?? null,
       storeId: f.storeId,
     }))
     // ⚠️ v1's rule, kept (`picker-options.ts:22`) — a drained float is not a source of money. Read
