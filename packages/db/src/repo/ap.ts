@@ -248,9 +248,10 @@ export async function getSupplierInvoiceById(
 export async function listSupplierInvoices(
   tx: Tx,
   orgId: string,
-  filter: { supplierId?: string; status?: SupplierInvoiceStatus } = {},
+  filter: { supplierId?: string; status?: SupplierInvoiceStatus; storeId?: string } = {},
 ): Promise<SupplierInvoiceRow[]> {
   const conditions = [eq(supplierInvoices.orgId, orgId)];
+  if (filter.storeId) conditions.push(eq(supplierInvoices.storeId, filter.storeId)); // T-414: the expense picker is store-scoped
   if (filter.supplierId) conditions.push(eq(supplierInvoices.supplierId, filter.supplierId));
   if (filter.status) conditions.push(eq(supplierInvoices.status, filter.status));
   const rows = await tx

@@ -166,6 +166,20 @@ function fundingLine(
     // cannot.
     case 'cash':
     case 'online': {
+      // ⭐ T-414 (I4, ruling 3): a float is spendable whether or not its store has a staff-custody money account
+      // (releasing a request debits 1120 directly and never needed one). A CASH leg that names a cash request and
+      // no money account therefore credits 1120 with the REQUEST as party, at the expense's own store (no `storeId`
+      // on the line). A cash leg naming neither still refuses, below.
+      if (payment.method === 'cash' && !payment.moneyAccountId && payment.cashRequestId) {
+        return {
+          accountCode: EXPENSE_FUNDING_ACCOUNTS.CASH_STAFF,
+          side: 'credit',
+          amount: payment.amount,
+          partyType: 'cash_request',
+          partyId: payment.cashRequestId,
+          lineMemo: `${payment.method} payment #${index}`,
+        };
+      }
       if (!payment.moneyAccountId || !payment.moneyAccountGlCode) {
         return {
           error: `payment #${index}: a ${payment.method} payment names no money account — every peso has to leave somewhere nameable`,

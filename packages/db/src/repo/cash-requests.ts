@@ -7,7 +7,7 @@
  * already knows. Here the float is read off `1120`, attributed by the party — so *"who still owes
  * a liquidation?"* has exactly one answer.
  */
-import { and, desc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { cashRequests, type CashRequestStatus } from '../../schema/cash-requests';
 import { recordGone } from './record-gone';
@@ -219,5 +219,25 @@ export async function openFloats(tx: Tx, orgId: string): Promise<CashRequestRow[
       ),
     )
     .orderBy(desc(cashRequests.releasedOn));
+  return rows as CashRequestRow[];
+}
+
+/**
+ * ⭐ T-414 (ruling 6): lock the named requests for the rest of this transaction (`SELECT ... FOR UPDATE`).
+ *
+ * `approveExpense` calls this BEFORE it reads `floatPositionOf`, so two approvals drawing on one float serialise on the
+ * request row: the second waits for the first to commit, then reads the balance the first left. ⛔ Without the lock both
+ * read the same outstanding and both pass. Ids are de-duplicated and locked in id order, so two approvals naming the
+ * same requests in a different order cannot deadlock. A request that does not exist in this org is simply absent.
+ */
+export async function lockForSpend(tx: Tx, orgId: string, ids: readonly string[]): Promise<CashRequestRow[]> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return [];
+  const rows = await tx
+    .select()
+    .from(cashRequests)
+    .where(and(eq(cashRequests.orgId, orgId), inArray(cashRequests.id, unique)))
+    .orderBy(asc(cashRequests.id))
+    .for('update');
   return rows as CashRequestRow[];
 }
