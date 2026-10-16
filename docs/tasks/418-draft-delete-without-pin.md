@@ -1,6 +1,6 @@
 # T-418 — Deleting an unposted draft needs no administrator's PIN
 
-**Status:** spec written 2026-10-16, not started. Opus spec. Reopens **T-412** Question 2 (`docs/tasks/412-confirm-destructive-tiers.md`).
+**Status:** spec written 2026-10-16, not started; **Ian's answers folded in 16 Oct (both questions closed)**. Opus spec. Reopens **T-412** Question 2 (`docs/tasks/412-confirm-destructive-tiers.md`).
 **Source:** bible row 348 (Ian, 16 Oct, decisions page): *"deleting an unposted DRAFT needs NO admin PIN; only posted records
 do."* T-412 shipped the opposite default (Q2 "keep that literal"), so three draft deletes ask for a PIN today.
 **Model: SONNET** (one builder, one tester; Haiku not used: auth-adjacent). **No migration.** **No capability change**
@@ -20,7 +20,7 @@ PIN: it is voided or reversed, never deleted, and that path does not change.
 
 The recurring template is in scope because it is the same case: it can only be deleted while it has never produced
 anything, so no posted record is touched. **Out of scope, stays Tier P:** cutover "Remove opening figure"
-(`app/cutover/actions.ts:113`) — see Question 1. Every other Tier P row (voids, reversals, write-offs, posts) is unchanged.
+(`app/cutover/actions.ts:113`) — **Ian 16 Oct: keeps the admin PIN** (answer 1 below). Every other Tier P row (voids, reversals, write-offs, posts) is unchanged.
 
 ## The tier these three get: **Tier W (no extra confirmation step)** — decided, with reasons
 T-412 has three tiers: P (admin PIN), R (retype the name), W (unguarded workflow step: discard, withdraw, cancel).
@@ -29,8 +29,8 @@ T-412 has three tiers: P (admin PIN), R (retype the name), W (unguarded workflow
 - **W fits exactly.** It is already the tier for "throw away unposted work": attendance "Discard event", "Withdraw cash
   request", "Cancel count". A draft delete is the same act. The domain comment in `delete.ts` already argues this:
   *"friction on a self-correction is what produces the abandoned drafts."*
-- **No new "plain confirm" tier.** It would add a fourth tier, a component change and a census rule for one click's worth
-  of protection. Rejected; see Question 2 if Ian wants it.
+- **No new "plain confirm" tier.** **Ian 16 Oct: one click, no "Are you sure?"** (answer 2 below). The button deletes on
+  the first click; no `confirm()`, no second-click state, no dialog.
 
 ## Server contract (the gate stays on the server)
 1. The three actions **drop** `loadDestructiveTarget`, `verifyAdminApproval` and `recordApproval`. They call the domain
@@ -54,6 +54,7 @@ Remove any import left unused. Keep the consequence sentence as visible text bes
 
 **TESTER (tests only):**
 NEW `apps/erp/tests/integration/t418-draft-delete.test.ts` (cases 1-8) ·
+NEW `apps/erp/tests/t418-draft-delete-one-click.test.ts` (case 10) ·
 EDIT `apps/erp/tests/t412-destructive-census.test.ts` — the three rows move `tier: 'P'` -> `tier: 'W'`; header arithmetic
 becomes P 32 / R 14 / W 13 / X 4 (63 controls unchanged) ·
 EDIT `apps/erp/tests/integration/t412-destructive-actions.test.ts` — remove the `deleteDraftAction` I10 case (its
@@ -88,13 +89,17 @@ Also untouched: the domain delete functions (their refusals are what this task r
 Each mutant shown red, then reverted. No mutant survives in the merged diff (grep it).
 
 ## Done when
-`npm run typecheck` clean · cases 1-9 green · `t412-destructive-actions` and the census green · CI PR green (row 296) ·
+`npm run typecheck` clean · cases 1-10 green · `t412-destructive-actions` and the census green · CI PR green (row 296) ·
 screenshots of `/expenses/[id]` (draft) and `/inventory/usage/[id]` (draft) at 390 and 1280 showing a plain Delete button.
 Orchestrator notes T-412 Q2 as superseded by row 348 in `412-confirm-destructive-tiers.md`.
 
-## Questions for Ian (plain language)
-1. **Opening balances at go-live.** Before the opening figures are posted, removing one figure is like deleting a draft.
-   (a) Keep the PIN there — recommended: it happens once, only administrators do it, and it feeds the opening books.
-   (b) Drop it, to match today's rule exactly. Until answered, T-418 keeps the PIN.
-2. **One extra click?** Deleting a draft now happens on the first click. (a) Leave it — recommended, same as "Discard"
-   and "Withdraw" today. (b) Add an "Are you sure?" second click for draft deletes only (small extra task).
+## Ian's answers (16 Oct) — binding
+1. **Opening balances at go-live keep the admin PIN.** Removing an opening figure before go-live stays Tier P
+   (`app/cutover/actions.ts:113` untouched). Case 9 already pins it.
+2. **Draft delete is one click.** No "Are you sure?" step. Case 10 pins it.
+
+## Added case (from answer 2)
+10. Render (`apps/erp/tests/t418-draft-delete-one-click.test.ts`, TESTER): each of the three pages' delete control is a plain
+    submit button inside its form, with no `onClick` that calls `confirm(`, no `ConfirmDestructive`, no dialog role and no
+    "Are you sure" text; source grep of the three page files finds no `confirm(`. *Kills: adding a browser confirm or a
+    two-click "Click again to delete" state.*
