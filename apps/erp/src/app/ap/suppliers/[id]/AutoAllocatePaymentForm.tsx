@@ -90,12 +90,23 @@ export interface PayableItem {
   particulars: string;
   businessDate: string;
   outstanding: string;
+  /** T-432: the bill this open item belongs to, so `?bill=` can pre-fill only that bill's items. */
+  supplierInvoiceId?: string;
 }
 export interface Wallet {
   id: string;
   name: string;
   custodian: string;
+  instrument?: string;
   balance: string;
+}
+/** T-432: an open cash request at this store the viewer may spend (the `openFloatsForStore` shape). */
+export interface PayableFloat {
+  cashRequestId: string;
+  holderName: string;
+  outstanding: string;
+  moneyAccountId: string | null;
+  storeId: string;
 }
 
 function peso(v: string): string {
@@ -122,6 +133,9 @@ export function AutoAllocatePaymentForm({
   storeId,
   items,
   wallets,
+  floats = [],
+  hasUnroutedFloat = false,
+  prefillBill = null,
   today,
 }: {
   postAction: (fd: FormData) => void | Promise<void>;
@@ -130,11 +144,17 @@ export function AutoAllocatePaymentForm({
   storeId: string;
   items: readonly PayableItem[];
   wallets: readonly Wallet[];
+  floats?: readonly PayableFloat[];
+  /** T-432 ruling 4: a holder only - a request at this store has no staff cash account yet. */
+  hasUnroutedFloat?: boolean;
+  /** T-432 ruling 7: when set (and it matches an item), only that bill's items start filled. */
+  prefillBill?: string | null;
   today: string;
 }) {
-  const [amounts, setAmounts] = useState<Record<string, string>>(() =>
-    Object.fromEntries(items.map((i) => [i.expenseId, i.outstanding])),
-  );
+  const [amounts, setAmounts] = useState<Record<string, string>>(() => {
+    const only = prefillBill && items.some((i) => i.supplierInvoiceId === prefillBill) ? prefillBill : null;
+    return Object.fromEntries(items.map((i) => [i.expenseId, only === null || i.supplierInvoiceId === only ? i.outstanding : '']));
+  });
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [totalAmount, setTotalAmount] = useState('');
   const [unallocated, setUnallocated] = useState<string | null>(null);
@@ -317,11 +337,19 @@ export function AutoAllocatePaymentForm({
             className="w-full"
           />
         </Field>
-        <Field label="From account">
-          <Select name="moneyAccountId" required defaultValue="" className="w-full">
+        <Field label="Pay from" hint={hasUnroutedFloat ? 'A cash request at this store has no staff cash account yet; it can be spent on a new expense.' : undefined}>
+          <Select name="source" required defaultValue="" className="w-full">
             <option value="" disabled>Choose…</option>
-            {wallets.map((w) => (
-              <option key={w.id} value={w.id}>{w.name} ({w.custodian}) — {peso(w.balance)}</option>
+            {/* T-432 ruling 2: staff cash is reached only through a request. */}
+            {wallets
+              .filter((w) => !(w.custodian === 'staff' && w.instrument === 'cash'))
+              .map((w) => (
+                <option key={w.id} value={w.id}>{w.name} ({w.custodian}) — {peso(w.balance)}</option>
+              ))}
+            {floats.map((f) => (
+              <option key={f.cashRequestId} value={`float:${f.cashRequestId}`}>
+                {f.holderName} · cash request — Balance {peso(f.outstanding)}
+              </option>
             ))}
           </Select>
         </Field>

@@ -10,6 +10,7 @@ import { EditableRecord } from '@/components/forms';
 import { Badge, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { AutoAllocatePaymentForm } from './AutoAllocatePaymentForm';
 import { withFlash } from '@/lib/flash';
+import { payableFloatsForStore } from '@/lib/money-lines/load';
 import { typedFor } from '@/lib/keep-typing';
 import { SUPPLIER_EDIT } from '../../typed-forms';
 
@@ -21,6 +22,8 @@ interface SearchParams {
   ok?: string;
   /** Which store's payables are being settled. AP is store-scoped (Ian, 2026-08-28). */
   store?: string;
+  /** T-432: a bill id - pre-fills only that bill's open items (ignored unless it matches one). */
+  bill?: string;
 }
 
 export default async function SupplierDetailPage({
@@ -58,6 +61,13 @@ export default async function SupplierDetailPage({
   const openItems = storeId ? await listOpenItems(orgId, id, storeId) : [];
   const storeBalance = storeId ? await getPosition(orgId, id, storeId) : '0.00';
   const wallets = storeId ? await moneyAccountsFor(orgId, storeId) : [];
+  // T-432 ruling 4: floats only for someone who holds record_ap_payment at THIS store (else []), and only those
+  // with a staff cash account to pay from; the rest is a note.
+  const { floats, unrouted: unroutedFloat } = storeId
+    ? await payableFloatsForStore(orgId, storeId, actor)
+    : { floats: [], unrouted: false };
+  // T-432 ruling 7: a `bill` that is none of THIS supplier's open items here is ignored.
+  const prefillBill = sp.bill && openItems.some((i) => i.supplierInvoiceId === sp.bill) ? sp.bill : null;
 
   return (
     <Page density="table">
@@ -301,6 +311,9 @@ export default async function SupplierDetailPage({
             storeId={storeId}
             items={openItems}
             wallets={wallets}
+            floats={floats}
+            hasUnroutedFloat={unroutedFloat}
+            prefillBill={prefillBill}
             today={today()}
           />
         </section>

@@ -113,6 +113,14 @@ export default async function InvoiceDetailPage({
   });
   // The photo link is drawn only for someone who can actually open it (the same check the route makes).
   const canViewReceipt = await canViewPhoto(actor, invoice.receiptFileId);
+  // T-432 ruling 7 - "Pay this bill": only a booked bill with open items, and only for someone who may pay at its store.
+  const canPayBill =
+    invoice.status === 'verified' &&
+    (await withOrgPrincipal(orgId, async (tx) => {
+      const open = await apRepo.openItems(tx, orgId, invoice.supplierId, invoice.storeId);
+      if (!open.some((i) => i.supplierInvoiceId === invoice.id && compare(money(i.outstanding), ZERO) > 0)) return false;
+      return can(tx, actor, 'record_ap_payment', { storeId: invoice.storeId });
+    }));
   const today = toBusinessDate();
   const billName = (b: { invoiceId: string; invoiceNo: string | null }) => b.invoiceNo ?? b.invoiceId.slice(0, 8);
 
@@ -159,6 +167,14 @@ return (
       </div>
 
       <FlashBanner flash={sp} />
+
+      {canPayBill && (
+        <p>
+          <a href={`/ap/suppliers/${invoice.supplierId}?store=${invoice.storeId}&bill=${invoice.id}`} className={ACTION_LINK}>
+            Pay this bill
+          </a>
+        </p>
+      )}
 
       <section className="grid gap-4 md:grid-cols-2">
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">

@@ -90,10 +90,12 @@ async function autoPostOne(tx: Tx, row: stockUsageRepo.DueUsageDraftRow, source:
 
   // 1. Items the pull covered in this record, each against its own snapshot (A3/A4). Outside the band: back to expected, which for an
   //    item with no line (staff deleted it) means the line comes back.
-  for (const v of await snapshotVariancesFor(tx, record.orgId, record.id, lines)) {
+  for (const v of await snapshotVariancesFor(tx, record.orgId, record, lines)) {
     if (v.withinBand) continue;
     const mine = lines.filter((l) => l.itemId === v.itemId);
-    const target = quantity(v.expected);
+    // T-420 C5: back to the snapshot LESS what posted cooking in this room already took out; never below 0.
+    const afterCook = subtractQuantity(quantity(v.expected), quantity(v.cooked));
+    const target = compareQuantity(afterCook, ZERO_QUANTITY) > 0 ? afterCook : ZERO_QUANTITY;
     adjusted.push({ itemId: v.itemId, recorded: v.actual, posted: target });
     if (compareQuantity(target, ZERO_QUANTITY) === 0) {
       await stockUsageRepo.deleteUsageLines(tx, mine.map((l) => l.id));
@@ -116,7 +118,7 @@ async function autoPostOne(tx: Tx, row: stockUsageRepo.DueUsageDraftRow, source:
     const mine = lines.filter((l) => l.itemId === v.itemId);
     const myTotal = addQuantity(...mine.map((l) => quantity(l.quantity)));
     const others = subtractQuantity(quantity(v.actual), myTotal);
-    const wanted = subtractQuantity(quantity(v.expected), others);
+    const wanted = subtractQuantity(subtractQuantity(quantity(v.expected), others), quantity(v.cooked)); // T-420 C5: and the store's cooking
     const target = compareQuantity(wanted, ZERO_QUANTITY) > 0 ? wanted : ZERO_QUANTITY;
     adjusted.push({ itemId: v.itemId, recorded: myTotal, posted: target });
     if (compareQuantity(target, ZERO_QUANTITY) === 0) {
