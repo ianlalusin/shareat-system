@@ -616,6 +616,7 @@ export interface MonthUsageRecordRow {
   readonly id: string;
   readonly storeId: string;
   readonly usedOn: string;
+  readonly locationId: string;
   readonly status: UsageStatus;
   readonly kind: UsageKind;
   readonly itemIds: readonly string[];
@@ -631,6 +632,7 @@ export async function listMonthUsageRecordsForClose(tx: Tx, orgId: string, start
       id: stockUsageRecords.id,
       storeId: stockUsageRecords.storeId,
       usedOn: stockUsageRecords.usedOn,
+      locationId: stockUsageRecords.locationId,
       status: stockUsageRecords.status,
       autoPosted: stockUsageRecords.autoPosted,
       kind: stockUsageRecords.kind,
@@ -654,7 +656,7 @@ export async function listMonthUsageRecordsForClose(tx: Tx, orgId: string, start
     .where(inArray(stockUsageLines.recordId, keep.map((r) => r.id)));
   const itemsOf = new Map<string, Set<string>>();
   for (const l of lines) itemsOf.set(l.recordId, (itemsOf.get(l.recordId) ?? new Set<string>()).add(l.itemId));
-  return keep.map((r) => ({ id: r.id, storeId: r.storeId, usedOn: r.usedOn, status: r.status, kind: r.kind, itemIds: [...(itemsOf.get(r.id) ?? [])] }));
+  return keep.map((r) => ({ id: r.id, storeId: r.storeId, usedOn: r.usedOn, locationId: r.locationId, status: r.status, kind: r.kind, itemIds: [...(itemsOf.get(r.id) ?? [])] }));
 }
 
 /** `recordId|itemId` of every out-of-band verification (a reason was given at the post) among these records. */

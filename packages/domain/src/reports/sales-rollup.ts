@@ -107,11 +107,12 @@ export async function getSalesRollup(ex: Executor, input: SalesRollupInput): Pro
     byDay.set(r.day, list);
   }
   const channelDays: SalesChannelDay[] = [...byDay.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .sort(([a], [b]) => a.localeCompare(b))
     .map(([day, blocks]) => ({ day, total: add(...blocks.map((b) => b.total)), channels: blocks }));
   const unreconciledDays: string[] = [];
   if (wantDays) {
-    const ledgerOf = new Map(periods.map((p) => [p.period ?? '', p.total] as const));
+    const ledgerOf = new Map<string, (typeof periods)[number]['total']>();
+    for (const p of periods) ledgerOf.set(p.period ?? '', p.total);
     const days = new Set<string>([...ledgerOf.keys(), ...byDay.keys()]);
     for (const day of [...days].sort()) {
       const blocks = byDay.get(day) ?? [];
