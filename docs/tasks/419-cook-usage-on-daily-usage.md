@@ -64,8 +64,8 @@ EDIT `apps/erp/tests/t343-s6c-screen-labels.test.ts` — its `usageQueueData` mo
 job. Lane T-416's files (`packages/auth/**`) are unrelated.
 
 ## Acceptance cases (real Postgres; each names the mutant it kills)
-1. Recipe "Adobo base" (500 g pork + 100 ml soy -> 1 kg). Post a cook of 1 kg at store A on D -> `listCookUsageForDay(A, D)`
-   returns exactly pork 0.500 kg and soy 0.100 L, each `recipeName = 'Adobo base'`, `isDraft = false`. *Kills: dropping the recipe join.*
+1. Recipe "Adobo base" (500 g pork + 100 g soy -> 0.6 kg). Post a cook of 0.6 kg at store A on D -> `listCookUsageForDay(A, D)`
+   returns exactly pork 0.500 kg and soy 0.100 kg, each `recipeName = 'Adobo base'`, `isDraft = false`. *Kills: dropping the recipe join.*
 2. The cooked output item is **not** in the list. *Kills: `direction = 'in'` instead of `'out'`.*
 3. A **draft** cook on D is listed with `isDraft = true`; a **voided** cook on D is not listed. *Kills: posted-only
    filter (drafts dropped); dropping the void exclusion; `isDraft` hard-coded false.*
