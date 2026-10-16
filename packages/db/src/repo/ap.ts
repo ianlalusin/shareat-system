@@ -10,7 +10,7 @@
  * `expenses_check_invoice_open_for_recording` trigger (migration, DEF-073) — this is the clean,
  * named error; the trigger is the backstop that holds regardless of code path.
  */
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
 import { businessDayRange, formatBusinessDateTime, parseBusinessDate } from '@shareat/core/datetime';
 import { compare, money, type Decimal, type Money } from '@shareat/core/money';
 import type { Tx } from '../client';
@@ -629,7 +629,29 @@ export async function openItems(
    *  store's ledger it is talking about. */
   storeId: string,
 ): Promise<OpenItem[]> {
-  const rows = (await tx.execute(sql`
+  const rows = (await tx.execute(
+    openItemsQuery(orgId, sql`and e.supplier_id = ${supplierId} and e.store_id = ${storeId}`, sql``),
+  )) as unknown as Record<string, string>[];
+  return rows.map((r) => ({
+    expenseId: String(r.expense_id ?? r.expenseId),
+    supplierId: String(r.supplier_id ?? r.supplierId),
+    supplierInvoiceId: String(r.supplier_invoice_id ?? r.supplierInvoiceId),
+    storeId: String(r.store_id ?? r.storeId),
+    businessDate: String(r.business_date ?? r.businessDate),
+    particulars: String(r.particulars),
+    creditAmount: Number(r.credit_amount ?? r.creditAmount).toFixed(2),
+    allocatedAmount: Number(r.allocated_amount ?? r.allocatedAmount).toFixed(2),
+    outstanding: Number(r.outstanding).toFixed(2),
+  }));
+}
+
+/**
+ * ⭐ THE one definition of "open", as SQL. `openItems` (one supplier, one store) and
+ * `openItemsForStores` (T-431, every supplier) both run THIS text; only the WHERE tail and the
+ * extra columns differ. ⛔ Do not copy it (`aging()`'s copy lacks the voided-invoice filter).
+ */
+function openItemsQuery(orgId: string, filterTail: SQL, extraColumns: SQL): SQL {
+  return sql`
     with credit as (
       select ep.expense_id, sum(ep.amount) as credit_amount
       from expense_payments ep
@@ -653,25 +675,67 @@ export async function openItems(
       c.credit_amount::text as credit_amount,
       coalesce(a.allocated_amount, 0)::text as allocated_amount,
       (c.credit_amount - coalesce(a.allocated_amount, 0))::text as outstanding
+      ${extraColumns}
     from expenses e
     join credit c on c.expense_id = e.id
     left join allocated a on a.expense_id = e.id
     join supplier_invoices si on si.id = e.supplier_invoice_id
-    where e.org_id = ${orgId} and e.supplier_id = ${supplierId} and e.store_id = ${storeId}
+    where e.org_id = ${orgId} ${filterTail}
       and e.status = 'posted' and si.status <> 'voided'
       and (c.credit_amount - coalesce(a.allocated_amount, 0)) > 0.005
     order by e.business_date asc
-  `)) as unknown as Record<string, string>[];
+  `;
+}
+
+export interface OpenItemLine {
+  expenseId: string;
+  supplierId: string;
+  supplierName: string;
+  supplierInvoiceId: string;
+  invoiceNo: string | null;
+  storeId: string;
+  dueDate: string | null;
+  particulars: string;
+  /** Exact `numeric(14,2)` text. */
+  outstanding: string;
+  /** The recurring template this invoice was born from, or null. */
+  recurringName: string | null;
+}
+
+/**
+ * T-431 — every open payable across suppliers, for the stores given (or every store when
+ * `storeIds` is omitted). One query; shares `openItems`' definition of "open" via `openItemsQuery`.
+ */
+export async function openItemsForStores(
+  tx: Tx,
+  orgId: string,
+  storeIds?: readonly string[],
+): Promise<OpenItemLine[]> {
+  const tail =
+    storeIds === undefined
+      ? sql``
+      : storeIds.length === 0
+        ? sql`and false`
+        : sql`and e.store_id in (${sql.join(storeIds.map((id) => sql`${id}`), sql`, `)})`;
+  const extra = sql`,
+      si.invoice_no as invoice_no,
+      si.due_date::text as due_date,
+      (select sp.name from suppliers sp where sp.id = e.supplier_id) as supplier_name,
+      (select t.name from recurring_expense_drafts d
+         join recurring_expenses t on t.id = d.recurring_expense_id
+        where d.expense_id = e.id limit 1) as recurring_name`;
+  const rows = (await tx.execute(openItemsQuery(orgId, tail, extra))) as unknown as Record<string, string | null>[];
   return rows.map((r) => ({
-    expenseId: String(r.expense_id ?? r.expenseId),
-    supplierId: String(r.supplier_id ?? r.supplierId),
-    supplierInvoiceId: String(r.supplier_invoice_id ?? r.supplierInvoiceId),
-    storeId: String(r.store_id ?? r.storeId),
-    businessDate: String(r.business_date ?? r.businessDate),
+    expenseId: String(r.expense_id),
+    supplierId: String(r.supplier_id),
+    supplierName: String(r.supplier_name ?? ''),
+    supplierInvoiceId: String(r.supplier_invoice_id),
+    invoiceNo: r.invoice_no ?? null,
+    storeId: String(r.store_id),
+    dueDate: r.due_date ?? null,
     particulars: String(r.particulars),
-    creditAmount: Number(r.credit_amount ?? r.creditAmount).toFixed(2),
-    allocatedAmount: Number(r.allocated_amount ?? r.allocatedAmount).toFixed(2),
-    outstanding: Number(r.outstanding).toFixed(2),
+    outstanding: String(r.outstanding),
+    recurringName: r.recurring_name ?? null,
   }));
 }
 
