@@ -1,7 +1,7 @@
 # 09 — POS System (Discovery)
 
 Read-only discovery over `C:\Users\ianla\webapps\POS` (branch `sev5_advanced`; Next.js
-+ Firebase/Firestore + Capacitor Android shell, app id `culinaryflow`). Purpose: an
++ Firebase/Firestore + Capacitor Android shell, app id `net.shareat.pos`, npm name `culinaryflow`). Purpose: an
 entity/behaviour inventory a database architect can use to design the shared
 PostgreSQL schema all four apps (POS, ERP, CUSTOMER, Website) will move onto. This
 document does not propose a schema. No file under `POS` was modified. Every claim is
