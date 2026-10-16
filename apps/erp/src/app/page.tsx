@@ -154,7 +154,7 @@ export default async function DashboardPage({
         return { id: s.id, name: s.name, value: v, text: fmtNum(v) };
       })
     : [];
-  // One colour per channel, shared by the donut and the day bars (key: channel id, or 'pos-corrections').
+  // One colour per channel, shared by the donut and the day lines (key: channel id, or 'pos-corrections').
   const colorOf = new Map<string, string>();
   const orderOf = new Map<string, number>();
   salesNow.channels.forEach((c, i) => {
@@ -163,20 +163,24 @@ export default async function DashboardPage({
   });
   const hidden = new Set(salesNow.unreconciledDays ?? []);
   const dayBlocks = new Map((salesNow.channelDays ?? []).map((d) => [d.day, d.channels] as const));
-  const bars = nowDays.map((d) => ({
-    segments: hidden.has(d)
-      ? []
-      : [...(dayBlocks.get(d) ?? [])]
-          .map((c) => {
-            const key = c.channelId ?? 'pos-corrections';
-            return { key, name: c.channelName, value: Number(c.total), color: colorOf.get(key) ?? seriesColor(0) };
-          })
-          .sort((a, b) => (orderOf.get(a.key) ?? 0) - (orderOf.get(b.key) ?? 0)),
-  }));
-  const showBars = bars.some((b) => b.segments.length > 0);
-  const legend = salesNow.channels.map((c) => {
+  const lines = salesNow.channels.map((c) => {
     const key = c.channelId ?? 'pos-corrections';
-    return { key, name: c.channelName, color: colorOf.get(key)! };
+    return {
+      key,
+      name: c.channelName,
+      color: colorOf.get(key)!,
+      dashed: c.channelId === null,
+      values: nowDays.map((d) =>
+        hidden.has(d) ? null : Number((dayBlocks.get(d) ?? []).find((b) => (b.channelId ?? 'pos-corrections') === key)?.total ?? 0),
+      ),
+    };
+  });
+  const showLines = (salesNow.channelDays ?? []).length > 0;
+  const legend = lines.map((l) => ({ key: l.key, name: l.name, color: l.color, dashed: l.dashed }));
+  points.forEach((p, i) => {
+    (p as { channels?: unknown }).channels = lines
+      .filter((l) => l.values[i] !== null && l.values[i] !== 0)
+      .map((l) => ({ name: l.name, color: l.color, text: fmtNum(l.values[i]!) }));
   });
   const hiddenDays = nowDays.filter((d) => hidden.has(d));
   const channelRows = salesNow.channels.map((c) => ({
@@ -242,12 +246,12 @@ export default async function DashboardPage({
           </div>
           <SalesLine
             points={points}
-            chartLabel={`Sales per day, ${rangeText}, against ${against}${showBars ? `; bars split by channel: ${legend.map((l) => l.name).join(', ')}` : ''}`}
-            bars={showBars ? bars : undefined}
-            legend={showBars ? legend : undefined}
+            chartLabel={`Sales per day, ${rangeText}, against ${against}${showLines ? `; lines by channel: ${legend.map((l) => l.name).join(', ')}` : ''}`}
+            lines={showLines ? lines : undefined}
+            legend={showLines ? legend : undefined}
             note={
               hiddenDays.length > 0
-                ? `The channel split does not match the ledger on ${hiddenDays.map((d) => shortDay(d, true)).join(', ')}; those bars are hidden.`
+                ? `The channel split does not match the ledger on ${hiddenDays.map((d) => shortDay(d, true)).join(', ')}; those channel lines break there.`
                 : undefined
             }
             curName={rangeText}

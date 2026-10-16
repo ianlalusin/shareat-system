@@ -102,3 +102,6 @@ wraps, no sideways page scroll, bars line up under the line.
 
 ## Ian's answers (16 Oct)
 - Six colours; a 7th channel reuses one (as the donut does). Accepted.
+
+## Redesign (Ian, 16 Oct, after seeing the bars)
+Bars dropped as too crowded. The chart is now: a THICK neon gross-sales line (gradient, glow, glowing peak dot) plus one THIN smooth line per channel in the donut colours (POS corrections dashed), drawn under it; the previous-period dashed line is fainter when channel lines show. One legend row: Gross sales, previous period, then the channels. The hover card lists each channel's amount for that day. Days in `unreconciledDays` break the channel lines and the note reads "The channel split does not match the ledger on <days>; those channel lines break there." The data layer (channelDays, unreconciledDays, the to-the-centavo invariant) is unchanged. Cases 7-11 are rewritten for lines.
