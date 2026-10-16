@@ -267,6 +267,31 @@ export async function outstandingForCharge(tx: Tx, orgId: string, chargeId: stri
   return row ? Number(row.outstanding).toFixed(2) : '0.00';
 }
 
+/**
+ * T-433. How many payments (posted collections) are allocated to this charge. A charge with any cannot be
+ * voided: the payment would stay allocated to a dead charge.
+ */
+export async function liveAllocationCount(tx: Tx, orgId: string, chargeId: string): Promise<number> {
+  const [row] = (await tx.execute(sql`
+    select count(*)::int as n
+    from ar_collection_allocations a
+    join ar_collections c on c.id = a.ar_collection_id
+    where c.org_id = ${orgId} and a.ar_charge_id = ${chargeId} and c.status = 'posted'
+  `)) as unknown as { n: number }[];
+  return row ? Number(row.n) : 0;
+}
+
+/** T-433. What has been paid against this charge: the sum of its posted allocations, as 2dp text. */
+export async function paidForCharge(tx: Tx, orgId: string, chargeId: string): Promise<string> {
+  const [row] = (await tx.execute(sql`
+    select coalesce(sum(a.amount_applied), 0)::numeric(14,2)::text as paid
+    from ar_collection_allocations a
+    join ar_collections c on c.id = a.ar_collection_id
+    where c.org_id = ${orgId} and a.ar_charge_id = ${chargeId} and c.status = 'posted'
+  `)) as unknown as { paid: string }[];
+  return row ? row.paid : '0.00';
+}
+
 export interface ArAgingBucket {
   customerId: string;
   storeId: string;

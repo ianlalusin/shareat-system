@@ -7,8 +7,10 @@
  * surface lives in `packages/domain` and is enforced there.
  */
 import {
+  arRepo,
   customersRepo,
   itemsRepo,
+  moneyAccountsRepo,
   tradeRepo,
   treatmentOf,
   type CustomerRow,
@@ -17,7 +19,9 @@ import {
   type TradeOrderRow,
 } from '@shareat/db';
 import type { CustomerTreatment, TradeOrderStatus } from '@shareat/db/schema';
-import { branchPriceFor } from '@shareat/domain';
+import { AuthorizationError, can, type Actor } from '@shareat/auth';
+import { branchPriceFor, previewCreditExposure } from '@shareat/domain';
+import { money, subtract } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
@@ -162,5 +166,67 @@ export async function orderDetail(orgId: string, id: string): Promise<OrderDetai
         ? stores.find((s) => s.id === customer.counterpartyStoreId)
         : undefined,
     };
+  });
+}
+
+/** T-433. The money accounts a payment at THIS order's store can go into (a payment into another store's account is refused). */
+export async function storeMoneyAccounts(
+  orgId: string,
+  storeId: string,
+): Promise<{ id: string; name: string; instrument: string; custodian: string }[]> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const accounts = await moneyAccountsRepo.listMoneyAccounts(tx, orgId, { storeId });
+    return accounts.map((a) => ({ id: a.id, name: a.name, instrument: a.instrument, custodian: a.custodian }));
+  });
+}
+
+/**
+ * T-433 S3. The warning shown BEFORE dispatch is pressed: what the buyer owes and what this order would take them to. `null`
+ * when the viewer may not dispatch here (they see no customer figures); the server still decides when the order posts.
+ */
+export async function creditPreview(
+  actor: Actor,
+  input: { customerId: string; storeId: string; total: string },
+): Promise<{ owed: string; after: string; limit: string | null; over: boolean } | null> {
+  try {
+    return await withOrgPrincipal(actor.orgId, (tx) => previewCreditExposure(tx, actor, input));
+  } catch (err) {
+    if (err instanceof AuthorizationError) return null;
+    throw err;
+  }
+}
+
+export interface DeliveryReceiptData {
+  detail: OrderDetail;
+  /** Paid against THIS order's charge, and what is still due on it. */
+  paid: string;
+  balanceDue: string;
+  /** The buyer's whole account, org-wide: receivable (1210) less store credit held (2140). */
+  accountBalance: string;
+  printedAt: Date;
+}
+
+/**
+ * T-433 S2. Everything the printable delivery receipt shows - or `null`, which the page turns into a 404 for EVERY reason
+ * alike (no such order, a draft or void one, a branch transfer, or a viewer without `approve_buyer`/`record_ar_collection`
+ * at the order's store), so a person without the right learns nothing about whether the order exists.
+ */
+export async function deliveryReceiptData(actor: Actor, id: string): Promise<DeliveryReceiptData | null> {
+  const detail = await orderDetail(actor.orgId, id);
+  if (!detail) return null;
+  const { order } = detail;
+  if ((order.status !== 'dispatched' && order.status !== 'received') || !order.arChargeId) return null;
+  const chargeId = order.arChargeId;
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const allowed =
+      (await can(tx, actor, 'approve_buyer', { storeId: order.storeId })) ||
+      (await can(tx, actor, 'record_ar_collection', { storeId: order.storeId }));
+    if (!allowed) return null;
+    const paid = await arRepo.paidForCharge(tx, actor.orgId, chargeId);
+    const balanceDue = await arRepo.outstandingForCharge(tx, actor.orgId, chargeId);
+    const position = await arRepo.positionOf(tx, actor.orgId, order.customerId);
+    const credit = await arRepo.creditBalanceOf(tx, actor.orgId, order.customerId);
+    const accountBalance = subtract(money(position.controlBalance), money(credit));
+    return { detail, paid, balanceDue, accountBalance, printedAt: new Date() };
   });
 }

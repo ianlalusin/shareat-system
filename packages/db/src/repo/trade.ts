@@ -51,7 +51,10 @@ export interface TradeOrderRow {
   dispatchedBy: string | null;
   receivedAt: Date | null;
   receivedBy: string | null;
+  creditOverrideBy: string | null;
   creditOverrideReason: string | null;
+  /** T-433 S2. The pre-printed BIR booklet number, when someone noted it. */
+  birInvoiceNo: string | null;
   voidedAt: Date | null;
   voidReason: string | null;
   createdBy: string;
@@ -441,4 +444,26 @@ export async function markReceived(
     .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)))
     .returning({ receivedAt: tradeOrders.receivedAt });
   return row!.receivedAt!;
+}
+
+/** T-433 S2. The order in this org that already carries this booklet number, if any. */
+export async function findByBirInvoiceNo(
+  tx: Tx,
+  orgId: string,
+  value: string,
+): Promise<{ id: string; referenceNo: string | null } | undefined> {
+  const [row] = await tx
+    .select({ id: tradeOrders.id, referenceNo: tradeOrders.referenceNo })
+    .from(tradeOrders)
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.birInvoiceNo, value)))
+    .limit(1);
+  return row;
+}
+
+/** T-433 S2. Set (or, with null, clear) the booklet number. */
+export async function setBirInvoiceNo(tx: Tx, orgId: string, id: string, value: string | null): Promise<void> {
+  await tx
+    .update(tradeOrders)
+    .set({ birInvoiceNo: value, updatedAt: sql`now()` })
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
 }

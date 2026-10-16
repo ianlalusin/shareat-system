@@ -3,8 +3,10 @@ import { notFound } from 'next/navigation';
 import { SHORTAGE_REASONS } from '@shareat/db/schema';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../../../lib/session';
-import { dispatchOrderAction, receiveOrderAction, voidOrderAction } from '../actions';
-import { orderDetail, peso, today } from '../lib';
+import { dispatchOrderAction, receiveOrderAction, setBirInvoiceNoAction, voidOrderAction } from '../actions';
+import { creditPreview, orderDetail, peso, storeMoneyAccounts, today } from '../lib';
+import { ACTION_LINK } from '@/components/action-link';
+import { PhotoInput } from '@/components/PhotoInput';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -82,6 +84,15 @@ export default async function TradeOrderPage({
   })();
   const fees = add(money(order.deliveryFee), money(order.otherFees));
 
+  // T-433. Pay at the door, and the credit-limit warning BEFORE the button is pressed (the server still decides).
+  const payAtDispatch = canDispatch && !isInternal;
+  const accounts = payAtDispatch ? await storeMoneyAccounts(actor.orgId, order.storeId) : [];
+  const preview =
+    payAtDispatch && customer.creditLimit !== null
+      ? await creditPreview(actor, { customerId: customer.id, storeId: order.storeId, total: order.totalAmount })
+      : null;
+  const isSale = (order.status === 'dispatched' || order.status === 'received') && !isInternal;
+
   return (
     <Page density="table">
       <div>
@@ -109,6 +120,36 @@ export default async function TradeOrderPage({
             className="flex flex-wrap items-end gap-3"
           >
             <input type="hidden" name="orderId" value={order.id} />
+            {preview?.over && (
+              <p role="alert" className="w-full rounded-md border border-amber-400 bg-amber-50 p-2 text-sm text-amber-900 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-100">
+                Owes {peso(preview.owed)}. This order takes them to {peso(preview.after)} against a {peso(preview.limit ?? '0')} limit.
+                Dispatch is refused unless a manager says why below, or they pay enough now to stay within the limit.
+              </p>
+            )}
+            {payAtDispatch && (
+              <fieldset className="flex w-full flex-wrap items-end gap-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
+                <legend className="px-1 text-xs text-neutral-500 dark:text-neutral-400">Paid on the spot? (optional)</legend>
+                <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                  Paid now (₱)
+                  <Input name="payNowAmount" inputMode="decimal" placeholder="0.00" className="w-32 text-right tabular-nums" />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                  Into account
+                  <Select name="moneyAccountId" defaultValue="">
+                    <option value="">Choose…</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({a.custodian})
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                  Proof of payment (required for GCash or bank)
+                  <PhotoInput name="receiptPhoto" accept="image/*" className="text-sm" />
+                </label>
+              </fieldset>
+            )}
             {!isInternal && customer.creditLimit !== null && (
               <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
                 Reason to exceed the {peso(customer.creditLimit)} limit (only if it does)
@@ -249,6 +290,28 @@ export default async function TradeOrderPage({
             {isInternal
               ? 'The goods leave the commissary: its stock is relieved into in-transit at real FIFO cost. No revenue, no receivable — a branch is not a customer of its own company.'
               : 'The billing event: the receivable is raised against the customer, wholesale revenue is recognised, and stock is relieved with cost of sales — one act, idempotent.'}
+          </p>
+        </div>
+      )}
+
+      {isSale && (
+        <div className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-medium">Delivery receipt</h2>
+            <Link href={`/trade/orders/${order.id}/print`} className={ACTION_LINK}>
+              Print delivery receipt
+            </Link>
+          </div>
+          <form action={setBirInvoiceNoAction} className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="orderId" value={order.id} />
+            <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+              BIR invoice no. (booklet)
+              <Input name="birInvoiceNo" defaultValue={order.birInvoiceNo ?? ''} placeholder="from the pre-printed booklet" className="w-56" />
+            </label>
+            <Button type="submit">Save invoice no.</Button>
+          </form>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            The official invoice is the booklet you already use; this only notes its number so it prints on the receipt. Leave it blank and save to clear it.
           </p>
         </div>
       )}
