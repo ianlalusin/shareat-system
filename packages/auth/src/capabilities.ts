@@ -80,6 +80,8 @@ export type Capability =
   | 'void_sales_day'
   | 'record_statutory_discount'
   | 'void_statutory_discount'
+  /** T-424. Approving a POS v2 refund, tender correction or unpaid-session void with an ERP PIN. Admin yes, manager NO by role: held by grant (store-manager position defaults / a hand grant). */
+  | 'approve_pos_correction'
   | 'accept_remittance'
   /** T-186. Staff-OPEN: the person holding the drawer is the cashier. */
   | 'record_till_count'
@@ -308,6 +310,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'void_sales_day',
   'record_statutory_discount',
   'void_statutory_discount',
+  'approve_pos_correction',
   'accept_remittance',
   'record_till_count',
   'resolve_till_variance',
@@ -431,6 +434,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   // The SC/PWD register is kept per store, like the sales day it sits beside (T-137).
   record_statutory_discount: 'store',
   void_statutory_discount: 'store',
+  approve_pos_correction: 'store',
   accept_remittance: 'store',
   record_till_count: 'store',
   resolve_till_variance: 'store',
@@ -663,6 +667,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   void_sales_day: 'sales',
   record_statutory_discount: 'sales',
   void_statutory_discount: 'sales',
+  approve_pos_correction: 'sales',
   accept_remittance: 'sales',
   record_till_count: 'sales',
   resolve_till_variance: 'sales',
@@ -804,6 +809,9 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // the seller, so withdrawing a statutory record is a supervisory act - same shape as
   // void_sales_day directly above.
   void_statutory_discount: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-424. ⭐ Manager is FALSE on purpose: approving a refund / tender correction / void with a PIN is held by GRANT (the store-manager
+  // positions' access defaults, or a hand grant at the store) - a franchise-owner role alone does not approve. Admins hold it implicitly.
+  approve_pos_correction: { super_admin: true, admin: true, manager: false, staff: false },
   accept_remittance: { super_admin: true, admin: true, manager: true, staff: false },
   record_till_count: { super_admin: true, admin: true, manager: true, staff: false },
   resolve_till_variance: { super_admin: true, admin: true, manager: true, staff: false },
@@ -1139,6 +1147,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   void_sales_day: 'void a sales day',
   record_statutory_discount: 'record a statutory discount',
   void_statutory_discount: 'void a statutory discount',
+  approve_pos_correction: 'approve a POS refund or correction',
   accept_remittance: 'accept a remittance',
   record_till_count: 'record a till count',
   resolve_till_variance: 'resolve a till variance',

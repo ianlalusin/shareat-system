@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
-import { Loader2, Printer, Search, Settings, Download, Calendar as CalendarIcon, Trash2, Edit, Ban, ArrowLeft, RotateCcw } from "lucide-react";
+import { Loader2, Printer, Search, Settings, Download, Calendar as CalendarIcon, Trash2, Edit, Ban, ArrowLeft, ArrowLeftRight, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useStoreContext } from "@/context/store-context";
 import { db } from "@/lib/firebase/client";
@@ -22,6 +22,7 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { cn } from "@/lib/utils";
 import { ReceiptView } from "@/components/receipt/receipt-view";
 import { RefundReceiptDialog } from "@/components/receipts/RefundReceiptDialog";
+import { TenderCorrectionDialog } from "@/components/receipts/TenderCorrectionDialog";
 import { useAuthContext } from "@/context/auth-context";
 import { toJsDate, formatDuration } from "@/lib/utils/date";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -93,6 +94,7 @@ export default function ReceiptsPage() {
     const [paymentMethods, setPaymentMethods] = useState<ModeOfPayment[]>([]);
 
     const [refundTarget, setRefundTarget] = useState<ReceiptType | null>(null);
+    const [tenderTarget, setTenderTarget] = useState<ReceiptType | null>(null);
 
     // --- Pagination State ---
     const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
@@ -575,22 +577,21 @@ export default function ReceiptsPage() {
                                                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setRefundTarget(r); }}
                                                             disabled={r.status === "voided" || !!r.isRefund}
                                                             className="mr-2"
-                                                            title="Issue Refund"
+                                                            title="Refund this receipt (a store manager PIN is needed)"
                                                             type="button"
                                                         >
-                                                            <RotateCcw className="h-4 w-4" />
+                                                            <RotateCcw className="mr-1 h-4 w-4" /> Refund
                                                         </Button>
-                                                        {(appUser?.role === "admin" || appUser?.role === "manager") && (
-                                                            <Button
-                                                                variant="destructive"
-                                                                size="sm"
-                                                                disabled
-                                                                title="Voiding a paid receipt moves to the safe flow (T-423)"
-                                                                type="button"
-                                                            >
-                                                                <Ban className="mr-1 h-4 w-4"/> Void — coming in the safe flow
-                                                            </Button>
-                                                        )}
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setTenderTarget(r); }}
+                                                            disabled={r.status !== "final" || !!r.isRefund}
+                                                            title="Money went to the wrong payment method (a store manager PIN is needed)"
+                                                            type="button"
+                                                        >
+                                                            <ArrowLeftRight className="mr-1 h-4 w-4" /> Mark wrong tender
+                                                        </Button>
                                                     </TableCell>
                                                 )}
                                             </TableRow>
@@ -635,6 +636,15 @@ export default function ReceiptsPage() {
                 {selectedReceiptData && settings && <ReceiptView data={{...selectedReceiptData, settings}} paymentMethods={paymentMethods} />}
             </div>
             {ConfirmDialog}
+            {tenderTarget && (
+                <TenderCorrectionDialog
+                    isOpen={!!tenderTarget}
+                    onClose={() => setTenderTarget(null)}
+                    receipt={tenderTarget}
+                    paymentMethods={paymentMethods}
+                    onSuccess={() => { fetchReceipts(); }}
+                />
+            )}
             {refundTarget && appUser && (
                 <RefundReceiptDialog
                     isOpen={!!refundTarget}

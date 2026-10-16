@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Hash, Check } from "lucide-react";
+import { Hash, Check, Copy } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,23 @@ export function TerminalSection() {
   const [holder, setHolder] = useState<"mine" | "other" | "unclaimed" | null>(null);
   const [terminalInput, setTerminalInput] = useState("");
   const [busy, setBusy] = useState(false);
+  // T-424 S5: the device id the person registering this tablet for manager approvals copies into ERP (the provision-terminal script).
+  const [deviceId, setDeviceId] = useState("");
+  useEffect(() => {
+    try {
+      setDeviceId(getBrowserDeviceId());
+    } catch {
+      setDeviceId("");
+    }
+  }, []);
+  const copyDeviceId = async () => {
+    try {
+      await navigator.clipboard.writeText(deviceId);
+      toast({ title: "Copied", description: "The device id is on the clipboard." });
+    } catch {
+      toast({ variant: "destructive", title: "Could not copy", description: "Select the device id and copy it by hand." });
+    }
+  };
 
   const isManager = appUser?.role === "manager" || appUser?.isPlatformAdmin === true;
 
@@ -147,6 +164,15 @@ export function TerminalSection() {
           </Button>
         )}
         {!isOnline && <p className="text-xs text-muted-foreground">Connect to the internet to set up or release a terminal.</p>}
+        <div className="space-y-1 border-t pt-3 text-sm">
+          <div className="text-muted-foreground">This tablet&apos;s device id (an administrator registers it in ERP so managers can approve refunds here)</div>
+          <div className="flex items-center gap-2">
+            <code className="break-all rounded bg-muted px-2 py-1 text-xs">{deviceId || "not available"}</code>
+            <Button type="button" variant="outline" size="sm" onClick={copyDeviceId} disabled={!deviceId}>
+              <Copy className="mr-1 h-4 w-4" /> Copy
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

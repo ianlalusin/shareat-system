@@ -1,4 +1,5 @@
 GET
+POST
 __resetChatPresenceTracker
 __setPhase5AvailableForTests
 acknowledgementHistory
@@ -9,11 +10,14 @@ adjudicateRange
 allocationsFor
 apiUrl
 applyCreditAction
+applyReceiptDeltaServerFirst
 arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
+byMethodOf
 cancelScheduledDepletionRule
+canonicalAnalytics
 capitalizeFromExpense
 cashPayment
 catalogueProblems
@@ -28,8 +32,10 @@ convertSpecimen
 countedVariances
 createFakeFirestore
 createFakeIdb
+createPaymentConversionServer
 customerReturnableQuantity
 datesInWeek
+dayIdOf
 declareSupplierItem
 deleteDocumentNonBlocking
 depreciateAsset
@@ -83,13 +89,14 @@ listPayRates
 listPunchesForDay
 listRoster
 listWriteOffsForCharge
+makeDeps
 markReviewed
 memoryLocalStorage
+middleware
 mintUniqueToken
 nameMatches
 newCorrelationId
 openFloatsForStore
-parsePesoInput
 partitionVisibleRefills
 pendingItemRequests
 periodForDate
@@ -129,7 +136,11 @@ runCapture
 runLoad
 sampleCandidates
 seedCanonicalPositions
+seedRefundRecord
+seedSale
 seedSession
+seedStaff
+seedStore
 setActiveFake
 setCostBasisItem
 setDocumentNonBlocking
@@ -137,6 +148,7 @@ setItemPricing
 setTillFloat
 signOffPack
 stalePackageIds
+storedAnywhere
 sumTender
 summarizeConversions
 tablesWithScope
@@ -164,6 +176,7 @@ useFirestore
 useMemoFirebase
 useUser
 validateFingerprintTemplates
+voidPaymentConversionServer
 voidShift
 withPrincipal
 writtenReceipt

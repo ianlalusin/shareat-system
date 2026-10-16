@@ -10,7 +10,11 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { voidSession } from "./firestore";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase/client";
+import { postPos2, Pos2Error } from "@/lib/pos2/client";
+import { voidOutcome } from "@/lib/pos2/voidOutcome";
+import { PIN_LENGTH, PinPad } from "@/components/pos2/PinPad";
 import { voidSessionOffline } from "./offlineVoid";
 import { addToQueue, getQueue, removeFromQueue } from "@/lib/offline/payment-queue";
 import { useOnlineStatus } from "@/hooks/use-online-status";
@@ -29,10 +33,14 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
   const { toast } = useToast();
   const { user: firebaseUser } = useAuthContext();
   const [reason, setReason] = useState("");
+  const [pin, setPin] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isOnline = useOnlineStatus();
 
   const isLocked = session.isPaid;
+  // T-424 Ruling 8: the SERVER decides who may void. A manager or admin (by their staff record) voids without a PIN; anyone else needs a store
+  // manager's PIN. This only decides whether to show the pad.
+  const needsPin = !(user.role === "manager" || user.role === "admin" || (user as any).isPlatformAdmin === true);
 
   const handleConfirm = async () => {
     const safeReason = (reason ?? '').toString().trim();
@@ -43,17 +51,35 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
     setIsSubmitting(true);
     try {
       if (isOnline) {
-        const { doc, getDoc } = await import("firebase/firestore");
-        const { db } = await import("@/lib/firebase/client");
         const activeProjectionSnap = await getDoc(doc(db, "stores", storeId, "activeSessions", session.id));
         const currentPin = activeProjectionSnap.exists() ? String(activeProjectionSnap.data()?.customerPin || "") : "";
 
-        const voidResult = await voidSession({
-          storeId: storeId,
-          sessionId: session.id,
-          reason: safeReason,
-          actor: user,
-        });
+        // The loyalty reversal is queued BEFORE the void commits (a crash can no longer lose it), exactly as T-423 did; if the server refuses the
+        // void, the entry we queued is taken back out.
+        const sessionSnap = await getDoc(doc(db, "stores", storeId, "sessions", session.id));
+        const redemptions = sessionSnap.exists() && Array.isArray((sessionSnap.data() as any)?.loyaltyRedemptions) ? (sessionSnap.data() as any).loyaltyRedemptions : [];
+        const reversedRedemptionIds: string[] = redemptions.map((r: any) => r?.redemptionId).filter(Boolean);
+        let queuedId: string | null = null;
+        if (reversedRedemptionIds.length > 0 && !getQueue().some((q) => q.sessionId === session.id && q.kind === "void")) {
+          queuedId = addToQueue({
+            storeId,
+            sessionId: session.id,
+            receiptId: session.id,
+            kind: "void",
+            ctx: { amount: 0, redemptionIds: reversedRedemptionIds },
+            effects: { analytics: "skip", loyaltyFinalize: "skip", loyaltyEarn: "skip", pinFinalize: "skip", loyaltyReverse: "pending" },
+          }).id;
+        }
+        try {
+          await postPos2("session-voids", { storeId, sessionId: session.id, reason: safeReason, ...(needsPin ? { pin } : {}) });
+        } catch (voidErr) {
+          // Only a DEFINITE refusal takes the queued reversal back out. No answer or a 5xx: the void may have committed, keep it (replay checks the
+          // session first). "Already voided": the void happened, so carry on as success and let the reversal run.
+          const outcome = voidOutcome(voidErr as { status?: unknown; message?: unknown });
+          if (outcome === "refused" && queuedId) removeFromQueue(queuedId);
+          if (outcome !== "voided") throw voidErr;
+        }
+        const voidResult = { reversedRedemptionIds };
 
         // Refund any Sharelebrator rewards redeemed against this session.
         const redemptionIds = voidResult?.reversedRedemptionIds ?? [];
@@ -123,6 +149,7 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
       }
     } catch (error: any) {
       console.error("Failed to void session:", error);
+      if (error instanceof Pos2Error && error.status === 403) setPin("");
       toast({ variant: 'destructive', title: 'Action Failed', description: error.message || String(error) });
     } finally {
       setIsSubmitting(false);
@@ -149,6 +176,13 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g., Customer complaint, wrong order"
             />
+            {needsPin && isOnline && (
+              <div className="pt-3">
+                <Label>Store manager PIN</Label>
+                <p className="mb-2 text-xs text-muted-foreground">A store manager types their own ERP PIN. It is checked on the server and never saved.</p>
+                <PinPad value={pin} onChange={setPin} disabled={isSubmitting} />
+              </div>
+            )}
           </div>
         )}
         <DialogFooter>
@@ -156,7 +190,7 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
           <Button
             variant="destructive"
             onClick={handleConfirm}
-            disabled={isSubmitting || isLocked || !reason.trim()}
+            disabled={isSubmitting || isLocked || !reason.trim() || (isOnline && needsPin && pin.length !== PIN_LENGTH)}
           >
             {isSubmitting && <Loader2 className="mr-2 animate-spin" />}
             Confirm Void

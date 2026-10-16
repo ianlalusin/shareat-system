@@ -107,6 +107,8 @@ export * from './pos/v1-recheck';
 // T-375 S1 - the POS v1 day feed: the bridge fetchers and the store link.
 export * from './pos/v1-feed';
 export * from './pos/store-link';
+// T-424 S5 - register a POS v2 tablet as an ERP terminal person (the manager-approval bucket owner).
+export * from './pos/terminal-link';
 export * from './pos/tenders';
 export { packageCapExcess } from './pos/v1-derive';
 export { normalizePosV1Alias, resolvePosV1Methods, type ResolvedMethods, type ResolverTender } from './pos/v1-methods';
