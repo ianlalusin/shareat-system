@@ -118,6 +118,14 @@ export function SalesLine({
         aria-label={chartLabel}
         className="block h-[300px] w-full overflow-visible sm:h-[360px]"
       >
+        <defs>
+          {/* Low days deep red, the top days bright neon (Ian, 16 Oct). One chart per page, so a fixed id. */}
+          <linearGradient id="sales-neon" gradientUnits="userSpaceOnUse" x1="0" y1={BASE} x2="0" y2={TOP}>
+            <stop offset="0" stopColor="#8a0f22" />
+            <stop offset="0.55" stopColor="#e3122f" />
+            <stop offset="1" stopColor="#ff3b5c" />
+          </linearGradient>
+        </defs>
         {[40, 143, 247].map((y) => (
           <line
             key={y}
@@ -154,17 +162,25 @@ export function SalesLine({
           d={curPath}
           pathLength={1}
           fill="none"
-          strokeWidth="3.5"
+          strokeWidth="2"
           strokeLinejoin="round"
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
-          style={{ stroke: 'var(--brand-ink)' }}
+          // Neon look (Ian, 16 Oct): thin bright red core plus a screen-space glow, so the SVG's
+          // non-uniform scaling cannot stretch the blur.
+          style={{
+            stroke: 'url(#sales-neon)',
+            filter: 'drop-shadow(0 0 2px rgba(255,31,68,0.9)) drop-shadow(0 0 7px rgba(255,31,68,0.55))',
+          }}
         />
       </svg>
       <div className="dash-pop absolute h-0 w-0" style={{ left: peakX + '%', top: peakY * 100 + '%' }}>
         <span
-          className="absolute -left-[7px] -top-[7px] h-3.5 w-3.5 rounded-full shadow-[0_0_0_4px_var(--canvas)]"
-          style={{ background: 'var(--brand-ink)' }}
+          className="absolute -left-[6px] -top-[6px] h-3 w-3 rounded-full"
+          style={{
+            background: '#ff3b5c',
+            boxShadow: '0 0 0 3px var(--canvas), 0 0 10px 4px rgba(255,59,92,0.75), 0 0 26px 10px rgba(255,59,92,0.35)',
+          }}
         />
         <span
           className={
@@ -186,7 +202,7 @@ export function SalesLine({
       </div>
       <figcaption className="mt-3.5 flex gap-5 text-[13px] text-muted">
         <span className="inline-flex items-center gap-2">
-          <span className="h-[3px] w-[22px] rounded-sm" style={{ background: 'var(--brand-ink)' }} />
+          <span className="h-[2px] w-[22px] rounded-sm" style={{ background: 'linear-gradient(90deg, #8a0f22, #ff3b5c)' }} />
           {curName}
         </span>
         <span className="inline-flex items-center gap-2">
