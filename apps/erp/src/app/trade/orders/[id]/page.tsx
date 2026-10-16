@@ -13,6 +13,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Button, ConfirmDestructive, exitStepFromTimestamps, FlashBanner, Field, FormGrid, Input, LinkRow, RowAction, RowLink, Select, simpleStepIndexFor, StatusHero, statusLabel, tradeOrderSteps, type StatusIconKind, type Tone } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { BIR_INVOICE_NO } from '../typed-forms';
 
 export const metadata = { title: 'Trade order — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -306,7 +308,7 @@ export default async function TradeOrderPage({
               Print delivery receipt
             </Link>
           </div>
-          <EditableRecord action={setBirInvoiceNoAction} label="BIR invoice no." hidden={{ orderId: order.id }} typed={null}>
+          <EditableRecord action={setBirInvoiceNoAction} label="BIR invoice no." hidden={{ orderId: order.id }} typed={typedFor(sp, BIR_INVOICE_NO, order.id, actor.personId)}>
             <FormGrid>
               <Field label="BIR invoice no. (booklet)">
                 <Input name="birInvoiceNo" defaultValue={order.birInvoiceNo ?? ''} placeholder="from the pre-printed booklet" className="w-full" />
