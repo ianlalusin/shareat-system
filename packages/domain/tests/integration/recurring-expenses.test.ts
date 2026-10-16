@@ -72,10 +72,10 @@ async function fixture(hint: string) {
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
   const [store] = await sql<{ id: string }[]>`
-    insert into stores (org_id, code, name) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}) returning id`;
+    insert into stores (org_id, code, name, opening_date) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}, '2020-01-01') returning id`;
   const storeId = store!.id;
   const [other] = await sql<{ id: string }[]>`
-    insert into stores (org_id, code, name) values (${orgId}, ${uid('oth')}, ${'Other store'}) returning id`;
+    insert into stores (org_id, code, name, opening_date) values (${orgId}, ${uid('oth')}, ${'Other store'}, '2020-01-01') returning id`;
   const mk = async (name: string, role: string) => {
     const [p] = await sql<{ id: string }[]>`
       insert into persons (org_id, display_name) values (${orgId}, ${name}) returning id`;
@@ -131,7 +131,7 @@ describe('a template, and the cursor it starts on', () => {
     // waiting for the bill would ever notice.
     const f = await fixture('cursor');
     const { nextDueDate } = await createRecurringTemplateAsOrg(f.orgId, f.manager, {
-      ...base(f), from: '2026-09-03',
+      ...base(f), startsOn: '2026-09-03',
     });
     expect(nextDueDate).toBe('2026-09-05');
   });
@@ -139,7 +139,7 @@ describe('a template, and the cursor it starts on', () => {
   it('a template created AFTER its anchor rolls to next month', async () => {
     const f = await fixture('cursor2');
     const { nextDueDate } = await createRecurringTemplateAsOrg(f.orgId, f.manager, {
-      ...base(f), from: '2026-09-20',
+      ...base(f), startsOn: '2026-09-20',
     });
     expect(nextDueDate).toBe('2026-10-05');
   });
@@ -147,7 +147,7 @@ describe('a template, and the cursor it starts on', () => {
   it('⚠️ a 31st anchor clamps rather than being refused — "the last day of the month"', async () => {
     const f = await fixture('clamp');
     const { nextDueDate } = await createRecurringTemplateAsOrg(f.orgId, f.manager, {
-      ...base(f), anchorDay: 31, from: '2026-02-01',
+      ...base(f), anchorDay: 31, startsOn: '2026-02-01',
     });
     expect(nextDueDate).toBe('2026-02-28');
   });
@@ -240,7 +240,7 @@ describe('pause, resume, and the one thing that may not be deleted', () => {
     // Otherwise it wakes with a due date months behind and drafts its way forward — noise on the
     // morning somebody switched it back on, and the opposite of what "resume" means.
     const f = await fixture('stale');
-    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), from: '2026-01-02' });
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), startsOn: '2026-01-02' });
     await sql`update recurring_expenses set next_due_date = '2026-01-05', status = 'paused' where id = ${id}`;
     await setRecurringTemplateStatusAsOrg(f.orgId, f.manager, { templateId: id, status: 'active' });
     const row = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
@@ -280,7 +280,7 @@ describe('pause, resume, and the one thing that may not be deleted', () => {
     // made by an edit that had nothing to do with timing. Found in self-review, and this is the
     // test that keeps it found.
     const f = await fixture('editname');
-    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), from: '2026-01-02' });
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), startsOn: '2026-01-02' });
     const before = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
     await updateRecurringTemplateAsOrg(f.orgId, f.manager, {
       templateId: id,
@@ -295,7 +295,7 @@ describe('pause, resume, and the one thing that may not be deleted', () => {
 
   it('⚠️ changing the INTERVAL re-derives the cursor — an old due date the new rule could not produce is not kept', async () => {
     const f = await fixture('edit');
-    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), anchorDay: 30, from: '2026-01-02' });
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), anchorDay: 30, startsOn: '2026-01-02' });
     const before = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
     await updateRecurringTemplateAsOrg(f.orgId, f.manager, { templateId: id, interval: 'weekly', anchorDay: 2 });
     const after = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));

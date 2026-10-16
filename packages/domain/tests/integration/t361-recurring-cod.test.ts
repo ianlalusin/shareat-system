@@ -46,7 +46,7 @@ async function fixture(hint: string) {
   const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
-  const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}) returning id`;
+  const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, opening_date) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}, '2020-01-01') returning id`;
   const storeId = store!.id;
 
   const [manager] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Manager') returning id`;
@@ -92,7 +92,7 @@ const template = (f: Fixture) => ({
 });
 
 async function dueTemplate(f: Fixture, over: Partial<Parameters<typeof createRecurringTemplate>[2]> = {}) {
-  const { id } = await asOrg(f.orgId, (tx) => createRecurringTemplate(tx, f.manager, { ...template(f), ...over, from: '2026-09-01' }));
+  const { id } = await asOrg(f.orgId, (tx) => createRecurringTemplate(tx, f.manager, { ...template(f), ...over, startsOn: '2026-09-01' }));
   return id;
 }
 

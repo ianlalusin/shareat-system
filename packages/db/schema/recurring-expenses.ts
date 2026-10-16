@@ -103,6 +103,8 @@ export const recurringExpenses = pgTable(
     interval: text('interval', { enum: RECURRING_INTERVALS }).notNull(),
     /** Day of the MONTH (1–31) for the monthly family, day of the WEEK (0–6) for the weekly one. */
     anchorDay: integer('anchor_day').notNull(),
+    /** T-430 (migration 0201): the period the template starts from. History: not editable after the first draft. */
+    startsOn: date('starts_on').notNull().default(sql`((now() AT TIME ZONE 'Asia/Manila')::date)`),
     /** ⭐ The job's ONLY cursor. One column, so "did this already draft?" has one answer. */
     nextDueDate: date('next_due_date').notNull(),
     status: text('status', { enum: RECURRING_STATUSES }).notNull().default('active'),
