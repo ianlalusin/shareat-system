@@ -127,8 +127,8 @@ async function insertRate(
   const [row] = await sql<{ id: string }[]>`
     insert into statutory_rates (org_id, agency, effective_from, ee_rate, er_rate, base_kind, floor, ceiling, step, low_threshold,
                                  low_ee_rate, ec_threshold, ec_low, ec_high, source_ref, confirmed_at, confirmed_by)
-    values (${f.orgId}, ${agency}, ${effectiveFrom}, ${r.ee_rate!}, ${r.er_rate!}, ${r.base_kind!}, ${r.floor}, ${r.ceiling}, ${r.step},
-            ${r.low_threshold}, ${r.low_ee_rate}, ${r.ec_threshold}, ${r.ec_low}, ${r.ec_high}, 'T-190 test fixture',
+    values (${f.orgId}, ${agency}, ${effectiveFrom}, ${r.ee_rate!}, ${r.er_rate!}, ${r.base_kind!}, ${r.floor as string}, ${r.ceiling as string}, ${r.step as string},
+            ${r.low_threshold as string}, ${r.low_ee_rate as string}, ${r.ec_threshold as string}, ${r.ec_low as string}, ${r.ec_high as string}, 'T-190 test fixture',
             ${confirmed ? new Date() : null}, ${confirmed ? f.adminId : null})
     returning id`;
   return row!.id;

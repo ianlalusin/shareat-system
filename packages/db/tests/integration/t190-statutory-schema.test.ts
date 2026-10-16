@@ -88,13 +88,16 @@ async function insertSlip(f: F, over: Record<string, string | string[] | null> =
      values ($1, $2, $3, $4, '${f.payRateId}', '1', ${params}) returning id`,
     [run!.id, f.orgId, f.employmentId, f.workerId, ...vals] as never,
   );
-  return (rows[0] as { id: string }).id;
+  return (rows[0] as unknown as { id: string }).id;
 }
 
-const rateRow = (orgId: string, agency: string, from: string, over: { ee?: string; confirmed?: boolean; by?: string } = {}) => sql<{ id: string }[]>`
+const rateRow = async (orgId: string, agency: string, from: string, over: { ee?: string; confirmed?: boolean; by?: string } = {}): Promise<string> => {
+  const [row] = await sql<{ id: string }[]>`
   insert into statutory_rates (org_id, agency, effective_from, ee_rate, er_rate, base_kind, floor, ceiling, source_ref, confirmed_at, confirmed_by)
   values (${orgId}, ${agency}, ${from}, ${over.ee ?? '0.05'}, '0.10', 'gross', '5000', '35000', 'T-190 schema test',
           ${over.confirmed ? new Date() : null}, ${over.confirmed ? over.by! : null}) returning id`;
+  return row!.id;
+};
 
 // =====================================================================================================================
 
@@ -185,7 +188,7 @@ describe('T-190 case 15 - statutory_rates: dating, uniqueness, immutability', ()
 
   it('UPDATE of a CONFIRMED row\'s ee_rate is refused as the app role - and the rate is unchanged  [mutant: UPDATE granted]', async () => {
     const f = await fixture('imm-confirmed');
-    const [{ id }] = (await rateRow(f.orgId, 'sss', '2026-01-01', { confirmed: true, by: f.adminId })) as { id: string }[];
+    const id = await rateRow(f.orgId, 'sss', '2026-01-01', { confirmed: true, by: f.adminId });
     await expect(asApp(f.orgId, (tx) => tx`update statutory_rates set ee_rate = '0.06' where id = ${id!}`)).rejects.toThrow();
     const [r] = await sql<{ ee_rate: string }[]>`select ee_rate::text from statutory_rates where id = ${id!}`;
     expect(Number(r!.ee_rate)).toBe(0.05);
@@ -193,7 +196,7 @@ describe('T-190 case 15 - statutory_rates: dating, uniqueness, immutability', ()
 
   it('UPDATE of an UNCONFIRMED row\'s rate is refused too - the app role may set confirmed_at / confirmed_by and nothing else', async () => {
     const f = await fixture('imm-unconfirmed');
-    const [{ id }] = (await rateRow(f.orgId, 'sss', '2026-01-01')) as { id: string }[];
+    const id = await rateRow(f.orgId, 'sss', '2026-01-01');
     await expect(asApp(f.orgId, (tx) => tx`update statutory_rates set ee_rate = '0.06' where id = ${id!}`)).rejects.toThrow();
     const [r] = await sql<{ ee_rate: string }[]>`select ee_rate::text from statutory_rates where id = ${id!}`;
     expect(Number(r!.ee_rate)).toBe(0.05);
@@ -201,7 +204,7 @@ describe('T-190 case 15 - statutory_rates: dating, uniqueness, immutability', ()
 
   it('confirming works ONCE: the first confirm is accepted, re-confirming (a new time, another person, or clearing it) is refused  [mutant: re-confirm allowed]', async () => {
     const f = await fixture('reconfirm');
-    const [{ id }] = (await rateRow(f.orgId, 'sss', '2026-01-01')) as { id: string }[];
+    const id = await rateRow(f.orgId, 'sss', '2026-01-01');
     await asApp(f.orgId, (tx) => tx`update statutory_rates set confirmed_at = now(), confirmed_by = ${f.adminId} where id = ${id!}`);
     const [first] = await sql<{ confirmed_at: Date; confirmed_by: string }[]>`select confirmed_at, confirmed_by from statutory_rates where id = ${id!}`;
     expect(first!.confirmed_by).toBe(f.adminId);
@@ -214,15 +217,15 @@ describe('T-190 case 15 - statutory_rates: dating, uniqueness, immutability', ()
 
   it('DELETE: an unconfirmed never-used row can be deleted; a confirmed row cannot; a USED row cannot (the payslip FK restricts)', async () => {
     const f = await fixture('delete');
-    const [{ id: free }] = (await rateRow(f.orgId, 'sss', '2026-02-01')) as { id: string }[];
+    const free = await rateRow(f.orgId, 'sss', '2026-02-01');
     await asApp(f.orgId, (tx) => tx`delete from statutory_rates where id = ${free!}`);
     expect(await sql`select 1 from statutory_rates where id = ${free!}`).toHaveLength(0);
 
-    const [{ id: confirmed }] = (await rateRow(f.orgId, 'sss', '2026-03-01', { confirmed: true, by: f.adminId })) as { id: string }[];
+    const confirmed = await rateRow(f.orgId, 'sss', '2026-03-01', { confirmed: true, by: f.adminId });
     await expect(asApp(f.orgId, (tx) => tx`delete from statutory_rates where id = ${confirmed!}`)).rejects.toThrow();
     expect(await sql`select 1 from statutory_rates where id = ${confirmed!}`).toHaveLength(1);
 
-    const [{ id: used }] = (await rateRow(f.orgId, 'sss', '2026-04-01')) as { id: string }[];
+    const used = await rateRow(f.orgId, 'sss', '2026-04-01');
     await insertSlip(f, { sss_rate_id: used! });
     await expect(asApp(f.orgId, (tx) => tx`delete from statutory_rates where id = ${used!}`)).rejects.toThrow();
     expect(await sql`select 1 from statutory_rates where id = ${used!}`).toHaveLength(1);
@@ -232,9 +235,10 @@ describe('T-190 case 15 - statutory_rates: dating, uniqueness, immutability', ()
 describe('T-190 case 15 - withholding_brackets and minimum_wages: the same immutability', () => {
   it('a bracket row: rate cannot be updated, confirming works once', async () => {
     const f = await fixture('bracket');
-    const [{ id }] = await sql<{ id: string }[]>`
+    const [row0] = await sql<{ id: string }[]>`
       insert into withholding_brackets (org_id, frequency, effective_from, "over", base_tax, rate, source_ref)
       values (${f.orgId}, 'semi_monthly', '2026-01-01', '10417', '0', '0.15', 'T-190 schema test') returning id`;
+    const id = row0!.id;
     await expect(asApp(f.orgId, (tx) => tx`update withholding_brackets set rate = '0.20' where id = ${id!}`)).rejects.toThrow();
     await asApp(f.orgId, (tx) => tx`update withholding_brackets set confirmed_at = now(), confirmed_by = ${f.adminId} where id = ${id!}`);
     await expect(asApp(f.orgId, (tx) => tx`update withholding_brackets set confirmed_at = now() where id = ${id!}`)).rejects.toThrow();
@@ -244,9 +248,10 @@ describe('T-190 case 15 - withholding_brackets and minimum_wages: the same immut
 
   it('a minimum-wage row: daily_rate cannot be updated, confirming works once, frequency of brackets is a closed list', async () => {
     const f = await fixture('minwage');
-    const [{ id }] = await sql<{ id: string }[]>`
+    const [row0] = await sql<{ id: string }[]>`
       insert into minimum_wages (org_id, store_id, effective_from, daily_rate, wage_order_ref)
       values (${f.orgId}, ${f.storeId}, '2026-01-01', '695.00', 'T-190 schema test') returning id`;
+    const id = row0!.id;
     await expect(asApp(f.orgId, (tx) => tx`update minimum_wages set daily_rate = '1.00' where id = ${id!}`)).rejects.toThrow();
     await asApp(f.orgId, (tx) => tx`update minimum_wages set confirmed_at = now(), confirmed_by = ${f.adminId} where id = ${id!}`);
     await expect(asApp(f.orgId, (tx) => tx`update minimum_wages set confirmed_at = now() where id = ${id!}`)).rejects.toThrow();

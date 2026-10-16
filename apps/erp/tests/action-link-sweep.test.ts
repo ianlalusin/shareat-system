@@ -444,7 +444,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // +6 (16 Oct): T-433 order page — Print delivery receipt link, BIR invoice no. input + save button, pay-now amount, money account select, receipt photo
     // -1 (16 Oct): T-433 BIR invoice no. form moved into EditableRecord, so its Save button leaves the census
     // +7 (16 Oct): T-434 staff detail page photo and signature controls (net +7 measured, 1259 -> 1266; the "View signature" link is a per-click link).
-    expect(results.length).toBe(1266);
+    // +35 (17 Oct): T-190 payroll screens (rates page, government IDs on the staff page, payslip lines; net +35 measured, 1266 -> 1301).
+    expect(results.length).toBe(1301);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
