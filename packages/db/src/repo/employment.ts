@@ -464,3 +464,23 @@ export async function photoFileIds(tx: Tx, employmentIds: string[]): Promise<Map
   for (const r of rows) out.set(r.id, r.photoFileId ?? null);
   return out;
 }
+
+/** T-434: set (or clear, with null) the employment's ID-card photo. The previous stored_files row is kept. */
+export async function setPhotoFileId(tx: Tx, employmentId: string, fileId: string | null): Promise<void> {
+  await tx.update(employments).set({ photoFileId: fileId, updatedAt: sql`now()` }).where(eq(employments.id, employmentId));
+}
+
+/**
+ * T-434: a person's OPEN employments (`ended_on is null`) with the instant each row was created. `createdAt`, not only
+ * `started_on`, is what a "hired before the upload" test compares: a start date can be back-dated, a creation instant cannot.
+ */
+export async function listOpenForPerson(
+  tx: Tx,
+  personId: string,
+): Promise<{ id: string; storeId: string; createdAt: Date }[]> {
+  const rows = await tx
+    .select({ id: employments.id, storeId: employments.storeId, createdAt: employments.createdAt })
+    .from(employments)
+    .where(and(eq(employments.personId, personId), isNull(employments.endedOn)));
+  return rows;
+}

@@ -47,6 +47,9 @@ export const FILE_PURPOSES = [
   'onboarding_document',
   // T-436 (migration 0205): a medical-certificate photo for a leave request. Row-353 guarded; read only via assertCanReadLeaveDocument.
   'leave_document',
+  // T-434, migration 0204. The signature is PNG-only and read through its own rule (never the shared one).
+  'staff_photo',
+  'staff_signature',
 ] as const;
 export type FilePurpose = (typeof FILE_PURPOSES)[number];
 

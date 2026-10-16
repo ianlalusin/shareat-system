@@ -160,6 +160,11 @@ const COMMANDS: Record<string, string> = {
   'Provision terminal': 'issues a device credential',
   'Reinstate': 'moves a status',
   'Retire this channel': 'moves a status',
+  // T-434 staff photo/signature (managers only; bible rows 353/355)
+  'Save photo': 'T-434 staff photo/signature (managers only; bible rows 353/355): uploads a photo; plain data entry that should read "Save"',
+  'Remove photo': 'T-434 staff photo/signature (managers only; bible rows 353/355): removes the photo',
+  'View signature': 'T-434 staff photo/signature (managers only; bible rows 353/355): opens a signature, audited',
+  'Remove signature': 'T-434 staff photo/signature (managers only; bible rows 353/355): removes the signature',
 };
 /** Forms that only navigate, filter, preview or retry. Not data entry, so G8 does not judge them (ruling 2). */
 const NAVIGATION = new Set(['Show', 'Search', 'Filter', 'Go', 'Refresh', 'Preview', 'Check POS again', 'Retry']);

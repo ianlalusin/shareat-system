@@ -64,6 +64,7 @@ vi.mock('../../src/app/payroll/separations/actions', () => ({ postSeparationActi
 vi.mock('../../src/app/payroll/separations/lib', () => ({
   peso: (n: number) => String(n),
   listStores: async () => [{ id: STORE_A, name: 'Store A' }, { id: STORE_B, name: 'Store B' }],
+  payrollStoresFor: async () => [{ id: STORE_A, name: 'Store A' }, { id: STORE_B, name: 'Store B' }],
   cashAccountsFor: async () => [],
   separationsFor: async () => [],
   worklistFor: SEP.worklistFor,
@@ -153,7 +154,7 @@ describe('R2 - GET inputs and nav keys survive the strip (no cookie)', () => {
   });
   it('nav key survives: ?store=<uuid> deep link still scopes the page with no cookie', async () => {
     await renderSep({ store: STORE_B, employmentId: 'emp-1' });
-    expect(SEP.worklistFor).toHaveBeenCalledWith('org-1', STORE_B);
+    expect(SEP.worklistFor).toHaveBeenCalledWith(ACTOR, STORE_B);
   });
   it('the allow-list is only for GET inputs: a crafted ?error= on separations still shows nothing', async () => {
     const html = await renderSep({ store: STORE_A, error: CRAFTED, separationDate: '2026-10-05' });

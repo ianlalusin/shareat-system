@@ -28,8 +28,10 @@ import {
   recordLeaveDocumentViewed,
   recordLeaveDocumentViewRefused,
 } from '../leave/document-access';
+import { signatureUrl } from './signature';
 
 export * from './driver';
+export { mayViewSignature, SIGNATURE_LINK_SECONDS } from './signature';
 
 /**
  * What each purpose may hold, and how big. ⚠️ v1 used one blanket 25 MB with *"no content-type
@@ -47,6 +49,9 @@ export const PURPOSE_LIMITS: Record<
   onboarding_document: { types: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 25 * 1024 * 1024 },
   // T-436: a medical-certificate photo. Images only; the app-wide 1 MB photo cap applies on top.
   leave_document: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
+  // T-434. The staff ID-card photo, and the on-screen signature (PNG only, under the app-wide 1 MB image ceiling).
+  staff_photo: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
+  staff_signature: { types: ['image/png'], maxBytes: 1024 * 1024 },
 };
 
 /**
@@ -90,6 +95,9 @@ const PURPOSE_CAPABILITY: Record<FilePurpose, Parameters<typeof authorize>[2]> =
   // T-436: this governs UPLOAD only (attaching a certificate is a manage_attendance act). ⛔ READING a leave_document never goes
   // through this map - see `readFileUrl`'s leave branch and `leave/document-access.ts` (bible row 353).
   leave_document: 'manage_attendance',
+  staff_photo: 'enrol_staff',
+  // ⛔ T-434: this governs UPLOAD of a signature only. Signature READS never use it: see `./signature` (`mayViewSignature`).
+  staff_signature: 'enrol_staff',
 };
 
 const EXTENSIONS: Record<string, string> = {
@@ -243,6 +251,8 @@ export async function canReadFiles(tx: Tx, actor: Actor, fileIds: readonly strin
       // ⛔ T-436: a leave document is never offered on the strength of the UPLOAD capability. The screens ask this to draw a
       // "View photo" link; for a certificate the only reader is `openLeaveDocument` (row 353), so no link is ever drawn from here.
       if (file.purpose === 'leave_document') continue;
+      // ⛔ T-434: a signature is NEVER decided here (the shared verdict is keyed by capability + store, the wrong question for it).
+      if (file.purpose === 'staff_signature') continue;
       const key = `${PURPOSE_CAPABILITY[file.purpose]}|${file.storeId ?? ''}`;
       let ok = verdicts.get(key);
       if (ok === undefined) {
@@ -295,6 +305,8 @@ export async function readFileUrl(
       );
       return { url: leaveUrl, contentType: file.contentType };
     }
+    // ⛔ T-434: a signature goes through its own rule, its own 60 s link and its own audit - never `assertCanRead`.
+    if (file.purpose === 'staff_signature') return signatureUrl(trx, actor, file);
     await assertCanRead(trx, actor, file);
 
     const url = await resolveStorageDriver().signedUrl(

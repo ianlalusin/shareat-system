@@ -226,6 +226,24 @@ const EXEMPT: Record<string, string> = {
   // T-290; T-290 (`apps/erp/src/app/admin/access-defaults/actions.ts`) is their caller, and this
   // guard's third `it` is what forced the rows out the moment that became true.
 
+  // ---- T-434 — staff signature (packages/domain/src/files/signature.ts) --------------------
+  assertMayLearnSignatureAbsent:
+    'INTERNAL — `currentSignatureFile` (`people/staff-media.ts`), reached from `viewStaffSignatureUrl` and ' +
+    '`signatureForPrint`, calls it when the person has no signature, so a non-viewer cannot tell "none" from "has one".',
+  auditSignatureChange:
+    'INTERNAL — `setStaffSignature` and `removeStaffSignature` (`people/staff-media.ts`) call it in the same ' +
+    'transaction to audit every signature change.',
+  mayViewSignature:
+    'INTERNAL — `signatureUrl` and `signatureBytes` (`files/signature.ts`) and `staffMediaView` (`people/staff-media.ts`) call it; ' +
+    'it is the single read rule for signatures, never a screen action.',
+  signatureBytes:
+    'INTERNAL — `signatureForPrint` (`people/staff-media.ts`) is its only caller, for the print path.',
+  signatureUrl:
+    'INTERNAL — `readFileUrl` (`files/index.ts`) and `viewStaffSignatureUrl` (`people/staff-media.ts`) call it to ' +
+    'mint the 60-second link.',
+  signatureForPrint:
+    'UNWIRED — RESERVED: print routes for payslips/forms come later (T-434 spec: prints out of scope).',
+
   // ---- T-336 — per-position access defaults at store creation -------------------------------
   seedStoreAccessDefaults:
     'INTERNAL — `createStore` calls it (`stores/service.ts` step 2c) to seed the ruled defaults ' +

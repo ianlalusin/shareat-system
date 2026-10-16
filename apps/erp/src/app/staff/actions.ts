@@ -9,6 +9,7 @@
  * repeated here. Every mutation runs under the org's RLS principal (`withOrgPrincipal`), the same
  * way the items and commissary-catalogue actions do.
  */
+import { redirect } from 'next/navigation';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { STAFF_POSITIONS } from './typed-forms';
@@ -16,8 +17,13 @@ import {
   createEmployment,
   createPerson,
   endEmployment,
+  removeStaffPhoto,
+  removeStaffSignature,
   setEmploymentPositions,
+  setStaffPhoto,
+  setStaffSignature,
   upsertStorePosition,
+  viewStaffSignatureUrl,
   type CreateEmploymentInput,
 } from '@shareat/domain';
 import type { EmploymentStatus } from '@shareat/db/schema';
@@ -303,4 +309,80 @@ export async function reopenPinSignInAction(formData: FormData): Promise<void> {
     ? `PIN sign-in reopened at ${name}.`
     : `PIN sign-in was not stopped at ${name}. Nothing changed.`;
   return await redirectWithFlash('/staff', { store: storeId }, { ok: message });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-434 - staff photo and signature. Thin adapters: the file part and the ids come from the form, the ACTOR from the session,
+// and every gate (enrol_staff at the store, no self-service, PNG-only signature, audit) is the domain function's own.
+// The signature arrives as a file part drawn on the pad, never a data URL.
+// ---------------------------------------------------------------------------------------------------------------------
+
+async function filePart(fd: FormData, key: string): Promise<{ contentType: string; bytes: Uint8Array } | null> {
+  const f = fd.get(key);
+  if (!(f instanceof File) || f.size === 0) return null;
+  return { contentType: f.type, bytes: new Uint8Array(await f.arrayBuffer()) };
+}
+
+export async function setStaffPhotoAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  try {
+    const part = await filePart(formData, 'photo');
+    if (!part) throw new Error('Choose or take a photo first.');
+    await withOrgPrincipal(actor.orgId, (tx) => setStaffPhoto(tx, actor, { employmentId, ...part }));
+  } catch (err) {
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Photo saved.' });
+}
+
+export async function removeStaffPhotoAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => removeStaffPhoto(tx, actor, { employmentId }));
+  } catch (err) {
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Photo removed.' });
+}
+
+export async function setStaffSignatureAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  const personId = str(formData, 'personId');
+  try {
+    const part = await filePart(formData, 'signature');
+    if (!part) throw new Error('Draw the signature first.');
+    await withOrgPrincipal(actor.orgId, (tx) => setStaffSignature(tx, actor, { personId, ...part }));
+  } catch (err) {
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Signature saved.' });
+}
+
+export async function removeStaffSignatureAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  const personId = str(formData, 'personId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => removeStaffSignature(tx, actor, { personId }));
+  } catch (err) {
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Signature removed.' });
+}
+
+/** "View signature": mints a 60-second link per click (audited, refusals audited too) and sends the browser to it. Nothing is stored or logged. */
+export async function viewStaffSignatureAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  const personId = str(formData, 'personId');
+  let url: string;
+  try {
+    ({ url } = await withOrgPrincipal(actor.orgId, (tx) => viewStaffSignatureUrl(tx, actor, { personId })));
+  } catch (err) {
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+  }
+  redirect(`${url}`);
 }

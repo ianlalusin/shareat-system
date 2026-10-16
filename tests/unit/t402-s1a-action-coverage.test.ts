@@ -101,7 +101,7 @@ describe('T-402 S1a - every audit action the code writes is labelled, in both pl
    * script (commit 2a62961, since removed), and 0197 refused to copy it: the HEAD scan above cannot see a writer that no
    * longer exists. So every action string that was EVER passed to an audit write, anywhere in history, must be in 0197.
    *
-   * Pinned list: derived with `git log --all -p -- packages apps scripts` (added lines `action: '...'` in a diff that also
+   * Pinned list: derived with `git log HEAD -p -- packages apps scripts` (added lines `action: '...'` in a diff that also
    * contains `auditLogRepo.append(`, plus the menu `audit(tx, actor, '...')` helper), noise removed (other `action` fields:
    * charge, recognise_income, write_off, inactive, supplier, read), and the dotted actions that post-date 0197 left out
    * (master_data.*_load, menu.option_offer_*), which the catalogue test covers. Add to it when a new undotted action ever ships.
@@ -130,7 +130,8 @@ describe('T-402 S1a - every audit action the code writes is labelled, in both pl
     try {
       const shallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], { cwd: ROOT, encoding: 'utf8' }).trim();
       if (shallow !== 'false') return ctx.skip();
-      log = execFileSync('git', ['log', '--all', '-p', '--no-color', '-G', 'action: |audit[(]', '--', 'packages', 'apps', 'scripts', ':!*.test.ts', ':!*.test.tsx'], {
+      // HEAD, not --all: an unmerged lane branch on origin must not turn main red (DEF-656)
+      log = execFileSync('git', ['log', 'HEAD', '-p', '--no-color', '-G', 'action: |audit[(]', '--', 'packages', 'apps', 'scripts', ':!*.test.ts', ':!*.test.tsx'], {
         cwd: ROOT,
         encoding: 'utf8',
         maxBuffer: 1024 * 1024 * 1024,
