@@ -160,3 +160,25 @@ export async function employmentStoresFor(
     order by s.name`)) as unknown as Record<string, string>[];
   return rows.map((r) => ({ personId: String(r.person_id), storeId: String(r.store_id), storeName: String(r.store_name) }));
 }
+
+/**
+ * T-434: the person's CURRENT signature file id (null = none). ⛔ The ONLY reader of `persons.signature_file_id`; no list,
+ * roster or search select may add the column. Callers are the signature rule and the staff detail loader in
+ * `@shareat/domain`, never a screen.
+ */
+export async function getSignatureFileId(tx: Tx, orgId: string, personId: string): Promise<string | null> {
+  const [row] = await tx
+    .select({ signatureFileId: persons.signatureFileId })
+    .from(persons)
+    .where(and(eq(persons.id, personId), eq(persons.orgId, orgId)))
+    .limit(1);
+  return row?.signatureFileId ?? null;
+}
+
+/** T-434: point the person at a new current signature (or null to remove). The old stored_files row is kept. */
+export async function setSignatureFileId(tx: Tx, orgId: string, personId: string, fileId: string | null): Promise<void> {
+  await tx
+    .update(persons)
+    .set({ signatureFileId: fileId, updatedAt: sql`now()` })
+    .where(and(eq(persons.id, personId), eq(persons.orgId, orgId)));
+}

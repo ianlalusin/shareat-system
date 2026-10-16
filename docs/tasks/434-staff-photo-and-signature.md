@@ -145,3 +145,5 @@ on a card, a list or an export.
 ## Out of scope
 
 Building the payslip, cash advance and ID-card prints; signature history screen; staff self-service.
+
+**Orchestrator note (16 Oct, audit):** the uploader rule compares `employments.created_at` with `stored_files.uploaded_at` (not `started_on`). This is stricter (a back-dated start date cannot pre-date an upload) and is the intended rule.

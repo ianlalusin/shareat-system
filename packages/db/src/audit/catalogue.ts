@@ -204,6 +204,17 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('security.event_store_mismatch', 'security', 'high', 'store', 'stores', 'T-402', { actor: 'either' }),
   def('employment.created', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('employment.ended', 'staff', 'normal', 'store', 'employments', 'T-402'),
+  // T-434: a staff photo is changed on an EMPLOYMENT (the store's ID card). Photo VIEWS are deliberately not logged (every card load would flood it).
+  def('staff_photo.set', 'staff', 'normal', 'store', 'employments', 'T-434'),
+  def('staff_photo.replaced', 'staff', 'normal', 'store', 'employments', 'T-434'),
+  def('staff_photo.removed', 'staff', 'normal', 'store', 'employments', 'T-434'),
+  // T-434 / bible row 353: a signature belongs to the PERSON (entity_id = person id). Payloads carry NO file id, path or URL.
+  // `viewed` / `view_refused` are every attempt to open it (DEF-668, signatures only); admin-read because who looked at a signature is itself sensitive.
+  def('staff_signature.set', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
+  def('staff_signature.replaced', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
+  def('staff_signature.removed', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
+  def('staff_signature.viewed', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
+  def('staff_signature.view_refused', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
   def('employment.positions_set', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('position.reactivated', 'staff', 'normal', 'store', 'positions', 'T-402'),
 

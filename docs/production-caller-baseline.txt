@@ -147,6 +147,7 @@ setDocumentNonBlocking
 setItemPricing
 setTillFloat
 signOffPack
+signatureForPrint
 stalePackageIds
 storedAnywhere
 sumTender

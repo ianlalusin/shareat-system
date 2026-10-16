@@ -73,11 +73,14 @@ export function PhotoInput({
   required,
   className,
   accept = 'image/*,application/pdf',
+  capture,
 }: {
   name: string;
   required?: boolean;
   className?: string;
   accept?: string;
+  /** T-434: `user` opens the phone's front camera (an ID-card photo of the person standing there). */
+  capture?: 'user' | 'environment';
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
@@ -161,6 +164,7 @@ export function PhotoInput({
         name={name}
         required={required}
         accept={accept}
+        capture={capture}
         onChange={onChange}
         className={className}
       />
