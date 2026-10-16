@@ -1,6 +1,6 @@
 # T-410: Guard test: one person, one id, behind every credential
 
-**Status:** SPEC DRAFT 2026-10-15 (Opus planner). Not built. **No migration.** ≈0.75 lane-day, two slices.
+**Status:** **DONE 2026-10-16, merged a879264 (PR #28).** | Earlier: SPEC DRAFT 2026-10-15 (Opus planner). Not built. **No migration.** ≈0.75 lane-day, two slices.
 **Haiku lane** (tests only, every rule and list is written below; no production code changes). One question for Ian.
 
 ## Goal

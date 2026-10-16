@@ -1,6 +1,6 @@
 # T-406 — `accountLabel` helper: account words, not account numbers (batch 1)
 
-**Status:** **BATCH 1 DONE 2026-10-14** (accountLabel on 20 screens); batch 2 SPEC 2026-10-15 (22 files + guard, section below). | SPEC 2026-10-14, Opus. Work list item 3 (`docs/plans/2026-10-14-ian-answers-worklist.md`), review item 15
+**Status:** **BATCH 2 DONE 2026-10-15, merged PR #27** (account names on 22 more screens; ledger tables and account-mapping pickers keep code + name; guard sweeps 41 files). | Earlier: **BATCH 1 DONE 2026-10-14** (accountLabel on 20 screens); batch 2 SPEC 2026-10-15 (22 files + guard, section below). | SPEC 2026-10-14, Opus. Work list item 3 (`docs/plans/2026-10-14-ian-answers-worklist.md`), review item 15
 (`docs/feedback/2026-10-14-ian-feedback-review.md`). Bible row 229: "never an id, a code or a key". No migration. Size S.
 
 ## Goal

@@ -1,6 +1,6 @@
 # T-394: Purge and opening rehearsal on a restored copy; the 31 Dec-2 Jan runbook (DEF-585)
 
-**Status:** **S1+S2 DONE 2026-10-14** (rehearsal tooling; verify + sanitised report), in the release PR. Next: S3 runbook (7 Nov), S4 the 13 Nov rehearsal. | SPEC APPROVED WITH CHANGES 2026-10-12 (fresh Opus review applied). Written at HEAD a9e299b.
+**Status:** **S3 DONE 2026-10-15** (cutover rehearsal + production runbook DRAFTED; durations/owners TBD at S4, sign-off pending Ian), merged PR #27. Next: S4 the 13 Nov rehearsal. | Earlier: **S1+S2 DONE 2026-10-14** (rehearsal tooling; verify + sanitised report), in the release PR. Next: S3 runbook (7 Nov), S4 the 13 Nov rehearsal. | SPEC APPROVED WITH CHANGES 2026-10-12 (fresh Opus review applied). Written at HEAD a9e299b.
 **Model:** Sonnet lanes, **tester first** in S1 and S2, then builder (bible row 184). S3 (the runbook) is written in plan
 mode (Opus) because it records decisions. S4 and S5 are operations with Ian present.
 **Lane:** L1 Cutover, wave 3 (`docs/plans/remaining-build-plan.md` §3.3, plan item C6, plus DEF-585 from C10).

@@ -1,6 +1,6 @@
 # T-412 — `ConfirmDestructive`: two tiers, and the admin PIN is checked on the server
 
-**Status:** SPEC 2026-10-15, Opus. Work list item 7 (`docs/plans/2026-10-14-ian-answers-worklist.md`); bible row 329
+**Status:** **DONE 2026-10-16, merged a879264 (PR #28), migration 0199.** M6 (per-actor PIN miss budget) DEFERRED, see register. Questions answered BY DEFAULT ONLY (recommended options built; Ian has not answered on the page yet). | Earlier: SPEC 2026-10-15, Opus. Work list item 7 (`docs/plans/2026-10-14-ian-answers-worklist.md`); bible row 329
 (Ian Q11 "a"), row 196 (adminless fallback), §2 rule 7 / RULES §1.7 (no client-only authorization). Builds on T-302/T-303/
 T-395 (org-scoped PIN lookup, `pinAttemptsRepo` throttle). **No migration** (reuses `pin_attempt_throttle` and
 `sign_in_attempts`; the new audit action is a TS catalogue entry). Size M-L.

@@ -1,6 +1,6 @@
 # T-407: Ended employment stops sign-in and ends live sessions (DEF-649, DEF-650)
 
-**Status:** SPEC DRAFT 2026-10-15 (Opus planner). Not built. **No migration.** ≈2.5 lane-days, four slices.
+**Status:** **DONE 2026-10-15, merged PR #27** (DEF-649/650 fixed: ended employment blocks email and PIN sign-in and ends sessions). Ian answered Q1-Q3 (recommended). Live since the 2e9d72d deploy (15 Oct ~22:08 Manila). | Earlier: SPEC DRAFT 2026-10-15 (Opus planner). Not built. **No migration.** ≈2.5 lane-days, four slices.
 Three questions for Ian below; the recommended option is what gets built.
 
 ## Goal
