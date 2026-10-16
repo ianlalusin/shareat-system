@@ -45,6 +45,9 @@ const EXEMPT: Record<string, string> = {};
 // `<button>` labels written in app/ - they are the `label=` prop of <ConfirmDestructive>, whose own submit button is the one
 // control (apps/erp/tests/t412-destructive-census.test.ts is the guard for those). Their entries left this list with them.
 const COMMANDS: Record<string, string> = {
+  'Delete draft': 'T-418: discards an unposted expense draft; one click, no PIN (Ian 16 Oct)',
+  'Delete usage draft': 'T-418: discards an unposted usage draft; one click, no PIN (Ian 16 Oct)',
+  'Delete template': 'T-418: deletes a never-used recurring template; one click, no PIN (Ian 16 Oct)',
   'Restore recipe': 'moves a status (T-413)',
   'Save recipe': 'T-413: label pinned by the T-413 screen tests; it saves a recipe (planner to rule: Save vs Save recipe)',
   'Record payment': 'books money out for good (Q2)',

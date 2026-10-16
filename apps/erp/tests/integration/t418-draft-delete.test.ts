@@ -158,7 +158,7 @@ describe('T-418 case 4: deleteDraftAction on a POSTED expense is refused, PIN or
     const id = await expense(f, true);
     expect(await expenseStatus(id)).toBe('posted');
     const journal = await journalCount(f.orgId);
-    for (const fields of [{ expenseId: id }, { expenseId: id, adminPin }]) {
+    for (const fields of [{ expenseId: id }, { expenseId: id, adminPin }] as Record<string, string>[]) {
       const o = await runAction(EXP, 'deleteDraftAction', fields, f.manager);
       expect(o.flash.error ?? '', 'refused for the right reason, not as a PIN problem').toContain('Only a draft can be deleted');
       expect(await expenseStatus(id)).toBe('posted');
@@ -175,7 +175,7 @@ describe('T-418 case 5: deleteUsageDraftAction on a POSTED usage record is refus
     const before = await usageState(id);
     const moves = await movementCount(f.orgId);
     expect(JSON.parse(before).rec).toBe('posted');
-    for (const fields of [{ recordId: id, storeId: f.storeId }, { recordId: id, storeId: f.storeId, adminPin }]) {
+    for (const fields of [{ recordId: id, storeId: f.storeId }, { recordId: id, storeId: f.storeId, adminPin }] as Record<string, string>[]) {
       const o = await runAction(USE, 'deleteUsageDraftAction', fields, f.manager);
       expect(o.flash.error, 'refused').toBeDefined();
       expect(o.flash.error, 'refused because it is not a draft, not for want of a PIN').not.toBe(ADMIN_PIN_REFUSED);
@@ -190,7 +190,7 @@ describe('T-418 case 6: deleteTemplateAction on a template that HAS produced an 
     const f = await moneyFixture(sql, 't418-c6');
     const adminPin = await adminPinOf(f);
     const id = await template(f, true);
-    for (const fields of [{ templateId: id, storeId: f.storeId }, { templateId: id, storeId: f.storeId, adminPin }]) {
+    for (const fields of [{ templateId: id, storeId: f.storeId }, { templateId: id, storeId: f.storeId, adminPin }] as Record<string, string>[]) {
       const o = await runAction(REC, 'deleteTemplateAction', fields, f.manager);
       expect(o.flash.error ?? '').toContain('pause it instead');
       expect(await templateExists(id)).toBe(true);
