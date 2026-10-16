@@ -23,13 +23,16 @@ import { isPaymongoQrMethod, shouldOfferPaymongoQr } from "@/lib/payments/paymon
 import { useLocalProfile } from "@/context/local-profile-context";
 import { PaymongoQrView } from "@/components/cashier/paymongo-qr-view";
 import { SessionCardBanner } from "@/components/cashier/SessionCardBanner";
+import { storedPesosToCentavos, toWirePesos } from "@/lib/money/centavos";
+// A peso amount made exact (whole centavos back to the peso number the form holds).
+import { roundMoney as normalizePesos } from "@/lib/money";
 
 // --- Validation ---
 function validatePayments(payments: Payment[], grandTotalCents: number, paymentMethods: ModeOfPayment[]): string | null {
   if (!payments || payments.length === 0) return "Add at least one payment method.";
   for (const p of payments) {
     if (!p.methodId) return "Select a payment method.";
-    const amountCents = Math.round(Number(p.amount || 0) * 100);
+    const amountCents = storedPesosToCentavos(p.amount);
     if (amountCents <= 0) return "Payment amounts must be greater than zero.";
     const methodDetails = paymentMethods.find(pm => pm.id === p.methodId);
     if (!methodDetails) return "Payment method not found. It may have been deleted.";
@@ -40,9 +43,9 @@ function validatePayments(payments: Payment[], grandTotalCents: number, paymentM
       return "Scan-to-pay tender isn't paid yet — generate the QR and wait for payment.";
     }
   }
-  const totalPaidCents = payments.reduce((s, p) => s + Math.round(Number(p.amount || 0) * 100), 0);
+  const totalPaidCents = payments.reduce((s, p) => s + storedPesosToCentavos(p.amount), 0);
   if (totalPaidCents < grandTotalCents - 1) {
-    return `Payment is not enough. Balance: ₱${((grandTotalCents - totalPaidCents) / 100).toFixed(2)}`;
+    return `Payment is not enough. Balance: ₱${toWirePesos(grandTotalCents - totalPaidCents).toFixed(2)}`;
   }
   const changeCents = Math.max(0, totalPaidCents - grandTotalCents);
   if (changeCents > 1) {
@@ -53,7 +56,7 @@ function validatePayments(payments: Payment[], grandTotalCents: number, paymentM
     );
     const cashPaidCents = payments
       .filter(p => cashIds.has(p.methodId))
-      .reduce((s, p) => s + Math.round(Number(p.amount || 0) * 100), 0);
+      .reduce((s, p) => s + storedPesosToCentavos(p.amount), 0);
     if (cashPaidCents < changeCents) {
       return "Overpayment must be covered by Cash so change can be issued.";
     }
@@ -159,7 +162,7 @@ export function PaymentModal({
                 .map(rp => ({
                   id: `rp-${rp.id}`,
                   methodId: rp.methodId,
-                  amount: Math.round((Number(rp.amount) || 0) * 100) / 100,
+                  amount: normalizePesos(rp.amount),
                   reference: rp.reference ?? "",
                   fromReservationPaymentId: rp.id,
                 }));
@@ -187,7 +190,7 @@ export function PaymentModal({
           prepaidLines.push({
             id: `qr-${dSnap.id}`,
             methodId: data.methodId,
-            amount: Math.round((Number(data.amount) || 0) * 100) / 100,
+            amount: normalizePesos(data.amount),
             reference,
           });
         }
@@ -197,9 +200,9 @@ export function PaymentModal({
 
       if (cancelled) return;
 
-      const seededTotal = prepaidLines.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-      const remainingCents = Math.max(0, Math.round(grandTotal * 100) - Math.round(seededTotal * 100));
-      const remaining = remainingCents / 100;
+      const seededCents = prepaidLines.reduce((s, p) => s + storedPesosToCentavos(p.amount), 0);
+      const remainingCents = Math.max(0, storedPesosToCentavos(grandTotal) - seededCents);
+      const remaining = toWirePesos(remainingCents);
 
       const cashMethod = paymentMethods.find(pm => pm.type === "cash");
       const defaultMethodId = cashMethod?.id || (paymentMethods.length > 0 ? paymentMethods[0].id : "");
@@ -207,7 +210,7 @@ export function PaymentModal({
       let lines: Payment[];
       if (prepaidLines.length === 0) {
         const initialId = `pay-${Date.now()}`;
-        lines = [{ id: initialId, methodId: defaultMethodId, amount: Math.round(grandTotal * 100) / 100, reference: "" }];
+        lines = [{ id: initialId, methodId: defaultMethodId, amount: normalizePesos(grandTotal), reference: "" }];
       } else if (remaining > 0) {
         const newId = `pay-${Date.now()}`;
         lines = [...prepaidLines, { id: newId, methodId: defaultMethodId, amount: remaining, reference: "" }];
@@ -227,12 +230,12 @@ export function PaymentModal({
     return () => { cancelled = true; };
   }, [open, grandTotal, paymentMethods, reservationId, storeId, sessionId]);
 
-  const grandTotalCents = Math.round(grandTotal * 100);
-  const totalPaid = useMemo(() => payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0), [payments]);
-  const totalPaidCents = Math.round(totalPaid * 100);
+  const grandTotalCents = storedPesosToCentavos(grandTotal);
+  const totalPaidCents = useMemo(() => payments.reduce((sum, p) => sum + storedPesosToCentavos(p.amount), 0), [payments]);
+  const totalPaid = toWirePesos(totalPaidCents);
   const remainingCents = grandTotalCents - totalPaidCents;
-  const remainingBalance = Math.max(0, remainingCents) / 100;
-  const change = Math.max(0, -remainingCents) / 100;
+  const remainingBalance = toWirePesos(Math.max(0, remainingCents));
+  const change = toWirePesos(Math.max(0, -remainingCents));
   const hasUnpaidGatewayRow = payments.some(p => {
     const methodDetails = paymentMethods.find(pm => pm.id === p.methodId);
     return !!methodDetails && isPaymongoQrMethod(methodDetails) && (!p.reference || String(p.reference).trim().length === 0);
@@ -242,7 +245,7 @@ export function PaymentModal({
   const addPayment = () => {
     const cashMethod = paymentMethods.find(pm => pm.type === "cash");
     const defaultMethodId = cashMethod?.id || (paymentMethods.length > 0 ? paymentMethods[0].id : "");
-    const newAmount = remainingBalance > 0 ? Math.round(remainingBalance * 100) / 100 : 0;
+    const newAmount = remainingBalance > 0 ? normalizePesos(remainingBalance) : 0;
     const newId = `pay-${Date.now()}`;
     setPayments(prev => [...prev, { id: newId, methodId: defaultMethodId, amount: newAmount, reference: "" }]);
     setActivePaymentId(newId);
@@ -362,7 +365,7 @@ export function PaymentModal({
     }
 
     setIsProcessing(true);
-    const normalizedPayments = payments.map(p => ({ ...p, amount: Math.round(Number(p.amount || 0) * 100) / 100 }));
+    const normalizedPayments = payments.map(p => ({ ...p, amount: normalizePesos(p.amount) }));
 
     // --- OFFLINE ---
     if (!isOnline) {

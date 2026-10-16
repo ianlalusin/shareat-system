@@ -2,6 +2,7 @@
 
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
+import { storedPesosToCentavos, toWirePesos } from "@/lib/money/centavos";
 
 /**
  * Start-of-shift-day in ms, anchored at 4 AM Asia/Manila (mirrors getShiftDayId
@@ -75,13 +76,13 @@ export async function computeCashSales(
       // don't add it again (the re-ring receipt already counts as normal cash).
       if (r?.voidCashRetainedReversed === true) return;
       const retained = Number(r?.voidCashRetained || 0);
-      if (retained > 0) totalCents += Math.round(retained * 100);
+      if (retained > 0) totalCents += storedPesosToCentavos(retained);
       return;
     }
     const mop = (r?.analytics?.mop ?? {}) as Record<string, number>;
     for (const [k, v] of Object.entries(mop)) {
-      if (isCashKey(k)) totalCents += Math.round(Number(v || 0) * 100);
+      if (isCashKey(k)) totalCents += storedPesosToCentavos(v);
     }
   });
-  return totalCents / 100;
+  return toWirePesos(totalCents);
 }

@@ -145,7 +145,8 @@ describe('T-422 case 3 - closure guard', () => {
   it('every non-test .ts/.tsx under src is reachable from the kept routes. Mutant: "copied all of src/" (dead admin code)', () => {
     const reach = closure(routeRoots());
     const orphans = srcFiles()
-      .filter((f) => isCode(f) && !isTest(f) && !reach.has(f))
+      // T-423 slice T: test support (src/test-helpers/**, vendored src/**/__fixtures__/**) is read by tests only, never by a route.
+      .filter((f) => isCode(f) && !isTest(f) && !reach.has(f) && !/^src\/(test-helpers\/|(.*\/)?__fixtures__\/)/.test(rel(f)))
       .map(rel)
       .sort();
     expect(orphans).toEqual([]);

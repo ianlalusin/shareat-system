@@ -12,7 +12,7 @@ import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { voidSession } from "./firestore";
 import { voidSessionOffline } from "./offlineVoid";
-import { addToQueue } from "@/lib/offline/payment-queue";
+import { addToQueue, getQueue, removeFromQueue } from "@/lib/offline/payment-queue";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import type { ActiveSession } from "./active-sessions-grid";
 import type { AppUser } from "@/context/auth-context";
@@ -59,15 +59,19 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
         const redemptionIds = voidResult?.reversedRedemptionIds ?? [];
         if (firebaseUser && redemptionIds.length > 0) {
           const token = await firebaseUser.getIdToken();
-          await Promise.all(
+          const results = await Promise.all(
             redemptionIds.map((redemptionId) =>
               fetch("/api/loyalty/redeem", {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ redemptionId, storeId, reason: "void" }),
-              }).catch((e) => console.warn("[Loyalty] reverse on void failed (non-fatal):", e)),
+              }).then((r) => r.ok).catch((e) => { console.warn("[Loyalty] reverse on void failed (non-fatal):", e); return false; }),
             ),
           );
+          // T-423: voidSession queued this reversal before it committed. Done here => drop the queued copy; failed => the queue retries it.
+          if (results.every(Boolean)) {
+            getQueue().filter((q) => q.sessionId === session.id && q.kind === "void").forEach((q) => removeFromQueue(q.id));
+          }
         }
 
         if (firebaseUser && currentPin) {
