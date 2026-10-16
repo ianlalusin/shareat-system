@@ -93,7 +93,7 @@ describe.each(names)('T-417 apps/%s is a real workspace', (app) => {
     expect(pkg.devDependencies?.['@capacitor/android']).toMatch(/^\^6/);
   });
 
-  it('is an empty shell: one page, no API routes (ruling 3)', () => {
+  it('has a root page and no API routes (ruling 3; T-422 for pos)', () => {
     expect(existsSync(path.join(repoRoot, dir, 'src/app/layout.tsx'))).toBe(true);
     expect(existsSync(path.join(repoRoot, dir, 'src/app/page.tsx'))).toBe(true);
     const walk = (d: string): string[] =>
@@ -103,7 +103,10 @@ describe.each(names)('T-417 apps/%s is a real workspace', (app) => {
     const srcApp = path.join(repoRoot, dir, 'src/app');
     const routeHandlers = walk(srcApp).filter((f) => /[\\/]route\.(ts|js|tsx)$/.test(f));
     expect(routeHandlers).toEqual([]);
-    expect(read(dir, 'src/app/page.tsx')).toContain(app === 'pos' ? 'Shareat POS v2' : 'Shareat Customer v2');
+    // T-422 filled apps/pos with POS v1's floor screens (its root page renders the login page), so
+    // for pos the app name is checked where the copy puts it: the root layout's title.
+    if (app === 'pos') expect(read(dir, 'src/app/layout.tsx')).toContain('Shareat POS v2');
+    else expect(read(dir, 'src/app/page.tsx')).toContain('Shareat Customer v2');
   });
 
   it('gitignores build output and signing material', () => {

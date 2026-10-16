@@ -1,0 +1,161 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Nav "needs attention" alert — discrete 3-color blink. Used for pending
+   (unconfirmed) reservations and for new online orders. */
+@keyframes reservationAlertBlink {
+  0%, 32.9%  { background-color: #ef4444; color: #fff; }
+  33%, 65.9% { background-color: #f59e0b; color: #fff; }
+  66%, 100%  { background-color: #10b981; color: #fff; }
+}
+.reservation-alert-blink,
+.nav-alert-blink {
+  animation: reservationAlertBlink 1.35s steps(1, end) infinite;
+  border-radius: 9999px;
+  padding-inline: 0.5rem;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 240 5.9% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 5.9% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 5.9% 10%;
+    --primary: 42 100% 50%; /* Orange-yellow */
+    --primary-foreground: 0 0% 0%; /* Black text on yellow */
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 5.9% 10%; /* Black for selected state */
+    --accent-foreground: 0 0% 98%; /* White text on black */
+    --destructive: 0 85% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 85.9%;
+    --input: 240 5.9% 90%;
+    --ring: 42 100% 50%; /* Orange-yellow for ring */
+    --radius: 0.5rem;
+  }
+ 
+  .dark {
+    --background: 240 5.9% 10%;
+    --foreground: 0 0% 98%;
+    --card: 240 5.9% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 5.9% 10%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 42 100% 50%; /* Orange-yellow */
+    --primary-foreground: 0 0% 0%; /* Black text on yellow */
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 0 0% 98%; /* White for selected state in dark mode */
+    --accent-foreground: 240 5.9% 10%; /* Black text on white */
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 42 100% 50%; /* Orange-yellow for ring */
+  }
+}
+ 
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans), sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* =========================
+   Receipt printing safety
+   ========================= */
+.receipt-view {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  line-height: 1.1 !important;
+  padding-top: 5mm !important;
+}
+
+.receipt-58 { width: 48mm; margin: 0 auto; }
+.receipt-80 { width: 72mm; margin: 0 auto; }
+
+
+@media print {
+  @page {
+    margin: 0;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    width: var(--receipt-width, 80mm) !important;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+  
+  #receipt-print-root, 
+  #receipt-print-root * {
+    visibility: visible !important;
+  }
+
+  #receipt-print-root {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: var(--receipt-width, 80mm) !important;
+    max-width: none !important;
+    display: block !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  #print-receipt-area {
+    width: var(--receipt-width, 80mm) !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  .no-print { display: none !important; }
+
+  .receipt-view {
+    box-shadow: none !important;
+    border: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .receipt-section,
+  .receipt-item-row {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  * { box-shadow: none !important; }
+}
+
+#receipt-print-root[data-paper="58mm"] { --receipt-width: 58mm; }
+#receipt-print-root[data-paper="80mm"] { --receipt-width: 80mm; }
+    
+
+    
+
+    
