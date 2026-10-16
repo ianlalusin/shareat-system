@@ -61,7 +61,7 @@ function manilaToday(nowMs = Date.now()): string {
 /** T-430 D1/D5: how many owed due dates a cursor move skips over (old cursor up to, not including, the new one). */
 function droppedDueDates(template: { nextDueDate: string; interval: RecurringInterval; anchorDay: number }, newCursor: string): number {
   let n = 0;
-  for (let d = template.nextDueDate; d < newCursor && n < 5000; d = nextDueDateAfter(d, template.interval, template.anchorDay)) n += 1;
+  for (let d = template.nextDueDate; d.localeCompare(newCursor) < 0 && n < 5000; d = nextDueDateAfter(d, template.interval, template.anchorDay)) n += 1;
   return n;
 }
 
@@ -158,13 +158,13 @@ export async function createRecurringTemplate(
     // T-430 D1: a start before the store opened has no books to land in; a store that has not opened has no past to catch up.
     const store = await storesRepo.getById(trx, actor.orgId, input.storeId);
     if (!store) throw new Error('that store does not exist.');
-    if (store.openingDate !== null && startsOn < store.openingDate) {
+    if (store.openingDate !== null && startsOn.localeCompare(store.openingDate) < 0) {
       throw refuse(
         `createRecurringTemplate: startsOn ${startsOn} is before the store's opening date ${store.openingDate}.`,
         `Starts from cannot be before the store opened (${store.openingDate}).`,
       );
     }
-    if (store.openingDate === null && startsOn < today) {
+    if (store.openingDate === null && startsOn.localeCompare(today) < 0) {
       throw refuse(
         `createRecurringTemplate: startsOn ${startsOn} is in the past but the store has no opening date.`,
         'This store has no opening date yet, so Starts from cannot be in the past. Set the store opening date first, or start from today.',

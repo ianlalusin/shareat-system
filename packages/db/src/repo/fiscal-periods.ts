@@ -578,12 +578,12 @@ export async function firstOpenDateOnOrAfter(
       .from(fiscalPeriods)
       .where(and(eq(fiscalPeriods.orgId, orgId), lte(fiscalPeriods.startsOn, d), gte(fiscalPeriods.endsOn, d)))
       .limit(1);
-    if (!row || row.status === 'open') return d > today ? null : { date: d, shutBy };
+    if (!row || row.status === 'open') return d.localeCompare(today) > 0 ? null : { date: d, shutBy };
     shutBy ??= { status: row.status as 'closed' | 'locked', startsOn: row.startsOn, endsOn: row.endsOn };
     const next = new Date(`${row.endsOn}T00:00:00Z`);
     next.setUTCDate(next.getUTCDate() + 1);
     d = next.toISOString().slice(0, 10);
-    if (d > today) return null;
+    if (d.localeCompare(today) > 0) return null;
   }
   return null;
 }

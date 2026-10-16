@@ -162,11 +162,11 @@ export async function runRecurringExpenses(
             let cursor = template.nextDueDate;
             let draftedHere = 0;
             // Hard stop on a pathological cursor; the cap and the cursor's own advance end every real loop first.
-            for (let guard = 0; cursor <= today && guard < 500; guard++) {
+            for (let guard = 0; cursor.localeCompare(today) <= 0 && guard < 500; guard++) {
               if (draftedHere >= CATCH_UP_CAP) {
                 // Still owed after the cap: reported, and the template stays due for tomorrow night.
                 let n = 0;
-                for (let d = cursor; d <= today && n < 5000; d = nextDueDate(d, template.interval, template.anchorDay)) n += 1;
+                for (let d = cursor; d.localeCompare(today) <= 0 && n < 5000; d = nextDueDate(d, template.interval, template.anchorDay)) n += 1;
                 capped += n;
                 break;
               }
