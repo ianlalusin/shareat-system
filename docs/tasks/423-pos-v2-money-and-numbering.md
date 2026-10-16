@@ -49,7 +49,8 @@ v2 writes to the same `shareat-hub-v2` documents that v1's server analytics and 
    only re-exports for old imports; the private `round()` in `tax.ts` is deleted. **Exactly one rounding
    implementation** (DEF-003).
 2. **Bill math in exact integers, rounded only where v1 rounds.** ✎R `calculateBillTotals` keeps its signature but
-   computes intermediates as exact scaled integers (centavos x 10,000: no rounding between stages) and rounds half-up
+   computes intermediates as scaled integers (centavos x 10,000; ✎R2 near-exact: dividing by 1.12 is the one place
+   that scale is not exact, which is why the BigInt oracle, not this function, is the exact reference) and rounds half-up
    to centavos ONLY at v1's named stages (`tax.ts:129-131` grossSubtotal, lineDiscountsTotal, lineChargesTotal; the
    VAT split; totalDiscounts; grandTotal); percent charges on "total" use the UNROUNDED tax as v1 does
    (`tax.ts:203-207`). Per-line amounts needed elsewhere are allocated from the rounded totals afterwards
@@ -118,7 +119,8 @@ already in the lockfile, else an in-memory IDB shim written in the test), `apps/
 **S3 — unpaid void** (Ruling 9).
 
 ## Acceptance (each names the mutant it kills)
-1. `centavos.test.ts`: `pesosToCentavos(0.1+0.2)` = 30; `pesosToCentavos(1.005)` throws; `allocate(100,[1,1,1])` sums
+1. `centavos.test.ts`: `storedPesosToCentavos(0.1+0.2)` = 30; ✎R2 `storedPesosToCentavos(1.005)` rounds to 101 and is
+   counted; `parsePesoInput("1.005")` is refused; `allocate(100,[1,1,1])` sums
    to 100. Kills: float pass-through; lossy allocation.
 2. Golden property: ≥ 2,000 bills, every field within 1 centavo of v1; every wire amount × 100 is an integer. Kills: a
    changed discount/VAT stage; float drift reaching the wire.

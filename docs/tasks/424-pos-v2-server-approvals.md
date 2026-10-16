@@ -75,7 +75,8 @@ keep reading the same numbers they read today.
    parent (query by `parentReceiptId`), never read from the client-writable counters on the parent; ✎R **idempotent:**
    the request is keyed on `receiptNumber`: if its `receiptNumbers` doc already points at a refund of the same parent
    with the same body hash, return that refund (a timed-out retry never pays twice); a different body on the same
-   number is refused; ✎R **amount (M2):** the refund of each unit is its share of what the customer actually PAID:
+   number is refused; ✎R2 the body hash leaves out `pin` (a manager retyping the PIN must not turn a safe retry into
+   a refusal); ✎R **amount (M2):** the refund of each unit is its share of what the customer actually PAID:
    `allocate(receipt total in centavos, by line net)` gives every line its paid amount (VAT added on top at VAT-exclusive
    stores, the senior/PWD VAT removal and 20%, discounts, loyalty and charges are all inside `total`), units take equal
    shares with the last unit of a line taking the remainder, and all refunds of one receipt can never exceed `total`
@@ -92,7 +93,7 @@ keep reading the same numbers they read today.
    token from another project).
 7. **Tender correction** `POST /api/pos2/tender-corrections` `{storeId, receiptId, fromMethod, toMethod, amount,
    reference, reason, pin, requestId}`. ✎R `requestId` (uuid) is the correction doc's id: a retry returns the same doc
-   (B2). Refuse unless: receipt `final` and not a refund; `amount` (centavos, > 0) ≤ the receipt's
+   (B2); ✎R2 a retry with the same `requestId` but a different body is refused. Refuse unless: receipt `final` and not a refund; `amount` (centavos, > 0) ≤ the receipt's
    `analytics.mop[fromMethod]` ✎R MINUS the sum of this receipt's active `pos2-correction` docs already moving money
    out of `fromMethod` (plus any moved into it), read inside the same transaction, so stacked corrections can never
    drive a method negative (`v1-methods.ts:85` would refuse the day); `toMethod` is an active `storeModesOfPayment` with a different name; a reference when
@@ -114,12 +115,18 @@ keep reading the same numbers they read today.
    the full from-amount, reference, reason, PIN pad); the void-session dialog calls the route. The disabled "Void —
    coming in the safe flow" button from T-422 is replaced by Refund (a paid receipt is never voided, row 272).
 10a. ✎R **Port of v1's analytics delta for sales (M5).** The test Firebase project has no v1 server or reconcile cron,
-    so the v2 server also serves `/api/pos2/analytics/apply-delta` (port of v1's route, same idempotency flags) and
-    the APK sends v2's sale and void deltas there. Loyalty, PINs and online orders keep using v1's server and do not
+    so the v2 server also serves `/api/pos2/analytics/apply-delta` (port of v1's route, same idempotency flags).
+    ✎R2 **It is used only where proven:** the APK sends sale and void deltas there only when built with
+    `NEXT_PUBLIC_POS2_ANALYTICS=1` (test-project builds); production builds keep calling v1's `apply-delta` until a
+    parity test passes AND the orchestrator flips it. Slice **S10** owns the port and its parity test: the vendored
+    real v1 delta code (as fixtures, read via `git show e26d0c1:`) and the port produce byte-identical day / month /
+    year / preset deltas for payment, void and refund receipts over a fixture corpus including offline, discounted,
+    VAT-exempt and refunded receipts. Loyalty, PINs and online orders keep using v1's server and do not
     work on the test project; the soak plan says so.
 11. ✎R **Detector (M4).** `apps/pos/scripts/pos2-audit.mjs` (read-only, run by a person): lists, per v2 store and day,
     refund receipts without `approvedByPersonId` or without a `receiptNumbers` doc, and `paymentConversions` without
-    `source: 'pos2-correction'`. Output is counts and receipt numbers only.
+    `source: 'pos2-correction'`, ✎R2 and `pos2-correction` docs that v1 has since voided. Output is counts and receipt
+    numbers only.
 12. **Ops is not this lane's.** The lane writes `docs/ops/pos2-runbook.md` (DNS, Caddy route, env file, unit install,
     first start, memory check) and a `deploy.yml` change PROPOSAL in the task report; the orchestrator applies deploy
     and ops. Never build on, or connect to, a droplet.
@@ -128,8 +135,14 @@ keep reading the same numbers they read today.
 **T** tester first (red for the right reason): route tests with an injected Firestore port (in-memory fake, no live
 project); `packages/auth` integration tests for `verifyPosManagerApproval` on its own test DB; tree guards for the
 server boundary; an ERP-feed contract test that runs `v1-methods`/`v1-derive` on the day doc a refund and a correction
-produce. **S4** skeleton + caller identity + config 503 + CORS + build-cap stash. **S5** approval function, capability,
-matrix row (+ migration only if needed). **S6** refund. **S7** correction. **S8** void route. **S9** UI wiring + runbook.
+produce. **S4** skeleton + caller identity + config 503 + CORS + build-cap stash. **S5** ✎R2 approval function, capability `approve_pos_correction` and matrix row, AND the terminal link:
+the migration (number from the orchestrator) creating `pos_terminal_links` with its `classification.ts` and
+`rls/registry.ts` entries; the writer `provisionPosTerminalLink(tx, actor, {...})` in `packages/domain`, gated by the
+EXISTING capability that provisions clock terminals (named in the report after reading `provision-terminal`), audited,
+and reached from the same provisioning script; a "This tablet's device id" line with a copy button on `/settings` so
+the person provisioning can record it. A reinstall makes a new device id: approvals then fail with "This tablet is not
+registered for approvals yet. Ask an administrator to register it." until it is re-provisioned (the old link is
+revoked by the same writer). **S6** refund. **S7** correction. **S8** void route. **S9** UI wiring + runbook. **S10** ✎R2 analytics port + parity test (Ruling 10a).
 
 ## Acceptance (each names the mutant it kills)
 1. No client file imports `firebase-admin`, `@shareat/db`, `@shareat/auth`, `@shareat/domain`, or `src/server/**`;
@@ -156,6 +169,11 @@ matrix row (+ migration only if needed). **S6** refund. **S7** correction. **S8*
    and after; `paymentConversions` doc has v1's fields + the new ones. Kills: editing a paid receipt (row 272);
    correcting a closed shift. ✎R A second correction of the same full amount is refused; a retry with the same
    `requestId` returns the first doc; `dayId` equals the receipt's day even when corrected after midnight.
+11. ✎R2 Re-provisioning: a new device id on the same tablet is refused with the "not registered" sentence until the
+    writer re-links it; the old link is revoked; only the provisioning capability can write a link. Kills: approvals
+    silently working on an unregistered device.
+12. ✎R2 Analytics parity (S10): port vs vendored v1 delta code byte-identical over the corpus; a production build
+    without `NEXT_PUBLIC_POS2_ANALYTICS` calls v1's `apply-delta`. Kills: a drifting copy changing ERP day totals.
 10. ✎R B1 mutant: a forged Firestore claim doc and a forged `deviceId` of another store change neither the store
     checked nor the bucket charged; a non-uuid `deviceId` is a 400, not a 500.
 8. Void route: cashier without PIN refused; manager role or manager PIN passes; paid session refused. Kills: client-only
