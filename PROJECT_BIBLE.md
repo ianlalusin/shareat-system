@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1687` 13. Decision log
-- `1688–1707` 14. Amendment protocol
-- `1708–1712` 15. Engineering standards — the industry practices this project follows
-  - `1713–1718` 15.1 Build order: walking skeleton first
-  - `1719–1730` 15.2 Golden-master testing — the most important practice here
-  - `1731–1739` 15.3 Strangler Fig, not big-bang cutover
-  - `1740–1744` 15.4 No dual-write
-  - `1745–1753` 15.5 Expand/contract migrations
-  - `1754–1762` 15.6 Observability from day zero, not later
-  - `1763–1767` 15.7 CI gates
-  - `1768–1772` 15.8 Backups and a tested restore
-  - `1773–1777` 15.9 Twelve-Factor config
-  - `1778–1785` 15.10 Append-only ledgers — but not event sourcing
-  - `1786–1790` 15.11 Defence in depth
-  - `1791–1819` 15.12 Skills are lenses, not assurance
-  - `1820–1826` 15.13 Reconciliation is a permanent feature
-- `1827–1831` 16. The accounting spine
-  - `1832–1863` 16.0 What we are actually fixing — the diagnosis
-  - `1864–1907` 16.1 The ten invariants — non-negotiable
-  - `1908–1922` 16.2 The oracle: how "correct" is tested
-  - `1923–1944` 16.3 The model — header + lines, not legs
-  - `1945–1964` 16.4 Deliberately simpler than ERPNext
-  - `1965–2031` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2032–2056` 16.6 What v1 already gets right — preserve the intent
-  - `2057–2078` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2079–2093` 16.8 What v1's accounting already gets right
-  - `2094–2137` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2138–2188` 16.10 Posting patterns — one canonical pattern per business event
-  - `2189–2221` 16.11 Inventory's accounting integration
+- `1329–1688` 13. Decision log
+- `1689–1708` 14. Amendment protocol
+- `1709–1713` 15. Engineering standards — the industry practices this project follows
+  - `1714–1719` 15.1 Build order: walking skeleton first
+  - `1720–1731` 15.2 Golden-master testing — the most important practice here
+  - `1732–1740` 15.3 Strangler Fig, not big-bang cutover
+  - `1741–1745` 15.4 No dual-write
+  - `1746–1754` 15.5 Expand/contract migrations
+  - `1755–1763` 15.6 Observability from day zero, not later
+  - `1764–1768` 15.7 CI gates
+  - `1769–1773` 15.8 Backups and a tested restore
+  - `1774–1778` 15.9 Twelve-Factor config
+  - `1779–1786` 15.10 Append-only ledgers — but not event sourcing
+  - `1787–1791` 15.11 Defence in depth
+  - `1792–1820` 15.12 Skills are lenses, not assurance
+  - `1821–1827` 15.13 Reconciliation is a permanent feature
+- `1828–1832` 16. The accounting spine
+  - `1833–1864` 16.0 What we are actually fixing — the diagnosis
+  - `1865–1908` 16.1 The ten invariants — non-negotiable
+  - `1909–1923` 16.2 The oracle: how "correct" is tested
+  - `1924–1945` 16.3 The model — header + lines, not legs
+  - `1946–1965` 16.4 Deliberately simpler than ERPNext
+  - `1966–2032` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2033–2057` 16.6 What v1 already gets right — preserve the intent
+  - `2058–2079` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2080–2094` 16.8 What v1's accounting already gets right
+  - `2095–2138` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2139–2189` 16.10 Posting patterns — one canonical pattern per business event
+  - `2190–2222` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1684,6 +1684,7 @@ just a patch.**
 | 349 | 2026-10-16 | **CUSTOMER v2 TAKES OVER customer.shareat.net ONCE STABLE.** Customer v2 launches at order.shareat.net (POS v2 at pos2.shareat.net; Android ids `net.shareat.order` / `net.shareat.pos2`). When order.shareat.net is working well and stable, customer.shareat.net is pointed at it, and Customer v1 is either retired fully or moved to legacycustomer.shareat.net. Which of the two, and the date, are decided at that time. | Ian, 2026-10-16 (orchestrator session) | Yes |
 | 350 | 2026-10-16 | **DINERS LIVE IN THE SAME PEOPLE LIST AS STAFF, MARKED AS DINERS.** When Customer v2 moves to the shared backend, diner accounts are rows in the one people list (one sign-in path, one privacy rule: consent tick, delete after 3 years inactive). A staff member who is also a diner is ONE person. Hard rule: a diner-only person can reach no ERP or POS screen or action; every capability check must prove it with a test that the diner is refused. v1 member data (points, visits) is migrated when Customer v2 is built. Closes the last open question of row 348. | Ian, 2026-10-16 (orchestrator session; decisions page said "discuss further") | Yes, before Customer v2 diner accounts exist; costly after |
 | 351 | 2026-10-16 | **POS v2 MONEY ACTIONS GO THROUGH OUR OWN SMALL POS v2 SERVER; MANAGERS APPROVE WITH THEIR ERP v2 PIN.** Refunds, tender corrections and unpaid-session voids are done by a POS v2 server in this monorepo (pos2.shareat.net, on 159.223.46.224 as `shareat-pos.service`, port 9009, memory-capped), never directly from the tablet. A manager approves with the same per-person PIN as ERP v2, verified by the shared PIN code (`packages/auth`, with the T-416 per-person miss cap); nobody can skip the check from the tablet. The Firestore wire format v1 shares stays unchanged (v2 adds fields beside the old ones). Refunds stay cash-only until the ERP day feed (T-375) reads `refundTender`. Specs: T-423 (client money core), T-424 (server). | Ian, 2026-10-16, in the POS v2 session (plan `tingly-questing-pretzel.md`); recorded by the orchestrator | Yes, before T-424 ships; costly after |
+| 352 | 2026-10-16 | **BUSINESS (B2B) CUSTOMERS USE CUSTOMERS + TRADE ORDERS + AR, NOT A SALES CHANNEL.** Shareat has two customer kinds: walk-in/online diners (B2C: dine-in, take-out, online à la carte, bulk orders, through sales channels and the POS) and business customers (B2B, e.g. a samgyup house buying meat, paying cash or on account). B2B sales are a trade order to a named customer (T-132): dispatch bills Dr 1210 per customer / Cr 4300 and relieves stock; payment is an AR collection (T-131/T-226). A sales channel stays a B2C source label only. Gaps to build as T-433: pay-now at dispatch, a printable delivery receipt/invoice, a credit-limit warning with manager override. | Ian, 2026-10-16 (orchestrator session, research-evaluate-propose: "plan items 123") | Yes |
 
 ## 14. Amendment protocol
 
