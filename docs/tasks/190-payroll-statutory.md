@@ -4,8 +4,7 @@
 tables; staff data comes from the HR sheet due 31 Oct. Row 217: the business deducts, adds the employer share, and
 remits itself (remittance is T-193).
 **Model:** Sonnet tester first (commits red), then Sonnet builder, per slice. Money path: never Haiku.
-**Migration:** YES, one, hand-authored (ADR-012 §5). Number allocated by the orchestrator: 0205 or later, and
-coordinate with T-436 so the two do not collide. Restates `payslips_net_identity_check` (schema/payroll.ts:270).
+**Migration:** YES, one, hand-authored (ADR-012 §5): **0206** (after T-434's 0204 and T-436's 0205). Restates `payslips_net_identity_check` (schema/payroll.ts:270).
 **Depends on:** T-189 (pay run, payslips, `postEntry`), T-191 (13th month), T-332 (payday policy per store).
 
 ## Goal (plain words)
@@ -33,6 +32,14 @@ confirmed the rates it uses.
   still apply). ₱1 above the minimum is not an MWE (RR 11-2018; verify).
 - **13th month (T-191)**: no contributions, no withholding, while the person's year-to-date 13th month is ≤ ₱90,000.
   Above that the run refuses with a typed refusal naming the person (nobody is near it; the accountant decides).
+- **Missing agency number (Ian, 16 Oct).** If the person has no number on file for an agency, that agency is
+  NOT deducted for them: employee AND employer share both 0, no 22x0 line. The payslip stores which agencies were
+  skipped (`skipped_agencies`) and shows "not deducted: no SSS no." (PhilHealth no., Pag-IBIG no.). The preview
+  lists every person and agency missing a number. The number is read at POST time, so a later edit never changes
+  an old payslip. **No back-deduction:** once the number is added, deductions start from the next run, and that
+  agency's MTD base counts only payslips where the agency WAS deducted. Withholding is unaffected (a TIN is not
+  needed to compute it; T-193 needs it to report). ⚠️ The skipped months are still owed to the agency by law;
+  the accountant decides any catch-up (left for later).
 - **Separation final pay (T-192)** stays untouched by T-190 (left to a follow-up; see "Left for later").
 
 ## Semi-monthly and weekly: month-to-date true-up (beats v1's ÷2 estimate)
@@ -63,7 +70,7 @@ expense action books the same cost a second time.
 - `persons`: sss_no (10 digits), philhealth_no (12), pagibig_no (12), tin (9-12), format CHECKs, nullable.
   Government IDs are personal data: read only behind `run_payroll` / `enrol_staff`, store-scoped (row 353, T-435).
 - `payslips`: sss_ee, philhealth_ee, pagibig_ee, withholding, sss_er, sss_ec, philhealth_er, pagibig_er,
-  taxable_pay, is_mwe, and the rate row ids used (same "re-read March in June" rule as `pay_rate_id`).
+  taxable_pay, is_mwe, skipped_agencies (subset of sss/philhealth/pagibig), and the rate row ids used (same "re-read March in June" rule as `pay_rate_id`).
   Restate `net = gross − sss_ee − philhealth_ee − pagibig_ee − withholding − advance_recovered`;
   `advance_recovered ≤ gross − (the four)`; every new column ≥ 0 and finite.
 - Classify all three tables in `cutover/classification.ts` and `rls/registry.ts`. New capability
@@ -112,6 +119,12 @@ expense action books the same cost a second time.
     *Mutant: post ignores `confirmed_at`.* And: a manager adding a rate row is refused (`manage_payroll_rates` ✗).
 14. **13th month.** YTD ₱12,000 posts with no statutory lines; a run taking someone over ₱90,000 refuses.
     *Mutant: 13th month routed through contributions → SSS ee > 0.*
+16. **Skip on missing number.** Case 1's person with no SSS no.: SSS ee/er/EC 0, no 2210 line, PhilHealth and
+    Pag-IBIG as case 1, taxable 9,940.00, net 9,940.00, payslip shows "not deducted: no SSS no.", preview lists
+    them. *Mutant: SSS deducted anyway, or only the employee share skipped (6110 still debited).*
+17. **Resume, no back-deduction.** First half skipped (no SSS no.); number added; second half ₱10,400: SSS MTD base
+    = 10,400 (the deducted payslips only) → ee 525.00, er 1,050.00, EC 10.00. *Mutant: MTD includes the skipped
+    first half → ee 1,050.00 (back-deducted).* And the first-half payslip still shows "not deducted".
 15. **Schema.** Insert a payslip whose net ignores withholding → `payslips_net_identity_check` rejects; sss_no of 9
     digits rejected. *Mutant: CHECK not restated.*
 
@@ -121,5 +134,5 @@ SSS R-3 / PhilHealth RF-1 / Pag-IBIG MCRF / BIR 1601-C, year-end tax adjustment 
 final-pay statutory (T-192), de minimis components, uncollected-shortfall settlement.
 
 ## Done when
-All 15 cases green, full suite green on a fresh gate DB (migration with CHECKs), census and classification guards
+All 17 cases green, full suite green on a fresh gate DB (migration with CHECKs), census and classification guards
 green, and the accountant has confirmed (or corrected) every row marked **verify** before the first real POST.
