@@ -65,6 +65,8 @@ const rows: Row[] = [
   { file: 'app/commissary/orders/[id]/page.tsx', tier: 'P', label: 'Void dispatch', danger: true, visible: 'Void dispatch', action: 'withdrawOrderAction', actionFile: 'app/commissary/orders/[id]/actions.ts', mutation: 'voidTradeOrder' },
   { file: 'app/customers/[customerId]/page.tsx', tier: 'P', label: 'Write off as bad debt', danger: true, visible: 'Write off as bad debt', action: 'writeOffChargeAction', actionFile: 'app/customers/actions.ts', mutation: 'writeOffCharge' },
   { file: 'app/customers/[customerId]/page.tsx', tier: 'P', label: 'Void charge', danger: true, visible: 'Void charge', action: 'voidChargeAction', actionFile: 'app/customers/actions.ts', mutation: 'voidCharge' },
+  // DEF-654: the collection 'void' was a plain <button className={ACTION_LINK}> (not danger), so the census missed it. Tier P.
+  { file: 'app/customers/[customerId]/page.tsx', tier: 'P', label: 'Void collection', danger: false, visible: 'Void collection', action: 'voidCollectionAction', actionFile: 'app/customers/actions.ts', mutation: 'voidCollection' },
   { file: 'app/cutover/opening/page.tsx', tier: 'P', label: 'Remove opening figure', danger: true, visible: 'Remove opening figure', action: 'removeOpeningFigureAction', actionFile: 'app/cutover/actions.ts', mutation: 'removeOpeningFigure' },
   { file: 'app/cutover/opening/page.tsx', tier: 'P', label: 'Post the opening balances', danger: false, visible: 'Post the opening balances', action: 'postOpeningBalancesAction', actionFile: 'app/cutover/actions.ts', mutation: 'postOpeningBalances' },
   { file: 'app/expenses/[id]/page.tsx', tier: 'P', label: 'Delete draft', danger: true, visible: 'Delete draft', action: 'deleteDraftAction', actionFile: 'app/expenses/actions.ts', mutation: 'deleteExpenseDraft' },
@@ -198,10 +200,10 @@ function topLevelArgs(argText: string): string[] {
 const FORM_READ = /formData|\bfd\b|str\(|opt\(|requireId\(|\.get\(/;
 
 describe('the census arithmetic (green today: the literal map matches the spec + the audit-round conditionals)', () => {
-  it('66 controls: P 35, R 17 (14 + the 2 conditional danger buttons + T-413 Retire recipe), W 10, X 4; 63 are danger (2 conditional), in 49 files', () => {
+  it('67 controls: P 36 (35 + DEF-654 Void collection), R 17 (14 + the 2 conditional danger buttons + T-413 Retire recipe), W 10, X 4; 63 are danger (2 conditional), in 49 files', () => {
     const by = (t: Tier) => rows.filter((r) => r.tier === t).length;
-    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([35, 17, 10, 4]);
-    expect(rows).toHaveLength(66);
+    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([36, 17, 10, 4]);
+    expect(rows).toHaveLength(67);
     expect(rows.filter((r) => r.danger)).toHaveLength(63);
     expect(rows.filter((r) => r.conditional)).toHaveLength(2);
     expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(49);
@@ -279,7 +281,7 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
     expect(bad).toEqual([]);
   });
 
-  it('the total of controls = bare danger + ConfirmDestructive across src is exactly 66', () => {
+  it('the total of controls = bare danger + ConfirmDestructive across src is exactly 67 (66 + DEF-654 Void collection)', () => {
     let total = 0;
     for (const abs of walk(SRC)) {
       const r = rel(abs);
@@ -287,7 +289,7 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
       const src = readFileSync(abs, 'utf8');
       total += count(src, DANGER) + confirmWindows(src).length;
     }
-    expect(total).toBe(66);
+    expect(total).toBe(67);
   });
 });
 
@@ -317,6 +319,64 @@ describe('Tier P: every action verifies the admin PIN on the server, before the 
       }
     });
   }
+});
+
+describe('DEF-654: no destructive SERVER ACTION hides behind a non-danger button (the danger-variant scan cannot see it)', () => {
+  // A control can be a plain <button> or a secondary <Button> and still reverse posted money (DEF-654: the collection 'void').
+  // So the census is ALSO driven from the server actions: every exported action in a 'use server' file under app/ whose NAME or
+  // whose BODY calls a void / reverse / writeOff / dispose / delete / cancel / reopen function must be either (a) the `action`
+  // of a row in the table above, or (b) in EXEMPT below with the reason it moves no posted money. A new one is red until classified.
+  // MUTANT M-s1: add `export async function voidThingAction` to any actions.ts -> red here. M-s2: delete the voidCollectionAction
+  // row -> red here (and in the arithmetic).
+  const EXEMPT: Record<string, string> = {
+    'app/menu/prices/actions.ts#cancelScheduledPriceAction': 'clears a FUTURE menu price offer; no ledger, no stock',
+    'app/menu/prices/actions.ts#cancelScheduledOptionPriceAction': 'clears a FUTURE option price offer; no ledger, no stock',
+    'app/staff/actions.ts#reopenPinSignInAction': 'lifts a staff sign-in lock; not a money record',
+  };
+  // Found unguarded by the sweep and held red by its own test below until Ian rules the tier and the builder wires it.
+  const PENDING = new Set(['app/owners/actions.ts#settleAction']);
+  const TRIGGER = /(?<![A-Za-z])(?:void|reverse|writeOff|dispose|delete|cancel|reopen)[A-Za-z0-9]*\(/;
+  function exportedActions(src: string): { name: string; body: string }[] {
+    const out: { name: string; body: string }[] = [];
+    const re = /export async function ([A-Za-z0-9_]+)/g;
+    const hits = [...src.matchAll(re)];
+    hits.forEach((m, i) => {
+      const end = i + 1 < hits.length ? hits[i + 1]!.index! : src.length;
+      out.push({ name: m[1]!, body: stripComments(src.slice(m.index!, end)) });
+    });
+    return out;
+  }
+  const found: { key: string; file: string; name: string }[] = [];
+  for (const abs of walk(join(SRC, 'app'))) {
+    const src = readFileSync(abs, 'utf8');
+    if (!/^\s*['"]use server['"]/m.test(src)) continue;
+    for (const a of exportedActions(src)) {
+      const bodyAfterSignature = a.body.slice(a.body.indexOf('{'));
+      if (/^(?:void|reverse|writeOff|dispose|delete|cancel|reopen)/i.test(a.name) || TRIGGER.test(bodyAfterSignature)) {
+        found.push({ key: `${rel(abs)}#${a.name}`, file: rel(abs), name: a.name });
+      }
+    }
+  }
+  const classified = new Set(rows.filter((r) => r.action && r.actionFile).map((r) => `${r.actionFile}#${r.action}`));
+
+  it('every destructive-looking server action is a row in the census table or an exempt one with a reason', () => {
+    const unclassified = found.filter((f) => !classified.has(f.key) && !(f.key in EXEMPT) && !PENDING.has(f.key)).map((f) => f.key);
+    expect(unclassified, 'classify each in `rows` (tier P / R / W) or in EXEMPT with its reason').toEqual([]);
+  });
+  it('the scan is not vacuous: it finds the known actions, and every exemption still names a real action', () => {
+    expect(found.length).toBeGreaterThan(30);
+    expect(found.map((f) => f.key)).toContain('app/customers/actions.ts#voidCollectionAction');
+    for (const k of Object.keys(EXEMPT)) expect(found.map((f) => f.key), `${k} still exists and still matches`).toContain(k);
+  });
+  it('owners settleAction (its `writeoff` branch writes a posted owner receivable off as a drawing) verifies the admin PIN before writeOffReceivable', () => {
+    // Found by the DEF-654 sweep: the select-driven form at app/owners/[id]/page.tsx has no danger button and no guard. A write-off
+    // is Tier P everywhere else (customers writeOffChargeAction, prepaid writeOffAction). Ian to confirm the tier; red until then.
+    const body = functionBody(read('app/owners/actions.ts'), 'settleAction');
+    expect(body, 'settleAction exists').toBeDefined();
+    const call = body!.indexOf('verifyAdminApproval(');
+    expect(call, 'settleAction calls verifyAdminApproval( for the writeoff branch').toBeGreaterThan(-1);
+    expect(call, 'before writeOffReceivable(').toBeLessThan(body!.indexOf('writeOffReceivable('));
+  });
 });
 
 describe('Tier R: every action compares the typed name with the one it loads (V8, M10)', () => {
