@@ -1,12 +1,12 @@
 # Handoff — 2026-10-16
 
 ## Where things stand
-Everything built on 15-16 Oct is merged to `main` (a879264, PR #28). PR #27 (2e9d72d) has been live since 15 Oct
-~22:08 Manila. The a879264 deploy (migrations 0198 + 0199) was running at the time of writing. Nothing is half-built
-on a lane. POS/Customer v2 is designed, not built: the phase plan is drafted (`docs/plans/pos-customer-v2-phase-plan.md`)
+main = 0f2156a, LIVE since 16 Oct 10:44 Manila: PR #28 (a879264) plus PR #30 (release/2026-10-16b), which added
+T-414 (cash requests in the expense payment list; auto-created staff cash account, row 347) and DEF-654 (collection void
+and owner write-off admin PIN, liability retire retype). Nothing is half-built on a lane. POS/Customer v2 is designed, not built: the phase plan is drafted (`docs/plans/pos-customer-v2-phase-plan.md`)
 and ADR-015 carries a 15 Oct amendment. Next free migration: **0200**.
 
-PRODUCTION: a879264 LIVE since 16 Oct 08:57 Manila (deploy success; /api/health ok, database reachable; migrations 0198 + 0199 applied).
+PRODUCTION: 0f2156a LIVE since 16 Oct 10:44 Manila (PR #30: T-414 + DEF-654; deploy success; /api/health ok, database reachable). Migrations through 0199.
 
 ## Gates at c4aabaf (PR #28 CI, the release head merged as a879264)
 typecheck pass · unit 6,761 passed / 3 skipped · integration 8,052 / 8,052 · build compiled.
@@ -28,8 +28,7 @@ typecheck pass · unit 6,761 passed / 3 skipped · integration 8,052 / 8,052 · 
 - **Roadmap and What's Left:** updated (T-401, T-406..T-413 done; follow-ups added).
 
 ## Only Ian can do these
-1. Install `shareat-usage-auto-post.service` + `.timer` on **159.223.46.224** (`docs/ops/README.md`, "Usage auto-post":
-   re-run `provision.sh`, then `systemctl enable --now shareat-usage-auto-post.timer`). Until then nothing auto-posts.
+1. Give YANIYOW (`C:\Users\ianla\webapps\YANIYOW`) its own dev port. It was holding 9008, which is ERP v2's (DEF-660).
 2. Tell managers: POS usage now arrives as drafts; staff correct, manager posts; anything left posts itself at 14:00
    the next day.
 3. Answer the decisions page https://claude.ai/artifact/H8YVDBG9nuBDBQi2Sguwrs (newest first): business-day cut-off,
@@ -38,9 +37,10 @@ typecheck pass · unit 6,761 passed / 3 skipped · integration 8,052 / 8,052 · 
 4. Run the read-only counts in `C:\Users\ianla\t409-counts.sql` and paste the results back.
 
 ## Pick up here
-1. Confirm the a879264 deploy is live and the auto-post timer is installed (`systemctl list-timers` on the droplet).
-2. DEF-654: put the AR collection void (`apps/erp/src/app/customers/[customerId]/page.tsx`) behind the T-412 admin
-   PIN tier and add it to the census. Small.
+1. Confirm PR #30 is live (T-414, DEF-654). The usage auto-post timer is already installed (16 Oct, first run 14:05 Manila).
+2. DEF-657 + DEF-658 as one small task: row-lock the cash-request float in `recordApPayment`
+   (`packages/domain/src/ap/index.ts:1295-1320`) and in settle/return (`packages/domain/src/cash-requests/index.ts:333-350`),
+   re-checking live balance. Add DEF-659 (silent null from `ensureStaffCashAccount`) if cheap.
 3. DEF-653 (T-412 M6): per-person daily PIN miss cap. Needs storage, so a migration (0200).
 4. POS v2 PC-2: monorepo setup for `apps/pos` / `apps/customer` (phase plan). Spec in plan mode first.
 5. The rest of `docs/plans/2026-10-14-ian-answers-worklist.md`.
@@ -65,7 +65,7 @@ typecheck pass · unit 6,761 passed / 3 skipped · integration 8,052 / 8,052 · 
 ## Lanes and worktrees (all merged, all idle)
 | Worktree | Branch | State |
 |---|---|---|
-| wt-t385 | wrap/2026-10-16 | this wrap-up's records |
+| wt-t385 | wrap/2026-10-16b | this wrap-up's records |
 | wt-t386 | lane/t401-s6 | merged |
 | wt-t390 | lane/specs-1015 | merged |
 | wt-t401 | lane/t413 | merged |
@@ -78,9 +78,9 @@ typecheck pass · unit 6,761 passed / 3 skipped · integration 8,052 / 8,052 · 
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global /orchestrator
 skill. Start COLD: read docs/HANDOFF-TODAY.md (all) and docs/RULES.md, then the spec of the lane you start.
 GREP the bible and register, never Read them whole.
-State: main = a879264 (PR #28), migrations through 0199; next free 0200. Check the PRODUCTION line in the handoff.
-FIRST: ask Ian whether the auto-post timer is installed and whether he answered the decisions page.
-Next: DEF-654 (collection void PIN), DEF-653 (per-person PIN budget, 0200), POS v2 PC-2 (spec in plan mode).
+State: main = 0f2156a (PR #30: T-414, DEF-654), live; migrations through 0199; next free 0200. Check the PRODUCTION line.
+FIRST: confirm PR #30 is live; ask Ian whether he answered the decisions page.
+Next: DEF-657/658 float row locks (one small task), DEF-653 (per-person PIN budget, 0200), POS v2 PC-2 (spec in plan mode).
 STANDING: lanes are subagents (tester/builder/auditor separate, own _test DB, worktree per lane, workers never run git,
 LF only); keep agents busy while tests run; Haiku where it can do the job, Sonnet for money/auth/schema, Opus for
 specs and rulings; never remove a worktree except by the junction-safe method in memory; talk to Ian in plain
