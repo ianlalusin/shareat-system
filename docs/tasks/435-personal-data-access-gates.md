@@ -1,6 +1,6 @@
 # T-435: personal-data access gates (payroll, customers, staff, trade)
 
-**Status:** spec written 2026-10-16, not started — PRIORITY (the live ERP leaks personal data). Revised same day after
+**Status:** DONE 2026-10-17 — merged to main; in release PR #34 (not yet live).
 Opus review; Ian answered Q1-Q3. Ships with the next normal release (not a hotfix).
 **Model:** Sonnet tester first (commits red), then Sonnet builder, per slice (bible row 184). Auth path: Sonnet, not Haiku.
 **Migration:** NO. No new capability: every gate reuses one already in `CAPABILITY-MATRIX.md` and already seeded.

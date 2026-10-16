@@ -131,7 +131,7 @@
 <div class="wrap">
 
   <header class="mast">
-    <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 10 October 2026 &middot; not launched</p>
+    <p class="kicker">Shareat System &middot; ERP v2 &middot; as at 17 October 2026 &middot; not launched</p>
     <h1>What's Left</h1>
     <p class="answer">
       <b>The money push is closed:</b> no open money defects. Phase 2 is closed (T-316 done). Now the POS day feed: sales days from POS, before 15 November.
@@ -164,7 +164,7 @@
         <div class="k">Now</div>
         <h3>Confirm the deploy, then the real-data run</h3>
         <ul>
-          <li>Confirm PR #30 (T-414, DEF-654) is live; give YANIYOW its own dev port (DEF-660)</li>
+          <li>PR #32 and #33 are live (T-415 to T-423, T-430 to T-432, DEF-664); release PR #34 is next</li>
           <li>Brief managers: POS usage now arrives as drafts that auto-post at 14:00 the next day</li>
           <li>T-392: run Lipa&rsquo;s real week on production; the dual run starts 2 Nov</li>
           <li>T-391 rollout with you; T-393 backups switched on before 1 Nov</li>
@@ -174,8 +174,8 @@
         <div class="k">Next</div>
         <h3>Small follow-ups, rehearsal, activity log</h3>
         <ul>
-          <li>Float row locks in AP payment and cash-request settle/return (DEF-657/658, one small task); silent null in ensureStaffCashAccount (DEF-659)</li>
-          <li>Per-person PIN miss budget for admin approvals (DEF-653, T-412 M6; needs storage)</li>
+          <li>Silent null in ensureStaffCashAccount (DEF-659)</li>
+          <li>Merge T-190 payroll statutory (0206), T-436 leave tracking (0205) and the Staff Positions tab; release PR #34 (T-433, T-434, T-435, T-424) goes live</li>
           <li>T-394 S4 the 13 Nov rehearsal (runbook drafted); T-402 S4 viewer, S5</li>
           <li>The rest of the 23-item work list</li>
         </ul>
@@ -185,7 +185,7 @@
         <h3>Payroll and the shared backend</h3>
         <ul>
           <li>T-396 link 3 stores (needs your POS ids)</li>
-          <li>T-190/T-193 when HR data lands</li>
+          <li>T-193 statutory remittance, after T-190 merges; POS v2 T-425 offline rules (spec in review), then PC-6 senior/PWD</li>
           <li>POS &amp; Customer v2 in this repo (docs/plans/pos-customer-v2-phase-plan.md): PC-2 monorepo setup, then PC-3</li>
         </ul>
       </div>
@@ -210,10 +210,7 @@
     <h2>Other open follow-ups</h2>
     <p class="lede">Found while fixing money. None posts a wrong amount today; each is small.</p>
     <div class="items">
-      <div class="item y"><div class="id">DEF-657/658</div><div><b>Cash-request float can be overdrawn by a concurrent AP payment or settle/return</b> (no row lock). One small task.</div></div>
       <div class="item y"><div class="id">DEF-659</div><div><b>ensureStaffCashAccount returns null silently</b> when a same-name manual account exists.</div></div>
-      <div class="item y"><div class="id">DEF-660</div><div><b>Port 9008 clash:</b> the YANIYOW dev server held ERP v2's port. YANIYOW needs its own.</div></div>
-      <div class="item y"><div class="id">DEF-653</div><div><b>Admin-approval PIN guesses are budgeted per store, not per person</b> (T-412 M6, deferred). A manager with several stores gets more guesses. Needs storage.</div></div>
       <div class="item y"><div class="id">DEF-655</div><div><b>The production server lost group-write on /srv after 13 Oct</b>; the 15 Oct deploy failed until <code>chmod g+w /srv</code>. Cause unknown.</div></div>
       <div class="item"><div class="id">DEF-656</div><div>A CI check fails on main when an unmerged branch on GitHub adds a new activity action (flake by design).</div></div>
       <div class="item"><div class="id">DEF-651, 652</div><div>POS v1 (live build #238) voids receipts the unsafe old way, and its database rules do not lock receipts. v2 is safe by design; whether to patch v1 is on your decisions page.</div></div>
@@ -230,13 +227,14 @@
     <p class="lede">None of these posts to the ledger; v1 covers each until it ships.</p>
     <div class="items">
       <div class="item"><div class="id">ADR-015</div><div><b>POS &amp; Customer v2, in this repo (apps/pos, apps/customer):</b> phase plan drafted (docs/plans/pos-customer-v2-phase-plan.md). Next PC-2 monorepo setup, PC-3. Usage counts on v1 data wait on you running the read-only queries.</div></div>
-      <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals:</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
+      <div class="item"><div class="id">T-343</div><div><b>Plain-language refusals (human-readable):</b> S5.4, S8, S9 left; about 180 domain refusals still name records by id.</div></div>
       <div class="item"><div class="id">POS pulls</div><div>Interim pulls rebuilt per your redesign (T-375 S5-lite, S6). At the shared backend (ADR-015 P2) the pull goes away: usage posts after verify, and refunded or voided items wait for a manager decision (your answers, bible row 282).</div></div>
       
       <div class="item"><div class="id">T-392</div><div>Build complete. Left: Lipa&rsquo;s real week on production (Done-when).</div></div>
       <div class="item"><div class="id">T-394</div><div>S3 runbook drafted 15 Oct (sign-off pending you); S4 rehearsal (13 Nov).</div></div>
       <div class="item"><div class="id">T-402</div><div>S3 done 15 Oct; next S4 viewer, S5 maintenance.</div></div>
-      <div class="item"><div class="id">T-396</div><div>Link 3 stores. Needs your POS ids.</div></div>
+      <div class="item"><div class="id">T-396</div><div>Link 3 stores and the morning auto-import for the other stores. Needs your POS ids.</div></div>
+      <div class="item"><div class="id">T-398</div><div>Padre Garcia franchise organisation: S1 live, S2 to S7 not built.</div></div>
       <div class="item"><div class="id">Work list</div><div>docs/plans/2026-10-14-ian-answers-worklist.md: 23 items from your 14 answers; item 2 and item 3 (batch 1) done. Settlement parsers need your sample payout files.</div></div>
       <div class="item"><div class="id">T-386 S6</div><div>The database shape check for item codes, after the production recode (S5, built) reads 0 unconverted.</div></div>
       <div class="item"><div class="id">Cutover plan</div><div><b>docs/plans/remaining-build-plan.md:</b> T-390 opening stock (spec reviewed; S2 waits on your cost-basis answer), T-391 master data, T-392 dual-run comparator, T-393 backups, T-394 rehearsal, T-395 PIN throttle (done), T-396 link 3 stores, T-397 payroll bridge.</div></div>
@@ -245,8 +243,9 @@
       <div class="item"><div class="id">T-320</div><div>Access that does not come from a position. Number reserved.</div></div>
       <div class="item"><div class="id">T-334</div><div>Inputs, buttons and one shared dropdown across the remaining screens; brand red and a dark-mode toggle.</div></div>
       <div class="item"><div class="id">Phase 7</div><div>Activity-log viewer &middot; memos, performance, checklists, infractions &middot; onboarding as one gated track &middot; cookbook &middot; remaining settings screens &middot; tutorials (count first).</div></div>
-      <div class="item"><div class="id">T-136, T-141</div><div>Cash custody &sect;2 (revolving fund; still open, ask Ian) and the rest of the upload UI.</div></div>
-      <div class="item"><div class="id">T-190, T-193</div><div>Statutory contributions and their remittance. <span class="pill y">blocked on HR data</span></div></div>
+      <div class="item"><div class="id">T-136, T-141</div><div>The store revolving fund (after cutover) and the rest of the T-141 upload UI.</div></div>
+      <div class="item"><div class="id">T-190, T-193</div><div>T-190 payroll statutory is built on a lane (migration 0206), not merged. T-193 remittance follows it. BIR 1601-E supplier withholding is closed as not applicable (row 354).</div></div>
+      <div class="item"><div class="id">T-436</div><div>Leave tracking is built on a lane (migration 0205), not merged. The Staff Positions tab with expandable cards is built on a lane too.</div></div>
       <div class="item"><div class="id">T-314</div><div>Fingerprint capture, slice A built. <span class="pill y">needs a tablet and the reader model</span></div></div>
       <div class="item"><div class="id">T-308</div><div>Alert when production runs an older build; slice A live. <span class="pill y">slice B needs your token</span></div></div>
       <div class="item"><div class="id">Later</div><div>T-363 doubtful-expense flag (after launch) &middot; T-309 own Firebase project (after cutover).</div></div>
