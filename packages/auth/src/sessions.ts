@@ -23,6 +23,7 @@ import { AuthenticationError } from './errors';
 import {
   enqueueFirebaseSignedIn,
   enqueuePinPaused,
+  enqueueApprovalPinCapped,
   enqueuePinStoppedForDay,
   enqueueSessionEnded,
   enqueueSigninRefused,
@@ -94,7 +95,11 @@ export async function signInWithPin(
   tx: Tx | null,
   input: { orgId: string; storeId: string; pin: string; deviceId?: string },
 ): Promise<SignInResult> {
-  return runChargedPinLookup(tx, input, (lookupTx) => runPinSignIn(lookupTx, input));
+  return runChargedPinLookup(
+    tx,
+    { orgId: input.orgId, bucket: { store: input.storeId }, ...(input.deviceId ? { deviceId: input.deviceId } : {}) },
+    (lookupTx) => runPinSignIn(lookupTx, input),
+  );
 }
 
 /**
@@ -102,8 +107,9 @@ export async function signInWithPin(
  * (`admin-approval.ts`), so a wrong approval PIN is a wrong PIN on exactly the budget a wrong sign-in PIN uses. Not exported
  * from the package index: an approval is not a sign-in and nothing outside `packages/auth` may drive this.
  *
- * `input.storeId` null is the ORGANISATION's own bucket (migration 0198): the same limits, nobody else's budget; the
- * store-scoped security events (pin paused / stopped) are not written for it - they have no store to be about.
+ * `input.bucket` is a store (sign-in), the ORGANISATION's own (migration 0199) or, T-416, a PERSON (the signed-in actor
+ * typing an administrator PIN; `opts` carry its cap and auto-lift). The store-scoped security events (pin paused / stopped)
+ * are written only for a store bucket; a person's bucket writes `auth.approval_pin_capped` when it trips.
  *
  * With `tx === null` (production): the charge runs in its own principal'd transaction that COMMITS before the lookup starts
  * (T-395 R14 / DEF-626), so a miss survives the throw. With a `tx`, everything runs on it (tests, callers with their own
@@ -111,14 +117,15 @@ export async function signInWithPin(
  */
 export async function runChargedPinLookup<T>(
   tx: Tx | null,
-  input: { orgId: string; storeId: string | null; deviceId?: string },
+  input: { orgId: string; bucket: pinAttemptsRepo.Bucket; deviceId?: string },
   lookup: (lookupTx: Tx) => Promise<T>,
+  opts: { dailyMissBudget?: number; stopAutoReopenMinutes?: number | null } = {},
 ): Promise<T> {
-  const chargeInput = { orgId: input.orgId, storeId: input.storeId, deviceId: input.deviceId ?? null };
+  const chargeInput = { orgId: input.orgId, bucket: input.bucket, deviceId: input.deviceId ?? null };
   if (tx) {
-    const charge = await pinAttemptsRepo.chargeAttempt(tx, chargeInput);
+    const charge = await pinAttemptsRepo.chargeAttempt(tx, chargeInput, opts);
     await noteRefusedCharge(tx, charge, input);
-    refuseIfCharged(charge);
+    refuseIfCharged(charge, input.bucket);
     let result: T;
     try {
       result = await lookup(tx);
@@ -126,7 +133,7 @@ export async function runChargedPinLookup<T>(
       await notePauseStarted(tx, charge, input);
       throw err;
     }
-    await pinAttemptsRepo.refundOnSuccess(tx, input.storeId, charge, input.orgId);
+    await pinAttemptsRepo.refundOnSuccess(tx, input.orgId, input.bucket, charge);
     return result;
   }
 
@@ -134,9 +141,9 @@ export async function runChargedPinLookup<T>(
   // COMMITS before the lookup starts. The charge locks the store's throttle row, refuses if
   // stopped or paused, and otherwise writes the miss and the tier-1 increment, so attempts are
   // serialised before any scrypt runs and the guess bound is exact under a parallel burst.
-  const charge = await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.chargeAttempt(ptx, chargeInput));
+  const charge = await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.chargeAttempt(ptx, chargeInput, opts));
   noteRefusedCharge(null, charge, input);
-  refuseIfCharged(charge);
+  refuseIfCharged(charge, input.bucket);
 
   // ⭐ T-302 / B1 - **under a real principal, not the auth door.** The lookup moved off the auth door when T-304 made
   // `orgId` a parameter resolved BEFORE this runs. ⛔ And T-302 is what makes it necessary: the org prefix inside the HMAC is
@@ -150,7 +157,7 @@ export async function runChargedPinLookup<T>(
     notePauseStarted(null, charge, input);
     throw err;
   }
-  await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.refundOnSuccess(ptx, input.storeId, charge, input.orgId));
+  await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.refundOnSuccess(ptx, input.orgId, input.bucket, charge));
   return result;
 }
 
@@ -159,7 +166,12 @@ export async function runChargedPinLookup<T>(
 const STOPPED_MESSAGE =
   'PIN sign-in is stopped at this store after too many wrong PINs today. A manager can reopen it: sign in with email and password, then open Staff.';
 
-type PinInput = { orgId: string; storeId: string | null; deviceId?: string };
+/** T-416: the ONE sentence for a capped person - no name, id, count or time. */
+export const APPROVAL_PIN_CAPPED =
+  'Too many wrong administrator PINs from your account today. An administrator can clear this on your user page, or try again tomorrow.';
+
+type PinInput = { orgId: string; bucket: pinAttemptsRepo.Bucket; deviceId?: string };
+const storeOf = (input: PinInput): string | null => ('store' in input.bucket ? input.bucket.store : null);
 type AnyCharge = Awaited<ReturnType<typeof pinAttemptsRepo.chargeAttempt>>;
 
 /**
@@ -171,16 +183,34 @@ type AnyCharge = Awaited<ReturnType<typeof pinAttemptsRepo.chargeAttempt>>;
 function noteRefusedCharge(throttleTx: null, charge: AnyCharge, input: PinInput): void;
 function noteRefusedCharge(throttleTx: Tx, charge: AnyCharge, input: PinInput): Promise<void>;
 function noteRefusedCharge(throttleTx: Tx | null, charge: AnyCharge, input: PinInput): Promise<void> | void {
-  // T-412: the organisation's own bucket (storeId null) has no store for a store-scoped event to be about.
-  if (!(charge.refused === 'stopped' && charge.newlyStopped) || input.storeId === null) return throttleTx ? Promise.resolve() : undefined;
-  if (!throttleTx) return enqueuePinStoppedForDay(input.orgId, input.storeId, input.deviceId ?? null);
+  if (!(charge.refused === 'stopped' && charge.newlyStopped)) return throttleTx ? Promise.resolve() : undefined;
+  // T-416: the attempt that TRIPS a person's cap writes one org-level row about that person.
+  if ('actor' in input.bucket) {
+    const personId = input.bucket.actor;
+    if (!throttleTx) return enqueueApprovalPinCapped(input.orgId, personId, input.deviceId ?? null);
+    return auditLogRepo
+      .appendSystem(throttleTx, input.orgId, {
+        action: 'auth.approval_pin_capped',
+        storeId: null,
+        entityId: personId,
+        before: null,
+        after: { cap: pinAttemptsRepo.APPROVAL_DAILY_MISS_CAP },
+        source: 'web',
+        deviceId: input.deviceId ?? null,
+      })
+      .then(() => undefined);
+  }
+  // T-412: the organisation's own bucket has no store for a store-scoped event to be about.
+  const storeId = storeOf(input);
+  if (storeId === null) return throttleTx ? Promise.resolve() : undefined;
+  if (!throttleTx) return enqueuePinStoppedForDay(input.orgId, storeId, input.deviceId ?? null);
   return auditLogRepo
     .appendSystem(throttleTx, input.orgId, {
       action: 'auth.pin_stopped_for_day',
-      storeId: input.storeId,
-      entityId: input.storeId,
+      storeId,
+      entityId: storeId,
       before: null,
-      after: { storeId: input.storeId, dailyMissBudget: pinAttemptsRepo.DAILY_MISS_BUDGET },
+      after: { storeId, dailyMissBudget: pinAttemptsRepo.DAILY_MISS_BUDGET },
       source: 'web',
       deviceId: input.deviceId ?? null,
     })
@@ -191,16 +221,17 @@ function noteRefusedCharge(throttleTx: Tx | null, charge: AnyCharge, input: PinI
 function notePauseStarted(throttleTx: null, charge: AnyCharge, input: PinInput): void;
 function notePauseStarted(throttleTx: Tx, charge: AnyCharge, input: PinInput): Promise<void>;
 function notePauseStarted(throttleTx: Tx | null, charge: AnyCharge, input: PinInput): Promise<void> | void {
-  if (!(charge.refused === null && charge.startedPause) || input.storeId === null) return throttleTx ? Promise.resolve() : undefined;
-  if (!throttleTx) return enqueuePinPaused(input.orgId, input.storeId, input.deviceId ?? null);
+  const storeId = storeOf(input);
+  if (!(charge.refused === null && charge.startedPause) || storeId === null) return throttleTx ? Promise.resolve() : undefined;
+  if (!throttleTx) return enqueuePinPaused(input.orgId, storeId, input.deviceId ?? null);
   return auditLogRepo
     .appendSystem(throttleTx, input.orgId, {
       action: 'auth.pin_paused',
-      storeId: input.storeId,
-      entityId: input.storeId,
+      storeId,
+      entityId: storeId,
       before: null,
       after: {
-        storeId: input.storeId,
+        storeId,
         missThreshold: pinAttemptsRepo.MISS_THRESHOLD,
         windowSeconds: pinAttemptsRepo.MISS_WINDOW_SECONDS,
         cooldownSeconds: pinAttemptsRepo.LOCK_COOLDOWN_SECONDS,
@@ -214,8 +245,11 @@ function notePauseStarted(throttleTx: Tx | null, charge: AnyCharge, input: PinIn
 /** Narrows a `Charge` to the charged variant, throwing the refusal sentence otherwise. */
 function refuseIfCharged(
   charge: Awaited<ReturnType<typeof pinAttemptsRepo.chargeAttempt>>,
+  bucket: pinAttemptsRepo.Bucket,
 ): asserts charge is Extract<typeof charge, { refused: null }> {
-  if (charge.refused === 'stopped') throw new AuthenticationError(STOPPED_MESSAGE);
+  if (charge.refused === 'stopped') {
+    throw new AuthenticationError('actor' in bucket ? APPROVAL_PIN_CAPPED : STOPPED_MESSAGE);
+  }
   if (charge.refused === 'locked') throw new AuthenticationError(cooldownMessage(charge.until!)); // 'locked' always carries locked_until
 }
 

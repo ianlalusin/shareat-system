@@ -414,16 +414,18 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
   pin_attempt_throttle: {
     scope: 'org_column',
     reason:
-      'A throttle belongs to a store, and a store to one org — the same shape as a dozen ' +
-      'existing entries. Written AFTER layer 1 resolves the terminal (T-304), so org_id and ' +
-      'store_id are both known and this is never a pre-authentication write (DEF-333).',
+      'A throttle belongs to a store, to the organisation, or (T-416) to a person, and each is ' +
+      'in one org — the same shape as a dozen existing entries. Written AFTER layer 1 resolves ' +
+      'the terminal (T-304) or the signed-in actor (resolveActor), so org_id is always known ' +
+      'and this is never a pre-authentication write (DEF-333).',
   },
 
   // T-395 (docs/tasks/395-pin-sign-in-throttle.md).
   sign_in_attempts: {
     scope: 'org_column',
     reason:
-      'A sign-in attempt happens at a store terminal after layer 1, so its org is known; never a pre-auth write (DEF-333).',
+      'A sign-in attempt happens at a store terminal after layer 1, or (T-416) by a signed-in person typing an ' +
+      'approval PIN, so its org is known; never a pre-auth write (DEF-333).',
   },
 
   // T-391 S1 (migration 0193).

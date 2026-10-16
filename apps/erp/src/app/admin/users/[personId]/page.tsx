@@ -1,9 +1,12 @@
 import { notFound } from 'next/navigation';
+import { pinAttemptsRepo } from '@shareat/db';
+import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { CAPABILITY_SCOPE, ROLES, ROLE_LABEL, capabilityTitle, type Capability } from '@shareat/auth';
 import { requirePageAccess } from '../../../../lib/page-access';
 import {
   assignRoleAction,
   linkFirebaseAction,
+  resetApprovalPinCapAction,
   setCapabilityGrantAction,
   setStoreScopeAction,
   unlinkCredentialAction,
@@ -16,6 +19,7 @@ import {
   grantSummaryLine,
   positionProvenanceLine,
   userDetail,
+  withOrgPrincipal,
 } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
@@ -54,6 +58,8 @@ export default async function UserAccessPage({
   if (!detail) notFound();
 
   const { person, stores, grants, credentials } = detail;
+  // T-416: is this person's administrator-PIN approval bucket capped right now (auto-lift applied)?
+  const approvalCap = await withOrgPrincipal(actor.orgId, (tx) => pinAttemptsRepo.statusForActor(tx, actor.orgId, personId));
   const isSelf = actor.personId === personId;
   const activeGrants = grants.filter((g) => g.revokedAt === null);
   const revokedGrants = grants.filter((g) => g.revokedAt !== null);
@@ -90,6 +96,26 @@ export default async function UserAccessPage({
       </div>
 
       <FlashBanner flash={sp} />
+
+      {approvalCap.capped && (
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">Administrator-PIN approvals</h2>
+          <p className="text-sm text-warning-ink">
+            Capped since {approvalCap.cappedAt ? formatBusinessDateTime(approvalCap.cappedAt) : 'earlier today'}. Too many wrong
+            administrator PINs. It lifts by itself after 24 hours.
+          </p>
+          {isSelf ? (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">Another administrator must clear this.</p>
+          ) : (
+            <form action={resetApprovalPinCapAction}>
+              <input type="hidden" name="personId" value={personId} />
+              <Button type="submit" variant="secondary">
+                Clear the approval-PIN cap
+              </Button>
+            </form>
+          )}
+        </section>
+      )}
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Role</h2>

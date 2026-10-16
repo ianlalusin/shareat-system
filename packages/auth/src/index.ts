@@ -59,7 +59,7 @@ export type { AdminApprovalInput } from './admin-approval';
 export { hashPin, verifyPin, pinLookupHash, isValidPinFormat, newSessionToken, sessionTokenHash } from './credentials';
 /** T-237 / DEF-224 — administering someone else's sign-in credentials. Gated on `manage_users`,
  *  unlike everything in `sessions.ts`, which is why it is a separate module. */
-export { linkFirebaseCredential, unlinkCredential, reopenPinSignIn } from './credentials-admin';
+export { linkFirebaseCredential, unlinkCredential, reopenPinSignIn, resetApprovalPinCap } from './credentials-admin';
 export type {
   LinkFirebaseCredentialInput,
   UnlinkCredentialInput,

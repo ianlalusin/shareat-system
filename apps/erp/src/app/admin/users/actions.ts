@@ -22,6 +22,7 @@ import {
   capabilityTitle,
   grantCapabilityAsActor,
   linkFirebaseCredential,
+  resetApprovalPinCap,
   unlinkCredential,
   type Capability,
   type Role,
@@ -316,5 +317,25 @@ export async function unlinkCredentialAction(formData: FormData): Promise<void> 
           ? 'Unlinked. They had no live session to end.'
           : `Unlinked, and signed out of ${ended} live session${ended === 1 ? '' : 's'}.`,
     },
+  );
+}
+
+/**
+ * T-416 / DEF-653 - an administrator clears a person's administrator-PIN approval cap. A plain button (not a Tier P action).
+ * The actor is the session's; the gate (`manage_users`), the no-self-clear rule and the audit row live in `resetApprovalPinCap`.
+ */
+export async function resetApprovalPinCapAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/admin/users');
+  const personId = str(formData, 'personId');
+  let cleared = false;
+  try {
+    ({ cleared } = await withOrgPrincipal(actor.orgId, (tx) => resetApprovalPinCap(tx, actor, personId)));
+  } catch (err) {
+    return await redirectWithFlash(`/admin/users/${personId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(
+    `/admin/users/${personId}`,
+    {},
+    { ok: cleared ? 'Cleared. They can approve with an administrator PIN again.' : 'Nothing to clear: they are not capped.' },
   );
 }

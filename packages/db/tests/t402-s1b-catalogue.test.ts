@@ -92,7 +92,7 @@ function expectedRetention(category: string, sensitivity: string): 'r10y' | 'r2y
 describe('T-402 S1b - the catalogue is closed, typed and in one file (R2, R3, R4)', () => {
   it('has roughly the specified size (~95 entries; the 22 existing + ~33 S2/S3 + ~40 reserved) and every entry has every field', () => {
     expect(AUDIT_CATALOGUE.length).toBeGreaterThanOrEqual(90);
-    expect(AUDIT_CATALOGUE.length).toBeLessThanOrEqual(150);
+    expect(AUDIT_CATALOGUE.length).toBeLessThanOrEqual(160); // T-416 +2; raise deliberately
     for (const e of AUDIT_CATALOGUE) {
       expect(typeof e.action, 'action').toBe('string');
       expect(CATEGORIES, `${e.action} category`).toContain(e.category);

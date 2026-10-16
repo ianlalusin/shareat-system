@@ -24,6 +24,15 @@ export const DAILY_MISS_BUDGET = 50;
 export const DAILY_WINDOW_HOURS = 24;
 /** T-395 R4 / Q1: null = a stop lasts until a manager reopens it; option b sets 60. */
 export const STOP_AUTO_REOPEN_MINUTES: number | null = null;
+/**
+ * T-416 (DEF-653): administrator-PIN approvals are charged to the PERSON typing them, never to a store or the org.
+ * 5 wrong per person in a rolling 24 h; the cap auto-lifts 24 h after it tripped, or when an administrator clears it.
+ * TRIPWIRE: tier 1 (MISS_THRESHOLD 10 per 60 s) never fires for an actor bucket because step 2's daily check (cap 5)
+ * stops the bucket first, so no `lockout` row is written for it. If either number is re-tuned so tier 1 could fire
+ * first, the "this terminal" pause sentence would be wrong for a person.
+ */
+export const APPROVAL_DAILY_MISS_CAP = 5;
+export const APPROVAL_CAP_AUTO_LIFT_MINUTES = 1440;
 /** T-395 R11: rows older than this are purged lazily, 500 per charge. */
 export const ATTEMPT_RETENTION_DAYS = 90;
 const PURGE_BATCH = 500;
@@ -33,13 +42,31 @@ function toDate(v: Date | string | null | undefined): Date | null {
   return v == null ? null : new Date(v);
 }
 
-type ReopenOpts = { stopAutoReopenMinutes?: number | null };
+type ReopenOpts = { stopAutoReopenMinutes?: number | null; dailyMissBudget?: number };
+
+/** T-416: a bucket is a store (sign-in), the organisation's own (0199), or a person (administrator-PIN approvals). */
+export type Bucket = { store: string } | { org: true } | { actor: string };
 
 function autoReopen(opts: ReopenOpts): number | null {
   return opts.stopAutoReopenMinutes === undefined ? STOP_AUTO_REOPEN_MINUTES : opts.stopAutoReopenMinutes;
 }
 
 // T-395 S2: statusForStore (below) is the Staff panel's read-only status; its caller is staff/page.tsx.
+
+/** Row filter for one bucket. The org arm excludes actor rows, else the org bucket would count every person's misses. */
+function bucketFilter(col: string, orgId: string, b: Bucket) {
+  const c = sql.identifier(col);
+  if ('store' in b) return sql`${c}.store_id = ${b.store}`;
+  if ('org' in b) return sql`${c}.org_id = ${orgId} and ${c}.store_id is null and ${c}.actor_person_id is null`;
+  return sql`${c}.org_id = ${orgId} and ${c}.actor_person_id = ${b.actor}`;
+}
+
+/** ON CONFLICT target; the predicate must match the partial unique index exactly (else Postgres raises 42P10). */
+function bucketConflict(b: Bucket) {
+  if ('store' in b) return sql`on conflict (store_id)`;
+  if ('org' in b) return sql`on conflict (org_id) where store_id is null and actor_person_id is null`;
+  return sql`on conflict (org_id, actor_person_id) where actor_person_id is not null`;
+}
 
 export type Charge =
   /** `newlyStopped` (T-402 S2): this very attempt tripped the daily budget (not an already-stopped store). */
@@ -60,23 +87,23 @@ export type Charge =
  */
 export async function chargeAttempt(
   tx: Tx,
-  input: { orgId: string; storeId: string | null; deviceId: string | null },
+  /** `bucket` names the key. `storeId` is the pre-T-416 spelling (a store, or null = the organisation) and is ignored when `bucket` is given. */
+  input: { orgId: string; deviceId: string | null; bucket?: Bucket; storeId?: string | null },
   opts: ReopenOpts = {},
 ): Promise<Charge> {
-  const { orgId, storeId, deviceId } = input;
+  const { orgId, deviceId } = input;
+  const b: Bucket = input.bucket ?? (input.storeId ? { store: input.storeId } : { org: true });
+  const storeId = 'store' in b ? b.store : null;
+  const actorId = 'actor' in b ? b.actor : null;
   const auto = autoReopen(opts);
-  // T-412: storeId NULL is the organisation's own approval-PIN bucket (migration 0198). `bucket(col)` is the row filter
-  // for it; a store's filter is exactly what it was.
-  const bucket = (col: string) =>
-    storeId === null
-      ? sql`${sql.identifier(col)}.org_id = ${orgId} and ${sql.identifier(col)}.store_id is null`
-      : sql`${sql.identifier(col)}.store_id = ${storeId}`;
-  const conflict = storeId === null ? sql`on conflict (org_id) where store_id is null` : sql`on conflict (store_id)`;
+  const budget = opts.dailyMissBudget ?? DAILY_MISS_BUDGET;
+  const bucket = (col: string) => bucketFilter(col, orgId, b);
+  const conflict = bucketConflict(b);
 
   // 1. LOCK. A no-op update on conflict still takes the row lock until commit.
   const locked = (await tx.execute(sql`
-    insert into pin_attempt_throttle (org_id, store_id)
-    values (${orgId}, ${storeId}::uuid)
+    insert into pin_attempt_throttle (org_id, store_id, actor_person_id)
+    values (${orgId}, ${storeId}::uuid, ${actorId}::uuid)
     ${conflict} do update set updated_at = pin_attempt_throttle.updated_at
     returning
       locked_until as "lockedUntil",
@@ -100,13 +127,13 @@ export async function chargeAttempt(
                case when ${auto}::int is not null then t.stopped_at + make_interval(mins => ${auto}::int) end,
                '-infinity'::timestamptz))
   `)) as unknown as Array<{ n: number }>;
-  if ((counted[0]?.n ?? 0) >= DAILY_MISS_BUDGET) {
+  if ((counted[0]?.n ?? 0) >= budget) {
     await tx.execute(
       sql`update pin_attempt_throttle set stopped_at = now(), updated_at = now() where ${bucket('pin_attempt_throttle')}`,
     );
     await tx.execute(sql`
-      insert into sign_in_attempts (org_id, store_id, device_id, kind)
-      values (${orgId}, ${storeId}::uuid, ${deviceId}::uuid, 'stopped')
+      insert into sign_in_attempts (org_id, store_id, actor_person_id, device_id, kind)
+      values (${orgId}, ${storeId}::uuid, ${actorId}::uuid, ${deviceId}::uuid, 'stopped')
     `);
     return { refused: 'stopped', until: null, newlyStopped: true };
   }
@@ -138,15 +165,15 @@ export async function chargeAttempt(
     returning (locked_until is not null) as "startedPause"
   `)) as unknown as Array<{ startedPause: boolean }>;
   const miss = (await tx.execute(sql`
-    insert into sign_in_attempts (org_id, store_id, device_id, kind)
-    values (${orgId}, ${storeId}::uuid, ${deviceId}::uuid, 'miss')
+    insert into sign_in_attempts (org_id, store_id, actor_person_id, device_id, kind)
+    values (${orgId}, ${storeId}::uuid, ${actorId}::uuid, ${deviceId}::uuid, 'miss')
     returning id
   `)) as unknown as Array<{ id: string }>;
   let lockoutId: string | null = null;
   if (bumped[0]?.startedPause) {
     const lockout = (await tx.execute(sql`
-      insert into sign_in_attempts (org_id, store_id, device_id, kind)
-      values (${orgId}, ${storeId}::uuid, ${deviceId}::uuid, 'lockout')
+      insert into sign_in_attempts (org_id, store_id, actor_person_id, device_id, kind)
+      values (${orgId}, ${storeId}::uuid, ${actorId}::uuid, ${deviceId}::uuid, 'lockout')
       returning id
     `)) as unknown as Array<{ id: string }>;
     lockoutId = lockout[0]!.id; // INSERT ... RETURNING always yields the row
@@ -174,18 +201,16 @@ export async function chargeAttempt(
  */
 export async function refundOnSuccess(
   tx: Tx,
-  storeId: string | null,
+  orgId: string,
+  bucket: Bucket,
   charge: { missId: string; lockoutId: string | null },
-  /** Required when `storeId` is null (T-412: the organisation's own bucket). */
-  orgId?: string,
 ): Promise<void> {
   const ids = charge.lockoutId ? [charge.missId, charge.lockoutId] : [charge.missId];
-  const scope = storeId === null ? sql`store_id is null and org_id = ${orgId}` : sql`store_id = ${storeId}`;
   await tx.execute(sql`
-    delete from sign_in_attempts
-     where ${scope} and id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})
+    delete from sign_in_attempts a
+     where ${bucketFilter('a', orgId, bucket)} and a.id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})
   `);
-  await clearOnSuccess(tx, storeId, orgId);
+  await clearOnSuccess(tx, orgId, bucket);
 }
 
 /**
@@ -215,18 +240,65 @@ export async function reopen(
  * the write entirely when there is nothing to clear, so the ordinary hot path (a correct PIN,
  * first try) touches no row.
  */
-export async function clearOnSuccess(tx: Tx, storeId: string | null, orgId?: string): Promise<void> {
+export async function clearOnSuccess(tx: Tx, orgId: string, bucket: Bucket): Promise<void> {
   await tx
     .update(pinAttemptThrottle)
     .set({ failCount: 0, windowStartedAt: null, lockedUntil: null, updatedAt: sql`now()` })
     .where(
       and(
-        storeId === null
-          ? and(eq(pinAttemptThrottle.orgId, orgId ?? ''), sql`${pinAttemptThrottle.storeId} is null`)
-          : eq(pinAttemptThrottle.storeId, storeId),
+        'store' in bucket
+          ? eq(pinAttemptThrottle.storeId, bucket.store)
+          : 'org' in bucket
+            ? and(
+                eq(pinAttemptThrottle.orgId, orgId),
+                sql`${pinAttemptThrottle.storeId} is null`,
+                sql`${pinAttemptThrottle.actorPersonId} is null`,
+              )
+            : and(eq(pinAttemptThrottle.orgId, orgId), eq(pinAttemptThrottle.actorPersonId, bucket.actor)),
         or(gt(pinAttemptThrottle.failCount, 0), sql`${pinAttemptThrottle.lockedUntil} is not null`),
       ),
     );
+}
+
+/** T-416: is this person's administrator-PIN bucket capped right now? Applies the auto-lift rule (a lifted cap reads "not capped"). */
+export async function statusForActor(
+  tx: Tx,
+  orgId: string,
+  personId: string,
+): Promise<{ capped: boolean; cappedAt: Date | null }> {
+  const rows = (await tx.execute(sql`
+    select stopped_at as "stoppedAt"
+      from pin_attempt_throttle
+     where org_id = ${orgId} and actor_person_id = ${personId}
+       and stopped_at is not null and stopped_at + make_interval(mins => ${APPROVAL_CAP_AUTO_LIFT_MINUTES}::int) > now()
+  `)) as unknown as Array<{ stoppedAt: Date | string }>;
+  return rows[0] ? { capped: true, cappedAt: toDate(rows[0].stoppedAt) } : { capped: false, cappedAt: null };
+}
+
+/**
+ * T-416: an administrator clears a person's cap. Not capped (including an auto-lifted cap): { cleared: false }, nothing written.
+ * Mirrors `reopen`, but applies the auto-lift rule.
+ */
+export async function resetActorCap(
+  tx: Tx,
+  orgId: string,
+  personId: string,
+  byPersonId: string,
+): Promise<{ cleared: boolean; cappedAt: Date | null; resetAt: Date | null }> {
+  const rows = (await tx.execute(sql`
+    update pin_attempt_throttle t set
+      stopped_at = null, reopened_at = now(), reopened_by = ${byPersonId}::uuid,
+      fail_count = 0, window_started_at = null, locked_until = null, updated_at = now()
+    from (select id, stopped_at from pin_attempt_throttle
+           where org_id = ${orgId} and actor_person_id = ${personId} and stopped_at is not null
+             and stopped_at + make_interval(mins => ${APPROVAL_CAP_AUTO_LIFT_MINUTES}::int) > now()
+           for update) old
+    where t.id = old.id
+    returning old.stopped_at as "stoppedAt", t.reopened_at as "reopenedAt"
+  `)) as unknown as Array<{ stoppedAt: Date | string | null; reopenedAt: Date | string | null }>;
+  return rows[0]
+    ? { cleared: true, cappedAt: toDate(rows[0].stoppedAt), resetAt: toDate(rows[0].reopenedAt) }
+    : { cleared: false, cappedAt: null, resetAt: null };
 }
 
 export interface PinSignInStatus {
