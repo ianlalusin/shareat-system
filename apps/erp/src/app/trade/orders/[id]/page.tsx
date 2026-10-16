@@ -146,7 +146,7 @@ export default async function TradeOrderPage({
                 </label>
                 <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
                   Proof of payment (required for GCash or bank)
-                  <PhotoInput name="receiptPhoto" accept="image/*" className="text-sm" />
+                  <PhotoInput name="receiptPhoto" className="text-sm" />
                 </label>
               </fieldset>
             )}
