@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1688` 13. Decision log
-- `1689–1708` 14. Amendment protocol
-- `1709–1713` 15. Engineering standards — the industry practices this project follows
-  - `1714–1719` 15.1 Build order: walking skeleton first
-  - `1720–1731` 15.2 Golden-master testing — the most important practice here
-  - `1732–1740` 15.3 Strangler Fig, not big-bang cutover
-  - `1741–1745` 15.4 No dual-write
-  - `1746–1754` 15.5 Expand/contract migrations
-  - `1755–1763` 15.6 Observability from day zero, not later
-  - `1764–1768` 15.7 CI gates
-  - `1769–1773` 15.8 Backups and a tested restore
-  - `1774–1778` 15.9 Twelve-Factor config
-  - `1779–1786` 15.10 Append-only ledgers — but not event sourcing
-  - `1787–1791` 15.11 Defence in depth
-  - `1792–1820` 15.12 Skills are lenses, not assurance
-  - `1821–1827` 15.13 Reconciliation is a permanent feature
-- `1828–1832` 16. The accounting spine
-  - `1833–1864` 16.0 What we are actually fixing — the diagnosis
-  - `1865–1908` 16.1 The ten invariants — non-negotiable
-  - `1909–1923` 16.2 The oracle: how "correct" is tested
-  - `1924–1945` 16.3 The model — header + lines, not legs
-  - `1946–1965` 16.4 Deliberately simpler than ERPNext
-  - `1966–2032` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2033–2057` 16.6 What v1 already gets right — preserve the intent
-  - `2058–2079` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2080–2094` 16.8 What v1's accounting already gets right
-  - `2095–2138` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2139–2189` 16.10 Posting patterns — one canonical pattern per business event
-  - `2190–2222` 16.11 Inventory's accounting integration
+- `1329–1689` 13. Decision log
+- `1690–1709` 14. Amendment protocol
+- `1710–1714` 15. Engineering standards — the industry practices this project follows
+  - `1715–1720` 15.1 Build order: walking skeleton first
+  - `1721–1732` 15.2 Golden-master testing — the most important practice here
+  - `1733–1741` 15.3 Strangler Fig, not big-bang cutover
+  - `1742–1746` 15.4 No dual-write
+  - `1747–1755` 15.5 Expand/contract migrations
+  - `1756–1764` 15.6 Observability from day zero, not later
+  - `1765–1769` 15.7 CI gates
+  - `1770–1774` 15.8 Backups and a tested restore
+  - `1775–1779` 15.9 Twelve-Factor config
+  - `1780–1787` 15.10 Append-only ledgers — but not event sourcing
+  - `1788–1792` 15.11 Defence in depth
+  - `1793–1821` 15.12 Skills are lenses, not assurance
+  - `1822–1828` 15.13 Reconciliation is a permanent feature
+- `1829–1833` 16. The accounting spine
+  - `1834–1865` 16.0 What we are actually fixing — the diagnosis
+  - `1866–1909` 16.1 The ten invariants — non-negotiable
+  - `1910–1924` 16.2 The oracle: how "correct" is tested
+  - `1925–1946` 16.3 The model — header + lines, not legs
+  - `1947–1966` 16.4 Deliberately simpler than ERPNext
+  - `1967–2033` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2034–2058` 16.6 What v1 already gets right — preserve the intent
+  - `2059–2080` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2081–2095` 16.8 What v1's accounting already gets right
+  - `2096–2139` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2140–2190` 16.10 Posting patterns — one canonical pattern per business event
+  - `2191–2223` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1685,6 +1685,7 @@ just a patch.**
 | 350 | 2026-10-16 | **DINERS LIVE IN THE SAME PEOPLE LIST AS STAFF, MARKED AS DINERS.** When Customer v2 moves to the shared backend, diner accounts are rows in the one people list (one sign-in path, one privacy rule: consent tick, delete after 3 years inactive). A staff member who is also a diner is ONE person. Hard rule: a diner-only person can reach no ERP or POS screen or action; every capability check must prove it with a test that the diner is refused. v1 member data (points, visits) is migrated when Customer v2 is built. Closes the last open question of row 348. | Ian, 2026-10-16 (orchestrator session; decisions page said "discuss further") | Yes, before Customer v2 diner accounts exist; costly after |
 | 351 | 2026-10-16 | **POS v2 MONEY ACTIONS GO THROUGH OUR OWN SMALL POS v2 SERVER; MANAGERS APPROVE WITH THEIR ERP v2 PIN.** Refunds, tender corrections and unpaid-session voids are done by a POS v2 server in this monorepo (pos2.shareat.net, on 159.223.46.224 as `shareat-pos.service`, port 9009, memory-capped), never directly from the tablet. A manager approves with the same per-person PIN as ERP v2, verified by the shared PIN code (`packages/auth`, with the T-416 per-person miss cap); nobody can skip the check from the tablet. The Firestore wire format v1 shares stays unchanged (v2 adds fields beside the old ones). Refunds stay cash-only until the ERP day feed (T-375) reads `refundTender`. Specs: T-423 (client money core), T-424 (server). | Ian, 2026-10-16, in the POS v2 session (plan `tingly-questing-pretzel.md`); recorded by the orchestrator | Yes, before T-424 ships; costly after |
 | 352 | 2026-10-16 | **BUSINESS (B2B) CUSTOMERS USE CUSTOMERS + TRADE ORDERS + AR, NOT A SALES CHANNEL.** Shareat has two customer kinds: walk-in/online diners (B2C: dine-in, take-out, online à la carte, bulk orders, through sales channels and the POS) and business customers (B2B, e.g. a samgyup house buying meat, paying cash or on account). B2B sales are a trade order to a named customer (T-132): dispatch bills Dr 1210 per customer / Cr 4300 and relieves stock; payment is an AR collection (T-131/T-226). A sales channel stays a B2C source label only. Gaps to build as T-433: pay-now at dispatch, a printable delivery receipt/invoice, a credit-limit warning with manager override. | Ian, 2026-10-16 (orchestrator session, research-evaluate-propose: "plan items 123") | Yes |
+| 353 | 2026-10-16 | ⭐ **STAFF AND CUSTOMER PERSONAL INFORMATION IS STRICTLY GUARDED (standing).** Personal data of staff and customers (names with contact details, addresses, government IDs, birthdays, photos, PIN data, bank/e-wallet details, B2B customer contacts and balances) is shown only to people whose capability needs it, enforced in the LOADER/domain (never only the UI), store-scoped, and never in exports or logs beyond what the task requires. **Signatures are the strictest class:** stored only through the file broker (never a data URL), viewable only by payroll staff and admins, never shown in lists, cards or exports, served by a short-lived link, and EVERY view and change is audited. Every new screen or report touching personal data needs a test proving an unauthorised viewer sees nothing. | Ian, 2026-10-16 (orchestrator session) | No — tightening only |
 
 ## 14. Amendment protocol
 
