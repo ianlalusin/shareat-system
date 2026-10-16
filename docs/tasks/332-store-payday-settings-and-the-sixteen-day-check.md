@@ -1,6 +1,6 @@
 # T-332 — the payday settings Ian asked for already exist; what is missing is the row and the check
 
-**Status:** ⭐ **SPECCED 2026-09-20 by the orchestrator (`system32-df`), NOT BUILT.** Ordered by Ian
+**Status:** **BUILT.** Payday settings (`packages/domain/src/attendance/config.ts`, `packages/db/schema/attendance-config.ts`) and the 16-day check (`packages/domain/src/findings/index.ts`) exist. Specced 2026-09-20 by the orchestrator (`system32-df`). Ordered by Ian
 the same night: *"create a doc on store settings where admin define the date of paydays."*
 **Migration slot:** ⛔ **decide at build time — §4.2 turns on whether a backfill is a migration.**
 **Depends on:** nothing. ⚠️ **T-187 is its best data source but is NOT a prerequisite** — §5.

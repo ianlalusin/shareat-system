@@ -201,6 +201,7 @@ report).
   ERP routine must exist by then. Orchestrator to schedule.
 - **Offline refunds** (ADR A3: same tablet, same day, cash only, manager PIN) are PC-5.
 - **E-wallet refunds:** wait for T-375 to read `refundTender` (orchestrator, ERP side).
+- **Known drift (builder, audit):** a v2 refund skips what v1's `apply-delta 'refund'` also did: the `catalogCache/popularItems` decrement and the `dailySessions` refund row. CUSTOMER's "Popular" may overcount refunded dishes; the ERP feed is unaffected.
 
 ## Open questions
 1. Refunds always need a manager PIN (recommended; 7 refunds all-time) — or may a manager signed in on the tablet

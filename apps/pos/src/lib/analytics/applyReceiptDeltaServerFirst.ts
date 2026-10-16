@@ -7,6 +7,16 @@ export type ReceiptDeltaOp = 'payment' | 'refund' | 'void' | 'edit' | 'voidcash-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * T-424 Ruling 10a: sale and void deltas go to the POS v2 server's port of v1's endpoint ONLY in builds made with
+ * NEXT_PUBLIC_POS2_ANALYTICS=1 (test-project builds). Production builds keep calling v1's `/api/analytics/apply-delta` until the parity
+ * test passes AND the orchestrator flips it. Refunds never come here from v2: the refund route applies its own analytics.
+ */
+function applyDeltaUrl(op: ReceiptDeltaOp): string {
+  const v2 = process.env.NEXT_PUBLIC_POS2_ANALYTICS === '1' && (op === 'payment' || op === 'void');
+  return v2 ? '/api/pos2/analytics/apply-delta' : '/api/analytics/apply-delta';
+}
+
+/**
  * Apply a receipt analytics delta server-first, with transient-failure retry.
  *
  * The authoritative path is the server endpoint (server clock, recomputes from
@@ -32,7 +42,7 @@ export async function applyReceiptDeltaServerFirst(
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) break; // not authed; reconcile cron will catch receipt ops
-      const res = await fetch('/api/analytics/apply-delta', {
+      const res = await fetch(applyDeltaUrl(op), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ storeId, receiptId, op, ...(extra || {}) }),

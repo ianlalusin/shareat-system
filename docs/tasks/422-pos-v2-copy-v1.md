@@ -1,6 +1,6 @@
 # T-422: POS v2 — copy POS v1's floor screens into `apps/pos` (P0, PC-3)
 
-**Status:** spec written 2026-10-16 (Opus planner, POS v2 lane), not started
+**Status:** DONE 2026-10-16 (POS v2 lane; merged to main)
 **Model:** Sonnet tester first (slice T), then Sonnet builder (B1-B5), Sonnet auditor last (bible rows 184, 307).
 **Migration:** none. No `packages/**` change. No server code.
 **Authority:** `docs/plans/pos-customer-v2-phase-plan.md` §6 PC-3 · ADR-015 + Amendment 2026-10-15 (A1, A4.1, A4.2) ·

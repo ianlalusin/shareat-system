@@ -1,6 +1,6 @@
 # T-114b — Stage 1: the audit report
 
-> **Status:** spec ready. **Depends on:** T-112, T-113, T-114a (all done). 19,358 v1 documents
+> **Status:** BUILT (absorbed into T-392). Code: `packages/etl/src/audit/`. **Depends on:** T-112, T-113, T-114a (all done). 19,358 v1 documents
 > are already landed — this task reads **Postgres only** and touches production **never**.
 > **Blocks:** the December close and the 1 January opening balance.
 > **Written by:** Opus planner, 2026-08-24, from the captured data rather than from assumption.

@@ -1,6 +1,6 @@
 # T-419 — Ingredients used by recipe cooking also show on the daily usage screen, labelled "from recipe"
 
-**Status:** spec written 2026-10-16, not started; **Ian's answers folded in 16 Oct** (drafts shown, marked "draft"; counting
+**Status:** DONE 2026-10-16 (merged to main); **Ian's answers folded in 16 Oct** (drafts shown, marked "draft"; counting
 in the check moved to **T-420**). Opus spec. Reopens **T-409 Q2** (`docs/tasks/409-production-slice-pickers.md:113`) and
 touches the **T-401 S6** usage screen (`docs/tasks/401-erp-menu-catalog-master.md`, rulings A1-A12).
 **Source:** bible row 348 (Ian, 16 Oct): recipe-cook ingredients ALSO appear on the daily usage screen, *"just label so

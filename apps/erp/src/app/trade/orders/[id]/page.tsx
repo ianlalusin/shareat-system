@@ -7,10 +7,11 @@ import { dispatchOrderAction, receiveOrderAction, setBirInvoiceNoAction, voidOrd
 import { canSeeCreditLimit, creditPreview, orderDetail, peso, storeMoneyAccounts, today } from '../lib';
 import { ACTION_LINK } from '@/components/action-link';
 import { PhotoInput } from '@/components/PhotoInput';
+import { EditableRecord } from '@/components/forms';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Button, ConfirmDestructive, exitStepFromTimestamps, FlashBanner, Input, LinkRow, RowAction, RowLink, Select, simpleStepIndexFor, StatusHero, statusLabel, tradeOrderSteps, type StatusIconKind, type Tone } from '@/components/ui';
+import { Button, ConfirmDestructive, exitStepFromTimestamps, FlashBanner, Field, FormGrid, Input, LinkRow, RowAction, RowLink, Select, simpleStepIndexFor, StatusHero, statusLabel, tradeOrderSteps, type StatusIconKind, type Tone } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Trade order — Shareat System' };
@@ -131,27 +132,26 @@ export default async function TradeOrderPage({
               </p>
             )}
             {payAtDispatch && (
-              <fieldset className="flex w-full flex-wrap items-end gap-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
+              <fieldset className="w-full rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
                 <legend className="px-1 text-xs text-neutral-500 dark:text-neutral-400">Paid on the spot? (optional)</legend>
-                <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-                  Paid now (₱)
-                  <Input name="payNowAmount" inputMode="decimal" placeholder="0.00" className="w-32 text-right tabular-nums" />
-                </label>
-                <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-                  Into account
-                  <Select name="moneyAccountId" defaultValue="">
-                    <option value="">Choose…</option>
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} ({a.custodian})
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-                <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-                  Proof of payment (required for GCash or bank)
-                  <PhotoInput name="receiptPhoto" className="text-sm" />
-                </label>
+                <FormGrid>
+                  <Field label="Paid now (₱)">
+                    <Input name="payNowAmount" inputMode="decimal" placeholder="0.00" className="w-full text-right tabular-nums" />
+                  </Field>
+                  <Field label="Into account">
+                    <Select name="moneyAccountId" defaultValue="" className="w-full">
+                      <option value="">Choose…</option>
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} ({a.custodian})
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Proof of payment (required for GCash or bank)" span="full">
+                    <PhotoInput name="receiptPhoto" className="text-sm" />
+                  </Field>
+                </FormGrid>
               </fieldset>
             )}
             {!isInternal && customer.creditLimit !== null && (
@@ -306,14 +306,13 @@ export default async function TradeOrderPage({
               Print delivery receipt
             </Link>
           </div>
-          <form action={setBirInvoiceNoAction} className="flex flex-wrap items-end gap-3">
-            <input type="hidden" name="orderId" value={order.id} />
-            <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-              BIR invoice no. (booklet)
-              <Input name="birInvoiceNo" defaultValue={order.birInvoiceNo ?? ''} placeholder="from the pre-printed booklet" className="w-56" />
-            </label>
-            <Button type="submit">Save invoice no.</Button>
-          </form>
+          <EditableRecord action={setBirInvoiceNoAction} label="BIR invoice no." hidden={{ orderId: order.id }} typed={null}>
+            <FormGrid>
+              <Field label="BIR invoice no. (booklet)">
+                <Input name="birInvoiceNo" defaultValue={order.birInvoiceNo ?? ''} placeholder="from the pre-printed booklet" className="w-full" />
+              </Field>
+            </FormGrid>
+          </EditableRecord>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             The official invoice is the booklet you already use; this only notes its number so it prints on the receipt. Leave it blank and save to clear it.
           </p>

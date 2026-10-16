@@ -1,6 +1,6 @@
 # T-417: POS v2 and Customer v2 as empty-shell apps in this repo (phase S, PC-2)
 
-**Status:** spec written 2026-10-16, not started
+**Status:** DONE 2026-10-16 (merged to main)
 **Model:** Sonnet tester first (slice T), then Sonnet builder (B1-B5), bible row 184. No money path.
 **Migration:** none. No schema, no `packages/**` source change.
 **Authority:** `docs/plans/pos-customer-v2-phase-plan.md` §4, §6 (PC-2) · ADR-015 Amendment 2026-10-15 §A1 ·

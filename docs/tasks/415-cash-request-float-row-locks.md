@@ -1,6 +1,6 @@
 # T-415: every move of money in or out of a cash request locks the request first and checks its live state
 
-**Status:** spec written 2026-10-16, not started (revised same day after Opus review)
+**Status:** DONE 2026-10-16 (merged to main); revised same day after Opus review
 **Closes:** DEF-657, DEF-658, DEF-659 (all found in the T-414 audit; bible row 347 names them as its follow-ups), plus the
 void gap found in review (ruling 4; DEF-661).
 **Model:** Sonnet tester first (commits red), then Sonnet builder (bible row 184). Money path: Sonnet, not Haiku.

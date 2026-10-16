@@ -111,19 +111,28 @@ describe('T-422 case 1 - route set', () => {
   });
 });
 
-describe('T-422 case 2 - no server code', () => {
-  it('no src/app/api, no middleware. Mutant: server routes shipped in the APK', () => {
-    expect(existsSync(path.join(APP, 'api'))).toBe(false);
-    for (const m of ['middleware.ts', 'middleware.js', 'proxy.ts']) {
+// T-424 slice T (allowed edit): the T-422 server-code guard is narrowed to CLIENT paths. The POS v2 server (T-424 Ruling 1-2) lives
+// ONLY under src/app/api/pos2/** and src/server/** (plus src/middleware.ts for CORS); everything else stays server-free.
+// tests/unit/pos-v2-server-boundary.test.ts proves the positive side (no client file reaches server code).
+const isServerPath = (f: string) => /^src\/(app\/api\/pos2\/|server\/)/.test(rel(f));
+describe('T-422 case 2 - no server code in client paths (narrowed by T-424)', () => {
+  it('route handlers and src/app/api exist only under pos2; the only middleware is src/middleware.ts. Mutant: server routes outside the pos2 prefix', () => {
+    const apiDir = path.join(APP, 'api');
+    if (existsSync(apiDir)) {
+      const top = readdirSync(apiDir, { withFileTypes: true }).map((e) => e.name);
+      expect(top.filter((n) => n !== 'pos2')).toEqual([]);
+    }
+    for (const m of ['middleware.js', 'proxy.ts']) {
       expect(existsSync(path.join(SRC, m)), m).toBe(false);
     }
-    const handlers = walk(APP).filter((f) => /[\\/]route\.(ts|js|tsx)$/.test(f));
-    expect(handlers).toEqual([]);
+    const handlers = walk(APP).filter((f) => /[\\/]route\.(ts|js|tsx)$/.test(f)).map(rel);
+    expect(handlers.filter((h) => !h.startsWith('src/app/api/pos2/'))).toEqual([]);
   });
 
-  it('nothing imports firebase-admin / genkit / @anthropic-ai/sdk / server-only / @/lib/server/. Mutant: server code in the client bundle', () => {
+  it('no CLIENT file imports firebase-admin / genkit / @anthropic-ai/sdk / server-only / @/lib/server/. Mutant: server code in the client bundle', () => {
     const bad: string[] = [];
     for (const f of srcFiles().filter(isCode)) {
+      if (isServerPath(f) || isTest(f) || rel(f) === 'src/middleware.ts' || /^src\/(test-helpers\/|(.*\/)?__fixtures__\/)/.test(rel(f))) continue;
       for (const s of specifiers(readFileSync(f, 'utf8'))) {
         if (
           s === 'firebase-admin' || s.startsWith('firebase-admin/') ||
@@ -146,7 +155,7 @@ describe('T-422 case 3 - closure guard', () => {
     const reach = closure(routeRoots());
     const orphans = srcFiles()
       // T-423 slice T: test support (src/test-helpers/**, vendored src/**/__fixtures__/**) is read by tests only, never by a route.
-      .filter((f) => isCode(f) && !isTest(f) && !reach.has(f) && !/^src\/(test-helpers\/|(.*\/)?__fixtures__\/)/.test(rel(f)))
+      .filter((f) => isCode(f) && !isTest(f) && !reach.has(f) && !/^src\/(test-helpers\/|(.*\/)?__fixtures__\/)/.test(rel(f)) && rel(f) !== 'src/middleware.ts')
       .map(rel)
       .sort();
     expect(orphans).toEqual([]);
@@ -296,7 +305,9 @@ describe('T-422 case 8 - V1-COPY.md', () => {
 // Case 9 - dependencies and lockfile
 // ---------------------------------------------------------------------------------------------
 describe('T-422 case 9 - dependencies', () => {
-  const FORBIDDEN = ['firebase-admin', 'genkit', '@anthropic-ai/sdk', 'firebase-tools', 'genkit-cli', 'eslint-config-next'];
+  // T-424: 'firebase-admin' is no longer forbidden here - the POS v2 SERVER (src/server, src/app/api/pos2) needs it. What this guard protected is
+  // the APK: that is now policed by tests/unit/pos-v2-server-boundary.test.ts (no client file imports it; build:cap output holds none).
+  const FORBIDDEN = ['genkit', '@anthropic-ai/sdk', 'firebase-tools', 'genkit-cli', 'eslint-config-next'];
 
   it('apps/pos/package.json has none of the forbidden packages. Mutant: server-side deps dragged into the APK', () => {
     const pkg = JSON.parse(read('apps/pos/package.json')) as Record<string, Record<string, string> | undefined>;

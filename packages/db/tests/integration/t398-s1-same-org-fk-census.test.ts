@@ -55,7 +55,8 @@ const OPEN_BASELINE = { count: 223, sha256: '341d656a156ce5e35006ba7dfba23171f82
 /** Planner-ruled permanent exceptions. Empty until S5 adds the inter-entity links. */
 const BY_DESIGN_PIN: readonly string[] = [];
 const ORG_LESS_PIN: readonly string[] = ['etl_quarantine', 'etl_reconciliation', 'etl_runs', 'etl_source_documents'];
-const NO_FK_PIN = { count: 27, sha256: '120bb2f5377f2b7afca47c14d1e83affd8974d0575c38ff3a19f105f581dda7a' } as const;
+// T-424: +pos_terminal_links.device_id (external key: the POS v2 tablet install id). 27 -> 28.
+const NO_FK_PIN = { count: 28, sha256: 'c3b1234c5f44b1cff1489c2b16baa5d49e5177c9a2dc8adca16d54829de6810f' } as const;
 const JSONB_PIN = { count: 9, sha256: 'c6ed3b6390ba20d384ed7ad17b22b6fc66e2ade9b0cb2867c115aa36f7d8d16b' } as const;
 
 const openKeys = (l: readonly OpenFkEntry[]) => l.map((e) => e.fk);

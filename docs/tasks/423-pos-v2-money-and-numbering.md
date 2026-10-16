@@ -1,6 +1,6 @@
 # T-423: POS v2 — money in centavos and one receipt series per tablet (P0, PC-4 part 1)
 
-**Status:** spec written 2026-10-16 (Opus planner, POS v2 lane, plan mode); revised the same day after the Opus spec
+**Status:** DONE 2026-10-16 (POS v2 lane; merged to main); revised the same day after the Opus spec
 review (M7-M10 and minors folded in, marked ✎R)
 **Model:** Sonnet tester (T) -> Sonnet builder (S1-S3) -> Sonnet auditor. Money lane: Sonnet always, never Haiku.
 **Migration:** none. No `packages/**` change. No server code (that is T-424).

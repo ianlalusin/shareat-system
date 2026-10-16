@@ -1,6 +1,6 @@
 # T-421 — Dashboard sales chart: one bar per day, split and colour-coded by sales channel
 
-**Status:** spec written 2026-10-16, not started. Opus spec. Builds on T-387 S5 (the dashboard) and `ea49036` (smooth line).
+**Status:** DONE 2026-10-16 (merged to main). Opus spec. Builds on T-387 S5 (the dashboard) and `ea49036` (smooth line).
 **Source:** Ian, 16 Oct: *"I want to see the bars per sales channel on the same graph, color coded."*
 **Model: SONNET** (reports touch money totals: not Haiku). **No migration.** **No capability added** (the dashboard's
 existing report scope gates it). Size S-M.
