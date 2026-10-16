@@ -5,7 +5,7 @@ export function ChannelDonut({
   rows,
   subtitle,
 }: {
-  rows: Array<{ id: string; name: string; value: number; text: string }>;
+  rows: Array<{ id: string; name: string; value: number; text: string; color?: string }>;
   subtitle: string;
 }) {
   const total = rows.reduce((n, r) => n + r.value, 0);
@@ -17,7 +17,7 @@ export function ChannelDonut({
       pct,
       dash: pct.toFixed(3) + ' ' + (100 - pct).toFixed(3),
       offset: (-acc).toFixed(3),
-      color: seriesColor(i),
+      color: r.color ?? seriesColor(i),
     };
     acc += pct;
     return arc;

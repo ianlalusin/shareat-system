@@ -3,6 +3,7 @@
  * day marked. Server-rendered inline SVG; the draw-in motion is CSS-only and lives in globals.css inside
  * the no-preference block, so reduced motion gets the finished chart.
  */
+import type { ReactNode } from 'react';
 import { SalesHover } from './SalesHover';
 
 export interface SalesLinePoint {
@@ -15,20 +16,40 @@ export interface SalesLinePoint {
   text?: string;
 }
 
+export interface SalesBarSegment {
+  key: string;
+  name: string;
+  /** Pesos. Negative only for the "POS corrections" block, drawn hatched over the top of the stack. */
+  value: number;
+  /** A palette token string, the same one the donut uses for this channel. */
+  color: string;
+}
+export interface SalesBar {
+  segments: SalesBarSegment[];
+}
+export interface SalesLegendItem {
+  key: string;
+  name: string;
+  color: string;
+}
+
 const W = 1000;
 const BASE = 350;
 const TOP = 40;
 
-function build(values: number[], max: number): [number, number][] {
+function build(values: number[], max: number, centred = false): [number, number][] {
   const n = values.length;
   return values.map((v, i) => {
-    const x = n === 1 ? (i === 0 ? 0 : W) : (i * W) / (n - 1);
-    const y = BASE - (max > 0 ? (v / max) * (BASE - TOP) : 0);
-    return [x, y];
+    const x = centred ? ((i + 0.5) * W) / n : n === 1 ? (i === 0 ? 0 : W) : (i * W) / (n - 1);
+    const y0 = BASE - (max > 0 ? (v / max) * (BASE - TOP) : 0);
+    // With bars a net-negative day stays on the baseline (the hatch carries the negative part).
+    return [x, centred ? Math.min(y0, BASE) : y0];
   });
 }
 
 const f = (n: number) => n.toFixed(1);
+const peso = (v: number) =>
+  '₱' + (Number.isInteger(v) ? v.toLocaleString('en-US') : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
 /**
  * Smooth curve through every point (monotone cubic, Fritsch-Carlson): it passes exactly through each day's
@@ -79,6 +100,9 @@ export function SalesLine({
   prevName,
   peakText,
   peakLabel,
+  bars,
+  legend,
+  note,
 }: {
   points: SalesLinePoint[];
   chartLabel: string;
@@ -86,34 +110,84 @@ export function SalesLine({
   prevName: string;
   peakText: string;
   peakLabel: string;
+  /** T-421. One entry per point, aligned with `points`; an empty `segments` draws no stack for that day. */
+  bars?: SalesBar[];
+  legend?: SalesLegendItem[];
+  note?: string;
 }) {
   if (points.length === 0) return null;
-  const max = Math.max(...points.map((p) => Math.max(p.current, p.previous)), 0);
-  const cur = build(points.map((p) => p.current), max);
-  const prev = build(points.map((p) => p.previous), max);
+  const hasBars = bars !== undefined && bars.length === points.length;
+  const positiveSum = (b: SalesBar | undefined) => (b ? b.segments.reduce((n, s) => n + Math.max(s.value, 0), 0) : 0);
+  const max = Math.max(
+    ...points.map((p, i) => Math.max(p.current, p.previous, hasBars ? positiveSum(bars![i]) : 0)),
+    0,
+  );
+  const cur = build(points.map((p) => p.current), max, hasBars);
+  const prev = build(points.map((p) => p.previous), max, hasBars);
   // One day has one point: draw it as a flat segment so there is something to see.
-  const curPts = points.length === 1 ? [cur[0]!, cur[0]!] : cur;
-  const prevPts = points.length === 1 ? [prev[0]!, prev[0]!] : prev;
+  const flat = (p: [number, number]): [number, number][] => (hasBars ? [[0, p[1]], [W, p[1]]] : [p, p]);
+  const curPts = points.length === 1 ? flat(cur[0]!) : cur;
+  const prevPts = points.length === 1 ? flat(prev[0]!) : prev;
   const curPath = smoothPath(curPts);
   const prevPath = smoothPath(prevPts);
-  const areaPath = curPath + ' L ' + W + ' ' + BASE + ' L 0 ' + BASE + ' Z';
+  const areaPath = hasBars
+    ? curPath + ' L ' + f(curPts[curPts.length - 1]![0]) + ' ' + BASE + ' L ' + f(curPts[0]![0]) + ' ' + BASE + ' Z'
+    : curPath + ' L ' + W + ' ' + BASE + ' L 0 ' + BASE + ' Z';
 
   let peakIdx = 0;
   points.forEach((p, i) => {
     if (p.current > points[peakIdx]!.current) peakIdx = i;
   });
-  const peakX = points.length === 1 ? 50 : (peakIdx / (points.length - 1)) * 100;
+  const peakX = hasBars
+    ? ((peakIdx + 0.5) / points.length) * 100
+    : points.length === 1
+      ? 50
+      : (peakIdx / (points.length - 1)) * 100;
   const peakY = (BASE - (max > 0 ? (points[peakIdx]!.current / max) * (BASE - TOP) : 0)) / 360;
   const calloutRight = peakX > 60;
 
   const tickCount = Math.min(points.length, 7);
-  const ticks =
+  const tickIdx =
     points.length === 1
-      ? [points[0]!.label]
-      : Array.from(
-          { length: tickCount },
-          (_, i) => points[Math.round((i * (points.length - 1)) / (tickCount - 1))]!.label,
+      ? [0]
+      : Array.from({ length: tickCount }, (_, i) => Math.round((i * (points.length - 1)) / (tickCount - 1)));
+  const ticks = tickIdx.map((i) => points[i]!.label);
+
+  const scale = max > 0 ? (BASE - TOP) / max : 0;
+  const band = W / points.length;
+  const barW = band * 0.6;
+  const hatchColors: string[] = [];
+  const blocks: ReactNode[] = [];
+  if (hasBars) {
+    bars!.forEach((bar, i) => {
+      const day = points[i]!.day ?? points[i]!.label;
+      const x = (i + 0.5) * band - barW / 2;
+      let top = BASE;
+      for (const seg of bar.segments) {
+        if (seg.value < 0) continue;
+        const h = seg.value * scale;
+        top -= h;
+        blocks.push(
+          <rect key={i + '-' + seg.key} x={f(x)} y={f(top)} width={f(barW)} height={f(h)} fill={seg.color} fillOpacity="0.85">
+            <title>{day + ' · ' + seg.name + ' · ' + peso(seg.value)}</title>
+          </rect>,
         );
+      }
+      for (const seg of bar.segments) {
+        if (seg.value >= 0) continue;
+        // Hatched, over the top of the stack: the solid part ends at the day's net total (the line's point).
+        const lower = Math.min(cur[i]![1], BASE);
+        const h = Math.min(-seg.value * scale, lower - TOP);
+        let k = hatchColors.indexOf(seg.color);
+        if (k < 0) k = hatchColors.push(seg.color) - 1;
+        blocks.push(
+          <rect key={i + '-' + seg.key} x={f(x)} y={f(lower - h)} width={f(barW)} height={f(h)} fill={'url(#sales-hatch-' + k + ')'}>
+            <title>{day + ' · ' + seg.name + ' · ' + peso(seg.value)}</title>
+          </rect>,
+        );
+      }
+    });
+  }
 
   return (
     <figure className="relative m-0 min-w-0">
@@ -131,6 +205,12 @@ export function SalesLine({
             <stop offset="0.55" stopColor="#e3122f" />
             <stop offset="1" stopColor="#ff3b5c" />
           </linearGradient>
+          {hatchColors.map((c, k) => (
+            <pattern key={c} id={'sales-hatch-' + k} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width="6" height="6" style={{ fill: 'var(--canvas)' }} fillOpacity="0.6" />
+              <line x1="0" y1="0" x2="0" y2="6" strokeWidth="3" style={{ stroke: c }} />
+            </pattern>
+          ))}
         </defs>
         {[40, 143, 247].map((y) => (
           <line
@@ -153,6 +233,7 @@ export function SalesLine({
           vectorEffect="non-scaling-stroke"
           style={{ stroke: 'var(--ink)' }}
         />
+        {blocks}
         <path className="dash-fade-late" d={areaPath} fillOpacity="0.09" style={{ fill: 'var(--brand-ink)' }} />
         <path
           className="dash-fade"
@@ -186,6 +267,7 @@ export function SalesLine({
           text: p.text ?? String(p.current),
           y: Number(cur[i]![1]) / 360,
         }))}
+        centred={hasBars}
       />
       <div className="dash-pop absolute h-0 w-0" style={{ left: peakX + '%', top: peakY * 100 + '%' }}>
         <span
@@ -206,13 +288,30 @@ export function SalesLine({
           {peakLabel}
         </span>
       </div>
-      <div className="mt-2.5 flex justify-between text-xs text-muted tabular-nums">
-        {ticks.map((t, i) => (
-          <span key={t + '-' + i} className="min-w-0 text-center">
-            {t}
-          </span>
-        ))}
-      </div>
+      {hasBars ? (
+        <div className="relative mt-2.5 h-4 text-xs text-muted tabular-nums">
+          {ticks.map((t, k) => (
+            <span
+              key={t + '-' + k}
+              className={
+                'absolute top-0 whitespace-nowrap text-center ' +
+                (k === 0 ? '' : k === ticks.length - 1 ? '-translate-x-full' : '-translate-x-1/2')
+              }
+              style={{ left: ((tickIdx[k]! + 0.5) / points.length) * 100 + '%' }}
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-2.5 flex justify-between text-xs text-muted tabular-nums">
+          {ticks.map((t, i) => (
+            <span key={t + '-' + i} className="min-w-0 text-center">
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
       <figcaption className="mt-3.5 flex gap-5 text-[13px] text-muted">
         <span className="inline-flex items-center gap-2">
           <span className="h-[2px] w-[22px] rounded-sm" style={{ background: 'linear-gradient(90deg, #8a0f22, #ff3b5c)' }} />
@@ -223,6 +322,17 @@ export function SalesLine({
           {prevName}
         </span>
       </figcaption>
+      {legend && legend.length > 0 ? (
+        <ul className="m-0 mt-3 flex list-none flex-wrap gap-x-5 gap-y-2 p-0 text-[13px] text-muted">
+          {legend.map((l) => (
+            <li key={l.key} className="inline-flex items-center gap-2">
+              <span className="h-3 w-3 rounded-sm" style={{ background: l.color }} />
+              {l.name}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {note ? <p className="m-0 mt-2 text-[13px] text-muted">{note}</p> : null}
     </figure>
   );
 }

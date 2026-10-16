@@ -11,6 +11,7 @@ import { RangeForm } from '@/components/dashboard/RangeForm';
 import { HeroNumber } from '@/components/dashboard/HeroNumber';
 import { SalesLine } from '@/components/dashboard/SalesLine';
 import { StoreBars } from '@/components/dashboard/StoreBars';
+import { seriesColor } from '@/components/dashboard/chart-colors';
 import { ChannelDonut } from '@/components/dashboard/ChannelDonut';
 import { OutlineCount } from '@/components/dashboard/OutlineCount';
 import { RightNowBand } from '@/components/dashboard/RightNowBand';
@@ -69,7 +70,7 @@ export default async function DashboardPage({
         getBalanceSheet(tx, { orgId, storeId, asOfDate: today }),
         getArAgingReport(tx, { orgId, storeId, asOfDate: today }),
         getApAgingReport(tx, { orgId, storeId, asOfDate: today }),
-        getSalesRollup(tx, { orgId, storeId, fromDate, toDate, groupBy: 'day' }),
+        getSalesRollup(tx, { orgId, storeId, fromDate, toDate, groupBy: 'day', channelDays: true }),
         getSalesRollup(tx, { orgId, storeId, fromDate: prev.from, toDate: prev.to, groupBy: 'day' }),
         showByStore ? getSalesRollup(tx, { orgId, storeId, fromDate, toDate, groupBy: 'store' }) : Promise.resolve(null),
         Promise.all(storesInScope.map((s) => lowStockRepo.lowStock(tx, orgId, s.id))),
@@ -153,7 +154,33 @@ export default async function DashboardPage({
         return { id: s.id, name: s.name, value: v, text: fmtNum(v) };
       })
     : [];
+  // One colour per channel, shared by the donut and the day bars (key: channel id, or 'pos-corrections').
+  const colorOf = new Map<string, string>();
+  const orderOf = new Map<string, number>();
+  salesNow.channels.forEach((c, i) => {
+    colorOf.set(c.channelId ?? 'pos-corrections', seriesColor(i));
+    orderOf.set(c.channelId ?? 'pos-corrections', i);
+  });
+  const hidden = new Set(salesNow.unreconciledDays ?? []);
+  const dayBlocks = new Map((salesNow.channelDays ?? []).map((d) => [d.day, d.channels] as const));
+  const bars = nowDays.map((d) => ({
+    segments: hidden.has(d)
+      ? []
+      : [...(dayBlocks.get(d) ?? [])]
+          .map((c) => {
+            const key = c.channelId ?? 'pos-corrections';
+            return { key, name: c.channelName, value: Number(c.total), color: colorOf.get(key) ?? seriesColor(0) };
+          })
+          .sort((a, b) => (orderOf.get(a.key) ?? 0) - (orderOf.get(b.key) ?? 0)),
+  }));
+  const showBars = bars.some((b) => b.segments.length > 0);
+  const legend = salesNow.channels.map((c) => {
+    const key = c.channelId ?? 'pos-corrections';
+    return { key, name: c.channelName, color: colorOf.get(key)! };
+  });
+  const hiddenDays = nowDays.filter((d) => hidden.has(d));
   const channelRows = salesNow.channels.map((c) => ({
+    color: colorOf.get(c.channelId ?? 'pos-corrections'),
     id: c.channelId ?? c.channelName,
     name: c.channelName,
     value: Number(c.total),
@@ -215,7 +242,14 @@ export default async function DashboardPage({
           </div>
           <SalesLine
             points={points}
-            chartLabel={`Sales per day, ${rangeText}, against ${against}`}
+            chartLabel={`Sales per day, ${rangeText}, against ${against}${showBars ? `; bars split by channel: ${legend.map((l) => l.name).join(', ')}` : ''}`}
+            bars={showBars ? bars : undefined}
+            legend={showBars ? legend : undefined}
+            note={
+              hiddenDays.length > 0
+                ? `The channel split does not match the ledger on ${hiddenDays.map((d) => shortDay(d, true)).join(', ')}; those bars are hidden.`
+                : undefined
+            }
             curName={rangeText}
             prevName={`${shortDay(prev.from)}${days === 1 ? '' : ` to ${shortDay(prev.to)}`}`}
             peakText={peakIdx >= 0 ? fmtNum(points[peakIdx]!.current) : fmtNum(0)}

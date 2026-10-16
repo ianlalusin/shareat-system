@@ -14,6 +14,8 @@ export interface SalesRollupInput {
   fromDate: string;
   toDate: string;
   groupBy: reportsRepo.SalesRollupGrouping;
+  /** T-421. With `groupBy: 'day'` only: also return the per-day channel split and the days that do not reconcile. */
+  channelDays?: boolean;
 }
 
 export interface SalesPeriodLine {
@@ -43,6 +45,20 @@ export interface SalesRollupBasis {
   groupBy: reportsRepo.SalesRollupGrouping;
 }
 
+export interface SalesChannelDayBlock {
+  /** Null only on the synthetic "POS corrections" block. */
+  channelId: string | null;
+  channelName: string;
+  total: Money;
+}
+
+export interface SalesChannelDay {
+  day: string;
+  /** The sum of this day's blocks. */
+  total: Money;
+  channels: SalesChannelDayBlock[];
+}
+
 export interface SalesRollupResult {
   periods: SalesPeriodLine[];
   ledgerTotal: Money;
@@ -52,15 +68,23 @@ export interface SalesRollupResult {
   modeTotal: Money;
   /** channelTotal === ledgerTotal === modeTotal, to the centavo. */
   reconciles: boolean;
+  /** T-421. Empty unless `channelDays` was asked for with `groupBy: 'day'`. */
+  channelDays: SalesChannelDay[];
+  /** T-421. Days whose blocks do not add up to that day's ledger total, to the centavo. */
+  unreconciledDays: string[];
   basis: SalesRollupBasis;
 }
 
 export async function getSalesRollup(ex: Executor, input: SalesRollupInput): Promise<SalesRollupResult> {
   const storeId = input.storeId ?? null;
 
-  const [periodRows, breakdown] = await Promise.all([
+  const wantDays = input.channelDays === true && input.groupBy === 'day';
+  const [periodRows, breakdown, dayRows] = await Promise.all([
     reportsRepo.getSalesByPeriod(ex, { orgId: input.orgId, storeId, fromDate: input.fromDate, toDate: input.toDate, groupBy: input.groupBy }),
     reportsRepo.getSalesByChannelAndMode(ex, { orgId: input.orgId, storeId, fromDate: input.fromDate, toDate: input.toDate }),
+    wantDays
+      ? reportsRepo.getSalesByDayAndChannel(ex, { orgId: input.orgId, storeId, fromDate: input.fromDate, toDate: input.toDate })
+      : Promise.resolve([] as reportsRepo.SalesByDayAndChannelRow[]),
   ]);
 
   const periods: SalesPeriodLine[] = periodRows.map((r) => ({ period: r.period, storeId: r.storeId, total: money(r.total) }));
@@ -76,6 +100,25 @@ export async function getSalesRollup(ex: Executor, input: SalesRollupInput): Pro
   const channelTotal = add(...channels.map((c) => c.total));
   const modeTotal = add(...modes.map((m) => m.total));
 
+  const byDay = new Map<string, SalesChannelDayBlock[]>();
+  for (const r of dayRows) {
+    const list = byDay.get(r.day) ?? [];
+    list.push({ channelId: r.channelId, channelName: r.channelName, total: money(r.total) });
+    byDay.set(r.day, list);
+  }
+  const channelDays: SalesChannelDay[] = [...byDay.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([day, blocks]) => ({ day, total: add(...blocks.map((b) => b.total)), channels: blocks }));
+  const unreconciledDays: string[] = [];
+  if (wantDays) {
+    const ledgerOf = new Map(periods.map((p) => [p.period ?? '', p.total] as const));
+    const days = new Set<string>([...ledgerOf.keys(), ...byDay.keys()]);
+    for (const day of [...days].sort()) {
+      const blocks = byDay.get(day) ?? [];
+      if (!equals(add(...blocks.map((b) => b.total)), ledgerOf.get(day) ?? money('0'))) unreconciledDays.push(day);
+    }
+  }
+
   return {
     periods,
     ledgerTotal,
@@ -84,6 +127,8 @@ export async function getSalesRollup(ex: Executor, input: SalesRollupInput): Pro
     modes,
     modeTotal,
     reconciles: equals(ledgerTotal, channelTotal) && equals(ledgerTotal, modeTotal),
+    channelDays,
+    unreconciledDays,
     basis: { orgId: input.orgId, storeId, fromDate: input.fromDate, toDate: input.toDate, groupBy: input.groupBy },
   };
 }
