@@ -28,15 +28,20 @@ after the lookup, and absent for a wrong PIN.)
 **An approval charges ONLY the actor's bucket** — never a store's, never the org's. Approvals and sign-ins stop sharing
 anything: a bad approval actor can lock out only themselves.
 
-**The limits (one named block in `pin-attempts.ts`):** `APPROVAL_DAILY_MISS_CAP = 10` misses per person in a rolling
-24 h. An admin types their PIN a few times a day; 10 wrong is far past fat-fingering, and with k administrators the
-guess odds are 10·k in 1,000,000 a day. Tier 1 (the 60 s pause) is **skipped** for the actor bucket — its message says
-"this terminal", which is false here, and the cap of 10 already bounds a burst.
+**The limits (one named block in `pin-attempts.ts`):** `APPROVAL_DAILY_MISS_CAP = 5` misses per person in a rolling
+24 h (**Ian, 2026-10-16**). An admin types their PIN a few times a day; 5 wrong is past fat-fingering. **The real
+company-wide bound** is 5 × (the number of signed-in people who can reach a Tier P action — i.e. hold that action's
+capability) guesses a day, each guess matching any of the k administrators' PINs; no company-wide cap on top (Ian, Q2).
+**Tier 1 (the 60 s pause) needs no option:** its threshold is 10 per 60 s (`:18`), and step 2's daily check (cap 5)
+runs before it, so an actor bucket is stopped long before tier 1 could fire — no `lockout` row is ever written for it.
+Say so in a comment beside the constant; if either number is re-tuned so that tier 1 could fire first, that comment
+is the tripwire (its "this terminal" sentence would be wrong for a person).
 **Reset semantics.** The existing budget is a **rolling 24 h window, not a Manila calendar day** (`:96-97`), and Ian's
 business day ends at store closing time (bible row 348) — a person spans stores with different closings, so a calendar
-or business-day reset has no single right midnight and lets 10 at 23:59 plus 10 at 00:01 through. Proposed: the same
+or business-day reset has no single right midnight and lets 5 at 23:59 plus 5 at 00:01 through. So: the same
 rolling 24 h window, and a capped person **auto-lifts 24 h after the cap tripped** (`chargeAttempt`'s existing
-`stopAutoReopenMinutes` option = 1440 for this bucket), or earlier when an administrator resets it. Open Question 1.
+`stopAutoReopenMinutes` option = `APPROVAL_CAP_AUTO_LIFT_MINUTES = 1440` for this bucket), or earlier when an
+administrator clears it (**Ian, 2026-10-16, Q1**).
 
 ### What the capped person sees (one sentence, no names, ids, counts or times)
 `APPROVAL_PIN_CAPPED = 'Too many wrong administrator PINs from your account today. An administrator can clear this on
@@ -57,7 +62,7 @@ An administrator holding `manage_users` (admin / super_admin only, org-scoped: `
   `:142`). An already-capped attempt writes nothing more.
 - `reset_approval_pin_cap` — the reset, in the same tx as the update: `actorPersonId` = the administrator, `entityId` =
   the person, `before: { cappedAt }`, `after: { resetAt }`.
-- Every miss stays a `sign_in_attempts` row (`kind='miss'`, `actor_person_id` set), so "who guessed how often" is
+- EVERY actor-bucket row (`miss`, `stopped`; `lockout` cannot occur, above) carries `actor_person_id`, so "who guessed how often" is
   queryable; the 90-day purge (`:155-165`) covers these rows as it does today.
 Register both in `packages/db/src/audit/catalogue.ts` (T-402 pattern, `def(…, 'T-416', …)`; scope per the catalogue's
 own rules — org-level, entity table `persons`).
@@ -84,18 +89,31 @@ the person is in one org, and the write is after `resolveActor`, never pre-auth)
 
 ## Code shape
 - `pin-attempts.ts`: replace `storeId: string | null` with `type Bucket = { store: string } | { org: true } |
-  { actor: string }` in `chargeAttempt`, `refundOnSuccess`, `clearOnSuccess`; the `bucket(col)` filter (`:70-74`) gains
-  the actor arm, and ⛔ the org arm gains `and actor_person_id is null` (else the org bucket counts every person's misses).
-  `chargeAttempt` opts gain `dailyMissBudget` and `tier1: boolean`. New `resetActorCap(tx, orgId, personId, byPersonId)`
-  (mirrors `reopen`, `:195-211`) and `statusForActor(tx, orgId, personId)`.
+  { actor: string }` in `chargeAttempt`, `refundOnSuccess`, `clearOnSuccess`. Every per-bucket SQL fragment gets three arms:
+  - **row filter** `bucket(col)` (`:70-74`): store `store_id = $s` (unchanged) · org `org_id = $o and store_id is null
+    and actor_person_id is null` (⛔ the new `and actor_person_id is null`, else the org bucket counts every person's
+    misses) · actor `org_id = $o and actor_person_id = $p`.
+  - **ON CONFLICT** (`:74`): store `on conflict (store_id)` (unchanged) · org `on conflict (org_id) where store_id is null
+    and actor_person_id is null` · actor `on conflict (org_id, actor_person_id) where actor_person_id is not null`. ⛔ After
+    0200 narrows the 0199 index, today's `on conflict (org_id) where store_id is null` no longer matches any index and
+    Postgres raises (42P10) — the predicate must match the index exactly.
+  - **inserts**: the lock upsert (`:78-79`) and all three `sign_in_attempts` inserts (`:108,141,148`) write
+    `actor_person_id` (NULL for store/org buckets).
+  - `chargeAttempt` opts gain `dailyMissBudget` (default `DAILY_MISS_BUDGET`). No `tier1` option (see "The limits").
+- New `resetActorCap(tx, orgId, personId, byPersonId)` (shape of `reopen`, `:195-211`) and `statusForActor(tx, orgId,
+  personId)`. ⛔ Both apply the **auto-lift rule** (`stopped_at + 1440 min > now()`), unlike `reopen` (any non-null
+  `stopped_at` counts as stopped, `:204-205`) and `statusForStore` (constant `null` auto-lift, `:244`): a cap that has
+  auto-lifted reads "not capped" and a clear of it is a no-op that writes nothing. Pass the minutes in, one constant.
 - `sessions.ts`: `runChargedPinLookup` takes the `Bucket`; `signInWithPin` passes `{ store }` (behaviour identical).
   A `stopped` charge on an actor bucket throws `APPROVAL_PIN_CAPPED`, never `STOPPED_MESSAGE`.
-- `admin-approval.ts`: charge `{ actor: actor.personId }` with `{ dailyMissBudget: APPROVAL_DAILY_MISS_CAP, tier1: false,
-  stopAutoReopenMinutes: 1440 }`. `storeId` stays in the signature (it still scopes the row-196 `can` fallback); the
-  30 callers in `apps/erp/src/app` do not change. The 0199 org-bucket branch is no longer reached by approvals; keep
-  the arm (harmless, keeps Open Question 2 cheap).
+- `admin-approval.ts`: charge `{ actor: actor.personId }` with `{ dailyMissBudget: APPROVAL_DAILY_MISS_CAP,
+  stopAutoReopenMinutes: APPROVAL_CAP_AUTO_LIFT_MINUTES }`. `storeId` stays in the signature (it still scopes the
+  row-196 `can` fallback); the 30 callers in `apps/erp/src/app` do not change. The 0199 org-bucket arm is no longer
+  reached by approvals; keep it (harmless; no other caller is touched).
 - `credentials-admin.ts`: `resetApprovalPinCap(tx, actor, personId)` — `authorize(…, 'manage_users')`, refuse self,
-  repo reset, audit row; export from `packages/auth/src/index.ts`.
+  repo reset, audit row only when something was cleared; export from `packages/auth/src/index.ts`.
+- Stray comments that say "migration 0198" for what is 0199 (`schema/pin-attempts.ts:26,42`,
+  `schema/sign-in-attempts.ts:23`, `repo/pin-attempts.ts:68`, `sessions.ts:105`): correct to 0199 while editing these files.
 
 ## Files — BUILDER (only these)
 `packages/db/migrations/0200_t416_actor_approval_bucket.sql` · `packages/db/migrations/meta/_journal.json` ·
@@ -109,33 +127,42 @@ the person is in one org, and the write is after `resolveActor`, never pre-auth)
 NEW `packages/auth/tests/integration/t416-approval-pin-cap.test.ts` (A1–A11) ·
 NEW `packages/db/tests/integration/t416-actor-bucket-schema.test.ts` (A12–A13) ·
 EDIT `packages/auth/tests/integration/t412-admin-approval.test.ts` — **I2c, I6 and I11 asserted the old shared budget
-and are deliberately superseded**: I2c becomes "the miss is on the actor's bucket and on NO store"; I6 moves to A3;
-I11 (and its mutant M12) is inverted to A4. Every other T-412 case stays green unedited.
+and are deliberately superseded**: I2c becomes "the miss is on the actor's bucket and on NO store"; I6 (which killed
+T-412's M7, skip `refuseIfCharged`) moves under **A2**; I11 (and its mutant M12) is inverted to A4. Every other T-412
+case stays green unedited.
 **Unedited and green:** `packages/auth/tests/integration/t395-pin-daily-budget.test.ts`, `t395-reopen.test.ts`,
 `terminal-sign-in.test.ts`, `packages/db/tests/integration/t395-*.test.ts` — sign-in behaviour does not change.
 
 ## Acceptance cases (each names the mutant it kills; every mutant shown red, then reverted)
 - **A1** one wrong approval writes one `miss` with `actor_person_id` = actor and `store_id` NULL; the record's store has
   0 miss rows. **Kills M1:** charge `{ store: storeId }` as before.
-- **A2** 10 misses in 24 h, then the 11th attempt — the admin's CORRECT PIN — reads `APPROVAL_PIN_CAPPED`, zero lookups,
-  and exactly one `auth.approval_pin_capped` row exists. **Kills M2:** cap read as `DAILY_MISS_BUDGET` (50).
+- **A2** 5 misses in 24 h, then the 6th attempt — the admin's CORRECT PIN — reads `APPROVAL_PIN_CAPPED` with zero
+  lookups; exactly one `auth.approval_pin_capped` row exists; and EVERY `sign_in_attempts` row written (5 `miss`, 1
+  `stopped`) and the throttle row carry `actor_person_id` = actor, none a `store_id`. **Kills M2** cap read as
+  `DAILY_MISS_BUDGET` (50); **M2b** skip `refuseIfCharged` (T-412's M7, carried over from I6); **M2c** the `stopped`
+  insert omits `actor_person_id`.
 - **A3** with the actor capped, a cashier's correct PIN signs in at that store; the store is neither paused nor stopped.
   **Kills M3:** also charge the store bucket.
-- **A4** 5 wrong approvals on a store-A record + 5 on a store-B record cap the person (no N × cap). **Kills M4:** key the
-  bucket on (actor, store).
+- **A4** 3 wrong approvals on a store-A record + 2 on a store-B record cap the person (no N × cap). **Kills M4:** key
+  the bucket on (actor, store).
 - **A5** actor P capped; actor Q in the same org approves with the admin's PIN. **Kills M5:** drop
   `actor_person_id = $` from the actor filter (any person's misses count).
-- **A6** the 0199 org bucket counts no actor-bucket misses (seed 10 actor misses; an org-bucket charge is not stopped).
-  **Kills M6:** omit `and actor_person_id is null` from the org arm.
-- **A7** 10 misses 25 h old do not cap. **Kills M7:** window 48 h.
+- **A6** the org bucket never counts actor misses: seed **50** actor-bucket `miss` rows in the last hour (spread over
+  several persons), then one org-bucket charge (`storeId: null` path) is NOT stopped, and the org bucket's own miss count
+  read directly is 1. **Kills M6:** omit `and actor_person_id is null` from the org arm (50 ≥ `DAILY_MISS_BUDGET` trips it).
+- **A6b** an org-bucket charge and an actor-bucket charge in the same org both succeed on a migrated DB (no 42P10, no
+  unique violation). **Kills M6b:** leave the org `on conflict (org_id) where store_id is null` unchanged.
+- **A7** 5 misses 25 h old do not cap. **Kills M7:** window 48 h.
 - **A8** cap tripped 24 h + 1 min ago, no reset: the next correct approval succeeds. **Kills M8:** `stopAutoReopenMinutes`
   null for the actor bucket.
 - **A9** 10 correct approvals leave 0 miss rows for the actor; the next wrong one is a plain `ADMIN_PIN_REFUSED`.
   **Kills M9:** skip `refundOnSuccess` for the actor bucket.
 - **A10** `tx = null` path: a wrong approval's miss row survives the throw. **Kills M10:** charge inside the lookup tx.
-- **A11** reset: an admin clears P's cap -> P approves again, one `reset_approval_pin_cap` row (admin, P, before/after);
-  a manager is refused (`manage_users`); P clearing their own cap is refused; clearing an uncapped person writes nothing.
-  **Kills M11a** drop the `authorize`, **M11b** drop the self check, **M11c** audit on a no-op.
+- **A11** clear: an admin clears P's cap -> P approves again, one `reset_approval_pin_cap` row (admin, P, before/after);
+  a manager is refused (`manage_users`); P clearing their own cap is refused; clearing an uncapped person writes nothing;
+  **a cap that auto-lifted (tripped 24 h + 1 min ago) reads "not capped" in `statusForActor`, and clearing it is a no-op
+  with no audit row.** **Kills M11a** drop the `authorize`, **M11b** drop the self check, **M11c** audit on a no-op,
+  **M11d** `resetActorCap`/`statusForActor` treat any non-null `stopped_at` as capped (the `reopen` shape).
 - **A12** schema: a row with both `store_id` and `actor_person_id` is rejected; a second throttle row for the same
   (org, person) is rejected; two different persons in one org both get buckets; a person of another org is rejected by
   the same-org FK. **Kills M12a** drop the CHECK, **M12b** keep 0199's org index predicate, **M12c** drop the composite FK.
@@ -145,13 +172,10 @@ I11 (and its mutant M12) is inverted to A4. Every other T-412 case stays green u
 ## Done when
 `npm run typecheck` clean; A1–A13 and the edited T-412 file green; T-395 files green unedited; `npm test` (journal
 guards) green; migration proven on a scratch DB (ADR-012 §5 step 8); **FULL integration suite green on a fresh DB in CI**;
-M1–M13 red then reverted; fresh audit closed; `/admin/users/[personId]` cap line + clear button screenshotted at 390 and
+every named mutant red then reverted; fresh audit closed; `/admin/users/[personId]` cap line + clear button screenshotted at 390 and
 1280 on 9008; DEF-653 marked fixed in the register with the commit.
 
-## Questions for Ian (Open Questions page)
-1. **When does a capped person get unlocked?** (a) automatically 24 hours after it tripped, or sooner by an admin —
-   recommended, nobody is stuck overnight; (b) only when an admin clears it — stricter, but a lone admin who mistypes is
-   stuck until another admin acts.
-2. **Should there also be a company-wide ceiling?** (a) no, per person only — recommended; a ceiling shared by everyone
-   is exactly what lets one bad actor block everyone; (b) yes, e.g. 100 wrong approval PINs a day across the company.
-3. **Is 10 wrong PINs a day per person right?** Recommended 10; say a number if you want it stricter or looser.
+## Ian's answers (2026-10-16)
+1. Unlock: automatically 24 h after the cap tripped; an administrator may clear it sooner.
+2. No company-wide cap.
+3. Cap = **5** wrong administrator PINs per person per rolling 24 h.
