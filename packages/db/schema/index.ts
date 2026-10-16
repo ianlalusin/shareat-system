@@ -137,6 +137,9 @@ export * from './missed-month-adjustments';
 // T-375 S1 - the POS v1 day feed: store links, the immutable feed, the tender master, POS corrections.
 export * from './pos-v1';
 
+// T-424 S5 - which POS v2 tablet is which ERP terminal person (the manager-approval bucket owner).
+export * from './pos-terminal-links';
+
 // T-392 S3 - the dual-run comparator: reports (one per store-week version), their lines, and dispositions.
 export * from './dual-run';
 

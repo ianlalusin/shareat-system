@@ -12,7 +12,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  DEVICE, MANAGER_PERSON, NOW, PIN_BAD, PIN_OK, STORE, analyticsDocs, byMethodOf, createFakeFirestore, dayIdOf, json, makeDeps, post, seedRefundRecord, seedSale,
+  DEVICE, MANAGER_PERSON, NOW, SAME_DAY, PIN_BAD, PIN_OK, STORE, analyticsDocs, byMethodOf, createFakeFirestore, dayIdOf, json, makeDeps, post, seedRefundRecord, seedSale,
   seedStaff, seedStore, storedAnywhere, T_SALE, type LineSpec,
 } from '@/test-helpers/pos2';
 import type { FakeFirestore } from '@/test-helpers/fakeFirestore';
@@ -30,7 +30,7 @@ const baseBody = (over: Record<string, unknown> = {}) => ({
 
 async function refund(body: Record<string, unknown>, o: { token?: string; fs?: FakeFirestore; deps?: ReturnType<typeof makeDeps> } = {}) {
   const target = o.fs ?? fs;
-  const d = o.deps ?? makeDeps(target);
+  const d = o.deps ?? makeDeps(target, { nowMs: () => SAME_DAY });
   const { handleRefund } = await import('@/server/pos2/refunds');
   const res = await handleRefund(post('refunds', body, o.token ?? 'tok-cashier'), d.deps as any);
   return { status: res.status, body: await json(res), calls: d.calls };
@@ -69,7 +69,7 @@ describe('Acceptance 5 - a refund in v1 shape, paid-amount based, approved, anal
     });
     expect(doc.lines).toHaveLength(1);
     expect(doc.lines[0]).toMatchObject({ id: 'l1', qtyOrdered: 1 });
-    expect(doc.createdAtClientMs, 'the server clock, not the client').toBe(NOW);
+    expect(doc.createdAtClientMs, 'the server clock, not the client').toBe(SAME_DAY);
     expect(doc.analytics?.mop, 'a refund carries NO analytics.mop (the ERP derives X = sum byMethod - totalSales)').toBeUndefined();
     expect(fs.get(`stores/${STORE}/receiptNumbers/SHT-01-000002`)).toMatchObject({ receiptId: r.body.refundReceiptId, terminalNo: 1, terminalSeq: 2 });
     expect(parent()).toMatchObject({ refundedQtys: { l1: 1 }, totalRefunded: 90, refundCount: 1 });
@@ -150,6 +150,17 @@ describe('Acceptance 5 - a refund in v1 shape, paid-amount based, approved, anal
     const reuse = await refund(baseBody({ terminalSeq: 1, receiptNumber: 'SHT-01-000001' }));
     expect(reuse.status, "the parent's own number cannot be used again").toBeGreaterThanOrEqual(400);
     expect(refundDocs()).toHaveLength(2);
+  });
+});
+
+describe('Acceptance 5 - a refund lands on the day it is made (row 272)', () => {
+  it('a refund made the next day (after midnight) is booked on its OWN day; the sale day is untouched', async () => {
+    const d = makeDeps(fs); // default clock NOW = 01:00 the next day
+    const r = await refund(baseBody(), { deps: d });
+    expect(r.status).toBe(200);
+    expect(fs.get(`stores/${STORE}/receipts/${r.body.refundReceiptId}`)!.createdAtClientMs).toBe(NOW);
+    expect(fs.get(`stores/${STORE}/analytics/${DAY}`)!.payments.totalGross, 'sale day unchanged').toBe(360);
+    expect(fs.get(`stores/${STORE}/analytics/${dayIdOf(NOW)}`)!.payments).toMatchObject({ totalGross: -90, txCount: 1 });
   });
 });
 

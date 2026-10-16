@@ -64,6 +64,24 @@ copy (T-422 Ruling 6). Re-running the copy script brings the originals back; re-
 
 Files deleted (T-423 S2): `src/lib/offline/offlineReceiptNumber.ts` and `src/lib/offline/offlineReceiptNumber.test.ts` (the localStorage daily counter, DEF-587).
 
+## T-424 edits (manager-PIN approvals through the POS v2 server)
+
+- `src/middleware.ts` (T-424 S4): v1's middleware is replaced by the APK-origin CORS gate for `/api/:path*` (only `https://localhost` is allowed). Server build only: `scripts/build-cap.mjs` stashes it, and `src/app/api`, during the static export.
+- `src/lib/api-base.ts` (T-424 S4): a fetch of `/api/pos2/...` goes to `NEXT_PUBLIC_POS2_API_BASE` (default `https://pos2.shareat.net`); every other `/api/...` keeps `NEXT_PUBLIC_API_BASE`.
+- `src/lib/analytics/applyReceiptDeltaServerFirst.ts` (T-424 S10): sale and void deltas go to `/api/pos2/analytics/apply-delta` only when built with `NEXT_PUBLIC_POS2_ANALYTICS=1`; otherwise v1's endpoint as before.
+- `src/components/receipts/RefundReceiptDialog.tsx` (T-424 S9): the refund calls `POST /api/pos2/refunds` (manager PIN pad, cash-only tender picker, paid-share amounts) instead of writing the refund from the tablet; `createRefundReceipt` in `components/cashier/firestore.ts` is DELETED (audit): it wrote a refund from the tablet with no PIN.
+- `src/components/cashier/void-session-dialog.tsx` (T-424 S9): the online void calls `POST /api/pos2/session-voids` (a manager or admin voids without a PIN; anyone else types a store manager's PIN); the loyalty reversal is still queued before the void and taken back out if the server refuses. The offline void is unchanged.
+- `src/app/receipts/page.tsx` (T-424 S9): the disabled "Void - coming in the safe flow" button is replaced by "Refund" and a "Mark wrong tender" button (`components/receipts/TenderCorrectionDialog.tsx`, new file).
+- `src/components/settings/TerminalSection.tsx` (T-424 S5): shows this tablet's device id with a Copy button, so an administrator can register the tablet for approvals.
+
+- `src/components/cashier/firestore.ts` (T-424 audit): the dead client writers `createRefundReceipt` and `voidSession` are deleted (no caller; they wrote without a PIN). `src/components/cashier/void-session.test.ts` loses its `voidSession` cases; the replay-check cases stay.
+
+**Known drift (T-424):** a refund made through the POS v2 server does NOT do what v1's `apply-delta 'refund'` also did: it skips the `catalogCache/popularItems` decrement and the `dailySessions` refund row. The CUSTOMER app's "Popular" group may therefore overcount refunded dishes. The ERP day feed (`analytics` day docs) is unaffected.
+
+New in T-424, not from v1: `src/server/**` and `src/app/api/pos2/**` (the POS v2 server), `src/lib/pos2/client.ts`, `src/lib/money/refundShare.ts`, `src/components/pos2/PinPad.tsx`, `scripts/pos2-audit.mjs`.
+
+Ported from v1 into `src/server/pos2/` (the vendored fixtures below are the parity reference): `analytics/delta-core.ts` (v1 `src/lib/analytics/delta-core.ts`, byte-identical apart from the header), `analytics/apply-delta-core.ts` (v1 `src/lib/server/analytics/applyAnalyticsDeltaServer.ts`, FieldValue taken from `db`), `payment-conversion.ts` (v1 `applyPaymentConversionServer.ts` `writeByMethodDeltaServer`), `apply-delta.ts` (v1 `src/app/api/analytics/apply-delta/route.ts`, ops payment / refund / void only), `identity.ts` (v1 `lib/server/staff-access.ts`, without its platform-admin bypass). NOT ported: v1's popular-items counter and daily session timeline rows (the test Firebase project has no customer app or timeline reader).
+
 ## Test fixtures
 
 - `src/lib/__fixtures__/tax-v1.ts` (T-423 slice T): the v1 tax module at commit e26d0c1, byte-identical (taken with git show from the v1 repo); read only by `src/lib/tax.golden.test.ts` as the golden reference for the new bill math. Do not edit it and do not import it from app code.

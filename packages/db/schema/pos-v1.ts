@@ -83,6 +83,8 @@ export const posV1StoreLinks = pgTable(
   },
   (t) => [
     unique('pos_v1_store_links_store_id_unique').on(t.storeId),
+    // T-424 (migration 0202): the target of pos_terminal_links' same-org composite FK.
+    unique('pos_v1_store_links_org_id_id_unique').on(t.orgId, t.id),
     // GLOBAL, not per org: two orgs linking one POS store would import the same sales twice.
     unique('pos_v1_store_links_pos_store_id_unique').on(t.posStoreId),
     index('pos_v1_store_links_org_idx').on(t.orgId),

@@ -41,9 +41,14 @@ async function correct(b: Record<string, unknown>, o: { token?: string; deps?: R
 }
 const conversions = (f: FakeFirestore = fs) => f.list(`stores/${STORE}/paymentConversions`);
 const receiptText = (f: FakeFirestore = fs) => JSON.stringify(f.get(`stores/${STORE}/receipts/r1`));
+// v1's increment leaves a 0 entry behind after a reversal (it never deletes a key), so zero-valued methods are dropped before comparing.
 const payments = (f: FakeFirestore = fs) => {
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(analyticsDocs(f))) out[k] = v.payments;
+  for (const [k, v] of Object.entries(analyticsDocs(f))) {
+    const p = JSON.parse(JSON.stringify(v.payments ?? {}));
+    if (p.byMethod) for (const m of Object.keys(p.byMethod)) if (p.byMethod[m] === 0) delete p.byMethod[m];
+    out[k] = p;
+  }
   return JSON.stringify(out);
 };
 const refused = (r: { status: number; body: any }, why: string) => {

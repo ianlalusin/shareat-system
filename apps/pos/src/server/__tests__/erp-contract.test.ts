@@ -18,7 +18,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  DEVICE, NOW, PIN_OK, STORE, T_SALE, createFakeFirestore, dayIdOf, json, makeDeps, post, seedSale, seedStaff, seedStore,
+  DEVICE, NOW, SAME_DAY, PIN_OK, STORE, T_SALE, createFakeFirestore, dayIdOf, json, makeDeps, post, seedSale, seedStaff, seedStore,
 } from '@/test-helpers/pos2';
 import type { FakeFirestore } from '@/test-helpers/fakeFirestore';
 
@@ -85,7 +85,7 @@ describe('harness (no builder needed): the ERP accepts a day of sales booked by 
 describe('Acceptance 6 - a refund keeps X = sum(byMethod) - totalSales = R', () => {
   it('after one refund of 90.00 the ERP derives refunds = 90.00, cash = cash methods - 90.00, nothing negative (M1, M2, M5)', async () => {
     const f = await dayWithSales();
-    const d = makeDeps(f);
+    const d = makeDeps(f, { nowMs: () => SAME_DAY });
     const { handleRefund } = await import('@/server/pos2/refunds');
     const res = await handleRefund(
       post('refunds', { storeId: STORE, parentReceiptId: 'r1', lines: [{ lineId: 'l1', qty: 1 }], tenderMethodId: 'm-cash', reason: 'returned', terminalNo: 1, terminalSeq: 3, receiptNumber: 'SHT-01-000003', pin: PIN_OK, deviceId: DEVICE }),
@@ -111,7 +111,7 @@ describe('Acceptance 6 - a refund keeps X = sum(byMethod) - totalSales = R', () 
     const lines = [[{ lineId: 'l1', qty: 3 }], [{ lineId: 'l2', qty: 1 }], [{ lineId: 'l2', qty: 1 }]];
     let seq = 3;
     for (const l of lines) {
-      const d = makeDeps(f);
+      const d = makeDeps(f, { nowMs: () => SAME_DAY });
       const res = await handleRefund(
         post('refunds', { storeId: STORE, parentReceiptId: 'r1', lines: l, tenderMethodId: 'm-cash', reason: 'returned', terminalNo: 1, terminalSeq: seq, receiptNumber: `SHT-01-${String(seq).padStart(6, '0')}`, pin: PIN_OK, deviceId: DEVICE }),
         d.deps as any,
@@ -173,7 +173,7 @@ describe('Acceptance 6 - a correction leaves sum(byMethod) and totalGross alone 
   it('a refund and a correction on the same day together: still X = R and accepted', async () => {
     const f = await dayWithSales();
     expect((await correct(f, {})).status).toBe(200);
-    const d = makeDeps(f);
+    const d = makeDeps(f, { nowMs: () => SAME_DAY });
     const { handleRefund } = await import('@/server/pos2/refunds');
     const res = await handleRefund(
       post('refunds', { storeId: STORE, parentReceiptId: 'r1', lines: [{ lineId: 'l1', qty: 1 }], tenderMethodId: 'm-cash', reason: 'returned', terminalNo: 1, terminalSeq: 3, receiptNumber: 'SHT-01-000003', pin: PIN_OK, deviceId: DEVICE }),

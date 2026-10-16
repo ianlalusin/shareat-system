@@ -107,7 +107,7 @@ export async function getSeparationByEmployment(
     .where(and(eq(separations.orgId, orgId), eq(separations.employmentId, employmentId)))
     .orderBy(desc(separations.createdAt))
     .limit(1);
-  return (row as SeparationRow | undefined) ?? null;
+  return (row as unknown as SeparationRow | undefined) ?? null; // `as unknown`: apps/pos typechecks this file without noUncheckedIndexedAccess (T-424)
 }
 
 export async function getSeparation(tx: Tx, orgId: string, id: string): Promise<SeparationRow | null> {
@@ -116,7 +116,7 @@ export async function getSeparation(tx: Tx, orgId: string, id: string): Promise<
     .from(separations)
     .where(and(eq(separations.id, id), eq(separations.orgId, orgId)))
     .limit(1);
-  return (row as SeparationRow | undefined) ?? null;
+  return (row as unknown as SeparationRow | undefined) ?? null; // `as unknown`: apps/pos typechecks this file without noUncheckedIndexedAccess (T-424)
 }
 
 export async function listSeparations(

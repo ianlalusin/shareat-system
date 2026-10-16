@@ -89,6 +89,12 @@ function actionShapedExports(): Map<string, string> {
  * off the same day** by T-226, and the stale-exemption rule below is what forced their rows out.
  */
 const EXEMPT: Record<string, string> = {
+  revokePosTerminalLink:
+    'UNWIRED — T-424 audit: scripts/provision-terminal.ts (--revoke-pos-device) is its caller, run by an administrator; no ERP screen yet. ' +
+    'It retires a lost or replaced POS v2 tablet.',
+  provisionPosTerminalLink:
+    'UNWIRED — T-424 S5: scripts/provision-terminal.ts (--link-pos-device) is its caller, run by an administrator; no ERP screen yet. ' +
+    "The tablet's device id is read from POS v2 Settings and typed into that command.",
   recordRemittanceEvent:
     'INTERNAL — `createRemittance` calls it (`remittance/index.ts:422`) in the same transaction, after its own rows (T-402 S3 C4); ' +
     'a separate file only so the action-coverage scan does not read the TYPE members in index.ts as audit actions.',

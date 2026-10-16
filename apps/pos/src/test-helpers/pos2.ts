@@ -73,6 +73,8 @@ export const MANAGER_PERSON = 'person-mgr-1';
 export const NOW = Date.parse('2026-10-15T01:00:00+08:00');
 /** The sale: 2026-10-14 10:00 Manila. */
 export const T_SALE = Date.parse('2026-10-14T10:00:00+08:00');
+/** A clock on the SALE's own day (the refund lands on the day of its own createdAtClientMs = deps.nowMs()). */
+export const SAME_DAY = T_SALE + 2 * 3600 * 1000;
 export const SHIFT_OPENED = Date.parse('2026-10-14T08:00:00+08:00');
 
 export interface Calls { approve: { posStoreId: string; deviceId: string; pin: string }[]; shift: string[] }
@@ -178,6 +180,7 @@ export async function seedSale(fs: FakeFirestore, spec: ReceiptSpec, opts: { boo
     });
     fs.seed(`stores/${STORE}/receipts/${spec.id}`, { ...doc, analyticsApplied: true });
   }
+  fs.commits.length = 0; // seeding is setup: tests assert on commits made by the route only
   return doc;
 }
 

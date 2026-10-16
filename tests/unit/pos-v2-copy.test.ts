@@ -305,7 +305,9 @@ describe('T-422 case 8 - V1-COPY.md', () => {
 // Case 9 - dependencies and lockfile
 // ---------------------------------------------------------------------------------------------
 describe('T-422 case 9 - dependencies', () => {
-  const FORBIDDEN = ['firebase-admin', 'genkit', '@anthropic-ai/sdk', 'firebase-tools', 'genkit-cli', 'eslint-config-next'];
+  // T-424: 'firebase-admin' is no longer forbidden here - the POS v2 SERVER (src/server, src/app/api/pos2) needs it. What this guard protected is
+  // the APK: that is now policed by tests/unit/pos-v2-server-boundary.test.ts (no client file imports it; build:cap output holds none).
+  const FORBIDDEN = ['genkit', '@anthropic-ai/sdk', 'firebase-tools', 'genkit-cli', 'eslint-config-next'];
 
   it('apps/pos/package.json has none of the forbidden packages. Mutant: server-side deps dragged into the APK', () => {
     const pkg = JSON.parse(read('apps/pos/package.json')) as Record<string, Record<string, string> | undefined>;

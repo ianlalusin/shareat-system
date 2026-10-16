@@ -336,6 +336,7 @@ export type {
 // T-375 S1 - the POS v1 day feed: wire field names (R12), and the repo.
 export * from './pos-v1/wire';
 export * as posV1Repo from './repo/pos-v1';
+export * as posTerminalLinksRepo from './repo/pos-terminal-links';
 export type {
   PosItemMapRow,
   PosMapRequestRow,
