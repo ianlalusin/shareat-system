@@ -98,7 +98,8 @@ export default defineConfig({
           // BEFORE migrations are applied, so a DB-touching test here fails on a fresh
           // database with "relation does not exist". Convention: anything under a
           // `tests/integration/` directory, anywhere, is an integration test.
-          exclude: ['**/node_modules/**', '**/.next/**', '**/tests/integration/**'],
+          // T-422: apps/pos has its own vitest config (`@` -> apps/pos/src); the ERP alias must never resolve its files.
+          exclude: ['**/node_modules/**', '**/.next/**', '**/tests/integration/**', 'apps/pos/**'],
           environment: 'node',
           // T-380 S1a / REV-2: an empty `next/headers` jar for any test that renders a page which
           // calls `withFlash` without mocking cookies itself (a test's own vi.mock still wins).

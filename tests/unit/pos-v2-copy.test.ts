@@ -224,9 +224,9 @@ describe('T-422 case 6 - nav and links', () => {
     expect(links.map((l) => l.split(/[?#]/)[0])).toContain('/online-orders');
   });
 
-  it('no "/admin", "/dashboard" or "/manager" path string anywhere in src. Mutant: a stray redirect to a dropped page', () => {
+  it('no path string to a dropped route (/admin, /dashboard, /manager, /sales-report, /weather-calendar) anywhere in src. Mutant: a stray redirect to a dropped page', () => {
     const bad: string[] = [];
-    const re = /['"`]\/(admin|dashboard|manager)(?:[/?#'"`])/;
+    const re = /['"`]\/(admin|dashboard|manager|sales-report|weather-calendar)(?:[/?#'"`])/;
     for (const f of srcFiles().filter(isCode)) {
       if (re.test(readFileSync(f, 'utf8'))) bad.push(rel(f));
     }
@@ -288,7 +288,7 @@ describe('T-422 case 8 - V1-COPY.md', () => {
     while ((m = re.exec(text)) !== null) listed.add(m[1]!.replace(/^apps\/pos\//, ''));
     expect(changed.filter((f) => !listed.has(f)).sort(), 'hand-edited but not listed').toEqual([]);
     expect([...listed].filter((f) => identicalToV1.has(f)).sort(), 'listed but identical to v1').toEqual([]);
-  });
+  }, 180_000); // ~300 `git show` calls against the local v1 repo; runs only where that repo exists
 });
 
 // ---------------------------------------------------------------------------------------------

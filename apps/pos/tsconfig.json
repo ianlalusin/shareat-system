@@ -1,6 +1,9 @@
 {
+  "//": "T-422 ruling 8: POS v1 was written without the root's noUncheckedIndexedAccess and noImplicitOverride. Turning them on is hundreds of edits to code that PC-4/PC-5/PC-6 rewrite anyway, so they are off here until then (follow-up: tighten per area). strict stays on; ignoreBuildErrors stays false.",
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": false,
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"]

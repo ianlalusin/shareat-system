@@ -1,0 +1,21 @@
+{
+  "name": "Shareat POS v2",
+  "short_name": "Shareat POS v2",
+  "description": "A complete POS, KDS, and ERP solution for restaurants.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FFFFFF",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}

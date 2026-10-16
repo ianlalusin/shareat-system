@@ -168,6 +168,9 @@ function extractSitesFromText(file: string, text: string): CandidateSite[] {
 function findCandidateSites(): CandidateSite[] {
   const sites: CandidateSite[] = [];
   for (const absolute of tsFilesUnder(appsRoot)) {
+    // T-422: apps/pos is a verbatim copy of POS v1 (client Firestore code, no ERP FormData
+    // actions); its money input is rewritten by T-423 (PC-4), not swept here. Remove when T-423 lands.
+    if (/^apps\/pos\//.test(posix(absolute))) continue;
     sites.push(...extractSitesFromText(posix(absolute), readFileSync(absolute, 'utf8')));
   }
   return sites;
