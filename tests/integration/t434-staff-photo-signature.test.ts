@@ -44,6 +44,18 @@ vi.mock('../../apps/erp/src/lib/session', () => ({
   })),
 }));
 
+const FLASH: { calls: { path: string; flash?: { error?: string; ok?: string } }[] } = { calls: [] };
+vi.mock('@/lib/flash', () => ({
+  redirectWithFlash: vi.fn(async (path: string, _nav: unknown, flash?: { error?: string; ok?: string }) => {
+    FLASH.calls.push({ path, ...(flash ? { flash } : {}) });
+    throw new Error('flash-redirect');
+  }),
+}));
+vi.mock('next/navigation', () => ({
+  redirect: (to: string) => { throw new Error(`redirect:${to}`); },
+  notFound: () => { throw new Error('notFound'); },
+}));
+
 import { closeDb, employmentRepo, personsRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
@@ -57,6 +69,7 @@ import {
   setStorageDriver,
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from '../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
+import { viewStaffSignatureAction } from '../../apps/erp/src/app/staff/actions';
 import { GET as filesRoute } from '../../apps/erp/src/app/files/[fileId]/route';
 
 const sql = postgres(url, { max: 5 });
@@ -398,6 +411,19 @@ describe('signature: who can view', () => {
     await refused(readUrl(w, w.managerB, fileId));
   });
 
+  it('13e. the UPLOADER, now also holding enrol_staff at the store where the person was hired AFTER the upload, is refused (only the created-before-upload comparison blocks this)', async () => {
+    const w = await world();
+    await setSig(w, w.managerA, w.cook.id);
+    expect((await viewSig(w, w.managerA, w.cook.id)).url).toBeTruthy(); // positive control: allowed through the old job at A
+    // The person's job at A ends; they are hired at B today, AFTER the upload. The uploader is the same, uploaded_by matches,
+    // the file is current, and the uploader is a store-B manager too - so only the employment-vs-upload time can refuse.
+    await sql`update employments set ended_on = '2025-06-01', employment_status = 'resigned' where id = ${w.cookEmp}`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${w.managerA.id}, ${w.B}) on conflict do nothing`;
+    await mkEmployment(w, w.cook.id, w.B, new Date().toISOString().slice(0, 10));
+    await refused(viewSig(w, w.managerA, w.cook.id));
+    await refused(readUrl(w, w.managerA, (await sigFileOf(w.cook.id))!));
+  });
+
   it('13b. a second store-A enrol_staff holder who is NOT the uploader is refused on /files/<id>; canReadFiles never returns a signature id', async () => {
     const w = await world();
     const sig = await setSig(w, w.managerA, w.cook.id);
@@ -490,8 +516,12 @@ describe('signature: who can view', () => {
     const path = (await fileRow(sig.fileId))!.storage_path;
     const calls: string[] = [];
     for (const level of ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const) {
-      const fn = (logger as unknown as Record<string, unknown>)[level];
-      if (typeof fn === 'function') vi.spyOn(logger as never, level as never).mockImplementation(((...a: unknown[]) => { calls.push(JSON.stringify(a, (_k, v) => (v instanceof Error ? { n: v.name, m: v.message } : v))); }) as never);
+      const target = logger as unknown as Record<string, (...a: unknown[]) => unknown>;
+      if (typeof target[level] === 'function') {
+        vi.spyOn(target, level).mockImplementation((...a: unknown[]) => {
+          calls.push(JSON.stringify(a, (_k, v) => (v instanceof Error ? { n: v.name, m: v.message } : v)));
+        });
+      }
     }
     const minted = await viewSig(w, w.admin, w.cook.id);
     await refused(viewSig(w, w.cashier, w.cook.id));
@@ -570,5 +600,96 @@ describe('print path, capability matrix, audit payloads', () => {
       expect((payload.match(UUID_G) ?? []).filter((u) => u !== w.cook.id)).toEqual([]); // at most the person
       expect(r.entity_id).toBe(w.cook.id);
     }
+  });
+});
+
+// ---------------------------------------------------------------- existence oracle, print channel, throttle
+describe('refused views: no existence oracle, channel recorded, audit throttled', () => {
+  const NO_SIG = /There is no signature on file for this person\./;
+  const normal = (t: string) => t.replace(UUID_G, '<id>').trim();
+
+  /** What a refused viewer is told, per entry point: message + userMessage (domain) or the flash banner (action). */
+  async function refusalTexts(w: W, who: Person, target: Person, employmentId: string) {
+    const out: Record<string, string> = {};
+    const e1 = await refused(viewSig(w, who, target.id));
+    out.url = normal(`${e1.message} | ${(e1 as AuthorizationError).userMessage ?? ''}`);
+    const e2 = await refused(asOrg(w.orgId, (tx) => dm.signatureForPrint!(tx, who.actor, { personId: target.id })));
+    out.print = normal(`${e2.message} | ${(e2 as AuthorizationError).userMessage ?? ''}`);
+    ACTOR_HOLDER.actor = who.actor;
+    FLASH.calls.length = 0;
+    const fd = new FormData();
+    fd.set('personId', target.id);
+    fd.set('employmentId', employmentId);
+    await refused(viewStaffSignatureAction(fd));
+    out.action = normal(FLASH.calls[0]?.flash?.error ?? '(no flash error)');
+    return out;
+  }
+
+  it('A. a viewer without view_staff_signature gets the IDENTICAL refusal whether or not the person has a signature, and both are audited', async () => {
+    const w = await world();
+    await setSig(w, w.managerA, w.clerk.id); // person WITH a signature
+    // w.managerA2 has no signature on file (and no employment)
+    const withEmp = w.cookEmp; // any employment id: the action only uses it for the redirect path
+    for (const viewer of [w.cook, w.cashier]) {
+      const has = await refusalTexts(w, viewer, w.clerk, withEmp);
+      const none = await refusalTexts(w, viewer, w.managerA, withEmp);
+      for (const k of ['url', 'print', 'action']) {
+        expect(none[k], `${k}: refusal for a person with NO signature differs from the one for a person WITH one`).toBe(has[k]);
+        expect(none[k]!).not.toMatch(/no signature/i);
+        expect(none[k]!).not.toMatch(/none on file/i);
+      }
+    }
+    // both kinds of attempt are audited as refused (viewer x target x channel)
+    const rows = await auditRows(w.orgId, 'staff_signature.view_refused');
+    const keys = new Set(rows.map((r) => `${r.actor_person_id}|${r.entity_id}`));
+    for (const viewer of [w.cook, w.cashier]) for (const t of [w.clerk, w.managerA]) expect(keys.has(`${viewer.id}|${t.id}`)).toBe(true);
+  });
+
+  it('A+. positive control: a rightful viewer asking for a person with NO signature is told so', async () => {
+    const w = await world();
+    for (const call of [
+      () => viewSig(w, w.admin, w.managerA.id),
+      () => asOrg(w.orgId, (tx) => dm.signatureForPrint!(tx, w.admin.actor, { personId: w.managerA.id })),
+    ]) {
+      const err = await refused(call());
+      expect(`${err.message} ${(err as AuthorizationError).userMessage ?? ''}`).toMatch(NO_SIG);
+    }
+    ACTOR_HOLDER.actor = w.admin.actor;
+    FLASH.calls.length = 0;
+    const fd = new FormData();
+    fd.set('personId', w.managerA.id);
+    fd.set('employmentId', w.managerAEmp);
+    await refused(viewStaffSignatureAction(fd));
+    expect(FLASH.calls[0]?.flash?.error).toMatch(NO_SIG);
+    // a rightful viewer's "none on file" is not a refused attempt
+    expect(await auditRows(w.orgId, 'staff_signature.view_refused')).toHaveLength(0);
+  });
+
+  it('B. a refused signatureForPrint is audited with via=print, a refused screen view with via=screen', async () => {
+    const w = await world();
+    await setSig(w, w.managerA, w.cook.id);
+    await refused(asOrg(w.orgId, (tx) => dm.signatureForPrint!(tx, w.cashier.actor, { personId: w.cook.id })));
+    await refused(viewSig(w, w.managerA2, w.cook.id));
+    const rows = await auditRows(w.orgId, 'staff_signature.view_refused');
+    const via = (actorId: string) => (rows.find((r) => r.actor_person_id === actorId)?.after as { via?: string } | null)?.via;
+    expect(via(w.cashier.id)).toBe('print');
+    expect(via(w.managerA2.id)).toBe('screen');
+  });
+
+  it('C. the refused-view audit is throttled: 30 rapid refusals by one viewer for one person on one channel write ONE row', async () => {
+    const w = await world();
+    await setSig(w, w.managerA, w.cook.id);
+    for (let i = 0; i < 30; i++) await refused(viewSig(w, w.cashier, w.cook.id));
+    const mine = (await auditRows(w.orgId, 'staff_signature.view_refused')).filter((r) => r.actor_person_id === w.cashier.id);
+    expect(mine).toHaveLength(1);
+    // the throttle key is viewer + person + channel: another channel, another viewer and another person each still record
+    await refused(asOrg(w.orgId, (tx) => dm.signatureForPrint!(tx, w.cashier.actor, { personId: w.cook.id })));
+    await refused(viewSig(w, w.managerA2, w.cook.id));
+    await setSig(w, w.managerA, w.clerk.id);
+    await refused(viewSig(w, w.cashier, w.clerk.id));
+    const all = await auditRows(w.orgId, 'staff_signature.view_refused');
+    expect(all).toHaveLength(4);
+    // still refused every time (throttling the audit never softens the refusal)
+    await refused(viewSig(w, w.cashier, w.cook.id));
   });
 });

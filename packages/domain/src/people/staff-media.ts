@@ -17,7 +17,7 @@
 import { authorize, can, AuthorizationError, type Actor } from '@shareat/auth';
 import { accessRepo, auditLogRepo, employmentRepo, filesRepo, personsRepo, refuse, type Tx } from '@shareat/db';
 import { uploadFile } from '../files';
-import { auditSignatureChange, mayViewSignature, signatureBytes, signatureUrl } from '../files/signature';
+import { assertMayLearnSignatureAbsent, auditSignatureChange, mayViewSignature, signatureBytes, signatureUrl } from '../files/signature';
 
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -139,21 +139,22 @@ export async function removeStaffSignature(tx: Tx, actor: Actor, input: { person
 }
 
 /** The person's CURRENT signature file, or a refusal that says nothing about why. */
-async function currentSignatureFile(tx: Tx, actor: Actor, personId: string) {
+async function currentSignatureFile(tx: Tx, actor: Actor, personId: string, via: 'screen' | 'print') {
   const id = await personsRepo.getSignatureFileId(tx, actor.orgId, personId);
   const file = id ? await filesRepo.getById(tx, actor.orgId, id) : undefined;
+  if (!file) await assertMayLearnSignatureAbsent(tx, actor, personId, via); // refuses a non-viewer identically to "has one"
   if (!file) throw refuse('signature: none on file', 'There is no signature on file for this person.');
   return file;
 }
 
 /** A 60 s link for the "View signature" click on the staff detail page. Gated, audited (viewed / view_refused). */
 export async function viewStaffSignatureUrl(tx: Tx, actor: Actor, input: { personId: string }): Promise<{ url: string; contentType: string }> {
-  return signatureUrl(tx, actor, await currentSignatureFile(tx, actor, input.personId));
+  return signatureUrl(tx, actor, await currentSignatureFile(tx, actor, input.personId, 'screen'));
 }
 
 /** For print routes (payslip, cash advance form, ID card): the image BYTES, server-side only, gated and audited like a view. Never a URL. */
 export async function signatureForPrint(tx: Tx, actor: Actor, input: { personId: string }): Promise<{ bytes: Uint8Array; contentType: string }> {
-  return signatureBytes(tx, actor, await currentSignatureFile(tx, actor, input.personId));
+  return signatureBytes(tx, actor, await currentSignatureFile(tx, actor, input.personId, 'print'));
 }
 
 /**

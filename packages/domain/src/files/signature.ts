@@ -104,9 +104,13 @@ async function auditSignatureView(tx: Tx, actor: Actor, personId: string, refuse
 }
 
 /** `view_refused` in its OWN transaction so it survives the caller's rollback. A failure to write it must not hide the refusal. */
-async function auditRefusedView(actor: Actor, personId: string): Promise<void> {
+async function auditRefusedView(actor: Actor, personId: string, via: 'screen' | 'print'): Promise<void> {
   try {
-    await withOrgPrincipal(actor.orgId, (t) => auditSignatureView(t, actor, personId, true, 'screen'));
+    await withOrgPrincipal(actor.orgId, async (t) => {
+      // At most one row per (viewer, person, channel) per 60 s.
+      if (await auditLogRepo.hasRecentSignatureRefusal(t, actor.orgId, actor.personId, personId, via, 60)) return;
+      await auditSignatureView(t, actor, personId, true, via);
+    });
   } catch (err) {
     logger.error({ kind: 'fault', errorName: err instanceof Error ? err.name : typeof err }, 'files: could not record a refused signature view');
   }
@@ -116,10 +120,22 @@ async function auditRefusedView(actor: Actor, personId: string): Promise<void> {
 async function gate(tx: Tx, actor: Actor, file: SignatureFile, via: 'screen' | 'print'): Promise<void> {
   const personId = file.linkedTo ?? actor.personId;
   if (!(await mayViewSignature(tx, actor, file))) {
-    await auditRefusedView(actor, personId);
+    await auditRefusedView(actor, personId, via);
     throw refusal();
   }
   await auditSignatureView(tx, actor, personId, false, via);
+}
+
+/**
+ * A person with NO signature on file: the permission check still runs first, so a non-viewer gets the identical refusal (and the
+ * same `view_refused` row) whether or not one exists. Resolves only for a rightful viewer, who may then be told there is none.
+ */
+export async function assertMayLearnSignatureAbsent(tx: Tx, actor: Actor, personId: string, via: 'screen' | 'print'): Promise<void> {
+  const probe = { id: '', linkedTo: personId, uploadedBy: '', uploadedAt: new Date(0), orgId: actor.orgId } as SignatureFile;
+  if (!(await mayViewSignature(tx, actor, probe))) {
+    await auditRefusedView(actor, personId, via);
+    throw refusal();
+  }
 }
 
 /** A 60 s link to a signature file, after the rule and the `viewed` audit. The URL is never stored and never logged. */

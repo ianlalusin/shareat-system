@@ -235,7 +235,8 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     const { rows } = parseCapabilityMatrixDoc();
     // ⭐ 101 -> 108 (T-401 S2): seven menu capabilities (view_menu, add_menu_item, manage_menu, request_menu_item, set_menu_price, set_menu_depletion, switch_usage_source).
     // ⭐ 111 -> 112 (T-424): `approve_pos_correction` (store, admin yes, manager no: held by grant).
-    expect(rows.length).toBe(112);
+    // ⭐ 112 -> 113 (T-434): `view_staff_signature` (store, admin yes, manager no: held by position grant). Also joins the derived ELEVATED set.
+    expect(rows.length).toBe(113);
     // ⭐ 109 -> 111 (T-402 S1b): `view_activity_log` (store) and `view_activity_log_restricted` (org).
     // ⭐ 108 -> 109 (T-403): `manage_recipes` (org, admin-only).
   });
@@ -312,9 +313,9 @@ describe('invariant 1 — every capability has an explicit decision for all four
     // ⭐ 99 -> 100 (T-382 S1, A3): `unlink_store_from_pos`. ⛔ RED until the builder adds it to capabilities.ts.
     // ⭐ 100 -> 101 (T-385 S3, A3): `verify_own_sales_day`. ⛔ RED until the builder adds it to capabilities.ts.
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities.
-    expect(CAPABILITIES.length).toBe(112);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(112);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(112);
+    expect(CAPABILITIES.length).toBe(113);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(113);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(113);
     // ⭐ 108 -> 109 (T-403): `manage_recipes`.
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
@@ -460,6 +461,8 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         // T-424: admin-yes, manager-no (held by grant: the store-manager positions' defaults), so it JOINS by the derivation. In an org with no
         // admin the manager serves as admin and may approve a POS refund / correction / void with their PIN.
         'approve_pos_correction',
+        // ⭐ T-434: `view_staff_signature` is admin-yes / manager-no (store), so the derived set gains it; with no admin the manager serves as admin.
+        'view_staff_signature',
       ].sort(),
     );
   });
