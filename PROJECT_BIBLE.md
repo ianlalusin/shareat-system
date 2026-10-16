@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1683` 13. Decision log
-- `1684–1703` 14. Amendment protocol
-- `1704–1708` 15. Engineering standards — the industry practices this project follows
-  - `1709–1714` 15.1 Build order: walking skeleton first
-  - `1715–1726` 15.2 Golden-master testing — the most important practice here
-  - `1727–1735` 15.3 Strangler Fig, not big-bang cutover
-  - `1736–1740` 15.4 No dual-write
-  - `1741–1749` 15.5 Expand/contract migrations
-  - `1750–1758` 15.6 Observability from day zero, not later
-  - `1759–1763` 15.7 CI gates
-  - `1764–1768` 15.8 Backups and a tested restore
-  - `1769–1773` 15.9 Twelve-Factor config
-  - `1774–1781` 15.10 Append-only ledgers — but not event sourcing
-  - `1782–1786` 15.11 Defence in depth
-  - `1787–1815` 15.12 Skills are lenses, not assurance
-  - `1816–1822` 15.13 Reconciliation is a permanent feature
-- `1823–1827` 16. The accounting spine
-  - `1828–1859` 16.0 What we are actually fixing — the diagnosis
-  - `1860–1903` 16.1 The ten invariants — non-negotiable
-  - `1904–1918` 16.2 The oracle: how "correct" is tested
-  - `1919–1940` 16.3 The model — header + lines, not legs
-  - `1941–1960` 16.4 Deliberately simpler than ERPNext
-  - `1961–2027` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2028–2052` 16.6 What v1 already gets right — preserve the intent
-  - `2053–2074` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2075–2089` 16.8 What v1's accounting already gets right
-  - `2090–2133` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2134–2184` 16.10 Posting patterns — one canonical pattern per business event
-  - `2185–2217` 16.11 Inventory's accounting integration
+- `1329–1684` 13. Decision log
+- `1685–1704` 14. Amendment protocol
+- `1705–1709` 15. Engineering standards — the industry practices this project follows
+  - `1710–1715` 15.1 Build order: walking skeleton first
+  - `1716–1727` 15.2 Golden-master testing — the most important practice here
+  - `1728–1736` 15.3 Strangler Fig, not big-bang cutover
+  - `1737–1741` 15.4 No dual-write
+  - `1742–1750` 15.5 Expand/contract migrations
+  - `1751–1759` 15.6 Observability from day zero, not later
+  - `1760–1764` 15.7 CI gates
+  - `1765–1769` 15.8 Backups and a tested restore
+  - `1770–1774` 15.9 Twelve-Factor config
+  - `1775–1782` 15.10 Append-only ledgers — but not event sourcing
+  - `1783–1787` 15.11 Defence in depth
+  - `1788–1816` 15.12 Skills are lenses, not assurance
+  - `1817–1823` 15.13 Reconciliation is a permanent feature
+- `1824–1828` 16. The accounting spine
+  - `1829–1860` 16.0 What we are actually fixing — the diagnosis
+  - `1861–1904` 16.1 The ten invariants — non-negotiable
+  - `1905–1919` 16.2 The oracle: how "correct" is tested
+  - `1920–1941` 16.3 The model — header + lines, not legs
+  - `1942–1961` 16.4 Deliberately simpler than ERPNext
+  - `1962–2028` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2029–2053` 16.6 What v1 already gets right — preserve the intent
+  - `2054–2075` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2076–2090` 16.8 What v1's accounting already gets right
+  - `2091–2134` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2135–2185` 16.10 Posting patterns — one canonical pattern per business event
+  - `2186–2218` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1680,6 +1680,7 @@ just a patch.**
 | 345 | 2026-10-15 | ⭐ **KEEP AGENTS BUSY (standing).** Never leave lanes idle: while CI or tests run, start work that shares no state with them (no edits to files, databases or branches the running gate depends on). Extends row 298 (work-faster practices); row 336 picks the model. | Ian, 2026-10-15 (orchestrator session); memory note "Keep agents busy" | No |
 | 346 | 2026-10-16 | **T-408, T-409, T-411, T-412, T-413 SHIPPED ON THE RECOMMENDED ANSWERS, NOT IAN'S.** Their questions sit on the decisions page unanswered; the recommended options were built so the lanes could merge. An answer that differs from the recommendation reopens that task as a follow-up. The decisions page lists newest and unanswered questions first. | Ian, 2026-10-15 evening ("merge all lanes when built"); each task's Status line says "answered by default only" | Yes, per question |
 | 347 | 2026-10-16 | ⭐ **R-AUTO: RELEASING A CASH REQUEST CREATES THE STORE'S STAFF CASH ACCOUNT IF MISSING (Ian, 16 Oct).** Open cash requests also appear in the expense payment list ("Name · cash request — Balance") with no staff-account gate; the store is chosen first; approve re-checks each request's live balance under a row lock. Shipped as T-414 (PR #30). Spec: `docs/tasks/414-expense-cash-request-source.md`. Follow-ups: DEF-657/658/659 | Ian, 2026-10-16 (orchestrator session) | Yes |
+| 348 | 2026-10-16 | **DECISIONS PAGE, ROUND 2 CLOSED (Ian, 16 Oct).** Business day ends at the store closing time; after-midnight sales belong to the day that opened. First store on v2: 11 Jan. POS v1 feature freeze from 9 Nov (fixes allowed). Live POS v1 = APK build #238, commit `e26d0c1`. **Yes, connect POS v1 to its safe void now (DEF-651)**. VAT on supplier invoices: typed from the paper; the VAT list is seen by managers for their own stores and admins for all. Recipes: same cap for ingredients; edit refused while unposted cooks use it; retire refused until menu items are re-mapped. Slicing a blocked item: blocked. Admins without a PIN: the Staff page issues one. Receipt photos: under 1,000 a month; OCR = test locally on 30 receipts first. **Two answers DIFFER from what shipped and reopen work:** (1) deleting an unposted DRAFT needs NO admin PIN; only posted records do (reopens T-412); (2) recipe-cook ingredients ALSO appear on the daily usage screen, labelled as coming from the recipe (reopens T-409/T-401 usage). **Still open:** whether diners share the people list with staff (Ian: discuss further). | Ian, 2026-10-16, on the decisions page https://claude.ai/artifact/H8YVDBG9nuBDBQi2Sguwrs (answers read by the orchestrator) | Yes, per answer |
 
 ## 14. Amendment protocol
 
