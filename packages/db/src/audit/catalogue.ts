@@ -198,6 +198,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('employment.created', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('employment.ended', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('employment.positions_set', 'staff', 'normal', 'store', 'employments', 'T-402'),
+  def('position.reactivated', 'staff', 'normal', 'store', 'positions', 'T-402'),
 
   // ---- S3 (money / data steps before posting): the 15 S3_LIVE entries are live; expense.submitted/rejected, sales_day.reopened, remittance.confirmed and data.* stay reserved (no verb, C4/C5) ----
   def('expense.drafted', 'money', 'normal', 'store', 'expenses', 'T-402'),
