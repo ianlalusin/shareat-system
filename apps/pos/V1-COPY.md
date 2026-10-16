@@ -42,3 +42,7 @@ copy (T-422 Ruling 6). Re-running the copy script brings the originals back; re-
 
 - `src/components/dashboard/WeatherLogFloatingButton.tsx` (6d): removed the "View calendar" button that pushed to the dropped `/weather-calendar`; the weather logger itself is unchanged.
 - `src/components/shared/WeatherLoggerModal.tsx` (6d): removed the "See monthly logs" button that pushed to `/weather-calendar`; the weather logger itself is unchanged.
+
+## Test fixtures
+
+- `src/lib/__fixtures__/tax-v1.ts` (T-423 slice T): the v1 tax module at commit e26d0c1, byte-identical (taken with git show from the v1 repo); read only by `src/lib/tax.golden.test.ts` as the golden reference for the new bill math. Do not edit it and do not import it from app code.
