@@ -2,8 +2,20 @@ import { notFound } from 'next/navigation';
 import { ENDED_STATUSES } from '@shareat/db/schema';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
-import { endEmploymentAction, issuePinAction, setGovernmentIdsAction, setPositionsAction } from '../actions';
-import { employmentDetail, governmentIdsFor, livePinFor, otherOpenBranchesFor, positionsForStore } from '../lib';
+import {
+  endEmploymentAction,
+  issuePinAction,
+  removeStaffPhotoAction,
+  removeStaffSignatureAction,
+  setGovernmentIdsAction,
+  setPositionsAction,
+  setStaffPhotoAction,
+  setStaffSignatureAction,
+  viewStaffSignatureAction,
+} from '../actions';
+import { employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
+import { PhotoInput } from '@/components/PhotoInput';
+import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
 import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input } from '@/components/ui';
@@ -33,7 +45,7 @@ export default async function EmploymentDetailPage({
   if (!detail) notFound();
 
   const isEnded = detail.employment.endedOn !== null;
-  const [positions, livePin, otherBranches, govIds] = await Promise.all([
+  const [positions, livePin, otherBranches, govIds, media] = await Promise.all([
     positionsForStore(actor.orgId, detail.employment.storeId),
     livePinFor(actor, detail.employment.personId),
     // ⭐ T-302 — read BEFORE the form renders, because the warning it feeds has to be on screen
@@ -41,6 +53,7 @@ export default async function EmploymentDetailPage({
     otherOpenBranchesFor(actor, detail.employment.personId, detail.employment.storeId),
     // T-190 - personal data, shown only to someone holding enrol_staff at this store (null hides the section).
     governmentIdsFor(actor, detail.employment.personId, detail.employment.storeId),
+    mediaFor(actor, employmentId),
   ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
@@ -223,6 +236,65 @@ export default async function EmploymentDetailPage({
         <a href={`/staff/${employmentId}/credentials`} className="text-sm underline underline-offset-4">
           Manage credentials →
         </a>
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Photo and signature</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          The photo is for this store&rsquo;s ID card. The signature is printed on documents (payslips, cash advance forms); it is not
+          an approval, PINs do that. Staff cannot change their own.
+        </p>
+        <div className="space-y-2 text-sm">
+          <h3 className="font-medium">Photo</h3>
+          {media.photoFileId ? (
+            <a href={`/files/${media.photoFileId}`} className="inline-block py-1 underline underline-offset-4">
+              View photo
+            </a>
+          ) : (
+            <p className="text-neutral-500 dark:text-neutral-400">No photo on file.</p>
+          )}
+          {!isEnded && (
+            <form action={setStaffPhotoAction} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="employmentId" value={employmentId} />
+              <PhotoInput name="photo" required accept="image/*" capture="user" />
+              <Button type="submit" variant="primary">
+                {media.photoFileId ? 'Replace photo' : 'Save photo'}
+              </Button>
+            </form>
+          )}
+          {!isEnded && media.photoFileId && (
+            <form action={removeStaffPhotoAction}>
+              <input type="hidden" name="employmentId" value={employmentId} />
+              <Button type="submit">Remove photo</Button>
+            </form>
+          )}
+        </div>
+        <div className="space-y-2 text-sm">
+          <h3 className="font-medium">Signature</h3>
+          {media.hasSignature ? (
+            <p>Signature on file.</p>
+          ) : (
+            <p className="text-neutral-500 dark:text-neutral-400">No signature on file.</p>
+          )}
+          {media.hasSignature && media.canViewSignature && (
+            <form action={viewStaffSignatureAction}>
+              <input type="hidden" name="employmentId" value={employmentId} />
+              <input type="hidden" name="personId" value={detail.employment.personId} />
+              <Button type="submit">View signature</Button>
+              <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">Each view is recorded. The link lasts one minute.</span>
+            </form>
+          )}
+          {!isEnded && (
+            <SignaturePad personId={detail.employment.personId} employmentId={employmentId} action={setStaffSignatureAction} />
+          )}
+          {!isEnded && media.hasSignature && (
+            <form action={removeStaffSignatureAction}>
+              <input type="hidden" name="employmentId" value={employmentId} />
+              <input type="hidden" name="personId" value={detail.employment.personId} />
+              <Button type="submit">Remove signature</Button>
+            </form>
+          )}
+        </div>
       </section>
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">

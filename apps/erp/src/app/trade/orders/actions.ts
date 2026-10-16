@@ -18,6 +18,8 @@ import { peso, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { BIR_INVOICE_NO } from './typed-forms';
 import { verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
@@ -147,7 +149,7 @@ export async function setBirInvoiceNoAction(fd: FormData): Promise<void> {
     );
     message = result.birInvoiceNo ? `Invoice no. ${result.birInvoiceNo} noted on this order.` : 'Invoice no. cleared.';
   } catch (err) {
-    return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { error: errorMessage(err), typed: keepTyping(fd, BIR_INVOICE_NO, orderId, { actorId: actor.personId }) });
   }
   revalidatePath(`/trade/orders/${orderId}`);
   return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { ok: message });

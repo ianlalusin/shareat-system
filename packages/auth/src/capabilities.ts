@@ -229,6 +229,12 @@ export type Capability =
   | 'run_payroll'
   /** T-190. Admin-only: the statutory rate, withholding and minimum-wage tables decide every payslip's deductions. */
   | 'manage_payroll_rates'
+  /**
+   * T-434, bible row 353. Seeing a staff member's SIGNATURE IMAGE (payslips, cash advance forms, ID cards print it). A signature can be
+   * forged, so this is NOT folded into `enrol_staff` and does not imply `run_payroll`. Store-scoped; admins hold it, managers do not;
+   * grantable to a position (a payroll clerk). Every view is audited.
+   */
+  | 'view_staff_signature'
   | 'provision_clock_terminal'
   // Configuration
   | 'manage_store_settings'
@@ -382,6 +388,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'set_pay_rate',
   'run_payroll',
   'manage_payroll_rates',
+  'view_staff_signature',
   'provision_clock_terminal',
   'manage_store_settings',
   'set_cash_policy',
@@ -567,6 +574,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   run_payroll: 'store',
   // T-190. The rate tables are per org (each org confirms its own), not per store.
   manage_payroll_rates: 'org',
+  view_staff_signature: 'store',
   provision_clock_terminal: 'store',
 
   manage_store_settings: 'store',
@@ -755,6 +763,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   set_pay_rate: 'staff',
   run_payroll: 'staff',
   manage_payroll_rates: 'staff', // T-190
+  view_staff_signature: 'staff',
   provision_clock_terminal: 'staff',
 
   run_cutover: 'books',
@@ -979,6 +988,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   run_payroll: { super_admin: true, admin: true, manager: false, staff: false },
   // T-190: admin-only. A manager must not be able to move the table that sets every payslip's deductions.
   manage_payroll_rates: { super_admin: true, admin: true, manager: false, staff: false },
+  // T-434 (bible row 353): manager DENIED - a signature is forgeable. Position-grantable (a payroll clerk); never implies run_payroll.
+  view_staff_signature: { super_admin: true, admin: true, manager: false, staff: false },
   // ⭐ ADMIN-ONLY (Ian, 2026-08-29, bible row 165). A provisioned terminal is the ONLY principal
   // allowed to read the credential mirror, so whoever may create one may read every enrolled
   // fingerprint template and card id at that store. Manager was v1's level; this is tighter.
@@ -1225,6 +1236,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   set_pay_rate: 'set a pay rate',
   run_payroll: 'run payroll',
   manage_payroll_rates: 'add or confirm the SSS, PhilHealth, Pag-IBIG and tax tables',
+  view_staff_signature: "see a staff member's signature",
   provision_clock_terminal: 'set up a clock-in tablet',
   manage_store_settings: 'manage store settings',
   set_cash_policy: "set a store's cash policy",

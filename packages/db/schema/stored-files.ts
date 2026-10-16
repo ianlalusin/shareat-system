@@ -45,6 +45,9 @@ export const FILE_PURPOSES = [
   'memo_document',
   'wastage_dispute',
   'onboarding_document',
+  // T-434, migration 0204. The signature is PNG-only and read through its own rule (never the shared one).
+  'staff_photo',
+  'staff_signature',
 ] as const;
 export type FilePurpose = (typeof FILE_PURPOSES)[number];
 

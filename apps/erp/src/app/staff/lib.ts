@@ -10,7 +10,7 @@
  */
 import { employmentRepo, personsRepo, sessionsRepo, statutoryRepo, type EmploymentPositionRow, type EmploymentRow, type PersonRow, type PositionRow, type RosterRow, type Tx } from '@shareat/db';
 import { authorize, can, type Actor, type Capability } from '@shareat/auth';
-import { searchPersons } from '@shareat/domain';
+import { searchPersons, staffMediaView } from '@shareat/domain';
 import { listStores, withOrgPrincipal, type StoreOption } from '../expenses/lib';
 import { heldStoresFor } from '../../lib/held-stores';
 
@@ -171,4 +171,19 @@ function groupPositions(rows: EmploymentPositionRow[]): Map<string, PositionAssi
     out.set(r.employmentId, arr);
   }
   return out;
+}
+
+/**
+ * T-434. The detail page's photo and signature state, from the domain loader: booleans for the signature (never its id) and the photo
+ * file id only for a viewer who holds `enrol_staff` at the store. A refusal reads as "nothing to show".
+ */
+export async function mediaFor(
+  actor: Actor,
+  employmentId: string,
+): Promise<{ hasSignature: boolean; canViewSignature: boolean; photoFileId: string | null }> {
+  try {
+    return await withOrgPrincipal(actor.orgId, (tx) => staffMediaView(tx, actor, { employmentId }));
+  } catch {
+    return { hasSignature: false, canViewSignature: false, photoFileId: null };
+  }
 }
