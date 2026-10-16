@@ -120,7 +120,8 @@ const FLOOR_EXPORTS = 1200;
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
 const ROOT = (args.find((a) => !a.startsWith('--')) || process.cwd()).replace(/\\/g, '/');
-const SKIP_DIR = new Set(['node_modules', '.next', 'dist', 'build', '.turbo', 'coverage', '.git']);
+// DEF-669: '.claude' holds nested git worktrees (a full second copy of the repo) - never scan it.
+const SKIP_DIR = new Set(['node_modules', '.next', 'dist', 'build', '.turbo', 'coverage', '.git', '.claude']);
 
 function walk(dir, out) {
   let entries;
