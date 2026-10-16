@@ -226,10 +226,24 @@ export async function runRecurringExpenses(
                 const account = cur.defaultMoneyAccountId
                   ? await moneyAccountsRepo.getById(tx, org.id, cur.defaultMoneyAccountId)
                   : null;
-                const payment = paymentForAccount(
+                let payment = paymentForAccount(
                   account ? (account.instrument as 'cash' | 'ewallet' | 'bank') : null,
                   cur.defaultMoneyAccountId,
                 );
+                // DEF-663 (T-430): a cash line must NAME its money account (routing refuses one that names none, so
+                // the draft could never be approved as-is). The template's own account is that money account; if it
+                // cannot be used (gone, retired, another store, a staff float that needs a cash request), draft the
+                // bill on credit with no account and the approver picks the source. Never a cash line with a null account.
+                if (payment.method === 'cash') {
+                  const usable =
+                    account != null &&
+                    account.isActive &&
+                    account.storeId === cur.storeId &&
+                    account.custodian !== 'staff';
+                  payment = usable
+                    ? { method: 'cash', moneyAccountId: cur.defaultMoneyAccountId }
+                    : { method: 'credit', moneyAccountId: null };
+                }
 
                 const expense = await createExpense(tx, actor, {
                   storeId: cur.storeId,

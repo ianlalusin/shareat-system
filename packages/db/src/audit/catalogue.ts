@@ -164,11 +164,11 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // The org's usage system person (the author of every POS-pull usage draft) was created, once, on first use (audit ruling A9).
   def('stock.usage_system_author_created', 'stock', 'normal', 'org', 'persons', 'T-401', { actor: 'system' }),
   def('stock.usage_auto_posted', 'stock', 'normal', 'store', 'stock_usage_records', 'T-401', { actor: 'system' }),
-  // Written by T-401's setOptionOffer (price / withdraw) but absent from 0197's copy list (a ternary the S1a scan missed). Dotted on purpose: never in 0197's list, so no row can carry the underscore form.
   // T-430: a recurring template was created (carries starts_on), resumed, or had its interval/anchor changed (the last two record dropped_due_dates).
   def('recurring.template_created', 'money', 'normal', 'store', 'recurring_expenses', 'T-430'),
   def('recurring.template_resumed', 'money', 'normal', 'store', 'recurring_expenses', 'T-430'),
   def('recurring.template_rescheduled', 'money', 'normal', 'store', 'recurring_expenses', 'T-430'),
+  // Written by T-401's setOptionOffer (price / withdraw) but absent from 0197's copy list (a ternary the S1a scan missed). Dotted on purpose: never in 0197's list, so no row can carry the underscore form.
   def('menu.option_offer_set', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),
   def('menu.option_offer_withdraw', 'menu_price', 'high', 'store', 'menu_option_offers', 'T-401'),
 

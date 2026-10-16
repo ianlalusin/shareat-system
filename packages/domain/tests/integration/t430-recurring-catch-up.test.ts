@@ -516,3 +516,27 @@ describe('history and audit', () => {
     expect((await sql`select 1 from recurring_expenses where id = ${fresh.id}`).length).toBe(0);
   });
 });
+
+describe('DEF-663 — a catch-up must not multiply an unapprovable cash line', () => {
+  it('17 — cash default account, 3 periods: no draft carries a cash payment with a NULL money account (a line with the account, or no line)', async () => {
+    const f = await fixture('c17');
+    await addPeriod(f, '2026-07', 'open');
+    await addPeriod(f, '2026-08', 'open');
+    const [office] = await sql<{ id: string }[]>`
+      select id from money_accounts where store_id = ${f.storeId} and custodian = 'office' and instrument = 'cash' limit 1`;
+    await mkTemplate(f, '2026-07-01', { defaultMoneyAccountId: office!.id });
+
+    const r = await run(f);
+
+    expect(r.hadFailures).toBe(false);
+    expect((await counts(f.orgId)).e).toBe(3);
+    const bad = await sql<{ n: number }[]>`
+      select count(*)::int as n from expense_payments p join expenses e on e.id = p.expense_id
+      where e.org_id = ${f.orgId} and p.method = 'cash' and p.money_account_id is null`;
+    expect(bad[0]!.n).toBe(0);
+    // Either branch of the ruling: a resolvable account is used, an unresolvable one leaves no payment line at all.
+    const lines = await sql<{ expense_id: string; money_account_id: string | null }[]>`
+      select p.expense_id, p.money_account_id from expense_payments p join expenses e on e.id = p.expense_id where e.org_id = ${f.orgId}`;
+    expect(lines.every((l) => l.money_account_id !== null)).toBe(true);
+  });
+});
