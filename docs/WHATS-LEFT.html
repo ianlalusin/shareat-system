@@ -164,7 +164,7 @@
         <div class="k">Now</div>
         <h3>Confirm the deploy, then the real-data run</h3>
         <ul>
-          <li>Confirm the a879264 deploy (PR #28) is live; install the usage auto-post timer on the droplet</li>
+          <li>Confirm PR #30 (T-414, DEF-654) is live; give YANIYOW its own dev port (DEF-660)</li>
           <li>Brief managers: POS usage now arrives as drafts that auto-post at 14:00 the next day</li>
           <li>T-392: run Lipa&rsquo;s real week on production; the dual run starts 2 Nov</li>
           <li>T-391 rollout with you; T-393 backups switched on before 1 Nov</li>
@@ -174,7 +174,7 @@
         <div class="k">Next</div>
         <h3>Small follow-ups, rehearsal, activity log</h3>
         <ul>
-          <li>AR collection void needs the admin PIN (DEF-654, small)</li>
+          <li>Float row locks in AP payment and cash-request settle/return (DEF-657/658, one small task); silent null in ensureStaffCashAccount (DEF-659)</li>
           <li>Per-person PIN miss budget for admin approvals (DEF-653, T-412 M6; needs storage)</li>
           <li>T-394 S4 the 13 Nov rehearsal (runbook drafted); T-402 S4 viewer, S5</li>
           <li>The rest of the 23-item work list</li>
@@ -210,7 +210,9 @@
     <h2>Other open follow-ups</h2>
     <p class="lede">Found while fixing money. None posts a wrong amount today; each is small.</p>
     <div class="items">
-      <div class="item y"><div class="id">DEF-654</div><div><b>Voiding a posted AR collection needs no admin PIN.</b> The button on the customer page was missed by T-412. Small follow-up.</div></div>
+      <div class="item y"><div class="id">DEF-657/658</div><div><b>Cash-request float can be overdrawn by a concurrent AP payment or settle/return</b> (no row lock). One small task.</div></div>
+      <div class="item y"><div class="id">DEF-659</div><div><b>ensureStaffCashAccount returns null silently</b> when a same-name manual account exists.</div></div>
+      <div class="item y"><div class="id">DEF-660</div><div><b>Port 9008 clash:</b> the YANIYOW dev server held ERP v2's port. YANIYOW needs its own.</div></div>
       <div class="item y"><div class="id">DEF-653</div><div><b>Admin-approval PIN guesses are budgeted per store, not per person</b> (T-412 M6, deferred). A manager with several stores gets more guesses. Needs storage.</div></div>
       <div class="item y"><div class="id">DEF-655</div><div><b>The production server lost group-write on /srv after 13 Oct</b>; the 15 Oct deploy failed until <code>chmod g+w /srv</code>. Cause unknown.</div></div>
       <div class="item"><div class="id">DEF-656</div><div>A CI check fails on main when an unmerged branch on GitHub adds a new activity action (flake by design).</div></div>
@@ -256,7 +258,6 @@
     <p class="lede">Each holds work still.</p>
     <div class="items">
       <div class="item y"><div class="id">Payout samples</div><div><b>Send sample Grab and Foodpanda payout files.</b> The settlement parsers wait on them.</div></div>
-      <div class="item y"><div class="id">Auto-post timer</div><div><b>Install <code>shareat-usage-auto-post.service</code> and <code>.timer</code> on 159.223.46.224</b> (docs/ops/README.md). Until then pull drafts do not auto-post.</div></div>
       <div class="item y"><div class="id">Managers</div><div><b>Tell managers:</b> POS usage now arrives as drafts; staff correct, the manager posts; unposted drafts auto-post at 14:00 the next day.</div></div>
       <div class="item y"><div class="id">Decisions page</div><div><b>Answer the open questions</b> (newest first): business-day cut-off, first-store date (11 Jan), v1 freeze, v1 safe-void fix, VAT strictness, recipe questions, admin PIN for email-only admins. T-408/409/411/412/413 shipped on the recommended answers.</div></div>
       <div class="item y"><div class="id">Usage counts</div><div><b>Run the read-only counts</b> in <code>C:&#92;Users&#92;ianla&#92;t409-counts.sql</code> and paste the results back.</div></div>
