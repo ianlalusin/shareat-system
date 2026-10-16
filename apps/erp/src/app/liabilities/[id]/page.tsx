@@ -251,9 +251,7 @@ export default async function LiabilityPage({
           </div>
           <form action={retireAction}>
             <input type="hidden" name="liabilityId" value={liability.id} />
-            <Button type="submit" variant="secondary">
-              Retire
-            </Button>
+            <ConfirmDestructive tier="retype" label="Retire" consequence="Retires this obligation. It stays on the ledger and its history is untouched." expectedName={liability.name} />
           </form>
         </section>
       )}

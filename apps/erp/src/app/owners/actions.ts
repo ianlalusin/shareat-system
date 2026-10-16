@@ -15,10 +15,12 @@ import {
   writeOffReceivable,
 } from '@shareat/domain';
 import type { DrawingLimitPeriod, PersonalExpenseTreatment } from '@shareat/db/schema';
+import { verifyAdminApproval } from '@shareat/auth';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -121,14 +123,20 @@ export async function settleAction(formData: FormData): Promise<void> {
         `⚠️ No cash has come back yet; payroll nets it when it runs, so it still counts against ` +
         `the drawing limit.`;
     } else if (how === 'writeoff') {
-      const result = await withOrgPrincipal(actor.orgId, (tx) =>
-        writeOffReceivable(tx, actor, {
+      // T-412 Tier P (DEF-654): writing a posted receivable off is an administrator's PIN, checked on the server against the
+      // RECORD's store. Only this branch is guarded: repaying in cash or from pay moves money back, it forgives nothing.
+      const target = await loadDestructiveTarget(actor, 'owner', id, ['approve_expense']);
+      const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId!, pin: str(formData, 'adminPin'), capability: 'approve_expense' });
+      const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+        const written = await writeOffReceivable(tx, actor, {
           ownerId: id,
           amount,
           reason: str(formData, 'reason'),
           on: str(formData, 'on'),
-        }),
-      );
+        });
+        await recordApproval(tx, actor, approval, { capability: 'approve_expense', entityType: 'owner', entityId: id, storeId: target.storeId });
+        return written;
+      });
       message =
         `Written off. It is a drawing now, so equity is down by ₱${amount} — ` +
         `₱${result.outstanding} still owed.`;

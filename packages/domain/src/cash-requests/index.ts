@@ -255,6 +255,21 @@ export async function releaseCashRequest(
       'releaseCashRequest',
     );
 
+    // ⭐ T-414 / R-AUTO (Ian, 2026-10-16): the store always has a staff cash account once a float is out, so the released
+    // money has a place to go. Created here in the SAME transaction (idempotent under concurrency), audited only when made.
+    const staffAccount = await moneyAccountsRepo.ensureStaffCashAccount(trx, actor.orgId, req.storeId);
+    if (staffAccount?.created) {
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'money_account.created',
+        storeId: req.storeId,
+        entityId: staffAccount.id,
+        before: null,
+        after: { name: staffAccount.name, custodian: 'staff', instrument: 'cash', glAccountCode: '1120', source: 'cash_request_release', cashRequestId: req.id },
+        source: 'web',
+      });
+    }
+
     const result = await postEntry(trx, {
       orgId: actor.orgId,
       entryDate: input.on,

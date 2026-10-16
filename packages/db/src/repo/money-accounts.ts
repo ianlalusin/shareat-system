@@ -89,6 +89,65 @@ export async function insertMoneyAccount(
   return row!;
 }
 
+/**
+ * ⭐ T-414 / R-AUTO (Ian, 2026-10-16): the store's staff cash account, created when there is none.
+ *
+ * Releasing a cash request calls this in the SAME transaction, so released money always has a place to go. Returns the
+ * account and whether THIS call made it (the caller audits only a creation). Idempotent under concurrency: a
+ * transaction-scoped advisory lock keyed on the store serialises two releases at one store, and the second then finds
+ * the first's row. The row is a foundation account (staff / cash / 1120), so the partial unique index
+ * `money_accounts_foundation_unique` is a second guard; when that index conflicts with a RETIRED foundation row nothing
+ * is inserted and `null` comes back (the loader then still offers the float, with no account).
+ */
+export async function ensureStaffCashAccount(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+): Promise<{ id: string; created: boolean; name: string } | null> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`staff-cash:${storeId}`}))`);
+  const findActive = async () => {
+    const [row] = await tx
+      .select({ id: moneyAccounts.id, name: moneyAccounts.name })
+      .from(moneyAccounts)
+      .where(
+        and(
+          eq(moneyAccounts.orgId, orgId),
+          eq(moneyAccounts.storeId, storeId),
+          eq(moneyAccounts.custodian, 'staff'),
+          eq(moneyAccounts.instrument, 'cash'),
+          eq(moneyAccounts.isActive, true),
+        ),
+      )
+      .orderBy(asc(moneyAccounts.createdAt))
+      .limit(1);
+    return row;
+  };
+  const existing = await findActive();
+  if (existing) return { ...existing, created: false };
+
+  const [store] = await tx
+    .select({ name: stores.name })
+    .from(stores)
+    .where(and(eq(stores.id, storeId), eq(stores.orgId, orgId)))
+    .limit(1);
+  if (!store) return null;
+  const name = `Staff cash — ${store.name}`;
+  const [made] = await tx
+    .insert(moneyAccounts)
+    .values({
+      orgId,
+      storeId,
+      name,
+      instrument: 'cash',
+      glAccountCode: '1120',
+      custodian: 'staff',
+      isFoundation: true,
+    })
+    .onConflictDoNothing()
+    .returning({ id: moneyAccounts.id });
+  return made ? { id: made.id, name, created: true } : null;
+}
+
 export async function getById(
   tx: Tx,
   orgId: string,

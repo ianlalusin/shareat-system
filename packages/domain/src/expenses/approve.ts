@@ -13,9 +13,9 @@
  * checked first" philosophy.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, auditLogRepo, expensesRepo, journalRepo, moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, journalRepo, moneyAccountsRepo, ownersRepo, personsRepo, transaction, type Tx } from '@shareat/db';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
-import { add, money, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, formatMoney, money, ZERO, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { withInterStoreLegs } from '../ledger/inter-store';
@@ -129,6 +129,48 @@ async function runApproveExpense(
 
   const payments = await expensesRepo.getPaymentsForExpense(tx, expenseId);
 
+  // ⭐ T-414 (rulings 6, 7): every cash-request leg is re-checked against the request's LIVE outstanding, inside this
+  // transaction, before anything posts. Create checks amount <= outstanding once; two drafts can each pass it on one
+  // float and both post. The request rows are locked FIRST (`FOR UPDATE`, id order), and the balance is read AFTER the
+  // lock - so a concurrent approval that drew on the same float has committed and is already in the number. The legs are
+  // summed per request in exact centavos (two legs of 600 on a 1,000 float are one draw of 1,200, not two of 600).
+  const drawnPerRequest = new Map<string, Money>();
+  for (const p of payments) {
+    if (!p.cashRequestId) continue;
+    drawnPerRequest.set(p.cashRequestId, add(drawnPerRequest.get(p.cashRequestId) ?? ZERO, money(p.amount)));
+  }
+  if (drawnPerRequest.size > 0) {
+    const locked = new Map(
+      (await cashRequestsRepo.lockForSpend(tx, actor.orgId, [...drawnPerRequest.keys()])).map((r) => [r.id, r] as const),
+    );
+    for (const [requestId, drawn] of [...drawnPerRequest].sort(([a], [b]) => a.localeCompare(b))) {
+      const req = locked.get(requestId);
+      if (!req) {
+        throw gone(`approveExpense: expense ${expenseId} draws on cash request ${requestId}, which does not exist in org ${actor.orgId}`, 'cash request');
+      }
+      const holder = (await personsRepo.getPersonById(tx, actor.orgId, req.requestedFor))?.displayName ?? 'The holder';
+      if (req.status !== 'released') {
+        throw refuse(
+          `approveExpense: expense ${expenseId} draws on cash request ${requestId}, which is ${req.status}, not released`,
+          `${holder}'s cash request is no longer open (${req.status}). Pick another source.`,
+        );
+      }
+      if (req.storeId !== expense.storeId) {
+        throw refuse(
+          `approveExpense: expense ${expenseId} (store ${expense.storeId}) draws on cash request ${requestId}, released at store ${req.storeId}`,
+          `${holder}'s cash request belongs to another store, so this expense cannot draw from it. Pick another source.`,
+        );
+      }
+      const outstanding = money((await cashRequestsRepo.floatPositionOf(tx, actor.orgId, requestId)).outstanding);
+      if (compare(drawn, outstanding) > 0) {
+        throw refuse(
+          `approveExpense: expense ${expenseId} draws ${drawn} from cash request ${requestId}, which has ${outstanding} left`,
+          `${holder}'s cash request has ${formatMoney(outstanding)} left — this expense draws ${formatMoney(drawn)} from it. Lower the amount or pay the rest another way.`,
+        );
+      }
+    }
+  }
+
   // ⭐ Resolve each payment's money account to its GL code HERE. `routeExpense` is pure and cannot
   // look one up, and the account is what decides both where the credit lands and who owned it
   // (DEF-058). A named account that does not exist blocks the posting rather than defaulting.
@@ -176,6 +218,9 @@ async function runApproveExpense(
   const drawnPerAccount = new Map<string, Money>();
   for (const p of payments) {
     if (!p.moneyAccountId) continue; // credit, reimbursable and cash-request legs move no money now
+    // T-414: a cash-request leg is judged against ITS request (above), not against the aggregate staff account, which
+    // holds every holder's float and would hide an over-spend on one of them.
+    if (p.cashRequestId) continue;
     drawnPerAccount.set(p.moneyAccountId, add(drawnPerAccount.get(p.moneyAccountId) ?? ZERO, money(p.amount)));
   }
   const warnings: string[] = [];
