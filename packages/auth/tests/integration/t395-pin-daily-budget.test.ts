@@ -289,7 +289,7 @@ describe('T-395 S1 — tier 2, the daily budget (tests 1-8)', () => {
     const cols = await sql<{ column_name: string }[]>`
       select column_name from information_schema.columns
        where table_schema = 'public' and table_name = 'sign_in_attempts' order by column_name`;
-    expect(cols.map((c) => c.column_name)).toEqual(['device_id', 'id', 'kind', 'occurred_at', 'org_id', 'store_id']);
+    expect(cols.map((c) => c.column_name)).toEqual(['actor_person_id', 'device_id', 'id', 'kind', 'occurred_at', 'org_id', 'store_id']);
   });
 });
 

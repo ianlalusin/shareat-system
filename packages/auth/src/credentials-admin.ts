@@ -327,3 +327,32 @@ export async function reopenPinSignIn(tx: Tx, actor: Actor, storeId: string): Pr
   });
   return { reopened: true };
 }
+
+/**
+ * T-416 (DEF-653) - an administrator clears a person's administrator-PIN approval cap.
+ *
+ * Gated on `manage_users` (org-scoped; admin / super_admin only). Nobody clears their own cap. A person who is not capped
+ * (including a cap that auto-lifted) is a no-op: nothing changes and NO audit row is written. A real clear writes exactly
+ * one `auth.approval_pin_cap_reset` row in the same transaction.
+ */
+export async function resetApprovalPinCap(tx: Tx, actor: Actor, personId: string): Promise<{ cleared: boolean }> {
+  if (!UUID_SHAPE.test(personId)) {
+    throw refuse('Pick a person to clear the cap for.', 'Pick a person to clear the cap for.');
+  }
+  await authorize(tx, actor, 'manage_users');
+  if (personId === actor.personId) {
+    throw refuse('Another administrator must clear this.', 'Another administrator must clear this.');
+  }
+  const result = await pinAttemptsRepo.resetActorCap(tx, actor.orgId, personId, actor.personId);
+  if (!result.cleared) return { cleared: false };
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'auth.approval_pin_cap_reset',
+    storeId: null,
+    entityId: personId,
+    before: { cappedAt: result.cappedAt ? result.cappedAt.toISOString() : null },
+    after: { resetAt: result.resetAt ? result.resetAt.toISOString() : null },
+    source: 'web',
+  });
+  return { cleared: true };
+}

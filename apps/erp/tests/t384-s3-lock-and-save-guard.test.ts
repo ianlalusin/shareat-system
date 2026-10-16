@@ -64,6 +64,7 @@ const COMMANDS: Record<string, string> = {
   'Value the count': 'writes the generated opening inventory entry (T-390 S5)',
   'Post this settlement': 'posts to the ledger',
   'Pay': 'books a payment',
+  'Clear the approval-PIN cap': 'lifts an administrator-PIN cap early (T-416, audited)',
   'Reopen PIN sign-in': 'lets PIN sign-in back in at a stopped store (T-395 S2, audited)',
   'Add directly (super-admin)': 'creates an item with no approval, bypassing the request flow (items page)',
   'Charge': 'books a charge',

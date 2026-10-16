@@ -20,8 +20,10 @@ export const signInAttempts = pgTable(
     orgId: uuid('org_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict' }),
-    // T-412 (migration 0198): NULL = the organisation's approval-PIN bucket.
+    // T-412 (migration 0199): NULL = the organisation's approval-PIN bucket.
     storeId: uuid('store_id').references(() => stores.id, { onDelete: 'restrict' }),
+    // T-416 (migration 0200): the signed-in person whose approval-PIN bucket this row belongs to. At most one of store_id / actor_person_id.
+    actorPersonId: uuid('actor_person_id').references(() => persons.id, { onDelete: 'restrict' }),
     deviceId: uuid('device_id').references(() => persons.id, { onDelete: 'restrict' }),
     kind: text('kind').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
@@ -29,6 +31,13 @@ export const signInAttempts = pgTable(
   (t) => [
     index('sign_in_attempts_store_time_idx').on(t.storeId, t.occurredAt),
     index('sign_in_attempts_org_time_idx').on(t.orgId, t.occurredAt),
+    index('sign_in_attempts_actor_time_idx').on(t.actorPersonId, t.occurredAt),
+    check('sign_in_attempts_one_key_check', sql`not (${t.storeId} is not null and ${t.actorPersonId} is not null)`),
+    foreignKey({
+      columns: [t.orgId, t.actorPersonId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'sign_in_attempts_actor_person_id_same_org_fk',
+    }).onDelete('restrict'),
     check('sign_in_attempts_kind_check', sql`${t.kind} in ('miss', 'lockout', 'stopped')`),
     // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
     // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a

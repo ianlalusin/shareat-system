@@ -28,8 +28,8 @@ import { sql as dsql } from 'drizzle-orm';
  *   M5   hash the PIN with a constant instead of actor.orgId                    -> I1 red (and I5's collision leg if the hash
  *        is built from the PIN owner's org); I5 alone cannot go red on a constant, see its comment
  *   M6   charge inside the caller's transaction (miss rolls back with the throw) -> I2 red
- *   M7   skip refuseIfCharged                                                   -> I6 red
- *   M12  approvals charge their own bucket (not the sign-in store budget)       -> I11 red          (tester-added)
+ *   M7   skip refuseIfCharged                                                   -> t416 A2 red (I6 moved there)
+ *   M12  approvals charge the sign-in store budget again                        -> I11 (inverted by T-416) red
  *   M13  refund the charge when the PIN is right but its owner is no admin      -> I3 red           (tester-added)
  *   M14  isAdministrative narrowed to 'admin' only (super_admin refused)        -> I1d red          (tester-added)
  *   (M1, M8, M9, M10, M11 live in the action / census tests: t412-destructive-actions.test.ts and t412-destructive-census.test.ts.)
@@ -65,9 +65,6 @@ const sql = postgres(url, { max: 8 });
 
 /** The spec's one refusal sentence, typed here on purpose: a test must assert the text the spec wrote, not a re-export of it. */
 const ADMIN_PIN_REFUSED = 'That PIN cannot approve this. An administrator must enter their own PIN.';
-const STOPPED =
-  /PIN sign-in is stopped at this store after too many wrong PINs today\. A manager can reopen it: sign in with email and password, then open Staff\./;
-const PAUSED = /paused until/;
 const WRONG = '000000'; // well-formed, never issued in these fixtures
 
 type Approve = (
@@ -148,10 +145,12 @@ const approve = (f: Fixture, actor: Who, pin: string, capability = 'void_expense
   verifyFn()(null, { actor: actorOf(f, actor), storeId, pin, capability });
 const msg = (p: Promise<unknown>): Promise<string> => p.then(() => 'OK', (e: Error) => e.message);
 
+// T-416: an approval's miss is on the ACTOR's bucket (actor_person_id, no store); a sign-in's is on the store. Each test has its
+// own org, so these count the org's rows whichever bucket they sit in.
 const countKind = async (f: Fixture, kind: string) =>
-  (await sql<{ n: number }[]>`select count(*)::int as n from sign_in_attempts where store_id = ${f.storeId} and kind = ${kind}`)[0]!.n;
+  (await sql<{ n: number }[]>`select count(*)::int as n from sign_in_attempts where org_id = ${f.orgId} and kind = ${kind}`)[0]!.n;
 const throttleRow = async (f: Fixture) =>
-  (await sql<{ fail_count: number; stopped_at: Date | null }[]>`select fail_count, stopped_at from pin_attempt_throttle where store_id = ${f.storeId}`)[0];
+  (await sql<{ fail_count: number; stopped_at: Date | null }[]>`select fail_count, stopped_at from pin_attempt_throttle where org_id = ${f.orgId} order by updated_at desc limit 1`)[0];
 
 beforeEach(() => {
   lookups.n = 0;
@@ -210,13 +209,16 @@ describe('I2 a wrong PIN is refused with the one sentence, and the miss SURVIVES
     expect(notAdmin).toBe(ADMIN_PIN_REFUSED);
   });
 
-  it('I2c: the miss is written at the store of the RECORD (the storeId the action passes), nowhere else', async () => {
+  it('I2c (T-416): the miss is on the ACTOR bucket and on NO store, whichever store the record is at', async () => {
     const f = await org('i2c', { admin: true });
     const [other] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${f.orgId}, ${uid('s2')}, 'S2') returning id`;
     await msg(approve(f, f.manager, WRONG, 'void_expense', other!.id));
     const at = async (id: string) => (await sql<{ n: number }[]>`select count(*)::int as n from sign_in_attempts where store_id = ${id} and kind = 'miss'`)[0]!.n;
-    expect(await at(other!.id)).toBe(1);
+    expect(await at(other!.id)).toBe(0);
     expect(await at(f.storeId)).toBe(0);
+    const mine = await sql<{ store_id: string | null }[]>`select store_id from sign_in_attempts where actor_person_id = ${f.manager.personId} and kind = 'miss'`;
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.store_id).toBeNull();
   });
 });
 
@@ -269,18 +271,7 @@ describe('I5 the PIN is bound to the actor’s organisation', () => {
   });
 });
 
-describe('I6 a stopped store keeps the stopped sentence and does no lookup', () => {
-  it('I6: 50 misses an hour old, one attempt trips the budget; the admin’s CORRECT PIN then reads the stopped sentence with zero lookups (M7)', async () => {
-    const f = await org('i6', { admin: true });
-    await sql`
-      insert into sign_in_attempts (org_id, store_id, device_id, kind, occurred_at)
-      select ${f.orgId}::uuid, ${f.storeId}::uuid, ${f.deviceId}::uuid, 'miss', now() - interval '1 hour' from generate_series(1, 50)`;
-    expect(await msg(approve(f, f.manager, WRONG)), 'the tripping attempt').toMatch(STOPPED);
-    lookups.n = 0;
-    expect(await msg(approve(f, f.manager, f.admin!.pin))).toMatch(STOPPED);
-    expect(lookups.n, 'refused at the charge, before any credential lookup').toBe(0);
-  });
-});
+// I6 (a stopped bucket keeps its sentence and does no lookup) moved to t416-approval-pin-cap.test.ts, A2 (T-416).
 
 describe('I7 an administrator whose authority is gone is refused', () => {
   it('I7: an admin whose role row was revoked is refused while ANOTHER admin keeps the org administered', async () => {
@@ -328,16 +319,16 @@ describe('I9 a correct PIN refunds its charge', () => {
   });
 });
 
-describe('I11 approval misses and sign-in misses are ONE per-store budget', () => {
-  it('I11: five wrong sign-ins + five wrong approvals pause the store for BOTH doors (M12)', async () => {
+describe('I11 (T-416, inverted) approval misses and sign-in misses are NOT one budget any more', () => {
+  it('I11: five wrong sign-ins + five wrong approvals do not pause the store: the next wrong sign-in is a plain miss (M12)', async () => {
     const f = await org('i11', { admin: true });
     for (let i = 0; i < 5; i++) {
       await msg(signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: WRONG, deviceId: f.deviceId }));
-      await msg(approve(f, f.manager, WRONG));
+      expect(await msg(approve(f, f.manager, WRONG))).toBe(ADMIN_PIN_REFUSED);
     }
-    expect(await countKind(f, 'miss'), 'ten misses at ONE store').toBe(10);
-    expect(await msg(approve(f, f.manager, f.admin!.pin)), 'the admin’s correct PIN is paused out').toMatch(PAUSED);
-    expect(await msg(signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: WRONG, deviceId: f.deviceId })), 'and so is the sign-in door').toMatch(PAUSED);
+    expect(await msg(signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: WRONG, deviceId: f.deviceId })), 'ten misses in all, but only five at the store').toBe(
+      'Sign-in failed: that PIN is not valid.',
+    );
   });
 });
 

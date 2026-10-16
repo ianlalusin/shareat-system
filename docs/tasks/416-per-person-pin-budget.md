@@ -60,7 +60,7 @@ An administrator holding `manage_users` (admin / super_admin only, org-scoped: `
   person, `after: { cap: APPROVAL_DAILY_MISS_CAP }`), exactly like `auth.pin_stopped_for_day`: in the caller's tx when
   one is given, else via the outbox (`security-events.ts`, new `enqueueApprovalPinCapped` beside `enqueuePinStoppedForDay`
   `:142`). An already-capped attempt writes nothing more.
-- `reset_approval_pin_cap` — the reset, in the same tx as the update: `actorPersonId` = the administrator, `entityId` =
+- `auth.approval_pin_cap_reset` — the reset, in the same tx as the update: `actorPersonId` = the administrator, `entityId` =
   the person, `before: { cappedAt }`, `after: { resetAt }`.
 - EVERY actor-bucket row (`miss`, `stopped`; `lockout` cannot occur, above) carries `actor_person_id`, so "who guessed how often" is
   queryable; the 90-day purge (`:155-165`) covers these rows as it does today.
@@ -158,7 +158,7 @@ case stays green unedited.
 - **A9** 10 correct approvals leave 0 miss rows for the actor; the next wrong one is a plain `ADMIN_PIN_REFUSED`.
   **Kills M9:** skip `refundOnSuccess` for the actor bucket.
 - **A10** `tx = null` path: a wrong approval's miss row survives the throw. **Kills M10:** charge inside the lookup tx.
-- **A11** clear: an admin clears P's cap -> P approves again, one `reset_approval_pin_cap` row (admin, P, before/after);
+- **A11** clear: an admin clears P's cap -> P approves again, one `auth.approval_pin_cap_reset` row (admin, P, before/after);
   a manager is refused (`manage_users`); P clearing their own cap is refused; clearing an uncapped person writes nothing;
   **a cap that auto-lifted (tripped 24 h + 1 min ago) reads "not capped" in `statusForActor`, and clearing it is a no-op
   with no audit row.** **Kills M11a** drop the `authorize`, **M11b** drop the self check, **M11c** audit on a no-op,
