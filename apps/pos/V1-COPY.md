@@ -67,3 +67,8 @@ Files deleted (T-423 S2): `src/lib/offline/offlineReceiptNumber.ts` and `src/lib
 ## Test fixtures
 
 - `src/lib/__fixtures__/tax-v1.ts` (T-423 slice T): the v1 tax module at commit e26d0c1, byte-identical (taken with git show from the v1 repo); read only by `src/lib/tax.golden.test.ts` as the golden reference for the new bill math. Do not edit it and do not import it from app code.
+- `src/lib/__fixtures__/v1-analytics/delta-core.ts` (T-424 slice T): v1's `src/lib/analytics/delta-core.ts` at e26d0c1, byte-identical. Read only by T-424 tests (`src/server/__tests__/*`). Do not edit it and do not import it from app code.
+- `src/lib/__fixtures__/v1-analytics/applyAnalyticsDeltaServer.ts` (T-424 slice T): v1's `src/lib/server/analytics/applyAnalyticsDeltaServer.ts` at e26d0c1; only three import lines differ (`server-only` removed, `firebase-admin/firestore` -> `./admin-shim`, `@/lib/analytics/delta-core` -> `./delta-core`). Same rules.
+- `src/lib/__fixtures__/v1-analytics/applyPaymentConversionServer.ts` (T-424 slice T): v1's `src/lib/server/analytics/applyPaymentConversionServer.ts` at e26d0c1; same three import edits. Same rules.
+- `src/lib/__fixtures__/v1-analytics/admin-shim.ts` (T-424 slice T): NOT v1 code; a `FieldValue` shim that returns the in-memory fake's sentinels so the vendored files run against the fake.
+- The lib/analytics daily module (copied in T-422) is already byte-identical to v1 and is what the vendored delta code imports; it needs no entry.

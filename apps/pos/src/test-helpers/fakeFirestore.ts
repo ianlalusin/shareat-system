@@ -109,6 +109,17 @@ function applySet(existing: any | undefined, data: any, merge: boolean): any {
   const resolved = resolveValue(merge ? existing : undefined, data);
   return merge ? { ...(existing ?? {}), ...resolved } : resolved;
 }
+/** Admin-SDK `set(data, {merge:true})`: maps merge RECURSIVELY (the web fake above merges one level). T-424 slice T. */
+function deepApply(existing: any, data: any): any {
+  const plain = (x: any) => x !== null && typeof x === 'object' && !Array.isArray(x) && !(x instanceof FakeTimestamp) && !(x instanceof Date) && !isSentinel(x);
+  if (!plain(data)) return resolveValue(existing, data);
+  const base: any = plain(existing) ? structuredCloneDeep(existing) : {};
+  for (const [k, v] of Object.entries(data)) {
+    const r = deepApply(base[k], v);
+    if (r === undefined) delete base[k]; else base[k] = r;
+  }
+  return base;
+}
 function applyUpdate(existing: any, data: Record<string, any>): any {
   const out = structuredCloneDeep(existing);
   for (const [path, v] of Object.entries(data)) {
@@ -119,7 +130,8 @@ function applyUpdate(existing: any, data: Record<string, any>): any {
 }
 
 type Write =
-  | { op: 'set'; path: string; data: any; merge: boolean }
+  | { op: 'set'; path: string; data: any; merge: boolean; deep?: boolean }
+  | { op: 'create'; path: string; data: any }
   | { op: 'update'; path: string; data: Record<string, any> }
   | { op: 'delete'; path: string };
 export interface CommitRecord { kind: 'transaction' | 'batch'; writes: Write[]; attempts: number }
@@ -282,7 +294,11 @@ export class FakeFirestore {
     for (const h of this.commitHooks.splice(0)) h(rec);
     const next = new Map(this.docs);
     for (const w of writes) {
-      if (w.op === 'set') next.set(w.path, applySet(next.get(w.path), w.data, w.merge));
+      if (w.op === 'create') {
+        if (next.has(w.path)) throw new Error(`ALREADY_EXISTS: Document already exists: ${w.path}`);
+        next.set(w.path, applySet(undefined, w.data, false));
+      } else if (w.op === 'set' && w.deep && w.merge) next.set(w.path, deepApply(next.get(w.path), w.data));
+      else if (w.op === 'set') next.set(w.path, applySet(next.get(w.path), w.data, w.merge));
       else if (w.op === 'update') {
         const cur = next.get(w.path);
         if (cur === undefined) throw new Error(`NOT_FOUND: No document to update: ${w.path}`);
@@ -319,6 +335,100 @@ export class FakeFirestore {
     }
     throw new Error('ABORTED: too much contention');
   };
+
+  /**
+   * T-424 slice T - the firebase-ADMIN shaped view of the same in-memory store (what the POS v2 server's injected Firestore port is):
+   * `doc(path)`, `collection(path)` with chainable `where/orderBy/limit` and `get()`, `runTransaction(fn)` whose `tx.get` takes a doc OR a
+   * query, `tx.create` (ALREADY_EXISTS on a second create, also across attempts), `tx.set(ref, data, {merge:true})` that merges maps
+   * RECURSIVELY, `snap.exists` as a PROPERTY, and `FieldValue` / `FieldPath`. Same composite-index refusal and the same read-before-write
+   * rule as the web view. The hooks (`retryNextTransaction`, `beforeNextTransaction`, `onCommit`, `failNextCommit`) apply to both views.
+   */
+  get admin() {
+    const self = this;
+    const wrapSnap = (s: DocSnap) => ({
+      id: s.id, ref: s.ref, exists: s.exists(), data: () => s.data(), get: (f: string) => s.get(f),
+    });
+    const wrapQs = (qs: QuerySnap) => {
+      const docs = qs.docs.map(wrapSnap);
+      return { docs, size: qs.size, empty: qs.empty, forEach: (fn: (d: any) => void) => docs.forEach(fn) };
+    };
+    const mkQuery = (coll: CollRef, constraints: Constraint[]): any => ({
+      __kind: 'query', coll, constraints, firestore: self,
+      where: (f: any, op: string, v: any) => mkQuery(coll, [...constraints, self.where(f, op, v)]),
+      orderBy: (f: any, d?: 'asc' | 'desc') => mkQuery(coll, [...constraints, self.orderBy(f, d)]),
+      limit: (n: number) => mkQuery(coll, [...constraints, self.limit(n)]),
+      get: async () => wrapQs(await self.getDocs({ __kind: 'query', coll, constraints, firestore: self } as QueryRef)),
+    });
+    const mkDoc = (path: string): any => {
+      const ref = self.doc(self.db, path);
+      return Object.assign(ref, {
+        get: async () => wrapSnap(await self.getDoc(ref)),
+        collection: (name: string) => mkColl(`${path}/${name}`),
+      });
+    };
+    const mkColl = (path: string): any => {
+      const coll = self.collection(self.db, path);
+      return Object.assign(coll, {
+        doc: (id?: string) => mkDoc(id ? `${path}/${id}` : `${path}/auto${++autoId}`),
+        where: (f: any, op: string, v: any) => mkQuery(coll, [self.where(f, op, v)]),
+        orderBy: (f: any, d?: 'asc' | 'desc') => mkQuery(coll, [self.orderBy(f, d)]),
+        limit: (n: number) => mkQuery(coll, [self.limit(n)]),
+        get: async () => mkQuery(coll, []).get(),
+      });
+    };
+    const runTransaction = async <T>(fn: (tx: any) => Promise<T>): Promise<T> => {
+      self.consumeBeforeTx();
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        const readVersions = new Map<string, number>();
+        const queryReads: { q: QueryRef; size: number }[] = [];
+        const writes: Write[] = [];
+        const created = new Set<string>();
+        const tx = {
+          get: async (target: any) => {
+            if (writes.length) throw new Error('Firestore transactions require all reads to be executed before all writes.');
+            if (target.__kind === 'query') {
+              const q = { __kind: 'query', coll: target.coll, constraints: target.constraints, firestore: self } as QueryRef;
+              const qs = await self.getDocs(q);
+              for (const d of qs.docs) readVersions.set(d.ref.path, self.versions.get(d.ref.path) ?? 0);
+              queryReads.push({ q, size: qs.size }); // a NEW matching document also makes this read stale
+              return wrapQs(qs);
+            }
+            readVersions.set(target.path, self.versions.get(target.path) ?? 0);
+            return wrapSnap(new DocSnap(target, self.docs.get(target.path)));
+          },
+          create: (ref: DocRef, data: any) => {
+            if (self.docs.has(ref.path) || created.has(ref.path)) throw new Error(`ALREADY_EXISTS: Document already exists: ${ref.path}`);
+            created.add(ref.path);
+            writes.push({ op: 'create', path: ref.path, data });
+            return tx;
+          },
+          set: (ref: DocRef, data: any, opts?: { merge?: boolean }) => { writes.push({ op: 'set', path: ref.path, data, merge: !!opts?.merge, deep: true }); return tx; },
+          update: (ref: DocRef, data: any) => { writes.push({ op: 'update', path: ref.path, data }); return tx; },
+          delete: (ref: DocRef) => { writes.push({ op: 'delete', path: ref.path }); return tx; },
+        };
+        const result = await fn(tx);
+        if (self.consumeRetry()) continue;
+        let stale = false;
+        for (const [p, v] of readVersions) if ((self.versions.get(p) ?? 0) !== v) stale = true;
+        for (const r of queryReads) if ((await self.getDocs(r.q)).size !== r.size) stale = true;
+        if (stale) continue;
+        self.commit('transaction', writes, attempt);
+        return result;
+      }
+      throw new Error('ABORTED: too much contention');
+    };
+    return {
+      doc: (path: string) => mkDoc(path),
+      collection: (path: string) => mkColl(path),
+      runTransaction,
+      FieldValue: {
+        serverTimestamp: () => self.serverTimestamp(), increment: (n: number) => self.increment(n), delete: () => self.deleteField(),
+        arrayUnion: (...v: unknown[]) => self.arrayUnion(...v), arrayRemove: (...v: unknown[]) => self.arrayRemove(...v),
+      },
+      FieldPath: { documentId: () => self.documentId() },
+    };
+  }
+
 
   /** What a caller of the claim code receives: the subset of the modular API plus `db`. */
   get port() {
