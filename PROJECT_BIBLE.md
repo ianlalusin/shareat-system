@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1689` 13. Decision log
-- `1690–1709` 14. Amendment protocol
-- `1710–1714` 15. Engineering standards — the industry practices this project follows
-  - `1715–1720` 15.1 Build order: walking skeleton first
-  - `1721–1732` 15.2 Golden-master testing — the most important practice here
-  - `1733–1741` 15.3 Strangler Fig, not big-bang cutover
-  - `1742–1746` 15.4 No dual-write
-  - `1747–1755` 15.5 Expand/contract migrations
-  - `1756–1764` 15.6 Observability from day zero, not later
-  - `1765–1769` 15.7 CI gates
-  - `1770–1774` 15.8 Backups and a tested restore
-  - `1775–1779` 15.9 Twelve-Factor config
-  - `1780–1787` 15.10 Append-only ledgers — but not event sourcing
-  - `1788–1792` 15.11 Defence in depth
-  - `1793–1821` 15.12 Skills are lenses, not assurance
-  - `1822–1828` 15.13 Reconciliation is a permanent feature
-- `1829–1833` 16. The accounting spine
-  - `1834–1865` 16.0 What we are actually fixing — the diagnosis
-  - `1866–1909` 16.1 The ten invariants — non-negotiable
-  - `1910–1924` 16.2 The oracle: how "correct" is tested
-  - `1925–1946` 16.3 The model — header + lines, not legs
-  - `1947–1966` 16.4 Deliberately simpler than ERPNext
-  - `1967–2033` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2034–2058` 16.6 What v1 already gets right — preserve the intent
-  - `2059–2080` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2081–2095` 16.8 What v1's accounting already gets right
-  - `2096–2139` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2140–2190` 16.10 Posting patterns — one canonical pattern per business event
-  - `2191–2223` 16.11 Inventory's accounting integration
+- `1329–1690` 13. Decision log
+- `1691–1710` 14. Amendment protocol
+- `1711–1715` 15. Engineering standards — the industry practices this project follows
+  - `1716–1721` 15.1 Build order: walking skeleton first
+  - `1722–1733` 15.2 Golden-master testing — the most important practice here
+  - `1734–1742` 15.3 Strangler Fig, not big-bang cutover
+  - `1743–1747` 15.4 No dual-write
+  - `1748–1756` 15.5 Expand/contract migrations
+  - `1757–1765` 15.6 Observability from day zero, not later
+  - `1766–1770` 15.7 CI gates
+  - `1771–1775` 15.8 Backups and a tested restore
+  - `1776–1780` 15.9 Twelve-Factor config
+  - `1781–1788` 15.10 Append-only ledgers — but not event sourcing
+  - `1789–1793` 15.11 Defence in depth
+  - `1794–1822` 15.12 Skills are lenses, not assurance
+  - `1823–1829` 15.13 Reconciliation is a permanent feature
+- `1830–1834` 16. The accounting spine
+  - `1835–1866` 16.0 What we are actually fixing — the diagnosis
+  - `1867–1910` 16.1 The ten invariants — non-negotiable
+  - `1911–1925` 16.2 The oracle: how "correct" is tested
+  - `1926–1947` 16.3 The model — header + lines, not legs
+  - `1948–1967` 16.4 Deliberately simpler than ERPNext
+  - `1968–2034` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2035–2059` 16.6 What v1 already gets right — preserve the intent
+  - `2060–2081` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2082–2096` 16.8 What v1's accounting already gets right
+  - `2097–2140` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2141–2191` 16.10 Posting patterns — one canonical pattern per business event
+  - `2192–2224` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1686,6 +1686,7 @@ just a patch.**
 | 351 | 2026-10-16 | **POS v2 MONEY ACTIONS GO THROUGH OUR OWN SMALL POS v2 SERVER; MANAGERS APPROVE WITH THEIR ERP v2 PIN.** Refunds, tender corrections and unpaid-session voids are done by a POS v2 server in this monorepo (pos2.shareat.net, on 159.223.46.224 as `shareat-pos.service`, port 9009, memory-capped), never directly from the tablet. A manager approves with the same per-person PIN as ERP v2, verified by the shared PIN code (`packages/auth`, with the T-416 per-person miss cap); nobody can skip the check from the tablet. The Firestore wire format v1 shares stays unchanged (v2 adds fields beside the old ones). Refunds stay cash-only until the ERP day feed (T-375) reads `refundTender`. Specs: T-423 (client money core), T-424 (server). | Ian, 2026-10-16, in the POS v2 session (plan `tingly-questing-pretzel.md`); recorded by the orchestrator | Yes, before T-424 ships; costly after |
 | 352 | 2026-10-16 | **BUSINESS (B2B) CUSTOMERS USE CUSTOMERS + TRADE ORDERS + AR, NOT A SALES CHANNEL.** Shareat has two customer kinds: walk-in/online diners (B2C: dine-in, take-out, online à la carte, bulk orders, through sales channels and the POS) and business customers (B2B, e.g. a samgyup house buying meat, paying cash or on account). B2B sales are a trade order to a named customer (T-132): dispatch bills Dr 1210 per customer / Cr 4300 and relieves stock; payment is an AR collection (T-131/T-226). A sales channel stays a B2C source label only. Gaps to build as T-433: pay-now at dispatch, a printable delivery receipt/invoice, a credit-limit warning with manager override. | Ian, 2026-10-16 (orchestrator session, research-evaluate-propose: "plan items 123") | Yes |
 | 353 | 2026-10-16 | ⭐ **STAFF AND CUSTOMER PERSONAL INFORMATION IS STRICTLY GUARDED (standing).** Personal data of staff and customers (names with contact details, addresses, government IDs, birthdays, photos, PIN data, bank/e-wallet details, B2B customer contacts and balances) is shown only to people whose capability needs it, enforced in the LOADER/domain (never only the UI), store-scoped, and never in exports or logs beyond what the task requires. **Signatures are the strictest class:** stored only through the file broker (never a data URL), viewable only by payroll staff and admins, never shown in lists, cards or exports, served by a short-lived link, and EVERY view and change is audited. Every new screen or report touching personal data needs a test proving an unauthorised viewer sees nothing. | Ian, 2026-10-16 (orchestrator session) | No — tightening only |
+| 354 | 2026-10-16 | **EARLY-PHASE CLOSE-OUT RULINGS.** (1) Backups (T-393, Phase 0): switch ON now with one proven restore drill, before the 15 Nov go/no-go (reverses row 306's "no backup for now"). (2) Leave/absence tracking (monthly and yearly caps, Phase 4, never built): BUILD before the 1 Jan go-live. (3) Expanded withholding tax on supplier payments (BIR 1601-E): Shareat does NOT withhold; closed as not applicable. (4) Payroll statutory deductions (SSS, PhilHealth, Pag-IBIG, withholding; T-190, then remittance T-193): start NOW from the official 2026 tables; staff data from the HR sheet when it arrives (due 31 Oct). | Ian, 2026-10-16 (orchestrator session, roadmap review) | Yes, per item |
 
 ## 14. Amendment protocol
 
