@@ -53,35 +53,42 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     positionsForStore(actor.orgId, storeId),
   ]);
 
+  // The Positions tab only uses names and ids - photos and live state are for the Cards and Roster views.
+  const view: 'cards' | 'roster' | 'positions' =
+    sp.view === 'roster' ? 'roster' : sp.view === 'positions' ? 'positions' : 'cards';
+
   // T-387 S7 - photos (only where the viewer may open them) and the live state (only for manage_attendance here).
-  const ids = roster.map((r) => r.id);
-  const [photoIds, states] = await Promise.all([
-    withOrgPrincipal(actor.orgId, (tx) => employmentRepo.photoFileIds(tx, ids)),
-    withOrgPrincipal(actor.orgId, async (tx): Promise<Record<string, LiveEntry> | null> => {
-      // A2: the non-logging check first (todayStateFor's own gate is manage_attendance at this store).
-      if (!(await can(tx, actor, 'manage_attendance', { storeId }))) return null;
-      return todayStateFor(tx, actor, storeId);
-    }),
-  ]);
-  const people: StaffPerson[] = await Promise.all(
-    roster.map(async (r) => {
-      const fileId = photoIds.get(r.id) ?? null;
-      const primary = r.positions.find((p) => p.isPrimary) ?? r.positions[0];
-      return {
-        id: r.id,
-        displayName: r.displayName,
-        employmentStatus: r.employmentStatus,
-        startedOn: r.startedOn,
-        primaryPosition: primary?.name ?? null,
-        photoFileId: fileId && (await canViewPhoto(actor, fileId)) ? fileId : null,
-      };
-    }),
-  );
+  let people: StaffPerson[] = [];
+  let states: Record<string, LiveEntry> | null = null;
+  if (view !== 'positions') {
+    const ids = roster.map((r) => r.id);
+    const [photoIds, liveStates] = await Promise.all([
+      withOrgPrincipal(actor.orgId, (tx) => employmentRepo.photoFileIds(tx, ids)),
+      withOrgPrincipal(actor.orgId, async (tx): Promise<Record<string, LiveEntry> | null> => {
+        // A2: the non-logging check first (todayStateFor's own gate is manage_attendance at this store).
+        if (!(await can(tx, actor, 'manage_attendance', { storeId }))) return null;
+        return todayStateFor(tx, actor, storeId);
+      }),
+    ]);
+    states = liveStates;
+    people = await Promise.all(
+      roster.map(async (r) => {
+        const fileId = photoIds.get(r.id) ?? null;
+        const primary = r.positions.find((p) => p.isPrimary) ?? r.positions[0];
+        return {
+          id: r.id,
+          displayName: r.displayName,
+          employmentStatus: r.employmentStatus,
+          startedOn: r.startedOn,
+          primaryPosition: primary?.name ?? null,
+          photoFileId: fileId && (await canViewPhoto(actor, fileId)) ? fileId : null,
+        };
+      }),
+    );
+  }
   const now = new Date();
   const today = toBusinessDate(now);
   const storeName = stores.find((s) => s.id === storeId)?.name ?? '';
-  const view: 'cards' | 'roster' | 'positions' =
-    sp.view === 'roster' ? 'roster' : sp.view === 'positions' ? 'positions' : 'cards';
 
   // T-395 S2 - the PIN sign-in panel is for anyone holding enrol_staff at this store (R5).
   const pinStatus = await withOrgPrincipal(actor.orgId, async (tx) => {
