@@ -39,7 +39,7 @@ const TYPED_EXEMPT: Record<string, string> = {
 
 /** The deny list, as the spec states it (R4). The runtime copy lives in lib/keep-typing.ts. */
 const NEVER_ECHO = /(^|_)(pin|newpin|password|passcode|secret|token|otp|apikey|api_key)$/i;
-const SENSITIVE: ReadonlySet<string> = new Set(['bankAccountNumber', 'sssNo', 'philhealthNo', 'pagibigNo', 'tin']);
+const SENSITIVE: ReadonlySet<string> = new Set(['bankAccountNumber', 'sssNo', 'philhealthNo', 'pagibigNo']);
 const denied = (name: string) => NEVER_ECHO.test(name) || SENSITIVE.has(name);
 
 /** The forms S1 wires. A key is added here by the slice that wires it. */

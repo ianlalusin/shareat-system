@@ -36,7 +36,7 @@ function credentialName(name: string): boolean {
 }
 /** Fields that are sensitive but not credentials. Q1 = (a): the supplier's account number is not kept. */
 // T-190: government ID numbers are as sensitive as a bank account (bible row 353), so they are never echoed back either.
-const SENSITIVE: ReadonlySet<string> = new Set(['bankAccountNumber', 'sssNo', 'philhealthNo', 'pagibigNo', 'tin']);
+const SENSITIVE: ReadonlySet<string> = new Set(['bankAccountNumber', 'sssNo', 'philhealthNo', 'pagibigNo']);
 
 export function isNeverEchoed(name: string): boolean {
   return credentialName(name) || SENSITIVE.has(name);
