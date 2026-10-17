@@ -1324,6 +1324,13 @@
       "when": 1804044707084,
       "tag": "0208_t439_cook_to_kitchen_staff",
       "breakpoints": true
+    },
+    {
+      "idx": 209,
+      "version": "7",
+      "when": 1804131107084,
+      "tag": "0209_t396_pos_day_import_job",
+      "breakpoints": true
     }
   ]
 }

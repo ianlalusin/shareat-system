@@ -118,6 +118,7 @@ export async function runJobForOrg(
   period: string,
   trigger: 'cron' | 'manual',
   work: () => Promise<JobWork>,
+  startedAt?: Date,
 ): Promise<JobOutcome> {
   const base = { orgId: org.id, orgName: org.name, job, period };
 
@@ -126,7 +127,7 @@ export async function runJobForOrg(
   // never opened" are different facts with different fixes, and there is no row to carry a flag.
   let runId: string;
   try {
-    runId = await systemTransaction((tx) => schedulerRepo.startRun(tx, { orgId: org.id, job, period, trigger }));
+    runId = await systemTransaction((tx) => schedulerRepo.startRun(tx, { orgId: org.id, job, period, trigger, ...(startedAt ? { startedAt } : {}) }));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
