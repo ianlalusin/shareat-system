@@ -16,7 +16,8 @@
  *     Namespaces taken here: 366001 (cash custody), 366002 (service-charge float), 369001
  *     (reimbursement payee, keyed on the employee id rather than a store id), 369002 (supplier
  *     return credit, keyed on the supplier id), 369003 (inter-store pair settlement, keyed on the
- *     UNORDERED pair of store ids), 392001 (dual-run store-week, keyed on org:store:week).
+ *     UNORDERED pair of store ids), 392001 (dual-run store-week, keyed on org:store:week), 436001 (a
+ *     person's leave: caps, SIL balance, one-leave-day-per-date, keyed on the person id).
  *   - A `hashtext(storeId)` collision only serialises two stores for a moment; it never gives a
  *     wrong answer (the same reasoning as `access.ts` `lockOrgAccess`).
  *
@@ -94,5 +95,17 @@ const DUAL_RUN_WEEK_LOCK_NAMESPACE = 392001;
 export async function lockDualRunWeek(tx: Tx, orgId: string, storeId: string, weekStart: string): Promise<void> {
   await tx.execute(
     sql`select pg_advisory_xact_lock(${DUAL_RUN_WEEK_LOCK_NAMESPACE}::int4, hashtext(${orgId}::text || ':' || ${storeId}::text || ':' || ${weekStart}::text))`,
+  );
+}
+
+/** Namespace (first int4) for the per-person leave lock. T-436. */
+const PERSON_LEAVE_LOCK_NAMESPACE = 436001;
+
+/** Serialises everything that reads or moves one PERSON's leave: the monthly/yearly cap counts, the Service Incentive Leave
+ *  balance and the one-leave-day-per-date rule. Keyed on the person (not the employment, not the store): a person with two
+ *  jobs has one balance, so approvals at two stores must queue behind each other. Take it AFTER `authorize`. */
+export async function lockPersonLeave(tx: Tx, personId: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${PERSON_LEAVE_LOCK_NAMESPACE}::int4, hashtext(${personId}))`,
   );
 }

@@ -22,6 +22,8 @@ import { parseMoneyInput } from '../shared/money-input';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { advanceToRecover, computePay, type DayInput } from './compute';
+// T-436: leave pay + the year-end SIL payout. The computation lives in `leave/payroll.ts`; this file only adds its two figures to a slip.
+import { applyLeaveToRun, planLeavePayroll, releaseLeaveOfRun, sumMoney, type SilPayoutPlan } from '../leave/payroll';
 
 export * from './compute';
 export * from './periods';
@@ -112,6 +114,13 @@ export interface PayslipDraft {
   otPay: Money;
   nightDiffPay: Money;
   holidayPay: Money;
+  /** T-436. Paid leave days at the daily rate in force that day. ⛔ Not part of `basicPay`. */
+  leavePay: Money;
+  /** T-436. Unused Service Incentive Leave paid in cash at year end (the run covering 31 Dec). ⛔ Not part of `basicPay`. */
+  silConversionPay: Money;
+  /** T-436. The leave days this slip pays (frozen to the run on post) and the payout rows it takes. */
+  leaveDayIds: string[];
+  silPayouts: SilPayoutPlan[];
   grossPay: Money;
   advanceRecovered: Money;
   netPay: Money;
@@ -208,7 +217,22 @@ export async function previewPayRun(
     const slips: PayslipDraft[] = [];
     const unratedEmployments: PayRunPreview['unratedEmployments'] = [];
 
-    for (const [employmentId, theirDays] of byEmployment) {
+    // ⭐ T-436: paid leave days and the year-end SIL payout. A person with leave but no attendance (or only the payout) still gets a slip.
+    const leavePlan = await planLeavePayroll(trx, actor.orgId, {
+      storeId: input.storeId,
+      from: input.periodStart,
+      to: input.periodEnd,
+    });
+    const employmentIds = new Set<string>([
+      ...byEmployment.keys(),
+      ...leavePlan.leaveByEmployment.keys(),
+      ...leavePlan.payoutsByEmployment.keys(),
+    ]);
+
+    for (const employmentId of employmentIds) {
+      const theirDays = byEmployment.get(employmentId) ?? [];
+      const leaveLine = leavePlan.leaveByEmployment.get(employmentId);
+      const silPayouts = leavePlan.payoutsByEmployment.get(employmentId) ?? [];
       // ⭐ Per-day rate resolution. The LAST day's rate row is the one recorded on the payslip,
       // because that is the rate in force at the end of the period the slip covers.
       const inputs: DayInput[] = [];
@@ -257,7 +281,8 @@ export async function previewPayRun(
           days: missingRate,
         });
       }
-      if (inputs.length === 0 || !payRateId) continue;
+      payRateId = payRateId ?? leaveLine?.payRateId ?? silPayouts[silPayouts.length - 1]?.payRateId ?? null;
+      if ((inputs.length === 0 && !leaveLine && silPayouts.length === 0) || !payRateId) continue;
 
       // ⭐ Every premium is now a per-store SETTING rather than a constant (T-189b, Ian's
       // "configurable to x1.25 or fix amount" and "holiday must be configurable too").
@@ -278,9 +303,12 @@ export async function previewPayRun(
         0,
       );
 
-      const personId = theirDays[0]!.personId;
+      const personId = theirDays[0]?.personId ?? leaveLine?.personId ?? silPayouts[0]!.personId;
+      const leavePay = leaveLine?.leavePay ?? ZERO;
+      const silConversionPay = sumMoney(silPayouts.map((p) => p.amount));
+      const grossPay = add(pay.grossPay, leavePay, silConversionPay);
       const outstanding = await outstandingAdvance(trx, actor.orgId, personId);
-      const advanceRecovered = advanceToRecover(pay.grossPay, outstanding);
+      const advanceRecovered = advanceToRecover(grossPay, outstanding);
 
       slips.push({
         employmentId,
@@ -290,9 +318,17 @@ export async function previewPayRun(
         dayIds: theirDays.map((d) => d.id),
         unapprovedOtMinutes,
         ...pay,
+        leavePay,
+        silConversionPay,
+        leaveDayIds: leaveLine?.dayIds ?? [],
+        silPayouts,
+        grossPay,
         advanceRecovered,
-        netPay: subtract(pay.grossPay, advanceRecovered),
+        netPay: subtract(grossPay, advanceRecovered),
       });
+    }
+    for (const u of leavePlan.unrated) {
+      unratedEmployments.push({ employmentId: u.employmentId, personName: nameOf.get(u.employmentId) ?? 'unknown', days: u.days });
     }
 
     slips.sort((a, b) => a.personName.localeCompare(b.personName));
@@ -445,6 +481,8 @@ export async function postPayRun(
           otPay: slip.otPay,
           nightDiffPay: slip.nightDiffPay,
           holidayPay: slip.holidayPay,
+          leavePay: slip.leavePay,
+          silConversionPay: slip.silConversionPay,
           grossPay: slip.grossPay,
           advanceRecovered: slip.advanceRecovered,
           netPay: slip.netPay,
@@ -495,6 +533,8 @@ export async function postPayRun(
       // ⭐ The freeze. `attendance_days.frozen_by_pay_run_id` has waited for this since T-157, and
       // the guard that reads it is already live in `adjudicate.ts` and `adjustments.ts`.
       await payrollRepo.freezeDays(trx, slip.dayIds, runId);
+      // ⭐ T-436: the same freeze for the leave days this slip paid, and the year-end payout rows it took.
+      await applyLeaveToRun(trx, actor, { runId, storeId: input.storeId, leaveDayIds: slip.leaveDayIds, payouts: slip.silPayouts });
     }
 
     const ok = await payrollRepo.markPayRunPosted(trx, actor.orgId, runId, actor.personId);
@@ -548,6 +588,8 @@ export async function voidPayRun(
     }
 
     const unfrozenDays = await payrollRepo.unfreezeDaysOfRun(trx, input.runId);
+    // ⭐ T-436: a voided run did not pay its leave days or its year-end payout, so both are payable again.
+    await releaseLeaveOfRun(trx, input.runId);
     const ok = await payrollRepo.markPayRunVoided(trx, actor.orgId, input.runId, {
       voidedBy: actor.personId,
       reason,

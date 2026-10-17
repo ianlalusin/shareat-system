@@ -147,3 +147,6 @@ export * from './menu';
 
 // T-402 S3 - the R10 offline envelope: recordClientEvents (no caller until the POS v2 receipts spec, ADR-015 P2).
 export * from './activity/client-events';
+
+// T-436 - leave and absence tracking: requests, caps, the SIL balance, medical-certificate photos.
+export * from './leave';

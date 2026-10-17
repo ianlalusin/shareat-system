@@ -834,6 +834,32 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'T-356), so an attempt is a loud 42501.',
   },
 
+  // ---- T-436: leave and absence tracking (migration 0205) --------------------------------
+  leave_types: {
+    scope: 'org_column',
+    reason:
+      'The kinds of leave. org_id is NULL for the platform seed every org reads and non-null for a kind an org added; ' +
+      'the policies read both and WRITE only the org’s own. Not personal data, but an org must not edit another’s kinds.',
+  },
+  leave_caps: {
+    scope: 'org_column',
+    reason: 'Monthly and yearly leave limits per kind, store and position: an org’s own staffing policy.',
+  },
+  leave_requests: {
+    scope: 'org_column',
+    reason:
+      'Who asked for or was recorded absent, when, and why. The note is a reason or a medical note (bible row 353): personal ' +
+      'data that must never cross an org boundary, and is further narrowed inside the org by the domain loader.',
+  },
+  leave_request_days: {
+    scope: 'org_column',
+    reason: 'One row per leave date: names a person and a date they were absent. Per-org like its request.',
+  },
+  leave_commutations: {
+    scope: 'org_column',
+    reason: 'What a person is owed in cash for unused leave: compensation data, scoped like payslips.',
+  },
+
   // ---- T-157: the adjudicated day (Phase 4, lane B) -------------------------------------
   attendance_days: {
     scope: 'org_column',

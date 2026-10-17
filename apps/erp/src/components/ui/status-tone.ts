@@ -24,7 +24,7 @@ export const STATUS_TONE: Readonly<Record<string, Tone>> = Object.fromEntries([
   ...group('danger', ['void', 'voided', 'overdue', 'rejected', 'failed', 'aborted', 'defaulted', 'written_off']),
   ...group('closed', [
     'closed', 'cancelled', 'reversed', 'disposed', 'merged', 'archived', 'inactive', 'locked', 'charged', 'income',
-    'resigned', 'terminated', 'retired', 'withdrawn',
+    'resigned', 'terminated', 'retired', 'withdrawn', 'superseded_by_work',
   ]),
 ]);
 

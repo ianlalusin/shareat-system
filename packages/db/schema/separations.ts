@@ -14,7 +14,7 @@
  * `hasPostedSeparationInYear`.
  */
 import { sql } from 'drizzle-orm';
-import { check, date, foreignKey, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, date, foreignKey, numeric, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { employments } from './employment';
 import { moneyAccounts } from './money-accounts';
 import { organizations } from './organizations';
@@ -96,6 +96,8 @@ export const separations = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    // T-436 (migration 0205): the target of leave_commutations' same-org composite FK.
+    unique('separations_org_id_id_unique').on(t.orgId, t.id),
     /** One POSTED separation per employment at a time — matches `pay_runs`/`thirteenth_month_runs`'
      *  own "void frees it to be posted again" shape. A voided separation (a correction — wrong
      *  cause, wrong date) does not permanently block that employment from ever separating. */
