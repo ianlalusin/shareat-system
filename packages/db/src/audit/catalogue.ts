@@ -122,6 +122,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('retire_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('edit_sales_day', 'money', 'high', 'store', 'sales_days', 'T-375'),
   def('reimport_sales_day', 'money', 'high', 'store', 'sales_days', 'T-375'),
+  // T-396: the 06:00 Manila timer (or `--manual`) drafted a sales day from POS; the actor is the person who vouched for the store's link. Dotted: the catalogue only, never 0197's list.
+  def('sales_day.auto_imported', 'money', 'normal', 'store', 'sales_days', 'T-396'),
   def('set_platform_sales', 'money', 'normal', 'store', 'sales_days', 'T-375'),
   def('dual_run.compare', 'money', 'normal', 'org', 'dual_run', 'T-392', { viewers: 'admin' }),
   def('dual_run.disposition', 'money', 'normal', 'store', 'dual_run_dispositions', 'T-392', { viewers: 'admin' }),

@@ -55,6 +55,8 @@ const JOB_SCRIPT: Record<SchedulerJob, string> = {
   fiscal_period_seed: 'fiscal-period-seed',
   // T-401 S6 audit ruling A1: the next-afternoon auto-post of POS-pull usage drafts.
   usage_auto_post: 'usage-auto-post',
+  // T-396 S1: the 06:00 Manila import of every linked store's closed POS days, as drafts.
+  pos_day_import: 'pos-day-import',
 };
 
 /** The unique scripts `JOB_SCRIPT` names — `docs/ops/shareat-<name>.{service,timer}` basenames. */
