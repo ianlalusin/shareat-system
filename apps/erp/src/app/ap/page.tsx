@@ -1,4 +1,4 @@
-import { PhotoInput } from '@/components/PhotoInput';
+import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import { createSupplierAction, recordInvoiceAction } from './actions';
@@ -193,13 +193,8 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               label="Photo of the receipt"
               hint="Required before it can be verified. Upload the actual photo — a link or a typed reference is not evidence."
             >
-              {/* ⭐ T-296 — compresses a photo to under 1 MB before submit. A PDF passes through.
-                  The server's own 1 MB image ceiling is what guarantees it (Ian, 2026-09-12). */}
-              <PhotoInput
-                name="receiptPhoto"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                className={FILE_INPUT}
-              />
+              {/* T-441: one upload control. The photo is shrunk (T-296), sent on pick with real progress, and claimed when the invoice is saved. */}
+              <PhotoUpload name="receiptPhoto" purpose="receipt_photo" label="Receipt photo" storeField="storeId" />
             </Field>
             <Button type="submit" variant="primary">Log invoice</Button>
           </form>
@@ -208,9 +203,6 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
     </Page>
   );
 }
-
-// PhotoInput is a file input, which the kit does not wrap; it takes the field tokens directly.
-const FILE_INPUT = 'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink';
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (

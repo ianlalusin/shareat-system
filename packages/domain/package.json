@@ -9,6 +9,7 @@
     "./money-lines": "./src/shared/money-lines.ts",
     "./money-input": "./src/shared/money-input.ts",
     "./item-code": "./src/items/code.ts",
+    "./files/limits": "./src/files/limits.ts",
     "./refusal-leaf": "./src/shared/refusal-leaf.ts",
     "./attendance/fingerprint": "./src/attendance/fingerprint/index.ts",
     "./service-charge": "./src/service-charge/index.ts"

@@ -14,7 +14,7 @@ import {
   editSupplier,
   recordInvoice,
   setInvoiceLines,
-  uploadFile,
+  claimUpload,
   type InvoiceLineDraft,
   lineTotalFromParts,
   type UnrecognisedTermsMode,
@@ -30,6 +30,7 @@ import { requireActor } from '../../lib/session';
 import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '@/lib/period-override';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { resolveUploadedFile } from '@/lib/uploaded-file';
 import { keepTyping } from '@/lib/keep-typing';
 import { INVOICE_LINES, SUPPLIER_EDIT } from './typed-forms';
 import { verifyAdminApproval } from '@shareat/auth';
@@ -162,20 +163,10 @@ export async function recordInvoiceAction(formData: FormData): Promise<void> {
   let warning = '';
   try {
     if (!storeId) throw new Error('Choose a store.');
-    const photo = formData.get('receiptPhoto');
-    const hasPhoto = photo instanceof File && photo.size > 0;
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
-      let receiptFileId: string | null = null;
-      if (hasPhoto) {
-        const uploaded = await uploadFile(tx, actor, {
-          purpose: 'receipt_photo',
-          storeId,
-          contentType: (photo as File).type,
-          bytes: new Uint8Array(await (photo as File).arrayBuffer()),
-        });
-        receiptFileId = uploaded.fileId;
-      }
-      return recordInvoice(tx, actor, {
+      // T-441: the receipt photo's id - uploaded on pick (JS on) or posted as a File (JS off). Claimed AFTER the insert.
+      const receiptFileId = await resolveUploadedFile(tx, actor, formData, 'receiptPhoto', { purpose: 'receipt_photo', storeId });
+      const invoice = await recordInvoice(tx, actor, {
         storeId,
         supplierId: str(formData, 'supplierId'),
         invoiceNo: str(formData, 'invoiceNo') || null,
@@ -197,6 +188,9 @@ export async function recordInvoiceAction(formData: FormData): Promise<void> {
             ? { isOfficialReceipt: false }
             : {}),
       });
+      // The same claim for both paths: links the file to the invoice in one conditional UPDATE (DEF-672), refusing a stale or foreign id.
+      if (receiptFileId) await claimUpload(tx, actor, { fileId: receiptFileId, purpose: 'receipt_photo', storeId, linkTo: invoice.id });
+      return invoice;
     });
     id = result.id;
     warning = result.duplicateWarning ?? '';
