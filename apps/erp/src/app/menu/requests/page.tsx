@@ -7,6 +7,8 @@ import { typedFor } from '@/lib/keep-typing';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Banner, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { MENU_REQUEST_REJECT_RULES, MENU_REQUEST_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import {
   approveItemRequestAction,
   markItemRequestDuplicateAction,
@@ -134,15 +136,15 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
                       Mark duplicate
                     </Button>
                   </form>
-                  <form action={rejectItemRequestAction} className="space-y-2">
+                  <CheckedForm rules={MENU_REQUEST_REJECT_RULES} action={rejectItemRequestAction} className="space-y-2">
                     <input type="hidden" name="id" value={q.id} />
-                    <Field label="Reason" className="text-sm">
-                      <Input name="note" required className="w-full" />
+                    <Field label="Reason" className="text-sm" rule={MENU_REQUEST_REJECT_RULES.note}>
+                      <Input {...nativeAttrs(MENU_REQUEST_REJECT_RULES.note)} className="w-full" />
                     </Field>
                     <Button type="submit" variant="danger">
                       Reject
                     </Button>
-                  </form>
+                  </CheckedForm>
                 </div>
               </div>
             );
@@ -155,7 +157,7 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
         {stores.length === 0 ? (
           <p className="text-sm text-muted">You are not assigned to any store, so you cannot send a request.</p>
         ) : (
-          <form action={submitItemRequestAction} className="space-y-3">
+          <CheckedForm rules={MENU_REQUEST_RULES} action={submitItemRequestAction} className="space-y-3">
             <FormGrid>
               <Field label="For store" className="text-sm">
                 <Select name="storeId" defaultValue={one('storeId') || stores[0]?.id} className="w-full">
@@ -166,8 +168,8 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
                   ))}
                 </Select>
               </Field>
-              <Field label="Name" className="text-sm">
-                <Input name="name" defaultValue={one('name')} required className="w-full" />
+              <Field label="Name" className="text-sm" rule={MENU_REQUEST_RULES.name}>
+                <Input {...nativeAttrs(MENU_REQUEST_RULES.name)} defaultValue={one('name')} className="w-full" />
               </Field>
               <Field label="Type" className="text-sm">
                 <Select name="itemType" defaultValue={one('itemType') || 'a_la_carte'} className="w-full">
@@ -193,7 +195,7 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
             <Button type="submit" variant="primary" name={showAnyway ? 'confirmed' : undefined} value={showAnyway ? confirmTokenFor(one('name')) : undefined}>
               {showAnyway ? 'Send request anyway' : 'Request item'}
             </Button>
-          </form>
+          </CheckedForm>
         )}
       </section>
 

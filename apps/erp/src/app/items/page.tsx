@@ -8,6 +8,8 @@ import {
   suggestItemCodeAction,
 } from './actions';
 import { ItemCodeField } from './ItemCodeField';
+import { ITEMS_APPROVE_RULES, ITEMS_REJECT_RULES, ITEMS_REQUEST_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 import { listItems, mayApproveItem, pendingRequestCodes, pendingRequests, duplicateCandidates, soldAsLabel } from './lib';
 import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
@@ -140,41 +142,41 @@ export default async function ItemsPage({
                   </Banner>
                 )}
                 <div className="mt-2 flex flex-wrap items-end gap-2">
-                  <form action={approveItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
+                  <CheckedForm rules={ITEMS_APPROVE_RULES} action={approveItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
                     <input type="hidden" name="requestId" value={r.id} />
                     {/* T-378 R5: the approver confirms the unit (pre-selected to the requester's choice) and the three ticks. */}
-                    <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                      Measured in
-                      <Select name="baseUnit" required defaultValue={r.baseUnit}>
+                    <Field label={<span className="text-xs text-neutral-500 dark:text-neutral-400">Measured in</span>} rule={ITEMS_APPROVE_RULES.baseUnit}>
+                      <Select {...nativeAttrs(ITEMS_APPROVE_RULES.baseUnit)} defaultValue={r.baseUnit}>
                         {BASE_UNITS.map((u) => (
                           <option key={u} value={u}>{u}</option>
                         ))}
                       </Select>
-                    </label>
+                    </Field>
                     {canOverride && (
-                      <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                        Use a different code
+                      <Field label={<span className="text-xs text-neutral-500 dark:text-neutral-400">Use a different code</span>} rule={ITEMS_APPROVE_RULES.code}>
                         <Input
-                          name="code"
+                          {...nativeAttrs(ITEMS_APPROVE_RULES.code)}
                           autoComplete="off"
                           pattern="[A-Za-z0-9]{4}-[0-9]{3}"
                           placeholder={willBe.get(r.id)?.code ?? 'CHWN-001'}
                           className="font-mono"
                         />
-                      </label>
+                      </Field>
                     )}
                     <Checkbox name="isPurchasable" defaultChecked={r.isPurchasable} label="Bought" />
                     <Checkbox name="sellableRetail" defaultChecked={r.sellableRetail} label="Sold à la carte" />
                     <Checkbox name="sellableWholesale" defaultChecked={r.sellableWholesale} label="Sold wholesale" />
                     <Button type="submit" variant="secondary">Approve</Button>
-                  </form>
-                  <form action={rejectItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
+                  </CheckedForm>
+                  <CheckedForm rules={ITEMS_REJECT_RULES} action={rejectItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
                     <input type="hidden" name="requestId" value={r.id} />
-                    <Input name="note" required placeholder="Why not?" />
+                    <Field label={<span className="text-xs text-neutral-500 dark:text-neutral-400">Why not?</span>} rule={ITEMS_REJECT_RULES.note}>
+                      <Input {...nativeAttrs(ITEMS_REJECT_RULES.note)} placeholder="Why not?" />
+                    </Field>
                     <Button type="submit" variant="danger">
                       Reject
                     </Button>
-                  </form>
+                  </CheckedForm>
                 </div>
               </li>
             ))}
@@ -228,22 +230,22 @@ export default async function ItemsPage({
           is the unit every price is compared in, so pick the one you actually measure by. A box is
           not a unit of measure — it belongs on the invoice line with its conversion.
         </p>
-        <form action={requestItemAction} className="space-y-3">
+        <CheckedForm rules={ITEMS_REQUEST_RULES} action={requestItemAction} className="space-y-3">
           <FormGrid>
-            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>} className="text-sm">
-              <Input id="item-name" name="name" required placeholder="Pork belly" className="mt-1 block w-full" />
+            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>} className="text-sm" rule={ITEMS_REQUEST_RULES.name}>
+              <Input id="item-name" {...nativeAttrs(ITEMS_REQUEST_RULES.name)} placeholder="Pork belly" className="mt-1 block w-full" />
             </Field>
             <ItemCodeField nameInputId="item-name" mode="new" canOverride={false} suggestAction={suggestItemCodeAction} />
-            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>} className="text-sm">
-              <select name="kind" required defaultValue="" className="mt-1 block w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink">
+            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>} className="text-sm" rule={ITEMS_REQUEST_RULES.kind}>
+              <select {...nativeAttrs(ITEMS_REQUEST_RULES.kind)} defaultValue="" className="mt-1 block w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink">
                 <option value="">Choose a kind</option>
                 {ITEM_KINDS.map((k) => (
                   <option key={k} value={k}>{ITEM_KIND_LABEL[k]}</option>
                 ))}
               </select>
             </Field>
-            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Measured in</span>} className="text-sm">
-              <Select name="baseUnit" required defaultValue="" className="mt-1 block w-full">
+            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Measured in</span>} className="text-sm" rule={ITEMS_REQUEST_RULES.baseUnit}>
+              <Select {...nativeAttrs(ITEMS_REQUEST_RULES.baseUnit)} defaultValue="" className="mt-1 block w-full">
                 <option value="">Choose a unit</option>
                 {BASE_UNITS.map((u) => (
                   <option key={u} value={u}>{u}</option>
@@ -287,23 +289,22 @@ export default async function ItemsPage({
             <Button type="submit" variant="primary">Request item</Button>
             {/* T-386 R7: the override belongs to the direct add (a super-admin), not to the request fields. */}
             {canOverride && (
-              <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                Use a different code (super-admin)
+              <Field label={<span className="text-xs text-neutral-500 dark:text-neutral-400">Use a different code (super-admin)</span>} rule={ITEMS_REQUEST_RULES.code}>
                 <Input
-                  name="code"
+                  {...nativeAttrs(ITEMS_REQUEST_RULES.code)}
                   type="text"
                   autoComplete="off"
                   pattern="[A-Za-z0-9]{4}-[0-9]{3}"
                   placeholder="CHWN-001"
                   className="font-mono"
                 />
-              </label>
+              </Field>
             )}
             <Button type="submit" variant="secondary" formAction={createItemAction}>
               Add directly (super-admin)
             </Button>
           </div>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
   );

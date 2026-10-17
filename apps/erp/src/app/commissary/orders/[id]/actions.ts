@@ -17,6 +17,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { goneSentence, lowStockRepo, schema, type Tx } from '@shareat/db';
 import { SHORTAGE_REASONS, type ShortageReason } from '@shareat/db/schema';
 import {
+  assertFieldRules,
   acceptOrder,
   addBranchOrderLine,
   decideProposedLine,
@@ -32,6 +33,13 @@ import {
   updateBranchOrderLine,
   voidTradeOrder,
 } from '@shareat/domain';
+import {
+  COMMISSARY_LINE_EDIT_RULES,
+  COMMISSARY_ORDER_LINE_RULES,
+  COMMISSARY_RECEIVE_RULES,
+  COMMISSARY_REJECT_RULES,
+  COMMISSARY_WITHDRAW_RULES,
+} from '@shareat/domain/field-rules';
 import { outcomeMessage } from '@/lib/constraint-messages';
 import { requireActor } from '../../../../lib/session';
 import { errorMessageOf, withOrgPrincipal } from '../lib';
@@ -145,6 +153,7 @@ export async function postMessageAction(fd: FormData): Promise<void> {
 export async function addLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
+    assertFieldRules(COMMISSARY_ORDER_LINE_RULES, fd);
     await addBranchOrderLine(tx, actor, {
       orderId,
       itemId: str(fd, 'itemId'),
@@ -158,6 +167,7 @@ export async function addLineAction(fd: FormData): Promise<void> {
 export async function updateLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
+    assertFieldRules(COMMISSARY_LINE_EDIT_RULES, fd);
     await updateBranchOrderLine(tx, actor, {
       orderId,
       lineId: str(fd, 'lineId'),
@@ -205,6 +215,7 @@ export async function withdrawOrderAction(fd: FormData): Promise<void> {
   let approval: { approverPersonId: string } | null = null;
   let storeOfOrder: string | null = null;
   try {
+    assertFieldRules(COMMISSARY_WITHDRAW_RULES, fd);
     const target = await loadDestructiveTarget(actor, 'trade_order', orderId, ['dispatch_branch_order', 'place_branch_order', 'fulfil_branch_order']);
     storeOfOrder = target.storeId;
     if (needsPin(target.status)) {
@@ -238,6 +249,7 @@ export async function receiveOrderAction(fd: FormData): Promise<void> {
     }))
     .filter((l) => l.lineId);
   const flash = await perform(orderId, async (tx, actor) => {
+    assertFieldRules(COMMISSARY_RECEIVE_RULES, fd);
     const result = await receiveTradeOrder(tx, actor, {
       orderId,
       receivedOn: str(fd, 'receivedOn') || undefined,
@@ -275,6 +287,7 @@ export async function acceptOrderAction(fd: FormData): Promise<void> {
 export async function rejectOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
+    assertFieldRules(COMMISSARY_REJECT_RULES, fd);
     await rejectOrder(tx, actor, { orderId, reason: str(fd, 'reason') });
     return 'Rejected. The branch sees your reason on the thread and may order again.';
   }));
@@ -283,6 +296,7 @@ export async function rejectOrderAction(fd: FormData): Promise<void> {
 export async function fulfilLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
+    assertFieldRules(COMMISSARY_LINE_EDIT_RULES, fd);
     await fulfilLine(tx, actor, {
       orderId,
       lineId: str(fd, 'lineId'),
@@ -297,6 +311,7 @@ export async function fulfilLineAction(fd: FormData): Promise<void> {
 export async function proposeLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
+    assertFieldRules(COMMISSARY_ORDER_LINE_RULES, fd);
     await proposeLine(tx, actor, {
       orderId,
       itemId: str(fd, 'itemId'),

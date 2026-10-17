@@ -15,6 +15,8 @@ import { listStores, ratesView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { PAYROLL_BRACKET_SET_RULES, PAYROLL_MIN_WAGE_RULES, PAYROLL_STATUTORY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Payroll rates — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -92,7 +94,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
 
         <details className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
           <summary className="cursor-pointer py-2.5 text-sm font-medium">Add a contribution row</summary>
-          <form action={addStatutoryRateAction} className="mt-3">
+          <CheckedForm rules={PAYROLL_STATUTORY_RATE_RULES} action={addStatutoryRateAction} className="mt-3">
 <FormGrid>
             <Field label="Agency">
 <Select name="agency" defaultValue="sss">
@@ -101,8 +103,8 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
                 <option value="pagibig">Pag-IBIG</option>
               </Select>
 </Field>
-            <Field label="Effective from (the 1st of a month)">
-<Input name="effectiveFrom" placeholder="2026-07-01" required className="w-full" />
+            <Field label="Effective from (the 1st of a month)" rule={PAYROLL_STATUTORY_RATE_RULES.effectiveFrom}>
+<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.effectiveFrom)} placeholder="2026-07-01" className="w-full" />
 </Field>
             <Field label="Counted on">
 <Select name="baseKind" defaultValue="basic">
@@ -110,38 +112,38 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
                 <option value="gross">Gross pay</option>
               </Select>
 </Field>
-            <Field label="Employee rate (0.05 is 5%)">
-<Input name="eeRate" inputMode="decimal" required className="w-full" />
+            <Field label="Employee rate (0.05 is 5%)" rule={PAYROLL_STATUTORY_RATE_RULES.eeRate}>
+<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.eeRate)} className="w-full" />
 </Field>
-            <Field label="Employer rate">
-<Input name="erRate" inputMode="decimal" required className="w-full" />
+            <Field label="Employer rate" rule={PAYROLL_STATUTORY_RATE_RULES.erRate}>
+<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.erRate)} className="w-full" />
 </Field>
-            <Field label="Floor (lowest pay it counts)">
-<Input name="floor" inputMode="decimal" className="w-full" />
+            <Field label="Floor (lowest pay it counts)" rule={PAYROLL_STATUTORY_RATE_RULES.floor}>
+<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.floor)} className="w-full" />
 </Field>
-            <Field label="Ceiling (highest pay it counts)">
-<Input name="ceiling" inputMode="decimal" className="w-full" />
+            <Field label="Ceiling (highest pay it counts)" rule={PAYROLL_STATUTORY_RATE_RULES.ceiling}>
+<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ceiling)} className="w-full" />
 </Field>
-            <Field label="Step (SSS rounds pay to this)">
-<Input name="step" inputMode="decimal" className="w-full" />
+            <Field label="Step (SSS rounds pay to this)" rule={PAYROLL_STATUTORY_RATE_RULES.step}>
+<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.step)} className="w-full" />
 </Field>
-            <Field label="Low band: pay up to (Pag-IBIG)">
-<Input name="lowThreshold" inputMode="decimal" className="w-full" />
+            <Field label="Low band: pay up to (Pag-IBIG)" rule={PAYROLL_STATUTORY_RATE_RULES.lowThreshold}>
+<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.lowThreshold)} className="w-full" />
 </Field>
-            <Field label="Low band: employee rate">
-<Input name="lowEeRate" inputMode="decimal" className="w-full" />
+            <Field label="Low band: employee rate" rule={PAYROLL_STATUTORY_RATE_RULES.lowEeRate}>
+<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.lowEeRate)} className="w-full" />
 </Field>
-            <Field label="EC: switch point (SSS)">
-<Input name="ecThreshold" inputMode="decimal" className="w-full" />
+            <Field label="EC: switch point (SSS)" rule={PAYROLL_STATUTORY_RATE_RULES.ecThreshold}>
+<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ecThreshold)} className="w-full" />
 </Field>
-            <Field label="EC below the switch point">
-<Input name="ecLow" inputMode="decimal" className="w-full" />
+            <Field label="EC below the switch point" rule={PAYROLL_STATUTORY_RATE_RULES.ecLow}>
+<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ecLow)} className="w-full" />
 </Field>
-            <Field label="EC at or above it">
-<Input name="ecHigh" inputMode="decimal" className="w-full" />
+            <Field label="EC at or above it" rule={PAYROLL_STATUTORY_RATE_RULES.ecHigh}>
+<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ecHigh)} className="w-full" />
 </Field>
-            <Field label="Where it comes from (circular or law)" span="full">
-<Input name="sourceRef" required className="w-full" />
+            <Field label="Where it comes from (circular or law)" span="full" rule={PAYROLL_STATUTORY_RATE_RULES.sourceRef}>
+<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.sourceRef)} className="w-full" />
 </Field>
             <div className="flex items-end">
               <Button type="submit" variant="primary">
@@ -149,7 +151,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
               </Button>
             </div>
           </FormGrid>
-</form>
+</CheckedForm>
         </details>
       </section>
 
@@ -193,7 +195,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
         )}
         <details className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
           <summary className="cursor-pointer py-2.5 text-sm font-medium">Add a withholding table</summary>
-          <form action={addWithholdingBracketSetAction} className="mt-3">
+          <CheckedForm rules={PAYROLL_BRACKET_SET_RULES} action={addWithholdingBracketSetAction} className="mt-3">
 <FormGrid>
             <Field label="Pay frequency">
 <Select name="frequency" defaultValue="semi_monthly">
@@ -202,19 +204,17 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
                 <option value="weekly">Weekly</option>
               </Select>
 </Field>
-            <Field label="Effective from">
-<Input name="effectiveFrom" placeholder="2027-01-01" required className="w-full" />
+            <Field label="Effective from" rule={PAYROLL_BRACKET_SET_RULES.effectiveFrom}>
+<Input {...nativeAttrs(PAYROLL_BRACKET_SET_RULES.effectiveFrom)} placeholder="2027-01-01" className="w-full" />
 </Field>
-            <Field label="Rows, one per line: over, base tax, rate (e.g. 10417, 0, 0.15)" span="full">
-<textarea
-                name="rows"
-                required
+            <Field label="Rows, one per line: over, base tax, rate (e.g. 10417, 0, 0.15)" span="full" rule={PAYROLL_BRACKET_SET_RULES.rows}>
+<textarea {...nativeAttrs(PAYROLL_BRACKET_SET_RULES.rows)}
                 rows={7}
                 className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-sm dark:border-neutral-700 dark:bg-neutral-950"
               />
 </Field>
-            <Field label="Where it comes from" span="full">
-<Input name="sourceRef" required className="w-full" />
+            <Field label="Where it comes from" span="full" rule={PAYROLL_BRACKET_SET_RULES.sourceRef}>
+<Input {...nativeAttrs(PAYROLL_BRACKET_SET_RULES.sourceRef)} className="w-full" />
 </Field>
             <div>
               <Button type="submit" variant="primary">
@@ -222,7 +222,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
               </Button>
             </div>
           </FormGrid>
-</form>
+</CheckedForm>
         </details>
       </section>
 
@@ -266,7 +266,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
             ))}
           </ul>
         )}
-        <form action={addMinimumWageAction} className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
+        <CheckedForm rules={PAYROLL_MIN_WAGE_RULES} action={addMinimumWageAction} className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
 <FormGrid>
           <Field label="Store">
 <Select name="storeId" defaultValue={stores[0]?.id}>
@@ -277,14 +277,14 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
               ))}
             </Select>
 </Field>
-          <Field label="Effective from">
-<Input name="effectiveFrom" placeholder="2026-01-01" required className="w-full" />
+          <Field label="Effective from" rule={PAYROLL_MIN_WAGE_RULES.effectiveFrom}>
+<Input {...nativeAttrs(PAYROLL_MIN_WAGE_RULES.effectiveFrom)} placeholder="2026-01-01" className="w-full" />
 </Field>
-          <Field label="Minimum daily wage">
-<Input name="dailyRate" inputMode="decimal" required className="w-full" />
+          <Field label="Minimum daily wage" rule={PAYROLL_MIN_WAGE_RULES.dailyRate}>
+<Input {...nativeAttrs(PAYROLL_MIN_WAGE_RULES.dailyRate)} className="w-full" />
 </Field>
-          <Field label="Wage order">
-<Input name="wageOrderRef" required className="w-full" />
+          <Field label="Wage order" rule={PAYROLL_MIN_WAGE_RULES.wageOrderRef}>
+<Input {...nativeAttrs(PAYROLL_MIN_WAGE_RULES.wageOrderRef)} className="w-full" />
 </Field>
           <div>
             <Button type="submit" variant="primary">
@@ -292,7 +292,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
             </Button>
           </div>
         </FormGrid>
-</form>
+</CheckedForm>
       </section>
     </Page>
   );

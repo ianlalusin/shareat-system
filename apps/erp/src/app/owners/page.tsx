@@ -12,7 +12,9 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Banner, Button, Field, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { OWNERS_CREATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Owners — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -156,10 +158,10 @@ export default async function OwnersPage({
           </p>
         </div>
 
-        <form action={createOwnerAction} className="space-y-4">
+        <CheckedForm rules={OWNERS_CREATE_RULES} action={createOwnerAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Store">
-              <Select name="storeId" required defaultValue="" className="w-full">
+            <Field label="Store" rule={OWNERS_CREATE_RULES.storeId}>
+              <Select {...nativeAttrs(OWNERS_CREATE_RULES.storeId)} defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -170,8 +172,8 @@ export default async function OwnersPage({
                 ))}
               </Select>
             </Field>
-            <Field label="Who">
-              <Select name="personId" required defaultValue="" className="w-full">
+            <Field label="Who" rule={OWNERS_CREATE_RULES.personId}>
+              <Select {...nativeAttrs(OWNERS_CREATE_RULES.personId)} defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -188,11 +190,12 @@ export default async function OwnersPage({
             <Field
               label="Ownership %"
               hint="Indicative only — nothing checks that these add to 100, because a store mid-restructure legitimately does not."
+              rule={OWNERS_CREATE_RULES.ownershipPercentage}
             >
-              <input name="ownershipPercentage" inputMode="decimal" className={INPUT} />
+              <Input {...nativeAttrs(OWNERS_CREATE_RULES.ownershipPercentage)} className="w-full" />
             </Field>
-            <Field label="Drawing limit" hint="Leave both blank for no limit.">
-              <input name="drawingLimit" inputMode="decimal" className={INPUT} />
+            <Field label="Drawing limit" hint="Leave both blank for no limit." rule={OWNERS_CREATE_RULES.drawingLimit}>
+              <Input {...nativeAttrs(OWNERS_CREATE_RULES.drawingLimit)} className="w-full" />
             </Field>
             <Field label="Limit period">
               <Select name="drawingLimitPeriod" defaultValue="" className="w-full">
@@ -217,29 +220,8 @@ export default async function OwnersPage({
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
-  );
-}
-
-const INPUT =
-  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
   );
 }

@@ -6,7 +6,8 @@ import { typedFor } from '@/lib/keep-typing';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { MENU_CATEGORY_RULES, MENU_ITEM_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { createCategoryAction, createItemAction, editCategoryAction, retireCategoryAction } from './actions';
 import { listCategories, listOverviewItems, storesInScope, withOrgPrincipal } from './lib';
@@ -146,13 +147,13 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
                 <p className="text-xs text-muted">
                   Retiring a category hides it, and every item in it, from every store menu. It is refused while the category still holds active items.
                 </p>
-                <EditableRecord action={editCategoryAction} label={c.name} hidden={{ id: c.id }} typed={typedFor(sp, MENU_CATEGORY, c.id, actor.personId)}>
+                <EditableRecord action={editCategoryAction} rules={MENU_CATEGORY_RULES} label={c.name} hidden={{ id: c.id }} typed={typedFor(sp, MENU_CATEGORY, c.id, actor.personId)}>
                   <FormGrid>
-                    <Field label="Name" className="text-sm">
-                      <Input name="name" defaultValue={c.name} required className="w-full" />
+                    <Field label="Name" className="text-sm" rule={MENU_CATEGORY_RULES.name}>
+                      <Input {...nativeAttrs(MENU_CATEGORY_RULES.name)} defaultValue={c.name} className="w-full" />
                     </Field>
-                    <Field label="Sort order" className="text-sm">
-                      <Input name="sortOrder" inputMode="numeric" defaultValue={String(c.sortOrder)} className="w-full" />
+                    <Field label="Sort order" className="text-sm" rule={MENU_CATEGORY_RULES.sortOrder}>
+                      <Input {...nativeAttrs(MENU_CATEGORY_RULES.sortOrder)} defaultValue={String(c.sortOrder)} className="w-full" />
                     </Field>
                   </FormGrid>
                 </EditableRecord>
@@ -182,29 +183,29 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
       {canManage && (
         <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
           <h2 className="text-lg font-semibold">Add category</h2>
-          <form action={createCategoryAction} className="space-y-3">
+          <CheckedForm rules={MENU_CATEGORY_RULES} action={createCategoryAction} className="space-y-3">
             <FormGrid>
-              <Field label="Name" className="text-sm">
-                <Input name="name" required className="w-full" />
+              <Field label="Name" className="text-sm" rule={MENU_CATEGORY_RULES.name}>
+                <Input {...nativeAttrs(MENU_CATEGORY_RULES.name)} className="w-full" />
               </Field>
-              <Field label="Sort order (optional)" className="text-sm">
-                <Input name="sortOrder" inputMode="numeric" className="w-full" />
+              <Field label="Sort order (optional)" className="text-sm" rule={MENU_CATEGORY_RULES.sortOrder}>
+                <Input {...nativeAttrs(MENU_CATEGORY_RULES.sortOrder)} className="w-full" />
               </Field>
             </FormGrid>
             <Button type="submit" variant="primary">
               Save
             </Button>
-          </form>
+          </CheckedForm>
         </section>
       )}
 
       {canAddItem && (
         <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
           <h2 className="text-lg font-semibold">Add item</h2>
-          <form action={createItemAction} className="space-y-3">
+          <CheckedForm rules={MENU_ITEM_ADD_RULES} action={createItemAction} className="space-y-3">
             <FormGrid>
-              <Field label="Category" className="text-sm">
-                <Select name="categoryId" required className="w-full">
+              <Field label="Category" className="text-sm" rule={MENU_ITEM_ADD_RULES.categoryId}>
+                <Select {...nativeAttrs(MENU_ITEM_ADD_RULES.categoryId)} className="w-full">
                   {categories
                     .filter((c) => c.status === 'active')
                     .map((c) => (
@@ -214,8 +215,8 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
                     ))}
                 </Select>
               </Field>
-              <Field label="Name" className="text-sm">
-                <Input name="name" required className="w-full" />
+              <Field label="Name" className="text-sm" rule={MENU_ITEM_ADD_RULES.name}>
+                <Input {...nativeAttrs(MENU_ITEM_ADD_RULES.name)} className="w-full" />
               </Field>
               <Field label="Type" className="text-sm">
                 <Select name="itemType" defaultValue="a_la_carte" className="w-full">
@@ -231,7 +232,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
             <Button type="submit" variant="primary">
               Save
             </Button>
-          </form>
+          </CheckedForm>
         </section>
       )}
     </Page>

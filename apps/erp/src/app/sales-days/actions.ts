@@ -13,10 +13,11 @@
  * could claim to be anyone. **The segregation only became real when this line changed.**
  */
 import {
-  createSalesDay, editSalesDay, importSalesDay, postPosCorrection, recheckPosDay, recheckRecentDays, reimportSalesDay,
+  assertFieldRules, createSalesDay, editSalesDay, importSalesDay, postPosCorrection, recheckPosDay, recheckRecentDays, reimportSalesDay,
   setPlatformSales, submitSalesDay, verifySalesDay, voidSalesDay,
 } from '@shareat/domain';
 import { logger } from '@shareat/core/logger';
+import { SALES_DAY_CORRECTION_RULES, SALES_DAY_CREATE_RULES, SALES_DAY_IMPORT_RULES, SALES_DAY_VOID_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -103,6 +104,7 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
   if (!storeId) return await redirectWithFlash('/sales-days/new', nav, { error: 'Choose a store.', field: 'store' });
   let newId: string;
   try {
+    assertFieldRules(SALES_DAY_CREATE_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       createSalesDay(tx, actor, {
         storeId,
@@ -130,6 +132,7 @@ export async function importSalesDayAction(formData: FormData): Promise<void> {
   let dayId: string;
   try {
     if (!storeId) throw new Error('Choose a store.');
+    assertFieldRules(SALES_DAY_IMPORT_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       importSalesDay(tx, actor, { storeId, businessDate: str(formData, 'businessDate') }),
     );
@@ -178,6 +181,7 @@ export async function postPosCorrectionAction(formData: FormData): Promise<void>
   const id = str(formData, 'salesDayId');
   const nav = carryNav(formData);
   try {
+    assertFieldRules(SALES_DAY_CORRECTION_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       postPosCorrection(tx, actor, {
         salesDayId: id,
@@ -263,6 +267,7 @@ export async function voidSalesDayAction(formData: FormData): Promise<void> {
     const approval = needsPin(target.status)
       ? await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'void_sales_day' })
       : null;
+    assertFieldRules(SALES_DAY_VOID_RULES, formData);
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await assertApprovalStillRight(tx, actor, 'sales_day', id, needsPin, approval !== null);
       await voidSalesDay(tx, actor, id, str(formData, 'reason'));

@@ -7,12 +7,14 @@
  * each service, not here — a gate in a server action protects one caller.
  */
 import {
+  assertFieldRules,
   createRemittance,
   refuse,
   resolveRemittanceVariance,
   reverseRemittance,
   setStoreCashPolicy,
 } from '@shareat/domain';
+import { CASH_POLICY_RULES, REMITTANCE_RECORD_RULES, REMITTANCE_REVERSE_RULES } from '@shareat/domain/field-rules';
 import { cashierAccounts, withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
@@ -62,6 +64,7 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
   let summary = '';
 
   try {
+    assertFieldRules(REMITTANCE_RECORD_RULES, formData);
     // Fetched up front (T-328) so a malformed amount's own error can name the account, the same
     // way the orphaned-overage refusal below already does — a multi-row form where every row's
     // error says only "the amount handed over" leaves the operator to guess which of several
@@ -187,8 +190,8 @@ export async function reverseRemittanceAction(formData: FormData): Promise<void>
   const actor = await requireActor();
   const storeId = str(formData, 'storeId');
   try {
+    assertFieldRules(REMITTANCE_REVERSE_RULES, formData);
     const reason = str(formData, 'reason');
-    if (!reason) throw new Error('Say why this remittance is being reversed.');
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the page's `storeId` field).
     const remittanceId = str(formData, 'remittanceId');
     const target = await loadDestructiveTarget(actor, 'remittance', remittanceId, ['accept_remittance']);
@@ -275,6 +278,7 @@ export async function setCashPolicyAction(formData: FormData): Promise<void> {
   const rawCeiling = str(formData, 'unremittedCeiling');
 
   try {
+    assertFieldRules(CASH_POLICY_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       setStoreCashPolicy(tx, actor, {
         storeId,

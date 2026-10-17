@@ -16,7 +16,9 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { auditLogRepo, itemsRepo, posMappingRepo, productionRepo, stockUsageRepo, type Tx } from '@shareat/db';
-import { gone, internalFault, refuse } from '../shared/refusal';
+import { gone, internalFault } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SETTINGS_ITEM_TOLERANCE_RULES, SETTINGS_ORG_TOLERANCE_RULES } from '../field-rules/settings';
 import { humanDate } from '../shared/refusal-leaf';
 import { menuRuleCoveredItemIds } from '../pos/depletion-source';
 import type { BusinessDate } from '@shareat/core/datetime';
@@ -76,16 +78,9 @@ function percentWords(tolerance: string): string {
   return `${whole}${frac ? `.${frac}` : ''}%`;
 }
 
-/** A tolerance a person typed, as the stored text, or a refusal in words: a fraction from 0 to 1 with at most four decimals. */
-function parseTolerance(raw: unknown, rawLabel: string): Decimal<'5,4'> {
-  const s = typeof raw === 'string' ? raw.trim() : '';
-  const sentence = 'A tolerance is a number from 0 to 1 with at most four decimals, for example 0.10 for 10%.';
-  if (!DECIMAL.test(s)) throw refuse(`${rawLabel}: ${JSON.stringify(raw)} is not a decimal fraction.`, sentence);
-  const frac = s.split('.')[1] ?? '';
-  if (frac.length > 4) throw refuse(`${rawLabel}: more than four decimals.`, sentence);
-  const t = scaled(s, rawLabel);
-  if (t.n > 10n ** BigInt(t.scale)) throw refuse(`${rawLabel}: above 1.`, sentence);
-  return decimal(s, '5,4');
+/** A tolerance the screen's own rule set has already judged (a fraction from 0 to 1, at most four decimals), as the stored text. */
+function toleranceDecimal(checked: string | null | undefined): Decimal<'5,4'> {
+  return decimal(checked ?? '', '5,4');
 }
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -98,7 +93,8 @@ async function audit(tx: Tx, actor: Actor, action: string, storeId: string | nul
 /** Sets the org-wide usage tolerance. Admin only (`set_menu_depletion`). Audited as `menu.usage_tolerance_set`. */
 export async function setOrgUsageTolerance(tx: Tx, actor: Actor, input: { readonly tolerance: string }): Promise<{ tolerance: string }> {
   await authorize(tx, actor, 'set_menu_depletion', {});
-  const tolerance = parseTolerance(input.tolerance, 'setOrgUsageTolerance');
+  // T-440: the rule, its sentence and the screen's live line are ONE definition (field-rules/settings.ts).
+  const tolerance = toleranceDecimal(assertFieldRules(SETTINGS_ORG_TOLERANCE_RULES, { tolerance: input.tolerance }).tolerance);
   const before = await stockUsageRepo.setOrgUsageTolerance(tx, actor.orgId, tolerance);
   if (!before) throw gone(`setOrgUsageTolerance: organization ${actor.orgId} does not exist.`, 'organization');
   await audit(tx, actor, 'menu.usage_tolerance_set', null, actor.orgId, { tolerance: before.previous }, { tolerance });
@@ -112,7 +108,10 @@ export async function setItemUsageTolerance(
   input: { readonly itemId: string; readonly tolerance: string | null },
 ): Promise<{ tolerance: string | null }> {
   await authorize(tx, actor, 'set_menu_depletion', {});
-  const tolerance = input.tolerance === null ? null : parseTolerance(input.tolerance, 'setItemUsageTolerance');
+  // `null` clears the override. A BLANK string is not a clear (the action turns the empty box into null): it is refused like the org box.
+  const typed = input.tolerance === null ? null : assertFieldRules(SETTINGS_ITEM_TOLERANCE_RULES, { tolerance: input.tolerance }).tolerance;
+  if (input.tolerance !== null && typed === null) assertFieldRules(SETTINGS_ORG_TOLERANCE_RULES, { tolerance: input.tolerance });
+  const tolerance = typed === null ? null : toleranceDecimal(typed);
   const before = await stockUsageRepo.setItemUsageTolerance(tx, actor.orgId, input.itemId, tolerance);
   if (!before) throw gone(`setItemUsageTolerance: item ${input.itemId} does not exist.`, 'stock item');
   await audit(tx, actor, 'menu.item_usage_tolerance_set', null, input.itemId, { tolerance: before.previous }, { tolerance });

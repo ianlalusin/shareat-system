@@ -13,6 +13,7 @@
  * fails the build if it ever does.
  */
 import {
+  assertFieldRules,
   createAsset,
   disposeAsset,
   runDepreciation,
@@ -21,6 +22,13 @@ import {
   type DepreciationInterval,
 } from '@shareat/domain';
 import { fixedAssetsRepo, type AssetCategory } from '@shareat/db';
+import {
+  ASSET_CREATE_RULES,
+  ASSET_DISPOSE_RULES,
+  ASSET_IN_SERVICE_CONFIRM_RULES,
+  ASSET_IN_SERVICE_RULES,
+  ASSET_TERMS_RULES,
+} from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -48,8 +56,9 @@ export async function createAssetAction(formData: FormData): Promise<void> {
   let newId: string;
 
   try {
+    // T-440: the same rule set the screen shows. In the action, not in createAsset: the domain has other callers (A6).
+    assertFieldRules(ASSET_CREATE_RULES, formData);
     const storeId = str(formData, 'storeId');
-    if (!storeId) throw new Error('Choose a store.');
 
     const lifeRaw = str(formData, 'usefulLifeMonths');
     const salvageRaw = str(formData, 'salvageValue');
@@ -99,6 +108,7 @@ export async function updateTermsAction(formData: FormData): Promise<void> {
   const nav = carryNav(formData);
 
   try {
+    assertFieldRules(ASSET_TERMS_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       updateAssetTerms(tx, actor, assetId, {
         name: str(formData, 'name'),
@@ -134,6 +144,9 @@ export async function setAssetInServiceAction(formData: FormData): Promise<void>
   const confirmedPlan = str(formData, 'confirmedPlan') || undefined;
 
   try {
+    // The confirm step carries the plan token and only a reason; the edit form carries the date as well.
+    if (confirmedPlan !== undefined) assertFieldRules(ASSET_IN_SERVICE_CONFIRM_RULES, formData);
+    else assertFieldRules(ASSET_IN_SERVICE_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       setAssetInService(tx, actor, assetId, {
         mode,
@@ -175,6 +188,7 @@ export async function disposeAssetAction(formData: FormData): Promise<void> {
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'fixed_asset', assetId, ['manage_fixed_assets']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'manage_fixed_assets' });
+    assertFieldRules(ASSET_DISPOSE_RULES, formData);
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await disposeAsset(tx, actor, {
         assetId,

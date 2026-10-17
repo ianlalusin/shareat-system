@@ -9,7 +9,9 @@
  * statement, not repeated here.
  */
 import { revalidatePath } from 'next/cache';
+import { INVENTORY_TRANSFER_RULES, INVENTORY_TRANSFER_VOID_RULES } from '@shareat/domain/field-rules';
 import {
+  assertFieldRules,
   dispatch,
   receiveTransfer,
   saveDraft,
@@ -30,6 +32,7 @@ function str(fd: FormData, key: string): string {
 
 export async function createTransferAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/transfers');
+  assertFieldRules(INVENTORY_TRANSFER_RULES, fd);
   const storeId = str(fd, 'storeId');
   const fromLocationId = str(fd, 'fromLocationId');
   const toLocationId = str(fd, 'toLocationId');
@@ -77,6 +80,7 @@ export async function voidTransferAction(fd: FormData): Promise<void> {
   const transferId = str(fd, 'transferId');
   const reason = str(fd, 'reason');
   try {
+    assertFieldRules(INVENTORY_TRANSFER_VOID_RULES, fd);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'stock_transfer', transferId, ['void_transfer']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_transfer' });

@@ -8,7 +8,9 @@
  * function (`manage_menu`, `add_menu_item`, `set_menu_depletion`); nothing here decides who may. A blank text box means "not
  * sent". Quantities stay TEXT all the way to the domain. Each action redirects for itself (guard G1b: no wrapper redirects).
  */
+import { MENU_DEPLETION_RULES, MENU_ITEM_EDIT_RULES, MENU_OPTION_GROUP_RULES, MENU_OPTION_VALUE_RULES, MENU_VARIANT_RULES } from '@shareat/domain/field-rules';
 import {
+  assertFieldRules,
   addMenuVariant,
   addOptionValue,
   createOptionGroup,
@@ -40,6 +42,8 @@ export async function editItemAction(fd: FormData): Promise<void> {
   const actor = await requireActor(path);
   if (!valid) return await redirectWithFlash(path, {}, { error: OPEN_FIRST });
   try {
+    // An edit that sends no name leaves the name alone ("a blank box is not sent"); one that sends it must send a real one.
+    if (fd.has('name')) assertFieldRules(MENU_ITEM_EDIT_RULES, fd);
     const name = opt(fd, 'name');
     const description = opt(fd, 'description');
     const categoryId = opt(fd, 'categoryId');
@@ -70,6 +74,7 @@ export async function addVariantAction(fd: FormData): Promise<void> {
   const actor = await requireActor(path);
   if (!valid) return await redirectWithFlash(path, {}, { error: OPEN_FIRST });
   try {
+    assertFieldRules(MENU_VARIANT_RULES, fd);
     await withOrgPrincipal(actor.orgId, (tx) => addMenuVariant(actor, { menuItemId, label: str(fd, 'label') }, tx));
   } catch (err) {
     return await redirectWithFlash(path, {}, { error: menuErrorMessage(err) });
@@ -83,6 +88,7 @@ export async function setDepletionRuleAction(fd: FormData): Promise<void> {
   const actor = await requireActor(path);
   if (!valid) return await redirectWithFlash(path, {}, { error: OPEN_FIRST });
   try {
+    assertFieldRules(MENU_DEPLETION_RULES, fd);
     const variantId = requireId(fd, 'variantId', 'Choose a variant.');
     const stockItemId = opt(fd, 'stockItemId');
     const recipeId = opt(fd, 'recipeId');
@@ -114,6 +120,7 @@ export async function createOptionGroupAction(fd: FormData): Promise<void> {
   const actor = await requireActor(path);
   if (!valid) return await redirectWithFlash(path, {}, { error: OPEN_FIRST });
   try {
+    assertFieldRules(MENU_OPTION_GROUP_RULES, fd);
     const names = str(fd, 'values')
       .split(/\r?\n/)
       .map((n) => n.trim())
@@ -146,6 +153,8 @@ export async function editOptionGroupAction(fd: FormData): Promise<void> {
   const groupId = str(fd, 'id');
   if (!valid) return await redirectWithFlash(path, {}, { error: OPEN_FIRST });
   try {
+    // An edit that sends no name leaves the name alone; one that sends it must send a real one.
+    if (fd.has('name')) assertFieldRules(MENU_OPTION_GROUP_RULES, fd);
     const id = requireId(fd, 'id', 'Choose an option group.');
     const name = opt(fd, 'name');
     const selectionMode = opt(fd, 'selectionMode');
@@ -177,6 +186,7 @@ export async function addOptionValueAction(fd: FormData): Promise<void> {
   const actor = await requireActor(path);
   if (!valid) return await redirectWithFlash(path, {}, { error: OPEN_FIRST });
   try {
+    assertFieldRules(MENU_OPTION_VALUE_RULES, fd);
     const optionGroupId = requireId(fd, 'optionGroupId', 'Choose an option group.');
     await withOrgPrincipal(actor.orgId, (tx) => addOptionValue(actor, { optionGroupId, name: str(fd, 'name') }, tx));
   } catch (err) {
@@ -191,6 +201,8 @@ export async function editOptionValueAction(fd: FormData): Promise<void> {
   const valueId = str(fd, 'id');
   if (!valid) return await redirectWithFlash(path, {}, { error: OPEN_FIRST });
   try {
+    // The Retire / Restore button posts this action with no name; a rename must send a real one.
+    if (fd.has('name')) assertFieldRules(MENU_OPTION_VALUE_RULES, fd);
     const id = requireId(fd, 'id', 'Choose an option.');
     const name = opt(fd, 'name');
     const status = opt(fd, 'status');

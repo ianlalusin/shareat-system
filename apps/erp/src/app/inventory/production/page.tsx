@@ -5,6 +5,8 @@ import { saveProductionDraftAction } from './actions';
 import { listStores, productionScreenData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { Badge, Banner, Button, Field, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { INVENTORY_PRODUCTION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -114,7 +116,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
               A cook starts from a recipe, and there is no active recipe yet. Ask an admin to add one; recipes can only be added by an admin.
             </Banner>
           ) : (
-          <form action={saveProductionDraftAction} className="mt-3 space-y-4">
+          <CheckedForm rules={INVENTORY_PRODUCTION_RULES} action={saveProductionDraftAction} className="mt-3 space-y-4">
             <input type="hidden" name="storeId" value={storeId} />
             <input type="hidden" name="kind" value={kind} />
             <FormGrid>
@@ -127,8 +129,8 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
                   ))}
                 </Select>
               </Field>
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Date</span>} className="text-sm">
-                <Input type="date" name="producedOn" defaultValue={toBusinessDate()} className="w-full" />
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Date</span>} className="text-sm" rule={INVENTORY_PRODUCTION_RULES.producedOn}>
+                <Input type="date" {...nativeAttrs(INVENTORY_PRODUCTION_RULES.producedOn)} defaultValue={toBusinessDate()} className="w-full" />
               </Field>
               <Field label={<span className="text-neutral-600 dark:text-neutral-400">Labour cost (optional)</span>} className="text-sm">
                 <Input type="text" name="labourCost" placeholder="0.00" className="w-full" />
@@ -166,7 +168,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
             <Button type="submit" variant="primary">
               Save draft
             </Button>
-          </form>
+          </CheckedForm>
           )}
         </section>
       )}

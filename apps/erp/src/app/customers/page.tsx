@@ -17,6 +17,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Button, FlashBanner, Input, LinkRow, RowAction, RowLink, Select } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { CUSTOMER_ADD_RULES, CUSTOMER_RECONCILE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Customers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -118,16 +120,18 @@ export default async function CustomersPage({
                       c.reconciledAsOf
                     ) : (
                       <RowAction>
-                        <form action={reconcileCustomerAction} className="flex items-center gap-1">
+                        <CheckedForm rules={CUSTOMER_RECONCILE_RULES} action={reconcileCustomerAction} className="flex items-center gap-1">
                           <input type="hidden" name="customerId" value={c.id} />
-                          <Input name="asOf" type="date" defaultValue={today()} />
+                          <Field label={<span className="sr-only">Date verified at zero</span>} rule={CUSTOMER_RECONCILE_RULES.asOf}>
+                            <Input type="date" {...nativeAttrs(CUSTOMER_RECONCILE_RULES.asOf)} defaultValue={today()} />
+                          </Field>
                           <button
                             type="submit"
                             className="rounded border border-neutral-300 px-2 py-0.5 text-xs dark:border-neutral-700"
                           >
                             Anchor
                           </button>
-                        </form>
+                        </CheckedForm>
                       </RowAction>
                     )}
                   </td>
@@ -158,10 +162,10 @@ export default async function CustomersPage({
           </p>
         </div>
 
-        <form action={createCustomerAction} className="space-y-4">
+        <CheckedForm rules={CUSTOMER_ADD_RULES} action={createCustomerAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name">
-              <Input name="name" required placeholder="Resto Bulacan" className="w-full" />
+            <Field label="Name" rule={CUSTOMER_ADD_RULES.name}>
+              <Input {...nativeAttrs(CUSTOMER_ADD_RULES.name)} placeholder="Resto Bulacan" className="w-full" />
             </Field>
             <Field
               label="Counterparty"
@@ -223,7 +227,7 @@ export default async function CustomersPage({
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
   );
@@ -232,17 +236,27 @@ export default async function CustomersPage({
 function Field({
   label,
   hint,
+  rule,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   hint?: string;
+  rule?: FieldRule;
   children: React.ReactNode;
 }) {
-  return (
-    <label className="flex flex-col gap-1">
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

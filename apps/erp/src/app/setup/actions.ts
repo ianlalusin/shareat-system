@@ -29,7 +29,8 @@
  */
 import { redirect } from 'next/navigation';
 import { systemTransaction } from '@shareat/db';
-import { bootstrapOrganization } from '@shareat/domain';
+import { assertFieldRules, bootstrapOrganization } from '@shareat/domain';
+import { SETUP_FIRST_RUN_RULES } from '@shareat/domain/field-rules';
 import { signInWithFirebase } from '@shareat/auth';
 import {
   readSetupIdentity,
@@ -66,6 +67,8 @@ export async function createFirstRunAction(formData: FormData): Promise<void> {
   let organisationCreated = false;
 
   try {
+    // T-440: the shapes the screen shows live; checked before a single row is written.
+    assertFieldRules(SETUP_FIRST_RUN_RULES, formData);
     // 2. Everything — org, chart, categories, person, role, grants, store, room, store scope,
     //    PIN and the firebase credential — in ONE transaction, or none of it.
     await systemTransaction((tx) =>

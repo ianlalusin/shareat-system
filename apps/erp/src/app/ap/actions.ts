@@ -9,7 +9,14 @@ import { apRepo, moneyAccountsRepo } from '@shareat/db';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 import { logger } from '@shareat/core/logger';
 import { compare, formatMoney, money, ZERO } from '@shareat/core/money';
+import { INVOICE_EXPENSE_RULES,
+  INVOICE_VOID_RULES,
+  PAYMENT_VOID_RULES,
+  SUPPLIER_INVOICE_LOG_RULES,
+  SUPPLIER_PAYMENT_RULES,
+} from '@shareat/domain/field-rules';
 import {
+  assertFieldRules,
   createSupplier,
   editSupplier,
   recordInvoice,
@@ -25,6 +32,7 @@ import {
   suggestPaymentAllocation,
 } from '@shareat/domain';
 import { withOrgPrincipal, INVOICE_LINE_ROWS } from './lib';
+import { recordExpenseForInvoiceAction } from '../expenses/actions';
 import { authorize } from '@shareat/auth';
 import { requireActor } from '../../lib/session';
 import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '@/lib/period-override';
@@ -162,7 +170,8 @@ export async function recordInvoiceAction(formData: FormData): Promise<void> {
   let id = '';
   let warning = '';
   try {
-    if (!storeId) throw new Error('Choose a store.');
+    // T-440: the screen's own rules (the same sentences the live lines show) judge the post before anything is written.
+    assertFieldRules(SUPPLIER_INVOICE_LOG_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
       // T-441: the receipt photo's id - uploaded on pick (JS on) or posted as a File (JS off). Claimed AFTER the insert.
       const receiptFileId = await resolveUploadedFile(tx, actor, formData, 'receiptPhoto', { purpose: 'receipt_photo', storeId });
@@ -290,8 +299,7 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'invoiceId');
   try {
-    const reason = str(formData, 'reason');
-    if (!reason) throw new Error('Say why this invoice is being voided.');
+    const { reason } = assertFieldRules(INVOICE_VOID_RULES, formData) as { reason: string };
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'supplier_invoice', id, ['void_supplier_invoice']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'void_supplier_invoice' });
@@ -364,6 +372,13 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
   let message = '';
   try {
     if (!storeId) throw new Error('Choose a store.');
+    // An older caller posts the account itself (moneyAccountId, no `source` pick) and the domain still takes that shape (T-432):
+    // its account stands in for the pick here.
+    assertFieldRules(SUPPLIER_PAYMENT_RULES, {
+      amount: str(formData, 'amount'),
+      source: str(formData, 'source') || str(formData, 'moneyAccountId'),
+      businessDate: str(formData, 'businessDate'),
+    });
     const expenseIds = formData.getAll('allocateExpenseId').map(String);
     // T-328/7th-shape — this used to be `.filter((a) => a.amountApplied && Number(a.amountApplied) > 0)`.
     // `Number('abc') > 0` is false, so a mistyped allocation was silently dropped: no message, the
@@ -424,6 +439,21 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
   return await redirectWithFlash(`/ap/suppliers/${supplierId}`, {}, { ok: message });
 }
 
+/**
+ * T-440: the "Record an expense against this invoice" form on /ap/invoices/[id]. The expense domain is another area's; this
+ * action judges the two boxes this page rules (category, particulars) with the screen's own sentences, then hands the post on.
+ */
+export async function recordInvoiceExpenseAction(formData: FormData): Promise<void> {
+  try {
+    assertFieldRules(INVOICE_EXPENSE_RULES, formData);
+  } catch (err) {
+    const invoiceId = str(formData, 'supplierInvoiceId');
+    const returnTo = UUID_SHAPE.test(invoiceId) ? `/ap/invoices/${invoiceId}` : '/ap';
+    return await redirectWithFlash(returnTo, {}, { error: errorMessage(err) });
+  }
+  return await recordExpenseForInvoiceAction(formData);
+}
+
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -443,6 +473,8 @@ export async function voidPaymentAction(formData: FormData): Promise<void> {
       : '/ap';
   let message: string;
   try {
+    // T-440: the reversal date is shown only for a payment in a closed month; "required then" is the domain's (a conditional rule, Q4).
+    assertFieldRules(PAYMENT_VOID_RULES, formData);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'ap_payment', paymentId, ['record_ap_payment']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'record_ap_payment' });

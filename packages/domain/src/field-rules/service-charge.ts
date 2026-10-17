@@ -1,5 +1,11 @@
 /**
- * T-440 field rules for app/service-charge. Created empty in S1 (Audit A9) so no sweep worker edits index.ts.
- * The sweep adds: export const <NAME>_RULES = defineFieldRules('<area>.<form>', { ... }) here, importing from './check'.
+ * T-440 field rules for app/service-charge (S6): the distribution form. "No more than the store's own float" is a ledger
+ * comparison and stays a server refusal (Q4).
  */
-export {};
+import { defineFieldRules } from './check';
+
+export const SERVICE_CHARGE_DISTRIBUTE_RULES = defineFieldRules('service-charge.distribute', {
+  amount: { label: 'The amount', kind: 'money', min: 0.01 },
+  moneyAccountId: { label: 'The account', kind: 'text', requires: 'Choose the account the money comes from.' },
+  paidOn: { label: 'The payday', kind: 'date' },
+});

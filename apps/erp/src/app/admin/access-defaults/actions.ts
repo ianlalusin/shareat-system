@@ -17,7 +17,8 @@
  * (`tests/unit/no-client-supplied-actor.test.ts`, bible §7.1).
  */
 import { accessRepo, type Tx } from '@shareat/db';
-import { retireStorePosition, setPositionDefault } from '@shareat/domain';
+import { assertFieldRules, retireStorePosition, setPositionDefault } from '@shareat/domain';
+import { ADMIN_COPY_DEFAULTS_RULES } from '@shareat/domain/field-rules';
 import { type Capability } from '@shareat/auth';
 import { requireActor } from '../../../lib/session';
 import { activeDefaultsAtStore, bannerMessage, bulkBannerMessage, copyableDefaults, withOrgPrincipal } from './lib';
@@ -172,6 +173,7 @@ export async function copyDefaultsAction(formData: FormData): Promise<void> {
   let anySkippedSelf = false;
   let rowsWritten = 0;
   try {
+    assertFieldRules(ADMIN_COPY_DEFAULTS_RULES, formData);
     if (sourceStoreId === targetStoreId) {
       throw new Error('Choose a different store to copy from.');
     }

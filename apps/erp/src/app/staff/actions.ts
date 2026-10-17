@@ -26,8 +26,16 @@ import {
   setStaffSignature,
   upsertStorePosition,
   viewStaffSignatureUrl,
+  assertFieldRules,
   type CreateEmploymentInput,
 } from '@shareat/domain';
+import {
+  STAFF_END_RULES,
+  STAFF_HIRE_RULES,
+  STAFF_PIN_RULES,
+  STAFF_POSITION_RULES,
+  STAFF_RENAME_RULES,
+} from '@shareat/domain/field-rules';
 import type { EmploymentStatus } from '@shareat/db/schema';
 import { authorize, reopenPinSignIn, setPin } from '@shareat/auth';
 import { accessRepo, employmentRepo, refuse, storesRepo, type Tx } from '@shareat/db';
@@ -113,6 +121,13 @@ export async function hireAction(formData: FormData): Promise<void> {
   const positionIds = strs(formData, 'positionIds');
   const primaryPositionId = str(formData, 'primaryPositionId');
 
+  // T-440: the start date's rule is the one the screen shows live.
+  try {
+    assertFieldRules(STAFF_HIRE_RULES, formData);
+  } catch (err) {
+    return await redirectWithFlash('/staff/hire', { store: storeId }, { error: errorMessage(err) });
+  }
+
   // N5: picked AND typed is refused, never guessed; neither is refused; one half of a name is refused.
   if (isExisting && (lastName !== '' || firstName !== '')) {
     return await redirectWithFlash('/staff/hire', { store: storeId }, { error: 'You picked a person from the search and also typed a new name. Keep only one.' });
@@ -187,6 +202,7 @@ export async function endEmploymentAction(formData: FormData): Promise<void> {
   const employmentStatus = str(formData, 'employmentStatus') as EmploymentStatus;
 
   try {
+    assertFieldRules(STAFF_END_RULES, formData);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'employment', employmentId, ['enrol_staff']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'enrol_staff' });
@@ -223,6 +239,7 @@ export async function issuePinAction(formData: FormData): Promise<void> {
   const pin = str(formData, 'pin');
 
   try {
+    assertFieldRules(STAFF_PIN_RULES, formData);
     await withOrgPrincipal(actor.orgId, async (tx) => {
       const employment = await employmentRepo.getEmployment(tx, employmentId);
       if (!employment || employment.orgId !== actor.orgId) {
@@ -255,6 +272,7 @@ export async function renamePersonAction(formData: FormData): Promise<void> {
   const actor = await requireActor('/staff');
   const employmentId = str(formData, 'employmentId');
   try {
+    assertFieldRules(STAFF_RENAME_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       renamePerson(tx, actor, {
         employmentId,
@@ -308,6 +326,7 @@ export async function issueAdminPinAction(formData: FormData): Promise<void> {
   const pin = str(formData, 'pin');
 
   try {
+    assertFieldRules(STAFF_PIN_RULES, formData);
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await authorize(tx, actor, 'manage_users', {});
       if (!UUID_SHAPE.test(personId) || !(await accessRepo.personIsActiveAdmin(tx, actor.orgId, personId))) {
@@ -332,6 +351,7 @@ export async function upsertStorePositionAction(formData: FormData): Promise<voi
 
   let outcome: string | undefined;
   try {
+    assertFieldRules(STAFF_POSITION_RULES, formData);
     outcome = (await withOrgPrincipal(actor.orgId, (tx) => upsertStorePosition(tx, actor, { storeId, name })))?.outcome;
   } catch (err) {
     return await redirectWithFlash('/staff', { view: 'positions', store: storeId }, { error: errorMessage(err) });

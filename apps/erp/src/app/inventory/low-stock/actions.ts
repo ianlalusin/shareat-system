@@ -14,6 +14,8 @@ import { revalidatePath } from 'next/cache';
 import { authorize } from '@shareat/auth';
 import { lowStockRepo } from '@shareat/db';
 import { parseDecimalInput } from '@shareat/domain/money-input';
+import { assertFieldRules } from '@shareat/domain';
+import { INVENTORY_THRESHOLD_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -37,6 +39,7 @@ export async function setThresholdAction(fd: FormData): Promise<void> {
       // the floor, and an unset threshold is INVISIBLE — the item just never appears on this list —
       // so friction here has no counter-pressure.
       await authorize(tx, actor, 'set_item_threshold', { storeId });
+      assertFieldRules(INVENTORY_THRESHOLD_RULES, fd);
 
       // ⚠️ An empty box CLEARS the threshold rather than meaning zero. Zero is a real setting that
       // means "tell me the moment it runs out"; they are different states and the form must not

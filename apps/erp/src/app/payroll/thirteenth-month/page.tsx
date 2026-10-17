@@ -72,7 +72,7 @@ export default async function ThirteenthMonthPage({
         </PageDescription>
       </div>
 
-      <form className="flex flex-wrap items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
           <span className={LABEL}>Store</span>
           <Select name="store" defaultValue={storeId} className="w-full">

@@ -8,7 +8,8 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { CUTOVER_COUNT } from './typed-forms';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { CUTOVER_COUNT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, FlashBanner, FormGrid, Field } from '@/components/ui';
 
 export const metadata = { title: 'Opening count — Shareat System' };
@@ -194,25 +195,22 @@ export default async function CountPage({
                 (keyed on the stored figures so a save comes back locked and showing them). */}
             <div className="mt-2">
               {r.quantity === null ? (
-                <form action={recordCountAction}>
+                <CheckedForm rules={CUTOVER_COUNT_RULES} action={recordCountAction}>
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="locationId" value={roomId} />
                   <input type="hidden" name="itemId" value={r.itemId} />
                   <FormGrid>
-                    <Field label={<span className="sr-only">Quantity in {r.baseUnit}</span>}>
+                    <Field label={<span className="sr-only">Quantity in {r.baseUnit}</span>} rule={CUTOVER_COUNT_RULES.quantity}>
                       <input
-                        name="quantity"
-                        required
+                        {...nativeAttrs(CUTOVER_COUNT_RULES.quantity)}
                         placeholder={`Quantity (${r.baseUnit})`}
-                        inputMode="decimal"
                         className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
                     </Field>
-                    <Field label={<span className="sr-only">Cost per {r.baseUnit}</span>}>
+                    <Field label={<span className="sr-only">Cost per {r.baseUnit}</span>} rule={CUTOVER_COUNT_RULES.unitCost}>
                       <input
-                        name="unitCost"
+                        {...nativeAttrs(CUTOVER_COUNT_RULES.unitCost)}
                         placeholder={`Cost per ${r.baseUnit}`}
-                        inputMode="decimal"
                         className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
                     </Field>
@@ -220,32 +218,30 @@ export default async function CountPage({
                   <Button type="submit" variant="secondary" className="mt-3">
                     Save
                   </Button>
-                </form>
+                </CheckedForm>
               ) : (
                 <EditableRecord
                   key={`${r.itemId}:${roomId}:${r.quantity}:${r.unitCost ?? ''}`}
                   action={recordCountAction}
+                  rules={CUTOVER_COUNT_RULES}
                   label={r.name}
                   hidden={{ storeId, locationId: roomId, itemId: r.itemId }}
                   typed={typedFor(sp, CUTOVER_COUNT, `${r.itemId}:${roomId}`, actor.personId)}
                 >
                   <FormGrid>
-                    <Field label={<span className="sr-only">Quantity in {r.baseUnit}</span>}>
+                    <Field label={<span className="sr-only">Quantity in {r.baseUnit}</span>} rule={CUTOVER_COUNT_RULES.quantity}>
                       <input
-                        name="quantity"
-                        required
+                        {...nativeAttrs(CUTOVER_COUNT_RULES.quantity)}
                         defaultValue={r.quantity}
                         placeholder={`Quantity (${r.baseUnit})`}
-                        inputMode="decimal"
                         className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
                     </Field>
-                    <Field label={<span className="sr-only">Cost per {r.baseUnit}</span>}>
+                    <Field label={<span className="sr-only">Cost per {r.baseUnit}</span>} rule={CUTOVER_COUNT_RULES.unitCost}>
                       <input
-                        name="unitCost"
+                        {...nativeAttrs(CUTOVER_COUNT_RULES.unitCost)}
                         defaultValue={r.unitCost ?? ''}
                         placeholder={`Cost per ${r.baseUnit}`}
-                        inputMode="decimal"
                         className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
                     </Field>

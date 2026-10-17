@@ -10,7 +10,8 @@
  *
  * ⭐ The actor comes from `requireActor()`, never the form (T-138, bible §7.1).
  */
-import { createMoneyTransfer, settleBetweenStores, voidMoneyTransfer } from '@shareat/domain';
+import { assertFieldRules, createMoneyTransfer, settleBetweenStores, voidMoneyTransfer } from '@shareat/domain';
+import { TRANSFER_RECORD_RULES, TRANSFER_SETTLE_RULES, TRANSFER_VOID_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -28,8 +29,8 @@ export async function createMoneyTransferAction(formData: FormData): Promise<voi
   let warning = '';
 
   try {
+    assertFieldRules(TRANSFER_RECORD_RULES, formData);
     const amountOut = str(formData, 'amountOut');
-    if (!amountOut) throw new Error('Enter the amount that left the source account.');
 
     // ⭐ A blank "amount that arrived" means the transfer cost nothing — the ordinary case, and by
     // far the common one. The field stays visible and labelled rather than hidden behind a
@@ -70,8 +71,8 @@ export async function settleBetweenStoresAction(formData: FormData): Promise<voi
   let warning = '';
 
   try {
+    assertFieldRules(TRANSFER_SETTLE_RULES, formData);
     const amountOut = str(formData, 'amountOut');
-    if (!amountOut) throw new Error('Enter the amount that left the paying store.');
     // Blank "amount that arrived" = the settlement cost nothing (the usual case), as on the ordinary transfer form.
     const amountIn = str(formData, 'amountIn') || amountOut;
 
@@ -99,10 +100,8 @@ export async function voidMoneyTransferAction(formData: FormData): Promise<void>
   const actor = await requireActor();
 
   try {
+    assertFieldRules(TRANSFER_VOID_RULES, formData);
     const reason = str(formData, 'reason');
-    if (!reason) {
-      throw new Error('Say why this transfer is being reversed — a reversal with no reason is a gap.');
-    }
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const moneyTransferId = str(formData, 'moneyTransferId');
     const target = await loadDestructiveTarget(actor, 'money_transfer', moneyTransferId, ['transfer_funds']);

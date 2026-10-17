@@ -6,7 +6,8 @@
  * Thin adapters: read the form, call the domain (packages/domain/src/menu), redirect with a banner. The gate lives INSIDE the
  * domain function (`manage_menu`, `add_menu_item`), not here. A blank text box means "not sent".
  */
-import { createMenuCategory, createMenuItem, editMenuCategory, retireMenuCategory } from '@shareat/domain';
+import { assertFieldRules, createMenuCategory, createMenuItem, editMenuCategory, retireMenuCategory } from '@shareat/domain';
+import { MENU_CATEGORY_RULES, MENU_ITEM_ADD_RULES } from '@shareat/domain/field-rules';
 import type { MenuItemType } from '@shareat/db/schema';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
@@ -21,6 +22,7 @@ const PATH = '/menu';
 export async function createCategoryAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PATH);
   try {
+    assertFieldRules(MENU_CATEGORY_RULES, fd);
     const sortOrder = wholeNumber(fd, 'sortOrder', 'The sort order');
     const parentId = opt(fd, 'parentId');
     await withOrgPrincipal(actor.orgId, (tx) =>
@@ -36,6 +38,8 @@ export async function editCategoryAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PATH);
   const categoryId = str(fd, 'id');
   try {
+    // An edit that sends no name leaves the name alone ("a blank box is not sent"); one that sends it must send a real one.
+    if (fd.has('name')) assertFieldRules(MENU_CATEGORY_RULES, fd);
     const id = requireId(fd, 'id', 'Choose a category.');
     const name = opt(fd, 'name');
     const sortOrder = wholeNumber(fd, 'sortOrder', 'The sort order');
@@ -68,6 +72,7 @@ export async function createItemAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PATH);
   let created: { id: string };
   try {
+    assertFieldRules(MENU_ITEM_ADD_RULES, fd);
     const categoryId = requireId(fd, 'categoryId', 'Choose a category for the item.');
     const description = opt(fd, 'description');
     created = await withOrgPrincipal(actor.orgId, (tx) =>

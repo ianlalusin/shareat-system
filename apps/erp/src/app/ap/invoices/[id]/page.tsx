@@ -7,8 +7,7 @@ import { expensesRepo, apRepo } from '@shareat/db';
 import { canViewPhoto } from '../../../../lib/photo-link';
 import { peso } from '../../../../lib/format';
 import { requireSession } from '../../../../lib/session';
-import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction, voidPaymentAction } from '../../actions';
-import { recordExpenseForInvoiceAction } from '../../../expenses/actions';
+import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction, voidPaymentAction, recordInvoiceExpenseAction } from '../../actions';
 import { getInvoice, getSupplier, listCategoriesGrouped, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
 import { withOrgPrincipal } from '../../../expenses/lib';
 import { canOverrideClosedMonth } from '../../../expenses/reimbursements/lib';
@@ -17,7 +16,14 @@ import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { MoneyLines } from '@/components/money/MoneyLines';
 import { Page } from '@/components/shell/Page';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
+import {
+  INVOICE_EXPENSE_RULES,
+  INVOICE_VOID_RULES,
+  PAYMENT_VOID_RULES,
+  nativeAttrs,
+  type FieldRule,
+} from '@shareat/domain/field-rules';
 import { ACTION_LINK } from '@/components/action-link';
 import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -466,7 +472,7 @@ return (
                     <summary className="inline-flex min-h-[44px] cursor-pointer items-center px-1 text-sm font-medium">
                       Void this payment
                     </summary>
-                    <form action={voidPaymentAction} className="mt-2 space-y-3">
+                    <CheckedForm rules={PAYMENT_VOID_RULES} action={voidPaymentAction} className="mt-2 space-y-3">
                       <input type="hidden" name="paymentId" value={p.paymentId} />
                       <input type="hidden" name="supplierId" value={p.supplierId} />
                       <input type="hidden" name="invoiceId" value={invoice.id} />
@@ -474,15 +480,17 @@ return (
                         The payment is reversed, not deleted, and the bills it paid are owed again.
                         {p.otherBills.length > 0 && ` This also re-opens ${p.otherBills.map(billName).join(', ')}.`}
                       </p>
-                      <Field label="Reason">
-                        <Input name="reason" required className="w-full" />
+                      <Field label="Reason" rule={PAYMENT_VOID_RULES.reason}>
+                        <Input {...nativeAttrs(PAYMENT_VOID_RULES.reason)} className="w-full" />
                       </Field>
                       {!p.periodOpen && (
                         <Field
                           label="Reversal date"
                           hint="This payment is in a closed month. The reversal is dated in an open month."
+                          rule={PAYMENT_VOID_RULES.voidOn}
                         >
-                          <Input name="voidOn" type="date" required defaultValue={today} className="w-full" />
+                          {/* Only a closed-month payment shows this box, and then it is required: the rule is optional because a form without the box must still pass. */}
+                          <Input type="date" required {...nativeAttrs(PAYMENT_VOID_RULES.voidOn)} defaultValue={today} className="w-full" />
                         </Field>
                       )}
                       <ConfirmDestructive
@@ -490,7 +498,7 @@ return (
                         label="Void payment"
                         consequence="Reverses this payment, and the bills it paid are owed again. An administrator must approve with their own PIN."
                       />
-                    </form>
+                    </CheckedForm>
                   </details>
                 )}
               </li>
@@ -505,14 +513,14 @@ return (
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Posts immediately — verification already was the approval (Ian, 2026-08-27).
           </p>
-          <form action={recordExpenseForInvoiceAction} className="space-y-3">
+          <CheckedForm rules={INVOICE_EXPENSE_RULES} action={recordInvoiceExpenseAction} className="space-y-3">
             <input type="hidden" name="returnTo" value={`/ap/invoices/${invoice.id}`} />
             <input type="hidden" name="supplierId" value={invoice.supplierId} />
             <input type="hidden" name="supplierInvoiceId" value={invoice.id} />
             <input type="hidden" name="storeId" value={invoice.storeId} />
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Category">
-                <Select name="categoryId" required defaultValue="" className="w-full">
+              <Field label="Category" rule={INVOICE_EXPENSE_RULES.categoryId}>
+                <Select {...nativeAttrs(INVOICE_EXPENSE_RULES.categoryId)} defaultValue="" className="w-full">
                   <option value="" disabled>Select…</option>
                   {/* ⭐ T-229 slice 2 — active only: this select adds a NEW line. The same
                       `categories` list still labels the EXISTING lines above, retired ones
@@ -530,8 +538,8 @@ return (
                   })}
                 </Select>
               </Field>
-              <Field label="Particulars">
-                <Input name="particulars" required className="w-full" />
+              <Field label="Particulars" rule={INVOICE_EXPENSE_RULES.particulars}>
+                <Input {...nativeAttrs(INVOICE_EXPENSE_RULES.particulars)} className="w-full" />
               </Field>
             </div>
             <div>
@@ -559,22 +567,22 @@ return (
             <Button type="submit" variant="secondary">
               Record expense
             </Button>
-          </form>
+          </CheckedForm>
         </section>
       )}
 
       {invoice.status !== 'voided' && (
-        <form action={voidInvoiceAction} className="flex flex-wrap items-end gap-3 rounded-lg border border-danger p-4 text-sm gap-y-2">
+        <CheckedForm rules={INVOICE_VOID_RULES} action={voidInvoiceAction} className="flex flex-wrap items-end gap-3 rounded-lg border border-danger p-4 text-sm gap-y-2">
           <input type="hidden" name="invoiceId" value={invoice.id} />
-          <Field label="Void reason">
-            <Input name="reason" required className="w-full" />
+          <Field label="Void reason" rule={INVOICE_VOID_RULES.reason}>
+            <Input {...nativeAttrs(INVOICE_VOID_RULES.reason)} className="w-full" />
           </Field>
           <ConfirmDestructive
             tier="admin-pin"
             label="Void invoice"
             consequence="Voids this invoice and reverses every linked expense. An administrator must approve with their own PIN."
           />
-        </form>
+        </CheckedForm>
       )}
     </Page>
   );
@@ -583,13 +591,21 @@ return (
 // The three number boxes stay raw <input>s: t343-s5-5t-number-boxes reads their source text. Kit field tokens.
 const FIELD = 'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
+function Field({ label, hint, rule, children }: { label: string; hint?: string; rule?: FieldRule; children: React.ReactNode }) {
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }
 

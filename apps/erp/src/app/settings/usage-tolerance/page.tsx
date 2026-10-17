@@ -5,7 +5,9 @@ import { percentOf, toleranceView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { Button, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { SETTINGS_ITEM_TOLERANCE_RULES, SETTINGS_ORG_TOLERANCE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Usage tolerance — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -44,15 +46,19 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium">Whole organisation: {percentOf(view.org)}</h2>
-        <form action={setOrgUsageToleranceAction} className="mt-3 flex flex-wrap items-end gap-3">
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Tolerance, as a fraction (0.10 is 10%)</span>
-            <Input name="tolerance" defaultValue={view.org} inputMode="decimal" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
-          </label>
+        <CheckedForm rules={SETTINGS_ORG_TOLERANCE_RULES} action={setOrgUsageToleranceAction} className="mt-3 flex flex-wrap items-end gap-3">
+          <Field label="Tolerance, as a fraction (0.10 is 10%)" rule={SETTINGS_ORG_TOLERANCE_RULES.tolerance} className="text-sm">
+            <Input
+              {...nativeAttrs(SETTINGS_ORG_TOLERANCE_RULES.tolerance)}
+              defaultValue={view.org}
+              inputMode="decimal"
+              className="w-full sm:w-auto sm:min-w-48 sm:flex-1"
+            />
+          </Field>
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -60,7 +66,7 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
         <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
           Leave the box empty to remove an item&apos;s own setting, so the organisation-wide one applies to it again.
         </p>
-        <form action={setItemUsageToleranceAction} className="mt-3 flex flex-wrap items-end gap-3">
+        <CheckedForm rules={SETTINGS_ITEM_TOLERANCE_RULES} action={setItemUsageToleranceAction} className="mt-3 flex flex-wrap items-end gap-3">
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Item</span>
             <Select name="itemId" defaultValue={view.items[0]?.id}>
@@ -71,14 +77,18 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
               ))}
             </Select>
           </label>
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Tolerance, as a fraction</span>
-            <Input name="tolerance" inputMode="decimal" placeholder="0.05" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
-          </label>
+          <Field label="Tolerance, as a fraction" rule={SETTINGS_ITEM_TOLERANCE_RULES.tolerance} className="text-sm">
+            <Input
+              {...nativeAttrs(SETTINGS_ITEM_TOLERANCE_RULES.tolerance)}
+              inputMode="decimal"
+              placeholder="0.05"
+              className="w-full sm:w-auto sm:min-w-48 sm:flex-1"
+            />
+          </Field>
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
         {overridden.length > 0 && (
           <ul className="mt-3 space-y-1 text-sm text-neutral-700 dark:text-neutral-300">
             {overridden.map((i) => (

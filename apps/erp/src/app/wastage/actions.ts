@@ -19,7 +19,9 @@ import {
   recordOrderWastage,
   resolveOrderWastage,
   reverseAutoCharge,
+  assertFieldRules,
 } from '@shareat/domain';
+import { WASTAGE_RECORD_RULES, WASTAGE_REVERSE_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../lib/session';
 import { withOrgPrincipal } from '../expenses/lib';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
@@ -82,6 +84,7 @@ export async function recordOrderWastageAction(fd: FormData): Promise<void> {
     .filter((a) => a.personId && a.percent);
 
   try {
+    assertFieldRules(WASTAGE_RECORD_RULES, fd);
     const salesDay = await withOrgPrincipal(actor.orgId, (tx) =>
       salesDaysRepo.findByBusinessDate(tx, actor.orgId, storeId, businessDate),
     );
@@ -191,6 +194,7 @@ export async function reverseAutoChargeAction(fd: FormData): Promise<void> {
   const reason = str(fd, 'reason');
 
   try {
+    assertFieldRules(WASTAGE_REVERSE_RULES, fd);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store. The domain call below gets the
     // record's store too, not the form's `storeId`.
     const target = await loadDestructiveTarget(actor, 'order_wastage', id, ['reverse_auto_charge']);

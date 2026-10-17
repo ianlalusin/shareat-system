@@ -12,7 +12,8 @@
 import { revalidatePath } from 'next/cache';
 import { tradeRepo } from '@shareat/db';
 import { compare, money, ZERO } from '@shareat/core/money';
-import { createTradeOrder, dispatchTradeOrder, receiveTradeOrder, setBirInvoiceNo, uploadFile, voidTradeOrder } from '@shareat/domain';
+import { assertFieldRules, createTradeOrder, dispatchTradeOrder, receiveTradeOrder, setBirInvoiceNo, uploadFile, voidTradeOrder } from '@shareat/domain';
+import { TRADE_DISPATCH_RULES, TRADE_ORDER_RULES, TRADE_RECEIVE_RULES, TRADE_VOID_RULES } from '@shareat/domain/field-rules';
 import { SHORTAGE_REASONS, type ShortageReason } from '@shareat/db/schema';
 import { peso, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
@@ -49,6 +50,7 @@ export async function createOrderAction(fd: FormData): Promise<void> {
   let orderId = '';
   let total = '';
   try {
+    assertFieldRules(TRADE_ORDER_RULES, fd);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       createTradeOrder(tx, actor, {
         storeId,
@@ -77,6 +79,7 @@ export async function dispatchOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   let message = '';
   try {
+    assertFieldRules(TRADE_DISPATCH_RULES, fd);
     // T-433 S1: a buyer who pays at the door. Blank amount = the old dispatch (billed, paid later on the customer's page).
     const payNowAmount = str(fd, 'payNowAmount');
     // ⭐ The proof is UPLOADED, never typed (same path as the customer page's collection). Upload, bill and collect share
@@ -176,6 +179,7 @@ export async function receiveOrderAction(fd: FormData): Promise<void> {
 
   let message = '';
   try {
+    assertFieldRules(TRADE_RECEIVE_RULES, fd);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       receiveTradeOrder(tx, actor, {
         orderId,
@@ -203,6 +207,7 @@ export async function voidOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   let message = '';
   try {
+    assertFieldRules(TRADE_VOID_RULES, fd);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'trade_order', orderId, ['approve_buyer', 'dispatch_branch_order']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'approve_buyer' });

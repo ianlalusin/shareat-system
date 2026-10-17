@@ -18,6 +18,7 @@
  */
 import {
   approveExpense,
+  assertFieldRules,
   createExpense,
   editExpense,
   voidExpense,
@@ -29,6 +30,7 @@ import {
   type MoneyLine,
 } from '@shareat/domain';
 import { apRepo, expensesRepo, goneSentence, refuse } from '@shareat/db';
+import { EXPENSE_CREATE_RULES, EXPENSE_VOID_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '../../lib/period-override';
 import { loadMoneyLines } from '@/lib/money-lines/load';
@@ -125,6 +127,8 @@ async function parseExpenseForm(
   actor: Actor,
   fallbackReturnTo: string,
   capabilities: readonly Capability[],
+  /** T-440: the screen's own field rules for this form, judged right AFTER the gate (never before it, T-364). */
+  judgeFields?: () => void,
 ): Promise<ParsedExpenseForm> {
   const storeId = str(formData, 'storeId');
   if (!storeId) throw new FieldError('Choose a store.', { field: 'store' });
@@ -134,6 +138,7 @@ async function parseExpenseForm(
   await withOrgPrincipal(actor.orgId, async (tx) => {
     for (const c of capabilities) await authorize(tx, actor, c, { storeId });
   });
+  judgeFields?.();
 
   const carry = carryNav(formData);
   // ⭐ Each form names where it actually lives (`/expenses/new` or `/ap/invoices/[id]`) — a
@@ -246,7 +251,9 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let parsed: ParsedExpenseForm;
   try {
-    parsed = await parseExpenseForm(formData, actor, '/expenses/new', ['create_expense']);
+    parsed = await parseExpenseForm(formData, actor, '/expenses/new', ['create_expense'], () => {
+      assertFieldRules(EXPENSE_CREATE_RULES, formData);
+    });
   } catch (err) {
     const returned = splitReturnTo(str(formData, 'returnTo'), '/expenses/new');
     return await redirectWithFlash(
@@ -365,6 +372,7 @@ export async function voidExpenseAction(formData: FormData): Promise<void> {
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'expense', expenseId, ['void_expense']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'void_expense' });
+    assertFieldRules(EXPENSE_VOID_RULES, formData);
     await withOrgPrincipal(actor.orgId, async (tx) => {
       const voided = await voidExpense(tx, actor, expenseId, reason);
       // The domain treats a second void as a harmless no-op (`created: false`). Nothing was approved or changed, so no

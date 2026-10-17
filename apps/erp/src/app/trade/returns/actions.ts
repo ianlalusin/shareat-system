@@ -9,7 +9,8 @@
  */
 import { toBusinessDate } from '@shareat/core/datetime';
 import { revalidatePath } from 'next/cache';
-import { applyCredit, recordCustomerReturn, voidCustomerReturn } from '@shareat/domain';
+import { applyCredit, assertFieldRules, recordCustomerReturn, voidCustomerReturn } from '@shareat/domain';
+import { RETURN_RECORD_RULES, RETURN_VOID_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -44,6 +45,7 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
   const keep: Nav = store ? { store } : {};
   let result: Awaited<ReturnType<typeof recordCustomerReturn>>;
   try {
+    assertFieldRules(RETURN_RECORD_RULES, fd);
     result = await withOrgPrincipal(actor.orgId, (tx) =>
       recordCustomerReturn(tx, {
         tradeOrderId,
@@ -75,6 +77,7 @@ export async function voidReturnAction(fd: FormData): Promise<void> {
   const keep: Nav = store ? { store } : {};
   let result: Awaited<ReturnType<typeof voidCustomerReturn>>;
   try {
+    assertFieldRules(RETURN_VOID_RULES, fd);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the form's `store`).
     const target = await loadDestructiveTarget(actor, 'customer_return', returnId, ['void_customer_return']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_customer_return' });

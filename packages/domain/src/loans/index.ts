@@ -16,6 +16,8 @@ import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { LOAN_ADD_RULES } from '../field-rules/loans';
 import { postEntry } from '../ledger/post-entry';
 import { authorizeOtherStores, withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -53,11 +55,11 @@ export async function createLoan(
 ): Promise<{ id: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_chart_of_accounts', {});
+    // T-440: the screen's own rules judge the boxes, AFTER the gate (T-364 order: nothing about the data is said before it).
+    // `termPeriods` may arrive as a number from a direct caller; the rule reads text.
+    assertFieldRules(LOAN_ADD_RULES, { ...input, termPeriods: String(input.termPeriods) });
     const name = input.name.trim();
     const lender = input.lenderName.trim();
-    if (!name || !lender) {
-      throw new Error('createLoan: a loan needs a name and a lender.');
-    }
     const principal = parseMoneyInput(input.principalAmount, 'createLoan: the amount agreed', 'The amount agreed');
     if (compare(principal, ZERO) <= 0) {
       throw refuse('createLoan: the amount agreed has to be greater than zero.', 'The amount agreed has to be greater than zero.');

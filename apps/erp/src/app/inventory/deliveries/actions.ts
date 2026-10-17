@@ -15,7 +15,8 @@
  */
 import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
-import { createDeliveryDocument, receiveDeliveryDocument, uploadFile } from '@shareat/domain';
+import { assertFieldRules, createDeliveryDocument, receiveDeliveryDocument, uploadFile } from '@shareat/domain';
+import { INVENTORY_DELIVERY_RULES } from '@shareat/domain/field-rules';
 import type { ShortageReason } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
@@ -148,6 +149,7 @@ export async function createDeliveryAction(fd: FormData): Promise<void> {
   let deliveryId = '';
   let warning = '';
   try {
+    assertFieldRules(INVENTORY_DELIVERY_RULES, fd);
     const photo = fd.get('proofPhoto');
     if (!(photo instanceof File) || photo.size === 0) {
       throw new Error('A photo of the paper is required — a link or a typed reference is not evidence.');

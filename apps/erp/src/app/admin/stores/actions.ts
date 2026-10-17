@@ -11,6 +11,7 @@
  * which is how DEF-180 happened.
  */
 import {
+  assertFieldRules,
   CANONICAL_POSITION_DEFAULTS,
   createStore,
   deactivateStore,
@@ -19,6 +20,7 @@ import {
   setStoreStockModel,
   updateStoreDetails,
 } from '@shareat/domain';
+import { ADMIN_STORE_CREATE_RULES, ADMIN_STORE_DETAILS_RULES, ADMIN_STORE_OPENING_DATE_RULES } from '@shareat/domain/field-rules';
 
 // Derived, never hand-typed — T-336 §1's own lesson (three documents once quoted "~8-12" and none
 // had checked it). Recomputes to 38 today; changes with the ruling, not with this file.
@@ -89,6 +91,11 @@ export async function createStoreAction(fd: FormData): Promise<void> {
   if (openingDate !== null && !storesRepo.isValidDateString(openingDate)) {
     return await redirectWithFlash('/admin/stores', {}, { error: invalidDateMessage(openingDate) });
   }
+  try {
+    assertFieldRules(ADMIN_STORE_CREATE_RULES, fd);
+  } catch (err) {
+    return await redirectWithFlash('/admin/stores', {}, { error: errorMessage(err) });
+  }
 
   let result: Awaited<ReturnType<typeof createStore>> | undefined;
   try {
@@ -134,6 +141,7 @@ export async function updateStoreAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const storeId = str(fd, 'storeId');
   try {
+    assertFieldRules(ADMIN_STORE_DETAILS_RULES, fd);
     await withOrgPrincipal(actor.orgId, (tx) =>
       updateStoreDetails(tx, actor, storeId, {
         name: str(fd, 'name'),
@@ -218,6 +226,7 @@ export async function setStoreOpeningDateAction(fd: FormData): Promise<void> {
     );
   }
   try {
+    assertFieldRules(ADMIN_STORE_OPENING_DATE_RULES, fd);
     await withOrgPrincipal(actor.orgId, (tx) =>
       setStoreOpeningDate(tx, actor, storeId, { openingDate, confirmedPlan }),
     );

@@ -4,6 +4,8 @@ import { payReimbursementAction } from './actions';
 import { canOverrideClosedMonth, listOwedAtStore, listPayFromAccounts, listPayableStores, peso } from './lib';
 import { closedMonths } from '../../../lib/period-override';
 import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { EXPENSE_REIMBURSEMENT_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
@@ -108,30 +110,27 @@ export default async function ReimbursementsPage({
                       <summary className="inline-flex min-h-[44px] cursor-pointer items-center px-1 text-sm font-medium">
                         Pay
                       </summary>
-                      <form action={payReimbursementAction} className="mt-2">
+                      <CheckedForm rules={EXPENSE_REIMBURSEMENT_RULES} action={payReimbursementAction} className="mt-2">
                         <input type="hidden" name="storeId" value={store.id} />
                         <input type="hidden" name="employeeId" value={row.employeeId} />
                         {/* Minted per render, so a double click or a replayed POST posts once. */}
                         <input type="hidden" name="payoutId" value={crypto.randomUUID()} />
                         <FormGrid>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Amount</span>
-                          <Input name="amount" required inputMode="decimal" defaultValue={row.outstanding} />
-                        </label>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Date</span>
-                          <Input name="on" type="date" required defaultValue={today} />
-                        </label>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Pay from</span>
-                          <Select name="fromMoneyAccountId" required>
+                        <Field label="Amount" rule={EXPENSE_REIMBURSEMENT_RULES.amount}>
+                          <Input {...nativeAttrs(EXPENSE_REIMBURSEMENT_RULES.amount)} defaultValue={row.outstanding} />
+                        </Field>
+                        <Field label="Date" rule={EXPENSE_REIMBURSEMENT_RULES.on}>
+                          <Input {...nativeAttrs(EXPENSE_REIMBURSEMENT_RULES.on)} type="date" defaultValue={today} />
+                        </Field>
+                        <Field label="Pay from" rule={EXPENSE_REIMBURSEMENT_RULES.fromMoneyAccountId}>
+                          <Select {...nativeAttrs(EXPENSE_REIMBURSEMENT_RULES.fromMoneyAccountId)}>
                             {accounts.map((a) => (
                               <option key={a.id} value={a.id}>
                                 {a.name}
                               </option>
                             ))}
                           </Select>
-                        </label>
+                        </Field>
                         <label className="flex flex-col gap-1">
                           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Memo (optional)</span>
                           <Input name="memo" />
@@ -145,7 +144,7 @@ export default async function ReimbursementsPage({
                           </Button>
                         </div>
                         </FormGrid>
-                      </form>
+                      </CheckedForm>
                     </details>
                   )}
                 </li>
@@ -155,5 +154,18 @@ export default async function ReimbursementsPage({
         </>
       )}
     </Page>
+  );
+}
+
+function Field({ label, rule, className, children }: { label: React.ReactNode; rule: FieldRule; className?: string; children: React.ReactNode }) {
+  // T-440: the label keeps its look; the live helper line sits OUTSIDE it (never part of the accessible name).
+  return (
+    <div className={className}>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+        {children}
+      </label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

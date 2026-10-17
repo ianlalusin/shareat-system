@@ -9,7 +9,7 @@ import { withFlash } from '@/lib/flash';
 import { Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
-import { SUPPLIER_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { SUPPLIER_ADD_RULES, SUPPLIER_INVOICE_LOG_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
@@ -131,17 +131,17 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               Pending until verified. No expense can be recorded against it before then.
             </p>
           </div>
-          <form action={recordInvoiceAction} className="space-y-3">
-            <Field label="Store">
-              <Select name="storeId" required defaultValue="" className="w-full">
+          <CheckedForm rules={SUPPLIER_INVOICE_LOG_RULES} action={recordInvoiceAction} className="space-y-3">
+            <Field label="Store" rule={SUPPLIER_INVOICE_LOG_RULES.storeId}>
+              <Select {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.storeId)} defaultValue="" className="w-full">
                 <option value="" disabled>Choose…</option>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </Select>
             </Field>
-            <Field label="Supplier">
-              <Select name="supplierId" required defaultValue="" className="w-full">
+            <Field label="Supplier" rule={SUPPLIER_INVOICE_LOG_RULES.supplierId}>
+              <Select {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.supplierId)} defaultValue="" className="w-full">
                 <option value="" disabled>Choose…</option>
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
@@ -152,23 +152,23 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               <Field label="Invoice no." hint="Optional.">
                 <Input name="invoiceNo" className="w-full" />
               </Field>
-              <Field label="Total amount">
-                <Input name="totalAmount" required placeholder="0.00" className="w-full" />
+              <Field label="Total amount" rule={SUPPLIER_INVOICE_LOG_RULES.totalAmount}>
+                <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.totalAmount)} placeholder="0.00" className="w-full" />
               </Field>
-              <Field label="Delivery fee" hint="Optional.">
-                <Input name="deliveryFee" inputMode="decimal" placeholder="0.00" className="w-full" />
+              <Field label="Delivery fee" hint="Optional." rule={SUPPLIER_INVOICE_LOG_RULES.deliveryFee}>
+                <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.deliveryFee)} placeholder="0.00" className="w-full" />
               </Field>
-              <Field label="Other fees" hint="Optional.">
-                <Input name="otherFees" inputMode="decimal" placeholder="0.00" className="w-full" />
+              <Field label="Other fees" hint="Optional." rule={SUPPLIER_INVOICE_LOG_RULES.otherFees}>
+                <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.otherFees)} placeholder="0.00" className="w-full" />
               </Field>
               <p className="col-span-2 text-xs text-neutral-500 dark:text-neutral-500">
                 Part of the total above. Both are added to the items&apos; cost; neither is a line.
               </p>
-              <Field label="Invoice date">
-                <Input type="date" name="invoiceDate" required defaultValue={today()} className="w-full" />
+              <Field label="Invoice date" rule={SUPPLIER_INVOICE_LOG_RULES.invoiceDate}>
+                <Input type="date" {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.invoiceDate)} defaultValue={today()} className="w-full" />
               </Field>
-              <Field label="Due date" hint="Leave blank to use the supplier's terms.">
-                <Input type="date" name="dueDate" className="w-full" />
+              <Field label="Due date" hint="Leave blank to use the supplier's terms." rule={SUPPLIER_INVOICE_LOG_RULES.dueDate}>
+                <Input type="date" {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.dueDate)} className="w-full" />
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -188,8 +188,8 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                   <option value="non_vat">Non-VAT</option>
                 </Select>
               </Field>
-              <Field label="VAT amount (as printed)" hint="Type the VAT shown on the paper. Only for a vatable bill.">
-                <Input name="vatAmount" inputMode="decimal" placeholder="0.00" className="w-full" />
+              <Field label="VAT amount (as printed)" hint="Type the VAT shown on the paper. Only for a vatable bill." rule={SUPPLIER_INVOICE_LOG_RULES.vatAmount}>
+                <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.vatAmount)} placeholder="0.00" className="w-full" />
               </Field>
             </div>
             <Field
@@ -200,7 +200,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               <PhotoUpload name="receiptPhoto" purpose="receipt_photo" label="Receipt photo" storeField="storeId" />
             </Field>
             <Button type="submit" variant="primary">Log invoice</Button>
-          </form>
+          </CheckedForm>
         </section>
       </div>
     </Page>

@@ -6,6 +6,7 @@
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
 import {
+  assertFieldRules,
   closeDrawingMonth,
   createOwner,
   recordContribution,
@@ -15,6 +16,13 @@ import {
   writeOffReceivable,
 } from '@shareat/domain';
 import type { DrawingLimitPeriod, PersonalExpenseTreatment } from '@shareat/db/schema';
+import {
+  OWNERS_CLOSE_MONTH_RULES,
+  OWNERS_CONTRIBUTION_RULES,
+  OWNERS_CREATE_RULES,
+  OWNERS_DRAWING_RULES,
+  OWNERS_SETTLE_RULES,
+} from '@shareat/domain/field-rules';
 import { verifyAdminApproval } from '@shareat/auth';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
@@ -31,10 +39,10 @@ export async function createOwnerAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let id = '';
   try {
+    // T-440: "Choose a store." / "Choose who this is." are now rule sentences, the same ones the screen shows live.
+    assertFieldRules(OWNERS_CREATE_RULES, formData);
     const storeId = str(formData, 'storeId');
-    if (!storeId) throw new Error('Choose a store.');
     const personId = str(formData, 'personId');
-    if (!personId) throw new Error('Choose who this is.');
     const limit = str(formData, 'drawingLimit');
     const period = str(formData, 'drawingLimitPeriod');
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
@@ -60,6 +68,7 @@ export async function contributionAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'ownerId');
   try {
+    assertFieldRules(OWNERS_CONTRIBUTION_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       recordContribution(tx, actor, {
         ownerId: id,
@@ -79,6 +88,7 @@ export async function drawingAction(formData: FormData): Promise<void> {
   const id = str(formData, 'ownerId');
   let message = 'Drawn. Equity is down by that much.';
   try {
+    assertFieldRules(OWNERS_DRAWING_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       recordDrawing(tx, actor, {
         ownerId: id,
@@ -103,6 +113,7 @@ export async function settleAction(formData: FormData): Promise<void> {
   const amount = str(formData, 'amount');
   let message = '';
   try {
+    assertFieldRules(OWNERS_SETTLE_RULES, formData);
     if (how === 'cash') {
       const result = await withOrgPrincipal(actor.orgId, (tx) =>
         repayFromOwner(tx, actor, {
@@ -154,6 +165,7 @@ export async function closeMonthAction(formData: FormData): Promise<void> {
   const id = str(formData, 'ownerId');
   let message = '';
   try {
+    assertFieldRules(OWNERS_CLOSE_MONTH_RULES, formData);
     const acknowledged = str(formData, 'acknowledgedAmount');
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       closeDrawingMonth(tx, actor, {

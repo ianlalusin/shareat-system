@@ -5,7 +5,9 @@
  *
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
+import { LIABILITY_ADD_RULES, LIABILITY_CHARGE_RULES, LIABILITY_PAY_RULES } from '@shareat/domain/field-rules';
 import {
+  assertFieldRules,
   chargeLiability,
   createLiability,
   payLiability,
@@ -31,8 +33,8 @@ export async function createLiabilityAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let id = '';
   try {
+    assertFieldRules(LIABILITY_ADD_RULES, formData);
     const storeId = str(formData, 'storeId');
-    if (!storeId) throw new Error('Choose a store.');
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
       createLiability(tx, actor, {
         storeId,
@@ -57,6 +59,7 @@ export async function chargeAction(formData: FormData): Promise<void> {
   const id = str(formData, 'liabilityId');
   let message = '';
   try {
+    assertFieldRules(LIABILITY_CHARGE_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       chargeLiability(tx, actor, {
         liabilityId: id,
@@ -78,6 +81,7 @@ export async function payAction(formData: FormData): Promise<void> {
   const id = str(formData, 'liabilityId');
   let message = '';
   try {
+    assertFieldRules(LIABILITY_PAY_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       payLiability(tx, actor, {
         liabilityId: id,

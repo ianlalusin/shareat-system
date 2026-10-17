@@ -4,14 +4,16 @@ import Link from 'next/link';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../lib/page-access';
 import type { PickerOption } from '../../components/two-way-picker';
-import { createMoneyTransferAction, settleBetweenStoresAction, voidMoneyTransferAction } from './actions';
+import { voidMoneyTransferAction } from './actions';
 import { RecordTransferForm } from './RecordTransferForm';
 import { SettleBetweenStoresForm, type SettlePairOption } from './SettleBetweenStoresForm';
 import { CUSTODIAN_LABEL, listAccountBalances, listRecentTransfers, listSettlementPairs, listStores, listTransferableAccounts, peso } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, ConfirmDestructive, FlashBanner, Input } from '@/components/ui';
+import { Badge, Banner, ConfirmDestructive, Field, FlashBanner, Input } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { TRANSFER_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Money transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -184,7 +186,7 @@ export default async function MoneyTransfersPage({
             </p>
           </div>
 
-          <RecordTransferForm action={createMoneyTransferAction} options={accountOptions} today={today} />
+          <RecordTransferForm options={accountOptions} today={today} />
         </section>
       )}
 
@@ -202,7 +204,6 @@ export default async function MoneyTransfersPage({
               <p className="text-sm text-neutral-500 dark:text-neutral-400">No store owes another.</p>
             ) : (
               <SettleBetweenStoresForm
-                action={settleBetweenStoresAction}
                 pairs={settleOptions}
                 settlementId={settlementId}
                 today={today}
@@ -268,17 +269,19 @@ export default async function MoneyTransfersPage({
                     </td>
                     <td className="px-3 py-2 text-right">
                       {t.status === 'posted' && (
-                        <form action={voidMoneyTransferAction} className="flex justify-end gap-1">
+                        <CheckedForm rules={TRANSFER_VOID_RULES} action={voidMoneyTransferAction} className="flex justify-end gap-1">
                           <input type="hidden" name="moneyTransferId" value={t.id} />
                           {/* A reversal without a reason is a gap, so the reason is part of the
                               same control rather than a confirmation step that can be skipped. */}
-                          <Input name="reason" required placeholder="Reason…" className="w-28" />
+                          <Field label={<span className="sr-only">Reason</span>} rule={TRANSFER_VOID_RULES.reason}>
+                            <Input {...nativeAttrs(TRANSFER_VOID_RULES.reason)} placeholder="Reason…" className="w-28" />
+                          </Field>
                           <ConfirmDestructive
                             tier="admin-pin"
                             label="Reverse money transfer"
                             consequence="Reverses this money transfer. An administrator must approve with their own PIN."
                           />
-                        </form>
+                        </CheckedForm>
                       )}
                     </td>
                   </tr>

@@ -8,7 +8,8 @@
  */
 import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
-import { decideMapRequest, upsertPosItemMap } from '@shareat/domain';
+import { assertFieldRules, decideMapRequest, upsertPosItemMap } from '@shareat/domain';
+import { INVENTORY_POS_MAP_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -25,6 +26,7 @@ export async function upsertPosItemMapAction(fd: FormData): Promise<void> {
 
   let result: Awaited<ReturnType<typeof upsertPosItemMap>> | undefined;
   try {
+    assertFieldRules(INVENTORY_POS_MAP_RULES, fd);
     result = await withOrgPrincipal(actor.orgId, (tx) =>
       upsertPosItemMap(tx, actor, {
         orgId: actor.orgId,

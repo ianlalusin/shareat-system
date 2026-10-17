@@ -10,7 +10,9 @@
  * sees "no default" before the server refuses the line.
  */
 import { useState } from 'react';
-import { Button, FormGrid, Input, Select } from '@/components/ui';
+import { Button, Field, FormGrid, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { TRADE_ORDER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import type { CustomerOption, ItemOption, StoreOption } from './lib';
 
 interface LineDraft {
@@ -27,7 +29,8 @@ const TREATMENT_HINT: Record<string, string> = {
 };
 
 export function NewOrderForm({
-  action,
+  // T-440: the prop is the page's `createOrderAction`; it keeps that name here so the form's server action is the one the guard traces.
+  action: createOrderAction,
   stores,
   storeId,
   customers,
@@ -86,13 +89,11 @@ export function NewOrderForm({
   }
 
   return (
-    <form action={action} className="mt-3 space-y-4">
+    <CheckedForm rules={TRADE_ORDER_RULES} action={createOrderAction} className="mt-3 space-y-4">
       <FormGrid>
-        <label className={label}>
-          Selling store
+        <Field label="Selling store" rule={TRADE_ORDER_RULES.storeId}>
           <Select
-            name="storeId"
-            required
+            {...nativeAttrs(TRADE_ORDER_RULES.storeId)}
             value={sellingStoreId}
             onChange={(e) => setSellingStoreId(e.target.value)}
           >
@@ -102,12 +103,10 @@ export function NewOrderForm({
               </option>
             ))}
           </Select>
-        </label>
-        <label className={label}>
-          Customer
+        </Field>
+        <Field label="Customer" rule={TRADE_ORDER_RULES.customerId}>
           <Select
-            name="customerId"
-            required
+            {...nativeAttrs(TRADE_ORDER_RULES.customerId)}
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
           >
@@ -118,11 +117,10 @@ export function NewOrderForm({
               </option>
             ))}
           </Select>
-        </label>
-        <label className={label}>
-          Order date
-          <Input name="orderDate" type="date" required defaultValue={today} />
-        </label>
+        </Field>
+        <Field label="Order date" rule={TRADE_ORDER_RULES.orderDate}>
+          <Input type="date" {...nativeAttrs(TRADE_ORDER_RULES.orderDate)} defaultValue={today} />
+        </Field>
         <label className={label}>
           Reference (optional)
           <Input name="referenceNo" placeholder="DR-0001" />
@@ -219,14 +217,12 @@ export function NewOrderForm({
       </div>
 
       <FormGrid>
-        <label className={label}>
-          Delivery fee ₱ (optional)
-          <Input name="deliveryFee" inputMode="decimal" placeholder="0.00" className="tabular-nums" />
-        </label>
-        <label className={label}>
-          Other fees ₱ (optional)
-          <Input name="otherFees" inputMode="decimal" placeholder="0.00" className="tabular-nums" />
-        </label>
+        <Field label="Delivery fee ₱ (optional)" rule={TRADE_ORDER_RULES.deliveryFee}>
+          <Input {...nativeAttrs(TRADE_ORDER_RULES.deliveryFee)} placeholder="0.00" className="tabular-nums" />
+        </Field>
+        <Field label="Other fees ₱ (optional)" rule={TRADE_ORDER_RULES.otherFees}>
+          <Input {...nativeAttrs(TRADE_ORDER_RULES.otherFees)} placeholder="0.00" className="tabular-nums" />
+        </Field>
         <label className={label}>
           Notes (optional)
           <Input name="notes" />
@@ -236,6 +232,6 @@ export function NewOrderForm({
       <Button type="submit" variant="primary" disabled={unsupported}>
         Save draft
       </Button>
-    </form>
+    </CheckedForm>
   );
 }

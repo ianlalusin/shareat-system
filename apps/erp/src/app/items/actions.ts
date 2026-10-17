@@ -26,8 +26,10 @@ import {
   setStoreSellability,
   suggestItemCode,
   updateItem,
+  assertFieldRules,
   type ItemCodeSuggestion,
 } from '@shareat/domain';
+import { ITEMS_APPROVE_RULES, ITEMS_REJECT_RULES, ITEMS_RENAME_RULES, ITEMS_REQUEST_RULES, ITEMS_UNIT_RULES } from '@shareat/domain/field-rules';
 import { AuthorizationError, can } from '@shareat/auth';
 import type { BaseUnit, ItemKind } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
@@ -80,6 +82,10 @@ export async function requestItemAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let warning = '';
   try {
+    // T-386 I3: a request takes no code, so whatever a hand-made form posts under `code` is neither read nor judged here.
+    const asked = new FormData();
+    for (const [k, v] of formData.entries()) if (k !== 'code') asked.append(k, v);
+    assertFieldRules(ITEMS_REQUEST_RULES, asked);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       requestItem(tx, actor, {
         name: str(formData, 'name'),
@@ -110,6 +116,7 @@ export async function requestItemAction(formData: FormData): Promise<void> {
 export async function createItemAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   try {
+    assertFieldRules(ITEMS_REQUEST_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       createItem(tx, actor, {
         // T-386 R5/R7: blank or absent allocates from the name; a typed code is a super-admin override.
@@ -216,6 +223,7 @@ export async function changeItemUnitAction(formData: FormData): Promise<void> {
   const baseUnit = str(formData, 'baseUnit') as BaseUnit;
   let message = '';
   try {
+    assertFieldRules(ITEMS_UNIT_RULES, formData);
     const { changed } = await withOrgPrincipal(actor.orgId, (tx) =>
       changeItemBaseUnit(tx, actor, { itemId, baseUnit }),
     );
@@ -236,6 +244,7 @@ export async function renameItemAction(formData: FormData): Promise<void> {
   const itemId = str(formData, 'itemId');
   let message = '';
   try {
+    assertFieldRules(ITEMS_RENAME_RULES, formData);
     const { changed } = await withOrgPrincipal(actor.orgId, (tx) =>
       renameItem(tx, actor, {
         itemId,
@@ -294,6 +303,7 @@ export async function approveItemRequestAction(formData: FormData): Promise<void
   const confirmed = formData.has('baseUnit');
   let approvedCode = '';
   try {
+    assertFieldRules(ITEMS_APPROVE_RULES, formData);
     const approved = await withOrgPrincipal(actor.orgId, (tx) =>
       approveItemRequest(tx, actor, {
         requestId: str(formData, 'requestId'),
@@ -329,6 +339,7 @@ export async function suggestItemCodeAction(name: string, forItemId?: string): P
 export async function rejectItemRequestAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   try {
+    assertFieldRules(ITEMS_REJECT_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       rejectItemRequest(tx, actor, {
         requestId: str(formData, 'requestId'),

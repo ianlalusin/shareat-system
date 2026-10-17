@@ -5,6 +5,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { CheckedForm } from '@/components/forms';
+import { ADMIN_STORE_CREATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Stores — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -111,7 +113,8 @@ export default async function StoresPage({
         <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-[12px] border border-surface-border bg-surface px-4 py-2.5 text-sm font-semibold text-ink hover:bg-canvas">
           Open a branch
         </summary>
-        <form
+        <CheckedForm
+          rules={ADMIN_STORE_CREATE_RULES}
           action={createStoreAction}
           className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
         >
@@ -119,11 +122,12 @@ export default async function StoresPage({
             <Field
               label={<span className="text-neutral-600 dark:text-neutral-400">Code</span>}
               hint="The stable handle. Not editable afterwards."
+              rule={ADMIN_STORE_CREATE_RULES.code}
             >
-              <Input name="code" required maxLength={16} className="mt-1 w-full" />
+              <Input {...nativeAttrs(ADMIN_STORE_CREATE_RULES.code)} className="mt-1 w-full" />
             </Field>
-            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}>
-              <Input name="name" required className="mt-1 w-full" />
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>} rule={ADMIN_STORE_CREATE_RULES.name}>
+              <Input {...nativeAttrs(ADMIN_STORE_CREATE_RULES.name)} className="mt-1 w-full" />
             </Field>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Stock model</span>}>
               <Select name="stockModel" className="mt-1 w-full">
@@ -142,8 +146,9 @@ export default async function StoresPage({
             <Field
               label={<span className="text-neutral-600 dark:text-neutral-400">Opening date</span>}
               hint="Leave blank if it has not opened. The first day this store trades."
+              rule={ADMIN_STORE_CREATE_RULES.openingDate}
             >
-              <Input type="date" name="openingDate" className="mt-1 w-full" />
+              <Input type="date" {...nativeAttrs(ADMIN_STORE_CREATE_RULES.openingDate)} className="mt-1 w-full" />
             </Field>
             <Field
               span="full"
@@ -153,8 +158,9 @@ export default async function StoresPage({
                 </span>
               }
               hint="A store that pools cash must name the ceiling that bounds it. The database refuses the unsafe combination; this field is where you satisfy it."
+              rule={ADMIN_STORE_CREATE_RULES.unremittedCeiling}
             >
-              <Input name="unremittedCeiling" inputMode="decimal" placeholder="e.g. 20000.00" className="mt-1 w-full" />
+              <Input {...nativeAttrs(ADMIN_STORE_CREATE_RULES.unremittedCeiling)} placeholder="e.g. 20000.00" className="mt-1 w-full" />
               {/* ⚠️ The form does not enforce this pairing — the database does. Disabling a button
                   client-side would be help, not enforcement (bible §2 rule 7). */}
             </Field>
@@ -164,7 +170,7 @@ export default async function StoresPage({
               Open branch
             </Button>
           </div>
-        </form>
+        </CheckedForm>
       </details>
     </Page>
   );

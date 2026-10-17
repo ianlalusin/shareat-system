@@ -7,12 +7,14 @@
  * protects one caller.
  */
 import {
+  assertFieldRules,
   createRecurringTemplate,
   deleteRecurringTemplate,
   setRecurringTemplateStatus,
   updateRecurringTemplate,
 } from '@shareat/domain';
 import type { RecurringInterval } from '@shareat/db/schema';
+import { RECURRING_TEMPLATE_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -30,6 +32,7 @@ export async function createTemplateAction(formData: FormData): Promise<void> {
   const storeId = str(formData, 'storeId');
   let message = '';
   try {
+    assertFieldRules(RECURRING_TEMPLATE_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       createRecurringTemplate(tx, actor, {
         storeId,
@@ -59,6 +62,7 @@ export async function updateTemplateAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const storeId = str(formData, 'storeId');
   try {
+    assertFieldRules(RECURRING_TEMPLATE_RULES, formData);
     const interval = str(formData, 'interval');
     await withOrgPrincipal(actor.orgId, (tx) =>
       updateRecurringTemplate(tx, actor, {

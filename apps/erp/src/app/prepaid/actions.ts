@@ -17,6 +17,8 @@ import {
 import type { PrepaidCategory } from '@shareat/db';
 import { compare, ZERO } from '@shareat/core/money';
 import { withOrgPrincipal } from './lib';
+import { PREPAID_MONTH_REVERSE_RULES, PREPAID_RELEASE_RULES, PREPAID_WRITE_OFF_RULES } from '@shareat/domain/field-rules';
+import { assertFieldRules } from '@shareat/domain';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
@@ -33,7 +35,6 @@ export async function createPrepaidItemAction(formData: FormData): Promise<void>
   let id = '';
   try {
     const storeId = str(formData, 'storeId');
-    if (!storeId) throw new Error('Choose a store.');
     // T-351 / DEF-481 — the raw string, unparsed: `createPrepaidItem` parses it AFTER
     // `authorize()`, in the domain (`whole-number-input.ts`'s `parseWholeNumberInput`).
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
@@ -63,6 +64,7 @@ export async function amortiseAction(formData: FormData): Promise<void> {
   const id = str(formData, 'prepaidItemId');
   let summary = '';
   try {
+    assertFieldRules(PREPAID_RELEASE_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       amortisePrepaidItem(tx, actor, {
         prepaidItemId: id,
@@ -105,7 +107,7 @@ export async function reverseMonthAction(formData: FormData): Promise<void> {
   const period = str(formData, 'period');
   try {
     const reason = str(formData, 'reason');
-    if (!reason) throw new Error('Say why this month is being reversed.');
+    assertFieldRules(PREPAID_MONTH_REVERSE_RULES, formData);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'prepaid_item', id, ['run_amortisation']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'run_amortisation' });
@@ -132,6 +134,7 @@ export async function writeOffAction(formData: FormData): Promise<void> {
   const refundAccountCode = str(formData, 'refundAccountCode');
   const writtenOffOn = str(formData, 'writtenOffOn');
   try {
+    assertFieldRules(PREPAID_WRITE_OFF_RULES, formData);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'prepaid_item', id, ['manage_prepaid_items']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'manage_prepaid_items' });

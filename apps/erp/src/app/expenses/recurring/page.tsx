@@ -27,7 +27,8 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
 import { RECURRING_TEMPLATE_EDIT } from './typed-forms';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
+import { RECURRING_TEMPLATE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Recurring expenses — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -214,7 +215,6 @@ export default async function RecurringExpensesPage({
                         </summary>
                         <div className="mt-2 space-y-2">
                           <TemplateForm
-                            action={updateTemplateAction}
                             storeId={storeId}
                             templateId={t.id}
                             cats={cats}
@@ -269,7 +269,6 @@ export default async function RecurringExpensesPage({
               statutory liabilities; a remittance debits a liability and is not an expense.
             </p>
             <TemplateForm
-              action={createTemplateAction}
               storeId={storeId}
               cats={cats}
               accounts={accounts}
@@ -299,7 +298,6 @@ interface TemplateDefaults {
 }
 
 function TemplateForm({
-  action,
   storeId,
   templateId,
   cats,
@@ -309,7 +307,6 @@ function TemplateForm({
   submitLabel,
   typed,
 }: {
-  action: (formData: FormData) => Promise<void>;
   storeId: string;
   templateId?: string;
   cats: { id: string; category: string; group: string; accountCode: string | null }[];
@@ -320,117 +317,9 @@ function TemplateForm({
   /** T-389: the typing of a refused save of THIS template, or the too-long notice. */
   typed?: TypedView | null;
 }) {
-  const fields = (
-    <div className="space-y-3">
-    <FormGrid>
-      <Field label="Name" hint="What a person calls it — “Lipa branch rent”.">
-        <Input name="name" required defaultValue={defaults?.name ?? ''} className="w-full" />
-      </Field>
-      <Field
-        label="Supplier"
-        hint="Who the bill comes from. The job records an invoice against them on the due date, so a template without one cannot draft."
-      >
-        <select name="supplierId" required defaultValue={defaults?.supplierId ?? ''} className={`${INPUT} w-full`}>
-          <option value="" disabled>
-            Choose…
-          </option>
-          {suppliers.map((sup) => (
-            <option key={sup.id} value={sup.id}>
-              {sup.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Category">
-        <select name="categoryId" required defaultValue={defaults?.categoryId ?? ''} className={`${INPUT} w-full`}>
-          <option value="" disabled>
-            Choose…
-          </option>
-          {cats.map((c) => (
-            <option key={c.id} value={c.id} disabled={!c.accountCode}>
-              {c.group} — {c.category}
-              {!c.accountCode ? ' (unmapped — cannot post)' : ''}
-            </option>
-          ))}
-        </select>
-      </Field>
-    </FormGrid>
-
-    <FormGrid>
-      <Field label="Default amount">
-        <Input
-          name="defaultAmount"
-          required
-          inputMode="decimal"
-          defaultValue={defaults?.defaultAmount ?? ''}
-          placeholder="0.00"
-          className="w-full text-right"
-        />
-      </Field>
-      <Field label="How often">
-        <select name="interval" defaultValue={defaults?.interval ?? 'monthly'} className={`${INPUT} w-full`}>
-          {RECURRING_INTERVALS.map((i) => (
-            <option key={i} value={i}>
-              {INTERVAL_LABEL[i] ?? i}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field
-        label="On which day"
-        hint="Day of the month (1–31) — or day of the week (0 = Sunday) for weekly and fortnightly. 29–31 clamp to the month end."
-      >
-        <Input
-          name="anchorDay"
-          required
-          inputMode="numeric"
-          defaultValue={defaults?.anchorDay ?? 1}
-          className="w-full text-right"
-        />
-      </Field>
-    </FormGrid>
-
-    {!templateId && (
-      <Field
-        label="Starts from"
-        hint="The first period this bill applies to. A past date makes the nightly job write one catch-up draft for every due date since then (up to 12 a night, never paid). A future date waits until it comes."
-      >
-        <Input name="startsOn" type="date" defaultValue={today()} className="w-full" />
-      </Field>
-    )}
-
-    <Field label="Paid from" hint="Optional — whatever this produces can name a different account.">
-      <select
-        name="defaultMoneyAccountId"
-        defaultValue={defaults?.defaultMoneyAccountId ?? ''}
-        className={`${INPUT} w-full`}
-      >
-        <option value="">Not stated</option>
-        {accounts.map((a) => (
-          <option key={a.id} value={a.id}>
-            {a.name} ({a.custodian})
-          </option>
-        ))}
-      </select>
-    </Field>
-
-    {/* ⛔ v1's `payment-routing.ts` exists because a scheduled payment could drift onto the till:
-        "a recurring/scheduled payment must never silently draw from the cashier till." Here it
-        cannot drift — it can only be chosen, on purpose, with this box. */}
-    <label className="flex items-start gap-2 text-sm">
-      <input type="checkbox" name="tillIsDeliberate" defaultChecked={defaults?.tillIsDeliberate ?? false} className="mt-1" />
-      <span>
-        Yes, really pay this from the <strong>cashier till</strong>
-        <span className="block text-xs text-neutral-500">
-          The till is the day&rsquo;s operating drawer. A bill that comes out of it leaves the day
-          short with nothing on the sales report naming why — so it needs saying out loud, and it
-          is recorded that somebody did.
-        </span>
-      </span>
-    </label>
-    </div>
-  );
   // An existing template is locked until Edit (T-384 L1); a new one is an add form and ends in Save.
+  // ⚠️ The fields are written out in BOTH branches on purpose: the live-check guard (T-440 G2) requires each control to sit
+  // lexically inside the form that owns its rule set, so one shared `fields` constant would be invisible to it.
   if (templateId) {
     return (
       <EditableRecord
@@ -438,28 +327,238 @@ function TemplateForm({
         label={defaults?.name ?? 'template'}
         hidden={{ storeId, templateId }}
         typed={typed ?? null}
+        rules={RECURRING_TEMPLATE_RULES}
       >
-        {fields}
+        <div className="space-y-3">
+        <FormGrid>
+          <Field label="Name" hint="What a person calls it — “Lipa branch rent”." rule={RECURRING_TEMPLATE_RULES.name}>
+            <Input {...nativeAttrs(RECURRING_TEMPLATE_RULES.name)} defaultValue={defaults?.name ?? ''} className="w-full" />
+          </Field>
+          <Field
+            label="Supplier"
+            hint="Who the bill comes from. The job records an invoice against them on the due date, so a template without one cannot draft."
+            rule={RECURRING_TEMPLATE_RULES.supplierId}
+          >
+            <select {...nativeAttrs(RECURRING_TEMPLATE_RULES.supplierId)} defaultValue={defaults?.supplierId ?? ''} className={`${INPUT} w-full`}>
+              <option value="" disabled>
+                Choose…
+              </option>
+              {suppliers.map((sup) => (
+                <option key={sup.id} value={sup.id}>
+                  {sup.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Category" rule={RECURRING_TEMPLATE_RULES.categoryId}>
+            <select {...nativeAttrs(RECURRING_TEMPLATE_RULES.categoryId)} defaultValue={defaults?.categoryId ?? ''} className={`${INPUT} w-full`}>
+              <option value="" disabled>
+                Choose…
+              </option>
+              {cats.map((c) => (
+                <option key={c.id} value={c.id} disabled={!c.accountCode}>
+                  {c.group} — {c.category}
+                  {!c.accountCode ? ' (unmapped — cannot post)' : ''}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </FormGrid>
+
+        <FormGrid>
+          <Field label="Default amount" rule={RECURRING_TEMPLATE_RULES.defaultAmount}>
+            <Input
+              {...nativeAttrs(RECURRING_TEMPLATE_RULES.defaultAmount)}
+              defaultValue={defaults?.defaultAmount ?? ''}
+              placeholder="0.00"
+              className="w-full text-right"
+            />
+          </Field>
+          <Field label="How often">
+            <select name="interval" defaultValue={defaults?.interval ?? 'monthly'} className={`${INPUT} w-full`}>
+              {RECURRING_INTERVALS.map((i) => (
+                <option key={i} value={i}>
+                  {INTERVAL_LABEL[i] ?? i}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="On which day"
+            hint="Day of the month (1–31) — or day of the week (0 = Sunday) for weekly and fortnightly. 29–31 clamp to the month end."
+            rule={RECURRING_TEMPLATE_RULES.anchorDay}
+          >
+            <Input
+              {...nativeAttrs(RECURRING_TEMPLATE_RULES.anchorDay)}
+              defaultValue={defaults?.anchorDay ?? 1}
+              className="w-full text-right"
+            />
+          </Field>
+        </FormGrid>
+
+        <Field label="Paid from" hint="Optional — whatever this produces can name a different account.">
+          <select
+            name="defaultMoneyAccountId"
+            defaultValue={defaults?.defaultMoneyAccountId ?? ''}
+            className={`${INPUT} w-full`}
+          >
+            <option value="">Not stated</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.custodian})
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        {/* ⛔ v1's `payment-routing.ts` exists because a scheduled payment could drift onto the till:
+            "a recurring/scheduled payment must never silently draw from the cashier till." Here it
+            cannot drift — it can only be chosen, on purpose, with this box. */}
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="tillIsDeliberate" defaultChecked={defaults?.tillIsDeliberate ?? false} className="mt-1" />
+          <span>
+            Yes, really pay this from the <strong>cashier till</strong>
+            <span className="block text-xs text-neutral-500">
+              The till is the day&rsquo;s operating drawer. A bill that comes out of it leaves the day
+              short with nothing on the sales report naming why — so it needs saying out loud, and it
+              is recorded that somebody did.
+            </span>
+          </span>
+        </label>
+        </div>
+
       </EditableRecord>
     );
   }
   return (
-    <form action={action} className="space-y-3">
+    <CheckedForm rules={RECURRING_TEMPLATE_RULES} action={createTemplateAction} className="space-y-3">
       <input type="hidden" name="storeId" value={storeId} />
-      {fields}
+        <div className="space-y-3">
+        <FormGrid>
+          <Field label="Name" hint="What a person calls it — “Lipa branch rent”." rule={RECURRING_TEMPLATE_RULES.name}>
+            <Input {...nativeAttrs(RECURRING_TEMPLATE_RULES.name)} defaultValue="" className="w-full" />
+          </Field>
+          <Field
+            label="Supplier"
+            hint="Who the bill comes from. The job records an invoice against them on the due date, so a template without one cannot draft."
+            rule={RECURRING_TEMPLATE_RULES.supplierId}
+          >
+            <select {...nativeAttrs(RECURRING_TEMPLATE_RULES.supplierId)} defaultValue="" className={`${INPUT} w-full`}>
+              <option value="" disabled>
+                Choose…
+              </option>
+              {suppliers.map((sup) => (
+                <option key={sup.id} value={sup.id}>
+                  {sup.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Category" rule={RECURRING_TEMPLATE_RULES.categoryId}>
+            <select {...nativeAttrs(RECURRING_TEMPLATE_RULES.categoryId)} defaultValue="" className={`${INPUT} w-full`}>
+              <option value="" disabled>
+                Choose…
+              </option>
+              {cats.map((c) => (
+                <option key={c.id} value={c.id} disabled={!c.accountCode}>
+                  {c.group} — {c.category}
+                  {!c.accountCode ? ' (unmapped — cannot post)' : ''}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </FormGrid>
+
+        <FormGrid>
+          <Field label="Default amount" rule={RECURRING_TEMPLATE_RULES.defaultAmount}>
+            <Input
+              {...nativeAttrs(RECURRING_TEMPLATE_RULES.defaultAmount)}
+                  placeholder="0.00"
+              className="w-full text-right"
+            />
+          </Field>
+          <Field label="How often">
+            <select name="interval" defaultValue="monthly" className={`${INPUT} w-full`}>
+              {RECURRING_INTERVALS.map((i) => (
+                <option key={i} value={i}>
+                  {INTERVAL_LABEL[i] ?? i}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="On which day"
+            hint="Day of the month (1–31) — or day of the week (0 = Sunday) for weekly and fortnightly. 29–31 clamp to the month end."
+            rule={RECURRING_TEMPLATE_RULES.anchorDay}
+          >
+            <Input
+              {...nativeAttrs(RECURRING_TEMPLATE_RULES.anchorDay)}
+              defaultValue={1}
+              className="w-full text-right"
+            />
+          </Field>
+        </FormGrid>
+
+        <Field
+          label="Starts from"
+          hint="The first period this bill applies to. A past date makes the nightly job write one catch-up draft for every due date since then (up to 12 a night, never paid). A future date waits until it comes."
+          rule={RECURRING_TEMPLATE_RULES.startsOn}
+        >
+          <Input {...nativeAttrs(RECURRING_TEMPLATE_RULES.startsOn)} type="date" defaultValue={today()} className="w-full" />
+        </Field>
+
+        <Field label="Paid from" hint="Optional — whatever this produces can name a different account.">
+          <select
+            name="defaultMoneyAccountId"
+            defaultValue=""
+            className={`${INPUT} w-full`}
+          >
+            <option value="">Not stated</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.custodian})
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        {/* ⛔ v1's `payment-routing.ts` exists because a scheduled payment could drift onto the till:
+            "a recurring/scheduled payment must never silently draw from the cashier till." Here it
+            cannot drift — it can only be chosen, on purpose, with this box. */}
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="tillIsDeliberate" className="mt-1" />
+          <span>
+            Yes, really pay this from the <strong>cashier till</strong>
+            <span className="block text-xs text-neutral-500">
+              The till is the day&rsquo;s operating drawer. A bill that comes out of it leaves the day
+              short with nothing on the sales report naming why — so it needs saying out loud, and it
+              is recorded that somebody did.
+            </span>
+          </span>
+        </label>
+        </div>
+
       <Button type="submit" variant={templateId ? 'secondary' : 'primary'}>
         {submitLabel}
       </Button>
-    </form>
+    </CheckedForm>
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+function Field({ label, hint, rule, children }: { label: string; hint?: string; rule?: FieldRule; children: React.ReactNode }) {
+  const body = (
+    <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+
+    </>
+  );
+  // T-440: a ruled field keeps its label and puts the live helper line OUTSIDE it (never part of the accessible name).
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

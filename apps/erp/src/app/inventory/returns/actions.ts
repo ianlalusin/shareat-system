@@ -10,7 +10,8 @@
 import { toBusinessDate } from '@shareat/core/datetime';
 import { redirectWithFlash, type Nav } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
-import { recordReturn, refundSupplierCredit, voidReturn } from '@shareat/domain';
+import { assertFieldRules, recordReturn, refundSupplierCredit, voidReturn } from '@shareat/domain';
+import { INVENTORY_REFUND_RULES, INVENTORY_RETURN_RULES, INVENTORY_RETURN_VOID_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -39,6 +40,7 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
   const keep: Nav = storeId ? { store: storeId } : {};
   let result: Awaited<ReturnType<typeof recordReturn>>;
   try {
+    assertFieldRules(INVENTORY_RETURN_RULES, fd);
     result = await withOrgPrincipal(actor.orgId, (tx) =>
       recordReturn(tx, {
         storeId,
@@ -71,6 +73,7 @@ export async function voidReturnAction(fd: FormData): Promise<void> {
   const keep: Nav = store ? { store } : {};
   let result: Awaited<ReturnType<typeof voidReturn>>;
   try {
+    assertFieldRules(INVENTORY_RETURN_VOID_RULES, fd);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the form's `store`).
     const target = await loadDestructiveTarget(actor, 'supplier_return', returnId, ['void_supplier_return']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_supplier_return' });
@@ -99,6 +102,7 @@ export async function refundCreditAction(fd: FormData): Promise<void> {
   const keep: Nav = storeId ? { store: storeId } : {};
   let result: Awaited<ReturnType<typeof refundSupplierCredit>>;
   try {
+    assertFieldRules(INVENTORY_REFUND_RULES, fd);
     result = await withOrgPrincipal(actor.orgId, (tx) =>
       refundSupplierCredit(tx, {
         storeId,

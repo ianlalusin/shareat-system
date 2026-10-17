@@ -7,7 +7,8 @@
  * `payroll/actions.ts` and `thirteenth-month/actions.ts`. A gate in a server action protects one
  * caller.
  */
-import { postSeparation, voidSeparation } from '@shareat/domain';
+import { assertFieldRules, postSeparation, voidSeparation } from '@shareat/domain';
+import { PAYROLL_SEPARATION_RULES } from '@shareat/domain/field-rules';
 import type { SeparationCause } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
@@ -27,6 +28,7 @@ export async function postSeparationAction(formData: FormData): Promise<void> {
   const employmentId = str(formData, 'employmentId');
   const separationDate = str(formData, 'separationDate');
   try {
+    assertFieldRules(PAYROLL_SEPARATION_RULES, formData);
     // T-412 Tier P: posting a separation pays out and ends the employment. An administrator's PIN, verified on the server
     // against the EMPLOYMENT's store (the record), not the form's `storeId`.
     const target = await loadDestructiveTarget(actor, 'employment', employmentId, ['run_payroll']);

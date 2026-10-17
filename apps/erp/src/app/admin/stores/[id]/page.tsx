@@ -11,7 +11,8 @@ import {
 } from '../actions';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { ADMIN_STORE_DETAILS_RULES, ADMIN_STORE_OPENING_DATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Field, Input, Textarea } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -135,10 +136,10 @@ export default async function StoreDetailPage({
         <section className="space-y-4">
           <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <h2 className="text-sm font-medium">Details</h2>
-            <EditableRecord action={updateStoreAction} label={store.name} hidden={{ storeId: store.id }} typed={typedFor(sp, STORE_DETAILS, store.id, actor.personId)}>
+            <EditableRecord action={updateStoreAction} label={store.name} hidden={{ storeId: store.id }} typed={typedFor(sp, STORE_DETAILS, store.id, actor.personId)} rules={ADMIN_STORE_DETAILS_RULES}>
               <FormGrid className="text-sm">
-                <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}>
-                  <Input name="name" defaultValue={store.name} required className="mt-1 w-full" />
+                <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>} rule={ADMIN_STORE_DETAILS_RULES.name}>
+                  <Input {...nativeAttrs(ADMIN_STORE_DETAILS_RULES.name)} defaultValue={store.name} className="mt-1 w-full" />
                 </Field>
                 <Field label={<span className="text-neutral-600 dark:text-neutral-400">Timezone</span>}>
                   <Input name="timezone" defaultValue={store.timezone} className="mt-1 w-full" />
@@ -160,8 +161,9 @@ export default async function StoreDetailPage({
                       TIN branch code <span className="text-neutral-400">— digits, e.g. 00001</span>
                     </span>
                   }
+                  rule={ADMIN_STORE_DETAILS_RULES.tinBranchCode}
                 >
-                  <Input name="tinBranchCode" defaultValue={store.tinBranchCode ?? ''} inputMode="numeric" className="mt-1 w-full tabular-nums" />
+                  <Input {...nativeAttrs(ADMIN_STORE_DETAILS_RULES.tinBranchCode)} defaultValue={store.tinBranchCode ?? ''} className="mt-1 w-full tabular-nums" />
                 </Field>
               </FormGrid>
               <p className="mt-3 text-xs text-neutral-500">
@@ -223,33 +225,36 @@ export default async function StoreDetailPage({
                   label="opening date"
                   hidden={{ storeId: store.id, ...(sp.confirm ? { confirmedPlan: sp.plan ?? '' } : {}) }}
                   typed={typedFor(sp, STORE_OPENING_DATE, store.id, actor.personId)}
+                  rules={ADMIN_STORE_OPENING_DATE_RULES}
                 >
                   <FormGrid className="text-sm">
                     <Field
                       label={<span className="text-neutral-600 dark:text-neutral-400">Opening date</span>}
                       hint="Leave blank if it has not opened. The first day this store trades."
+                      rule={ADMIN_STORE_OPENING_DATE_RULES.openingDate}
                     >
-                      <Input type="date" name="openingDate" defaultValue={sp.openingDate ?? store.openingDate ?? ''} className="mt-1 w-full" />
+                      <Input type="date" {...nativeAttrs(ADMIN_STORE_OPENING_DATE_RULES.openingDate)} defaultValue={sp.openingDate ?? store.openingDate ?? ''} className="mt-1 w-full" />
                     </Field>
                   </FormGrid>
                 </EditableRecord> 
                 ) : (
                   /* No date saved yet: an ADD, open with Save (A6 rule 1). */
-                  <form action={setStoreOpeningDateAction} className="space-y-3">
+                  <CheckedForm rules={ADMIN_STORE_OPENING_DATE_RULES} action={setStoreOpeningDateAction} className="space-y-3">
                     <input type="hidden" name="storeId" value={store.id} />
                     {sp.confirm ? <input type="hidden" name="confirmedPlan" value={sp.plan ?? ''} /> : null}
                     <FormGrid className="text-sm">
                     <Field
                       label={<span className="text-neutral-600 dark:text-neutral-400">Opening date</span>}
                       hint="Leave blank if it has not opened. The first day this store trades."
+                      rule={ADMIN_STORE_OPENING_DATE_RULES.openingDate}
                     >
-                      <Input type="date" name="openingDate" defaultValue={sp.openingDate ?? store.openingDate ?? ''} className="mt-1 w-full" />
+                      <Input type="date" {...nativeAttrs(ADMIN_STORE_OPENING_DATE_RULES.openingDate)} defaultValue={sp.openingDate ?? store.openingDate ?? ''} className="mt-1 w-full" />
                     </Field>
                   </FormGrid>
                     <Button type="submit" variant="secondary">
                       Save
                     </Button>
-                  </form>
+                  </CheckedForm>
                 )}
               </>
             )}

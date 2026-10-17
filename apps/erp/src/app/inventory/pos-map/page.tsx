@@ -5,6 +5,8 @@ import { upsertPosItemMapAction, decideMapRequestAction } from './actions';
 import { listStores, posMapScreenData, withOrgPrincipal } from './lib';
 import { Page } from '@/components/shell/Page';
 import { Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { INVENTORY_POS_MAP_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -104,14 +106,14 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
       {canEditMap && (
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium">New / edit mapping</h2>
-        <form action={upsertPosItemMapAction} className="mt-3 space-y-3">
+        <CheckedForm rules={INVENTORY_POS_MAP_RULES} action={upsertPosItemMapAction} className="mt-3 space-y-3">
           <input type="hidden" name="storeId" value={storeId} />
           <FormGrid>
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">POS item key</span>} className="text-sm">
-            <Input name="posItemKey" required className="w-full" />
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">POS item key</span>} className="text-sm" rule={INVENTORY_POS_MAP_RULES.posItemKey}>
+            <Input {...nativeAttrs(INVENTORY_POS_MAP_RULES.posItemKey)} className="w-full" />
           </Field>
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">POS item name</span>} className="text-sm">
-            <Input name="posItemName" required className="w-full" />
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">POS item name</span>} className="text-sm" rule={INVENTORY_POS_MAP_RULES.posItemName}>
+            <Input {...nativeAttrs(INVENTORY_POS_MAP_RULES.posItemName)} className="w-full" />
           </Field>
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Mode</span>} className="text-sm">
             <Select name="mode" className="w-full" defaultValue="direct">
@@ -158,7 +160,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
       )}
 

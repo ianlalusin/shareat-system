@@ -8,6 +8,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { PRICE_SET_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Price list — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -95,11 +97,11 @@ export default async function PriceListPage({
             than typing a code, so the same product cannot exist under three spellings.
           </p>
         </div>
-        <form action={setPriceAction} className="space-y-3">
+        <CheckedForm rules={PRICE_SET_RULES} action={setPriceAction} className="space-y-3">
           <input type="hidden" name="priceListId" value={list.id} />
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Item" hint="From the item master. No item? Add it under /items first.">
-              <Select name="itemId" required defaultValue="" className="w-full">
+            <Field label="Item" hint="From the item master. No item? Add it under /items first." rule={PRICE_SET_RULES.itemId}>
+              <Select {...nativeAttrs(PRICE_SET_RULES.itemId)} defaultValue="" className="w-full">
                 <option value="" disabled>
                   {allItems.length === 0 ? 'No items yet' : 'Select…'}
                 </option>
@@ -110,8 +112,8 @@ export default async function PriceListPage({
                 ))}
               </Select>
             </Field>
-            <Field label="Rate" hint="Zero is allowed — a sample is genuinely free.">
-              <input name="rate" required inputMode="decimal" className="w-full min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink" />
+            <Field label="Rate" hint="Zero is allowed — a sample is genuinely free." rule={PRICE_SET_RULES.rate}>
+              <input {...nativeAttrs(PRICE_SET_RULES.rate)} name="rate" inputMode="decimal" className="w-full min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink" />
             </Field>
             <Field label="Unit" hint="Optional.">
               <Input name="unit" placeholder="kg" className="w-full" />
@@ -120,7 +122,7 @@ export default async function PriceListPage({
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
   );
@@ -129,17 +131,27 @@ export default async function PriceListPage({
 function Field({
   label,
   hint,
+  rule,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   hint?: string;
+  rule?: FieldRule;
   children: React.ReactNode;
 }) {
-  return (
-    <label className="flex flex-col gap-1">
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

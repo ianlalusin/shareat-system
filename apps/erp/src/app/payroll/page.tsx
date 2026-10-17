@@ -18,7 +18,9 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { PAYROLL_PAY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Payroll — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -105,7 +107,7 @@ export default async function PayrollPage({
         </span>
       </div>
 
-      <form className="flex flex-wrap items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
           <span className={LABEL}>Store</span>
           <Select name="store" defaultValue={storeId} className="w-full">
@@ -403,30 +405,28 @@ export default async function PayrollPage({
                     )}
                   </td>
                   <td className="py-2">
-                    <form action={setPayRateAction} className="flex flex-wrap items-end gap-2">
+                    <CheckedForm rules={PAYROLL_PAY_RATE_RULES} action={setPayRateAction} className="flex flex-wrap items-end gap-2">
                       <input type="hidden" name="storeId" value={storeId} />
                       <input type="hidden" name="employmentId" value={r.id} />
                       <Select name="basis" defaultValue="daily" className="w-24">
                         <option value="daily">daily</option>
                         <option value="hourly">hourly</option>
                       </Select>
-                      <input
-                        name="amount"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        // raw <input>: t343-s5-5v-number-boxes.test.ts scans the source for this tag; kit field tokens by hand
-                        className="w-28 rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
-                      />
-                      <Input
-                        name="effectiveFrom"
-                        type="date"
-                        defaultValue={periodStart}
-                        className="w-40"
-                      />
+                      <Field label="Rate" rule={PAYROLL_PAY_RATE_RULES.amount}>
+                        <Input {...nativeAttrs(PAYROLL_PAY_RATE_RULES.amount)} placeholder="0.00" className="w-28" />
+                      </Field>
+                      <Field label="From" rule={PAYROLL_PAY_RATE_RULES.effectiveFrom}>
+                        <Input
+                          type="date"
+                          {...nativeAttrs(PAYROLL_PAY_RATE_RULES.effectiveFrom)}
+                          defaultValue={periodStart}
+                          className="w-40"
+                        />
+                      </Field>
                       <Button type="submit" variant="secondary">
                         Save
                       </Button>
-                    </form>
+                    </CheckedForm>
                   </td>
                 </tr>
               ))}

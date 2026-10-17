@@ -6,6 +6,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Button, FlashBanner, Input } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { PRICE_LIST_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Price lists — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -65,11 +67,10 @@ export default async function PriceListsPage({
 
       <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">New price list</h2>
-        <form action={createPriceListAction} className="space-y-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Name</span>
-            <Input name="name" required placeholder="Wholesale — meat" className="w-full" />
-          </label>
+        <CheckedForm rules={PRICE_LIST_ADD_RULES} action={createPriceListAction} className="space-y-3">
+          <Field label="Name" rule={PRICE_LIST_ADD_RULES.name}>
+            <Input {...nativeAttrs(PRICE_LIST_ADD_RULES.name)} placeholder="Wholesale — meat" className="w-full" />
+          </Field>
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
               Description
@@ -79,8 +80,21 @@ export default async function PriceListsPage({
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
+  );
+}
+
+function Field({ label, rule, children }: { label: string; rule: FieldRule; children: React.ReactNode }) {
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  return (
+    <div>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+        {children}
+      </label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

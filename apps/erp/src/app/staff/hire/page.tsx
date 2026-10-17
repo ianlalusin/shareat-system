@@ -6,6 +6,8 @@ import { positionsForStore, searchPersonsFor, staffStoresFor } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { Button, FlashBanner, FormGrid, Field, Input } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { STAFF_HIRE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -97,7 +99,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
       )}
 
       <h2 className="text-lg font-medium">Hire someone</h2>
-      <form action={hireAction} className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <CheckedForm rules={STAFF_HIRE_RULES} action={hireAction} className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <input type="hidden" name="storeId" value={storeId} />
 
         <fieldset className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
@@ -142,8 +144,8 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
               ))}
             </select>
           </Field>
-          <Field label="Start date">
-            <Input type="date" name="startedOn" required defaultValue={toBusinessDate()} className="mt-1 w-full" />
+          <Field label="Start date" rule={STAFF_HIRE_RULES.startedOn}>
+            <Input type="date" {...nativeAttrs(STAFF_HIRE_RULES.startedOn)} defaultValue={toBusinessDate()} className="mt-1 w-full" />
           </Field>
         </FormGrid>
 
@@ -181,7 +183,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
         <Button type="submit" variant="primary">
           Save
         </Button>
-      </form>
+      </CheckedForm>
     </Page>
   );
 }

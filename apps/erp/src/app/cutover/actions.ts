@@ -10,6 +10,7 @@
  */
 import { type Tx } from '@shareat/db';
 import {
+  assertFieldRules,
   addOpeningFigure,
   attestStep,
   postOpeningBalances,
@@ -18,6 +19,7 @@ import {
   valueOpeningAsset,
   valueOpeningStock,
 } from '@shareat/domain';
+import { CUTOVER_ASSET_RULES, CUTOVER_COUNT_RULES, CUTOVER_FIGURE_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
@@ -65,6 +67,7 @@ export async function recordCountAction(formData: FormData): Promise<void> {
   const locationId = str(formData, 'locationId');
   const nav = locationId ? { store: storeId, room: locationId } : { store: storeId };
   try {
+    assertFieldRules(CUTOVER_COUNT_RULES, formData);
     await recordingRefusalsFor(actor.orgId, () =>
       withOrgPrincipal(actor.orgId, (tx: Tx) =>
         recordOpeningCount(tx, actor, {
@@ -88,6 +91,7 @@ export async function recordCountAction(formData: FormData): Promise<void> {
 export async function addOpeningFigureAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   try {
+    assertFieldRules(CUTOVER_FIGURE_RULES, formData);
     await recordingRefusalsFor(actor.orgId, () =>
       withOrgPrincipal(actor.orgId, (tx: Tx) =>
         addOpeningFigure(tx, actor, {
@@ -171,6 +175,7 @@ export async function valueOpeningAssetAction(formData: FormData): Promise<void>
   const actor = await requireActor();
   const life = str(formData, 'remainingLifeMonths');
   try {
+    assertFieldRules(CUTOVER_ASSET_RULES, formData);
     await recordingRefusalsFor(actor.orgId, () =>
       withOrgPrincipal(actor.orgId, (tx: Tx) =>
         valueOpeningAsset(tx, actor, {

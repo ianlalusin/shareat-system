@@ -32,6 +32,8 @@
 import { posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SETTINGS_SALES_CHANNEL_RULES } from '../field-rules/settings';
 
 /** Store-scoped, manager ✅ — `packages/auth/src/capabilities.ts:206`, `:492`. */
 const CAPABILITY = 'manage_store_settings' as const;
@@ -122,9 +124,8 @@ async function validateWiring(
 }
 
 function cleanName(raw: string): string {
-  const name = raw.trim();
-  if (!name) throw new Error('A sales channel needs a name.');
-  return name;
+  // T-440: the rule (and its sentence) is the one the settings screen shows live (field-rules/settings.ts).
+  return assertFieldRules(SETTINGS_SALES_CHANNEL_RULES, { name: raw }).name ?? '';
 }
 
 /**

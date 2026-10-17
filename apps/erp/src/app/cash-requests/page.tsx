@@ -8,6 +8,8 @@ import {
   peso,
   today,
 } from './lib';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { CASH_REQUEST_CREATE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
@@ -153,10 +155,10 @@ export default async function CashRequestsPage({
           </p>
         </div>
 
-        <form action={createRequestAction} className="space-y-4">
+        <CheckedForm rules={CASH_REQUEST_CREATE_RULES} action={createRequestAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Store">
-              <Select id="store" name="storeId" required defaultValue="" invalid={sp.field === 'store'} className="w-full">
+            <Field label="Store" rule={CASH_REQUEST_CREATE_RULES.storeId}>
+              <Select id="store" {...nativeAttrs(CASH_REQUEST_CREATE_RULES.storeId)} defaultValue="" invalid={sp.field === 'store'} className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -170,8 +172,9 @@ export default async function CashRequestsPage({
             <Field
               label="Who holds the money"
               hint="The person the float is charged to — a shortage lands on them by name."
+              rule={CASH_REQUEST_CREATE_RULES.requestedFor}
             >
-              <Select id="requested-for" name="requestedFor" required defaultValue="" invalid={sp.field === 'requested-for'} className="w-full">
+              <Select id="requested-for" {...nativeAttrs(CASH_REQUEST_CREATE_RULES.requestedFor)} defaultValue="" invalid={sp.field === 'requested-for'} className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -182,25 +185,22 @@ export default async function CashRequestsPage({
                 ))}
               </Select>
             </Field>
-            <Field label="What it is for">
+            <Field label="What it is for" rule={CASH_REQUEST_CREATE_RULES.purpose}>
               <Input
-                name="purpose"
-                required
+                {...nativeAttrs(CASH_REQUEST_CREATE_RULES.purpose)}
                 placeholder="Market run, permit fee…"
                 className="w-full"
               />
             </Field>
-            <Field label="Amount">
+            <Field label="Amount" rule={CASH_REQUEST_CREATE_RULES.amount}>
               {/* raw <input>: t343-s5-5v-number-boxes.test.ts scans the source for this tag */}
               <input
-                name="amount"
-                required
-                inputMode="decimal"
+                {...nativeAttrs(CASH_REQUEST_CREATE_RULES.amount)}
                 className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
               />
             </Field>
-            <Field label="Date">
-              <Input name="on" type="date" required defaultValue={today()} className="w-full" />
+            <Field label="Date" rule={CASH_REQUEST_CREATE_RULES.on}>
+              <Input {...nativeAttrs(CASH_REQUEST_CREATE_RULES.on)} type="date" defaultValue={today()} className="w-full" />
             </Field>
             <Field label="Notes" hint="Optional.">
               <Input name="notes" className="w-full" />
@@ -209,26 +209,26 @@ export default async function CashRequestsPage({
           <Button type="submit" variant="primary">
             Submit request
           </Button>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
   );
 }
 
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+function Field({ label, hint, rule, children }: { label: string; hint?: string; rule?: FieldRule; children: React.ReactNode }) {
+  const body = (
+    <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    
+    </>
+  );
+  // T-440: a ruled field keeps its label and puts the live helper line OUTSIDE it (never part of the accessible name).
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

@@ -23,7 +23,9 @@ import { currentPeriod } from '../fixed-assets/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { Button, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { FINDINGS_MISSED_MONTH_RULES, FINDINGS_MISSING_PERIOD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Findings — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -312,20 +314,17 @@ function MissingPeriodsSection({
               <span className="font-medium">{p.targetStatus}</span>
             </div>
             {canCreate ? (
-              <form action={createMissingClosedPeriodAction} className="flex flex-wrap items-end gap-2">
+              <CheckedForm rules={FINDINGS_MISSING_PERIOD_RULES} action={createMissingClosedPeriodAction} className="flex flex-wrap items-end gap-2">
                 <input type="hidden" name="period" value={period} />
                 <input type="hidden" name="startsOn" value={p.startsOn} />
                 <input type="hidden" name="endsOn" value={p.endsOn} />
-                <Input
-                  name="reason"
-                  required
-                  placeholder="Why is this being created now?"
-                  className="w-full min-w-0 flex-1 basis-72"
-                />
+                <Field label="Reason" rule={FINDINGS_MISSING_PERIOD_RULES.reason} className="w-full flex-1 basis-72">
+                  <Input {...nativeAttrs(FINDINGS_MISSING_PERIOD_RULES.reason)} placeholder="Why is this being created now?" className="w-full min-w-0" />
+                </Field>
                 <Button type="submit" variant="secondary">
                   Create the missing month
                 </Button>
-              </form>
+              </CheckedForm>
             ) : (
               <p className="text-xs text-neutral-500">Only an administrator can create a missing month.</p>
             )}
@@ -376,21 +375,18 @@ function ScheduledChargesMissedSection({
               <span className="font-medium">{r.subjectName}</span> — {r.belongsToPeriod} —{' '}
               {peso(Number(r.amount))} — will be booked in {currentPeriod()}
             </div>
-            <form action={bookMissedMonthAction} className="flex flex-wrap items-end gap-2">
+            <CheckedForm rules={FINDINGS_MISSED_MONTH_RULES} action={bookMissedMonthAction} className="flex flex-wrap items-end gap-2">
               <input type="hidden" name="period" value={period} />
               <input type="hidden" name="schedule" value={r.schedule} />
               <input type="hidden" name="subjectId" value={r.subjectId} />
               <input type="hidden" name="belongsToPeriod" value={r.belongsToPeriod} />
-              <Input
-                name="reason"
-                required
-                placeholder="Why is this being booked now?"
-                className="w-full min-w-0 flex-1 basis-72"
-              />
+              <Field label="Reason" rule={FINDINGS_MISSED_MONTH_RULES.reason} className="w-full flex-1 basis-72">
+                <Input {...nativeAttrs(FINDINGS_MISSED_MONTH_RULES.reason)} placeholder="Why is this being booked now?" className="w-full min-w-0" />
+              </Field>
               <Button type="submit" variant="secondary">
                 Book it
               </Button>
-            </form>
+            </CheckedForm>
           </div>
         ))
       )}

@@ -12,12 +12,14 @@
  * `tests/unit/no-client-supplied-actor.test.ts` fails the build if that ever changes.
  */
 import {
+  assertFieldRules,
   previewChannelSettlement,
   recordChannelSettlement,
   setChannelPayoutDestination,
   voidChannelSettlement,
   type SettlementPreview,
 } from '@shareat/domain';
+import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_RECORD_RULES, CHANNEL_SETTLEMENT_VOID_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -110,6 +112,8 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
   const actor = await requireActor();
 
   try {
+    // T-440: the same rule set the screen shows (gross, net, loan amount, reference, date).
+    assertFieldRules(CHANNEL_SETTLEMENT_RECORD_RULES, formData);
     const channelId = str(formData, 'channelId');
     const salesDayId = str(formData, 'salesDayId');
     if (!channelId) throw new Error('Choose the channel this payout is for.');
@@ -171,10 +175,8 @@ export async function voidSettlementAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
 
   try {
+    assertFieldRules(CHANNEL_SETTLEMENT_VOID_RULES, formData);
     const reason = str(formData, 'reason');
-    if (!reason) {
-      throw new Error('Say why this settlement is being voided — a reversal with no reason is a gap.');
-    }
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const settlementId = str(formData, 'settlementId');
     const target = await loadDestructiveTarget(actor, 'channel_settlement', settlementId, ['record_ar_collection']);
@@ -204,8 +206,8 @@ export async function setPayoutDestinationAction(formData: FormData): Promise<vo
 
   try {
     channelId = str(formData, 'channelId');
+    assertFieldRules(CHANNEL_PAYOUT_DESTINATION_RULES, formData);
     const moneyAccountId = str(formData, 'moneyAccountId');
-    if (!moneyAccountId) throw new Error('Choose the account this channel pays into.');
     await withOrgPrincipal(actor.orgId, (tx) => setChannelPayoutDestination(tx, actor, { channelId, moneyAccountId }));
   } catch (err) {
     return await redirectWithFlash('/channel-settlements', {}, { error: errorMessage(err), typed: keepTyping(formData, PAYOUT_DESTINATION_EDIT, str(formData, 'channelId'), { actorId: actor.personId }) });

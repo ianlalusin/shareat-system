@@ -11,7 +11,8 @@
  * what makes `void_statutory_discount` being a different capability from `record_statutory_discount`
  * mean anything at all.
  */
-import { recordStatutoryDiscount, voidStatutoryDiscount } from '@shareat/domain';
+import { assertFieldRules, recordStatutoryDiscount, voidStatutoryDiscount } from '@shareat/domain';
+import { STATUTORY_DISCOUNT_RECORD_RULES, STATUTORY_DISCOUNT_VOID_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from '../expenses/lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash, type Nav } from '@/lib/flash';
@@ -61,6 +62,7 @@ export async function recordStatutoryDiscountAction(formData: FormData): Promise
   const kind = str(formData, 'kind');
 
   try {
+    assertFieldRules(STATUTORY_DISCOUNT_RECORD_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       recordStatutoryDiscount(tx, actor, {
         storeId,
@@ -89,6 +91,7 @@ export async function voidStatutoryDiscountAction(formData: FormData): Promise<v
     const discountId = str(formData, 'id');
     const target = await loadDestructiveTarget(actor, 'statutory_discount', discountId, ['void_statutory_discount']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'void_statutory_discount' });
+    assertFieldRules(STATUTORY_DISCOUNT_VOID_RULES, formData);
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await voidStatutoryDiscount(tx, actor, { id: discountId, reason: str(formData, 'voidReason') });
       await recordApproval(tx, actor, approval, { capability: 'void_statutory_discount', entityType: 'statutory_discount', entityId: discountId, storeId: target.storeId });

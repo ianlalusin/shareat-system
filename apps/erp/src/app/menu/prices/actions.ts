@@ -10,7 +10,9 @@
  * A typed time is read as Asia/Manila wall-clock (`manilaInstant`) and stored as an instant. Each action redirects for itself
  * (guard G1b: no wrapper redirects).
  */
+import { MENU_OPTION_PRICE_RULES, MENU_PRICE_RULES } from '@shareat/domain/field-rules';
 import {
+  assertFieldRules,
   cancelScheduledOffer,
   cancelScheduledOptionOffer,
   setMenuOffer,
@@ -32,6 +34,7 @@ export async function setPriceAction(fd: FormData): Promise<void> {
   if (!isUuid(storeId)) return await redirectWithFlash(PATH, {}, { error: CHOOSE_STORE });
   const scheduled = opt(fd, 'effectiveFrom') !== undefined;
   try {
+    assertFieldRules(MENU_PRICE_RULES, fd);
     const variantId = requireId(fd, 'variantId', 'Choose a variant.');
     const pricingMode = opt(fd, 'pricingMode');
     const amount = opt(fd, 'amount');
@@ -100,6 +103,8 @@ export async function setOptionPriceAction(fd: FormData): Promise<void> {
   if (!isUuid(storeId)) return await redirectWithFlash(PATH, {}, { error: CHOOSE_STORE });
   const withdrawing = str(fd, 'withdraw') === '1';
   try {
+    // Withdraw posts this form too, and a withdrawal ignores whatever is in the price box.
+    if (!withdrawing) assertFieldRules(MENU_OPTION_PRICE_RULES, fd);
     const optionValueId = requireId(fd, 'optionValueId', 'Choose an option.');
     const priceDelta = withdrawing ? null : opt(fd, 'priceDelta');
     if (priceDelta === undefined) {

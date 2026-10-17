@@ -9,12 +9,14 @@
 import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import {
+  assertFieldRules,
   createProductionDraft,
   editPostedProduction,
   postProduction,
   voidProduction,
 } from '@shareat/domain';
 import { productionRepo } from '@shareat/db';
+import { INVENTORY_PRODUCTION_RULES, INVENTORY_PRODUCTION_VOID_RULES } from '@shareat/domain/field-rules';
 import { authorize } from '@shareat/auth';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
@@ -70,6 +72,7 @@ export async function saveProductionDraftAction(fd: FormData): Promise<void> {
 
   let result: Awaited<ReturnType<typeof createProductionDraft>> | undefined;
   try {
+    assertFieldRules(INVENTORY_PRODUCTION_RULES, fd);
     result = await withOrgPrincipal(actor.orgId, async (tx) => {
       if (kind === 'cook') {
         // T-409 R4: the cook form is a recipe and a quantity made. Ingredients are never read from the form; the output item
@@ -144,6 +147,7 @@ export async function voidProductionAction(fd: FormData): Promise<void> {
 
   let result: Awaited<ReturnType<typeof voidProduction>> | undefined;
   try {
+    assertFieldRules(INVENTORY_PRODUCTION_VOID_RULES, fd);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'production_record', recordId, ['void_production']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_production' });

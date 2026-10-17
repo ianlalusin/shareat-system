@@ -9,7 +9,9 @@ import { arRepo } from '@shareat/db';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 import { logger } from '@shareat/core/logger';
 import { compare, money, ZERO } from '@shareat/core/money';
+import { CHARGE_VOID_RULES, CHARGE_WRITE_OFF_RULES, COLLECTION_RECORD_RULES, COLLECTION_VOID_RULES, CUSTOMER_ADD_RULES, CUSTOMER_RECONCILE_RULES, PRICE_LIST_ADD_RULES, PRICE_SET_RULES } from '@shareat/domain/field-rules';
 import {
+  assertFieldRules,
   createCustomer,
   createPriceList,
   reconcileCustomer,
@@ -38,6 +40,7 @@ export async function createCustomerAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let message = '';
   try {
+    assertFieldRules(CUSTOMER_ADD_RULES, formData);
     // ⭐ ONE picker on the form, split here. Offering two independent dropdowns would let someone
     // fill both, and the whole point is that a customer has at most one counterparty.
     const link = str(formData, 'counterparty');
@@ -74,7 +77,7 @@ export async function reconcileCustomerAction(formData: FormData): Promise<void>
   let message = '';
   try {
     const asOf = str(formData, 'asOf');
-    if (!asOf) throw new Error('Say which date they were verified at zero.');
+    assertFieldRules(CUSTOMER_RECONCILE_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       reconcileCustomer(tx, actor, { customerId: str(formData, 'customerId'), asOf }),
     );
@@ -166,6 +169,7 @@ export async function recordCollectionAction(formData: FormData): Promise<void> 
   let message = '';
   try {
     if (!storeId) throw new Error('Choose a store — a collection settles one store’s charges.');
+    assertFieldRules(COLLECTION_RECORD_RULES, formData);
 
     // ⛔ One row per ticked charge. The domain refuses an empty `allocations[]` citing bible
     // §16.10 (*a collection must never float unallocated*) — v1 let money arrive tied to nothing
@@ -242,7 +246,7 @@ export async function voidCollectionAction(formData: FormData): Promise<void> {
   const storeId = str(formData, 'storeId');
   try {
     const reason = str(formData, 'reason');
-    if (!reason) throw new Error('Say why this collection is being voided.');
+    assertFieldRules(COLLECTION_VOID_RULES, formData);
     // T-412 Tier P (DEF-654): an administrator's PIN, verified on the server against the RECORD's store.
     const collectionId = str(formData, 'collectionId');
     const target = await loadDestructiveTarget(actor, 'ar_collection', collectionId, ['record_ar_collection']);
@@ -268,7 +272,7 @@ export async function voidChargeAction(formData: FormData): Promise<void> {
   const storeId = str(formData, 'storeId');
   try {
     const reason = str(formData, 'reason');
-    if (!reason) throw new Error('Say why this charge is being voided.');
+    assertFieldRules(CHARGE_VOID_RULES, formData);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const chargeId = str(formData, 'chargeId');
     const target = await loadDestructiveTarget(actor, 'ar_charge', chargeId, ['approve_buyer']);
@@ -291,7 +295,7 @@ export async function writeOffChargeAction(formData: FormData): Promise<void> {
   try {
     const amount = str(formData, 'amount');
     const reason = str(formData, 'reason');
-    if (!reason) throw new Error('Say why this debt is uncollectible — a write-off without a reason is a hole.');
+    assertFieldRules(CHARGE_WRITE_OFF_RULES, formData);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the `storeId` field above,
     // which only carries the page's navigation).
     const chargeId = str(formData, 'chargeId');
@@ -323,6 +327,7 @@ export async function createPriceListAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let id = '';
   try {
+    assertFieldRules(PRICE_LIST_ADD_RULES, formData);
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
       createPriceList(tx, actor, {
         name: str(formData, 'name'),
@@ -340,6 +345,7 @@ export async function setPriceAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const priceListId = str(formData, 'priceListId');
   try {
+    assertFieldRules(PRICE_SET_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       setPrice(tx, actor, {
         priceListId,

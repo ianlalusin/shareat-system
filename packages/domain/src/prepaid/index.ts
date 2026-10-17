@@ -36,6 +36,8 @@ import {
 import { compare, isZero, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { PREPAID_ADD_RULES, PREPAID_TERM_RULES } from '../field-rules/prepaid';
 import { buildStraightLine, periodsThroughOf, type SchedulePeriod } from '../shared/straight-line';
 import { readPolicyOrRefuse } from '../fixed-assets/policy';
 import { refuse } from '../shared/refusal';
@@ -101,8 +103,9 @@ async function runCreate(
 ): Promise<{ id: string }> {
   await authorize(tx, actor, 'manage_prepaid_items', {});
 
+  // T-440: the screen's own rules judge the boxes, AFTER the gate (T-364 order). `coverageMonths` may arrive as a number from a direct caller.
+  assertFieldRules(PREPAID_ADD_RULES, { ...input, coverageMonths: String(input.coverageMonths) });
   const name = input.name.trim();
-  if (!name) throw new Error('createPrepaidItem: a prepaid item needs a name people will recognise.');
 
   // T-351 / DEF-481 — parsed here, after `authorize()`, on the VALUE (never the digit run):
   // "0012" is 12, not refused for its length.
@@ -159,6 +162,8 @@ export async function confirmPrepaidTerm(
 ): Promise<void> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_prepaid_items', {});
+    // T-440: the screen's own rules judge the boxes, after the gate.
+    assertFieldRules(PREPAID_TERM_RULES, { ...input, coverageMonths: String(input.coverageMonths) });
     // T-351 / DEF-481 — parsed here, after `authorize()`, on the VALUE (never the digit run).
     const coverageMonths = parseWholeNumberInput(input.coverageMonths, 'confirmPrepaidTerm: the coverage', 'The coverage', 1, 120, ' of months');
     const item = await prepaidRepo.getById(trx, actor.orgId, input.prepaidItemId);

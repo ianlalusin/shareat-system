@@ -9,6 +9,8 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { ACTION_LINK } from '@/components/action-link';
 import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { LIABILITY_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Liabilities — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -144,10 +146,10 @@ export default async function LiabilitiesPage({
           </p>
         </div>
 
-        <form action={createLiabilityAction} className="space-y-4">
+        <CheckedForm rules={LIABILITY_ADD_RULES} action={createLiabilityAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Store">
-              <Select name="storeId" required defaultValue="" className="w-full">
+            <Field label="Store" rule={LIABILITY_ADD_RULES.storeId}>
+              <Select {...nativeAttrs(LIABILITY_ADD_RULES.storeId)} defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -158,8 +160,8 @@ export default async function LiabilitiesPage({
                 ))}
               </Select>
             </Field>
-            <Field label="What it is">
-              <Input name="name" required placeholder="Accrued rent — January" className="w-full" />
+            <Field label="What it is" rule={LIABILITY_ADD_RULES.name}>
+              <Input {...nativeAttrs(LIABILITY_ADD_RULES.name)} placeholder="Accrued rent — January" className="w-full" />
             </Field>
             <Field label="Category">
               <Select name="category" defaultValue="other" className="w-full">
@@ -173,8 +175,9 @@ export default async function LiabilitiesPage({
             <Field
               label="Due"
               hint="Optional — but an obligation with no due date can never be reported late."
+              rule={LIABILITY_ADD_RULES.dueOn}
             >
-              <Input name="dueOn" type="date" defaultValue={today()} className="w-full" />
+              <Input type="date" {...nativeAttrs(LIABILITY_ADD_RULES.dueOn)} defaultValue={today()} className="w-full" />
             </Field>
             <Field label="Description" hint="Optional.">
               <Input name="description" className="w-full" />
@@ -186,7 +189,7 @@ export default async function LiabilitiesPage({
           <Button type="submit" variant="primary">
             Record obligation
           </Button>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
   );
@@ -195,17 +198,27 @@ export default async function LiabilitiesPage({
 function Field({
   label,
   hint,
+  rule,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   hint?: string;
+  rule?: FieldRule;
   children: React.ReactNode;
 }) {
-  return (
-    <label className="flex flex-col gap-1">
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

@@ -10,7 +10,9 @@
 import { authorize } from '@shareat/auth';
 import { menuRepo } from '@shareat/db';
 import type { MenuItemType } from '@shareat/db/schema';
+import { MENU_REQUEST_REJECT_RULES, MENU_REQUEST_RULES } from '@shareat/domain/field-rules';
 import {
+  assertFieldRules,
   approveMenuItemRequest,
   markMenuItemRequestDuplicate,
   rejectMenuItemRequest,
@@ -39,6 +41,7 @@ export async function submitItemRequestAction(fd: FormData): Promise<void> {
     outcome = await withOrgPrincipal(actor.orgId, async (tx) => {
       // The gate FIRST: someone who may not ask learns no item names from the look-alike list.
       await authorize(tx, actor, 'request_menu_item', { storeId });
+      assertFieldRules(MENU_REQUEST_RULES, fd);
       if (!confirmed && name !== '') {
         const similar = await menuRepo.similarMenuItems(tx, actor.orgId, name);
         const pending = await menuRepo.similarOpenRequests(tx, actor.orgId, name);
@@ -113,6 +116,7 @@ export async function markItemRequestDuplicateAction(fd: FormData): Promise<void
 export async function rejectItemRequestAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PATH);
   try {
+    assertFieldRules(MENU_REQUEST_REJECT_RULES, fd);
     const id = requireId(fd, 'id', 'Choose a request.');
     await withOrgPrincipal(actor.orgId, (tx) => rejectMenuItemRequest(actor, { id, note: str(fd, 'note') }, tx));
   } catch (err) {

@@ -13,6 +13,8 @@ import {
   reviewCount,
 } from './lib';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { PREPAID_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Banner, FlashBanner, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
@@ -178,13 +180,13 @@ export default async function PrepaidPage({
           </p>
         </div>
 
-        <form action={createPrepaidItemAction} className="space-y-4">
+        <CheckedForm rules={PREPAID_ADD_RULES} action={createPrepaidItemAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name" hint="What it is, as somebody would say it out loud">
-              <Input name="name" required maxLength={120} placeholder="Fire insurance 2026" className="w-full" />
+            <Field label="Name" hint="What it is, as somebody would say it out loud" rule={PREPAID_ADD_RULES.name}>
+              <Input {...nativeAttrs(PREPAID_ADD_RULES.name)} placeholder="Fire insurance 2026" className="w-full" />
             </Field>
-            <Field label="Store">
-              <Select name="storeId" required defaultValue="" className="w-full">
+            <Field label="Store" rule={PREPAID_ADD_RULES.storeId}>
+              <Select {...nativeAttrs(PREPAID_ADD_RULES.storeId)} defaultValue="" className="w-full">
                 <option value="">Choose a store…</option>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -202,26 +204,27 @@ export default async function PrepaidPage({
                 ))}
               </Select>
             </Field>
-            <Field label="Total cost">
+            <Field label="Total cost" rule={PREPAID_ADD_RULES.totalCost}>
               <input
+                {...nativeAttrs(PREPAID_ADD_RULES.totalCost)}
                 name="totalCost"
-                required
                 inputMode="decimal"
                 placeholder="0.00"
                 className={INPUT}
               />
             </Field>
-            <Field label="Coverage starts" hint="The first month the cover actually applies to">
-              <Input name="coverageStartDate" type="date" required className="w-full" />
+            <Field label="Coverage starts" hint="The first month the cover actually applies to" rule={PREPAID_ADD_RULES.coverageStartDate}>
+              <Input type="date" {...nativeAttrs(PREPAID_ADD_RULES.coverageStartDate)} className="w-full" />
             </Field>
             <Field
               label="Coverage months"
               hint="The CONTRACT's term — read it off the document, don't estimate"
+              rule={PREPAID_ADD_RULES.coverageMonths}
             >
               <input
+                {...nativeAttrs(PREPAID_ADD_RULES.coverageMonths)}
                 name="coverageMonths"
                 inputMode="numeric"
-                required
                 defaultValue={12}
                 className={INPUT}
               />
@@ -240,7 +243,7 @@ export default async function PrepaidPage({
           </p>
 
           <SubmitButton pendingLabel="Recording…">Record prepaid item</SubmitButton>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
   );
@@ -253,17 +256,27 @@ const INPUT =
 function Field({
   label,
   hint,
+  rule,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   hint?: string;
+  rule?: FieldRule;
   children: React.ReactNode;
 }) {
-  return (
-    <label className="flex flex-col gap-1">
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
-      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
-    </label>
+      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

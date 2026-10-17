@@ -14,7 +14,8 @@
  * `authorize()` call, not here. Parsing before the gate let a non-holder's malformed field draw a
  * field sentence instead of the authorization refusal.
  */
-import { addLeaveType, setLeaveCap, setLeaveTypeActive, supersedeConfig, type ConfigChangesInput } from '@shareat/domain';
+import { addLeaveType, assertFieldRules, setLeaveCap, setLeaveTypeActive, supersedeConfig, type ConfigChangesInput } from '@shareat/domain';
+import { SETTINGS_LEAVE_CAP_RULES, SETTINGS_LEAVE_KIND_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
@@ -113,24 +114,24 @@ export async function updateAttendanceConfigAction(formData: FormData): Promise<
 // T-436: leave limits and kinds. Every gate is in the domain (`setLeaveCap` authorizes manage_attendance at the store, or people
 // admin for the business-wide default; a statutory limit cannot be lowered). These actions only turn the form into its input.
 
-/** A whole number of days, or empty for "no limit". Anything else goes to the domain as NaN and is refused there, in words. */
-function capField(fd: FormData, key: string): number | null {
-  const v = str(fd, key);
-  if (v === '') return null;
-  return /^[0-9]+$/.test(v) ? Number(v) : Number.NaN;
+/** A cap the rule set already judged: a whole number of days, or null for "no limit". */
+function capOf(checked: string | null): number | null {
+  return checked === null ? null : Number(checked);
 }
 
 export async function saveLeaveCapAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const store = str(formData, 'storeId');
   try {
+    // T-440: the caps' rule is the one the form shows live (field-rules/settings.ts); the domain keeps its own backstop for its other callers.
+    const caps = assertFieldRules(SETTINGS_LEAVE_CAP_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       setLeaveCap(tx, actor, {
         leaveType: str(formData, 'leaveType'),
         storeId: str(formData, 'scope') === 'org' ? null : store,
         positionId: str(formData, 'positionId') || null,
-        monthlyCap: capField(formData, 'monthlyCap'),
-        yearlyCap: capField(formData, 'yearlyCap'),
+        monthlyCap: capOf(caps.monthlyCap ?? null),
+        yearlyCap: capOf(caps.yearlyCap ?? null),
       }),
     );
   } catch (err) {
@@ -143,10 +144,12 @@ export async function addLeaveTypeAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const store = str(formData, 'storeId');
   try {
+    // T-440: the name and code rule is the one the form shows live (field-rules/settings.ts).
+    const kind = assertFieldRules(SETTINGS_LEAVE_KIND_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       addLeaveType(tx, actor, {
-        code: str(formData, 'code'),
-        label: str(formData, 'label'),
+        code: kind.code ?? '',
+        label: kind.label ?? '',
         paid: str(formData, 'paid') === 'paid',
         needsProof: bool(formData, 'needsProof'),
       }),

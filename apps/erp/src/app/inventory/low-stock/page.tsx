@@ -5,8 +5,9 @@ import { listStores } from '../lib';
 import { setThresholdAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
-import { EditableRecord } from '@/components/forms';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { INVENTORY_THRESHOLD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { Button, Field, FlashBanner, Input, Select } from '@/components/ui';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -169,35 +170,38 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
                 {thresholdByItem.has(item.id) ? (
                   <EditableRecord
                     action={setThresholdAction}
+                    rules={INVENTORY_THRESHOLD_RULES}
                     label={`${item.name} threshold`}
                     hidden={{ storeId, itemId: item.id }}
                     typed={typedFor(sp, LOW_STOCK_THRESHOLD, item.id, actor.personId)}
                   >
-                    <Input
-                      name="threshold"
-                      aria-label={`${item.name} threshold`}
-                      inputMode="decimal"
-                      defaultValue={thresholdByItem.get(item.id) ?? ''}
-                      placeholder="none"
-                      className="w-28 tabular-nums"
-                    />
+                    <Field label={<span className="sr-only">{`${item.name} threshold`}</span>} rule={INVENTORY_THRESHOLD_RULES.threshold}>
+                      <Input
+                        {...nativeAttrs(INVENTORY_THRESHOLD_RULES.threshold)}
+                        aria-label={`${item.name} threshold`}
+                        defaultValue={thresholdByItem.get(item.id) ?? ''}
+                        placeholder="none"
+                        className="w-28 tabular-nums"
+                      />
+                    </Field>
                   </EditableRecord>
                 ) : (
-                  <form action={setThresholdAction} className="flex items-center gap-2">
+                  <CheckedForm rules={INVENTORY_THRESHOLD_RULES} action={setThresholdAction} className="flex items-center gap-2">
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="itemId" value={item.id} />
-                    <Input
-                      name="threshold"
-                      aria-label={`${item.name} threshold`}
-                      inputMode="decimal"
-                      defaultValue={thresholdByItem.get(item.id) ?? ''}
-                      placeholder="none"
-                      className="w-28 tabular-nums"
-                    />
+                    <Field label={<span className="sr-only">{`${item.name} threshold`}</span>} rule={INVENTORY_THRESHOLD_RULES.threshold}>
+                      <Input
+                        {...nativeAttrs(INVENTORY_THRESHOLD_RULES.threshold)}
+                        aria-label={`${item.name} threshold`}
+                        defaultValue={thresholdByItem.get(item.id) ?? ''}
+                        placeholder="none"
+                        className="w-28 tabular-nums"
+                      />
+                    </Field>
                     <Button type="submit" variant="secondary" className="text-xs">
                       Save
                     </Button>
-                  </form>
+                  </CheckedForm>
                 )}
               </td>
             </tr>

@@ -6,6 +6,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { LOAN_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Loans — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -117,16 +119,16 @@ export default async function LoansPage({
           </p>
         </div>
 
-        <form action={createLoanAction} className="space-y-4">
+        <CheckedForm rules={LOAN_ADD_RULES} action={createLoanAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="What it is called">
-              <Input name="name" required maxLength={120} placeholder="Grab cash advance" className="w-full" />
+            <Field label="What it is called" rule={LOAN_ADD_RULES.name}>
+              <Input {...nativeAttrs(LOAN_ADD_RULES.name)} placeholder="Grab cash advance" className="w-full" />
             </Field>
-            <Field label="Lender">
-              <Input name="lenderName" required maxLength={120} placeholder="Grab" className="w-full" />
+            <Field label="Lender" rule={LOAN_ADD_RULES.lenderName}>
+              <Input {...nativeAttrs(LOAN_ADD_RULES.lenderName)} placeholder="Grab" className="w-full" />
             </Field>
-            <Field label="Store">
-              <Select name="storeId" required defaultValue="" className="w-full">
+            <Field label="Store" rule={LOAN_ADD_RULES.storeId}>
+              <Select {...nativeAttrs(LOAN_ADD_RULES.storeId)} defaultValue="" className="w-full">
                 <option value="">Choose a store…</option>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -135,20 +137,21 @@ export default async function LoansPage({
                 ))}
               </Select>
             </Field>
-            <Field label="Amount agreed">
+            <Field label="Amount agreed" rule={LOAN_ADD_RULES.principalAmount}>
               <input
+                {...nativeAttrs(LOAN_ADD_RULES.principalAmount)}
                 name="principalAmount"
-                required
                 inputMode="decimal"
                 placeholder="0.00"
                 className={INPUT}
               />
             </Field>
 
-            <Field label="Interest rate (%)">
+            <Field label="Interest rate (%)" rule={LOAN_ADD_RULES.interestRate}>
+              {/* The pattern kind carries no keypad hint of its own, so the decimal keypad stays a literal here. */}
               <input
+                {...nativeAttrs(LOAN_ADD_RULES.interestRate)}
                 name="interestRate"
-                required
                 inputMode="decimal"
                 className={INPUT}
               />
@@ -156,8 +159,8 @@ export default async function LoansPage({
             {/* ⛔ No default, deliberately. In v1 an absent rate period meant ANNUAL on old rows and
                 MONTHLY on new ones, with nothing on the row to tell them apart — so the same "2"
                 described two very different debts. */}
-            <Field label="…per" hint="A month is 30 days and a year is 365. Say which.">
-              <Select name="ratePeriod" required defaultValue="" className="w-full">
+            <Field label="…per" hint="A month is 30 days and a year is 365. Say which." rule={LOAN_ADD_RULES.ratePeriod}>
+              <Select {...nativeAttrs(LOAN_ADD_RULES.ratePeriod)} defaultValue="" className="w-full">
                 <option value="">Choose…</option>
                 {RATE_PERIODS.map((p) => (
                   <option key={p} value={p}>
@@ -186,11 +189,11 @@ export default async function LoansPage({
               </Select>
             </Field>
 
-            <Field label="Number of payments">
-              <input name="termPeriods" inputMode="numeric" required defaultValue={12} className={INPUT} />
+            <Field label="Number of payments" rule={LOAN_ADD_RULES.termPeriods}>
+              <input {...nativeAttrs(LOAN_ADD_RULES.termPeriods)} name="termPeriods" inputMode="numeric" defaultValue={12} className={INPUT} />
             </Field>
-            <Field label="Starts">
-              <Input name="startDate" type="date" required defaultValue={today()} className="w-full" />
+            <Field label="Starts" rule={LOAN_ADD_RULES.startDate}>
+              <Input type="date" {...nativeAttrs(LOAN_ADD_RULES.startDate)} defaultValue={today()} className="w-full" />
             </Field>
           </div>
           <Field label="Notes">
@@ -200,7 +203,7 @@ export default async function LoansPage({
           <Button type="submit" variant="primary">
             Record loan
           </Button>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
   );
@@ -212,17 +215,27 @@ const INPUT =
 function Field({
   label,
   hint,
+  rule,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   hint?: string;
+  rule?: FieldRule;
   children: React.ReactNode;
 }) {
-  return (
-    <label className="flex flex-col gap-1">
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
-      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
-    </label>
+      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

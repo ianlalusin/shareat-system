@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { peso } from '../../../lib/format';
-import { createDeliveryAction } from './actions';
 import { deliveryFormData, deliveryRegister, listStores } from './lib';
 import { NewDeliveryForm } from './NewDeliveryForm';
 import { Page } from '@/components/shell/Page';
@@ -77,7 +76,6 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium">New delivery</h2>
         <NewDeliveryForm
-          action={createDeliveryAction}
           storeId={storeId}
           suppliers={formData.suppliers}
           items={formData.items}

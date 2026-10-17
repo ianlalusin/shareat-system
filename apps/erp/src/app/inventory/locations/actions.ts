@@ -11,10 +11,12 @@
  * `commissary/catalogue/actions.ts` established.
  */
 import { redirectWithFlash } from '@/lib/flash';
+import { INVENTORY_LOCATION_RULES } from '@shareat/domain/field-rules';
 import { keepTyping } from '@/lib/keep-typing';
 import { LOCATION_EDIT } from './typed-forms';
 import { revalidatePath } from 'next/cache';
 import {
+  assertFieldRules,
   createLocation,
   deactivateLocation,
   ensureLocationTypes,
@@ -102,6 +104,7 @@ export async function createLocationAction(fd: FormData): Promise<void> {
 
   let message = '';
   try {
+    assertFieldRules(INVENTORY_LOCATION_RULES, fd);
     await withOrgPrincipal(actor.orgId, (tx) =>
       createLocation(tx, actor, {
         storeId,

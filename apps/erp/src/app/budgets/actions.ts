@@ -6,7 +6,8 @@
  * ⛔ The gate lives in the service (`manage_expense_budgets`), not here. A gate in a server action
  * protects one caller; a gate in the domain protects every caller there will ever be.
  */
-import { removeExpenseBudget, setExpenseBudget } from '@shareat/domain';
+import { assertFieldRules, removeExpenseBudget, setExpenseBudget } from '@shareat/domain';
+import { BUDGET_CAP_RULES } from '@shareat/domain/field-rules';
 import type { ReissueInterval } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
@@ -28,6 +29,7 @@ export async function setBudgetAction(formData: FormData): Promise<void> {
   const periodKey = str(formData, 'periodKey');
   let message = '';
   try {
+    assertFieldRules(BUDGET_CAP_RULES, formData);
     const autoReissue = str(formData, 'autoReissue') === 'on';
     const interval = str(formData, 'reissueInterval');
     await withOrgPrincipal(actor.orgId, (tx) =>
