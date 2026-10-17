@@ -32,11 +32,14 @@ import { describe, expect, it } from 'vitest';
 const SRC_ROOT = resolve(__dirname, '..', 'src');
 
 /** `<file>::<snippet of the element's label attribute>` -> reason. Empty unless a lane finds a real reason; the orchestrator approves each entry. */
-const TYPED_EXEMPT: Record<string, string> = {};
+const TYPED_EXEMPT: Record<string, string> = {
+  'app/staff/[employmentId]/page.tsx::government numbers':
+    'T-190: every field is a government ID number, as sensitive as a bank account (bible row 353), so nothing is ever kept after a refused save',
+};
 
 /** The deny list, as the spec states it (R4). The runtime copy lives in lib/keep-typing.ts. */
 const NEVER_ECHO = /(^|_)(pin|newpin|password|passcode|secret|token|otp|apikey|api_key)$/i;
-const SENSITIVE: ReadonlySet<string> = new Set(['bankAccountNumber']);
+const SENSITIVE: ReadonlySet<string> = new Set(['bankAccountNumber', 'sssNo', 'philhealthNo', 'pagibigNo', 'tin']);
 const denied = (name: string) => NEVER_ECHO.test(name) || SENSITIVE.has(name);
 
 /** The forms S1 wires. A key is added here by the slice that wires it. */
